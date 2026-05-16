@@ -149,11 +149,17 @@ export default function SceneCanvas({
     const snap = snapRef.current
 
     if (drag.kind === 'move') {
-      // Plain move — never snapped. Snap-to-grid only affects the anchor.
       const ox = drag.originalLayer.transform.x
       const oy = drag.originalLayer.transform.y
-      const nx = clamp(ox + dx, 0, Math.max(0, cw - drag.width))
-      const ny = clamp(oy + dy, 0, Math.max(0, ch - drag.height))
+      let nx = ox + dx
+      let ny = oy + dy
+      // Snap to canvas grid when active — both anchor AND object move snap.
+      if (snap.enabled) {
+        nx = snapToGrid(nx, snap.size)
+        ny = snapToGrid(ny, snap.size)
+      }
+      nx = clamp(nx, 0, Math.max(0, cw - drag.width))
+      ny = clamp(ny, 0, Math.max(0, ch - drag.height))
       let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.x', nx)
       next = updateLayerProperty(next, drag.layerId, 'transform.y', ny)
       editorRef.current.previewTransaction(next)

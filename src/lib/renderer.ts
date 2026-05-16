@@ -103,6 +103,16 @@ function drawShape(
     ctx.restore()
   }
 
+  // ── Inner grid (clipped to the shape path, drawn over the fill) ─────────
+  if (layer.internalGrid && layer.internalGrid.size > 0 && w > 0 && h > 0) {
+    ctx.save()
+    ctx.clip()             // current path = shape silhouette
+    drawInnerGrid(ctx, w, h, layer.internalGrid.size)
+    ctx.restore()
+    // Rebuild the path so the stroke below still has it
+    buildShapePath(ctx, layer.shape ?? 'rect', w, h, cornerRadius)
+  }
+
   // ── Stroke (optional) ────────────────────────────────────────────────────
   if (style.stroke) {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
@@ -360,10 +370,6 @@ export function renderScene(
   ctx.fillStyle = backgroundColor
   ctx.fillRect(0, 0, width, height)
 
-  // Grid is painted ON the canvas surface, BEHIND every layer — so it acts
-  // like a property of the artboard background, not an overlay on objects.
-  if (grid && grid.size > 0) drawGrid(ctx, width, height, grid.size)
-
   // If any layer is solo'd, only render solo layers.
   const anySolo = scene.layers.some((l) => l.solo)
 
@@ -371,6 +377,11 @@ export function renderScene(
     if (anySolo && !layer.solo) continue
     renderLayer(ctx, layer, overrides, layer.id === selectedLayerId, assets)
   }
+
+  // Canvas grid drawn ON TOP of layers so it stays visible even when a
+  // background layer covers the artboard. Uses a neutral grey so it reads
+  // on both light and dark backgrounds.
+  if (grid && grid.size > 0) drawGrid(ctx, width, height, grid.size)
 
   // Time watermark
   ctx.save()
@@ -381,21 +392,46 @@ export function renderScene(
   ctx.restore()
 }
 
-// ── Grid (drawn behind layers, on the artboard background) ───────────────────
+// ── Canvas grid (drawn on TOP of layers — guaranteed visible) ───────────────
+// Neutral mid-grey + moderate alpha → readable on both light and dark
+// backgrounds and through opaque-fill background layers.
 
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, step: number) {
   if (step <= 0) return
   ctx.save()
   ctx.lineWidth = 1
   for (let i = 0, x = 0; x <= w; x += step, i++) {
-    ctx.strokeStyle = i % 5 === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(150,150,150,0.45)' : 'rgba(150,150,150,0.22)'
     ctx.beginPath()
     ctx.moveTo(x + 0.5, 0)
     ctx.lineTo(x + 0.5, h)
     ctx.stroke()
   }
   for (let i = 0, y = 0; y <= h; y += step, i++) {
-    ctx.strokeStyle = i % 5 === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(150,150,150,0.45)' : 'rgba(150,150,150,0.22)'
+    ctx.beginPath()
+    ctx.moveTo(0, y + 0.5)
+    ctx.lineTo(w, y + 0.5)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+// ── Inner (layer-local) grid drawn inside a shape's local bounds ──────────────
+
+function drawInnerGrid(ctx: CanvasRenderingContext2D, w: number, h: number, step: number) {
+  if (step <= 0) return
+  ctx.save()
+  ctx.lineWidth = 1
+  for (let i = 0, x = 0; x <= w; x += step, i++) {
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)'
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, 0)
+    ctx.lineTo(x + 0.5, h)
+    ctx.stroke()
+  }
+  for (let i = 0, y = 0; y <= h; y += step, i++) {
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)'
     ctx.beginPath()
     ctx.moveTo(0, y + 0.5)
     ctx.lineTo(w, y + 0.5)

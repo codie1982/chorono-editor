@@ -128,6 +128,10 @@ export interface Layer {
   /** When layer deactivates. Default timeline.durationMs. */
   endMs?: number
 
+  // ── Editor-only visual aid: a sub-grid drawn INSIDE the layer for
+  //    pixel-precision design work. Optional; stripped from runtime export.
+  internalGrid?: { size: number }
+
   // ── Editor meta (stripped on runtime export) ─────────────────────────────
   locked?:     boolean
   hidden?:     boolean

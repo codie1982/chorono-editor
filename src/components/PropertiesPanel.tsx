@@ -235,6 +235,34 @@ export default function PropertiesPanel({ layer, composition, onLayerChange, onC
               </Section>
             )}
 
+            {/* ── Inner grid (visual aid drawn inside the layer) ─────── */}
+            <Section title="Inner Grid">
+              <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!layer.internalGrid}
+                  onChange={(e) => update({
+                    internalGrid: e.target.checked ? { size: layer.internalGrid?.size ?? 10 } : undefined,
+                  })}
+                  className="accent-blue-500"
+                />
+                Show grid inside this layer
+              </label>
+              {layer.internalGrid && (
+                <Field label="Cell size (px)">
+                  <NumInput
+                    value={layer.internalGrid.size}
+                    min={2} max={200}
+                    onChange={(v) => update({ internalGrid: { size: v } })}
+                  />
+                </Field>
+              )}
+              <p className="text-[10px] text-gray-500 leading-snug pt-0.5">
+                Independent of the canvas grid. Useful for pixel-precise
+                content inside a single shape.
+              </p>
+            </Section>
+
             {/* ── Text özellikleri ──────────────────────────────────── */}
             {layer.type === 'text' && layer.text && (
               <Section title="Text">
