@@ -14,7 +14,6 @@ import {
 } from '@/lib/editor/commands-timeline'
 import { updateKfTimeMs } from '@/lib/timeline/keyframeOps'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
-import { useResizablePanel }       from '@/app/hooks/useResizablePanel'
 import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
 import { useKeyframeDrag, type DragSnapshot } from './timeline/hooks/useKeyframeDrag'
 import TimelineRuler           from './timeline/TimelineRuler'
@@ -56,11 +55,7 @@ export default function TimelinePanel({
   const timeline = scene.timelines.find((t) => t.id === selectedTimelineId) ?? null
   const duration = timeline?.durationMs ?? scene.composition.durationMs
 
-  // ── Resizable + viewport ─────────────────────────────────────────────────
-  const resize = useResizablePanel({
-    storageKey: 'chorono.timelinePanelHeight',
-    defaultHeight: 280, minHeight: 160, maxHeight: 640, direction: 'up',
-  })
+  // ── Viewport (panel height managed by parent dock splitter) ─────────────
   const vp = useTimelineViewport(duration)
 
   // ── Per-layer expand state (default: all layers expanded) ────────────────
@@ -251,17 +246,7 @@ export default function TimelinePanel({
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="flex flex-col bg-gray-900 border-t border-gray-700 shrink-0 relative"
-      style={{ height: `${resize.height}px` }}
-    >
-      <div
-        onPointerDown={resize.onDragHandlePointerDown}
-        title="Drag to resize timeline"
-        className={`absolute top-0 left-0 right-0 h-1 cursor-row-resize z-30
-          ${resize.isResizing ? 'bg-blue-500' : 'hover:bg-blue-500/50'}`}
-      />
-
+    <div className="flex flex-col h-full bg-gray-900 relative overflow-hidden">
       <TimelineToolbar
         timelines={scene.timelines}
         selectedTimelineId={selectedTimelineId}

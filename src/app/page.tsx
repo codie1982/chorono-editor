@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
@@ -26,7 +26,11 @@ import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import JsonModal       from '@/components/JsonModal'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
-import ResizableSidebar from '@/components/ResizableSidebar'
+import DockLayout       from '@/components/dock/DockLayout'
+import DockOuterEdges   from '@/components/dock/DockOuterEdges'
+import { DockDragProvider } from '@/components/dock/dragContext'
+import { useDockLayout } from '@/components/dock/useDockLayout'
+import { makeRegistry, type PanelDefinition } from '@/components/dock/registry'
 import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 
@@ -94,6 +98,12 @@ export default function BuilderPage() {
   const [showJson,        setShowJson]      = useState(false)
   const [showCompModal,   setShowCompModal] = useState(false)
   const [showHelp,        setShowHelp]      = useState(false)
+
+  // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
+  // The id list is the contract validated against the persisted tree —
+  // mismatches reset back to the default layout (recovery from corrupt state).
+  const dock = useDockLayout(['layers', 'canvas', 'properties', 'timeline'])
+  const dockContainerRef = useRef<HTMLDivElement | null>(null)
   /** UUID-based keyframe multi-selection — survives drag, persists across renders */
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
   /** Editor preferences (snap, auto-key, graph editor mode) — outside undo */
@@ -390,6 +400,14 @@ export default function BuilderPage() {
         </button>
 
         <button
+          onClick={dock.resetLayout}
+          title="Reset panel layout to default"
+          className="px-2.5 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 font-medium"
+        >
+          ⊞ Reset
+        </button>
+
+        <button
           onClick={() => setShowHelp(true)}
           title="Keyboard shortcuts (Cmd+/)"
           className="px-2.5 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 font-medium"
@@ -409,86 +427,98 @@ export default function BuilderPage() {
         </button>
       </header>
 
-      {/* ── Main work area ─────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0">
-        <ResizableSidebar
-          side="left"
-          storageKey="chorono.layerPanelWidth"
-          defaultWidth={224}
-          minWidth={180}
-          maxWidth={420}
-        >
-          <LayerPanel
-            layers={scene.layers}
-            selectedId={selectedLayerId}
-            selectedIds={selectedLayerIds}
-            onSelect={selectLayer}
-            onAdd={addLayer}
-            onAddImage={addImageLayerFromFile}
-            onAddVideo={addVideoLayerFromFile}
-            onAddAudio={addAudioLayerFromFile}
-            onDelete={deleteLayer}
-            onReorder={reorderLayer}
-            onToggleFlag={toggleLayerFlag}
-            onApplyStagger={applyStaggeredPreset}
+      {/* ── Dockable work area ─────────────────────────────────────── */}
+      <DockDragProvider onDrop={dock.dispatchDrop}>
+        <div ref={dockContainerRef} className="flex-1 min-h-0 relative">
+          <DockOuterEdges containerRef={dockContainerRef} />
+          <DockLayout
+            node={dock.layout}
+            registry={makeRegistry([
+              {
+                id: 'layers', title: 'Layers',
+                render: () => (
+                  <LayerPanel
+                    layers={scene.layers}
+                    selectedId={selectedLayerId}
+                    selectedIds={selectedLayerIds}
+                    onSelect={selectLayer}
+                    onAdd={addLayer}
+                    onAddImage={addImageLayerFromFile}
+                    onAddVideo={addVideoLayerFromFile}
+                    onAddAudio={addAudioLayerFromFile}
+                    onDelete={deleteLayer}
+                    onReorder={reorderLayer}
+                    onToggleFlag={toggleLayerFlag}
+                    onApplyStagger={applyStaggeredPreset}
+                  />
+                ),
+              },
+              {
+                id: 'canvas', title: 'Canvas',
+                render: () => (
+                  <SceneCanvas
+                    scene={scene}
+                    editor={editor}
+                    timeMs={currentTimeMs}
+                    selectedLayerId={selectedLayerId}
+                    assets={assetCache}
+                    onSelectLayer={(id) => selectLayer(id)}
+                  />
+                ),
+              },
+              {
+                id: 'properties', title: 'Properties',
+                render: () => (
+                  <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
+                    <PropertiesPanel
+                      layer={selectedLayer}
+                      composition={scene.composition}
+                      onLayerChange={updateLayer}
+                      onCompositionChange={updateComposition}
+                    />
+                    {selectedKfIds.size > 0 && (
+                      <KeyframeInspector
+                        scene={scene}
+                        selectedKfIds={selectedKfIds}
+                        editor={editor}
+                      />
+                    )}
+                  </div>
+                ),
+              },
+              {
+                id: 'timeline', title: 'Timeline',
+                render: () => (
+                  <div className="h-full bg-gray-900 overflow-hidden">
+                    <TimelinePanel
+                      scene={scene}
+                      editor={editor}
+                      settings={timelineSettings}
+                      onSettingsChange={setTimelineSettings}
+                      selectedLayerId={selectedLayerId}
+                      selectedLayerIds={selectedLayerIds}
+                      selectedTimelineId={selectedTlId}
+                      selectedKfIds={selectedKfIds}
+                      currentTimeMs={currentTimeMs}
+                      isPlaying={isPlaying}
+                      playbackSpeed={playbackSpeed}
+                      onTimeChange={handleSeek}
+                      onPlayToggle={handlePlayToggle}
+                      onSelectTimeline={setSelectedTl}
+                      onSelectKeyframes={setSelectedKfIds}
+                      onSelectLayer={selectLayer}
+                      onToggleLayerFlag={toggleLayerFlag}
+                      onPlaybackSpeedChange={setPlaybackSpeed}
+                    />
+                  </div>
+                ),
+              },
+            ] satisfies PanelDefinition[])}
+            onTabSelect={dock.dispatchTab}
+            onResize={dock.dispatchResize}
           />
-        </ResizableSidebar>
-
-        <SceneCanvas
-          scene={scene}
-          editor={editor}
-          timeMs={currentTimeMs}
-          selectedLayerId={selectedLayerId}
-          assets={assetCache}
-          onSelectLayer={(id) => selectLayer(id)}
-        />
-
-        <ResizableSidebar
-          side="right"
-          storageKey="chorono.propertiesPanelWidth"
-          defaultWidth={256}
-          minWidth={200}
-          maxWidth={480}
-        >
-          <div className="flex flex-col h-full bg-gray-900 border-l border-gray-700">
-            <PropertiesPanel
-              layer={selectedLayer}
-              composition={scene.composition}
-              onLayerChange={updateLayer}
-              onCompositionChange={updateComposition}
-            />
-            {selectedKfIds.size > 0 && (
-              <KeyframeInspector
-                scene={scene}
-                selectedKfIds={selectedKfIds}
-                editor={editor}
-              />
-            )}
-          </div>
-        </ResizableSidebar>
-      </div>
-
-      {/* ── Timeline ───────────────────────────────────────────────── */}
-      <TimelinePanel
-        scene={scene}
-        editor={editor}
-        settings={timelineSettings}
-        onSettingsChange={setTimelineSettings}
-        selectedLayerId={selectedLayerId}
-        selectedLayerIds={selectedLayerIds}
-        selectedTimelineId={selectedTlId}
-        selectedKfIds={selectedKfIds}
-        currentTimeMs={currentTimeMs}
-        isPlaying={isPlaying}
-        playbackSpeed={playbackSpeed}
-        onTimeChange={handleSeek}
-        onPlayToggle={handlePlayToggle}
-        onSelectTimeline={setSelectedTl}
-        onSelectKeyframes={setSelectedKfIds}
-        onSelectLayer={selectLayer}
-        onToggleLayerFlag={toggleLayerFlag}
-        onPlaybackSpeedChange={setPlaybackSpeed}
-      />
+        </div>
+      </DockDragProvider>
 
       {/* ── JSON Modal ─────────────────────────────────────────────── */}
       {showJson && <JsonModal scene={scene} onClose={() => setShowJson(false)} />}
