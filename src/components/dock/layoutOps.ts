@@ -63,15 +63,18 @@ export function setActiveTab(tree: DockNode, leafId: string, panelId: string): D
  * tree compact.
  */
 export function removePanel(tree: DockNode, panelId: string): DockNode {
-  // Step 1: drop the panel from its leaf
+  // Step 1: drop the panel from its leaf. When the last panel is removed the
+  // leaf is left with an empty `panels` array so collapseEmptyLeaves can
+  // detect and remove it in step 2.
   const stepOne = mapNode(tree, (n) => {
     if (n.kind !== 'leaf' || !n.panels.includes(panelId)) return n
     const nextPanels = n.panels.filter((p) => p !== panelId)
-    if (nextPanels.length === 0) return n   // mark empty — handled in step 2
     return {
       ...n,
       panels: nextPanels,
-      activeIndex: Math.min(n.activeIndex, nextPanels.length - 1),
+      activeIndex: nextPanels.length === 0
+        ? 0
+        : Math.min(n.activeIndex, nextPanels.length - 1),
     }
   })
   // Step 2: collapse empty leaves

@@ -53,7 +53,8 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
   return (
     <div
       ref={containerRef}
-      className="relative flex flex-col h-full bg-gray-900 border border-gray-800 overflow-hidden"
+      key={leaf.id}
+      className="relative flex flex-col h-full bg-gray-900 border border-gray-800 overflow-hidden dock-leaf-in"
     >
       {/* Tab strip — also the drag handle */}
       <div className="flex items-center bg-gray-800/80 border-b border-gray-700 shrink-0 h-7">
@@ -93,21 +94,18 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
       </div>
 
       {/* Drop overlay (visible during drag) */}
-      {drag && (
-        <div className="absolute inset-0 pointer-events-none z-40">
-          {/* Center "drop here as tab" hint when not on an edge */}
-          {localEdge === 'center' && (
+      {drag && localEdge && (
+        <div className="absolute inset-0 pointer-events-none z-40 dock-overlay-in">
+          {localEdge === 'center' ? (
             <div className="absolute inset-2 border-2 border-blue-400/80 bg-blue-500/10 rounded
-                            flex items-center justify-center">
-              <span className="text-xs font-medium text-blue-200 bg-blue-900/80 px-3 py-1 rounded">
+                            flex items-center justify-center transition-all duration-150">
+              <span className="text-xs font-medium text-blue-200 bg-blue-900/80 px-3 py-1 rounded shadow">
                 + Add tab
               </span>
             </div>
-          )}
-          {/* Edge highlight (left/right/top/bottom) */}
-          {localEdge && localEdge !== 'center' && (
+          ) : (
             <div
-              className="absolute bg-blue-500/40 border-2 border-blue-400"
+              className="absolute bg-blue-500/40 border-2 border-blue-400 transition-all duration-150"
               style={dropZoneStyle}
             />
           )}

@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import type { DockNode, DockSplit } from './types'
 import type { PanelRegistry } from './registry'
 import DockLeafComponent from './DockLeaf'
@@ -48,13 +48,16 @@ interface SplitProps {
 
 function DockSplitComponent({ split, registry, onTabSelect, onResize }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  /** While the splitter is being dragged, suspend the size transition so
+   *  the panel tracks the cursor exactly (no easing lag). */
+  const [isDragging, setIsDragging] = useState(false)
 
-  // ── Splitter drag (pointer-capture style) ───────────────────────────────
   const beginSplitterDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     e.preventDefault()
     const target = e.currentTarget
     target.setPointerCapture(e.pointerId)
+    setIsDragging(true)
 
     const move = (ev: PointerEvent) => {
       const container = containerRef.current
@@ -69,6 +72,7 @@ function DockSplitComponent({ split, registry, onTabSelect, onResize }: SplitPro
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       try { target.releasePointerCapture(e.pointerId) } catch { /* */ }
+      setIsDragging(false)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -76,6 +80,10 @@ function DockSplitComponent({ split, registry, onTabSelect, onResize }: SplitPro
 
   const isH = split.direction === 'h'
   const ratioPct = (split.ratio * 100).toFixed(2)
+  // Smooth ratio changes from drop-reflow; bypassed during splitter drag.
+  const sizeTransition = isDragging
+    ? 'none'
+    : (isH ? 'width 200ms ease' : 'height 200ms ease')
 
   return (
     <div
@@ -84,7 +92,10 @@ function DockSplitComponent({ split, registry, onTabSelect, onResize }: SplitPro
     >
       <div
         className="min-w-0 min-h-0 overflow-hidden"
-        style={isH ? { width: `${ratioPct}%` } : { height: `${ratioPct}%` }}
+        style={{
+          ...(isH ? { width: `${ratioPct}%` } : { height: `${ratioPct}%` }),
+          transition: sizeTransition,
+        }}
       >
         <DockLayout
           node={split.children[0]}
@@ -94,14 +105,13 @@ function DockSplitComponent({ split, registry, onTabSelect, onResize }: SplitPro
         />
       </div>
 
-      {/* Splitter handle — 4px wide, hover blue */}
       <div
         onPointerDown={beginSplitterDrag}
-        className={`shrink-0 z-20 transition-colors
+        className={`shrink-0 z-20 transition-colors duration-150
           ${isH
             ? 'w-1 cursor-col-resize hover:bg-blue-500/60'
             : 'h-1 cursor-row-resize hover:bg-blue-500/60'}
-          bg-gray-800`}
+          ${isDragging ? 'bg-blue-500/80' : 'bg-gray-800'}`}
       />
 
       <div className="flex-1 min-w-0 min-h-0 overflow-hidden">

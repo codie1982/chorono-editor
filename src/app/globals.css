@@ -33,3 +33,23 @@ select {
   padding-right: 20px;
   appearance: none;
 }
+
+/* ── Dock panel animations ───────────────────────────────────────── */
+
+@keyframes dock-leaf-in {
+  from { opacity: 0; transform: scale(0.985); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dock-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.dock-leaf-in    { animation: dock-leaf-in 180ms ease-out both; }
+.dock-overlay-in { animation: dock-overlay-in 120ms ease-out both; }
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .dock-leaf-in, .dock-overlay-in { animation: none; }
+}
