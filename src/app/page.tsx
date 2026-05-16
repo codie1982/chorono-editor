@@ -3,11 +3,11 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
-  emptyScene, newRectLayer, newCircleLayer, newTextLayer,
+  emptyScene,
   newImageLayer, newVideoLayer, newAudioLayer, newTimeline,
-  newPathStrokeLayer,
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
+import { layerRegistry } from '@/lib/registry'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
@@ -28,11 +28,16 @@ import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import JsonModal       from '@/components/JsonModal'
+import FileMenu        from '@/components/TopToolbar/FileMenu'
+import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
+import ToastContainer  from '@/components/Toast/ToastContainer'
+import { toast }       from '@/lib/toast/toast'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
 import ParametersPanel     from '@/components/panels/ParametersPanel'
 import EventsPanel         from '@/components/panels/EventsPanel'
 import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
+import AssetsPanel         from '@/components/panels/AssetsPanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
@@ -205,12 +210,16 @@ export default function BuilderPage() {
   }, [])
 
   // ── Layer commands ───────────────────────────────────────────────────────
-  const addLayer = useCallback((kind: 'rect' | 'circle' | 'text' | 'pathStroke') => {
-    const l =
-        kind === 'rect'        ? newRectLayer()
-      : kind === 'circle'      ? newCircleLayer()
-      : kind === 'pathStroke'  ? newPathStrokeLayer()
-      :                          newTextLayer()
+  // Layer creation is fully registry-driven: every kind looks up its
+  // LayerDefinition and calls createDefault(). Adding a new shape no longer
+  // requires touching this switch — just register a new LayerDefinition.
+  const addLayer = useCallback((kind: string) => {
+    const def = layerRegistry.get(kind)
+    if (!def) {
+      console.warn(`addLayer: unknown layer kind "${kind}"`)
+      return
+    }
+    const l = def.createDefault()
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
   }, [dispatchCommand, selectLayer])
@@ -284,6 +293,34 @@ export default function BuilderPage() {
   const addVideoLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'video'), [probeAndAddMedia])
   const addAudioLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'audio'), [probeAndAddMedia])
 
+  // ── SVG Import — reads file → parses → emits batched undo step ───────────
+  const importSvgFile = useCallback(async (file: File) => {
+    try {
+      const text = await file.text()
+      const { svgImporter } = await import('@/lib/svg')
+      const { makeImportSvgCmd } = await import('@/lib/editor/commands-svg')
+      const result = svgImporter.import(text)
+      if (result.layers.length === 0) {
+        toast.warning(`SVG "${file.name}" had no convertible layers`, {
+          detail: `${result.warnings.length} warning(s) — see console for details`,
+        })
+        console.warn('SVG import produced no layers', result.warnings)
+        return
+      }
+      dispatchCommand(makeImportSvgCmd(result.layers, file.name))
+      selectLayer(result.layers[0].id)
+      toast.success(`Imported ${result.layers.length} layer${result.layers.length === 1 ? '' : 's'} from ${file.name}`, {
+        detail: result.warnings.length > 0 ? `${result.warnings.length} warning(s) — see console` : undefined,
+      })
+      if (result.warnings.length > 0) {
+        console.info(`SVG import: ${result.warnings.length} warning(s)`, result.warnings)
+      }
+    } catch (err) {
+      toast.error(`SVG import failed`, { detail: (err as Error).message })
+      console.error('SVG import failed:', err)
+    }
+  }, [dispatchCommand, selectLayer])
+
   const deleteLayer = useCallback((id: string) => {
     const layer = scene.layers.find((l) => l.id === id)
     if (!layer) return
@@ -339,6 +376,116 @@ export default function BuilderPage() {
     dispatchCommand(makeUpdateLayerCmd(next.id, next, prev))
   }, [scene.layers, dispatchCommand])
 
+  // ── Group / Ungroup (Cmd+G / Cmd+Shift+G) ────────────────────────────────
+  const groupSelected = useCallback(async () => {
+    const ids = selectedLayerIds.size > 0
+      ? Array.from(selectedLayerIds)
+      : (selectedLayerId ? [selectedLayerId] : [])
+    if (ids.length === 0) return
+    const { makeGroupCmd } = await import('@/lib/editor/commands-group')
+    const cmd = makeGroupCmd(ids)
+    dispatchCommand(cmd)
+    selectLayer(cmd.groupId)
+    setSelectedLayerIds(new Set([cmd.groupId]))
+  }, [selectedLayerIds, selectedLayerId, dispatchCommand, selectLayer])
+
+  // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
+  const [toolMode, setToolMode] = useState<ToolMode>('select')
+
+  // ── Manual preview-mode toggle (so user can test draggable / tappable
+  //    layers without setting up segments / clicking the Preview tab) ──────
+  const [manualPreview, setManualPreview] = useState(false)
+
+  // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
+  const saveSceneJson = useCallback(() => {
+    const blob = new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `${scene.composition.id || 'scene'}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [scene])
+
+  const copySceneJson = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(scene, null, 2))
+      toast.success('Scene JSON copied to clipboard')
+    } catch (err) {
+      toast.error('Clipboard write failed', { detail: (err as Error).message })
+      console.warn('Clipboard write failed:', err)
+    }
+  }, [scene])
+
+  const openSceneJson = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json,application/json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const parsed = JSON.parse(text)
+        resetScene(parsed)
+        selectLayer(null)
+        handleSeek(0)
+        toast.success(`Loaded scene from ${file.name}`)
+      } catch (err) {
+        toast.error('Failed to load scene', { detail: (err as Error).message })
+      }
+    }
+    input.click()
+  }, [resetScene, selectLayer, handleSeek])
+
+  const newScene = useCallback(() => {
+    if (!confirm('Start a new empty scene? Unsaved changes will be lost.')) return
+    resetScene(emptyScene())
+    selectLayer(null)
+    handleSeek(0)
+  }, [resetScene, selectLayer, handleSeek])
+
+  // ── Runtime JSON export — runs validator + optimizer + triggers download ─
+  const exportRuntimeJson = useCallback(async () => {
+    try {
+      const { defaultRuntimeExporter, RuntimeExportError } = await import('@/lib/export')
+      const pkg = defaultRuntimeExporter.export(scene)
+      const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `chorono-runtime-${Date.now()}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Runtime JSON exported', {
+        detail: pkg.warnings.length > 0
+          ? `${pkg.warnings.length} warning(s) — check console`
+          : `${scene.layers.length} layers, ${scene.timelines.length} timelines`,
+      })
+      if (pkg.warnings.length > 0) {
+        console.info(`Runtime export: ${pkg.warnings.length} warning(s)`, pkg.warnings)
+      }
+    } catch (err: any) {
+      if (err?.name === 'RuntimeExportError') {
+        const errMsg = err.validation.errors.map((e: any) => '• ' + e.message).join('\n')
+        toast.error('Runtime export validation failed', { detail: errMsg, duration: 8000 })
+        console.error('Runtime export validation failed:', err.validation)
+      } else {
+        toast.error('Runtime export error', { detail: err?.message ?? String(err) })
+        console.error('Runtime export error:', err)
+      }
+    }
+  }, [scene])
+
+  const ungroupSelected = useCallback(async () => {
+    if (!selectedLayerId) return
+    const target = scene.layers.find(l => l.id === selectedLayerId)
+    if (!target || target.type !== 'group') return
+    const { makeUngroupCmd } = await import('@/lib/editor/commands-group')
+    const cmd = makeUngroupCmd(scene, selectedLayerId)
+    if (cmd) dispatchCommand(cmd)
+  }, [scene, selectedLayerId, dispatchCommand])
+
   const updateComposition = useCallback((comp: typeof scene.composition) => {
     const prev = scene
     dispatchCommand({
@@ -392,6 +539,8 @@ export default function BuilderPage() {
       if (pastedIds.size > 0) setSelectedKfIds(pastedIds)
     },
     onShowHelp: () => setShowHelp(true),
+    onGroupSelected:   groupSelected,
+    onUngroupSelected: ungroupSelected,
     frameRate,
   })
 
@@ -400,21 +549,32 @@ export default function BuilderPage() {
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
 
       {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-4 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
-        <span className="text-blue-400 text-lg">🎬</span>
-        <span className="font-semibold text-sm text-gray-100">Chorono Builder</span>
-        <span className="text-xs text-gray-500 font-mono">v0.1</span>
-
-        <div className="w-px h-5 bg-gray-700 mx-1" />
-
-        <input
-          type="text"
-          value={scene.composition.id}
-          onChange={(e) => updateComposition({ ...scene.composition, id: e.target.value })}
-          className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
-                     focus:outline-none focus:border-blue-500 w-32"
-          placeholder="composition id"
+      <header className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
+        <FileMenu
+          filename={scene.composition.id}
+          onRename={(next) => updateComposition({ ...scene.composition, id: next })}
+          onNewScene={newScene}
+          onOpenSceneJson={openSceneJson}
+          onSaveSceneJson={saveSceneJson}
+          onExportRuntime={exportRuntimeJson}
+          onCopySceneJson={copySceneJson}
+          onShowShortcuts={() => setShowHelp(true)}
+          onResetLayout={dock.resetLayout}
         />
+
+        <div className="w-px h-6 bg-gray-700 mx-1" />
+
+        <ToolGroup
+          mode={toolMode}
+          onChange={setToolMode}
+          penAuto={!!(scene.layers.find(l => l.id === selectedLayerId)?.type === 'path')}
+        />
+
+        <div className="w-px h-6 bg-gray-700 mx-1" />
+
+        <span className="text-blue-400 text-base">🎬</span>
+        <span className="font-semibold text-xs text-gray-100">Chorono</span>
+
         <button
           onClick={() => setShowCompModal(true)}
           title="Canvas size & framerate"
@@ -445,38 +605,35 @@ export default function BuilderPage() {
           {' · '}{scene.timelines.length} timelines
         </span>
 
+        {/* Preview Mode toggle — when ON, draggable/tappable layers respond
+            interactively on the canvas (no segment / preview tab needed). */}
+        <button
+          onClick={() => setManualPreview(v => !v)}
+          title={manualPreview
+            ? 'Exit preview — back to editing'
+            : 'Enter preview — draggable / tappable layers become interactive on the canvas'}
+          className={`px-3 py-1.5 text-xs rounded font-medium transition-colors flex items-center gap-1.5
+            ${manualPreview
+              ? 'bg-amber-600 hover:bg-amber-500 text-white animate-pulse'
+              : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}
+        >
+          {manualPreview ? <>⏹ Exit Preview</> : <>▶ Preview</>}
+        </button>
+
+        {/* Primary export — rest live inside FileMenu */}
         <button
           onClick={() => setShowJson(true)}
+          title="Inspect raw scene JSON"
           className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium"
         >
-          {'{ }'} Export JSON
+          {'{ }'} JSON
         </button>
-
         <button
-          onClick={dock.resetLayout}
-          title="Reset panel layout to default"
-          className="px-2.5 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 font-medium"
+          onClick={exportRuntimeJson}
+          title="Validate scene + emit lean runtime JSON for Android/iOS/Web players"
+          className="px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
         >
-          ⊞ Reset
-        </button>
-
-        <button
-          onClick={() => setShowHelp(true)}
-          title="Keyboard shortcuts (Cmd+/)"
-          className="px-2.5 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 font-medium"
-        >
-          ?
-        </button>
-
-        <button
-          onClick={() => {
-            resetScene(emptyScene())
-            selectLayer(null)
-            handleSeek(0)
-          }}
-          className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400"
-        >
-          Clear
+          ⤓ Runtime
         </button>
       </header>
 
@@ -498,6 +655,9 @@ export default function BuilderPage() {
                     onAdd={addLayer}
                     onAddImage={addImageLayerFromFile}
                     onAddVideo={addVideoLayerFromFile}
+                    onImportSvg={importSvgFile}
+                    onGroupSelection={groupSelected}
+                    onUngroupSelection={ungroupSelected}
                     onAddAudio={addAudioLayerFromFile}
                     onDelete={deleteLayer}
                     onReorder={reorderLayer}
@@ -514,14 +674,47 @@ export default function BuilderPage() {
                     editor={editor}
                     timeMs={currentTimeMs}
                     selectedLayerId={selectedLayerId}
+                    selectedLayerIds={selectedLayerIds}
                     assets={assetCache}
                     onSelectLayer={(id) => selectLayer(id)}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
-                    previewMode={!!runtime.segmentState}
+                    previewMode={!!runtime.segmentState || manualPreview}
                     onLayerClickInPreview={(layerId) =>
                       runtime.fireEvent({ type: 'click', layerId })
                     }
+                    onLayerDragInPreview={(layerId, phase, dx, dy, progress) => {
+                      const evtType =
+                          phase === 'start' ? 'dragStart'
+                        : phase === 'end'   ? 'dragEnd'
+                        : 'dragMove'
+                      runtime.fireEvent({ type: evtType, layerId, dx, dy, progress })
+
+                      const layer = scene.layers.find(l => l.id === layerId)
+                      const cfg = layer?.dragConfig
+
+                      // 🎬 Scrub a timeline — drag controls its playhead.
+                      //    Author normal keyframe animations; drag becomes the
+                      //    timeline cursor. Used for "drag this box down →
+                      //    text blur ramps up" style interactions.
+                      if (cfg?.scrubsTimeline) {
+                        const tl = scene.timelines.find(t => t.id === cfg.scrubsTimeline)
+                        if (tl) {
+                          // Pause regular playback at drag start so the user's
+                          // scrub isn't fighting the autoplay clock.
+                          if (phase === 'start' && isPlaying) handlePlayToggle()
+                          handleSeek(progress * tl.durationMs)
+                        }
+                      }
+
+                      // Auto-set parameter when configured on the layer
+                      if (cfg?.setsParameter && phase === 'move') {
+                        runtime.setParamOverride(cfg.setsParameter, progress)
+                      }
+                    }}
+                    panMode={toolMode === 'pan'}
+                    onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
+                    toolMode={toolMode}
                   />
                 ),
               },
@@ -535,6 +728,8 @@ export default function BuilderPage() {
                       onLayerChange={updateLayer}
                       onCompositionChange={updateComposition}
                       parameters={scene.parameters}
+                      allLayers={scene.layers}
+                      allTimelines={scene.timelines.map(t => ({ id: t.id, durationMs: t.durationMs }))}
                     />
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
@@ -591,6 +786,16 @@ export default function BuilderPage() {
                 id: 'runtimePreview', title: 'Preview',
                 render: () => <RuntimePreviewPanel scene={scene} runtime={runtime} />,
               },
+              {
+                id: 'assets', title: 'Assets',
+                render: () => (
+                  <AssetsPanel
+                    scene={scene}
+                    editor={editor}
+                    onSelectLayer={(id) => selectLayer(id)}
+                  />
+                ),
+              },
             ] satisfies PanelDefinition[])}
             onTabSelect={dock.dispatchTab}
             onResize={dock.dispatchResize}
@@ -612,6 +817,9 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── Toast notifications (lives above everything) ───────────── */}
+      <ToastContainer />
     </div>
   )
 }

@@ -5,7 +5,7 @@ import type { LayerType } from './core'
 
 // ── Animatable Property Descriptor ────────────────────────────────────────────
 
-export type AnimatableGroup = 'Transform' | 'Fill' | 'Stroke' | 'Text' | 'Effects' | 'Path'
+export type AnimatableGroup = 'Transform' | 'Fill' | 'Stroke' | 'Text' | 'Effects' | 'Path' | 'Geometry' | 'Trim Path'
 
 export interface AnimatableProperty {
   label: string
@@ -41,11 +41,26 @@ export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   { label: 'Saturate',        path: 'effects.saturate',      group: 'Effects' },
   // ── Motion Path ───────────────────────────────────────────────────────────
   { label: 'Path Offset',     path: 'motionPath.offset',     group: 'Path' },
+  // ── Follow Path (binds layer position to another path layer) ──────────────
+  { label: 'Follow Progress',         path: 'followPath.progress',            group: 'Path' },
+  { label: 'Follow Rotation Offset',  path: 'followPath.rotationOffset',      group: 'Path' },
+  { label: 'Follow Perp Offset',      path: 'followPath.perpendicularOffset', group: 'Path' },
   // ── Path Stroke Layer ─────────────────────────────────────────────────────
   { label: 'Trim Offset',     path: 'pathStroke.trim.offset',         group: 'Path', layerTypes: ['pathStroke'] },
   { label: 'Trim Length',     path: 'pathStroke.trim.segmentLength',  group: 'Path', layerTypes: ['pathStroke'] },
   { label: 'Stroke Width',    path: 'pathStroke.stroke.width',        group: 'Stroke', layerTypes: ['pathStroke'] },
   { label: 'Stroke Color',    path: 'pathStroke.stroke.color',        group: 'Stroke', layerTypes: ['pathStroke'] },
+  // ── Shape Geometry (shape-specific params) ────────────────────────────────
+  { label: 'Sides',           path: 'shapeParams.sides',        group: 'Geometry',  layerTypes: ['shape'] },
+  { label: 'Inner Radius',    path: 'shapeParams.innerRadius',  group: 'Geometry',  layerTypes: ['shape'] },
+  { label: 'Outer Radius',    path: 'shapeParams.outerRadius',  group: 'Geometry',  layerTypes: ['shape'] },
+  { label: 'Roundness',       path: 'shapeParams.roundness',    group: 'Geometry',  layerTypes: ['shape'] },
+  { label: 'Start Angle',     path: 'shapeParams.startAngle',   group: 'Geometry',  layerTypes: ['shape'] },
+  { label: 'End Angle',       path: 'shapeParams.endAngle',     group: 'Geometry',  layerTypes: ['shape'] },
+  // ── Shape Trim Path (animates stroke reveal / progress) ───────────────────
+  { label: 'Trim Start',      path: 'style.stroke.trim.start',  group: 'Trim Path', layerTypes: ['shape'] },
+  { label: 'Trim End',        path: 'style.stroke.trim.end',    group: 'Trim Path', layerTypes: ['shape'] },
+  { label: 'Trim Offset',     path: 'style.stroke.trim.offset', group: 'Trim Path', layerTypes: ['shape'] },
 ]
 
 // ── Timeline Settings ─────────────────────────────────────────────────────────

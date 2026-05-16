@@ -15,11 +15,20 @@ export interface RuntimeEvent {
   timelineId?:  string
   refId?:       string
   frameNumber?: number
-  /** 0–1, used for dragMove. */
+  /** 0–1 normalized drag distance, used for dragMove. */
   progress?:    number
+  /** Raw horizontal drag delta in composition pixels (dragMove). */
+  dx?:          number
+  /** Raw vertical drag delta in composition pixels (dragMove). */
+  dy?:          number
 }
 
-export type ResolvedAction = TriggerAction & { triggerId: string }
+export type ResolvedAction = TriggerAction & {
+  triggerId: string
+  /** The event that fired this action — provides dx/dy/progress payload for
+   *  paramValueFrom resolution downstream. */
+  sourceEvent: RuntimeEvent
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Matching
@@ -97,7 +106,7 @@ export function evaluateTriggers(
       if (!eventMatches(trigger.event, runtimeEvent)) continue
       if (trigger.condition && !evaluateCondition(trigger.condition, paramValues)) continue
       for (const action of trigger.actions) {
-        out.push({ ...action, triggerId: trigger.id })
+        out.push({ ...action, triggerId: trigger.id, sourceEvent: runtimeEvent })
       }
     }
   }

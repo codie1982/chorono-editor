@@ -2,10 +2,15 @@
 import {
   useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo,
 } from 'react'
-import type { ChronoScene, Layer } from '@/lib/types'
-import { renderScene, hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
+import type { ChronoScene, Layer, BezierPath } from '@/lib/types'
+import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
+import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
+import { hitTestPath, moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
+import {
+  buildSnapTargets, snapRect, type Guide,
+} from '@/lib/snap/AlignmentGuides'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 
 interface Props {
@@ -13,6 +18,9 @@ interface Props {
   editor: EditorStateReturn
   timeMs: number
   selectedLayerId: string | null
+  /** Multi-selection set — when set has >1 entries, drag operations move
+   *  ALL of them together (group-style transform). */
+  selectedLayerIds?: Set<string>
   assets: AssetElementMap
   onSelectLayer: (id: string | null) => void
   /** Optional pre-computed override map from the interactive runtime hook
@@ -26,6 +34,22 @@ interface Props {
   previewMode?:  boolean
   /** Called with the layer id when a tappable layer is clicked in preview mode. */
   onLayerClickInPreview?: (layerId: string) => void
+  /** Preview-mode drag events on draggable layers — fires Trigger events. */
+  onLayerDragInPreview?: (
+    layerId: string,
+    phase:   'start' | 'move' | 'end',
+    dx:      number,
+    dy:      number,
+    progress:number,
+  ) => void
+  /** Optional external control of pan mode — when provided, SceneCanvas reads
+   *  from this prop instead of its internal toggle. Lets the top toolbar drive
+   *  the canvas tool state without lifting all state. */
+  panMode?: boolean
+  onPanModeChange?: (next: boolean) => void
+  /** External tool mode (select/pan/pen). When 'pen' and a path layer is
+   *  selected, canvas clicks insert new anchors instead of starting drags. */
+  toolMode?: 'select' | 'pan' | 'pen'
 }
 
 const PADDING   = 24
@@ -38,8 +62,11 @@ type Handle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se'
 
 interface MoveState {
   kind: 'move'
+  /** Primary (the layer actually clicked). Used for snapshot + selection focus. */
   layerId: string
   originalLayer: Layer
+  /** All layers being moved together — primary + multi-selection peers. */
+  movingLayers: { id: string; originalLayer: Layer }[]
   startClientX: number
   startClientY: number
   width:  number
@@ -63,7 +90,36 @@ interface AnchorState {
   startClientY: number
 }
 
-type ActiveDrag = MoveState | ResizeState | AnchorState
+/** Rotation drag — rotates the layer around its anchor point. */
+interface RotateState {
+  kind: 'rotate'
+  layerId: string
+  originalLayer: Layer
+  /** Pointer position at drag start (shared with other drag kinds). */
+  startClientX: number
+  startClientY: number
+  /** Initial angle (degrees) from anchor to pointer at drag start. */
+  startAngle: number
+  /** Original rotation (degrees) so we can add the delta on top. */
+  originalRotation: number
+  /** World coords of the layer's anchor (rotation pivot). */
+  anchorWorldX: number
+  anchorWorldY: number
+}
+
+interface PathPointDrag {
+  kind: 'pathPoint'
+  layerId: string
+  originalLayer: Layer
+  startClientX: number
+  startClientY: number
+  /** Index of the anchor being moved in layer.path.anchors */
+  anchorIndex: number
+  /** Which part of the anchor is being moved */
+  part: 'anchor' | 'inHandle' | 'outHandle'
+}
+
+type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | RotateState
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -82,8 +138,9 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 }
 
 export default function SceneCanvas({
-  scene, editor, timeMs, selectedLayerId, assets, onSelectLayer,
-  overrides, paramValues, previewMode, onLayerClickInPreview,
+  scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
+  overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
+  panMode: controlledPanMode, onPanModeChange, toolMode,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -100,8 +157,25 @@ export default function SceneCanvas({
   const snapRef = useRef({ enabled: false, size: 20 })
   useEffect(() => { snapRef.current = { enabled: snapEnabled, size: gridSize } }, [snapEnabled, gridSize])
 
+  // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
+  // Active guides are stored in a ref AND state so changes trigger render
+  // but inside-pointermove updates don't re-create handler closures.
+  const [activeGuides, setActiveGuides] = useState<Guide[]>([])
+  const guidesRef = useRef<Guide[]>([])
+  const setGuides = (g: Guide[]) => {
+    guidesRef.current = g
+    setActiveGuides(g)
+  }
+
   // ── Pan mode (move the whole view instead of objects) ───────────────────
-  const [panMode, setPanMode] = useState(false)
+  // Controlled (via props) when parent provides it; otherwise self-managed.
+  const [internalPanMode, setInternalPanMode] = useState(false)
+  const panMode = controlledPanMode ?? internalPanMode
+  const setPanMode = (next: boolean | ((p: boolean) => boolean)) => {
+    const resolved = typeof next === 'function' ? next(panMode) : next
+    if (onPanModeChange) onPanModeChange(resolved)
+    else setInternalPanMode(resolved)
+  }
   const [pan, setPan]         = useState({ x: 0, y: 0 })
   const panDragRef = useRef<{
     startClientX: number; startClientY: number; startPan: { x: number; y: number }
@@ -230,19 +304,100 @@ export default function SceneCanvas({
     const snap = snapRef.current
 
     if (drag.kind === 'move') {
-      const ox = drag.originalLayer.transform.x
-      const oy = drag.originalLayer.transform.y
-      let nx = ox + dx
-      let ny = oy + dy
-      // Snap to canvas grid when active — both anchor AND object move snap.
-      if (snap.enabled) {
-        nx = snapToGrid(nx, snap.size)
-        ny = snapToGrid(ny, snap.size)
+      // Compute delta from the PRIMARY layer's drag — apply that delta to
+      // every layer in movingLayers (multi-select preserves relative spacing).
+      const primaryOx = drag.originalLayer.transform.x
+      const primaryOy = drag.originalLayer.transform.y
+      let pnx = primaryOx + dx
+      let pny = primaryOy + dy
+
+      // ── Alignment guides (canvas / other layers / centerlines) ──────────
+      // Snap applies BEFORE grid snap so guides win. Threshold scales with
+      // zoom so it feels like ~6 screen pixels regardless of zoom level.
+      const SNAP_PX = 6
+      const threshold = SNAP_PX / Math.max(0.01, snap.enabled ? 1 : 1)
+      // Build snap targets from OTHER layers (skip every layer being moved).
+      const movingIds = new Set(drag.movingLayers.map(m => m.id))
+      const otherRects = sceneRef.current.layers
+        .filter(l => !movingIds.has(l.id) && !l.hidden && l.type !== 'audio' && l.size)
+        .map(l => ({
+          id: l.id, x: l.transform.x, y: l.transform.y,
+          width: l.size!.width, height: l.size!.height,
+        }))
+      const targets = buildSnapTargets(cw, ch, otherRects)
+      const movingRect = {
+        x: pnx, y: pny,
+        width: drag.width, height: drag.height,
       }
-      nx = clamp(nx, 0, Math.max(0, cw - drag.width))
-      ny = clamp(ny, 0, Math.max(0, ch - drag.height))
-      let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.x', nx)
-      next = updateLayerProperty(next, drag.layerId, 'transform.y', ny)
+      const snapped = snapRect(movingRect, targets, threshold)
+      pnx = snapped.x
+      pny = snapped.y
+      setGuides(snapped.guides)
+
+      // ── Grid snap (legacy) ─────────────────────────────────────────────
+      if (snap.enabled) {
+        pnx = snapToGrid(pnx, snap.size)
+        pny = snapToGrid(pny, snap.size)
+      }
+
+      pnx = clamp(pnx, 0, Math.max(0, cw - drag.width))
+      pny = clamp(pny, 0, Math.max(0, ch - drag.height))
+      const actualDx = pnx - primaryOx
+      const actualDy = pny - primaryOy
+
+      let next = sceneRef.current
+      for (const { id, originalLayer } of drag.movingLayers) {
+        next = updateLayerProperty(next, id, 'transform.x', originalLayer.transform.x + actualDx)
+        next = updateLayerProperty(next, id, 'transform.y', originalLayer.transform.y + actualDy)
+      }
+      editorRef.current.previewTransaction(next)
+      return
+    }
+
+    if (drag.kind === 'pathPoint') {
+      const orig = drag.originalLayer
+      if (!orig.path) return
+      const a = orig.path.anchors[drag.anchorIndex]
+      if (!a) return
+
+      let nextPath: BezierPath
+      if (drag.part === 'anchor') {
+        nextPath = moveAnchor(orig.path, drag.anchorIndex, dx, dy)
+      } else if (drag.part === 'inHandle') {
+        const baseX = a.inX ?? a.x
+        const baseY = a.inY ?? a.y
+        nextPath = moveInHandle(orig.path, drag.anchorIndex, baseX + dx, baseY + dy)
+      } else {
+        const baseX = a.outX ?? a.x
+        const baseY = a.outY ?? a.y
+        nextPath = moveOutHandle(orig.path, drag.anchorIndex, baseX + dx, baseY + dy)
+      }
+
+      const nextScene: ChronoScene = {
+        ...sceneRef.current,
+        layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : { ...l, path: nextPath }),
+      }
+      editorRef.current.previewTransaction(nextScene)
+      return
+    }
+
+    if (drag.kind === 'rotate') {
+      // Pointer angle from layer's anchor center (world coords) → delta from
+      // start angle → add to original rotation. Shift = snap to 15°.
+      const rect = canvasRef.current!.getBoundingClientRect()
+      const wx = (e.clientX - rect.left) * (compositionRef.current.width  / rect.width)
+      const wy = (e.clientY - rect.top)  * (compositionRef.current.height / rect.height)
+      const dxA = wx - drag.anchorWorldX
+      const dyA = wy - drag.anchorWorldY
+      const curAngle = (Math.atan2(dyA, dxA) * 180) / Math.PI
+      let delta = curAngle - drag.startAngle
+      let nextRot = drag.originalRotation + delta
+      if (e.shiftKey) nextRot = Math.round(nextRot / 15) * 15
+      // Wrap into [-180, 180]
+      while (nextRot > 180)  nextRot -= 360
+      while (nextRot < -180) nextRot += 360
+
+      const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
       editorRef.current.previewTransaction(next)
       return
     }
@@ -312,11 +467,23 @@ export default function SceneCanvas({
     nw = Math.min(nw, cw - nx)
     nh = Math.min(nh, ch - ny)
 
+    // ── Preserve anchor's PROPORTIONAL position across resize ──────────
+    // If the user placed the anchor visually (e.g. at the centre at 50/100),
+    // resizing 100→200 should keep it at 50% width (= new 100, not stuck
+    // at the original 50). Without this, scaling shifts the rotation pivot
+    // and breaks the user's mental model.
+    const oax = layer.transform.anchorX
+    const oay = layer.transform.anchorY
+    const fx  = ow > 0 ? oax / ow : 0.5
+    const fy  = oh > 0 ? oay / oh : 0.5
+    const nax = fx * nw
+    const nay = fy * nh
+
     const nextScene: ChronoScene = {
       ...sceneRef.current,
       layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : {
         ...l,
-        transform: { ...l.transform, x: nx, y: ny },
+        transform: { ...l.transform, x: nx, y: ny, anchorX: nax, anchorY: nay },
         size: { width: nw, height: nh },
       }),
     }
@@ -329,10 +496,50 @@ export default function SceneCanvas({
     dragRef.current = null
     window.removeEventListener('pointermove', handlePointerMove)
     window.removeEventListener('pointerup',   handlePointerUp)
+    // Clear alignment guides once the drag is over
+    setGuides([])
 
     const ed = editorRef.current
     const finalLayer = ed.scene.layers.find((l) => l.id === drag.layerId)
     if (!finalLayer) { ed.cancelTransaction(); return }
+
+    // Path point drag — commit if path actually changed
+    if (drag.kind === 'pathPoint') {
+      const pChanged = JSON.stringify(finalLayer.path) !== JSON.stringify(drag.originalLayer.path)
+      if (!pChanged) { ed.cancelTransaction(); return }
+      ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
+      return
+    }
+
+    if (drag.kind === 'rotate') {
+      const rChanged = finalLayer.transform.rotationDeg !== drag.originalLayer.transform.rotationDeg
+      if (!rChanged) { ed.cancelTransaction(); return }
+      ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
+      return
+    }
+
+    // Multi-layer move → batch one undo step
+    if (drag.kind === 'move' && drag.movingLayers.length > 1) {
+      const moved: { layerId: string; next: Layer; prev: Layer }[] = []
+      for (const { id, originalLayer } of drag.movingLayers) {
+        const fl = ed.scene.layers.find(l => l.id === id)
+        if (!fl) continue
+        if (fl.transform.x !== originalLayer.transform.x ||
+            fl.transform.y !== originalLayer.transform.y) {
+          moved.push({ layerId: id, next: fl, prev: originalLayer })
+        }
+      }
+      if (moved.length === 0) { ed.cancelTransaction(); return }
+      const cmds = moved.map(m => makeUpdateLayerCmd(m.layerId, m.next, m.prev))
+      // Lazy-load batch builder so this file's bundle stays cool.
+      import('@/lib/editor/commands-batch').then(({ makeBatchCmd }) => {
+        ed.commitTransaction(makeBatchCmd(`Move ${moved.length} layers`, cmds))
+      }).catch(() => {
+        // Fallback: commit primary only
+        ed.commitTransaction(cmds[0])
+      })
+      return
+    }
 
     // Only commit if something actually changed
     const orig = drag.originalLayer
@@ -391,11 +598,18 @@ export default function SceneCanvas({
     // ── Runtime preview mode: clicks on tappable layers fire trigger events
     //    instead of changing selection. Lets the author exercise layer-click
     //    rules without leaving the builder.
-    if (previewMode && onLayerClickInPreview) {
+    if (previewMode) {
       const stack = hitTestLayersAt(scene, timeMs, cx, cy)
+      // Prefer draggable layer over tappable when both are set, since drag
+      // requires the drag-start handler to capture the pointer immediately.
       for (const id of stack) {
         const layer = scene.layers.find((l) => l.id === id)
-        if (layer?.tappable) {
+        if (!layer) continue
+        if (layer.draggable && onLayerDragInPreview) {
+          beginPreviewDrag(layer, e.clientX, e.clientY, cx, cy)
+          return
+        }
+        if (layer.tappable && onLayerClickInPreview) {
           onLayerClickInPreview(id)
           return
         }
@@ -403,9 +617,54 @@ export default function SceneCanvas({
       return
     }
 
+    // ── Pen Tool: if a path layer is selected, first check anchor/handle hits
+    //    BEFORE the normal layer hit-test. Drag the anchor/handle, not the layer.
+    const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (selectedLayer && selectedLayer.type === 'path' && selectedLayer.path && !selectedLayer.locked) {
+      const lx = cx - selectedLayer.transform.x
+      const ly = cy - selectedLayer.transform.y
+      const penHit = hitTestPath(selectedLayer.path, lx, ly, 8)
+      if (penHit) {
+        editor.beginTransaction()
+        dragRef.current = {
+          kind: 'pathPoint',
+          layerId: selectedLayer.id,
+          originalLayer: selectedLayer,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          anchorIndex: penHit.anchorIndex,
+          part: penHit.type,
+        }
+        window.addEventListener('pointermove', handlePointerMove)
+        window.addEventListener('pointerup',   handlePointerUp)
+        return
+      }
+
+      // Pen mode + click on empty area = APPEND a new anchor (corner type).
+      // Lets users build a path by clicking points in sequence.
+      if (toolMode === 'pen') {
+        const next = {
+          ...selectedLayer,
+          path: {
+            ...selectedLayer.path,
+            anchors: [
+              ...selectedLayer.path.anchors,
+              { x: lx, y: ly, pointType: 'corner' as const },
+            ],
+          },
+        }
+        editor.dispatchCommand(makeUpdateLayerCmd(selectedLayer.id, next, selectedLayer))
+        return
+      }
+    }
+
     // Alt/Option-click cycles through stacked layers under the cursor — useful
     // when a top layer (e.g. a full-canvas background) is blocking selection
     // of layers underneath. Plain click takes the topmost hit.
+    //
+    // Group semantics (Figma-style): clicking a grouped child SELECTS the
+    // topmost ancestor group instead, so the group can be dragged. Alt-click
+    // bypasses this and lets you pick the literal child.
     let hit: string | null
     if (e.altKey) {
       const stack = hitTestLayersAt(scene, timeMs, cx, cy)
@@ -417,17 +676,46 @@ export default function SceneCanvas({
       }
     } else {
       hit = hitTestLayer(scene, timeMs, cx, cy)
+      // Bubble up to topmost ancestor group
+      if (hit) {
+        let cur = scene.layers.find(l => l.id === hit)
+        while (cur?.parentId) {
+          const parent = scene.layers.find(l => l.id === cur!.parentId)
+          if (!parent) break
+          if (parent.type === 'group') hit = parent.id
+          cur = parent
+        }
+      }
     }
-    onSelectLayer(hit)
+    // Don't change selection when clicking on a layer that's already part of
+    // the multi-selection (preserves the multi-select set so the upcoming
+    // drag moves all peers).
+    const inMultiSet = !!hit && (selectedLayerIds?.has(hit) ?? false)
+    if (!inMultiSet) onSelectLayer(hit)
     if (!hit) return
     const layer = scene.layers.find((l) => l.id === hit)
     if (!layer || layer.locked) return
+
+    // Build the list of layers to move together. When clicking a member of the
+    // multi-selection, every selected (non-locked) layer travels with it.
+    const movingLayers: { id: string; originalLayer: Layer }[] = []
+    if (inMultiSet && selectedLayerIds && selectedLayerIds.size > 1) {
+      // Resolve each selected id to a non-locked layer snapshot
+      for (const id of Array.from(selectedLayerIds)) {
+        const l = scene.layers.find(x => x.id === id)
+        if (l && !l.locked) movingLayers.push({ id: l.id, originalLayer: l })
+      }
+      // Ensure primary is included (already covered if it's in the set)
+    } else {
+      movingLayers.push({ id: layer.id, originalLayer: layer })
+    }
 
     editor.beginTransaction()
     dragRef.current = {
       kind: 'move',
       layerId: layer.id,
       originalLayer: layer,
+      movingLayers,
       startClientX: e.clientX,
       startClientY: e.clientY,
       width:  layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80),
@@ -476,21 +764,183 @@ export default function SceneCanvas({
     window.addEventListener('pointerup',   handlePointerUp)
   }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
 
+  // ── Preview-mode drag: fires dragStart/Move/End on draggable layers ────
+  // Also writes a TEMPORARY override map entry so the dragged layer visibly
+  // follows the cursor (no scene mutation — pure render-time override).
+  const previewDragRef = useRef<{
+    layerId: string
+    startClientX: number; startClientY: number
+    range: number
+    axis: 'x' | 'y' | 'both'
+    originalX: number
+    originalY: number
+    /** When true, drag scrubs a timeline — the layer's position is driven by
+     *  its own keyframes (NOT the cursor). We skip the visual cursor-follow
+     *  override so the authored animation can play through. */
+    scrubMode: boolean
+  } | null>(null)
+  // Map of `layers.<id>.transform.x|y` → number. Merged into renderer
+  // overrides so the dragged layer follows the cursor in preview.
+  const [dragOverrides, setDragOverrides] = useState<Map<string, number>>(new Map())
+
+  const handlePreviewDragMove = useCallback((e: PointerEvent) => {
+    const d = previewDragRef.current
+    if (!d) return
+    const { sx, sy } = pxScale.current
+    const rawDx = (e.clientX - d.startClientX) * sx
+    const rawDy = (e.clientY - d.startClientY) * sy
+    // Apply axis filter
+    const dx = d.axis === 'y' ? 0 : rawDx
+    const dy = d.axis === 'x' ? 0 : rawDy
+
+    // 👉 Visual feedback:
+    //    – Free-drag mode:  override transform with cursor position
+    //    – Scrub mode:      let the layer's KEYFRAMES drive the position
+    //                       (the timeline scrub upstream moves the cursor,
+    //                       so the layer's authored animation plays through)
+    if (!d.scrubMode) {
+      setDragOverrides(new Map([
+        [`layers.${d.layerId}.transform.x`, d.originalX + dx],
+        [`layers.${d.layerId}.transform.y`, d.originalY + dy],
+      ]))
+    }
+
+    if (onLayerDragInPreview) {
+      const dist     = d.axis === 'both' ? Math.hypot(dx, dy) : Math.abs(d.axis === 'x' ? dx : dy)
+      const progress = Math.max(0, Math.min(1, dist / Math.max(1, d.range)))
+      onLayerDragInPreview(d.layerId, 'move', dx, dy, progress)
+    }
+  }, [onLayerDragInPreview])
+
+  const handlePreviewDragUp = useCallback((e: PointerEvent) => {
+    const d = previewDragRef.current
+    if (!d) return
+    previewDragRef.current = null
+    window.removeEventListener('pointermove', handlePreviewDragMove)
+    window.removeEventListener('pointerup',   handlePreviewDragUp)
+    // Clear the visual override — when preview exits / re-enters, layer
+    // returns to its authored position.
+    setDragOverrides(new Map())
+    if (onLayerDragInPreview) {
+      const { sx, sy } = pxScale.current
+      const rawDx = (e.clientX - d.startClientX) * sx
+      const rawDy = (e.clientY - d.startClientY) * sy
+      const dx = d.axis === 'y' ? 0 : rawDx
+      const dy = d.axis === 'x' ? 0 : rawDy
+      const dist     = d.axis === 'both' ? Math.hypot(dx, dy) : Math.abs(d.axis === 'x' ? dx : dy)
+      const progress = Math.max(0, Math.min(1, dist / Math.max(1, d.range)))
+      onLayerDragInPreview(d.layerId, 'end', dx, dy, progress)
+    }
+  }, [handlePreviewDragMove, onLayerDragInPreview])
+
+  const beginPreviewDrag = useCallback((
+    layer: Layer, startClientX: number, startClientY: number, _cx: number, _cy: number,
+  ) => {
+    const cfg = layer.dragConfig ?? {}
+
+    // ── Auto-detect scrub setup from the layer's OWN animation tracks ────
+    // When the layer is keyframed on a timeline AND has a scrubsTimeline
+    // pointing at that timeline, we infer:
+    //   • axis     = whichever of transform.x / transform.y is animated
+    //   • range    = absolute value delta across the animation (e.g. 0→200 → 200)
+    //   • scrubMode = true (layer position will be driven by keyframes,
+    //                       not by cursor follow)
+    let axis:  'x' | 'y' | 'both' = cfg.axis ?? 'both'
+    let range: number             = cfg.range ?? 200
+    let scrubMode                 = false
+
+    if (cfg.scrubsTimeline) {
+      const tl = scene.timelines.find(t => t.id === cfg.scrubsTimeline)
+      if (tl) {
+        scrubMode = true
+        const xTrack = tl.tracks.find(t => t.target === `layers.${layer.id}.transform.x`)
+        const yTrack = tl.tracks.find(t => t.target === `layers.${layer.id}.transform.y`)
+        const xValues = xTrack?.keyframes.map(k => Number(k.value)) ?? []
+        const yValues = yTrack?.keyframes.map(k => Number(k.value)) ?? []
+        const xRange  = xValues.length > 1 ? Math.max(...xValues) - Math.min(...xValues) : 0
+        const yRange  = yValues.length > 1 ? Math.max(...yValues) - Math.min(...yValues) : 0
+        if (xRange > 0 && yRange > 0) { axis = 'both'; range = Math.hypot(xRange, yRange) }
+        else if (xRange > 0)          { axis = 'x';    range = xRange }
+        else if (yRange > 0)          { axis = 'y';    range = yRange }
+        // If layer has no keyframes on this timeline, keep explicit cfg values.
+      }
+    }
+
+    previewDragRef.current = {
+      layerId: layer.id,
+      startClientX, startClientY,
+      range, axis,
+      originalX: layer.transform.x,
+      originalY: layer.transform.y,
+      scrubMode,
+    }
+    if (onLayerDragInPreview) onLayerDragInPreview(layer.id, 'start', 0, 0, 0)
+    window.addEventListener('pointermove', handlePreviewDragMove)
+    window.addEventListener('pointerup',   handlePreviewDragUp)
+  }, [scene, onLayerDragInPreview, handlePreviewDragMove, handlePreviewDragUp])
+
+  // ── Rotation handle (corner-outer area) → rotate around anchor ──────────
+  const beginRotate = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!layer || layer.locked) return
+
+    // Convert click → world (composition) coords for the rotation pivot math.
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const sx = compositionRef.current.width  / rect.width
+    const sy = compositionRef.current.height / rect.height
+    const wx = (e.clientX - rect.left) * sx
+    const wy = (e.clientY - rect.top)  * sy
+
+    const anchorWorldX = layer.transform.x + layer.transform.anchorX
+    const anchorWorldY = layer.transform.y + layer.transform.anchorY
+    const startAngle   = (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
+
+    editor.beginTransaction()
+    dragRef.current = {
+      kind: 'rotate',
+      layerId: layer.id,
+      originalLayer: layer,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startAngle,
+      originalRotation: layer.transform.rotationDeg,
+      anchorWorldX,
+      anchorWorldY,
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup',   handlePointerUp)
+  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+
   // ── Render canvas ─────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    renderScene(
+    // Merge timeline/runtime overrides with the temporary drag override so
+    // the dragged layer visibly follows the cursor.
+    let mergedOverrides = overrides
+    if (dragOverrides.size > 0) {
+      const m = new Map<string, number>()
+      overrides?.forEach((v, k) => m.set(k, v))
+      dragOverrides.forEach((v, k) => m.set(k, v))
+      mergedOverrides = m
+    }
+    canvasRenderer.render(
       ctx, scene, timeMs, selectedLayerId, assets,
       {
         grid:        snapEnabled ? { size: gridSize } : undefined,
-        overrides,
+        overrides:   mergedOverrides,
         paramValues,
+        selectedLayerIds,
       },
     )
-  }, [scene, timeMs, selectedLayerId, assets, snapEnabled, gridSize, overrides, paramValues])
+  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, gridSize, overrides, paramValues, dragOverrides])
 
   // ── Wheel zoom (Cmd/Ctrl held) ────────────────────────────────────────────
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -526,15 +976,30 @@ export default function SceneCanvas({
         {/* Canvas + selection overlay share the same scaled box */}
         <div
           className="relative"
-          style={{ width: `${width * zoom}px`, height: `${height * zoom}px` }}
+          style={{
+            width: `${width * zoom}px`, height: `${height * zoom}px`,
+            outline: previewMode ? '2px solid #f59e0b' : undefined,
+            outlineOffset: previewMode ? '-2px' : undefined,
+          }}
         >
+          {/* Preview-mode badge — corner indicator so user knows clicks fire
+              events / drag follows cursor instead of editing. */}
+          {previewMode && (
+            <div className="absolute top-1 left-1 z-30 pointer-events-none
+                            px-2 py-0.5 rounded bg-amber-600/90 text-white text-[10px]
+                            font-bold tracking-wider uppercase shadow">
+              ▶ Preview
+            </div>
+          )}
           <canvas
             ref={canvasRef}
             width={width}
             height={height}
             onPointerDown={handleCanvasPointerDown}
             className={`absolute inset-0 block ${
-              panMode ? 'cursor-grab'
+              previewMode ? 'cursor-pointer'
+              : toolMode === 'pen' ? 'cursor-crosshair'
+              : panMode ? 'cursor-grab'
               : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
               : 'cursor-grab'
             } ${panDragRef.current ? '!cursor-grabbing' : ''}`}
@@ -552,7 +1017,9 @@ export default function SceneCanvas({
               y={selectedLayer.transform.y * zoom}
               w={selectedLayer.size.width  * zoom}
               h={selectedLayer.size.height * zoom}
+              rotationDeg={selectedLayer.transform.rotationDeg}
               onHandlePointerDown={beginResize}
+              onRotatePointerDown={beginRotate}
             />
           )}
 
@@ -564,6 +1031,47 @@ export default function SceneCanvas({
               isDragging={dragRef.current?.kind === 'anchor'}
               onPointerDown={beginAnchorDrag}
             />
+          )}
+
+          {/* Alignment guide overlay — pink lines while snapping */}
+          {activeGuides.length > 0 && (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ width: `${width * zoom}px`, height: `${height * zoom}px` }}
+            >
+              {activeGuides.map((g, i) => {
+                const isCenter = g.source === 'canvas-center' || g.source === 'layer-center'
+                const color = isCenter ? '#ec4899' : '#f59e0b'   // pink for centers, amber for edges
+                if (g.axis === 'v') {
+                  return (
+                    <div
+                      key={`g-${i}`}
+                      style={{
+                        position: 'absolute',
+                        top: 0, bottom: 0,
+                        left: `${g.position * zoom}px`,
+                        width: '1px',
+                        background: color,
+                        boxShadow: `0 0 4px ${color}`,
+                      }}
+                    />
+                  )
+                }
+                return (
+                  <div
+                    key={`g-${i}`}
+                    style={{
+                      position: 'absolute',
+                      left: 0, right: 0,
+                      top: `${g.position * zoom}px`,
+                      height: '1px',
+                      background: color,
+                      boxShadow: `0 0 4px ${color}`,
+                    }}
+                  />
+                )
+              })}
+            </div>
           )}
         </div>
 
@@ -662,6 +1170,10 @@ export default function SceneCanvas({
 interface FrameProps {
   x: number; y: number; w: number; h: number
   onHandlePointerDown: (h: Handle) => (e: React.PointerEvent) => void
+  /** Begin rotation drag — wired to corner-outer hit zones. */
+  onRotatePointerDown?: (e: React.PointerEvent) => void
+  /** Layer rotation (degrees) so the frame can rotate visually if needed. */
+  rotationDeg?: number
 }
 
 // ── Fit / View menu (opens upward from the zoom pill) ───────────────────────
@@ -771,7 +1283,7 @@ function AnchorHandle({ x, y, isDragging, onPointerDown }: AnchorProps) {
   )
 }
 
-function SelectionFrame({ x, y, w, h, onHandlePointerDown }: FrameProps) {
+function SelectionFrame({ x, y, w, h, onHandlePointerDown, onRotatePointerDown }: FrameProps) {
   const handles: Array<{ key: Handle; cx: number; cy: number }> = [
     { key: 'nw', cx: 0,     cy: 0     },
     { key: 'n',  cx: w / 2, cy: 0     },
@@ -782,12 +1294,40 @@ function SelectionFrame({ x, y, w, h, onHandlePointerDown }: FrameProps) {
     { key: 's',  cx: w / 2, cy: h     },
     { key: 'se', cx: w,     cy: h     },
   ]
+  // Corner-OUTER hit zones for rotation. Standard pattern: a larger
+  // transparent square placed just outside each corner; cursor = alias /
+  // grab. Drag = rotate around the layer's anchor (handled in beginRotate).
+  const ROT_HIT = 18  // px outer-area
+  const rotHandles: Array<{ key: string; cx: number; cy: number }> = [
+    { key: 'rot-nw', cx: 0, cy: 0 },
+    { key: 'rot-ne', cx: w, cy: 0 },
+    { key: 'rot-sw', cx: 0, cy: h },
+    { key: 'rot-se', cx: w, cy: h },
+  ]
   return (
     <div className="absolute pointer-events-none" style={{ left: x, top: y, width: w, height: h }}>
       {/* Frame border */}
       <div className="absolute inset-0 border border-blue-400/90 box-border" />
 
-      {/* Handles */}
+      {/* Rotation hit zones — sit BEHIND resize handles so corner resize wins
+          when the pointer is directly on the corner dot itself. */}
+      {onRotatePointerDown && rotHandles.map((r) => (
+        <div
+          key={r.key}
+          onPointerDown={onRotatePointerDown}
+          className="absolute pointer-events-auto"
+          style={{
+            left:   `${r.cx - ROT_HIT}px`,
+            top:    `${r.cy - ROT_HIT}px`,
+            width:  `${ROT_HIT * 2}px`,
+            height: `${ROT_HIT * 2}px`,
+            cursor: 'alias',   // closest built-in cursor to "rotate"
+          }}
+          title="Drag to rotate (Shift = snap 15°)"
+        />
+      ))}
+
+      {/* Resize handles (drawn AFTER rotation zones so corner clicks resize) */}
       {handles.map((h) => (
         <div
           key={h.key}

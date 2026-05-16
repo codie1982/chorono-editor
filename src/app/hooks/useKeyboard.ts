@@ -12,6 +12,8 @@ interface Handlers {
   onCopy?: () => void
   onPaste?: () => void
   onShowHelp?: () => void
+  onGroupSelected?: () => void
+  onUngroupSelected?: () => void
   frameRate?: number
 }
 
@@ -25,6 +27,7 @@ export function useKeyboard(handlers: Handlers) {
     onStepBack, onStepForward,
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
+    onGroupSelected, onUngroupSelected,
     frameRate: _frameRate = 60,
   } = handlers
 
@@ -72,6 +75,14 @@ export function useKeyboard(handlers: Handlers) {
       if (meta && (e.key === '/' || e.key === '?') && onShowHelp) {
         e.preventDefault(); onShowHelp(); return
       }
+
+      // ── Group / Ungroup ────────────────────────────────────────────────
+      if (meta && e.key === 'g' && !e.shiftKey && onGroupSelected) {
+        e.preventDefault(); onGroupSelected(); return
+      }
+      if (meta && e.shiftKey && (e.key === 'g' || e.key === 'G') && onUngroupSelected) {
+        e.preventDefault(); onUngroupSelected(); return
+      }
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -81,5 +92,6 @@ export function useKeyboard(handlers: Handlers) {
     onStepBack, onStepForward,
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
+    onGroupSelected, onUngroupSelected,
   ])
 }

@@ -203,8 +203,20 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
   const applyAction = useCallback((action: ResolvedAction) => {
     switch (action.type) {
       case 'setParam': {
-        if (action.paramId && action.paramValue !== undefined) {
-          overridesRef.current.set(action.paramId, action.paramValue)
+        if (!action.paramId) return
+        // Dynamic value source from the firing event (drag dx/dy/progress)
+        // takes priority over the static paramValue.
+        let value: any = action.paramValue
+        if (action.paramValueFrom) {
+          const ev = action.sourceEvent
+          switch (action.paramValueFrom) {
+            case 'event.progress': value = ev.progress ?? 0; break
+            case 'event.dx':       value = ev.dx       ?? 0; break
+            case 'event.dy':       value = ev.dy       ?? 0; break
+          }
+        }
+        if (value !== undefined) {
+          overridesRef.current.set(action.paramId, value)
           setOverridesVersion((v) => v + 1)
         }
         return

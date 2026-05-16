@@ -272,7 +272,7 @@ export function defaultLayout(): DockNode {
               { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas'],     activeIndex: 0 },
               {
                 kind: 'leaf', id: 'properties-leaf',
-                panels: ['properties', 'parameters', 'events', 'motionBinding', 'runtimePreview'],
+                panels: ['properties', 'assets', 'parameters', 'events', 'motionBinding', 'runtimePreview'],
                 activeIndex: 0,
               },
             ],

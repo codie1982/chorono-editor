@@ -374,10 +374,29 @@ function ActionTargets({
               ...scene.parameters.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
+          {/* Value SOURCE: static literal OR pulled from event payload
+              (drag dx / dy / progress). When a non-static source is chosen
+              the literal input is greyed out — only meaningful for drag/scroll
+              event triggers. */}
+          <Select
+            value={action.paramValueFrom ?? ''}
+            onChange={(v) => onChange({
+              ...action,
+              paramValueFrom: (v || undefined) as any,
+            })}
+            options={[
+              { value: '',               label: '= (static)' },
+              { value: 'event.progress', label: '← event.progress (0-1)' },
+              { value: 'event.dx',       label: '← event.dx (px)' },
+              { value: 'event.dy',       label: '← event.dy (px)' },
+            ]}
+          />
           <input
-            className="bg-gray-900 border border-gray-700 rounded px-2 py-0.5 text-[11px] text-gray-100 outline-none flex-1"
-            placeholder="value"
-            value={String(action.paramValue ?? '')}
+            className={`bg-gray-900 border border-gray-700 rounded px-2 py-0.5 text-[11px] outline-none flex-1
+              ${action.paramValueFrom ? 'text-gray-600 italic line-through' : 'text-gray-100'}`}
+            placeholder={action.paramValueFrom ? '(from event)' : 'value'}
+            disabled={!!action.paramValueFrom}
+            value={action.paramValueFrom ? '' : String(action.paramValue ?? '')}
             onChange={(e) => onChange({ ...action, paramValue: maybeNumber(e.target.value) })}
           />
         </>
