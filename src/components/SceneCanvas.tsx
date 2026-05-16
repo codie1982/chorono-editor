@@ -95,6 +95,18 @@ export default function SceneCanvas({
     startClientX: number; startClientY: number; startPan: { x: number; y: number }
   } | null>(null)
 
+  // ── Fit menu (dropdown opens above the Fit button) ──────────────────────
+  const [fitMenuOpen, setFitMenuOpen] = useState(false)
+  const fitMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!fitMenuOpen) return
+    const close = (e: MouseEvent) => {
+      if (fitMenuRef.current && !fitMenuRef.current.contains(e.target as Node)) setFitMenuOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [fitMenuOpen])
+
   useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -110,8 +122,65 @@ export default function SceneCanvas({
 
   const fitZoom = useMemo(() => {
     if (maxSide.w <= 0 || maxSide.h <= 0) return 1
-    return Math.min(maxSide.w / width, maxSide.h / height, 1)
+    return Math.min(maxSide.w / width, maxSide.h / height, MAX_ZOOM)
   }, [maxSide, width, height])
+
+  // ── Zoom presets ─────────────────────────────────────────────────────────
+  /** Pan offset (display px) that places (cx, cy) in composition coords at the
+   *  centre of the viewport, given a zoom level. Reverses the flex centring. */
+  const panToCentre = useCallback((cx: number, cy: number, z: number) => ({
+    x: (width  / 2 - cx) * z,
+    y: (height / 2 - cy) * z,
+  }), [width, height])
+
+  const fitAll = useCallback(() => {
+    setZoom(fitZoom); setPan({ x: 0, y: 0 })
+  }, [fitZoom])
+
+  const fitWidth = useCallback(() => {
+    if (maxSide.w <= 0) return
+    const z = clamp(maxSide.w / width, MIN_ZOOM, MAX_ZOOM)
+    setZoom(z); setPan({ x: 0, y: 0 })
+  }, [maxSide.w, width])
+
+  const fitHeight = useCallback(() => {
+    if (maxSide.h <= 0) return
+    const z = clamp(maxSide.h / height, MIN_ZOOM, MAX_ZOOM)
+    setZoom(z); setPan({ x: 0, y: 0 })
+  }, [maxSide.h, height])
+
+  const actualSize = useCallback(() => {
+    setZoom(1); setPan({ x: 0, y: 0 })
+  }, [])
+
+  const zoomTo = useCallback((z: number) => {
+    setZoom(clamp(z, MIN_ZOOM, MAX_ZOOM)); setPan({ x: 0, y: 0 })
+  }, [])
+
+  /** Fit selected layer to viewport (with 40px padding) and centre it. */
+  const fitSelection = useCallback(() => {
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!layer || !layer.size) return
+    const PAD = 40
+    const z = clamp(
+      Math.min((maxSide.w - PAD * 2) / layer.size.width, (maxSide.h - PAD * 2) / layer.size.height),
+      MIN_ZOOM, MAX_ZOOM,
+    )
+    const cx = layer.transform.x + layer.size.width  / 2
+    const cy = layer.transform.y + layer.size.height / 2
+    setZoom(z); setPan(panToCentre(cx, cy, z))
+  }, [scene.layers, selectedLayerId, maxSide, panToCentre])
+
+  /** Re-centre selected layer in the viewport without changing zoom. */
+  const centreSelection = useCallback(() => {
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!layer) return
+    const w = layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80)
+    const h = layer.size?.height ?? (layer.text?.fontSize ?? 24)
+    const cx = layer.transform.x + w / 2
+    const cy = layer.transform.y + h / 2
+    setPan(panToCentre(cx, cy, zoom))
+  }, [scene.layers, selectedLayerId, zoom, panToCentre])
 
   // ── Refs for live values inside window-level pointer listeners ───────────
   const sceneRef = useRef(scene)
@@ -512,15 +581,37 @@ export default function SceneCanvas({
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
           <button onClick={() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom out (Cmd+scroll)">−</button>
-          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}
+          <button onClick={actualSize}
             className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100% + recentre">
             {Math.round(zoom * 100)}%
           </button>
           <button onClick={() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom in (Cmd+scroll)">+</button>
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
-          <button onClick={() => { setZoom(fitZoom); setPan({ x: 0, y: 0 }) }}
-            className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Fit composition to view (recentre)">Fit</button>
+
+          {/* Fit dropdown — opens upward */}
+          <div ref={fitMenuRef} className="relative">
+            <button
+              onClick={() => setFitMenuOpen((o) => !o)}
+              className="px-1.5 py-0.5 rounded hover:bg-gray-700 flex items-center gap-0.5"
+              title="View / fit options"
+            >
+              Fit <span className="text-[8px]">▾</span>
+            </button>
+            {fitMenuOpen && (
+              <FitMenu
+                hasSelection={!!selectedLayer && !selectedLayer.hidden}
+                onPick={(action) => { setFitMenuOpen(false); action() }}
+                actions={{
+                  fitAll, fitWidth, fitHeight, actualSize,
+                  fitSelection, centreSelection,
+                  zoom50:  () => zoomTo(0.5),
+                  zoom200: () => zoomTo(2),
+                  zoom400: () => zoomTo(4),
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -540,6 +631,79 @@ export default function SceneCanvas({
 interface FrameProps {
   x: number; y: number; w: number; h: number
   onHandlePointerDown: (h: Handle) => (e: React.PointerEvent) => void
+}
+
+// ── Fit / View menu (opens upward from the zoom pill) ───────────────────────
+
+interface FitMenuActions {
+  fitAll:          () => void
+  fitWidth:        () => void
+  fitHeight:       () => void
+  actualSize:      () => void
+  fitSelection:    () => void
+  centreSelection: () => void
+  zoom50:          () => void
+  zoom200:         () => void
+  zoom400:         () => void
+}
+
+interface FitMenuProps {
+  hasSelection: boolean
+  actions: FitMenuActions
+  onPick: (action: () => void) => void
+}
+
+function FitMenu({ hasSelection, actions, onPick }: FitMenuProps) {
+  type Item =
+    | { kind: 'item'; label: string; kbd?: string; action: () => void; disabled?: boolean }
+    | { kind: 'separator' }
+    | { kind: 'heading'; label: string }
+
+  const items: Item[] = [
+    { kind: 'heading', label: 'Fit composition' },
+    { kind: 'item', label: 'Fit to view',     kbd: 'F',  action: actions.fitAll },
+    { kind: 'item', label: 'Fit width',                  action: actions.fitWidth },
+    { kind: 'item', label: 'Fit height',                 action: actions.fitHeight },
+    { kind: 'separator' },
+    { kind: 'heading', label: 'Selection' },
+    { kind: 'item', label: 'Fit selection',  kbd: '⇧2', action: actions.fitSelection,    disabled: !hasSelection },
+    { kind: 'item', label: 'Centre selection',          action: actions.centreSelection, disabled: !hasSelection },
+    { kind: 'separator' },
+    { kind: 'heading', label: 'Zoom presets' },
+    { kind: 'item', label: 'Actual size (100%)', kbd: '0', action: actions.actualSize },
+    { kind: 'item', label: '50%',                          action: actions.zoom50 },
+    { kind: 'item', label: '200%',                         action: actions.zoom200 },
+    { kind: 'item', label: '400%',                         action: actions.zoom400 },
+  ]
+
+  return (
+    <div className="absolute bottom-full right-0 mb-1 min-w-[200px]
+                    bg-gray-900 border border-gray-700 rounded shadow-xl
+                    py-1 z-50 select-none">
+      {items.map((it, i) => {
+        if (it.kind === 'separator') return <div key={i} className="h-px bg-gray-800 my-1" />
+        if (it.kind === 'heading') return (
+          <div key={i} className="px-3 pt-1.5 pb-0.5 text-[9px] uppercase tracking-wider text-gray-500 font-semibold">
+            {it.label}
+          </div>
+        )
+        return (
+          <button
+            key={i}
+            disabled={it.disabled}
+            onClick={() => !it.disabled && onPick(it.action)}
+            className={`w-full flex items-center justify-between gap-6 px-3 py-1.5 text-xs
+              ${it.disabled
+                ? 'text-gray-600 cursor-not-allowed'
+                : 'text-gray-200 hover:bg-gray-800 cursor-pointer'}`}
+          >
+            <span>{it.label}</span>
+            {it.kbd && <span className="text-[10px] text-gray-500 font-mono">{it.kbd}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // ── Anchor point handle (pivot for rotation / scale) ─────────────────────────
