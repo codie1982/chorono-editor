@@ -1,9 +1,25 @@
 'use client'
+import { useState } from 'react'
 import type {
   Layer, Composition,
   PathStrokeData, PathShapeType, PathTrimMode, StrokeCap,
-  SceneParameter,
+  SceneParameter, PathAnchor,
 } from '@/lib/types'
+import {
+  togglePathClosed, reversePath, cyclePointType, deleteAnchor,
+} from '@/lib/path/pathOps'
+import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
+import ScrubInput  from '@/components/inputs/ScrubInput'
+
+// ── Tab definitions ──────────────────────────────────────────────────────────
+type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
+
+const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
+  { id: 'properties', label: 'Properties', icon: '🎨' },
+  { id: 'effects',    label: 'Effects',    icon: '✨' },
+  { id: 'motion',     label: 'Motion',     icon: '🎬' },
+  { id: 'interact',   label: 'Interact',   icon: '🖱' },
+]
 
 // Canvas composite operations the user typically picks from for blending.
 const BLEND_MODES: Array<[GlobalCompositeOperation, string]> = [
@@ -32,6 +48,10 @@ interface Props {
   onCompositionChange: (comp: Composition) => void
   /** Available scene parameters for property binding popovers. */
   parameters?: SceneParameter[]
+  /** All scene layers — needed for Mask picker + Path Motion picker. */
+  allLayers?: Layer[]
+  /** Scene timelines — exposed for the Drag scrubs-timeline picker. */
+  allTimelines?: Array<{ id: string; durationMs: number }>
 }
 
 // ── Genel giriş bileşenleri ─────────────────────────────────────────────────
@@ -48,17 +68,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function NumInput({ value, onChange, min, max, step = 1 }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number
 }) {
-  return (
-    <input
-      type="number"
-      value={value}
-      min={min} max={max} step={step}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
-                 focus:outline-none focus:border-blue-500 [appearance:textfield]
-                 [&::-webkit-inner-spin-button]:appearance-none"
-    />
-  )
+  return <ScrubInput value={value} onChange={onChange} min={min} max={max} step={step} />
 }
 
 function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -82,6 +92,23 @@ function ColorInput({ value, onChange }: { value: string; onChange: (v: string) 
   )
 }
 
+type PluginEffectType =
+  | 'glow' | 'blur' | 'shadow'
+  | 'innerShadow' | 'innerGlow' | 'tint' | 'vignette'
+
+function defaultEffectFor(type: PluginEffectType) {
+  const id = `effect_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  switch (type) {
+    case 'blur':        return { id, type, enabled: true, params: { radius: 4 } }
+    case 'glow':        return { id, type, enabled: true, params: { color: '#60A5FA', radius: 8, intensity: 0.8 } }
+    case 'shadow':      return { id, type, enabled: true, params: { color: '#000000', blur: 4, offsetX: 2, offsetY: 2, opacity: 0.5 } }
+    case 'innerShadow': return { id, type, enabled: true, params: { color: '#000000', blur: 6, offsetX: 2, offsetY: 2, opacity: 0.5 } }
+    case 'innerGlow':   return { id, type, enabled: true, params: { color: '#FFFFFF', radius: 10, intensity: 0.8 } }
+    case 'tint':        return { id, type, enabled: true, params: { color: '#3B82F6', strength: 0.5, blend: 'overlay' } }
+    case 'vignette':    return { id, type, enabled: true, params: { color: '#000000', strength: 0.5, innerStop: 0.4 } }
+  }
+}
+
 function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>
 }
@@ -101,12 +128,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function PropertiesPanel({
   layer, composition, onLayerChange, onCompositionChange,
-  parameters = [],
+  parameters = [], allLayers = [], allTimelines = [],
 }: Props) {
+  // Shadow `scene` shape for the inline mask + motion path UI below.
+  const scene = { layers: allLayers }
 
   const update = (partial: Partial<Layer>) => layer && onLayerChange({ ...layer, ...partial })
   const updateTransform = (key: keyof Layer['transform'], val: number) =>
     layer && update({ transform: { ...layer.transform, [key]: val } })
+
+  // Active section tab. Resets to first tab when selection changes layer kind.
+  const [activeTab, setActiveTab] = useState<PropTab>('properties')
 
   return (
     <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
@@ -115,6 +147,27 @@ export default function PropertiesPanel({
           {layer ? `Layer: ${layer.id}` : 'Properties'}
         </span>
       </div>
+
+      {/* ── Tab bar — only visible when a layer is selected ── */}
+      {layer && (
+        <div className="flex border-b border-gray-800 shrink-0 bg-gray-950/60">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] uppercase
+                tracking-wider transition-colors border-b-2
+                ${activeTab === t.id
+                  ? 'text-blue-300 border-blue-500 bg-gray-900'
+                  : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-gray-900/40'}`}
+              title={t.label}
+            >
+              <span className="text-[12px]" aria-hidden>{t.icon}</span>
+              <span className="hidden sm:inline">{t.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col gap-3 px-3 py-3">
 
@@ -148,6 +201,14 @@ export default function PropertiesPanel({
         {/* ── Layer özellikleri ──────────────────────────────────────── */}
         {layer && (
           <>
+            {/* Schema-driven properties: rendered for layer types that DON'T
+                already have a rich hand-written UI (group, repeater).
+                Shape / text / media layers keep their bespoke sections below. */}
+            {(layer.type === 'group' || layer.type === 'repeater') && activeTab === 'properties' && (
+              <SchemaPanel layer={layer} onLayerChange={onLayerChange} />
+            )}
+
+            {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>
             <Section title="Transform">
               <Row2>
                 <Field label="X">
@@ -255,12 +316,354 @@ export default function PropertiesPanel({
                       },
                     })} />
                 </Field>
-                {layer.shape === 'rect' && (
+                {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
                   <Field label="Corner Radius">
                     <NumInput value={layer.style.cornerRadius ?? 0} min={0}
                       onChange={(v) => update({ style: { ...layer.style!, cornerRadius: v } })} />
                   </Field>
                 )}
+              </Section>
+            )}
+
+            {/* ── Geometry (parametric shape params) ─────────────────── */}
+            {layer.type === 'shape' && layer.shapeKind && (
+              (layer.shapeKind === 'polygon' || layer.shapeKind === 'star' ||
+               layer.shapeKind === 'ring'    || layer.shapeKind === 'arc'  ||
+               layer.shapeKind === 'line'    || layer.shapeKind === 'arrow')
+            ) && (
+              <Section title="Geometry">
+                {/* Polygon & Star — sides */}
+                {(layer.shapeKind === 'polygon' || layer.shapeKind === 'star') && (
+                  <Field label={layer.shapeKind === 'star' ? 'Points' : 'Sides'}>
+                    <NumInput
+                      value={layer.shapeParams?.sides ?? (layer.shapeKind === 'star' ? 5 : 6)}
+                      min={3} max={12} step={1}
+                      onChange={(v) => update({
+                        shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, sides: v },
+                      })}
+                    />
+                  </Field>
+                )}
+
+                {/* Star — inner / outer radius */}
+                {layer.shapeKind === 'star' && (
+                  <Row2>
+                    <Field label="Outer R">
+                      <NumInput value={layer.shapeParams?.outerRadius ?? 60} min={1}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'star' }), kind: 'star', outerRadius: v },
+                        })} />
+                    </Field>
+                    <Field label="Inner R">
+                      <NumInput value={layer.shapeParams?.innerRadius ?? 27} min={1}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'star' }), kind: 'star', innerRadius: v },
+                        })} />
+                    </Field>
+                  </Row2>
+                )}
+
+                {/* Polygon & Star — roundness */}
+                {(layer.shapeKind === 'polygon' || layer.shapeKind === 'star') && (
+                  <Field label="Roundness (0-1)">
+                    <NumInput value={layer.shapeParams?.roundness ?? 0} min={0} max={1} step={0.05}
+                      onChange={(v) => update({
+                        shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, roundness: v },
+                      })} />
+                  </Field>
+                )}
+
+                {/* Ring & Arc — angles */}
+                {(layer.shapeKind === 'ring' || layer.shapeKind === 'arc') && (
+                  <>
+                    <Row2>
+                      <Field label="Start °">
+                        <NumInput value={layer.shapeParams?.startAngle ?? (layer.shapeKind === 'arc' ? -90 : 0)}
+                          min={-360} max={360} step={1}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, startAngle: v },
+                          })} />
+                      </Field>
+                      <Field label="End °">
+                        <NumInput value={layer.shapeParams?.endAngle ?? (layer.shapeKind === 'arc' ? 90 : 360)}
+                          min={-360} max={360} step={1}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, endAngle: v },
+                          })} />
+                      </Field>
+                    </Row2>
+                    {layer.shapeKind === 'ring' && (
+                      <Field label="Inner Radius">
+                        <NumInput value={layer.shapeParams?.innerRadius ?? 30} min={1}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: 'ring' }), kind: 'ring', innerRadius: v },
+                          })} />
+                      </Field>
+                    )}
+                  </>
+                )}
+
+                {/* Line & Arrow — endpoint */}
+                {(layer.shapeKind === 'line' || layer.shapeKind === 'arrow') && (
+                  <>
+                    <Row2>
+                      <Field label="End X">
+                        <NumInput value={layer.shapeParams?.x2 ?? 160}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, x2: v },
+                          })} />
+                      </Field>
+                      <Field label="End Y">
+                        <NumInput value={layer.shapeParams?.y2 ?? 0}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, y2: v },
+                          })} />
+                      </Field>
+                    </Row2>
+                    {layer.shapeKind === 'arrow' && (
+                      <Field label="Arrow Head Size">
+                        <NumInput value={layer.shapeParams?.arrowHeadSize ?? 14} min={2} max={60}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: 'arrow' }), kind: 'arrow', arrowHeadSize: v },
+                          })} />
+                      </Field>
+                    )}
+                  </>
+                )}
+              </Section>
+            )}
+
+            {/* ── Stroke (all shapes) ───────────────────────────────── */}
+            {layer.type === 'shape' && (
+              <Section title="Stroke">
+                <Row2>
+                  <Field label="Color">
+                    <ColorInput value={layer.style?.stroke?.color ?? '#FFFFFF'}
+                      onChange={(v) => update({
+                        style: { ...(layer.style ?? {}),
+                          stroke: { width: 2, ...(layer.style?.stroke ?? {}), color: v } },
+                      })} />
+                  </Field>
+                  <Field label="Width">
+                    <NumInput value={layer.style?.stroke?.width ?? 0} min={0} max={100}
+                      onChange={(v) => update({
+                        style: { ...(layer.style ?? {}),
+                          stroke: { color: '#FFFFFF', ...(layer.style?.stroke ?? {}), width: v } },
+                      })} />
+                  </Field>
+                </Row2>
+                {layer.style?.stroke && layer.style.stroke.width > 0 && (
+                  <Row2>
+                    <Field label="Cap">
+                      <select
+                        value={layer.style.stroke.lineCap ?? 'butt'}
+                        onChange={(e) => update({
+                          style: { ...layer.style!,
+                            stroke: { ...layer.style!.stroke!, lineCap: e.target.value as any } },
+                        })}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="butt">Butt</option>
+                        <option value="round">Round</option>
+                        <option value="square">Square</option>
+                      </select>
+                    </Field>
+                    <Field label="Join">
+                      <select
+                        value={layer.style.stroke.lineJoin ?? 'miter'}
+                        onChange={(e) => update({
+                          style: { ...layer.style!,
+                            stroke: { ...layer.style!.stroke!, lineJoin: e.target.value as any } },
+                        })}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="miter">Miter</option>
+                        <option value="round">Round</option>
+                        <option value="bevel">Bevel</option>
+                      </select>
+                    </Field>
+                  </Row2>
+                )}
+                {/* ── Stroke gradient toggle ── */}
+                {layer.style?.stroke && layer.style.stroke.width > 0 && (
+                  <div className="border-t border-gray-700 pt-1.5 space-y-1.5">
+                    <label className="flex items-center gap-2 text-[10px] text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!layer.style.stroke.gradient}
+                        onChange={(e) => update({
+                          style: {
+                            ...layer.style!,
+                            stroke: {
+                              ...layer.style!.stroke!,
+                              gradient: e.target.checked
+                                ? (layer.style!.stroke!.gradient ?? {
+                                    type: 'linear', angle: 90,
+                                    stops: [
+                                      { offset: 0, color: layer.style!.stroke!.color },
+                                      { offset: 1, color: '#FFFFFF' },
+                                    ],
+                                  })
+                                : undefined,
+                            },
+                          },
+                        })}
+                        className="accent-blue-500"
+                      />
+                      Use gradient stroke
+                    </label>
+                    {layer.style.stroke.gradient && (
+                      <>
+                        <Row2>
+                          <Field label="Type">
+                            <select
+                              value={layer.style.stroke.gradient.type}
+                              onChange={(e) => update({
+                                style: { ...layer.style!,
+                                  stroke: { ...layer.style!.stroke!,
+                                    gradient: { ...layer.style!.stroke!.gradient!, type: e.target.value as 'linear' | 'radial' } } },
+                              })}
+                              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+                            >
+                              <option value="linear">Linear</option>
+                              <option value="radial">Radial</option>
+                            </select>
+                          </Field>
+                          {layer.style.stroke.gradient.type === 'linear' && (
+                            <Field label="Angle °">
+                              <NumInput value={layer.style.stroke.gradient.angle ?? 90}
+                                min={0} max={360} step={1}
+                                onChange={(v) => update({
+                                  style: { ...layer.style!,
+                                    stroke: { ...layer.style!.stroke!,
+                                      gradient: { ...layer.style!.stroke!.gradient!, angle: v } } },
+                                })} />
+                            </Field>
+                          )}
+                        </Row2>
+                        <Row2>
+                          <Field label="Start Color">
+                            <ColorInput value={layer.style.stroke.gradient.stops[0]?.color ?? '#000000'}
+                              onChange={(v) => update({
+                                style: { ...layer.style!,
+                                  stroke: { ...layer.style!.stroke!,
+                                    gradient: { ...layer.style!.stroke!.gradient!,
+                                      stops: layer.style!.stroke!.gradient!.stops.map((s, i) => i === 0 ? { ...s, color: v } : s) } } },
+                              })} />
+                          </Field>
+                          <Field label="End Color">
+                            <ColorInput value={layer.style.stroke.gradient.stops[layer.style.stroke.gradient.stops.length - 1]?.color ?? '#FFFFFF'}
+                              onChange={(v) => update({
+                                style: { ...layer.style!,
+                                  stroke: { ...layer.style!.stroke!,
+                                    gradient: { ...layer.style!.stroke!.gradient!,
+                                      stops: layer.style!.stroke!.gradient!.stops.map((s, i) =>
+                                        i === layer.style!.stroke!.gradient!.stops.length - 1 ? { ...s, color: v } : s) } } },
+                              })} />
+                          </Field>
+                        </Row2>
+                      </>
+                    )}
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {/* ── Trim Path (only shows when stroke has width) ──────── */}
+            {layer.type === 'shape' && (layer.style?.stroke?.width ?? 0) > 0 && (
+              <Section title="Trim Path">
+                <Row2>
+                  <Field label="Start">
+                    <NumInput value={layer.style?.stroke?.trim?.start ?? 0} min={0} max={1} step={0.01}
+                      onChange={(v) => update({
+                        style: { ...layer.style!,
+                          stroke: { ...layer.style!.stroke!,
+                            trim: { end: 1, offset: 0, ...(layer.style?.stroke?.trim ?? {}), start: v } } },
+                      })} />
+                  </Field>
+                  <Field label="End">
+                    <NumInput value={layer.style?.stroke?.trim?.end ?? 1} min={0} max={1} step={0.01}
+                      onChange={(v) => update({
+                        style: { ...layer.style!,
+                          stroke: { ...layer.style!.stroke!,
+                            trim: { start: 0, offset: 0, ...(layer.style?.stroke?.trim ?? {}), end: v } } },
+                      })} />
+                  </Field>
+                </Row2>
+                <Field label="Offset">
+                  <NumInput value={layer.style?.stroke?.trim?.offset ?? 0} min={-1} max={1} step={0.01}
+                    onChange={(v) => update({
+                      style: { ...layer.style!,
+                        stroke: { ...layer.style!.stroke!,
+                          trim: { start: 0, end: 1, ...(layer.style?.stroke?.trim ?? {}), offset: v } } },
+                    })} />
+                </Field>
+                <p className="text-[10px] text-gray-500 leading-snug pt-0.5">
+                  Animate Trim End from 0→1 to reveal a stroke. Animate Offset for rotating loaders.
+                </p>
+              </Section>
+            )}
+
+            {/* ── Bezier Path (Pen Tool layer) ──────────────────────── */}
+            {layer.type === 'path' && layer.path && (
+              <Section title="Path">
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => update({ path: togglePathClosed(layer.path!) })}
+                    className="px-2 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 text-gray-200 transition-colors"
+                    title={layer.path.closed ? 'Open path' : 'Close path'}
+                  >
+                    {layer.path.closed ? '◯ Open' : '◌ Close'}
+                  </button>
+                  <button
+                    onClick={() => update({ path: reversePath(layer.path!) })}
+                    className="px-2 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 text-gray-200 transition-colors"
+                    title="Reverse direction"
+                  >
+                    ⇄ Reverse
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-gray-500 pt-1.5">
+                  {layer.path.anchors.length} anchors · {layer.path.closed ? 'closed' : 'open'}
+                </div>
+
+                {/* Anchor list — click to cycle point type, ✕ to delete */}
+                <div className="max-h-44 overflow-y-auto border border-gray-700 rounded">
+                  {layer.path.anchors.map((a, i) => (
+                    <div key={i}
+                      className="flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-800 border-b border-gray-800 last:border-b-0"
+                    >
+                      <span className="w-5 text-gray-500">#{i}</span>
+                      <button
+                        onClick={() => update({ path: cyclePointType(layer.path!, i) })}
+                        className={`px-1 rounded font-medium
+                          ${a.pointType === 'mirror' ? 'bg-amber-700 text-amber-100'
+                          : a.pointType === 'smooth' ? 'bg-blue-700 text-blue-100'
+                          : 'bg-gray-700 text-gray-300'}`}
+                        title="Cycle point type: corner → smooth → mirror"
+                      >
+                        {a.pointType?.[0]?.toUpperCase() ?? 'C'}
+                      </button>
+                      <span className="text-gray-400 tabular-nums flex-1">
+                        ({a.x.toFixed(0)}, {a.y.toFixed(0)})
+                      </span>
+                      <button
+                        onClick={() => update({ path: deleteAnchor(layer.path!, i) })}
+                        disabled={layer.path!.anchors.length <= 2}
+                        className="text-gray-600 hover:text-red-400 disabled:opacity-30 disabled:hover:text-gray-600"
+                        title="Delete anchor"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[10px] text-gray-500 leading-snug pt-1">
+                  Drag white squares to move anchors, blue dots to bend curves.
+                  Click the C/S/M badge to switch corner / smooth / mirror.
+                </p>
               </Section>
             )}
 
@@ -425,8 +828,10 @@ export default function PropertiesPanel({
                 onChange={(next) => update({ pathStroke: next })}
               />
             )}
+            </>)}{/* end of Properties tab */}
 
-            {/* ── Interactive Runtime ───────────────────────────────── */}
+            {/* ── Interactive Runtime (Interact tab) ─────────────────── */}
+            {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'interact' && (<>
             <Section title="Interactive">
               <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
                 <input
@@ -438,6 +843,116 @@ export default function PropertiesPanel({
                 Tappable — fires &apos;click&apos; triggers at runtime
               </label>
 
+              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layer.draggable ?? false}
+                  onChange={(e) => update({
+                    draggable: e.target.checked || undefined,
+                    dragConfig: e.target.checked ? (layer.dragConfig ?? { axis: 'both', range: 200 }) : undefined,
+                  })}
+                  className="accent-blue-500"
+                />
+                <span className="flex-1">
+                  <span className="font-medium">Draggable</span>
+                  <span className="block text-[10px] text-gray-500">
+                    In preview mode, the layer follows your cursor when dragged.
+                  </span>
+                </span>
+              </label>
+
+              {layer.draggable && (
+                <div className="border border-amber-700/50 bg-amber-950/30 rounded p-2 space-y-1.5">
+                  {/* ── Scrubs Timeline (THE main feature) ──────────── */}
+                  <Field label="🎬 Drag controls Timeline">
+                    <select
+                      value={layer.dragConfig?.scrubsTimeline ?? ''}
+                      onChange={(e) => update({
+                        dragConfig: {
+                          ...(layer.dragConfig ?? {}),
+                          scrubsTimeline: e.target.value || undefined,
+                        },
+                      })}
+                      className="w-full bg-gray-800 border border-amber-600/60 rounded px-1.5 py-1 text-[11px] text-gray-200
+                                 focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="">(none — just follow cursor)</option>
+                      {allTimelines.map(t => (
+                        <option key={t.id} value={t.id}>{t.id} ({t.durationMs}ms)</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {layer.dragConfig?.scrubsTimeline ? (
+                    <div className="text-[10px] text-amber-200/90 leading-snug border-t border-amber-800/40 pt-1.5">
+                      ✓ <strong>Scrub mode active.</strong> Animate this layer&apos;s
+                      <code className="text-amber-100"> transform.x </code>
+                      or <code className="text-amber-100">transform.y</code> on the timeline above
+                      (e.g. 0 → 200). Click <strong>▶ Preview</strong> in the toolbar, then drag this
+                      layer — it moves along its keyframe path AND scrubs the timeline. All other
+                      layers&apos; animations on that timeline play in sync.
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-amber-200/70 leading-snug">
+                      💡 Click <strong className="text-amber-100">▶ Preview</strong> in the toolbar,
+                      then drag — layer follows your cursor. Pick a timeline above to scrub-control
+                      a full keyframe animation instead.
+                    </div>
+                  )}
+                  <details className="text-[10px] text-gray-400">
+                    <summary className="cursor-pointer hover:text-gray-300 select-none">⚙ Advanced drag config…</summary>
+                    <div className="pt-1.5 space-y-1.5">
+                      <Row2>
+                        <Field label="Axis">
+                          <select
+                            value={layer.dragConfig?.axis ?? 'both'}
+                            onChange={(e) => update({
+                              dragConfig: { ...(layer.dragConfig ?? {}), axis: e.target.value as 'x' | 'y' | 'both' },
+                            })}
+                            className="w-full bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-gray-200
+                                       focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="both">Both (X+Y)</option>
+                            <option value="x">X only</option>
+                            <option value="y">Y only</option>
+                          </select>
+                        </Field>
+                        <Field label={layer.dragConfig?.scrubsTimeline ? 'Range (auto from keyframes)' : 'Range (px → 1.0)'}>
+                          <NumInput value={layer.dragConfig?.range ?? 200} min={1} max={2000}
+                            onChange={(v) => update({
+                              dragConfig: { ...(layer.dragConfig ?? {}), range: v },
+                            })} />
+                        </Field>
+                      </Row2>
+                      {parameters.length > 0 && (
+                        <Field label="Also sets parameter (optional)">
+                          <select
+                            value={layer.dragConfig?.setsParameter ?? ''}
+                            onChange={(e) => update({
+                              dragConfig: {
+                                ...(layer.dragConfig ?? {}),
+                                setsParameter: e.target.value || undefined,
+                              },
+                            })}
+                            className="w-full bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-gray-200
+                                       focus:outline-none focus:border-blue-500"
+                          >
+                            <option value="">(none)</option>
+                            {parameters.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </Field>
+                      )}
+                      <p className="text-[9px] text-gray-500 leading-snug">
+                        Drag fires <code>dragStart / Move / End</code> trigger events too,
+                        so you can author segment-play, parameter changes, etc. via the Events panel.
+                      </p>
+                    </div>
+                  </details>
+                </div>
+              )}
+
               {parameters.length > 0 && (
                 <ParamBindingsEditor
                   layer={layer}
@@ -445,6 +960,428 @@ export default function PropertiesPanel({
                   onChange={(paramBindings) => update({ paramBindings })}
                 />
               )}
+            </Section>
+            </>)}{/* end of Interact tab */}
+
+            {/* ── Masks + Plugin Effects (Effects tab) ──────────────── */}
+            {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'effects' && (<>
+            <Section title="Masks">
+              <div className="text-[10px] text-gray-500 leading-snug pb-1">
+                Use another layer&apos;s shape to cut out / reveal this layer.
+                Multiple masks composite in array order.
+              </div>
+              <div className="flex gap-1.5 pb-1.5">
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const maskId = e.target.value
+                    if (!maskId) return
+                    update({
+                      masks: [
+                        ...(layer.masks ?? []),
+                        { id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                          maskLayerId: maskId, mode: 'add', opacity: 1 },
+                      ],
+                    })
+                    e.target.value = ''
+                  }}
+                  className="flex-1 bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-gray-200
+                             focus:outline-none focus:border-blue-500"
+                >
+                  <option value="" disabled>+ Add mask from layer…</option>
+                  {scene.layers
+                    .filter(l => l.id !== layer.id && l.type !== 'audio')
+                    .map(l => (
+                      <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
+                    ))}
+                </select>
+              </div>
+              {(layer.masks ?? []).map((mask, i) => {
+                const ml = scene.layers.find(l => l.id === mask.maskLayerId)
+                return (
+                  <div key={mask.id} className="border border-gray-700 rounded p-1.5 space-y-1.5 mb-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-300 truncate">
+                        {ml?.name ?? '(missing layer)'}
+                      </span>
+                      <button
+                        onClick={() => update({
+                          masks: layer.masks!.filter((_, idx) => idx !== i),
+                        })}
+                        className="text-[10px] text-gray-500 hover:text-red-400"
+                      >✕</button>
+                    </div>
+                    <Row2>
+                      <Field label="Mode">
+                        <select
+                          value={mask.mode}
+                          onChange={(e) => update({
+                            masks: layer.masks!.map((m, idx) => idx === i
+                              ? { ...m, mode: e.target.value as 'add'|'subtract'|'intersect' } : m),
+                          })}
+                          className="w-full bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-gray-200
+                                     focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="add">Add</option>
+                          <option value="subtract">Subtract</option>
+                          <option value="intersect">Intersect</option>
+                        </select>
+                      </Field>
+                      <Field label="Opacity">
+                        <NumInput value={mask.opacity ?? 1} min={0} max={1} step={0.05}
+                          onChange={(v) => update({
+                            masks: layer.masks!.map((m, idx) => idx === i ? { ...m, opacity: v } : m),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Row2>
+                      <Field label="Feather (px)">
+                        <NumInput value={mask.feather ?? 0} min={0} max={50} step={1}
+                          onChange={(v) => update({
+                            masks: layer.masks!.map((m, idx) => idx === i ? { ...m, feather: v } : m),
+                          })} />
+                      </Field>
+                      <label className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wide">Inverted</span>
+                        <label className="flex items-center h-[26px]">
+                          <input
+                            type="checkbox"
+                            checked={!!mask.inverted}
+                            onChange={(e) => update({
+                              masks: layer.masks!.map((m, idx) => idx === i ? { ...m, inverted: e.target.checked } : m),
+                            })}
+                            className="accent-blue-500"
+                          />
+                        </label>
+                      </label>
+                    </Row2>
+                  </div>
+                )
+              })}
+            </Section>
+
+            {/* ── Plugin Effects (Glow / Blur / Shadow / Inner / Tint / Vignette) ─── */}
+            <Section title="Plugin Effects">
+              <div className="text-[10px] text-gray-500 leading-snug pb-1">
+                Effects render in chain order — earlier effects are processed first.
+              </div>
+              <div className="flex gap-1 flex-wrap pb-1.5">
+                {([
+                  ['blur',        '💧 Blur'],
+                  ['glow',        '✨ Glow'],
+                  ['shadow',      '⤵ Shadow'],
+                  ['innerShadow', '⌧ Inner Shadow'],
+                  ['innerGlow',   '◐ Inner Glow'],
+                  ['tint',        '🎨 Tint'],
+                  ['vignette',    '⊙ Vignette'],
+                ] as Array<[PluginEffectType, string]>).map(([type, label]) => (
+                  <button
+                    key={type}
+                    onClick={() => update({
+                      effectsChain: [...(layer.effectsChain ?? []), defaultEffectFor(type)],
+                    })}
+                    className="px-1.5 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 text-gray-200 transition-colors"
+                  >
+                    + {label}
+                  </button>
+                ))}
+              </div>
+              {(layer.effectsChain ?? []).map((eff, i) => (
+                <div key={eff.id} className="border border-gray-700 rounded p-1.5 space-y-1.5 mb-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={eff.enabled}
+                        onChange={(e) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i ? { ...x, enabled: e.target.checked } : x),
+                        })}
+                        className="accent-blue-500"
+                      />
+                      <span className="text-[11px] font-medium capitalize text-gray-300">{eff.type}</span>
+                    </div>
+                    <button
+                      onClick={() => update({
+                        effectsChain: layer.effectsChain!.filter((_, idx) => idx !== i),
+                      })}
+                      className="text-[10px] text-gray-500 hover:text-red-400"
+                    >✕</button>
+                  </div>
+                  {/* Param fields per effect type */}
+                  {eff.type === 'blur' && (
+                    <Field label="Radius (px)">
+                      <NumInput value={(eff.params.radius as number) ?? 4} min={0} max={50}
+                        onChange={(v) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, radius: v } } : x),
+                        })} />
+                    </Field>
+                  )}
+                  {eff.type === 'glow' && (<>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={(eff.params.color as string) ?? '#FFFFFF'}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, color: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Radius">
+                        <NumInput value={(eff.params.radius as number) ?? 8} min={0} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, radius: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Intensity (0-1)">
+                      <NumInput value={(eff.params.intensity as number) ?? 0.8} min={0} max={1} step={0.05}
+                        onChange={(v) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, intensity: v } } : x),
+                        })} />
+                    </Field>
+                  </>)}
+                  {eff.type === 'shadow' && (<>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={(eff.params.color as string) ?? '#000000'}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, color: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Blur">
+                        <NumInput value={(eff.params.blur as number) ?? 4} min={0} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, blur: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Row2>
+                      <Field label="Offset X">
+                        <NumInput value={(eff.params.offsetX as number) ?? 2} min={-50} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, offsetX: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Offset Y">
+                        <NumInput value={(eff.params.offsetY as number) ?? 2} min={-50} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, offsetY: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Opacity (0-1)">
+                      <NumInput value={(eff.params.opacity as number) ?? 0.5} min={0} max={1} step={0.05}
+                        onChange={(v) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, opacity: v } } : x),
+                        })} />
+                    </Field>
+                  </>)}
+                  {eff.type === 'innerShadow' && (<>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={(eff.params.color as string) ?? '#000000'}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, color: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Blur">
+                        <NumInput value={(eff.params.blur as number) ?? 6} min={0} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, blur: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Row2>
+                      <Field label="Offset X">
+                        <NumInput value={(eff.params.offsetX as number) ?? 2} min={-50} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, offsetX: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Offset Y">
+                        <NumInput value={(eff.params.offsetY as number) ?? 2} min={-50} max={50}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, offsetY: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Opacity (0-1)">
+                      <NumInput value={(eff.params.opacity as number) ?? 0.5} min={0} max={1} step={0.05}
+                        onChange={(v) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, opacity: v } } : x),
+                        })} />
+                    </Field>
+                  </>)}
+                  {eff.type === 'innerGlow' && (<>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={(eff.params.color as string) ?? '#FFFFFF'}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, color: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Radius">
+                        <NumInput value={(eff.params.radius as number) ?? 10} min={0} max={80}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, radius: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Intensity (0-1)">
+                      <NumInput value={(eff.params.intensity as number) ?? 0.8} min={0} max={1} step={0.05}
+                        onChange={(v) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, intensity: v } } : x),
+                        })} />
+                    </Field>
+                  </>)}
+                  {eff.type === 'tint' && (<>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={(eff.params.color as string) ?? '#3B82F6'}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, color: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Strength (0-1)">
+                        <NumInput value={(eff.params.strength as number) ?? 0.5} min={0} max={1} step={0.05}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, strength: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Blend">
+                      <select
+                        value={(eff.params.blend as string) ?? 'overlay'}
+                        onChange={(e) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, blend: e.target.value } } : x),
+                        })}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="multiply">Multiply (darken)</option>
+                        <option value="screen">Screen (lighten)</option>
+                        <option value="overlay">Overlay (contrast)</option>
+                        <option value="color">Color (hue replace)</option>
+                      </select>
+                    </Field>
+                  </>)}
+                  {eff.type === 'vignette' && (<>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={(eff.params.color as string) ?? '#000000'}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, color: v } } : x),
+                          })} />
+                      </Field>
+                      <Field label="Strength (0-1)">
+                        <NumInput value={(eff.params.strength as number) ?? 0.5} min={0} max={1} step={0.05}
+                          onChange={(v) => update({
+                            effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                              ? { ...x, params: { ...x.params, strength: v } } : x),
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Inner Stop (0-1, where vignette starts)">
+                      <NumInput value={(eff.params.innerStop as number) ?? 0.4} min={0} max={1} step={0.05}
+                        onChange={(v) => update({
+                          effectsChain: layer.effectsChain!.map((x, idx) => idx === i
+                            ? { ...x, params: { ...x.params, innerStop: v } } : x),
+                        })} />
+                    </Field>
+                  </>)}
+                </div>
+              ))}
+            </Section>
+            </>)}{/* end of Effects tab */}
+
+            {/* ── Follow Path + Motion Path (Motion tab) ────────────── */}
+            {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'motion' && (<>
+            <Section title="Follow Path">
+              <div className="text-[10px] text-gray-500 leading-snug pb-1">
+                Bind this layer&apos;s position to a path layer&apos;s curve.
+                Animate <span className="text-gray-400">followPath.progress</span> from 0→1.
+              </div>
+              <Field label="Path Layer">
+                <select
+                  value={layer.followPath?.pathLayerId ?? ''}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    if (!id) {
+                      update({ followPath: undefined })
+                    } else {
+                      update({
+                        followPath: {
+                          progress: 0,
+                          ...layer.followPath,
+                          pathLayerId: id,
+                        },
+                      })
+                    }
+                  }}
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-gray-200
+                             focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">(none)</option>
+                  {scene.layers
+                    .filter(l => l.type === 'path' && l.path && l.id !== layer.id)
+                    .map(l => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                </select>
+              </Field>
+              {layer.followPath?.pathLayerId && (<>
+                <Field label="Progress (0-1)">
+                  <NumInput value={layer.followPath.progress ?? 0} min={0} max={1} step={0.01}
+                    onChange={(v) => update({
+                      followPath: { ...layer.followPath!, progress: v },
+                    })} />
+                </Field>
+                <Row2>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">Orient to Path</span>
+                    <label className="flex items-center h-[26px]">
+                      <input
+                        type="checkbox"
+                        checked={!!layer.followPath.orientToPath}
+                        onChange={(e) => update({
+                          followPath: { ...layer.followPath!, orientToPath: e.target.checked },
+                        })}
+                        className="accent-blue-500"
+                      />
+                    </label>
+                  </label>
+                  <Field label="Rotation Offset °">
+                    <NumInput value={layer.followPath.rotationOffset ?? 0} min={-360} max={360}
+                      onChange={(v) => update({
+                        followPath: { ...layer.followPath!, rotationOffset: v },
+                      })} />
+                  </Field>
+                </Row2>
+                <Field label="Perpendicular Offset (px)">
+                  <NumInput value={layer.followPath.perpendicularOffset ?? 0} min={-200} max={200}
+                    onChange={(v) => update({
+                      followPath: { ...layer.followPath!, perpendicularOffset: v },
+                    })} />
+                </Field>
+              </>)}
             </Section>
 
             {/* ── Motion Path ───────────────────────────────────────── */}
@@ -477,6 +1414,14 @@ export default function PropertiesPanel({
                 </label>
               )}
             </Section>
+            </>)}{/* end of Motion tab */}
+
+            {/* Group / Repeater: helpful tab content reminder */}
+            {(layer.type === 'group' || layer.type === 'repeater') && activeTab !== 'properties' && (
+              <p className="text-xs text-gray-600 text-center py-8 italic">
+                {layer.type === 'group' ? 'Groups' : 'Repeaters'} only use the Properties tab.
+              </p>
+            )}
           </>
         )}
 

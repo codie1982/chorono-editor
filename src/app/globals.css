@@ -53,3 +53,97 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .dock-leaf-in, .dock-overlay-in { animation: none; }
 }
+
+/* ── Chorono Sprite Icon System ──────────────────────────────────────────── */
+
+/**
+ * Base icon cell — inline-block, fixed size, no-repeat.
+ * The background-image is injected per-theme below.
+ * background-position is set inline by <ChoronoIcon> via the style prop.
+ */
+.ch-icon {
+  display: inline-block;
+  width:  30px;
+  height: 30px;
+  background-repeat: no-repeat;
+  background-size: auto;
+  /* Default → dark sprite (Chorono ships dark-first) */
+  background-image: url('/assets/icons/chorono-icons-dark.png');
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Light theme override — add data-theme="light" to <html> or a parent */
+[data-theme="light"] .ch-icon {
+  background-image: url('/assets/icons/chorono-icons-light.png');
+}
+
+/* Dark theme (explicit) */
+[data-theme="dark"] .ch-icon {
+  background-image: url('/assets/icons/chorono-icons-dark.png');
+}
+
+/* Placeholder for unknown icon names */
+.ch-icon-placeholder {
+  display: inline-block;
+  background: transparent;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ── Add-Layer Button ────────────────────────────────────────────────────── */
+
+.ch-layer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  height: 32px;
+  padding: 0 10px;
+
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  background: #1f2937;  /* gray-800 */
+  color: #d1d5db;       /* gray-300 */
+
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+  user-select: none;
+}
+
+.ch-layer-btn:hover {
+  background: #2563eb;  /* blue-600 */
+  color: #ffffff;
+}
+
+.ch-layer-btn:active {
+  background: #1d4ed8;  /* blue-700 */
+}
+
+.ch-layer-btn:disabled,
+.ch-layer-btn[aria-disabled="true"] {
+  opacity: 0.38;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* "Coming soon" variant — visible but not clickable */
+.ch-layer-btn--soon {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ch-layer-btn--soon:hover {
+  background: #1f2937;
+  color: #d1d5db;
+}
+
+/* Small icon used inside layer list items */
+.ch-icon-sm {
+  width:  20px;
+  height: 20px;
+}
