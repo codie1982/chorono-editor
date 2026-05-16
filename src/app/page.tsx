@@ -5,6 +5,7 @@ import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
   emptyScene, newRectLayer, newCircleLayer, newTextLayer,
   newImageLayer, newVideoLayer, newAudioLayer, newTimeline,
+  newPathStrokeLayer,
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
@@ -15,6 +16,7 @@ import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
+import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
@@ -27,6 +29,10 @@ import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import JsonModal       from '@/components/JsonModal'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
+import ParametersPanel     from '@/components/panels/ParametersPanel'
+import EventsPanel         from '@/components/panels/EventsPanel'
+import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
+import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
@@ -161,6 +167,20 @@ export default function BuilderPage() {
   // ── Audio engine: separate from canvas (Web Audio API) ───────────────────
   useAudioEngine({ scene, currentTimeMs, isPlaying, playbackSpeed })
 
+  // ── Interactive runtime: parameters / events / segments preview ──────────
+  // Ephemeral state — never touches scene tree or undo history. Drives the
+  // four "Interactive" panels and the canvas's runtime preview overlay.
+  const runtime = useInteractiveRuntime(scene)
+  // Per-frame evaluation: merges timeline + binding + param overrides and
+  // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
+  // any runtime input changes.
+  const frame = useMemo(
+    () => runtime.evaluateFrame(currentTimeMs),
+    // We deliberately include paramValues so slider edits cause a re-eval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scene, currentTimeMs, runtime.paramValues, runtime.segmentState],
+  )
+
   /**
    * Click → replace selection. Shift+click → toggle in/out. Keeps the most
    * recently clicked layer as the primary (for PropertiesPanel + keyframe ops).
@@ -185,8 +205,12 @@ export default function BuilderPage() {
   }, [])
 
   // ── Layer commands ───────────────────────────────────────────────────────
-  const addLayer = useCallback((kind: 'rect' | 'circle' | 'text') => {
-    const l = kind === 'rect' ? newRectLayer() : kind === 'circle' ? newCircleLayer() : newTextLayer()
+  const addLayer = useCallback((kind: 'rect' | 'circle' | 'text' | 'pathStroke') => {
+    const l =
+        kind === 'rect'        ? newRectLayer()
+      : kind === 'circle'      ? newCircleLayer()
+      : kind === 'pathStroke'  ? newPathStrokeLayer()
+      :                          newTextLayer()
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
   }, [dispatchCommand, selectLayer])
@@ -492,6 +516,12 @@ export default function BuilderPage() {
                     selectedLayerId={selectedLayerId}
                     assets={assetCache}
                     onSelectLayer={(id) => selectLayer(id)}
+                    overrides={frame.overrides}
+                    paramValues={frame.paramValues}
+                    previewMode={!!runtime.segmentState}
+                    onLayerClickInPreview={(layerId) =>
+                      runtime.fireEvent({ type: 'click', layerId })
+                    }
                   />
                 ),
               },
@@ -504,6 +534,7 @@ export default function BuilderPage() {
                       composition={scene.composition}
                       onLayerChange={updateLayer}
                       onCompositionChange={updateComposition}
+                      parameters={scene.parameters}
                     />
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
@@ -538,9 +569,27 @@ export default function BuilderPage() {
                       onSelectLayer={selectLayer}
                       onToggleLayerFlag={toggleLayerFlag}
                       onPlaybackSpeedChange={setPlaybackSpeed}
+                      onPlaySegment={(tlId, segId, loop) => runtime.playSegment(tlId, segId, loop)}
+                      activeSegmentId={runtime.segmentState?.segmentId ?? null}
                     />
                   </div>
                 ),
+              },
+              {
+                id: 'parameters', title: 'Parameters',
+                render: () => <ParametersPanel scene={scene} editor={editor} />,
+              },
+              {
+                id: 'events', title: 'Events',
+                render: () => <EventsPanel scene={scene} editor={editor} />,
+              },
+              {
+                id: 'motionBinding', title: 'Bindings',
+                render: () => <MotionBindingPanel scene={scene} editor={editor} />,
+              },
+              {
+                id: 'runtimePreview', title: 'Preview',
+                render: () => <RuntimePreviewPanel scene={scene} runtime={runtime} />,
               },
             ] satisfies PanelDefinition[])}
             onTabSelect={dock.dispatchTab}

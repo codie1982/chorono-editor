@@ -15,6 +15,17 @@ interface Props {
   selectedLayerId: string | null
   assets: AssetElementMap
   onSelectLayer: (id: string | null) => void
+  /** Optional pre-computed override map from the interactive runtime hook
+   *  (already merges timeline + param + binding overrides). */
+  overrides?:    Map<string, number>
+  /** Runtime parameter values for text placeholder + colour resolution. */
+  paramValues?:  Map<string, string | number | boolean>
+  /** When true, canvas clicks on layers with tappable:true fire a runtime
+   *  'click' event INSTEAD of changing selection. Used by RuntimePreviewPanel
+   *  to exercise event bindings without leaving the builder. */
+  previewMode?:  boolean
+  /** Called with the layer id when a tappable layer is clicked in preview mode. */
+  onLayerClickInPreview?: (layerId: string) => void
 }
 
 const PADDING   = 24
@@ -72,6 +83,7 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, assets, onSelectLayer,
+  overrides, paramValues, previewMode, onLayerClickInPreview,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -376,6 +388,21 @@ export default function SceneCanvas({
     const cx = (e.clientX - rect.left) * sx
     const cy = (e.clientY - rect.top)  * sy
 
+    // ── Runtime preview mode: clicks on tappable layers fire trigger events
+    //    instead of changing selection. Lets the author exercise layer-click
+    //    rules without leaving the builder.
+    if (previewMode && onLayerClickInPreview) {
+      const stack = hitTestLayersAt(scene, timeMs, cx, cy)
+      for (const id of stack) {
+        const layer = scene.layers.find((l) => l.id === id)
+        if (layer?.tappable) {
+          onLayerClickInPreview(id)
+          return
+        }
+      }
+      return
+    }
+
     // Alt/Option-click cycles through stacked layers under the cursor — useful
     // when a top layer (e.g. a full-canvas background) is blocking selection
     // of layers underneath. Plain click takes the topmost hit.
@@ -408,7 +435,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId])
+  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -457,9 +484,13 @@ export default function SceneCanvas({
     if (!ctx) return
     renderScene(
       ctx, scene, timeMs, selectedLayerId, assets,
-      snapEnabled ? { size: gridSize } : undefined,
+      {
+        grid:        snapEnabled ? { size: gridSize } : undefined,
+        overrides,
+        paramValues,
+      },
     )
-  }, [scene, timeMs, selectedLayerId, assets, snapEnabled, gridSize])
+  }, [scene, timeMs, selectedLayerId, assets, snapEnabled, gridSize, overrides, paramValues])
 
   // ── Wheel zoom (Cmd/Ctrl held) ────────────────────────────────────────────
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {

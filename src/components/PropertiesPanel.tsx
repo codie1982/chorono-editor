@@ -1,5 +1,9 @@
 'use client'
-import type { Layer, Composition } from '@/lib/types'
+import type {
+  Layer, Composition,
+  PathStrokeData, PathShapeType, PathTrimMode, StrokeCap,
+  SceneParameter,
+} from '@/lib/types'
 
 // Canvas composite operations the user typically picks from for blending.
 const BLEND_MODES: Array<[GlobalCompositeOperation, string]> = [
@@ -26,6 +30,8 @@ interface Props {
   composition: Composition
   onLayerChange: (layer: Layer) => void
   onCompositionChange: (comp: Composition) => void
+  /** Available scene parameters for property binding popovers. */
+  parameters?: SceneParameter[]
 }
 
 // ── Genel giriş bileşenleri ─────────────────────────────────────────────────
@@ -93,7 +99,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // ── Ana bileşen ──────────────────────────────────────────────────────────────
 
-export default function PropertiesPanel({ layer, composition, onLayerChange, onCompositionChange }: Props) {
+export default function PropertiesPanel({
+  layer, composition, onLayerChange, onCompositionChange,
+  parameters = [],
+}: Props) {
 
   const update = (partial: Partial<Layer>) => layer && onLayerChange({ ...layer, ...partial })
   const updateTransform = (key: keyof Layer['transform'], val: number) =>
@@ -409,6 +418,35 @@ export default function PropertiesPanel({ layer, composition, onLayerChange, onC
               </Section>
             )}
 
+            {/* ── Path Stroke (layer.type === 'pathStroke') ─────────── */}
+            {layer.type === 'pathStroke' && layer.pathStroke && (
+              <PathStrokeSection
+                data={layer.pathStroke}
+                onChange={(next) => update({ pathStroke: next })}
+              />
+            )}
+
+            {/* ── Interactive Runtime ───────────────────────────────── */}
+            <Section title="Interactive">
+              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layer.tappable ?? false}
+                  onChange={(e) => update({ tappable: e.target.checked || undefined })}
+                  className="accent-blue-500"
+                />
+                Tappable — fires &apos;click&apos; triggers at runtime
+              </label>
+
+              {parameters.length > 0 && (
+                <ParamBindingsEditor
+                  layer={layer}
+                  parameters={parameters}
+                  onChange={(paramBindings) => update({ paramBindings })}
+                />
+              )}
+            </Section>
+
             {/* ── Motion Path ───────────────────────────────────────── */}
             <Section title="Motion Path">
               <Field label="SVG Path (use motionPath.offset track to animate)">
@@ -449,5 +487,211 @@ export default function PropertiesPanel({ layer, composition, onLayerChange, onC
         )}
       </div>
     </aside>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PathStroke section
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PATH_TYPES: PathShapeType[] = ['ellipse', 'circle', 'rect', 'custom']
+const STROKE_CAPS: StrokeCap[]    = ['butt', 'round', 'square']
+const TRIM_MODES:  PathTrimMode[] = ['static', 'movingSegment']
+
+function PathStrokeSection({
+  data, onChange,
+}: {
+  data: PathStrokeData
+  onChange: (next: PathStrokeData) => void
+}) {
+  function patchPath  (p: Partial<PathStrokeData['path']>)   { onChange({ ...data, path:   { ...data.path,   ...p } }) }
+  function patchStroke(p: Partial<PathStrokeData['stroke']>) { onChange({ ...data, stroke: { ...data.stroke, ...p } }) }
+  function patchTrim  (p: Partial<PathStrokeData['trim']>)   { onChange({ ...data, trim:   { ...data.trim,   ...p } }) }
+
+  return (
+    <Section title="Path Stroke">
+      <Row2>
+        <Field label="Path Type">
+          <select
+            value={data.path.shapeType}
+            onChange={(e) => patchPath({ shapeType: e.target.value as PathShapeType })}
+            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+          >
+            {PATH_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Stroke Cap">
+          <select
+            value={data.stroke.cap ?? 'round'}
+            onChange={(e) => patchStroke({ cap: e.target.value as StrokeCap })}
+            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+          >
+            {STROKE_CAPS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+      </Row2>
+
+      {data.path.shapeType !== 'custom' ? (
+        <Row2>
+          <Field label="Width">
+            <NumInput value={data.path.width ?? 100} min={1}
+              onChange={(v) => patchPath({ width: v })} />
+          </Field>
+          <Field label="Height">
+            <NumInput value={data.path.height ?? 100} min={1}
+              onChange={(v) => patchPath({ height: v })} />
+          </Field>
+        </Row2>
+      ) : (
+        <Field label="Custom SVG path">
+          <textarea
+            value={data.path.customPath ?? ''}
+            onChange={(e) => patchPath({ customPath: e.target.value })}
+            rows={2}
+            placeholder='e.g. "M 0 0 Q 50 -40 100 0 T 200 0"'
+            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500 font-mono resize-none"
+          />
+        </Field>
+      )}
+
+      <Row2>
+        <Field label="Stroke Width">
+          <NumInput value={data.stroke.width} min={0} step={0.5}
+            onChange={(v) => patchStroke({ width: v })} />
+        </Field>
+        <Field label="Stroke Color">
+          <ColorInput value={data.stroke.color}
+            onChange={(v) => patchStroke({ color: v })} />
+        </Field>
+      </Row2>
+
+      <Row2>
+        <Field label="Trim Mode">
+          <select
+            value={data.trim.mode}
+            onChange={(e) => patchTrim({ mode: e.target.value as PathTrimMode })}
+            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+          >
+            {TRIM_MODES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Segment Length">
+          <NumInput value={data.trim.segmentLength ?? 0.2} min={0} max={1} step={0.01}
+            onChange={(v) => patchTrim({ segmentLength: v })} />
+        </Field>
+      </Row2>
+
+      <Field label="Trim Offset (animate via track)">
+        <input
+          type="range" min={0} max={1} step={0.001}
+          value={data.trim.offset}
+          onChange={(e) => patchTrim({ offset: Number(e.target.value) })}
+          className="w-full accent-blue-500"
+        />
+      </Field>
+
+      <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={!!data.stroke.glow}
+          onChange={(e) => patchStroke({
+            glow: e.target.checked ? { color: data.stroke.color, blur: 16 } : undefined,
+          })}
+          className="accent-blue-500"
+        />
+        Glow effect
+      </label>
+      {data.stroke.glow && (
+        <Row2>
+          <Field label="Glow Color">
+            <ColorInput value={data.stroke.glow.color}
+              onChange={(v) => patchStroke({ glow: { ...data.stroke.glow!, color: v } })} />
+          </Field>
+          <Field label="Glow Blur">
+            <NumInput value={data.stroke.glow.blur} min={0} max={100}
+              onChange={(v) => patchStroke({ glow: { ...data.stroke.glow!, blur: v } })} />
+          </Field>
+        </Row2>
+      )}
+    </Section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parameter bindings editor (property → paramId)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ParamBindingsEditor({
+  layer, parameters, onChange,
+}: {
+  layer:      Layer
+  parameters: SceneParameter[]
+  onChange:   (next: Record<string, string> | undefined) => void
+}) {
+  const bindings = layer.paramBindings ?? {}
+  const entries  = Object.entries(bindings)
+
+  function add(property: string, paramId: string) {
+    const next = { ...bindings, [property]: paramId }
+    onChange(next)
+  }
+  function remove(property: string) {
+    const next = { ...bindings }
+    delete next[property]
+    onChange(Object.keys(next).length ? next : undefined)
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+        Parameter Bindings
+      </div>
+      {entries.length === 0 && (
+        <div className="text-[10px] text-gray-600 italic mb-1">
+          No bindings yet — link a layer property to a parameter.
+        </div>
+      )}
+      {entries.map(([property, paramId]) => (
+        <div key={property} className="flex items-center gap-1 mb-1">
+          <span className="text-[10px] text-gray-300 font-mono flex-1 truncate">
+            {property} ← {'{' + paramId + '}'}
+          </span>
+          <button
+            className="text-[10px] text-gray-500 hover:text-rose-400"
+            onClick={() => remove(property)}
+            title="Remove binding"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+
+      {/* Quick add row */}
+      <div className="flex items-center gap-1 mt-1">
+        <input
+          placeholder="property (e.g. opacity)"
+          className="flex-1 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-[10px] text-gray-200 outline-none font-mono"
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            const input  = e.currentTarget
+            const select = input.parentElement?.querySelector('select') as HTMLSelectElement | null
+            const prop   = input.value.trim()
+            const pid    = select?.value
+            if (prop && pid) {
+              add(prop, pid)
+              input.value = ''
+            }
+          }}
+        />
+        <select className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-200 outline-none">
+          <option value="">param…</option>
+          {parameters.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+      <div className="text-[9px] text-gray-600 mt-1">
+        Press Enter to add. Numeric params override numeric properties; for text
+        use <span className="font-mono">{'{paramId}'}</span> directly in the value.
+      </div>
+    </div>
   )
 }

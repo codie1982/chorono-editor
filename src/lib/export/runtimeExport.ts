@@ -4,7 +4,7 @@
 
 import type {
   ChronoScene, Layer, Timeline, Track, Keyframe, Composition,
-  Asset, Trigger, Binding,
+  Asset, Trigger, Binding, SceneParameter,
 } from '../types'
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -24,6 +24,8 @@ export interface RuntimeScene {
   timelines: Timeline[]
   triggers: Trigger[]
   bindings: Binding[]
+  /** Runtime-tunable parameters — read by the host platform via setParam(). */
+  parameters: SceneParameter[]
   initialState: Record<string, unknown>
 }
 
@@ -54,6 +56,7 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
     })),
     triggers:     scene.triggers,
     bindings:     scene.bindings,
+    parameters:   scene.parameters,
     initialState: scene.initialState,
   }
 }
