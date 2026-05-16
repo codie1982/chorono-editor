@@ -93,11 +93,29 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
 /** Evaluate all timelines and return a map of property path → computed value. */
 export type OverrideMap = Map<string, number>
 
-export function evaluateTimelines(timelines: Timeline[], globalTimeMs: number): OverrideMap {
+/**
+ * Marker used by the runtime hook to drive a timeline's local time externally
+ * — e.g. while a named segment is playing. When provided, the timeline whose
+ * id matches `timelineId` evaluates against `localTimeMs` instead of the
+ * usual computeLocalTime() output.
+ */
+export interface ExternalTimelineTime {
+  timelineId: string
+  localTimeMs: number
+}
+
+export function evaluateTimelines(
+  timelines: Timeline[],
+  globalTimeMs: number,
+  externalTime?: ExternalTimelineTime | null,
+): OverrideMap {
   const overrides: OverrideMap = new Map()
 
   for (const tl of timelines) {
-    const localTime = computeLocalTime(tl, globalTimeMs)
+    const localTime =
+      externalTime && externalTime.timelineId === tl.id
+        ? externalTime.localTimeMs
+        : computeLocalTime(tl, globalTimeMs)
 
     for (const track of tl.tracks) {
       const val = evaluateTrack(track, localTime)
@@ -105,6 +123,20 @@ export function evaluateTimelines(timelines: Timeline[], globalTimeMs: number): 
     }
   }
   return overrides
+}
+
+/**
+ * Merge multiple OverrideMaps — later entries win. Returns the first map
+ * untouched when no extras are supplied (common path: nothing to merge).
+ */
+export function mergeOverrides(...maps: OverrideMap[]): OverrideMap {
+  if (maps.length === 0) return new Map()
+  if (maps.length === 1) return maps[0]
+  const out = new Map(maps[0])
+  for (let i = 1; i < maps.length; i++) {
+    maps[i].forEach((v, k) => out.set(k, v))
+  }
+  return out
 }
 
 /**

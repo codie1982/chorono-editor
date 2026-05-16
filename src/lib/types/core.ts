@@ -8,9 +8,11 @@ import type { LayerEffects, MotionPath } from './effects'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio'
+export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke'
 export type ShapeType   = 'rect'  | 'circle'
-export type PlaybackAction = 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
+export type PlaybackAction =
+  | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
+  | 'playSegment' | 'setParam' | 'emitEvent'
 
 /** Colour as four 0–255 channels — used for animated colour values */
 export interface ColorValue { r: number; g: number; b: number; a: number }
@@ -128,6 +130,15 @@ export interface Layer {
   /** When layer deactivates. Default timeline.durationMs. */
   endMs?: number
 
+  // ── Path Stroke (layer.type === 'pathStroke') ────────────────────────────
+  pathStroke?: PathStrokeData
+
+  // ── Interactive runtime ──────────────────────────────────────────────────
+  /** When true, runtime hit-testing will fire 'click' triggers on this layer. */
+  tappable?: boolean
+  /** Map of property dot-paths → parameter id. Resolved at evaluation time. */
+  paramBindings?: Record<string, string>
+
   // ── Editor-only visual aid: a sub-grid drawn INSIDE the layer for
   //    pixel-precision design work. Optional; stripped from runtime export.
   internalGrid?: { size: number }
@@ -139,28 +150,172 @@ export interface Layer {
   colorLabel?: string  // e.g. '#3B82F6'
 }
 
-// ── Triggers & Bindings ───────────────────────────────────────────────────────
+// ── Scene Parameters ──────────────────────────────────────────────────────────
+
+export type SceneParameterType  = 'string' | 'number' | 'boolean' | 'color' | 'image'
+export type SceneParameterValue = string | number | boolean
+
+export interface SceneParameter {
+  id: string
+  name: string
+  type: SceneParameterType
+  defaultValue: SceneParameterValue
+  /** Optional min/max for number params (drives preview slider range). */
+  min?: number
+  max?: number
+}
+
+// ── Path Stroke Layer Data ────────────────────────────────────────────────────
+
+export type PathShapeType = 'ellipse' | 'circle' | 'rect' | 'custom'
+export type StrokeCap     = 'butt' | 'round' | 'square'
+export type PathTrimMode  = 'static' | 'movingSegment'
+
+export interface PathStrokeDefinition {
+  shapeType: PathShapeType
+  /** For ellipse / rect / circle (= width=height). Required for those shapes. */
+  width?: number
+  height?: number
+  /** For shapeType === 'custom': SVG path string. */
+  customPath?: string
+}
+
+export interface PathStrokeGlow {
+  color: string
+  blur: number
+}
+
+export interface PathStrokeStyle {
+  color: string
+  width: number
+  cap?: StrokeCap
+  glow?: PathStrokeGlow
+}
+
+export interface PathTrim {
+  mode: PathTrimMode
+  /** 0–1: visible segment length as a fraction of total path. Default 0.2. */
+  segmentLength?: number
+  /** 0–1: animated. Track this via 'layers.<id>.pathStroke.trim.offset'. */
+  offset: number
+}
+
+export interface PathStrokeData {
+  path:   PathStrokeDefinition
+  stroke: PathStrokeStyle
+  trim:   PathTrim
+}
+
+// ── Triggers ──────────────────────────────────────────────────────────────────
+
+export type TriggerEventType =
+  // User interaction
+  | 'click' | 'dragStart' | 'dragMove' | 'dragEnd'
+  // Timeline / animation lifecycle
+  | 'animationStart'
+  | 'animationComplete'
+  | 'animationLoop'
+  | 'segmentStart'
+  | 'segmentComplete'
+  // Layer lifecycle
+  | 'layerAppear'
+  | 'layerDisappear'
+  | 'layerAnimationComplete'
+  // Other
+  | 'markerReached'
+  | 'frameReached'
+  | 'customEvent'
+
+export interface TriggerEvent {
+  type: TriggerEventType
+  /** For click / drag / layer* / layerClick: which layer. */
+  layerId?: string
+  /** For segmentStart / segmentComplete: which segment. */
+  segmentId?: string
+  /** For animation* events: which timeline. */
+  timelineId?: string
+  /** For markerReached: marker id. For customEvent: event name. */
+  refId?: string
+  /** For frameReached: zero-based frame index inside the active timeline. */
+  frameNumber?: number
+}
+
+export type TriggerConditionOp = 'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte'
+
+export interface TriggerCondition {
+  /** Dot-path into runtime state, e.g. 'params.score'. */
+  path: string
+  op:   TriggerConditionOp
+  value: number | boolean | string
+}
+
+export type TriggerActionType =
+  | 'play' | 'pause' | 'stop' | 'reverse' | 'seek'
+  | 'playSegment' | 'setParam' | 'emitEvent'
 
 export interface TriggerAction {
-  type: PlaybackAction
-  timeline?: string
-  key?: string
-  value?: unknown
+  type: TriggerActionType
+  timelineId?: string
+  /** For seek: target time in ms. */
+  timeMs?: number
+  /** For playSegment: target segment id. */
+  segmentId?: string
+  /** For playSegment: optional loop flag (default false). */
+  loop?: boolean
+  /** For setParam: target parameter id. */
+  paramId?: string
+  /** For setParam: value to write. */
+  paramValue?: SceneParameterValue
+  /** For emitEvent: custom event name to emit. */
+  eventName?: string
 }
 
 export interface Trigger {
-  event: string
+  id: string
+  /** Optional human label shown in Events panel. */
+  label?: string
+  event: TriggerEvent
+  condition?: TriggerCondition
   actions: TriggerAction[]
 }
 
+// ── Bindings (motion binding / parameter binding) ─────────────────────────────
+
+export type BindingSourceType = 'layerProperty' | 'parameter'
+export type BindingTargetType = 'layerProperty' | 'timelineProgress' | 'parameter'
+
+export interface BindingSource {
+  type: BindingSourceType
+  layerId?: string
+  /** Dot-path e.g. 'transform.x', 'opacity', 'style.fill.color'. */
+  property?: string
+  paramId?: string
+}
+
+export interface BindingTarget {
+  type: BindingTargetType
+  layerId?: string
+  property?: string
+  timelineId?: string
+  paramId?: string
+}
+
+export interface BindingMap {
+  inputMin: number
+  inputMax: number
+  outputMin: number
+  outputMax: number
+  /** Clamp output to [outputMin, outputMax]. Default true. */
+  clamp?: boolean
+  /** Reverse the mapping (outputMax becomes the low end). Default false. */
+  reverse?: boolean
+}
+
 export interface Binding {
-  source: string
-  target: string
-  map: {
-    inputMin: number; inputMax: number
-    outputMin: number; outputMax: number
-    clamp: boolean
-  }
+  id: string
+  source: BindingSource
+  target: BindingTarget
+  map: BindingMap
 }
 
 // ── Composition ───────────────────────────────────────────────────────────────
@@ -182,6 +337,8 @@ export interface ChronoScene {
   assets: Asset[]
   layers: Layer[]
   timelines: Timeline[]
+  /** Runtime-tunable parameters. Surfaced via setParam() on the host platform. */
+  parameters: SceneParameter[]
   triggers: Trigger[]
   bindings: Binding[]
   initialState: Record<string, unknown>

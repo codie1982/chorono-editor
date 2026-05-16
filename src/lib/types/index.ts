@@ -8,7 +8,18 @@ export type {
   Track, TimelineMarker, TimelineSegment, Timeline,
   Transform,
   Layer,
-  TriggerAction, Trigger, Binding,
+  // Triggers (richer V1 model)
+  TriggerEventType, TriggerEvent, TriggerConditionOp, TriggerCondition,
+  TriggerActionType, TriggerAction, Trigger,
+  // Bindings
+  BindingSourceType, BindingTargetType, BindingSource, BindingTarget,
+  BindingMap, Binding,
+  // Scene Parameters
+  SceneParameterType, SceneParameterValue, SceneParameter,
+  // Path Stroke Layer
+  PathShapeType, StrokeCap, PathTrimMode,
+  PathStrokeDefinition, PathStrokeGlow, PathStrokeStyle,
+  PathTrim, PathStrokeData,
   Composition,
   ChronoScene,
 } from './core'
