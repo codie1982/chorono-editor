@@ -99,7 +99,9 @@ export default function BuilderPage() {
   const [showHelp,        setShowHelp]      = useState(false)
 
   // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
-  const dock = useDockLayout()
+  // The id list is the contract validated against the persisted tree —
+  // mismatches reset back to the default layout (recovery from corrupt state).
+  const dock = useDockLayout(['layers', 'canvas', 'properties', 'timeline'])
   /** UUID-based keyframe multi-selection — survives drag, persists across renders */
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
   /** Editor preferences (snap, auto-key, graph editor mode) — outside undo */
@@ -393,6 +395,14 @@ export default function BuilderPage() {
           className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium"
         >
           {'{ }'} Export JSON
+        </button>
+
+        <button
+          onClick={dock.resetLayout}
+          title="Reset panel layout to default"
+          className="px-2.5 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 font-medium"
+        >
+          ⊞ Reset
         </button>
 
         <button

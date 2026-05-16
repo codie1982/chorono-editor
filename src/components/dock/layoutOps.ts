@@ -145,9 +145,11 @@ export function dropPanel(
     ? [newLeaf, target]
     : [target, newLeaf]
 
+  // 50/50 split matches the half-pane the user just saw in the drop overlay
+  // (WYSIWYG). They can drag the splitter afterwards for finer control.
   const split: DockSplit = {
     kind: 'split', id: nextId('split'),
-    direction, ratio: newFirst ? 0.3 : 0.7,
+    direction, ratio: 0.5,
     children,
   }
   return replaceNode(cleaned, targetLeafId, split)
@@ -170,6 +172,45 @@ export function setSplitRatio(tree: DockNode, splitId: string, ratio: number): D
   return mapNode(tree, (n) =>
     n.kind === 'split' && n.id === splitId ? { ...n, ratio: clamped } : n
   )
+}
+
+// ── Validation ───────────────────────────────────────────────────────────────
+
+/**
+ * Check that the tree references exactly the expected panel ids — no
+ * duplicates, no orphans, no unknown panels. Used on load to detect a
+ * persisted layout that was corrupted by an older bug or schema change.
+ */
+export function isValidLayout(node: DockNode, expectedPanels: Set<string>): boolean {
+  const seen = new Set<string>()
+  let invalid = false
+
+  function walk(n: DockNode) {
+    if (invalid) return
+    if (!n || typeof n !== 'object' || !('kind' in n)) { invalid = true; return }
+    if (n.kind === 'leaf') {
+      if (!Array.isArray(n.panels)) { invalid = true; return }
+      for (const p of n.panels) {
+        if (typeof p !== 'string') { invalid = true; return }
+        if (seen.has(p))            { invalid = true; return }
+        if (!expectedPanels.has(p)) { invalid = true; return }
+        seen.add(p)
+      }
+      return
+    }
+    if (n.kind === 'split') {
+      if (!Array.isArray(n.children) || n.children.length !== 2) { invalid = true; return }
+      walk(n.children[0]); walk(n.children[1])
+      return
+    }
+    invalid = true
+  }
+  walk(node)
+  if (invalid) return false
+  // Every expected panel must be present
+  let allPresent = true
+  expectedPanels.forEach((p) => { if (!seen.has(p)) allPresent = false })
+  return allPresent
 }
 
 // ── Default layout ───────────────────────────────────────────────────────────

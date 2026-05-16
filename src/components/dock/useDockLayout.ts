@@ -2,7 +2,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { DockNode, DockEdge } from './types'
 import {
-  defaultLayout, dropPanel, setActiveTab, setSplitRatio,
+  defaultLayout, dropPanel, setActiveTab, setSplitRatio, isValidLayout,
 } from './layoutOps'
 
 const LS_KEY = 'chorono.dockLayout.v1'
@@ -19,17 +19,22 @@ interface DockLayoutReturn {
  * Owns the dock tree + persists it to localStorage. Provides imperative
  * mutators for drag-drop, tab switching, and splitter resize.
  *
- * NOTE: the saved layout is replaced by `defaultLayout()` if shape can't be
- * parsed back — protects against version skew when the schema evolves.
+ * `expectedPanelIds` is the set of panels the registry exposes — used to
+ * validate the persisted tree. If a saved tree is missing one or carries
+ * a duplicate (e.g. left over from an older bug) we fall back to the
+ * default layout silently instead of crashing or rendering a broken UI.
  */
-export function useDockLayout(): DockLayoutReturn {
+export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn {
   const [layout, setLayout] = useState<DockNode>(() => {
     if (typeof window === 'undefined') return defaultLayout()
     try {
       const raw = window.localStorage.getItem(LS_KEY)
       if (!raw) return defaultLayout()
       const parsed = JSON.parse(raw) as DockNode
-      // Cheap sanity check — must have a kind field
+      if (expectedPanelIds.length > 0
+          && !isValidLayout(parsed, new Set(expectedPanelIds))) {
+        return defaultLayout()
+      }
       if (parsed && typeof parsed === 'object' && 'kind' in parsed) return parsed
     } catch { /* fall through */ }
     return defaultLayout()
