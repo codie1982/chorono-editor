@@ -13,6 +13,17 @@ export interface LayerEffects {
   saturate?: number
 }
 
+/**
+ * Plugin-based effect (glow, shadow, etc.). Applied AFTER the layer is
+ * rendered to an offscreen canvas. See lib/effects/EffectRegistry.ts.
+ */
+export interface PluginEffect {
+  id:      string
+  type:    string
+  enabled: boolean
+  params:  Record<string, unknown>
+}
+
 // ── Motion Path ───────────────────────────────────────────────────────────────
 // Animate a layer along an SVG cubic-bezier path.
 // The path itself is NOT animatable — it is a static design decision.
@@ -23,6 +34,25 @@ export interface MotionPath {
   pathData: string
   /** When true, rotate layer to align with the path tangent direction */
   autoRotate?: boolean
+}
+
+/**
+ * Follow Path binding — drives a target layer's position from a Bezier path
+ * layer's geometry. Distinct from MotionPath (which uses an inline SVG path
+ * string): FollowPath REFERENCES an existing path layer in the scene, so
+ * editing the path updates every follower.
+ */
+export interface FollowPath {
+  /** Id of a path-type layer in the scene. */
+  pathLayerId: string
+  /** 0–1 arc-length progress along the path. Animatable. */
+  progress: number
+  /** Rotate the layer to face along the path tangent. */
+  orientToPath?: boolean
+  /** Extra rotation added on top of tangent (degrees). */
+  rotationOffset?: number
+  /** Perpendicular offset from the path (px). */
+  perpendicularOffset?: number
 }
 
 // ── Canvas filter builder (used by renderer) ──────────────────────────────────

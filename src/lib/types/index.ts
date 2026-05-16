@@ -1,7 +1,7 @@
 // ── Types barrel — re-export everything from sub-modules ─────────────────────
 
 export type {
-  LayerType, ShapeType, PlaybackAction,
+  LayerType, ShapeType, ShapeKind, ShapeParams, PlaybackAction,
   ColorValue, Vec2, AnimatableValue,
   EasingType, EasingDefinition,
   Keyframe,
@@ -10,12 +10,16 @@ export type {
   Layer,
   // Triggers (richer V1 model)
   TriggerEventType, TriggerEvent, TriggerConditionOp, TriggerCondition,
-  TriggerActionType, TriggerAction, Trigger,
+  TriggerActionType, TriggerAction, Trigger, ParamValueSource,
   // Bindings
   BindingSourceType, BindingTargetType, BindingSource, BindingTarget,
   BindingMap, Binding,
   // Scene Parameters
   SceneParameterType, SceneParameterValue, SceneParameter,
+  // Repeater
+  RepeaterMode, RepeaterTransformStep, RepeaterPolarParams, RepeaterLayerData,
+  // Drag (interactive)
+  DragAxis, DragConfig,
   // Path Stroke Layer
   PathShapeType, StrokeCap, PathTrimMode,
   PathStrokeDefinition, PathStrokeGlow, PathStrokeStyle,
@@ -28,8 +32,17 @@ export type {
   GradientStop, GradientFill,
   ShapeFill,
   StrokeAlignment, LineCap, LineJoin, ShapeStroke,
+  TrimPathDefinition,
   ShapeStyle,
 } from './style'
+
+export type {
+  PathAnchor, BezierPath,
+} from './path'
+
+export { pathFromPoints, DEFAULT_BEZIER_PATH } from './path'
+
+export type { MaskMode, MaskDefinition } from './mask'
 
 export type {
   FontWeight, FontStyle, TextAlign,
@@ -46,6 +59,8 @@ export type {
 export type {
   LayerEffects,
   MotionPath,
+  PluginEffect,
+  FollowPath,
 } from './effects'
 
 export { buildEffectsFilter } from './effects'

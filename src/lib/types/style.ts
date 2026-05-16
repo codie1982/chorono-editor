@@ -36,6 +36,37 @@ export type StrokeAlignment = 'inside' | 'center' | 'outside'
 export type LineCap  = 'butt' | 'round' | 'square'
 export type LineJoin = 'miter' | 'round' | 'bevel'
 
+// ── Trim Path ─────────────────────────────────────────────────────────────────
+
+/**
+ * Trims the visible portion of a stroke path.
+ * All values are normalised 0–1 (fraction of total path length).
+ *
+ * Example — ring progress animation:
+ *   start: 0, end: 0→1 (keyframed), offset: 0
+ *
+ * Example — rotating loader:
+ *   start: 0, end: 0.25, offset: 0→1 (keyframed)
+ */
+export interface TrimPathDefinition {
+  /** Start of visible segment (0 = path start). Animatable. */
+  start: number
+  /** End of visible segment (1 = path end). Animatable. */
+  end: number
+  /** Shifts the whole trim window along the path. Animatable. */
+  offset: number
+  /**
+   * Trim mode:
+   *   - 'static'        : start/end are absolute (default — current behavior)
+   *   - 'movingSegment' : start/end + offset wrap around path end; use
+   *                       segmentLength for a fixed-size window travelling
+   *                       along the path (orbiting light, worm trail).
+   */
+  mode?: 'static' | 'movingSegment'
+  /** Length of the visible window in `movingSegment` mode (0–1). */
+  segmentLength?: number
+}
+
 export interface ShapeStroke {
   color: string
   /** Stroke thickness in px */
@@ -48,6 +79,14 @@ export interface ShapeStroke {
   dashArray?: number[]
   lineCap?:  LineCap
   lineJoin?: LineJoin
+  /** Optional trim — hides parts of the stroke for reveal / progress animations. */
+  trim?: TrimPathDefinition
+  /**
+   * Optional gradient stroke. When set, the renderer uses this gradient as
+   * the stroke style instead of `color`. Linear gradient uses `angle`,
+   * radial uses the shape centre + min(w,h)/2.
+   */
+  gradient?: GradientFill
 }
 
 // ── Unified ShapeStyle ────────────────────────────────────────────────────────

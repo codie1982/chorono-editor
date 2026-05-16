@@ -4,15 +4,54 @@
 import type { ShapeStyle }  from './style'
 import type { TextStyle }   from './text'
 import type { ImageData, VideoData, AudioData, Asset } from './media'
-import type { LayerEffects, MotionPath } from './effects'
+import type { LayerEffects, MotionPath, PluginEffect, FollowPath } from './effects'
+import type { BezierPath } from './path'
+import type { MaskDefinition } from './mask'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke'
+export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke' | 'path' | 'group' | 'repeater'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
   | 'playSegment' | 'setParam' | 'emitEvent'
+
+// ── Shape system ──────────────────────────────────────────────────────────────
+
+/** Extended shape kinds. Existing 'rect'/'circle' kept for backward compat via ShapeType. */
+export type ShapeKind =
+  | 'rect'
+  | 'ellipse'
+  | 'line'
+  | 'arrow'
+  | 'polygon'
+  | 'star'
+  | 'ring'
+  | 'arc'
+  | 'capsule'
+
+/** Shape-specific geometry parameters. All fields optional — defaults live in renderer/factory. */
+export interface ShapeParams {
+  kind: ShapeKind
+  /** polygon: edge count (3–12). star: point count (3–12). */
+  sides?: number
+  /** star: inner arm radius (px). ring: hole radius (px). */
+  innerRadius?: number
+  /** star: outer tip radius (px). Falls back to min(width,height)/2. */
+  outerRadius?: number
+  /** polygon/star corner roundness 0–1. */
+  roundness?: number
+  /** ring/arc: start angle in degrees (0 = 12 o'clock). */
+  startAngle?: number
+  /** ring/arc: end angle in degrees. */
+  endAngle?: number
+  /** line/arrow: endpoint X in layer-local coordinates. */
+  x2?: number
+  /** line/arrow: endpoint Y in layer-local coordinates. */
+  y2?: number
+  /** arrow: arrowhead length in px. */
+  arrowHeadSize?: number
+}
 
 /** Colour as four 0–255 channels — used for animated colour values */
 export interface ColorValue { r: number; g: number; b: number; a: number }
@@ -107,7 +146,14 @@ export interface Layer {
   /** Human-friendly display name, e.g. "Logo", "Background" */
   name: string
   type: LayerType
+  /** Legacy shape discriminator kept for backward compat. Prefer shapeKind for new shapes. */
   shape?: ShapeType
+  /** Extended shape kind — used for all shapes beyond 'rect' and 'circle'. */
+  shapeKind?: ShapeKind
+  /** Shape-specific geometry parameters (sides, radii, angles, endpoints…). */
+  shapeParams?: ShapeParams
+  /** Bezier path data — used when type === 'path'. Editable via Pen Tool. */
+  path?: BezierPath
   /** Pivot for rotation/scale — set once in PropertiesPanel, NOT keyframed */
   transform: Transform
   opacity: number
@@ -122,7 +168,11 @@ export interface Layer {
   video?:      VideoData
   audio?:      AudioData
   effects?:    LayerEffects
+  /** Plugin-based effect chain (glow/shadow/etc.) applied AFTER rendering. */
+  effectsChain?: PluginEffect[]
   motionPath?: MotionPath
+  /** Drives layer position from another path layer's geometry. */
+  followPath?: FollowPath
 
   // ── Timeline range ───────────────────────────────────────────────────────
   /** When layer becomes active. Default 0. */
@@ -133,11 +183,27 @@ export interface Layer {
   // ── Path Stroke (layer.type === 'pathStroke') ────────────────────────────
   pathStroke?: PathStrokeData
 
+  // ── Scene Graph ──────────────────────────────────────────────────────────
+  /** Parent group layer id. undefined / null = root layer. */
+  parentId?: string
+  /** Group masks: ids of layers to be used as masks on THIS layer. */
+  masks?: MaskDefinition[]
+  /** Repeater config — only used when type === 'repeater'. */
+  repeater?: RepeaterLayerData
+
   // ── Interactive runtime ──────────────────────────────────────────────────
   /** When true, runtime hit-testing will fire 'click' triggers on this layer. */
   tappable?: boolean
   /** Map of property dot-paths → parameter id. Resolved at evaluation time. */
   paramBindings?: Record<string, string>
+  /**
+   * When true, pointerdown on this layer in preview mode starts a drag —
+   * fires dragStart / dragMove / dragEnd trigger events. Progress (0-1) is
+   * computed from the drag delta vs dragRange.
+   */
+  draggable?: boolean
+  /** Drag config — only used when draggable: true. */
+  dragConfig?: DragConfig
 
   // ── Editor-only visual aid: a sub-grid drawn INSIDE the layer for
   //    pixel-precision design work. Optional; stripped from runtime export.
@@ -206,6 +272,71 @@ export interface PathStrokeData {
   trim:   PathTrim
 }
 
+// ── Drag Config ───────────────────────────────────────────────────────────────
+
+export type DragAxis = 'x' | 'y' | 'both'
+
+export interface DragConfig {
+  /** Which axes contribute to the progress value. Default 'both'. */
+  axis?: DragAxis
+  /**
+   * Max drag distance (px) at which progress = 1. Default 200.
+   * For axis='both', uses Math.hypot(dx, dy).
+   */
+  range?: number
+  /**
+   * When true, the dragged layer's transform.x/y follows the cursor during
+   * drag (visual slider/knob feedback). Constrained to axis.
+   * Default false (events fire but layer stays still).
+   */
+  followCursor?: boolean
+  /**
+   * Parameter id to set with normalized progress (0-1) on every dragMove.
+   * Lets the drag DIRECTLY drive a scene parameter without needing a trigger.
+   * Optional — when set, the parameter is updated automatically.
+   */
+  setsParameter?: string
+  /**
+   * Timeline id whose playhead is driven by the drag.
+   *
+   * Each dragMove sets `currentTime = progress * timeline.durationMs`, so
+   * every keyframe on that timeline scrubs in sync with the drag. Use this
+   * to build "scrub-controlled" interactions:
+   *   "Drag this box down → text blur ramps up" — animate blur on Timeline 1,
+   *   then point the box's scrubsTimeline at Timeline 1.
+   */
+  scrubsTimeline?: string
+}
+
+// ── Repeater Layer Data ───────────────────────────────────────────────────────
+
+export type RepeaterMode = 'linear' | 'polar'
+
+export interface RepeaterTransformStep {
+  x?:        number
+  y?:        number
+  rotation?: number
+  scaleX?:   number
+  scaleY?:   number
+  opacity?:  number
+}
+
+export interface RepeaterPolarParams {
+  radius:        number
+  startAngle:    number
+  endAngle:      number
+  orientToAngle?: boolean
+}
+
+export interface RepeaterLayerData {
+  /** Layer id whose visual is being repeated. */
+  sourceLayerId: string
+  count:         number
+  mode:          RepeaterMode
+  transformStep?: RepeaterTransformStep
+  polar?:        RepeaterPolarParams
+}
+
 // ── Triggers ──────────────────────────────────────────────────────────────────
 
 export type TriggerEventType =
@@ -253,6 +384,13 @@ export type TriggerActionType =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek'
   | 'playSegment' | 'setParam' | 'emitEvent'
 
+/**
+ * For setParam actions, a dynamic value source pulled from the firing
+ * RuntimeEvent's payload (drag deltas + progress). When set, overrides the
+ * static `paramValue`. Lets drag events drive scene parameters declaratively.
+ */
+export type ParamValueSource = 'event.progress' | 'event.dx' | 'event.dy'
+
 export interface TriggerAction {
   type: TriggerActionType
   timelineId?: string
@@ -264,8 +402,16 @@ export interface TriggerAction {
   loop?: boolean
   /** For setParam: target parameter id. */
   paramId?: string
-  /** For setParam: value to write. */
+  /** For setParam: STATIC value to write. Used when paramValueFrom is unset. */
   paramValue?: SceneParameterValue
+  /**
+   * For setParam: DYNAMIC value source — reads from the firing event's data.
+   *   'event.progress' — drag progress 0–1 (dragMove)
+   *   'event.dx'       — raw horizontal drag delta in composition px
+   *   'event.dy'       — raw vertical drag delta
+   * When set, takes priority over `paramValue`.
+   */
+  paramValueFrom?: ParamValueSource
   /** For emitEvent: custom event name to emit. */
   eventName?: string
 }

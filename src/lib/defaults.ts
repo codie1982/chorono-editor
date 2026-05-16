@@ -113,6 +113,180 @@ export function newAudioLayer(assetId: string, durationMs?: number): Layer {
   }
 }
 
+// ── New shape factories (V1 expansion) ────────────────────────────────────────
+
+export function newEllipseLayer(): Layer {
+  layerCounter++
+  const w = 120, h = 80
+  return {
+    id:        `ellipse_${layerCounter}`,
+    name:      `Ellipse ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'ellipse',
+    shapeParams:{ kind: 'ellipse' },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { fill: { type: 'solid', color: '#8B5CF6' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newLineLayer(): Layer {
+  layerCounter++
+  const x2 = 160, y2 = 0
+  return {
+    id:        `line_${layerCounter}`,
+    name:      `Line ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'line',
+    shapeParams:{ kind: 'line', x2, y2 },
+    transform: { ...DEFAULT_TRANSFORM, x: 60, y: 100 + (layerCounter % 5) * 20 },
+    opacity: 1,
+    style:   { stroke: { color: '#94A3B8', width: 3, lineCap: 'round' } },
+    size:    { width: Math.abs(x2), height: Math.max(1, Math.abs(y2)) },
+  }
+}
+
+export function newArrowLayer(): Layer {
+  layerCounter++
+  const x2 = 140, y2 = 0
+  return {
+    id:        `arrow_${layerCounter}`,
+    name:      `Arrow ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'arrow',
+    shapeParams:{ kind: 'arrow', x2, y2, arrowHeadSize: 14 },
+    transform: { ...DEFAULT_TRANSFORM, x: 60, y: 120 + (layerCounter % 5) * 20 },
+    opacity: 1,
+    style:   { stroke: { color: '#F59E0B', width: 3, lineCap: 'round', lineJoin: 'round' } },
+    size:    { width: Math.abs(x2), height: Math.max(1, Math.abs(y2)) },
+  }
+}
+
+export function newPolygonLayer(): Layer {
+  layerCounter++
+  const w = 120, h = 120
+  return {
+    id:        `polygon_${layerCounter}`,
+    name:      `Polygon ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'polygon',
+    shapeParams:{ kind: 'polygon', sides: 6 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { fill: { type: 'solid', color: '#10B981' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newStarLayer(): Layer {
+  layerCounter++
+  const w = 120, h = 120
+  return {
+    id:        `star_${layerCounter}`,
+    name:      `Star ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'star',
+    shapeParams:{ kind: 'star', sides: 5, innerRadius: 27, outerRadius: 60 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { fill: { type: 'solid', color: '#F59E0B' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newRingLayer(): Layer {
+  layerCounter++
+  const w = 100, h = 100
+  return {
+    id:        `ring_${layerCounter}`,
+    name:      `Ring ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'ring',
+    shapeParams:{ kind: 'ring', innerRadius: 30, startAngle: 0, endAngle: 360 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { fill: { type: 'solid', color: '#3B82F6' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newArcLayer(): Layer {
+  layerCounter++
+  const w = 100, h = 100
+  return {
+    id:        `arc_${layerCounter}`,
+    name:      `Arc ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'arc',
+    shapeParams:{ kind: 'arc', startAngle: -90, endAngle: 90 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    // Arcs default to stroke-only — they are unfilled curves.
+    style:   { stroke: { color: '#06B6D4', width: 4, lineCap: 'round' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newCapsuleLayer(): Layer {
+  layerCounter++
+  const w = 160, h = 60
+  return {
+    id:        `capsule_${layerCounter}`,
+    name:      `Capsule ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'capsule',
+    shapeParams:{ kind: 'capsule' },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { fill: { type: 'solid', color: '#EC4899' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newBezierPathLayer(): Layer {
+  layerCounter++
+  // Default starter: a smooth-curve "S" — easy to recognise as a real Bezier
+  return {
+    id:    `path_${layerCounter}`,
+    name:  `Path ${layerCounter}`,
+    type:  'path',
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 80 + (layerCounter % 5) * 20 },
+    opacity: 1,
+    style: { stroke: { color: '#60A5FA', width: 3, lineCap: 'round', lineJoin: 'round' } },
+    path: {
+      closed: false,
+      anchors: [
+        { x:   0, y:  60, outX:  20, outY:   0, pointType: 'smooth' },
+        { x: 160, y:  60, inX:  140, inY: 120, outX: 180, outY:   0, pointType: 'smooth' },
+      ],
+    },
+  }
+}
+
+export function newRoundedRectLayer(): Layer {
+  const l = newRectLayer()
+  l.id   = l.id.replace(/^rect_/, 'rrect_')
+  l.name = l.name.replace(/^Rect /, 'Rounded ')
+  l.style = { ...(l.style ?? {}), cornerRadius: 24 }
+  return l
+}
+
+// ── Text layer ────────────────────────────────────────────────────────────────
+
 export function newTextLayer(): Layer {
   layerCounter++
   const value = 'Chorono'
