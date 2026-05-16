@@ -21,20 +21,20 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
   const containerRef = useRef<HTMLDivElement>(null)
   const [localEdge, setLocalEdge] = useState<DockEdge | null>(null)
 
-  // Compute hovered edge based on pointer position while dragging
+  // Compute hovered edge based on pointer position while dragging.
+  // Source leaf is excluded — you can't drop a panel back onto its own leaf.
+  const isSource = drag?.sourceLeafId === leaf.id
   useEffect(() => {
-    if (!drag) { setLocalEdge(null); return }
+    if (!drag || isSource) { setLocalEdge(null); return }
     const el = containerRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
     const x = drag.pointerX, y = drag.pointerY
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      // Pointer left this leaf
       if (hoverTarget?.leafId === leaf.id) setHoverTarget(null)
       setLocalEdge(null)
       return
     }
-    // Determine which edge zone (or center)
     const fx = (x - rect.left) / rect.width
     const fy = (y - rect.top)  / rect.height
     let edge: DockEdge = 'center'
@@ -44,7 +44,7 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
     else if (fy > 1 - EDGE_THRESHOLD)    edge = 'bottom'
     setLocalEdge(edge)
     setHoverTarget({ leafId: leaf.id, edge })
-  }, [drag, leaf.id, hoverTarget?.leafId, setHoverTarget])
+  }, [drag, isSource, leaf.id, hoverTarget?.leafId, setHoverTarget])
 
   const activePanelId = leaf.panels[leaf.activeIndex]
   const activeDef = activePanelId ? registry.get(activePanelId) : null
@@ -64,10 +64,12 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
           return (
             <div
               key={pid}
-              onClick={() => onTabSelect(pid)}
               onPointerDown={(e) => {
-                // Click selects, hold + move begins drag
-                if (e.button === 0) beginDrag(pid, leaf.id, e)
+                if (e.button !== 0) return
+                // Always select on press; if the pointer crosses the drag
+                // threshold afterwards, dragContext promotes it to a real drag.
+                onTabSelect(pid)
+                beginDrag(pid, leaf.id, e)
               }}
               className={`relative px-3 h-full flex items-center text-xs cursor-grab active:cursor-grabbing
                 border-r border-gray-700/60 select-none
