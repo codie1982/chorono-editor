@@ -1,0 +1,405 @@
+'use client'
+import type { Layer, Composition } from '@/lib/types'
+
+// Canvas composite operations the user typically picks from for blending.
+const BLEND_MODES: Array<[GlobalCompositeOperation, string]> = [
+  ['source-over', 'Normal'],
+  ['multiply',    'Multiply'],
+  ['screen',      'Screen'],
+  ['overlay',     'Overlay'],
+  ['darken',      'Darken'],
+  ['lighten',     'Lighten'],
+  ['color-dodge', 'Color Dodge'],
+  ['color-burn',  'Color Burn'],
+  ['hard-light',  'Hard Light'],
+  ['soft-light',  'Soft Light'],
+  ['difference',  'Difference'],
+  ['exclusion',   'Exclusion'],
+  ['hue',         'Hue'],
+  ['saturation',  'Saturation'],
+  ['color',       'Color'],
+  ['luminosity',  'Luminosity'],
+]
+
+interface Props {
+  layer: Layer | null
+  composition: Composition
+  onLayerChange: (layer: Layer) => void
+  onCompositionChange: (comp: Composition) => void
+}
+
+// ── Genel giriş bileşenleri ─────────────────────────────────────────────────
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function NumInput({ value, onChange, min, max, step = 1 }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number
+}) {
+  return (
+    <input
+      type="number"
+      value={value}
+      min={min} max={max} step={step}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
+                 focus:outline-none focus:border-blue-500 [appearance:textfield]
+                 [&::-webkit-inner-spin-button]:appearance-none"
+    />
+  )
+}
+
+function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-8 h-7 rounded border border-gray-600 bg-transparent cursor-pointer p-0.5"
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
+                   focus:outline-none focus:border-blue-500 font-mono uppercase"
+        maxLength={7}
+      />
+    </div>
+  )
+}
+
+function Row2({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-2 gap-2">{children}</div>
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
+        {title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Ana bileşen ──────────────────────────────────────────────────────────────
+
+export default function PropertiesPanel({ layer, composition, onLayerChange, onCompositionChange }: Props) {
+
+  const update = (partial: Partial<Layer>) => layer && onLayerChange({ ...layer, ...partial })
+  const updateTransform = (key: keyof Layer['transform'], val: number) =>
+    layer && update({ transform: { ...layer.transform, [key]: val } })
+
+  return (
+    <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
+      <div className="px-3 py-2 border-b border-gray-700 shrink-0">
+        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          {layer ? `Layer: ${layer.id}` : 'Properties'}
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col gap-3 px-3 py-3">
+
+        {/* ── Composition (only when nothing selected — otherwise edit via header modal) */}
+        {!layer && (
+          <Section title="Composition">
+            <Row2>
+              <Field label="Width">
+                <NumInput value={composition.width}  min={1} max={2048}
+                  onChange={(v) => onCompositionChange({ ...composition, width: v })} />
+              </Field>
+              <Field label="Height">
+                <NumInput value={composition.height} min={1} max={2048}
+                  onChange={(v) => onCompositionChange({ ...composition, height: v })} />
+              </Field>
+            </Row2>
+            <Field label="Bg Color">
+              <ColorInput value={composition.backgroundColor}
+                onChange={(v) => onCompositionChange({ ...composition, backgroundColor: v })} />
+            </Field>
+            <Field label="Duration (ms)">
+              <NumInput value={composition.durationMs} min={100} step={100}
+                onChange={(v) => onCompositionChange({ ...composition, durationMs: v })} />
+            </Field>
+            <p className="text-[10px] text-gray-500 leading-snug pt-1">
+              Tip: click <span className="font-mono text-gray-400">{composition.width}×{composition.height}</span> in the header for preset sizes.
+            </p>
+          </Section>
+        )}
+
+        {/* ── Layer özellikleri ──────────────────────────────────────── */}
+        {layer && (
+          <>
+            <Section title="Transform">
+              <Row2>
+                <Field label="X">
+                  <NumInput value={layer.transform.x} onChange={(v) => updateTransform('x', v)} />
+                </Field>
+                <Field label="Y">
+                  <NumInput value={layer.transform.y} onChange={(v) => updateTransform('y', v)} />
+                </Field>
+              </Row2>
+              <Row2>
+                <Field label="Scale X">
+                  <NumInput value={layer.transform.scaleX} step={0.01} min={0.01}
+                    onChange={(v) => updateTransform('scaleX', v)} />
+                </Field>
+                <Field label="Scale Y">
+                  <NumInput value={layer.transform.scaleY} step={0.01} min={0.01}
+                    onChange={(v) => updateTransform('scaleY', v)} />
+                </Field>
+              </Row2>
+              <Field label="Rotation (deg)">
+                <NumInput value={layer.transform.rotationDeg} min={-360} max={360}
+                  onChange={(v) => updateTransform('rotationDeg', v)} />
+              </Field>
+              <Row2>
+                <Field label="Anchor X">
+                  <NumInput value={layer.transform.anchorX}
+                    onChange={(v) => updateTransform('anchorX', v)} />
+                </Field>
+                <Field label="Anchor Y">
+                  <NumInput value={layer.transform.anchorY}
+                    onChange={(v) => updateTransform('anchorY', v)} />
+                </Field>
+              </Row2>
+            </Section>
+
+            <Section title="Appearance">
+              <Field label="Opacity">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range" min={0} max={1} step={0.01}
+                    value={layer.opacity}
+                    onChange={(e) => update({ opacity: Number(e.target.value) })}
+                    className="flex-1 accent-blue-500"
+                  />
+                  <span className="text-xs text-gray-400 w-8 text-right">
+                    {(layer.opacity * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </Field>
+              <Field label="Blend Mode">
+                <select
+                  value={layer.blendMode ?? 'source-over'}
+                  onChange={(e) => update({
+                    blendMode: e.target.value === 'source-over' ? undefined : (e.target.value as GlobalCompositeOperation),
+                  })}
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
+                             focus:outline-none focus:border-blue-500"
+                >
+                  {BLEND_MODES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </Field>
+            </Section>
+
+            {/* ── Shape özellikleri ──────────────────────────────────── */}
+            {layer.type === 'shape' && layer.style && layer.size && (
+              <Section title="Shape">
+                <Row2>
+                  <Field label="Width">
+                    <NumInput value={layer.size.width} min={1}
+                      onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
+                  </Field>
+                  <Field label="Height">
+                    <NumInput value={layer.size.height} min={1}
+                      onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
+                  </Field>
+                </Row2>
+                <Field label="Fill Color">
+                  <ColorInput value={layer.style.fill?.color ?? '#000000'}
+                    onChange={(v) => update({
+                      style: {
+                        ...layer.style!,
+                        fill: { type: 'solid', ...layer.style!.fill, color: v },
+                      },
+                    })} />
+                </Field>
+                {layer.shape === 'rect' && (
+                  <Field label="Corner Radius">
+                    <NumInput value={layer.style.cornerRadius ?? 0} min={0}
+                      onChange={(v) => update({ style: { ...layer.style!, cornerRadius: v } })} />
+                  </Field>
+                )}
+              </Section>
+            )}
+
+            {/* ── Text özellikleri ──────────────────────────────────── */}
+            {layer.type === 'text' && layer.text && (
+              <Section title="Text">
+                <Field label="Content">
+                  <input
+                    type="text"
+                    value={layer.text.value}
+                    onChange={(e) => update({ text: { ...layer.text!, value: e.target.value } })}
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
+                               focus:outline-none focus:border-blue-500"
+                  />
+                </Field>
+                <Row2>
+                  <Field label="Font Size">
+                    <NumInput value={layer.text.fontSize} min={4}
+                      onChange={(v) => update({ text: { ...layer.text!, fontSize: v } })} />
+                  </Field>
+                  <Field label="Color">
+                    <input type="color" value={layer.text.color}
+                      onChange={(e) => update({ text: { ...layer.text!, color: e.target.value } })}
+                      className="w-full h-7 rounded border border-gray-600 bg-transparent cursor-pointer p-0.5" />
+                  </Field>
+                </Row2>
+              </Section>
+            )}
+
+            {/* ── Image properties ──────────────────────────────────── */}
+            {layer.type === 'image' && layer.image && layer.size && (
+              <Section title="Image">
+                <Row2>
+                  <Field label="Width">
+                    <NumInput value={layer.size.width} min={1}
+                      onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
+                  </Field>
+                  <Field label="Height">
+                    <NumInput value={layer.size.height} min={1}
+                      onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
+                  </Field>
+                </Row2>
+                <Field label="Object Fit">
+                  <select
+                    value={layer.image.objectFit ?? 'contain'}
+                    onChange={(e) => update({
+                      image: { ...layer.image!, objectFit: e.target.value as 'fill' | 'contain' | 'cover' | 'none' },
+                    })}
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
+                               focus:outline-none focus:border-blue-500"
+                  >
+                    {(['contain', 'cover', 'fill', 'none'] as const).map((v) =>
+                      <option key={v} value={v}>{v}</option>
+                    )}
+                  </select>
+                </Field>
+              </Section>
+            )}
+
+            {/* ── Video properties ──────────────────────────────────── */}
+            {layer.type === 'video' && layer.video && layer.size && (
+              <Section title="Video">
+                <Row2>
+                  <Field label="Width">
+                    <NumInput value={layer.size.width} min={1}
+                      onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
+                  </Field>
+                  <Field label="Height">
+                    <NumInput value={layer.size.height} min={1}
+                      onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
+                  </Field>
+                </Row2>
+                <Row2>
+                  <Field label="Volume">
+                    <NumInput value={layer.video.volume ?? 1} min={0} max={1} step={0.1}
+                      onChange={(v) => update({ video: { ...layer.video!, volume: v } })} />
+                  </Field>
+                  <Field label="Trim Start (ms)">
+                    <NumInput value={layer.video.startOffsetMs ?? 0} min={0}
+                      onChange={(v) => update({ video: { ...layer.video!, startOffsetMs: v } })} />
+                  </Field>
+                </Row2>
+                <Row2>
+                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={!!layer.video.muted}
+                      onChange={(e) => update({ video: { ...layer.video!, muted: e.target.checked } })}
+                      className="accent-blue-500" />
+                    Muted
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={!!layer.video.loop}
+                      onChange={(e) => update({ video: { ...layer.video!, loop: e.target.checked } })}
+                      className="accent-blue-500" />
+                    Loop
+                  </label>
+                </Row2>
+              </Section>
+            )}
+
+            {/* ── Audio properties ──────────────────────────────────── */}
+            {layer.type === 'audio' && layer.audio && (
+              <Section title="Audio">
+                <Row2>
+                  <Field label="Volume">
+                    <NumInput value={layer.audio.volume ?? 1} min={0} max={1} step={0.1}
+                      onChange={(v) => update({ audio: { ...layer.audio!, volume: v } })} />
+                  </Field>
+                  <Field label="Trim Start (ms)">
+                    <NumInput value={layer.audio.startOffsetMs ?? 0} min={0}
+                      onChange={(v) => update({ audio: { ...layer.audio!, startOffsetMs: v } })} />
+                  </Field>
+                </Row2>
+                <Row2>
+                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={!!layer.audio.muted}
+                      onChange={(e) => update({ audio: { ...layer.audio!, muted: e.target.checked } })}
+                      className="accent-blue-500" />
+                    Muted
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={!!layer.audio.loop}
+                      onChange={(e) => update({ audio: { ...layer.audio!, loop: e.target.checked } })}
+                      className="accent-blue-500" />
+                    Loop
+                  </label>
+                </Row2>
+              </Section>
+            )}
+
+            {/* ── Motion Path ───────────────────────────────────────── */}
+            <Section title="Motion Path">
+              <Field label="SVG Path (use motionPath.offset track to animate)">
+                <textarea
+                  value={layer.motionPath?.pathData ?? ''}
+                  onChange={(e) => update({
+                    motionPath: e.target.value.trim()
+                      ? { ...layer.motionPath, pathData: e.target.value, autoRotate: layer.motionPath?.autoRotate }
+                      : undefined,
+                  })}
+                  rows={2}
+                  placeholder='e.g. "M 0 0 C 100 50 200 50 300 0"'
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[11px] text-gray-200
+                             focus:outline-none focus:border-blue-500 font-mono resize-none"
+                />
+              </Field>
+              {layer.motionPath && (
+                <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!layer.motionPath.autoRotate}
+                    onChange={(e) => update({
+                      motionPath: { ...layer.motionPath!, autoRotate: e.target.checked },
+                    })}
+                    className="accent-blue-500"
+                  />
+                  Auto-rotate to path tangent
+                </label>
+              )}
+            </Section>
+          </>
+        )}
+
+        {!layer && (
+          <p className="text-xs text-gray-600 text-center py-8">
+            Canvas'ta bir katman seç<br />veya soldan ekle.
+          </p>
+        )}
+      </div>
+    </aside>
+  )
+}
