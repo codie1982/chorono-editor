@@ -1,0 +1,127 @@
+'use client'
+import { useRef, useState, useEffect } from 'react'
+import type { DockLeaf, DockEdge } from './types'
+import type { PanelRegistry } from './registry'
+import { useDockDrag } from './dragContext'
+
+interface Props {
+  leaf: DockLeaf
+  registry: PanelRegistry
+  onTabSelect: (panelId: string) => void
+}
+
+const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
+
+/**
+ * Renders one leaf of the dock tree: a tab strip + active panel body + drop
+ * overlay (visible only while a drag is in progress).
+ */
+export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props) {
+  const { drag, beginDrag, hoverTarget, setHoverTarget } = useDockDrag()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [localEdge, setLocalEdge] = useState<DockEdge | null>(null)
+
+  // Compute hovered edge based on pointer position while dragging
+  useEffect(() => {
+    if (!drag) { setLocalEdge(null); return }
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const x = drag.pointerX, y = drag.pointerY
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      // Pointer left this leaf
+      if (hoverTarget?.leafId === leaf.id) setHoverTarget(null)
+      setLocalEdge(null)
+      return
+    }
+    // Determine which edge zone (or center)
+    const fx = (x - rect.left) / rect.width
+    const fy = (y - rect.top)  / rect.height
+    let edge: DockEdge = 'center'
+    if      (fx < EDGE_THRESHOLD)        edge = 'left'
+    else if (fx > 1 - EDGE_THRESHOLD)    edge = 'right'
+    else if (fy < EDGE_THRESHOLD)        edge = 'top'
+    else if (fy > 1 - EDGE_THRESHOLD)    edge = 'bottom'
+    setLocalEdge(edge)
+    setHoverTarget({ leafId: leaf.id, edge })
+  }, [drag, leaf.id, hoverTarget?.leafId, setHoverTarget])
+
+  const activePanelId = leaf.panels[leaf.activeIndex]
+  const activeDef = activePanelId ? registry.get(activePanelId) : null
+  const dropZoneStyle = getEdgeOverlayStyle(localEdge)
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative flex flex-col h-full bg-gray-900 border border-gray-800 overflow-hidden"
+    >
+      {/* Tab strip — also the drag handle */}
+      <div className="flex items-center bg-gray-800/80 border-b border-gray-700 shrink-0 h-7">
+        {leaf.panels.map((pid) => {
+          const def = registry.get(pid)
+          if (!def) return null
+          const isActive = pid === activePanelId
+          return (
+            <div
+              key={pid}
+              onClick={() => onTabSelect(pid)}
+              onPointerDown={(e) => {
+                // Click selects, hold + move begins drag
+                if (e.button === 0) beginDrag(pid, leaf.id, e)
+              }}
+              className={`relative px-3 h-full flex items-center text-xs cursor-grab active:cursor-grabbing
+                border-r border-gray-700/60 select-none
+                ${isActive
+                  ? 'bg-gray-900 text-gray-100 border-t-2 border-t-blue-500'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+              title="Drag to rearrange — drop on another panel's edge"
+            >
+              {def.title}
+            </div>
+          )
+        })}
+        <div className="flex-1" />
+      </div>
+
+      {/* Panel body */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {activeDef
+          ? activeDef.render()
+          : <div className="p-6 text-xs text-gray-600 text-center">Empty panel</div>}
+      </div>
+
+      {/* Drop overlay (visible during drag) */}
+      {drag && (
+        <div className="absolute inset-0 pointer-events-none z-40">
+          {/* Center "drop here as tab" hint when not on an edge */}
+          {localEdge === 'center' && (
+            <div className="absolute inset-2 border-2 border-blue-400/80 bg-blue-500/10 rounded
+                            flex items-center justify-center">
+              <span className="text-xs font-medium text-blue-200 bg-blue-900/80 px-3 py-1 rounded">
+                + Add tab
+              </span>
+            </div>
+          )}
+          {/* Edge highlight (left/right/top/bottom) */}
+          {localEdge && localEdge !== 'center' && (
+            <div
+              className="absolute bg-blue-500/40 border-2 border-blue-400"
+              style={dropZoneStyle}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Build the half-pane preview rectangle for an edge ────────────────────────
+function getEdgeOverlayStyle(edge: DockEdge | null): React.CSSProperties {
+  switch (edge) {
+    case 'left':   return { left: 0, top: 0, bottom: 0, width: '50%' }
+    case 'right':  return { right: 0, top: 0, bottom: 0, width: '50%' }
+    case 'top':    return { left: 0, right: 0, top: 0, height: '50%' }
+    case 'bottom': return { left: 0, right: 0, bottom: 0, height: '50%' }
+    default:       return { display: 'none' }
+  }
+}
