@@ -44,10 +44,23 @@ interface ResizeState {
   startClientY: number
 }
 
-type ActiveDrag = MoveState | ResizeState
+interface AnchorState {
+  kind: 'anchor'
+  layerId: string
+  originalLayer: Layer
+  startClientX: number
+  startClientY: number
+}
+
+type ActiveDrag = MoveState | ResizeState | AnchorState
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
+}
+
+function snapToGrid(v: number, step: number): number {
+  if (step <= 0) return v
+  return Math.round(v / step) * step
 }
 
 const HANDLE_CURSORS: Record<Handle, string> = {
@@ -68,6 +81,12 @@ export default function SceneCanvas({
   // ── Zoom ──────────────────────────────────────────────────────────────────
   const [zoom, setZoom]       = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
+
+  // ── Snap-to-grid (visual + position math during drag/resize/anchor) ────
+  const [snapEnabled, setSnapEnabled] = useState(false)
+  const [gridSize, setGridSize]       = useState(20)
+  const snapRef = useRef({ enabled: false, size: 20 })
+  useEffect(() => { snapRef.current = { enabled: snapEnabled, size: gridSize } }, [snapEnabled, gridSize])
 
   useLayoutEffect(() => {
     const el = containerRef.current
@@ -120,14 +139,47 @@ export default function SceneCanvas({
     const dy = (e.clientY - drag.startClientY) * sy
     const { width: cw, height: ch } = compositionRef.current
 
+    const snap = snapRef.current
+
     if (drag.kind === 'move') {
       const ox = drag.originalLayer.transform.x
       const oy = drag.originalLayer.transform.y
-      const nx = clamp(ox + dx, 0, Math.max(0, cw - drag.width))
-      const ny = clamp(oy + dy, 0, Math.max(0, ch - drag.height))
+      let nx = clamp(ox + dx, 0, Math.max(0, cw - drag.width))
+      let ny = clamp(oy + dy, 0, Math.max(0, ch - drag.height))
+      if (snap.enabled) {
+        nx = clamp(snapToGrid(nx, snap.size), 0, Math.max(0, cw - drag.width))
+        ny = clamp(snapToGrid(ny, snap.size), 0, Math.max(0, ch - drag.height))
+      }
       let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.x', nx)
       next = updateLayerProperty(next, drag.layerId, 'transform.y', ny)
       editorRef.current.previewTransaction(next)
+      return
+    }
+
+    if (drag.kind === 'anchor') {
+      // Anchor lives in layer-local coords. Snap is applied to the layer's
+      // local axis (so the grid you see on canvas still aligns 1:1).
+      const origAX = drag.originalLayer.transform.anchorX
+      const origAY = drag.originalLayer.transform.anchorY
+      let nAX = origAX + dx
+      let nAY = origAY + dy
+      if (snap.enabled) {
+        // Snap the WORLD position of the anchor to the grid, then translate
+        // back to local coords. That way the visible anchor handle lands
+        // exactly on a grid line.
+        const wx = drag.originalLayer.transform.x + nAX
+        const wy = drag.originalLayer.transform.y + nAY
+        nAX = snapToGrid(wx, snap.size) - drag.originalLayer.transform.x
+        nAY = snapToGrid(wy, snap.size) - drag.originalLayer.transform.y
+      }
+      const nextScene: ChronoScene = {
+        ...sceneRef.current,
+        layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : {
+          ...l,
+          transform: { ...l.transform, anchorX: nAX, anchorY: nAY },
+        }),
+      }
+      editorRef.current.previewTransaction(nextScene)
       return
     }
 
@@ -163,6 +215,23 @@ export default function SceneCanvas({
     // Minimum size + composition-bounds clamp
     nw = Math.max(MIN_SIZE, nw)
     nh = Math.max(MIN_SIZE, nh)
+
+    // Snap resize edges to the grid when snap is active
+    if (snap.enabled && !proportional) {
+      // Snap the moving edge (right/bottom) or the moving corner (left/top
+      // moves both x and dimension). Position snaps for handles that pull
+      // from the top/left; dimension snaps for the other side.
+      if (h === 'w' || h === 'nw' || h === 'sw') nx = snapToGrid(nx, snap.size)
+      if (h === 'n' || h === 'nw' || h === 'ne') ny = snapToGrid(ny, snap.size)
+      if (h === 'e' || h === 'ne' || h === 'se') nw = snapToGrid(ox + nw, snap.size) - ox
+      if (h === 's' || h === 'se' || h === 'sw') nh = snapToGrid(oy + nh, snap.size) - oy
+      // For left/top handles, recompute dimension after position snap
+      if (h === 'w' || h === 'nw' || h === 'sw') nw = ow + (ox - nx)
+      if (h === 'n' || h === 'nw' || h === 'ne') nh = oh + (oy - ny)
+      nw = Math.max(MIN_SIZE, nw)
+      nh = Math.max(MIN_SIZE, nh)
+    }
+
     nx = clamp(nx, 0, Math.max(0, cw - nw))
     ny = clamp(ny, 0, Math.max(0, ch - nh))
     nw = Math.min(nw, cw - nx)
@@ -268,6 +337,25 @@ export default function SceneCanvas({
     window.addEventListener('pointerup',   handlePointerUp)
   }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
 
+  // ── Anchor handle pointerdown → start anchor drag ────────────────────────
+  const beginAnchorDrag = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!layer || layer.locked) return
+    editor.beginTransaction()
+    dragRef.current = {
+      kind: 'anchor',
+      layerId: layer.id,
+      originalLayer: layer,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup',   handlePointerUp)
+  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+
   // ── Render canvas ─────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
@@ -320,6 +408,16 @@ export default function SceneCanvas({
             }}
           />
 
+          {/* Grid overlay — only when snap is on so it doubles as a hint */}
+          {snapEnabled && (
+            <GridOverlay
+              width={width}
+              height={height}
+              zoom={zoom}
+              gridSize={gridSize}
+            />
+          )}
+
           {showFrame && selectedLayer.size && (
             <SelectionFrame
               x={selectedLayer.transform.x * zoom}
@@ -329,6 +427,16 @@ export default function SceneCanvas({
               onHandlePointerDown={beginResize}
             />
           )}
+
+          {/* Anchor handle — visible for any unlocked selected layer */}
+          {selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+            <AnchorHandle
+              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
+              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              isDragging={dragRef.current?.kind === 'anchor'}
+              onPointerDown={beginAnchorDrag}
+            />
+          )}
         </div>
 
         <div className="absolute bottom-1 right-1 text-[10px] text-gray-600 font-mono pointer-events-none">
@@ -336,20 +444,47 @@ export default function SceneCanvas({
         </div>
       </div>
 
-      {/* Zoom pill */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-gray-900/90 border border-gray-700
-                      rounded px-2 py-1 text-xs font-mono text-gray-300 select-none">
-        <button onClick={() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
-          className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom out (Cmd+scroll)">−</button>
-        <button onClick={() => setZoom(1)}
-          className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100%">
-          {Math.round(zoom * 100)}%
-        </button>
-        <button onClick={() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
-          className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom in (Cmd+scroll)">+</button>
-        <span className="w-px h-3 bg-gray-700 mx-0.5" />
-        <button onClick={() => setZoom(fitZoom)}
-          className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Fit composition to view">Fit</button>
+      {/* Bottom-right controls: zoom pill + snap pill */}
+      <div className="absolute bottom-3 right-3 flex items-center gap-2 select-none">
+        {/* Snap pill — toggle + grid-size slider */}
+        <div className="flex items-center gap-2 bg-gray-900/90 border border-gray-700
+                        rounded px-2 py-1 text-xs font-mono text-gray-300">
+          <button
+            onClick={() => setSnapEnabled((s) => !s)}
+            title="Snap to grid (move / resize / anchor)"
+            className={`px-1.5 py-0.5 rounded transition-colors
+              ${snapEnabled ? 'bg-blue-600 text-white hover:bg-blue-500' : 'text-gray-400 hover:bg-gray-700'}`}
+          >
+            ⊞
+          </button>
+          <input
+            type="range" min={2} max={100} step={1}
+            value={gridSize}
+            onChange={(e) => setGridSize(Number(e.target.value))}
+            disabled={!snapEnabled}
+            title={`Grid size · ${gridSize}px`}
+            className="w-20 accent-blue-500 disabled:opacity-40"
+          />
+          <span className={`w-10 text-right ${snapEnabled ? 'text-gray-200' : 'text-gray-500'}`}>
+            {gridSize}px
+          </span>
+        </div>
+
+        {/* Zoom pill */}
+        <div className="flex items-center gap-1 bg-gray-900/90 border border-gray-700
+                        rounded px-2 py-1 text-xs font-mono text-gray-300">
+          <button onClick={() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
+            className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom out (Cmd+scroll)">−</button>
+          <button onClick={() => setZoom(1)}
+            className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100%">
+            {Math.round(zoom * 100)}%
+          </button>
+          <button onClick={() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
+            className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom in (Cmd+scroll)">+</button>
+          <span className="w-px h-3 bg-gray-700 mx-0.5" />
+          <button onClick={() => setZoom(fitZoom)}
+            className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Fit composition to view">Fit</button>
+        </div>
       </div>
 
       {/* Hint banner */}
@@ -366,6 +501,88 @@ export default function SceneCanvas({
 interface FrameProps {
   x: number; y: number; w: number; h: number
   onHandlePointerDown: (h: Handle) => (e: React.PointerEvent) => void
+}
+
+// ── Grid overlay (only rendered when snap is on) ─────────────────────────────
+
+interface GridProps {
+  width:  number   // composition width  (composition-px)
+  height: number   // composition height (composition-px)
+  zoom: number
+  gridSize: number // composition-px between lines
+}
+
+/**
+ * Draws light vertical + horizontal lines inside the artboard at every
+ * gridSize composition-pixels (scaled by zoom). Major lines every 5 cells
+ * are a touch brighter so the eye can count.
+ */
+function GridOverlay({ width, height, zoom, gridSize }: GridProps) {
+  const w = width * zoom
+  const h = height * zoom
+  const step = gridSize * zoom
+  if (step < 2) return null   // too dense to be useful
+  const cols: number[] = []
+  const rows: number[] = []
+  for (let x = 0; x <= width;  x += gridSize) cols.push(x)
+  for (let y = 0; y <= height; y += gridSize) rows.push(y)
+
+  return (
+    <svg
+      className="absolute inset-0 pointer-events-none"
+      width={w} height={h}
+      style={{ width: w, height: h }}
+    >
+      {cols.map((cx, i) => (
+        <line key={`v${cx}`}
+          x1={cx * zoom} y1={0} x2={cx * zoom} y2={h}
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth={i % 5 === 0 ? 1 : 0.5}
+        />
+      ))}
+      {rows.map((cy, i) => (
+        <line key={`h${cy}`}
+          x1={0} y1={cy * zoom} x2={w} y2={cy * zoom}
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth={i % 5 === 0 ? 1 : 0.5}
+        />
+      ))}
+    </svg>
+  )
+}
+
+// ── Anchor point handle (pivot for rotation / scale) ─────────────────────────
+
+interface AnchorProps {
+  x: number; y: number
+  isDragging?: boolean
+  onPointerDown: (e: React.PointerEvent) => void
+}
+
+/**
+ * Crosshair-in-a-ring handle marking the layer's anchor point. Draggable —
+ * moves transform.anchorX/Y. Sits above the selection frame so it's always
+ * reachable, but uses pointer-events:auto only on the inner hit area so it
+ * doesn't block other interactions.
+ */
+function AnchorHandle({ x, y, isDragging, onPointerDown }: AnchorProps) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      title="Anchor point (rotation / scale pivot) — drag to reposition"
+      className="absolute z-50 pointer-events-auto cursor-move select-none"
+      style={{ left: `${x}px`, top: `${y}px`, transform: 'translate(-50%, -50%)' }}
+    >
+      <div className={`relative w-4 h-4 rounded-full border-2 transition-transform
+        ${isDragging
+          ? 'border-orange-400 bg-orange-400/40 scale-125'
+          : 'border-orange-500 bg-white/30 hover:scale-110'}`}>
+        {/* crosshair */}
+        <span className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-orange-500" />
+        <span className="absolute top-1/2 left-0 right-0 h-px -translate-y-1/2 bg-orange-500" />
+      </div>
+    </div>
+  )
 }
 
 function SelectionFrame({ x, y, w, h, onHandlePointerDown }: FrameProps) {
