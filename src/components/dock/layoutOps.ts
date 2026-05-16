@@ -270,7 +270,11 @@ export function defaultLayout(): DockNode {
             direction: 'h', ratio: 0.72,
             children: [
               { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas'],     activeIndex: 0 },
-              { kind: 'leaf', id: 'properties-leaf', panels: ['properties'], activeIndex: 0 },
+              {
+                kind: 'leaf', id: 'properties-leaf',
+                panels: ['properties', 'parameters', 'events', 'motionBinding', 'runtimePreview'],
+                activeIndex: 0,
+              },
             ],
           },
         ],

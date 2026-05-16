@@ -2,9 +2,10 @@
 import { useCallback, useMemo, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
+  TimelineSegment,
 } from '@/lib/types'
 import { evaluateTrack } from '@/lib/evaluator'
-import { newTimeline, nextKfId } from '@/lib/defaults'
+import { newTimeline, nextKfId, newTimelineSegment } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
   makeKeyframeLayerSnapshotCmd,
@@ -12,6 +13,9 @@ import {
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
 } from '@/lib/editor/commands-timeline'
+import {
+  makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
+} from '@/lib/editor/commands-interactive'
 import { updateKfTimeMs } from '@/lib/timeline/keyframeOps'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
@@ -19,6 +23,8 @@ import { useKeyframeDrag, type DragSnapshot } from './timeline/hooks/useKeyframe
 import TimelineRuler           from './timeline/TimelineRuler'
 import TimelineToolbar         from './timeline/TimelineToolbar'
 import LayerTimelineSection    from './timeline/LayerTimelineSection'
+import SegmentStrip            from './timeline/SegmentStrip'
+import SegmentModal            from './modals/SegmentModal'
 
 interface Props {
   scene: ChronoScene
@@ -39,6 +45,10 @@ interface Props {
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   onToggleLayerFlag: (id: string, field: 'locked' | 'hidden' | 'solo') => void
   onPlaybackSpeedChange: (s: number) => void
+  /** Optional: clicking a segment band requests preview playback. */
+  onPlaySegment?: (timelineId: string, segmentId: string, loop?: boolean) => void
+  /** Optional: currently active runtime-preview segment, highlighted in strip. */
+  activeSegmentId?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +58,7 @@ export default function TimelinePanel({
   selectedLayerId, selectedLayerIds, selectedTimelineId, selectedKfIds,
   currentTimeMs, isPlaying, playbackSpeed,
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
-  onToggleLayerFlag, onPlaybackSpeedChange,
+  onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -57,6 +67,12 @@ export default function TimelinePanel({
 
   // ── Viewport (panel height managed by parent dock splitter) ─────────────
   const vp = useTimelineViewport(duration)
+
+  // ── Segment modal state (create / edit) ──────────────────────────────────
+  const [segmentModal, setSegmentModal] = useState<{
+    mode:    'create' | 'edit'
+    segment: TimelineSegment
+  } | null>(null)
 
   // ── Per-layer expand state (default: all layers expanded) ────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
@@ -290,6 +306,27 @@ export default function TimelinePanel({
             clientXToMs={vp.clientXToMs}
             onSeek={onTimeChange}
           />
+          {timeline && (
+            <SegmentStrip
+              segments={timeline.segments ?? []}
+              durationMs={duration}
+              totalContentPx={vp.totalContentPx}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              activeSegmentId={activeSegmentId ?? null}
+              onCreateAt={(ms) => {
+                // Default a fresh segment to 400ms wide starting at the click point.
+                const startMs = Math.max(0, Math.min(duration - 100, Math.round(ms)))
+                const endMs   = Math.min(duration, startMs + Math.min(400, duration - startMs))
+                setSegmentModal({
+                  mode: 'create',
+                  segment: newTimelineSegment(startMs, endMs),
+                })
+              }}
+              onEdit={(seg) => setSegmentModal({ mode: 'edit', segment: seg })}
+              onPlay={(segId) => onPlaySegment?.(timeline.id, segId)}
+            />
+          )}
         </div>
       </div>
 
@@ -346,6 +383,26 @@ export default function TimelinePanel({
           style={{ left: `${240 + vp.msToScreenPx(currentTimeMs)}px` }}
         />
       </div>
+
+      {/* ── Segment create / edit modal ──────────────────────────────────── */}
+      {segmentModal && timeline && (
+        <SegmentModal
+          initial={segmentModal.segment}
+          durationMs={duration}
+          isCreating={segmentModal.mode === 'create'}
+          onClose={() => setSegmentModal(null)}
+          onSave={(next) => {
+            if (segmentModal.mode === 'create') {
+              dispatchCommand(makeAddSegmentCmd(timeline.id, next))
+            } else {
+              dispatchCommand(makeUpdateSegmentCmd(timeline.id, segmentModal.segment, next))
+            }
+          }}
+          onDelete={segmentModal.mode === 'edit'
+            ? () => dispatchCommand(makeDeleteSegmentCmd(timeline.id, segmentModal.segment))
+            : undefined}
+        />
+      )}
     </div>
   )
 }

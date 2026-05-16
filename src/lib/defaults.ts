@@ -1,8 +1,17 @@
-import type { Layer, Timeline, Composition, ChronoScene, Transform } from './types'
+import type {
+  Layer, Timeline, Composition, ChronoScene, Transform,
+  SceneParameter, SceneParameterType, SceneParameterValue,
+  Trigger, Binding, TimelineSegment,
+  PathStrokeData,
+} from './types'
 
 let layerCounter    = 0
 let timelineCounter = 0
 let kfCounter       = 0
+let paramCounter    = 0
+let triggerCounter  = 0
+let bindingCounter  = 0
+let segmentCounter  = 0
 
 /** Generate a lightweight unique ID for keyframes (no crypto dependency). */
 function nextKfId(): string {
@@ -158,7 +167,97 @@ export function emptyScene(): ChronoScene {
     timelines: [],
     triggers: [],
     bindings: [],
+    parameters: [],
     initialState: {},
+  }
+}
+
+// ── Interactive Runtime Factories ─────────────────────────────────────────────
+
+/** PathStroke layer — defaults to a 200px circle with a thin white ring. */
+export function newPathStrokeLayer(): Layer {
+  layerCounter++
+  const w = 200, h = 200
+  const data: PathStrokeData = {
+    path:   { shapeType: 'circle', width: w, height: h },
+    stroke: { color: '#FFFFFF', width: 3, cap: 'round' },
+    trim:   { mode: 'static', segmentLength: 0.2, offset: 0 },
+  }
+  return {
+    id:   `pathStroke_${layerCounter}`,
+    name: `Path ${layerCounter}`,
+    type: 'pathStroke',
+    transform: {
+      ...DEFAULT_TRANSFORM,
+      x: 80,
+      y: 80,
+      anchorX: w / 2,
+      anchorY: h / 2,
+    },
+    opacity: 1,
+    size: { width: w, height: h },
+    pathStroke: data,
+  }
+}
+
+/** SceneParameter — type-aware default value. */
+const PARAM_DEFAULTS: Record<SceneParameterType, SceneParameterValue> = {
+  string:  '',
+  number:  0,
+  boolean: false,
+  color:   '#FFFFFF',
+  image:   '',
+}
+
+export function newSceneParameter(type: SceneParameterType = 'number'): SceneParameter {
+  paramCounter++
+  const param: SceneParameter = {
+    id:   `param_${paramCounter}`,
+    name: `param${paramCounter}`,
+    type,
+    defaultValue: PARAM_DEFAULTS[type],
+  }
+  if (type === 'number') {
+    param.min = 0
+    param.max = 100
+  }
+  return param
+}
+
+/** Empty Trigger — defaults to a custom event with no actions. */
+export function newTrigger(): Trigger {
+  triggerCounter++
+  return {
+    id:   `trigger_${triggerCounter}`,
+    label: `Rule ${triggerCounter}`,
+    event: { type: 'customEvent', refId: 'event.name' },
+    actions: [],
+  }
+}
+
+/** Empty Binding — defaults to parameter → layer property. */
+export function newBinding(): Binding {
+  bindingCounter++
+  return {
+    id: `binding_${bindingCounter}`,
+    source: { type: 'parameter' },
+    target: { type: 'layerProperty' },
+    map: {
+      inputMin: 0, inputMax: 1,
+      outputMin: 0, outputMax: 1,
+      clamp: true,
+    },
+  }
+}
+
+export function newTimelineSegment(startMs: number, endMs: number): TimelineSegment {
+  segmentCounter++
+  return {
+    id:    `segment_${segmentCounter}`,
+    name:  `Segment ${segmentCounter}`,
+    startMs,
+    endMs,
+    color: '#22D3EE',
   }
 }
 

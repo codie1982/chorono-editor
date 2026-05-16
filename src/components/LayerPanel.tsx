@@ -8,7 +8,7 @@ interface Props {
   selectedId: string | null
   selectedIds: Set<string>
   onSelect: (id: string, shiftHeld: boolean) => void
-  onAdd: (kind: 'rect' | 'circle' | 'text') => void
+  onAdd: (kind: 'rect' | 'circle' | 'text' | 'pathStroke') => void
   onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
   onAddAudio: (file: File) => void
@@ -19,12 +19,14 @@ interface Props {
 }
 
 const LAYER_ICON: Record<string, string> = {
-  rect:   '⬛',
-  circle: '⭕',
-  text:   '𝙏',
-  image:  '🖼',
-  video:  '▶',
-  audio:  '♪',
+  rect:       '⬛',
+  circle:     '⭕',
+  text:       '𝙏',
+  image:      '🖼',
+  video:      '▶',
+  audio:      '♪',
+  pathStroke: '◌',
+  shape:      '⬛',
 }
 
 export default function LayerPanel({
@@ -62,6 +64,13 @@ export default function LayerPanel({
             </button>
           ))}
         </div>
+        <button
+          onClick={() => onAdd('pathStroke')}
+          className="w-full py-1 text-xs rounded bg-gray-700 hover:bg-blue-600 text-gray-200 transition-colors"
+          title="Path stroke layer — for orbiting light, draw-on, worm trail effects"
+        >
+          + Path Stroke
+        </button>
         <div className="grid grid-cols-3 gap-1">
           <button
             onClick={() => imageInputRef.current?.click()}

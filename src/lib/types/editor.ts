@@ -41,6 +41,11 @@ export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   { label: 'Saturate',        path: 'effects.saturate',      group: 'Effects' },
   // ── Motion Path ───────────────────────────────────────────────────────────
   { label: 'Path Offset',     path: 'motionPath.offset',     group: 'Path' },
+  // ── Path Stroke Layer ─────────────────────────────────────────────────────
+  { label: 'Trim Offset',     path: 'pathStroke.trim.offset',         group: 'Path', layerTypes: ['pathStroke'] },
+  { label: 'Trim Length',     path: 'pathStroke.trim.segmentLength',  group: 'Path', layerTypes: ['pathStroke'] },
+  { label: 'Stroke Width',    path: 'pathStroke.stroke.width',        group: 'Stroke', layerTypes: ['pathStroke'] },
+  { label: 'Stroke Color',    path: 'pathStroke.stroke.color',        group: 'Stroke', layerTypes: ['pathStroke'] },
 ]
 
 // ── Timeline Settings ─────────────────────────────────────────────────────────

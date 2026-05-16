@@ -1,7 +1,12 @@
 import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit } from './types'
 import { buildEffectsFilter } from './types'
-import { evaluateTimelines, getLayerValue } from './evaluator'
+import { evaluateTimelines, getLayerValue, type OverrideMap } from './evaluator'
 import { evaluateMotionPath } from './motionPath'
+import { drawPathStrokeLayer } from './runtime/pathStrokeRenderer'
+import {
+  resolveTextContent, getStringParamBinding,
+  type ParamValueMap,
+} from './runtime/paramResolver'
 
 /** Element cache passed in from React (image / video DOM elements keyed by Asset.id). */
 export type AssetElementMap = Map<string, HTMLImageElement | HTMLVideoElement>
@@ -222,7 +227,11 @@ function drawVideoLayer(
 
 // ── Text renderer ─────────────────────────────────────────────────────────────
 
-function drawText(ctx: CanvasRenderingContext2D, layer: Layer) {
+function drawText(
+  ctx: CanvasRenderingContext2D,
+  layer: Layer,
+  paramValues?: ParamValueMap,
+) {
   if (!layer.text) return
   const {
     value, fontSize, color,
@@ -231,7 +240,13 @@ function drawText(ctx: CanvasRenderingContext2D, layer: Layer) {
     stroke, shadow, uppercase, underline,
   } = layer.text
 
-  const displayText = uppercase ? value.toUpperCase() : value
+  // Runtime parameter resolution — replaces "{paramId}" placeholders.
+  const resolvedValue = paramValues ? resolveTextContent(value, paramValues) : value
+  const displayText = uppercase ? resolvedValue.toUpperCase() : resolvedValue
+  // Parameter-bound colour override (paramBindings['text.color']).
+  const resolvedColor = paramValues
+    ? (getStringParamBinding(layer, 'text.color', paramValues) ?? color)
+    : color
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
   ctx.textAlign    = textAlign as CanvasTextAlign
   ctx.textBaseline = 'top'
@@ -266,7 +281,7 @@ function drawText(ctx: CanvasRenderingContext2D, layer: Layer) {
     drawRun('stroke')
   }
 
-  ctx.fillStyle = color
+  ctx.fillStyle = resolvedColor
   drawRun('fill')
 
   // Reset shadow so it doesn't bleed into the next layer
@@ -289,6 +304,7 @@ function renderLayer(
   overrides: ReturnType<typeof evaluateTimelines>,
   isSelected: boolean,
   assets: AssetElementMap,
+  paramValues?: ParamValueMap,
 ) {
   if (layer.hidden) return
 
@@ -325,11 +341,13 @@ function renderLayer(
   if (layer.type === 'shape' && layer.size) {
     drawShape(ctx, layer, overrides)
   } else if (layer.type === 'text') {
-    drawText(ctx, layer)
+    drawText(ctx, layer, paramValues)
   } else if (layer.type === 'image') {
     drawImageLayer(ctx, layer, assets)
   } else if (layer.type === 'video') {
     drawVideoLayer(ctx, layer, assets)
+  } else if (layer.type === 'pathStroke') {
+    drawPathStrokeLayer(ctx, layer, overrides)
   }
   // audio: no canvas rendering (handled by an AudioEngine)
 
@@ -355,16 +373,35 @@ export interface GridOptions {
   size: number
 }
 
+export interface RenderOptions {
+  grid?:        GridOptions
+  /** Optional pre-computed override map (e.g. from the interactive runtime
+   *  hook including param + binding overrides). When omitted, evaluator
+   *  output is used directly. */
+  overrides?:   OverrideMap
+  /** Runtime parameter values for text placeholder + colour resolution. */
+  paramValues?: ParamValueMap
+}
+
 export function renderScene(
   ctx: CanvasRenderingContext2D,
   scene: ChronoScene,
   timeMs: number,
   selectedLayerId: string | null,
   assets: AssetElementMap = new Map(),
-  grid?: GridOptions,
+  gridOrOptions?: GridOptions | RenderOptions,
 ) {
+  // Backward-compatible signature: 6th arg may be GridOptions OR RenderOptions.
+  const opts: RenderOptions =
+    gridOrOptions && 'grid' in gridOrOptions
+      ? gridOrOptions
+      : gridOrOptions
+        ? { grid: gridOrOptions as GridOptions }
+        : {}
+  const grid = opts.grid
+
   const { width, height, backgroundColor } = scene.composition
-  const overrides = evaluateTimelines(scene.timelines, timeMs)
+  const overrides = opts.overrides ?? evaluateTimelines(scene.timelines, timeMs)
 
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = backgroundColor
@@ -375,7 +412,7 @@ export function renderScene(
 
   for (const layer of scene.layers) {
     if (anySolo && !layer.solo) continue
-    renderLayer(ctx, layer, overrides, layer.id === selectedLayerId, assets)
+    renderLayer(ctx, layer, overrides, layer.id === selectedLayerId, assets, opts.paramValues)
   }
 
   // Canvas grid drawn ON TOP of layers so it stays visible even when a
