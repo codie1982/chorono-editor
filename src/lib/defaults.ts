@@ -106,6 +106,13 @@ export function newAudioLayer(assetId: string, durationMs?: number): Layer {
 
 export function newTextLayer(): Layer {
   layerCounter++
+  const value = 'Chorono'
+  const fontSize = 24
+  // Text has no exact bounding box without measureText — approximate so the
+  // anchor lands near the visual middle of the string. User can fine-tune
+  // via the Centre button in PropertiesPanel.
+  const estW = value.length * fontSize * 0.55
+  const estH = fontSize
   return {
     id:   `text_${layerCounter}`,
     name: `Text ${layerCounter}`,
@@ -114,9 +121,11 @@ export function newTextLayer(): Layer {
       ...DEFAULT_TRANSFORM,
       x: 50,
       y: 100 + (layerCounter % 5) * 20,
+      anchorX: estW / 2,
+      anchorY: estH / 2,
     },
     opacity: 1,
-    text: { value: 'Chorono', fontSize: 24, color: '#FFFFFF' },
+    text: { value, fontSize, color: '#FFFFFF' },
   }
 }
 

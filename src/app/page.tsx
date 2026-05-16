@@ -49,7 +49,8 @@ function makeDemoScene(): ChronoScene {
   }
   const label: Layer = {
     id: 'label', name: 'Label', type: 'text',
-    transform: { x: 130, y: 128, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 0, anchorY: 0 },
+    // Anchor at the visual centre of "Chorono" @22px (rough text bbox)
+    transform: { x: 130, y: 128, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 42, anchorY: 11 },
     opacity: 0,
     text: { value: 'Chorono', fontSize: 22, color: '#FFFFFF' },
   }

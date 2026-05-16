@@ -172,6 +172,26 @@ export default function PropertiesPanel({ layer, composition, onLayerChange, onC
                     onChange={(v) => updateTransform('anchorY', v)} />
                 </Field>
               </Row2>
+              <button
+                onClick={() => {
+                  // Layer-local centre: half of size for shapes/images/videos.
+                  // For text we approximate from value length × fontSize × 0.55.
+                  let cx = 0, cy = 0
+                  if (layer.size) {
+                    cx = layer.size.width  / 2
+                    cy = layer.size.height / 2
+                  } else if (layer.text) {
+                    cx = (layer.text.value.length * layer.text.fontSize * 0.55) / 2
+                    cy = layer.text.fontSize / 2
+                  }
+                  update({ transform: { ...layer.transform, anchorX: cx, anchorY: cy } })
+                }}
+                title="Move the anchor to the layer's visual centre (top-left = 0,0)"
+                className="w-full text-[11px] py-1 rounded bg-gray-800 hover:bg-gray-700
+                           border border-gray-700 text-gray-300"
+              >
+                ⊕ Centre anchor
+              </button>
             </Section>
 
             <Section title="Appearance">
