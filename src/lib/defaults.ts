@@ -15,6 +15,7 @@ export const DEFAULT_TRANSFORM: Transform = {
 
 export function newRectLayer(): Layer {
   layerCounter++
+  const w = 160, h = 80
   return {
     id:   `rect_${layerCounter}`,
     name: `Rect ${layerCounter}`,
@@ -24,18 +25,24 @@ export function newRectLayer(): Layer {
       ...DEFAULT_TRANSFORM,
       x: 40 + (layerCounter % 5) * 20,
       y: 40 + (layerCounter % 5) * 20,
+      // Anchor at layer centre — natural pivot for rotation / scale,
+      // and gives the visible anchor handle a stable, predictable spot
+      // instead of sitting on top of the move-by-grab area at top-left.
+      anchorX: w / 2,
+      anchorY: h / 2,
     },
     opacity: 1,
     style: {
       fill: { type: 'solid', color: '#3B82F6' },
       cornerRadius: 8,
     },
-    size: { width: 160, height: 80 },
+    size: { width: w, height: h },
   }
 }
 
 export function newCircleLayer(): Layer {
   layerCounter++
+  const w = 60, h = 60
   return {
     id:   `circle_${layerCounter}`,
     name: `Circle ${layerCounter}`,
@@ -45,12 +52,14 @@ export function newCircleLayer(): Layer {
       ...DEFAULT_TRANSFORM,
       x: 60 + (layerCounter % 5) * 20,
       y: 60 + (layerCounter % 5) * 20,
+      anchorX: w / 2,
+      anchorY: h / 2,
     },
     opacity: 1,
     style: {
       fill: { type: 'solid', color: '#EF4444' },
     },
-    size: { width: 60, height: 60 },
+    size: { width: w, height: h },
   }
 }
 
@@ -60,7 +69,7 @@ export function newImageLayer(assetId: string, w = 200, h = 150): Layer {
     id:   `image_${layerCounter}`,
     name: `Image ${layerCounter}`,
     type: 'image',
-    transform: { ...DEFAULT_TRANSFORM, x: 40, y: 40 },
+    transform: { ...DEFAULT_TRANSFORM, x: 40, y: 40, anchorX: w / 2, anchorY: h / 2 },
     opacity: 1,
     size: { width: w, height: h },
     image: { assetId, objectFit: 'contain' },
@@ -73,7 +82,7 @@ export function newVideoLayer(assetId: string, w = 320, h = 180, durationMs?: nu
     id:   `video_${layerCounter}`,
     name: `Video ${layerCounter}`,
     type: 'video',
-    transform: { ...DEFAULT_TRANSFORM, x: 40, y: 40 },
+    transform: { ...DEFAULT_TRANSFORM, x: 40, y: 40, anchorX: w / 2, anchorY: h / 2 },
     opacity: 1,
     size: { width: w, height: h },
     video: { assetId, volume: 1, muted: false, startOffsetMs: 0, loop: false },

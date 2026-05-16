@@ -82,11 +82,18 @@ export default function SceneCanvas({
   const [zoom, setZoom]       = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
 
-  // ── Snap-to-grid (visual + position math during drag/resize/anchor) ────
+  // ── Snap-to-grid (visual + math while ANCHOR drags) ──────────────────────
   const [snapEnabled, setSnapEnabled] = useState(false)
   const [gridSize, setGridSize]       = useState(20)
   const snapRef = useRef({ enabled: false, size: 20 })
   useEffect(() => { snapRef.current = { enabled: snapEnabled, size: gridSize } }, [snapEnabled, gridSize])
+
+  // ── Pan mode (move the whole view instead of objects) ───────────────────
+  const [panMode, setPanMode] = useState(false)
+  const [pan, setPan]         = useState({ x: 0, y: 0 })
+  const panDragRef = useRef<{
+    startClientX: number; startClientY: number; startPan: { x: number; y: number }
+  } | null>(null)
 
   useLayoutEffect(() => {
     const el = containerRef.current
@@ -142,14 +149,11 @@ export default function SceneCanvas({
     const snap = snapRef.current
 
     if (drag.kind === 'move') {
+      // Plain move — never snapped. Snap-to-grid only affects the anchor.
       const ox = drag.originalLayer.transform.x
       const oy = drag.originalLayer.transform.y
-      let nx = clamp(ox + dx, 0, Math.max(0, cw - drag.width))
-      let ny = clamp(oy + dy, 0, Math.max(0, ch - drag.height))
-      if (snap.enabled) {
-        nx = clamp(snapToGrid(nx, snap.size), 0, Math.max(0, cw - drag.width))
-        ny = clamp(snapToGrid(ny, snap.size), 0, Math.max(0, ch - drag.height))
-      }
+      const nx = clamp(ox + dx, 0, Math.max(0, cw - drag.width))
+      const ny = clamp(oy + dy, 0, Math.max(0, ch - drag.height))
       let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.x', nx)
       next = updateLayerProperty(next, drag.layerId, 'transform.y', ny)
       editorRef.current.previewTransaction(next)
@@ -212,26 +216,10 @@ export default function SceneCanvas({
       if (h === 'nw' || h === 'ne' || h === 'n') ny = oy + (oh - nh)
     }
 
-    // Minimum size + composition-bounds clamp
+    // Minimum size + composition-bounds clamp (resize never snaps to grid —
+    // only anchor does, so users get pixel-precise resize regardless).
     nw = Math.max(MIN_SIZE, nw)
     nh = Math.max(MIN_SIZE, nh)
-
-    // Snap resize edges to the grid when snap is active
-    if (snap.enabled && !proportional) {
-      // Snap the moving edge (right/bottom) or the moving corner (left/top
-      // moves both x and dimension). Position snaps for handles that pull
-      // from the top/left; dimension snaps for the other side.
-      if (h === 'w' || h === 'nw' || h === 'sw') nx = snapToGrid(nx, snap.size)
-      if (h === 'n' || h === 'nw' || h === 'ne') ny = snapToGrid(ny, snap.size)
-      if (h === 'e' || h === 'ne' || h === 'se') nw = snapToGrid(ox + nw, snap.size) - ox
-      if (h === 's' || h === 'se' || h === 'sw') nh = snapToGrid(oy + nh, snap.size) - oy
-      // For left/top handles, recompute dimension after position snap
-      if (h === 'w' || h === 'nw' || h === 'sw') nw = ow + (ox - nx)
-      if (h === 'n' || h === 'nw' || h === 'ne') nh = oh + (oy - ny)
-      nw = Math.max(MIN_SIZE, nw)
-      nh = Math.max(MIN_SIZE, nh)
-    }
-
     nx = clamp(nx, 0, Math.max(0, cw - nw))
     ny = clamp(ny, 0, Math.max(0, ch - nh))
     nw = Math.min(nw, cw - nx)
@@ -273,7 +261,37 @@ export default function SceneCanvas({
   }, [handlePointerMove])
 
   // ── Canvas pointerdown → select + start move ─────────────────────────────
+  // ── Pan (move whole view) ─────────────────────────────────────────────────
+  const handlePanMove = useCallback((e: PointerEvent) => {
+    const p = panDragRef.current
+    if (!p) return
+    setPan({
+      x: p.startPan.x + (e.clientX - p.startClientX),
+      y: p.startPan.y + (e.clientY - p.startClientY),
+    })
+  }, [])
+  const handlePanUp = useCallback(() => {
+    if (!panDragRef.current) return
+    panDragRef.current = null
+    window.removeEventListener('pointermove', handlePanMove)
+    window.removeEventListener('pointerup',   handlePanUp)
+  }, [handlePanMove])
+  const beginPan = useCallback((e: React.PointerEvent) => {
+    panDragRef.current = {
+      startClientX: e.clientX, startClientY: e.clientY,
+      startPan: { ...pan },
+    }
+    window.addEventListener('pointermove', handlePanMove)
+    window.addEventListener('pointerup',   handlePanUp)
+  }, [pan, handlePanMove, handlePanUp])
+
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Middle-mouse OR pan-mode + left button → pan the view, not the layer
+    if (e.button === 1 || (panMode && e.button === 0)) {
+      e.preventDefault()
+      beginPan(e)
+      return
+    }
     if (e.button !== 0) return
     const canvas = canvasRef.current
     if (!canvas) return
@@ -315,7 +333,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp])
+  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -362,8 +380,11 @@ export default function SceneCanvas({
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    renderScene(ctx, scene, timeMs, selectedLayerId, assets)
-  }, [scene, timeMs, selectedLayerId, assets])
+    renderScene(
+      ctx, scene, timeMs, selectedLayerId, assets,
+      snapEnabled ? { size: gridSize } : undefined,
+    )
+  }, [scene, timeMs, selectedLayerId, assets, snapEnabled, gridSize])
 
   // ── Wheel zoom (Cmd/Ctrl held) ────────────────────────────────────────────
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -384,7 +405,14 @@ export default function SceneCanvas({
       className="flex-1 flex items-center justify-center bg-gray-950 overflow-hidden relative"
       onWheel={handleWheel}
     >
-      <div className="relative" style={{ padding: PADDING }}>
+      <div
+        className="relative"
+        style={{
+          padding: PADDING,
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
+          transition: panDragRef.current ? 'none' : 'transform 120ms ease-out',
+        }}
+      >
         <div
           className="absolute inset-6 ring-1 ring-gray-600 shadow-2xl shadow-black/80 rounded pointer-events-none"
         />
@@ -399,7 +427,11 @@ export default function SceneCanvas({
             width={width}
             height={height}
             onPointerDown={handleCanvasPointerDown}
-            className={`absolute inset-0 block ${dragRef.current?.kind === 'move' ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className={`absolute inset-0 block ${
+              panMode ? 'cursor-grab'
+              : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
+              : 'cursor-grab'
+            } ${panDragRef.current ? '!cursor-grabbing' : ''}`}
             style={{
               width:  `${width  * zoom}px`,
               height: `${height * zoom}px`,
@@ -407,16 +439,6 @@ export default function SceneCanvas({
               touchAction: 'none',
             }}
           />
-
-          {/* Grid overlay — only when snap is on so it doubles as a hint */}
-          {snapEnabled && (
-            <GridOverlay
-              width={width}
-              height={height}
-              zoom={zoom}
-              gridSize={gridSize}
-            />
-          )}
 
           {showFrame && selectedLayer.size && (
             <SelectionFrame
@@ -470,27 +492,38 @@ export default function SceneCanvas({
           </span>
         </div>
 
-        {/* Zoom pill */}
+        {/* Zoom + pan pill */}
         <div className="flex items-center gap-1 bg-gray-900/90 border border-gray-700
                         rounded px-2 py-1 text-xs font-mono text-gray-300">
+          <button
+            onClick={() => setPanMode((p) => !p)}
+            title="Pan mode — drag the view instead of objects (middle-mouse always pans)"
+            className={`px-1.5 py-0.5 rounded transition-colors
+              ${panMode ? 'bg-blue-600 text-white hover:bg-blue-500' : 'text-gray-400 hover:bg-gray-700'}`}
+          >
+            ✋
+          </button>
+          <span className="w-px h-3 bg-gray-700 mx-0.5" />
           <button onClick={() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom out (Cmd+scroll)">−</button>
-          <button onClick={() => setZoom(1)}
-            className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100%">
+          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}
+            className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100% + recentre">
             {Math.round(zoom * 100)}%
           </button>
           <button onClick={() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom in (Cmd+scroll)">+</button>
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
-          <button onClick={() => setZoom(fitZoom)}
-            className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Fit composition to view">Fit</button>
+          <button onClick={() => { setZoom(fitZoom); setPan({ x: 0, y: 0 }) }}
+            className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Fit composition to view (recentre)">Fit</button>
         </div>
       </div>
 
-      {/* Hint banner */}
+      {/* Hint banner — context-aware to which mode is active */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono text-gray-500 pointer-events-none
-                      bg-gray-900/70 px-2 py-0.5 rounded">
-        Drag to move · Drag handles to resize · Hold ⌘ for proportional · Cmd+scroll zooms
+                      bg-gray-900/70 px-2 py-0.5 rounded whitespace-nowrap">
+        {panMode
+          ? '✋ Pan mode · drag anywhere to pan the view (click ✋ again to turn off)'
+          : 'Drag to move · Handles to resize · Hold ⌘ for aspect-lock · Cmd+scroll zooms · Mid-mouse pans'}
       </div>
     </div>
   )
@@ -501,54 +534,6 @@ export default function SceneCanvas({
 interface FrameProps {
   x: number; y: number; w: number; h: number
   onHandlePointerDown: (h: Handle) => (e: React.PointerEvent) => void
-}
-
-// ── Grid overlay (only rendered when snap is on) ─────────────────────────────
-
-interface GridProps {
-  width:  number   // composition width  (composition-px)
-  height: number   // composition height (composition-px)
-  zoom: number
-  gridSize: number // composition-px between lines
-}
-
-/**
- * Draws light vertical + horizontal lines inside the artboard at every
- * gridSize composition-pixels (scaled by zoom). Major lines every 5 cells
- * are a touch brighter so the eye can count.
- */
-function GridOverlay({ width, height, zoom, gridSize }: GridProps) {
-  const w = width * zoom
-  const h = height * zoom
-  const step = gridSize * zoom
-  if (step < 2) return null   // too dense to be useful
-  const cols: number[] = []
-  const rows: number[] = []
-  for (let x = 0; x <= width;  x += gridSize) cols.push(x)
-  for (let y = 0; y <= height; y += gridSize) rows.push(y)
-
-  return (
-    <svg
-      className="absolute inset-0 pointer-events-none"
-      width={w} height={h}
-      style={{ width: w, height: h }}
-    >
-      {cols.map((cx, i) => (
-        <line key={`v${cx}`}
-          x1={cx * zoom} y1={0} x2={cx * zoom} y2={h}
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={i % 5 === 0 ? 1 : 0.5}
-        />
-      ))}
-      {rows.map((cy, i) => (
-        <line key={`h${cy}`}
-          x1={0} y1={cy * zoom} x2={w} y2={cy * zoom}
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth={i % 5 === 0 ? 1 : 0.5}
-        />
-      ))}
-    </svg>
-  )
 }
 
 // ── Anchor point handle (pivot for rotation / scale) ─────────────────────────

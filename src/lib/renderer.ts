@@ -340,12 +340,18 @@ function renderLayer(
 
 // ── Main render function ──────────────────────────────────────────────────────
 
+export interface GridOptions {
+  /** Step between grid lines, in composition pixels. */
+  size: number
+}
+
 export function renderScene(
   ctx: CanvasRenderingContext2D,
   scene: ChronoScene,
   timeMs: number,
   selectedLayerId: string | null,
   assets: AssetElementMap = new Map(),
+  grid?: GridOptions,
 ) {
   const { width, height, backgroundColor } = scene.composition
   const overrides = evaluateTimelines(scene.timelines, timeMs)
@@ -353,6 +359,10 @@ export function renderScene(
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = backgroundColor
   ctx.fillRect(0, 0, width, height)
+
+  // Grid is painted ON the canvas surface, BEHIND every layer — so it acts
+  // like a property of the artboard background, not an overlay on objects.
+  if (grid && grid.size > 0) drawGrid(ctx, width, height, grid.size)
 
   // If any layer is solo'd, only render solo layers.
   const anySolo = scene.layers.some((l) => l.solo)
@@ -368,6 +378,29 @@ export function renderScene(
   ctx.fillStyle   = '#94A3B8'
   ctx.font        = '9px monospace'
   ctx.fillText(`${Math.round(timeMs)}ms`, 4, height - 4)
+  ctx.restore()
+}
+
+// ── Grid (drawn behind layers, on the artboard background) ───────────────────
+
+function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, step: number) {
+  if (step <= 0) return
+  ctx.save()
+  ctx.lineWidth = 1
+  for (let i = 0, x = 0; x <= w; x += step, i++) {
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, 0)
+    ctx.lineTo(x + 0.5, h)
+    ctx.stroke()
+  }
+  for (let i = 0, y = 0; y <= h; y += step, i++) {
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'
+    ctx.beginPath()
+    ctx.moveTo(0, y + 0.5)
+    ctx.lineTo(w, y + 0.5)
+    ctx.stroke()
+  }
   ctx.restore()
 }
 
