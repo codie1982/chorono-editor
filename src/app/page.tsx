@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
@@ -27,6 +27,7 @@ import TimelinePanel   from '@/components/TimelinePanel'
 import JsonModal       from '@/components/JsonModal'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
 import DockLayout       from '@/components/dock/DockLayout'
+import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
 import { useDockLayout } from '@/components/dock/useDockLayout'
 import { makeRegistry, type PanelDefinition } from '@/components/dock/registry'
@@ -102,6 +103,7 @@ export default function BuilderPage() {
   // The id list is the contract validated against the persisted tree —
   // mismatches reset back to the default layout (recovery from corrupt state).
   const dock = useDockLayout(['layers', 'canvas', 'properties', 'timeline'])
+  const dockContainerRef = useRef<HTMLDivElement | null>(null)
   /** UUID-based keyframe multi-selection — survives drag, persists across renders */
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
   /** Editor preferences (snap, auto-key, graph editor mode) — outside undo */
@@ -427,7 +429,8 @@ export default function BuilderPage() {
 
       {/* ── Dockable work area ─────────────────────────────────────── */}
       <DockDragProvider onDrop={dock.dispatchDrop}>
-        <div className="flex-1 min-h-0">
+        <div ref={dockContainerRef} className="flex-1 min-h-0 relative">
+          <DockOuterEdges containerRef={dockContainerRef} />
           <DockLayout
             node={dock.layout}
             registry={makeRegistry([

@@ -2,8 +2,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { DockNode, DockEdge } from './types'
 import {
-  defaultLayout, dropPanel, setActiveTab, setSplitRatio, isValidLayout,
+  defaultLayout, dropPanel, dropPanelToRoot,
+  setActiveTab, setSplitRatio, isValidLayout,
 } from './layoutOps'
+import { ROOT_LEAF_ID } from './DockOuterEdges'
 
 const LS_KEY = 'chorono.dockLayout.v1'
 
@@ -46,6 +48,11 @@ export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn
   }, [layout])
 
   const dispatchDrop = useCallback((panelId: string, targetLeafId: string, edge: DockEdge) => {
+    if (targetLeafId === ROOT_LEAF_ID) {
+      if (edge === 'center') return  // root drop has no "center" meaning
+      setLayout((tree) => dropPanelToRoot(tree, panelId, edge))
+      return
+    }
     setLayout((tree) => dropPanel(tree, panelId, targetLeafId, edge))
   }, [])
 

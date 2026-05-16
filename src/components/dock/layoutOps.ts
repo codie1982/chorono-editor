@@ -155,6 +155,44 @@ export function dropPanel(
   return replaceNode(cleaned, targetLeafId, split)
 }
 
+/**
+ * Drop a panel onto an OUTER edge of the entire dock — wrapping the existing
+ * tree with a new split so the panel spans the full edge (e.g. timeline at
+ * the bottom across all top panels, sidebar at full height on the left).
+ * New panel takes 30% of the perpendicular axis by default.
+ */
+export function dropPanelToRoot(
+  tree: DockNode,
+  panelId: string,
+  edge: 'left' | 'right' | 'top' | 'bottom',
+): DockNode {
+  const cleaned = removePanel(tree, panelId)
+
+  const newLeaf: DockLeaf = {
+    kind: 'leaf', id: nextId('leaf'),
+    panels: [panelId], activeIndex: 0,
+  }
+
+  // Edge case: removing the only panel left the tree as an empty leaf
+  if (cleaned.kind === 'leaf' && cleaned.panels.length === 0) {
+    return newLeaf
+  }
+
+  const direction: DockDirection = (edge === 'left' || edge === 'right') ? 'h' : 'v'
+  const newFirst  = (edge === 'left' || edge === 'top')
+  const children: [DockNode, DockNode] = newFirst
+    ? [newLeaf, cleaned]
+    : [cleaned, newLeaf]
+
+  return {
+    kind: 'split', id: nextId('split'),
+    direction,
+    // ratio = first-child size as fraction. New panel always lands ~30%.
+    ratio: newFirst ? 0.3 : 0.7,
+    children,
+  }
+}
+
 function appendPanelToFirstLeaf(tree: DockNode, panelId: string): DockNode {
   let inserted = false
   return mapNode(tree, (n) => {
