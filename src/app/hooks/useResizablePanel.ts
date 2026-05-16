@@ -32,22 +32,28 @@ interface ResizableReturn {
 export function useResizablePanel({
   storageKey, defaultHeight, minHeight, maxHeight, direction = 'up',
 }: Params): ResizableReturn {
-  const [height, setHeightState] = useState<number>(() => {
-    if (typeof window === 'undefined') return defaultHeight
-    const raw = window.localStorage.getItem(storageKey)
-    const parsed = raw ? Number(raw) : NaN
-    if (!Number.isFinite(parsed)) return defaultHeight
-    return Math.max(minHeight, Math.min(maxHeight, parsed))
-  })
-
+  // Initial state must match server (no localStorage). Hydrate after mount.
+  const [height, setHeightState] = useState<number>(defaultHeight)
+  const [hydrated, setHydrated] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const dragRef = useRef<{ startCoord: number; startHeight: number } | null>(null)
   const horizontal = direction === 'left' || direction === 'right'
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(storageKey, String(height))
-  }, [storageKey, height])
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      const parsed = raw ? Number(raw) : NaN
+      if (Number.isFinite(parsed)) {
+        setHeightState(Math.max(minHeight, Math.min(maxHeight, parsed)))
+      }
+    } catch { /* ignore */ }
+    setHydrated(true)
+  }, [storageKey, minHeight, maxHeight])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try { window.localStorage.setItem(storageKey, String(height)) } catch { /* */ }
+  }, [storageKey, height, hydrated])
 
   const setHeight = useCallback((h: number) => {
     setHeightState(Math.max(minHeight, Math.min(maxHeight, h)))

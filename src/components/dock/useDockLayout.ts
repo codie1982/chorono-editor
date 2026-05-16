@@ -27,25 +27,31 @@ interface DockLayoutReturn {
  * default layout silently instead of crashing or rendering a broken UI.
  */
 export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn {
-  const [layout, setLayout] = useState<DockNode>(() => {
-    if (typeof window === 'undefined') return defaultLayout()
-    try {
-      const raw = window.localStorage.getItem(LS_KEY)
-      if (!raw) return defaultLayout()
-      const parsed = JSON.parse(raw) as DockNode
-      if (expectedPanelIds.length > 0
-          && !isValidLayout(parsed, new Set(expectedPanelIds))) {
-        return defaultLayout()
-      }
-      if (parsed && typeof parsed === 'object' && 'kind' in parsed) return parsed
-    } catch { /* fall through */ }
-    return defaultLayout()
-  })
+  // Initial render MUST match the server (no localStorage there) — start with
+  // the default layout, then hydrate from storage on mount.
+  const [layout, setLayout] = useState<DockNode>(() => defaultLayout())
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(LS_KEY, JSON.stringify(layout))
-  }, [layout])
+    try {
+      const raw = window.localStorage.getItem(LS_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as DockNode
+        const validShape = parsed && typeof parsed === 'object' && 'kind' in parsed
+        const validPanels = expectedPanelIds.length === 0
+          || isValidLayout(parsed, new Set(expectedPanelIds))
+        if (validShape && validPanels) setLayout(parsed)
+      }
+    } catch { /* ignore — fall back to default */ }
+    setHydrated(true)
+    // expectedPanelIds is a stable prop in practice; rebuild only if it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expectedPanelIds.join(',')])
+
+  useEffect(() => {
+    if (!hydrated) return  // don't overwrite saved layout with the default
+    try { window.localStorage.setItem(LS_KEY, JSON.stringify(layout)) } catch { /* */ }
+  }, [layout, hydrated])
 
   const dispatchDrop = useCallback((panelId: string, targetLeafId: string, edge: DockEdge) => {
     if (targetLeafId === ROOT_LEAF_ID) {
