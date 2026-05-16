@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
@@ -7,6 +7,7 @@ import {
   newImageLayer, newVideoLayer, newAudioLayer, newTimeline,
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
+import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
@@ -110,10 +111,24 @@ export default function BuilderPage() {
   const [timelineSettings, setTimelineSettings] = useState<TimelineSettings>(DEFAULT_TIMELINE_SETTINGS)
 
   // ── Derived ──────────────────────────────────────────────────────────────
-  const maxDuration = useMemo(
-    () => scene.timelines.reduce((m, t) => Math.max(m, t.durationMs), scene.composition.durationMs),
-    [scene.timelines, scene.composition.durationMs],
-  )
+  /**
+   * Global playback span. Has to fit the LONGEST per-timeline cycle —
+   * for loopCount=N or pingPong, that means N×duration or 2×duration so the
+   * evaluator's bounded-loop math gets a chance to trigger. composition's
+   * own durationMs is the lower bound (manual override).
+   */
+  const maxDuration = useMemo(() => {
+    let max = scene.composition.durationMs
+    for (const tl of scene.timelines) {
+      const end = computeTimelineCycleEnd(tl)
+      if (end > max) max = end
+    }
+    return max
+  }, [scene.timelines, scene.composition.durationMs])
+
+  /** Whether the playhead should wrap back to 0 at maxDuration (true) vs.
+   *  auto-pause (false). Wraps only if some timeline plays forever. */
+  const wrapAtEnd = useMemo(() => hasInfinitePlayback(scene.timelines), [scene.timelines])
   const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
   const frameRate     = scene.composition.frameRate
 
@@ -124,7 +139,20 @@ export default function BuilderPage() {
   const {
     currentTimeMs, isPlaying, playbackSpeed,
     handlePlayToggle, handleSeek, setPlaybackSpeed,
-  } = usePlayback(maxDuration)
+  } = usePlayback({ maxDuration, wrapAtEnd })
+
+  // ── Autoplay: kick off playback once on first mount if any timeline asks for it.
+  // Subsequent scene edits do NOT restart — toggling autoplay later is metadata
+  // for the runtime export only. Browser autoplay policy may suppress audio.
+  const autoplayedRef = useRef(false)
+  useEffect(() => {
+    if (autoplayedRef.current) return
+    if (scene.timelines.some((t) => t.autoplay)) {
+      autoplayedRef.current = true
+      handlePlayToggle()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Video sync: keep each <video> element in step with the playhead ──────
   useVideoPlaybackSync({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed })
