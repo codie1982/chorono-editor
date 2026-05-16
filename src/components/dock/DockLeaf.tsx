@@ -86,8 +86,9 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
         <div className="flex-1" />
       </div>
 
-      {/* Panel body */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      {/* Panel body — flex container so children using flex-1 / h-full
+          / w-full all fill the available area regardless of style choice. */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {activeDef
           ? activeDef.render()
           : <div className="p-6 text-xs text-gray-600 text-center">Empty panel</div>}
