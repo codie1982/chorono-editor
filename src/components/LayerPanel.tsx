@@ -21,13 +21,32 @@ interface Props {
   /** Inline rename — fired on Enter or blur of the rename input. */
   onRename: (id: string, name: string) => void
   onApplyStagger?: (presetId: string, stepMs: number) => void
+  /** Drag-drop: move a layer to a new spot in the tree.
+   *  newParentId === undefined → promote to root. toIndex is absolute. */
+  onMoveInTree?: (layerId: string, newParentId: string | undefined, toIndex: number) => void
+  /** Drag-drop: dropped one layer ONTO another. Caller decides whether to
+   *  wrap both in a new group (target is leaf) or re-parent into an
+   *  existing group (target.type === 'group'). */
+  onGroupWith?: (draggedId: string, targetId: string) => void
 }
+
+type DropZone = 'before' | 'after' | 'into'
+interface DropTargetState { id: string; zone: DropZone }
 
 export default function LayerPanel({
   layers, selectedId, selectedIds, onSelect, onAdd,
   onAddImage, onAddVideo, onAddAudio, onImportSvg,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
+  onMoveInTree, onGroupWith,
 }: Props) {
+  // ── Drag-drop state ──────────────────────────────────────────────────────
+  // Only the dragged id + the current drop target row + zone — kept tiny so
+  // re-renders during dragover are cheap (each only invalidates two rows).
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null)
+  /** Descendants of the dragged layer — invalid drop targets (can't drop a
+   *  layer onto its own subtree). Pre-computed once at drag start. */
+  const dragDescendantsRef = useRef<Set<string>>(new Set())
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
@@ -86,6 +105,100 @@ export default function LayerPanel({
   }
 
   const activeGroup = ADD_LAYER_GROUPS.find(g => g.title === activeCategory) ?? ADD_LAYER_GROUPS[0]
+
+  // ── Drag-drop handlers ────────────────────────────────────────────────────
+  // Native HTML5 drag-and-drop is good enough here — it handles the ghost
+  // image and cursor automatically, and the dataTransfer API gives us a
+  // built-in way to identify the source even when crossing frame boundaries.
+  //
+  // Pre-compute descendants on dragstart so the dragover handler can reject
+  // drops onto the dragged layer's own subtree in O(1).
+
+  const collectDescendants = (rootId: string): Set<string> => {
+    const out = new Set<string>([rootId])
+    let added = true
+    while (added) {
+      added = false
+      for (const l of layers) {
+        if (l.parentId && out.has(l.parentId) && !out.has(l.id)) {
+          out.add(l.id)
+          added = true
+        }
+      }
+    }
+    return out
+  }
+
+  const onDragStart = (e: React.DragEvent<HTMLLIElement>, layerId: string) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/x-chorono-layer', layerId)
+    setDraggingId(layerId)
+    dragDescendantsRef.current = collectDescendants(layerId)
+  }
+
+  const onDragEnd = () => {
+    setDraggingId(null)
+    setDropTarget(null)
+    dragDescendantsRef.current = new Set()
+  }
+
+  /** Decide which zone the cursor is in (top 25% / middle / bottom 25%). */
+  const computeZone = (e: React.DragEvent<HTMLLIElement>): DropZone => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const h = rect.height
+    if (y < h * 0.25) return 'before'
+    if (y > h * 0.75) return 'after'
+    return 'into'
+  }
+
+  const onDragOverRow = (e: React.DragEvent<HTMLLIElement>, layer: Layer) => {
+    if (!draggingId) return
+    // Reject drops onto the dragged layer's own subtree (incl. itself).
+    if (dragDescendantsRef.current.has(layer.id)) {
+      e.dataTransfer.dropEffect = 'none'
+      return
+    }
+    e.preventDefault()                      // required to allow drop
+    e.dataTransfer.dropEffect = 'move'
+    const zone = computeZone(e)
+    setDropTarget((cur) =>
+      cur?.id === layer.id && cur.zone === zone ? cur : { id: layer.id, zone })
+  }
+
+  const onDropRow = (e: React.DragEvent<HTMLLIElement>, target: Layer, targetRealIdx: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const draggedId = e.dataTransfer.getData('text/x-chorono-layer') || draggingId
+    if (!draggedId || draggedId === target.id) { onDragEnd(); return }
+    if (dragDescendantsRef.current.has(target.id)) { onDragEnd(); return }
+
+    const zone = computeZone(e)
+
+    if (zone === 'into') {
+      // Drop ONTO a row → grouping logic lives in page.tsx (decides whether
+      // to wrap-in-new-group or add-to-existing-group based on target type).
+      onGroupWith?.(draggedId, target.id)
+    } else {
+      // Reorder within the target's parent.
+      //   • Visually-above (zone='before')  → insert AFTER target in array
+      //                                       (panel order is reversed)
+      //   • Visually-below (zone='after')   → insert BEFORE target in array
+      const newParentId = target.parentId
+      const insertAt = zone === 'before' ? targetRealIdx + 1 : targetRealIdx
+      onMoveInTree?.(draggedId, newParentId, insertAt)
+    }
+    onDragEnd()
+  }
+
+  /** Empty-area drop at the very bottom of the list = promote to root,
+   *  placed BEHIND everything (array index 0 = bottom of z-order). */
+  const onDropEmpty = (e: React.DragEvent<HTMLUListElement>) => {
+    if (!draggingId) return
+    e.preventDefault()
+    onMoveInTree?.(draggingId, undefined, 0)
+    onDragEnd()
+  }
 
   return (
     <aside className="flex flex-col h-full w-full bg-gray-900 border-r border-gray-700 select-none">
@@ -161,7 +274,11 @@ export default function LayerPanel({
              onChange={handleFilePicked((f) => onImportSvg?.(f))} />
 
       {/* ── Layer list ── */}
-      <ul className="flex-1 overflow-y-auto py-1">
+      <ul
+        className="flex-1 overflow-y-auto py-1"
+        onDragOver={(e) => { if (draggingId) e.preventDefault() }}
+        onDrop={onDropEmpty}
+      >
         {layers.length === 0 && (
           <li className="px-3 py-8 text-center text-xs text-gray-600 leading-relaxed">
             No layers yet.<br />Press <span className="text-gray-500">+ Add</span> above.
@@ -205,27 +322,54 @@ export default function LayerPanel({
           // layer row — they organise their children, not own geometry.
           const isGroup = layer.type === 'group'
 
+          const isDragSource = draggingId === layer.id
+          const isDropTarget = dropTarget?.id === layer.id
+          const dropZone     = isDropTarget ? dropTarget!.zone : null
+          // Drop-zone visuals — coloured outlines so reorder vs. group is
+          // visually unambiguous before the user commits.
+          //   before  →  blue line ABOVE the row
+          //   after   →  blue line BELOW the row
+          //   into    →  blue ring around the WHOLE row (will create / join group)
+          const dropClass =
+            dropZone === 'into'   ? 'ring-2 ring-blue-400 ring-inset' :
+            dropZone === 'before' ? 'shadow-[inset_0_2px_0_0_#60a5fa]' :
+            dropZone === 'after'  ? 'shadow-[inset_0_-2px_0_0_#60a5fa]' :
+            ''
+
           return (
             <li
               key={layer.id}
+              // Disable native DnD while inline-renaming so the input gets
+              // pointer events instead of being grabbed by the drag system.
+              draggable={editingId !== layer.id}
+              onDragStart={(e) => onDragStart(e, layer.id)}
+              onDragEnd={onDragEnd}
+              onDragOver={(e) => onDragOverRow(e, layer)}
+              onDragLeave={() => {
+                // Only clear if WE are the current target (dragover on
+                // another row will overwrite via setDropTarget anyway).
+                setDropTarget((cur) => (cur?.id === layer.id ? null : cur))
+              }}
+              onDrop={(e) => onDropRow(e, layer, realIdx)}
               onClick={(e) => onSelect(layer.id, e.shiftKey)}
               style={depth > 0 ? { paddingLeft: 6 + depth * 14 } : undefined}
               className={
-                isGroup
-                  ? `flex items-center gap-1 px-2 py-0.5 mx-0 my-0 cursor-pointer group border-l-2
+                (isGroup
+                  ? `flex items-center gap-1 px-2 py-0.5 mx-0 my-0 cursor-grab active:cursor-grabbing group border-l-2
                      ${isPrimary
                         ? 'bg-blue-600 text-white border-blue-300'
                         : isInSet
                         ? 'bg-blue-900/60 text-blue-100 border-blue-500'
                         : 'bg-gray-800/60 text-gray-400 border-amber-500/60 hover:bg-gray-800'}
                      ${layer.hidden ? 'opacity-50' : ''}`
-                  : `flex items-center gap-1 px-2 py-1.5 mx-1 my-0.5 rounded cursor-pointer group
+                  : `flex items-center gap-1 px-2 py-1.5 mx-1 my-0.5 rounded cursor-grab active:cursor-grabbing group
                      ${isPrimary
                         ? 'bg-blue-600 text-white'
                         : isInSet
                         ? 'bg-blue-900/60 text-blue-100'
                         : 'text-gray-300 hover:bg-gray-700'}
-                     ${layer.hidden ? 'opacity-50' : ''}`
+                     ${layer.hidden ? 'opacity-50' : ''}`)
+                + ` ${isDragSource ? 'opacity-40' : ''} ${dropClass}`
               }
             >
               {/* Disclosure arrow for groups; empty placeholder for leaves */}

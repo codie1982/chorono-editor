@@ -351,6 +351,46 @@ export default function BuilderPage() {
     dispatchCommand(makeMoveLayerCmd(layer.id, from, to))
   }, [scene.layers, dispatchCommand])
 
+  // ── Drag-drop hierarchy ops (LayerPanel) ─────────────────────────────────
+  // Drop ABOVE / BELOW a row reorders within the same parent (or moves to
+  // root). Drop INTO a row groups the dragged layer with the target — if
+  // the target is already a group, the dragged layer becomes its child; if
+  // it's a leaf, both are wrapped in a fresh group.
+  const moveLayerInTree = useCallback((
+    draggedId:   string,
+    newParentId: string | undefined,
+    toIndex:     number,
+  ) => {
+    import('@/lib/editor/commands-layer').then(({ makeMoveLayerToCmdWithSnapshot }) => {
+      const cmd = makeMoveLayerToCmdWithSnapshot(scene, draggedId, newParentId, toIndex)
+      if (cmd) dispatchCommand(cmd)
+    })
+  }, [scene, dispatchCommand])
+
+  const groupLayersByDrop = useCallback(async (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return
+    const target = scene.layers.find(l => l.id === targetId)
+    if (!target) return
+
+    if (target.type === 'group') {
+      // Drop INTO an existing group → just re-parent the dragged layer as
+      // a child of that group. Insert at the top of the group (front of
+      // render order for its siblings).
+      const targetIdx = scene.layers.findIndex(l => l.id === targetId)
+      // Find the index AFTER the group header and BEFORE its first child
+      // (so the dragged layer renders on top of existing group members).
+      const insertAt = targetIdx + 1
+      moveLayerInTree(draggedId, target.id, insertAt)
+      return
+    }
+
+    // Both are leaves → wrap them in a fresh group via the existing command.
+    const { makeGroupCmd } = await import('@/lib/editor/commands-group')
+    const cmd = makeGroupCmd([draggedId, targetId])
+    dispatchCommand(cmd)
+    selectLayer(cmd.groupId)
+  }, [scene.layers, dispatchCommand, moveLayerInTree, selectLayer])
+
   /**
    * Stagger: apply the same preset to every selected layer, offsetting each
    * subsequent layer's start time by `stepMs`. Preserves the order in which
@@ -804,6 +844,8 @@ export default function BuilderPage() {
                     onAddAudio={addAudioLayerFromFile}
                     onDelete={deleteLayer}
                     onReorder={reorderLayer}
+                    onMoveInTree={moveLayerInTree}
+                    onGroupWith={groupLayersByDrop}
                     onToggleFlag={toggleLayerFlag}
                     onApplyStagger={applyStaggeredPreset}
                     onRename={renameLayer}
