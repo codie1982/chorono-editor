@@ -718,6 +718,33 @@ export default function BuilderPage() {
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >↷</button>
 
+        {/* ── Group / Ungroup ────────────────────────────────────────────────
+            Always rendered (so the toolbar layout doesn't reflow as the
+            selection changes) but disabled when not actionable. Group needs
+            2+ selected layers; Ungroup needs the primary selection to be
+            a group layer. */}
+        <div className="w-px h-6 bg-gray-700 mx-1" />
+        <button
+          onClick={groupSelected}
+          disabled={selectedLayerIds.size < 2}
+          title="Group selected (Cmd+G)"
+          className="px-2 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300
+                     disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+        >
+          <span className="text-[11px]">▣</span>
+          <span>Group</span>
+        </button>
+        <button
+          onClick={ungroupSelected}
+          disabled={selectedLayer?.type !== 'group'}
+          title="Ungroup (Cmd+Shift+G) — animations preserved"
+          className="px-2 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300
+                     disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+        >
+          <span className="text-[11px]">⊟</span>
+          <span>Ungroup</span>
+        </button>
+
         <span className="text-xs text-gray-500 font-mono ml-auto">
           {scene.composition.width}×{scene.composition.height}
           {' · '}{scene.layers.length} layers
@@ -774,8 +801,6 @@ export default function BuilderPage() {
                     onAddImage={addImageLayerFromFile}
                     onAddVideo={addVideoLayerFromFile}
                     onImportSvg={importSvgFile}
-                    onGroupSelection={groupSelected}
-                    onUngroupSelection={ungroupSelected}
                     onAddAudio={addAudioLayerFromFile}
                     onDelete={deleteLayer}
                     onReorder={reorderLayer}

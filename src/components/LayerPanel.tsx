@@ -21,17 +21,12 @@ interface Props {
   /** Inline rename — fired on Enter or blur of the rename input. */
   onRename: (id: string, name: string) => void
   onApplyStagger?: (presetId: string, stepMs: number) => void
-  /** Group the current selection (called when user clicks the Group icon
-   *  button in the header). Wired to the same Cmd+G command from page.tsx. */
-  onGroupSelection?: () => void
-  onUngroupSelection?: () => void
 }
 
 export default function LayerPanel({
   layers, selectedId, selectedIds, onSelect, onAdd,
   onAddImage, onAddVideo, onAddAudio, onImportSvg,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
-  onGroupSelection, onUngroupSelection,
 }: Props) {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -98,27 +93,8 @@ export default function LayerPanel({
       <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between gap-1">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layers</span>
         <div className="flex items-center gap-1">
-          {/* Group / Ungroup — visible only when actionable */}
-          {(selectedIds.size > 1 && onGroupSelection) && (
-            <button
-              onClick={onGroupSelection}
-              title="Group selected (Cmd+G)"
-              className="flex items-center gap-0.5 text-xs text-gray-300 hover:text-white bg-gray-700 hover:bg-blue-600 rounded-md px-1.5 py-0.5 transition-colors"
-            >
-              <span className="text-[11px]">▣</span>
-              <span className="text-[10px] uppercase tracking-wider">Group</span>
-            </button>
-          )}
-          {selectedId && layers.find(l => l.id === selectedId)?.type === 'group' && onUngroupSelection && (
-            <button
-              onClick={onUngroupSelection}
-              title="Ungroup (Cmd+Shift+G) — animations preserved"
-              className="flex items-center gap-0.5 text-xs text-gray-300 hover:text-white bg-gray-700 hover:bg-blue-600 rounded-md px-1.5 py-0.5 transition-colors"
-            >
-              <span className="text-[11px]">⊟</span>
-              <span className="text-[10px] uppercase tracking-wider">Ungroup</span>
-            </button>
-          )}
+          {/* Group / Ungroup buttons now live in the top toolbar so the panel
+              header stays clean. Cmd+G / Cmd+Shift+G shortcuts still work. */}
           <button
             onClick={() => setMenuOpen(v => !v)}
             className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-blue-600 hover:bg-blue-500 rounded-md px-2 py-0.5 transition-colors"

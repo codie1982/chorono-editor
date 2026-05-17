@@ -2,6 +2,7 @@
 import {
   useEffect, useRef, useState, useCallback, type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 
 // ── Menu item types ─────────────────────────────────────────────────────────
 //
@@ -38,7 +39,7 @@ export type MenuItem = MenuActionItem | MenuSeparatorItem | MenuSubmenuItem
 // ── Public component ────────────────────────────────────────────────────────
 
 interface ContextMenuProps {
-  /** Page-relative position (clientX/Y from the pointer event). */
+  /** Viewport coords from the pointer event. */
   x: number
   y: number
   items: MenuItem[]
@@ -46,17 +47,23 @@ interface ContextMenuProps {
 }
 
 /**
- * Floating, multi-level context menu. Positions itself near the pointer and
- * flips to the opposite side of the viewport edge if it would overflow.
+ * Floating, multi-level context menu. Portalled into document.body so it
+ * escapes any ancestor `transform` (which would otherwise make
+ * `position:fixed` behave like `position:absolute` — the SceneCanvas pan
+ * wrapper hits exactly this trap).
  *
  *   • Esc closes
  *   • Click outside closes
  *   • Action selection → onSelect() then onClose()
- *   • Submenus open on hover OR click; nested viewports flip the same way.
+ *   • Submenus open on hover (with a short close-delay so the user can
+ *     reach the submenu without it closing on transit) and on click
  */
 export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
-  return (
-    <MenuLayer x={x} y={y} items={items} onClose={onClose} root />
+  // Render nothing during SSR / before document is available
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <MenuLayer x={x} y={y} items={items} onClose={onClose} root />,
+    document.body,
   )
 }
 
@@ -71,6 +78,8 @@ interface LayerProps {
   root?: boolean
 }
 
+const SUBMENU_CLOSE_DELAY_MS = 220   // long enough to cross the gap to submenu
+
 function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
   const ref = useRef<HTMLDivElement>(null)
   /** Which submenu item is currently expanded (by index in `items`). */
@@ -79,6 +88,17 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
   const [subAnchor, setSubAnchor] = useState<DOMRect | null>(null)
   /** Adjusted position after flip-on-overflow measurement. */
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y })
+  /** Pending close timer for the currently-open submenu (cleared if the user
+   *  re-enters the parent row OR enters the submenu itself). Lets the cursor
+   *  travel through the gap between parent row and submenu without losing it. */
+  const closeTimer = useRef<number | null>(null)
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }, [])
 
   // ── Flip if the menu would clip the viewport edge ────────────────────────
   useEffect(() => {
@@ -97,14 +117,12 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
   useEffect(() => {
     if (!root) return
     const onDown = (e: MouseEvent) => {
-      const el = ref.current
-      // Click outside the entire menu tree — close everything.
-      if (el && !el.contains(e.target as Node) && !isInsideSubmenu(e.target as Node)) {
-        onClose()
-      }
+      // Walk both the parent menu DOM and any open submenu's DOM. Because
+      // submenus are sibling MenuLayers we can't use ref.contains alone —
+      // delegate to the data-attribute walk.
+      if (!isInsideAnyMenu(e.target as Node)) onClose()
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    // Mousedown rather than click so we catch right-click dismiss too
     window.addEventListener('mousedown', onDown, true)
     window.addEventListener('contextmenu', onDown, true)
     window.addEventListener('keydown', onKey)
@@ -115,14 +133,35 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
     }
   }, [root, onClose])
 
-  const handleHover = (i: number, item: MenuItem, e: React.MouseEvent) => {
+  // Clean up timer on unmount
+  useEffect(() => cancelClose, [cancelClose])
+
+  const handleEnter = (i: number, item: MenuItem, rowEl: HTMLElement) => {
+    cancelClose()
     if (item.kind === 'submenu' && !item.disabled) {
       setOpenSub(i)
-      setSubAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
-    } else {
-      // Hovering a non-submenu row closes any open sibling submenu so we
-      // don't show two trails at once.
-      setOpenSub(null)
+      setSubAnchor(rowEl.getBoundingClientRect())
+    } else if (item.kind === 'action') {
+      // Hovering an action row schedules the currently-open submenu to
+      // close — but only after a short delay so transit through this row
+      // on the way to the submenu doesn't immediately dismiss it.
+      if (openSub != null) {
+        closeTimer.current = window.setTimeout(() => {
+          setOpenSub(null)
+          closeTimer.current = null
+        }, SUBMENU_CLOSE_DELAY_MS)
+      }
+    }
+  }
+
+  const handleLeaveLayer = () => {
+    // Leaving the entire layer queues a close — re-entering the submenu
+    // (also data-context-menu="true") will cancel it via its own enter.
+    if (openSub != null && closeTimer.current == null) {
+      closeTimer.current = window.setTimeout(() => {
+        setOpenSub(null)
+        closeTimer.current = null
+      }, SUBMENU_CLOSE_DELAY_MS)
     }
   }
 
@@ -133,14 +172,16 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
         role="menu"
         data-context-menu="true"
         className="fixed z-[9999] min-w-[220px] py-1 rounded-md
-                   bg-neutral-900 border border-neutral-700 shadow-xl text-gray-200
+                   bg-gray-900 border border-gray-700 shadow-2xl text-gray-200
                    select-none"
         style={{ left: pos.left, top: pos.top }}
         onContextMenu={(e) => e.preventDefault()}
+        onMouseLeave={handleLeaveLayer}
+        onMouseEnter={cancelClose}
       >
         {items.map((item, i) => {
           if (item.kind === 'separator') {
-            return <div key={`sep-${i}`} className="my-1 h-px bg-neutral-800" />
+            return <div key={`sep-${i}`} className="my-1 h-px bg-gray-800" />
           }
           const isOpen = openSub === i
           return (
@@ -148,7 +189,7 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
               key={`row-${i}-${item.label}`}
               item={item}
               isOpen={isOpen}
-              onHover={(e) => handleHover(i, item, e)}
+              onEnter={(e) => handleEnter(i, item, e.currentTarget as HTMLElement)}
               onActivate={() => {
                 if (item.kind === 'action' && !item.disabled) {
                   item.onSelect()
@@ -163,8 +204,8 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
         })}
       </div>
 
-      {/* Submenu — rendered as a sibling layer so it can overflow the parent
-          rect. We pass root=false so it doesn't double-bind the global listeners. */}
+      {/* Submenu — sibling layer so it can overflow the parent rect. We
+          pass root=false so it doesn't double-bind the global listeners. */}
       {openSub != null && subAnchor && items[openSub].kind === 'submenu' && (
         <MenuLayer
           x={subAnchor.right - 2}
@@ -179,36 +220,42 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
 
 // ── Single row ──────────────────────────────────────────────────────────────
 
-function Row({ item, isOpen, onHover, onActivate }: {
+function Row({ item, isOpen, onEnter, onActivate }: {
   item:       MenuActionItem | MenuSubmenuItem
   isOpen:     boolean
-  onHover:    (e: React.MouseEvent) => void
+  onEnter:    (e: React.MouseEvent<HTMLDivElement>) => void
   onActivate: () => void
 }) {
   const disabled = item.disabled === true
+  // Theme: idle = gray-200 text on transparent; hover/active = white on blue-600.
+  // Disabled rows: gray-600 with no hover effect. Matches the rest of the
+  // app's menu styling (FileMenu / SnapMenu) without the all-blue tint.
+  const rowClass = disabled
+    ? 'text-gray-600 cursor-default'
+    : isOpen
+      ? 'bg-blue-600 text-white cursor-default'
+      : 'text-gray-200 cursor-default hover:bg-blue-600 hover:text-white'
+
   return (
     <div
       role="menuitem"
       aria-disabled={disabled}
-      className={`flex items-center gap-2 px-3 py-1 text-[13px] cursor-default
-        ${disabled
-          ? 'text-gray-600'
-          : isOpen
-            ? 'bg-blue-600 text-white'
-            : 'text-gray-200 hover:bg-blue-600 hover:text-white'}`}
-      onMouseEnter={onHover}
+      className={`group flex items-center gap-2 px-3 py-1 text-[13px] ${rowClass}`}
+      onMouseEnter={onEnter}
       onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate() } }}
     >
       {'icon' in item && item.icon ? <span className="w-4 text-center">{item.icon}</span> : null}
       <span className="flex-1 truncate">{item.label}</span>
       {item.kind === 'action' && item.shortcut
         ? <span className={`text-[11px] font-mono tabular-nums
-              ${disabled ? 'text-gray-700' : 'text-gray-500 group-hover:text-gray-300'}`}>
+              ${disabled
+                ? 'text-gray-700'
+                : isOpen ? 'text-blue-100' : 'text-gray-500 group-hover:text-blue-100'}`}>
             {item.shortcut}
           </span>
         : null}
       {item.kind === 'submenu'
-        ? <span className="text-[10px] text-gray-400">▶</span>
+        ? <span className={`text-[10px] ${disabled ? 'text-gray-700' : 'text-gray-400 group-hover:text-white'}`}>▶</span>
         : null}
     </div>
   )
@@ -216,8 +263,10 @@ function Row({ item, isOpen, onHover, onActivate }: {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/** A click anywhere on a context menu tree should NOT count as "outside". */
-function isInsideSubmenu(node: Node | null): boolean {
+/** A click anywhere inside ANY context-menu DOM tree (parent or any submenu)
+ *  counts as "inside" — submenus are sibling portals so we can't use parent
+ *  containment, we walk by data attribute instead. */
+function isInsideAnyMenu(node: Node | null): boolean {
   let n: Node | null = node
   while (n) {
     if (n instanceof HTMLElement && n.dataset.contextMenu === 'true') return true
