@@ -8,6 +8,8 @@ interface Props {
   snapEnabled: boolean
   /** Optional: label shown during snap (e.g. "Frame 24" or "Marker CTA"). */
   snapLabel?: string | null
+  /** Auto-key mode (BL-41) — when 'record' the bar shows a pulsing red badge. */
+  autoKeyMode?: 'manual' | 'auto' | 'record'
 }
 
 function formatTime(ms: number): string {
@@ -19,7 +21,7 @@ function formatTime(ms: number): string {
 }
 
 export default function TimelineStatusBar({
-  currentTimeMs, frameRate, selectedKfCount, zoomFactor, snapEnabled, snapLabel,
+  currentTimeMs, frameRate, selectedKfCount, zoomFactor, snapEnabled, snapLabel, autoKeyMode,
 }: Props) {
   const frame = frameRate > 0 ? Math.round(currentTimeMs / (1000 / frameRate)) : 0
 
@@ -27,6 +29,22 @@ export default function TimelineStatusBar({
     <div className="flex items-center gap-0 px-3 h-5 border-t border-gray-700/60
                     bg-gray-950/80 text-[9px] font-mono text-gray-600 shrink-0 select-none">
 
+      {autoKeyMode === 'record' && (
+        <>
+          <span className="flex items-center gap-1 px-2 text-red-400 font-bold animate-pulse">
+            <span>●</span>REC
+          </span>
+          <Sep />
+        </>
+      )}
+      {autoKeyMode === 'auto' && (
+        <>
+          <span className="flex items-center gap-1 px-2 text-yellow-500">
+            <span>◆</span>AUTO
+          </span>
+          <Sep />
+        </>
+      )}
       <Segment label="F" value={String(frame)} />
       <Sep />
       <Segment label="" value={formatTime(currentTimeMs)} valueClass="text-gray-400" />

@@ -553,6 +553,13 @@ export default function TimelinePanel({
         zoomFactor={vp.zoomFactor}
         playbackSpeed={playbackSpeed}
         timelineMode={settings.timelineMode}
+        autoKeyMode={settings.autoKeyMode ?? (settings.autoKeyframe ? 'auto' : 'manual')}
+        onAutoKeyModeChange={(mode) => onSettingsChange({
+          ...settings,
+          autoKeyMode: mode,
+          // Derive legacy boolean so existing autoKeyframe consumers stay in sync.
+          autoKeyframe: mode !== 'manual',
+        })}
         hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
         onSelectTimeline={onSelectTimeline}
@@ -1072,6 +1079,7 @@ export default function TimelinePanel({
         snapLabel={drag.snapIndicatorMs != null
           ? `${Math.round(drag.snapIndicatorMs)}ms`
           : null}
+        autoKeyMode={settings.autoKeyMode ?? (settings.autoKeyframe ? 'auto' : 'manual')}
       />
     </div>
   )

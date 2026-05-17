@@ -67,8 +67,22 @@ export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
 
 export type TimelineMode = 'dope' | 'curve' | 'segments'
 
+/** Auto-keyframe / record mode (BL-41).
+ *  - `manual`  → property edits never write keyframes. User adds keys via 'K'
+ *                or the diamond button. Default.
+ *  - `auto`    → every property edit upserts a keyframe at the current time.
+ *                Equivalent to the legacy `autoKeyframe = true` flag.
+ *  - `record`  → same write behaviour as `auto`, but visually emphasised
+ *                (red ● badge, red playhead) so the user knows changes are
+ *                being committed to the timeline. Intended for live tweaking
+ *                during playback. */
+export type AutoKeyMode = 'manual' | 'auto' | 'record'
+
 export interface TimelineSettings {
   autoKeyframe: boolean
+  /** Auto-key behaviour selector — supersedes `autoKeyframe` but the boolean
+   *  is still derived for backward compat with existing consumers. */
+  autoKeyMode?: AutoKeyMode
   snapEnabled: boolean
   snapToFrame: boolean
   snapToGrid: boolean
@@ -82,6 +96,7 @@ export interface TimelineSettings {
 
 export const DEFAULT_TIMELINE_SETTINGS: TimelineSettings = {
   autoKeyframe: false,
+  autoKeyMode: 'manual',
   snapEnabled: true,
   snapToFrame: true,
   snapToGrid: false,

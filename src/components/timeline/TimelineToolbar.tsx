@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import type { Timeline, TimelineMode } from '@/lib/types'
+import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
 
 interface Props {
   timelines: Timeline[]
@@ -12,6 +12,8 @@ interface Props {
   zoomFactor: number
   playbackSpeed: number
   timelineMode: TimelineMode
+  autoKeyMode: AutoKeyMode
+  onAutoKeyModeChange: (mode: AutoKeyMode) => void
   hasSelectedLayer: boolean
   onPlayToggle: () => void
   onSelectTimeline: (id: string) => void
@@ -45,7 +47,7 @@ export default function TimelineToolbar(props: Props) {
   const {
     timelines, selectedTimelineId, selectedTimeline,
     currentTimeMs, duration, isPlaying, zoomFactor, playbackSpeed,
-    timelineMode, hasSelectedLayer,
+    timelineMode, autoKeyMode, onAutoKeyModeChange, hasSelectedLayer,
     onPlayToggle, onSelectTimeline, onAddTimeline, onDeleteTimeline,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
     onModeChange, onKeyframeProperties,
@@ -77,6 +79,30 @@ export default function TimelineToolbar(props: Props) {
       <span className="text-xs font-mono text-gray-400 w-24">
         {Math.round(currentTimeMs)} / {duration} ms
       </span>
+
+      {/* Auto-key / Record mode selector (BL-41) */}
+      <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">
+        {([
+          { id: 'manual', label: 'Manual', title: 'Manual — keyframes only when you press K',
+            active: 'bg-gray-700 text-white', dot: '◇' },
+          { id: 'auto',   label: 'Auto',   title: 'Auto Key — property edits auto-write keyframes',
+            active: 'bg-yellow-700 text-white', dot: '◆' },
+          { id: 'record', label: 'REC',    title: 'Record — same as Auto, visually emphasised for live tweaking',
+            active: 'bg-red-700 text-white', dot: '●' },
+        ] as const).map((m) => (
+          <button
+            key={m.id}
+            onClick={() => onAutoKeyModeChange(m.id)}
+            title={m.title}
+            className={`px-2 py-0.5 text-[10px] font-mono transition-colors
+              ${autoKeyMode === m.id
+                ? m.active
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+          >
+            <span className="mr-0.5">{m.dot}</span>{m.label}
+          </button>
+        ))}
+      </div>
 
       {/* Keyframe dropdown — pick which property subset to snapshot */}
       <div ref={kfRef} className="relative">
