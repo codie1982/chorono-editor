@@ -71,11 +71,20 @@ export default function DockLeafComponent({
       collapseSide === 'h-left'  ? '〈' :
       collapseSide === 'v-bottom'? '∨' :
                                    '∧'
+    // Pick the mount-in animation that "comes from" the direction the panel
+    // just retreated to: left panel rail flies in from the LEFT edge,
+    // right panel rail from the RIGHT edge, etc. Makes the collapse direction
+    // visually obvious instead of a generic fade.
+    const railAnim =
+      collapseSide === 'h-right' ? 'dock-rail-from-left'   :  // left panel → enters from left
+      collapseSide === 'h-left'  ? 'dock-rail-from-right'  :  // right panel → enters from right
+      collapseSide === 'v-bottom'? 'dock-rail-from-top'    :
+                                   'dock-rail-from-bottom'
     return (
       <div
         key={leaf.id}
-        className="relative flex flex-col items-center justify-start
-                   bg-gray-900 border border-gray-800 dock-leaf-in"
+        className={`relative flex flex-col items-center justify-start
+                    bg-gray-900 border border-gray-800 ${railAnim}`}
         style={{
           width:  (collapseSide?.startsWith('h')) ? '24px'  : '100%',
           height: (collapseSide?.startsWith('v')) ? '24px'  : '100%',
@@ -105,8 +114,25 @@ export default function DockLeafComponent({
       key={leaf.id}
       className="relative flex flex-col h-full bg-gray-900 border border-gray-800 overflow-hidden dock-leaf-in"
     >
-      {/* Tab strip — also the drag handle */}
+      {/* Tab strip — also the drag handle. Collapse button sits on the
+          INNER edge (the side touching the work area) so the affordance
+          mirrors which way the panel collapses:
+            · left panel  → button on the right of the strip → 〈 collapse left
+            · right panel → button on the LEFT of the strip  → 〉 collapse right
+            · top panel   → button on the bottom row (always-right is fine)
+            · bottom panel→ button on the right (top edge — fine)
+          Only horizontal splits get the mirrored placement; vertical splits
+          keep the conventional far-right position. */}
       <div className="flex items-center bg-gray-800/80 border-b border-gray-700 shrink-0 h-7">
+        {collapseSide === 'h-left' && onToggleCollapse && (
+          <button
+            onClick={() => onToggleCollapse(true)}
+            title="Collapse panel to the right"
+            className="w-6 h-full flex items-center justify-center text-gray-500
+                       hover:text-white hover:bg-gray-700 text-[10px] shrink-0
+                       border-r border-gray-700/60"
+          >〉</button>
+        )}
         {leaf.panels.map((pid) => {
           const def = registry.get(pid)
           if (!def) return null
@@ -133,7 +159,7 @@ export default function DockLeafComponent({
           )
         })}
         <div className="flex-1" />
-        {onToggleCollapse && (
+        {collapseSide !== 'h-left' && onToggleCollapse && (
           <button
             onClick={() => onToggleCollapse(true)}
             title="Collapse panel"
@@ -141,7 +167,6 @@ export default function DockLeafComponent({
                        hover:text-white hover:bg-gray-700 text-[10px] shrink-0"
           >
             {collapseSide === 'h-right' ? '〈' :
-             collapseSide === 'h-left'  ? '〉' :
              collapseSide === 'v-bottom'? '∧' : '∨'}
           </button>
         )}

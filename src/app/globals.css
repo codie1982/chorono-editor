@@ -49,6 +49,18 @@ select {
 .dock-leaf-in    { animation: dock-leaf-in 180ms ease-out both; }
 .dock-overlay-in { animation: dock-overlay-in 120ms ease-out both; }
 
+/* Directional collapse rail enters — chevron slides in from the side the
+   panel just retreated to, so the user sees "the panel went THAT way". */
+@keyframes dock-rail-in-from-right { from { transform: translateX( 24px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+@keyframes dock-rail-in-from-left  { from { transform: translateX(-24px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+@keyframes dock-rail-in-from-bottom{ from { transform: translateY( 24px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes dock-rail-in-from-top   { from { transform: translateY(-24px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+
+.dock-rail-from-right  { animation: dock-rail-in-from-right  180ms ease-out both; }
+.dock-rail-from-left   { animation: dock-rail-in-from-left   180ms ease-out both; }
+.dock-rail-from-bottom { animation: dock-rail-in-from-bottom 180ms ease-out both; }
+.dock-rail-from-top    { animation: dock-rail-in-from-top    180ms ease-out both; }
+
 /* Canvas hover preview — gentle fade-in when the cursor settles on a layer.
    Opacity only because the element carries an inline transform: rotate()
    for layer rotation; touching transform here would clobber the rotation
@@ -62,7 +74,9 @@ select {
 
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .dock-leaf-in, .dock-overlay-in, .hover-preview-in { animation: none; }
+  .dock-leaf-in, .dock-overlay-in, .hover-preview-in,
+  .dock-rail-from-right, .dock-rail-from-left,
+  .dock-rail-from-bottom, .dock-rail-from-top { animation: none; }
 }
 
 /* ── Chorono Sprite Icon System ──────────────────────────────────────────── */
