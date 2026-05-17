@@ -109,6 +109,11 @@ export interface Track {
   target: string
   label?: string
   keyframes: Keyframe[]
+  /** Track-kind discriminator (BL-35). Optional for backward compat:
+   *  legacy tracks without a `kind` are treated as 'property'. See
+   *  `src/lib/timeline/tracks.ts` for the full union (event / audio /
+   *  marker / state / trigger track types). */
+  kind?: 'property'
   // TODO(big-feature): controller type — currently every track is implicit
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
