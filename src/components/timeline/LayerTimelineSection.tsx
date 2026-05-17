@@ -5,6 +5,7 @@ import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { sampleTrackValueRange, valueToY } from '@/lib/timeline/valueGraph'
 import TimelineKeyframe from './TimelineKeyframe'
 import TrackValueGraph  from './TrackValueGraph'
+import AudioWaveform    from './AudioWaveform'
 import type { DragSnapshot } from './hooks/useKeyframeDrag'
 
 /**
@@ -45,6 +46,12 @@ interface Props {
   onKfDoubleClick?: (trackTarget: string, kfId: string, e: React.MouseEvent) => void
   /** Right-click on the layer's activity bar → opens layer-bar context menu. */
   onLayerBarContextMenu?: (layerId: string, e: React.MouseEvent) => void
+  /** Right-click on the empty part of a property track row → "Add Keyframe Here" etc. */
+  onTrackAreaContextMenu?: (trackTarget: string, timeMs: number, e: React.MouseEvent) => void
+  /** Double-click on the empty part of a property track row → add keyframe at click. */
+  onTrackAreaDoubleClick?: (trackTarget: string, timeMs: number) => void
+  /** Convert a client X position to ms for the events above. */
+  clientXToMs?: (clientX: number) => number
   /** Total duration of the selected timeline, for clamping drag. */
   durationMs: number
   /**
@@ -61,6 +68,12 @@ interface Props {
     toStartMs:   number,
     toEndMs:     number | undefined,
   ) => void
+  /** Index among pinned layers (0,1,2…). Undefined or -1 → not pinned.
+   *  Used to set sticky `top` offset so multiple pins stack. */
+  pinIndex?: number
+  /** Resolved asset URL for audio layers — when present the activity bar
+   *  renders the audio waveform overlay (BL-37). */
+  audioUrl?: string
 }
 
 const ROW_HEADER  = 32
@@ -76,8 +89,11 @@ export default function LayerTimelineSection({
   onAddTrack, onRemoveTrack, onAddKeyframeAtPlayhead,
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
-  durationMs, onLayerBarCommit,
+  onTrackAreaContextMenu, onTrackAreaDoubleClick, clientXToMs,
+  durationMs, onLayerBarCommit, pinIndex, audioUrl,
 }: Props) {
+
+  const isPinned = pinIndex != null && pinIndex >= 0
 
   const rowH = graphMode ? ROW_TRACK_G : ROW_TRACK
 
@@ -95,20 +111,39 @@ export default function LayerTimelineSection({
       {/* ── Layer header row (label + activity bar) ───────────────────────── */}
       <div
         className={`flex items-stretch border-b border-gray-800
-          ${isPrimary ? 'bg-blue-950/40' : ''} ${layer.hidden ? 'opacity-60' : ''}`}
-        style={{ height: ROW_HEADER }}
+          ${isPrimary ? 'bg-blue-950/40' : ''} ${layer.hidden ? 'opacity-60' : ''}
+          ${isPinned ? 'bg-gray-900 shadow-md shadow-black/40' : ''}`}
+        style={{
+          height: ROW_HEADER,
+          ...(isPinned ? {
+            position: 'sticky',
+            top: pinIndex! * ROW_HEADER,
+            zIndex: 5,
+          } : null),
+        }}
       >
         {/* Left: label */}
         <div
-          className="w-60 shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer"
+          className="w-60 shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer relative"
           onClick={(e) => onSelectLayer(e.shiftKey)}
         >
+          {/* Color label stripe — left edge of the row */}
+          {layer.colorLabel && (
+            <div
+              className="absolute left-0 top-0 bottom-0 w-1 pointer-events-none"
+              style={{ backgroundColor: layer.colorLabel }}
+            />
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onToggleExpand() }}
             className="w-4 text-xs text-gray-500 hover:text-gray-300"
           >{expanded ? '▾' : '▸'}</button>
           <span className="w-4 text-xs text-center">{LAYER_ICON[layer.shape ?? layer.type] ?? '□'}</span>
-          <span className="flex-1 truncate text-xs text-gray-200">{layer.name}</span>
+          <span className="flex-1 truncate text-xs text-gray-200">
+            {layer.pinned && <span className="text-blue-400 mr-1" title="Pinned">📌</span>}
+            {layer.solo && !layer.pinned && <span className="text-amber-400 mr-1" title="Solo">★</span>}
+            {layer.name}
+          </span>
           <span className="text-[9px] font-mono text-gray-500">{tracks.length}</span>
           <LayerFlag active={!layer.hidden} on="●" off="○" onClick={(e) => { e.stopPropagation(); onToggleFlag('hidden') }} />
           <LayerFlag active={!!layer.locked} on="🔒" off="🔓" onClick={(e) => { e.stopPropagation(); onToggleFlag('locked') }} />
@@ -128,6 +163,7 @@ export default function LayerTimelineSection({
             visibleEndMs={visibleEndMs}
             trackWidth={trackWidth}
             durationMs={durationMs}
+            audioUrl={audioUrl}
             onCommit={(kind, fromStart, fromEnd, toStart, toEnd) =>
               onLayerBarCommit?.(layer.id, kind, fromStart, fromEnd, toStart, toEnd)
             }
@@ -158,7 +194,21 @@ export default function LayerTimelineSection({
               >⊗</button>
             </div>
 
-            <div className="flex-1 relative bg-gray-900/40 overflow-hidden">
+            <div
+              className="flex-1 relative bg-gray-900/40 overflow-hidden"
+              onContextMenu={onTrackAreaContextMenu && clientXToMs ? (e) => {
+                // Skip if right-clicked on a keyframe — TimelineKeyframe handles its own ctx
+                const tgt = e.target as HTMLElement
+                if (tgt.closest('[data-kf-id]')) return
+                e.preventDefault()
+                onTrackAreaContextMenu(track.target, clientXToMs(e.clientX), e)
+              } : undefined}
+              onDoubleClick={onTrackAreaDoubleClick && clientXToMs ? (e) => {
+                const tgt = e.target as HTMLElement
+                if (tgt.closest('[data-kf-id]')) return
+                onTrackAreaDoubleClick(track.target, clientXToMs(e.clientX))
+              } : undefined}
+            >
               <TrackValueGraph
                 track={track} heightPx={rowH} trackWidthPx={trackWidth}
                 visibleStartMs={visibleStartMs} visibleEndMs={visibleEndMs}
@@ -246,7 +296,7 @@ const MIN_DUR_MS  = 10    // minimum bar duration in ms
 type BarDragKind = 'move' | 'trimStart' | 'trimEnd'
 
 function DraggableLayerBar({
-  layer, msToScreenPx, visibleStartMs, visibleEndMs, trackWidth, durationMs, onCommit,
+  layer, msToScreenPx, visibleStartMs, visibleEndMs, trackWidth, durationMs, audioUrl, onCommit,
 }: {
   layer:          Layer
   msToScreenPx:   (ms: number) => number
@@ -254,6 +304,7 @@ function DraggableLayerBar({
   visibleEndMs:   number
   trackWidth:     number
   durationMs:     number
+  audioUrl?:      string
   onCommit: (
     kind:        BarDragKind,
     fromStartMs: number,
@@ -274,6 +325,10 @@ function DraggableLayerBar({
   const previewRef = useRef<{ startMs: number; endMs: number } | null>(null)
   const [preview, setPreviewState] = useState<{ startMs: number; endMs: number } | null>(null)
   const setPreview = (v: typeof preview) => { previewRef.current = v; setPreviewState(v) }
+
+  // Layer colour label (BL-38). Falls back to the default Tailwind blue-500
+  // so legacy layers without a label keep the previous visual.
+  const barColor = layer.colorLabel ?? '#3B82F6'
 
   const origStart = layer.startMs ?? 0
   const origEnd   = layer.endMs   // undefined → whole timeline
@@ -344,9 +399,8 @@ function DraggableLayerBar({
       {/* Left trim handle */}
       <div
         className="absolute left-0 top-0 bottom-0 z-10 rounded-l-sm
-                   bg-blue-400/70 hover:bg-blue-300 cursor-ew-resize
-                   flex items-center justify-center"
-        style={{ width: HANDLE_W }}
+                   cursor-ew-resize flex items-center justify-center"
+        style={{ width: HANDLE_W, backgroundColor: barColor, opacity: 0.85 }}
         onPointerDown={(e) => beginDrag(e, 'trimStart')}
         title="Drag to trim start"
       >
@@ -355,18 +409,23 @@ function DraggableLayerBar({
 
       {/* Body — move (grab to shift both start + end) */}
       <div
-        className={`absolute top-0 bottom-0 rounded-sm border
-          ${preview
-            ? 'bg-blue-400/40 border-blue-300/70'
-            : 'bg-blue-500/30 border-blue-500/50 hover:bg-blue-500/40'}
-          cursor-grab active:cursor-grabbing`}
-        style={{ left: HANDLE_W, right: HANDLE_W }}
+        className="absolute top-0 bottom-0 rounded-sm border cursor-grab active:cursor-grabbing overflow-hidden"
+        style={{
+          left: HANDLE_W, right: HANDLE_W,
+          backgroundColor: barColor,
+          borderColor: barColor,
+          opacity: preview ? 0.55 : 0.45,
+        }}
         onPointerDown={(e) => beginDrag(e, 'move')}
         title={`${layer.name}: ${Math.round(dispStartMs)}–${Math.round(dispEndMs)} ms`}
       >
+        {/* Audio waveform overlay (BL-37) — drawn inside the bar for audio layers */}
+        {audioUrl && (
+          <AudioWaveform url={audioUrl} color="#ffffff" />
+        )}
         {preview && (
           <span className="absolute inset-0 flex items-center justify-center
-                           text-[9px] font-mono text-blue-200 pointer-events-none truncate px-1">
+                           text-[9px] font-mono text-white/90 pointer-events-none truncate px-1">
             {Math.round(dispStartMs)}–{Math.round(dispEndMs)}
           </span>
         )}
@@ -375,9 +434,8 @@ function DraggableLayerBar({
       {/* Right trim handle */}
       <div
         className="absolute right-0 top-0 bottom-0 z-10 rounded-r-sm
-                   bg-blue-400/70 hover:bg-blue-300 cursor-ew-resize
-                   flex items-center justify-center"
-        style={{ width: HANDLE_W }}
+                   cursor-ew-resize flex items-center justify-center"
+        style={{ width: HANDLE_W, backgroundColor: barColor, opacity: 0.85 }}
         onPointerDown={(e) => beginDrag(e, 'trimEnd')}
         title="Drag to trim end"
       >

@@ -65,7 +65,7 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
 
 function stripLayerMeta(layer: Layer): Layer {
   // Drop editor-only flags. Keep `name` for runtime debug logs.
-  const { locked: _l, hidden: _h, solo: _s, colorLabel: _c, ...rest } = layer
+  const { locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c, ...rest } = layer
   return rest
 }
 

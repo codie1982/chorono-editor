@@ -67,6 +67,10 @@ interface Props {
   /** Snap settings — owned by the page so the dockable SnapPanel + the
    *  in-canvas SnapMenu both read/write the same source of truth. */
   snap: SnapSettingsHook
+  /** Called once per drag-end / transform commit. Page-level auto-key
+   *  pipeline (BL-41) uses this to snapshot changed animatable properties
+   *  into keyframes when the timeline mode is Auto or REC + playing. */
+  onAfterLayerCommit?: (prev: Layer, next: Layer) => void
   /** Fullscreen toggle — when provided, FitMenu shows an "⛶ Fullscreen
    *  canvas" item and reflects the current state. */
   fullscreen?: boolean
@@ -202,7 +206,7 @@ export default function SceneCanvas({
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, snap,
   fullscreen, onToggleFullscreen,
-  menuHandlers,
+  menuHandlers, onAfterLayerCommit,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -735,6 +739,7 @@ export default function SceneCanvas({
       const pChanged = JSON.stringify(finalLayer.path) !== JSON.stringify(drag.originalLayer.path)
       if (!pChanged) { ed.cancelTransaction(); return }
       ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
+      onAfterLayerCommit?.(drag.originalLayer, finalLayer)
       return
     }
 
@@ -742,6 +747,7 @@ export default function SceneCanvas({
       const rChanged = finalLayer.transform.rotationDeg !== drag.originalLayer.transform.rotationDeg
       if (!rChanged) { ed.cancelTransaction(); return }
       ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
+      onAfterLayerCommit?.(drag.originalLayer, finalLayer)
       return
     }
 
@@ -761,9 +767,11 @@ export default function SceneCanvas({
       // Lazy-load batch builder so this file's bundle stays cool.
       import('@/lib/editor/commands-batch').then(({ makeBatchCmd }) => {
         ed.commitTransaction(makeBatchCmd(`Move ${moved.length} layers`, cmds))
+        moved.forEach((m) => onAfterLayerCommit?.(m.prev, m.next))
       }).catch(() => {
         // Fallback: commit primary only
         ed.commitTransaction(cmds[0])
+        onAfterLayerCommit?.(moved[0].prev, moved[0].next)
       })
       return
     }
@@ -785,7 +793,8 @@ export default function SceneCanvas({
     )
     if (!tChanged && !sChanged) { ed.cancelTransaction(); return }
     ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, orig))
-  }, [handlePointerMove])
+    onAfterLayerCommit?.(orig, finalLayer)
+  }, [handlePointerMove, onAfterLayerCommit])
 
   // ── Canvas pointerdown → select + start move ─────────────────────────────
   // ── Pan (move whole view) ─────────────────────────────────────────────────

@@ -8,7 +8,11 @@ import {
   type CurveViewport, type ValueRange,
 } from '@/lib/timeline/curveMath'
 import { useCurveDrag } from './hooks/useCurveDrag'
-import { makeUpdateEasingCmd, makeAddKfCmd, makeDeleteKfCmd, makeUpdateKfValueCmd, makeMirrorTimingCmd } from '@/lib/editor/commands-keyframe'
+import {
+  makeUpdateEasingCmd, makeAddKfCmd, makeDeleteKfCmd, makeUpdateKfValueCmd,
+  makeMirrorTimingCmd, makeFlattenSegmentCmd, makeReverseValuesCmd,
+  type KfValueRef,
+} from '@/lib/editor/commands-keyframe'
 import { evaluateTrack } from '@/lib/evaluator'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { TangentMode } from '@/lib/types'
@@ -84,6 +88,10 @@ export default function CurveEditor({
 
   // ── Per-track visibility toggle (3ds Max-style: click curve name to hide) ─
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  // ── Curve isolation (BL-40) — when set, all other tracks render as low-opacity
+  // ghosts so the user can focus on this one curve without losing peripheral
+  // shape context. Esc clears. Toggling the same track also clears.
+  const [isolatedTrack, setIsolatedTrack] = useState<string | null>(null)
   const visibleTracks = useMemo(
     () => tracks.filter((t) => !hidden.has(t.target)),
     [tracks, hidden],
@@ -237,13 +245,23 @@ export default function CurveEditor({
         e.preventDefault(); setViewStartMs(0); setViewEndMs(duration)
       }
       else if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHandles((v) => !v) }
+      else if (e.key === 'i' || e.key === 'I') {
+        // Toggle isolation: hovered track → solo it; else if anything is
+        // isolated → clear; else no-op (no hover target).
+        e.preventDefault()
+        if (hoveredTrack) setIsolatedTrack((cur) => cur === hoveredTrack ? null : hoveredTrack)
+        else if (isolatedTrack) setIsolatedTrack(null)
+      }
+      else if (e.key === 'Escape' && isolatedTrack) {
+        e.preventDefault(); setIsolatedTrack(null)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // fitToSelection captured below where it's defined; close over deps via
     // the latest-ref pattern is unnecessary here because state changes
     // re-create the listener.
-  }, [isHovered, duration]) // fitToSelection is stable enough; small cycle is OK
+  }, [isHovered, duration, hoveredTrack, isolatedTrack]) // fitToSelection is stable enough; small cycle is OK
 
   // ── Fit-to-selection — zooms the X axis to the selected keyframes' range ─
   const fitToSelection = useCallback(() => {
@@ -428,8 +446,42 @@ export default function CurveEditor({
     // overshoot for bounce/back-style curves.
     const cxRaw = (ms  - d.kfA.timeMs) / dt
     const cyRaw = (val - (d.kfA.value as number)) / dv
-    const cx = Math.max(0, Math.min(1, cxRaw))
-    const cy = Math.max(-0.5, Math.min(1.5, cyRaw))
+    let cx = Math.max(0, Math.min(1, cxRaw))
+    let cy = Math.max(-0.5, Math.min(1.5, cyRaw))
+
+    // ── Weighted-tangent axis lock (BL-40) ─────────────────────────────
+    // Shift → adjust WEIGHT (handle length along its original direction).
+    // Alt   → adjust ANGLE  (preserve original length, rotate handle).
+    // No modifier → free 2D drag (default — both weight and angle change).
+    //
+    // For P1 the handle vector is from (0,0); for P2 it's from (1,1).
+    // Project / scale the new (cx, cy) in that handle's local frame.
+    if (e.shiftKey || e.altKey) {
+      const origP = d.handle === 'p1'
+        ? { ox: 0, oy: 0, vx: d.originalBezier.cx1,     vy: d.originalBezier.cy1 }
+        : { ox: 1, oy: 1, vx: d.originalBezier.cx2 - 1, vy: d.originalBezier.cy2 - 1 }
+      const newVx = cx - origP.ox
+      const newVy = cy - origP.oy
+      const origLen2 = origP.vx * origP.vx + origP.vy * origP.vy
+      if (origLen2 > 1e-6) {
+        if (e.shiftKey) {
+          // Project (newV) onto origV — weight = magnitude along original dir
+          const scale = (newVx * origP.vx + newVy * origP.vy) / origLen2
+          cx = origP.ox + scale * origP.vx
+          cy = origP.oy + scale * origP.vy
+          cx = Math.max(0, Math.min(1, cx))
+        } else {
+          // Alt: preserve original length, just rotate to new direction
+          const newLen = Math.hypot(newVx, newVy)
+          if (newLen > 1e-6) {
+            const origLen = Math.sqrt(origLen2)
+            cx = origP.ox + (newVx / newLen) * origLen
+            cy = origP.oy + (newVy / newLen) * origLen
+            cx = Math.max(0, Math.min(1, cx))
+          }
+        }
+      }
+    }
 
     // ── Tangent-mode-aware mutation ───────────────────────────────────
     // 'broken' (default) → only the dragged handle moves.
@@ -738,23 +790,32 @@ export default function CurveEditor({
           {tracks.map((t, i) => {
             const color = pickTrackColor(t.target, i)
             const isHidden = hidden.has(t.target)
+            const isIso    = isolatedTrack === t.target
             const label = t.target.replace(`layers.${layer.id}.`, '')
             return (
               <button
                 key={t.target}
-                onClick={() => setHidden((prev) => {
-                  const next = new Set(prev)
-                  if (next.has(t.target)) next.delete(t.target)
-                  else                    next.add(t.target)
-                  return next
-                })}
+                onClick={(e) => {
+                  // Shift+click → toggle isolation (BL-40); plain click → hide/show.
+                  if (e.shiftKey) {
+                    setIsolatedTrack((cur) => cur === t.target ? null : t.target)
+                    return
+                  }
+                  setHidden((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(t.target)) next.delete(t.target)
+                    else                    next.add(t.target)
+                    return next
+                  })
+                }}
                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity ${
                   isHidden ? 'opacity-30 hover:opacity-60' : 'opacity-100'
-                } hover:bg-gray-800`}
-                title={isHidden ? 'Show this curve' : 'Hide this curve'}
+                } ${isIso ? 'ring-1 ring-blue-400 bg-blue-950/40' : 'hover:bg-gray-800'}`}
+                title={`${isHidden ? 'Show' : 'Hide'} curve · Shift+click to ${isIso ? 'exit isolate' : 'isolate'} (I)`}
               >
                 <span style={{ color }}>■</span>
                 <span className="ml-1 text-gray-300">{label}</span>
+                {isIso && <span className="ml-1 text-blue-400 text-[8px]">SOLO</span>}
               </button>
             )
           })}
@@ -916,7 +977,11 @@ export default function CurveEditor({
               const ms = viewStartMs + (x / plotW) * Math.max(1, viewEndMs - viewStartMs)
               addKeyframeAt(t.target, Math.max(0, Math.min(duration, ms)))
             }
-            const isHovered = hoveredTrack === t.target
+            const isHovered  = hoveredTrack === t.target
+            const isIsolated = isolatedTrack === t.target
+            // When something is isolated, non-isolated tracks are dimmed
+            // ghosts (still visible for shape reference, not interactive).
+            const isDimmed = isolatedTrack != null && !isIsolated
             // Find which segment the pointer is over (used by click + ctx)
             const sortedKfs = [...t.keyframes].sort((a, b) => a.timeMs - b.timeMs)
             const findSegmentAt = (ms: number) => {
@@ -947,6 +1012,7 @@ export default function CurveEditor({
                   fill="none" stroke="transparent"
                   strokeWidth={10}
                   style={{ cursor: 'pointer' }}
+                  pointerEvents={isDimmed ? 'none' : undefined}
                   onMouseEnter={() => setHoveredTrack(t.target)}
                   onMouseLeave={() => setHoveredTrack((cur) => cur === t.target ? null : cur)}
                   onClick={(e) => {
@@ -975,9 +1041,13 @@ export default function CurveEditor({
                 <path
                   d={d}
                   fill="none" stroke={color}
-                  strokeWidth={isHovered ? 3 : 1.5}
-                  opacity={isHovered ? 1 : 0.95}
-                  style={isHovered ? { filter: `drop-shadow(0 0 3px ${color})` } : undefined}
+                  strokeWidth={isIsolated ? 2.5 : isHovered ? 3 : 1.5}
+                  opacity={isDimmed ? 0.18 : isHovered ? 1 : 0.95}
+                  style={
+                    isIsolated ? { filter: `drop-shadow(0 0 4px ${color})` }
+                    : isHovered ? { filter: `drop-shadow(0 0 3px ${color})` }
+                    : undefined
+                  }
                   pointerEvents="none"
                 />
                 {selSegD && (
@@ -1029,6 +1099,14 @@ export default function CurveEditor({
               const p1y = ay + bez.cy1 * (by - ay)
               const p2x = ax + bez.cx2 * (bx - ax)
               const p2y = ay + bez.cy2 * (by - ay)
+              // Weighted-tangent radius: handle vector magnitude in [0,1]²
+              // easing space. The further the handle is from its anchor, the
+              // more "weight" it has on the curve — so we draw it slightly
+              // bigger. r ∈ [3, 7] px.
+              const w1 = Math.hypot(bez.cx1,     bez.cy1)
+              const w2 = Math.hypot(bez.cx2 - 1, bez.cy2 - 1)
+              const r1 = 3 + Math.max(0, Math.min(1, w1 / Math.SQRT2)) * 4
+              const r2 = 3 + Math.max(0, Math.min(1, w2 / Math.SQRT2)) * 4
               out.push(
                 <g key={`bz-${t.target}-${kfA.id}`}>
                   {/* Tangent lines from anchor → handle */}
@@ -1036,21 +1114,21 @@ export default function CurveEditor({
                   <line x1={bx} y1={by} x2={p2x} y2={p2y} stroke="#22d3ee" strokeWidth={1} opacity={0.7} />
                   {/* P1 (orange = outgoing tangent from kfA) */}
                   <circle
-                    cx={p1x} cy={p1y} r={5}
+                    cx={p1x} cy={p1y} r={r1}
                     fill="#f59e0b" stroke="#1e1b4b" strokeWidth={1.5}
                     style={{ cursor: 'pointer' }}
                     onPointerDown={(e) => beginBezierDrag(e, kfA, kfB, t.target, 'p1')}
                   >
-                    <title>Bezier P1 — drag to reshape easing from this keyframe</title>
+                    <title>Bezier P1 — drag to reshape · Shift = weight only · Alt = angle only</title>
                   </circle>
                   {/* P2 (cyan = incoming tangent into kfB) */}
                   <circle
-                    cx={p2x} cy={p2y} r={5}
+                    cx={p2x} cy={p2y} r={r2}
                     fill="#22d3ee" stroke="#1e1b4b" strokeWidth={1.5}
                     style={{ cursor: 'pointer' }}
                     onPointerDown={(e) => beginBezierDrag(e, kfA, kfB, t.target, 'p2')}
                   >
-                    <title>Bezier P2 — drag to reshape easing into next keyframe</title>
+                    <title>Bezier P2 — drag to reshape · Shift = weight only · Alt = angle only</title>
                   </circle>
                 </g>
               )
@@ -1306,6 +1384,16 @@ export default function CurveEditor({
           const cmd = makeMirrorTimingCmd(scene, refs)
           if (cmd) editor.dispatchCommand(cmd)
         } : undefined,
+        reverseValues: selectedKfIds.size > 1 ? () => {
+          const refs: KfValueRef[] = []
+          for (const tr of tl.tracks) {
+            for (const k of tr.keyframes) {
+              if (selectedKfIds.has(k.id)) refs.push({ kfId: k.id, target: tr.target, timelineId: selectedTimelineId! })
+            }
+          }
+          const cmd = makeReverseValuesCmd(scene, refs)
+          if (cmd) editor.dispatchCommand(cmd)
+        } : undefined,
         setTangentMode: (k, mode) => {
           const prev = k.tangentMode
           editor.dispatchCommand({
@@ -1336,7 +1424,16 @@ export default function CurveEditor({
         setEaseOut:   () => setSeg('easeOut'),
         setEaseInOut: () => setSeg('easeInOut'),
         setHold:      () => setSeg('hold'),
-        // TODO(sprint 3+): Flatten segment — sets kfB.value = kfA.value.
+        flatten:      () => {
+          // Flatten the segment under the cursor: find the kf at-or-before
+          // the click and the kf right after; equalise B.value = A.value.
+          if (!seg) return
+          const idx = sorted.findIndex((k) => k.id === seg.id)
+          const kfB = sorted[idx + 1]
+          if (!kfB) return
+          const cmd = makeFlattenSegmentCmd(scene, tl.id, ctxData.trackTarget, seg.id, kfB.id)
+          if (cmd) editor.dispatchCommand(cmd)
+        },
       })
     }
 

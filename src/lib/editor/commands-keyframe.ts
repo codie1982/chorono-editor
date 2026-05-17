@@ -324,6 +324,76 @@ export function makeAlignToFrameCmd(
   }
 }
 
+// ── Flatten segment ──────────────────────────────────────────────────────────
+//
+// Sets kfB.value to kfA.value so the curve renders as a horizontal line
+// between the two keys (their easing is preserved — the segment is "flat"
+// in value space). Useful for holding a value across a span without
+// converting both endpoints to hold easing.
+
+export function makeFlattenSegmentCmd(
+  scene:       ChronoScene,
+  timelineId:  string,
+  target:      string,
+  kfAId:       string,
+  kfBId:       string,
+): EditorCommand | null {
+  const tl = scene.timelines.find((t) => t.id === timelineId)
+  const tr = tl?.tracks.find((t) => t.target === target)
+  const kfA = tr?.keyframes.find((k) => k.id === kfAId)
+  const kfB = tr?.keyframes.find((k) => k.id === kfBId)
+  if (!kfA || !kfB) return null
+  if (typeof kfA.value !== 'number' || typeof kfB.value !== 'number') return null
+  const fromValue = kfB.value
+  const toValue   = kfA.value
+  return {
+    label: 'Flatten Segment',
+    execute: (s) => updateKfValue(s, timelineId, target, kfBId, toValue),
+    undo:    (s) => updateKfValue(s, timelineId, target, kfBId, fromValue),
+  }
+}
+
+// ── Reverse values ───────────────────────────────────────────────────────────
+//
+// Mirrors selected keyframes' VALUES around their min/max midpoint. Times
+// untouched (use makeMirrorTimingCmd for the time axis). Useful for flipping
+// a fade-in into a fade-out without re-keying.
+
+export interface KfValueRef { kfId: string; target: string; timelineId: string }
+
+export function makeReverseValuesCmd(
+  scene: ChronoScene,
+  items: KfValueRef[],
+): EditorCommand | null {
+  if (items.length < 2) return null
+  type Snap = { timelineId: string; target: string; kfId: string; priorVal: number }
+  const snaps: Snap[] = []
+  for (const it of items) {
+    const tl = scene.timelines.find((t) => t.id === it.timelineId)
+    const tr = tl?.tracks.find((t) => t.target === it.target)
+    const kf = tr?.keyframes.find((k) => k.id === it.kfId)
+    if (!kf || typeof kf.value !== 'number') continue
+    snaps.push({ timelineId: it.timelineId, target: it.target, kfId: it.kfId, priorVal: kf.value })
+  }
+  if (snaps.length < 2) return null
+  const minV = Math.min(...snaps.map((s) => s.priorVal))
+  const maxV = Math.max(...snaps.map((s) => s.priorVal))
+  const mirroredFor = (v: number) => minV + (maxV - v)
+  return {
+    label: 'Reverse Values',
+    execute(s) {
+      let next = s
+      for (const sn of snaps) next = updateKfValue(next, sn.timelineId, sn.target, sn.kfId, mirroredFor(sn.priorVal))
+      return next
+    },
+    undo(s) {
+      let next = s
+      for (const sn of snaps) next = updateKfValue(next, sn.timelineId, sn.target, sn.kfId, sn.priorVal)
+      return next
+    },
+  }
+}
+
 // ── Update easing ─────────────────────────────────────────────────────────────
 
 export function makeUpdateEasingCmd(

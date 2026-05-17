@@ -12,10 +12,16 @@ let paramCounter    = 0
 let triggerCounter  = 0
 let bindingCounter  = 0
 let segmentCounter  = 0
+let eventCounter    = 0
 
 /** Generate a lightweight unique ID for keyframes (no crypto dependency). */
 function nextKfId(): string {
   return `kf_${Date.now()}_${++kfCounter}`
+}
+
+/** Generate a unique ID for a timeline event (BL-36). */
+export function nextEventId(): string {
+  return `ev_${Date.now()}_${++eventCounter}`
 }
 
 export const DEFAULT_TRANSFORM: Transform = {

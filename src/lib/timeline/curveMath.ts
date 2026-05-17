@@ -109,8 +109,52 @@ export function yToValue(vp: CurveViewport, y: number): number {
  * line reflects the track's actual easing (incl. customBezier) — a single
  * source of truth between evaluator and the on-screen curve.
  */
+// ── LRU cache (BL-42) ──────────────────────────────────────────────────────
+// CurveEditor re-renders every viewport pan/zoom/scrub. Each render calls
+// buildCurvePath for every visible track — and the sampler does N evaluator
+// calls (where N ~= viewport width / 2px). With many tracks this dominates.
+//
+// We exploit two facts:
+//   1. Scene immutability — same `track` ref means same keyframes/easing.
+//   2. Viewport changes are bursty (drag, wheel) but the value space is
+//      coarse: rounding (startMs, endMs, widthPx, range.min, range.max)
+//      gives a stable cache key without changing visible output (we already
+//      .toFixed(1) the path coordinates).
+//
+// Implementation: WeakMap<Track, Map<viewportKey, path>>. The outer
+// WeakMap auto-evicts when a Track is GC'd. Per-track inner map is capped
+// to 12 entries (zoom levels users actually visit) with simple FIFO
+// eviction — when a new entry pushes over the cap, the oldest is dropped.
+
+const CACHE_PER_TRACK_LIMIT = 12
+const pathCache = new WeakMap<Track, Map<string, string>>()
+
+function viewportKey(vp: CurveViewport): string {
+  // Round to 1ms / 1px / 0.001 value precision — finer than the visible
+  // path resolution so cached output is pixel-identical.
+  return [
+    Math.round(vp.startMs),
+    Math.round(vp.endMs),
+    Math.round(vp.widthPx),
+    Math.round(vp.heightPx),
+    vp.range.min.toFixed(3),
+    vp.range.max.toFixed(3),
+  ].join(':')
+}
+
 export function buildCurvePath(track: Track, vp: CurveViewport): string {
   if (track.keyframes.length < 2) return ''
+
+  let perTrack = pathCache.get(track)
+  if (!perTrack) {
+    perTrack = new Map()
+    pathCache.set(track, perTrack)
+  }
+  const key = viewportKey(vp)
+  const cached = perTrack.get(key)
+  if (cached !== undefined) return cached
+
+  // Miss — sample.
   const stepPx = 2
   const steps = Math.max(8, Math.floor(vp.widthPx / stepPx))
   const visMs = Math.max(1, vp.endMs - vp.startMs)
@@ -123,7 +167,15 @@ export function buildCurvePath(track: Track, vp: CurveViewport): string {
     const y = valueToY(vp, v)
     d += `${d ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)} `
   }
-  return d.trim()
+  const out = d.trim()
+
+  // FIFO eviction — drop the oldest if we just crossed the cap.
+  if (perTrack.size >= CACHE_PER_TRACK_LIMIT) {
+    const firstKey = perTrack.keys().next().value
+    if (firstKey !== undefined) perTrack.delete(firstKey)
+  }
+  perTrack.set(key, out)
+  return out
 }
 
 // ── Axis tick generation ────────────────────────────────────────────────────
@@ -155,4 +207,49 @@ export function formatTickValue(v: number): string {
   return Math.abs(v) >= 100 ? v.toFixed(0)
        : Math.abs(v) >= 1   ? v.toFixed(1).replace(/\.0$/, '')
        : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+// ── Value snap ──────────────────────────────────────────────────────────────
+//
+// Per-property snap targets for the vertical (value) axis. Returns common
+// "round" values that users almost always want to land on: 90° for rotation,
+// 0/1 for opacity, integer scales, etc. Threshold is in screen px so the
+// snap feels consistent regardless of how zoomed in/out the Y axis is.
+//
+// Returns the snapped value when a target is within `thresholdPx`, otherwise
+// the raw value untouched. `target` is set to the chosen snap point (or null)
+// so callers can show a visual indicator.
+
+/** Common values for a given track target, derived from the property suffix. */
+export function getValueSnapTargets(trackTarget: string): number[] {
+  const prop = trackTarget.replace(/^layers\.[^.]+\./, '')
+  if (prop.includes('rotation')) {
+    return [0, 45, 90, 135, 180, 225, 270, 315, 360, -45, -90, -135, -180, -225, -270, -315, -360]
+  }
+  if (prop === 'opacity' || prop.endsWith('.opacity')) {
+    return [0, 0.25, 0.5, 0.75, 1]
+  }
+  if (prop.includes('scale')) {
+    return [0, 0.25, 0.5, 1, 1.5, 2, 3]
+  }
+  return []
+}
+
+export function snapValue(
+  trackTarget: string,
+  rawValue:    number,
+  vp:          CurveViewport,
+  thresholdPx: number = 8,
+): { value: number; snapped: boolean; target: number | null } {
+  const targets = getValueSnapTargets(trackTarget)
+  if (targets.length === 0) return { value: rawValue, snapped: false, target: null }
+  const pxPerValue = vp.heightPx / Math.max(0.0001, vp.range.max - vp.range.min)
+  let best: { target: number; dpx: number } | null = null
+  for (const t of targets) {
+    const dpx = Math.abs((rawValue - t) * pxPerValue)
+    if (dpx <= thresholdPx && (!best || dpx < best.dpx)) best = { target: t, dpx }
+  }
+  return best
+    ? { value: best.target, snapped: true, target: best.target }
+    : { value: rawValue, snapped: false, target: null }
 }

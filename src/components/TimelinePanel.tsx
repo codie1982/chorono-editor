@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
   TimelineSegment,
@@ -14,11 +14,14 @@ import {
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
+  makeAddEventCmd, makeDeleteEventCmd, makeUpdateEventCmd,
 } from '@/lib/editor/commands-timeline'
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
 } from '@/lib/editor/commands-interactive'
-import { makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd } from '@/lib/editor/commands-layer'
+import {
+  makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd, makeUpdateLayerCmd,
+} from '@/lib/editor/commands-layer'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
@@ -31,9 +34,28 @@ import TimelineRuler           from './timeline/TimelineRuler'
 import TimelineToolbar         from './timeline/TimelineToolbar'
 import TrackToolBar            from './timeline/TrackToolBar'
 import TimelineStatusBar       from './timeline/TimelineStatusBar'
+import TimelineMinimap         from './timeline/TimelineMinimap'
 import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
+import EventStrip              from './timeline/EventStrip'
 import SegmentModal            from './modals/SegmentModal'
+import type { TimelineEvent } from '@/lib/types'
+import { nextEventId } from '@/lib/defaults'
+
+// Preset palette for the layer "Color Label" submenu. `hex: null` clears
+// the label. Same set is used by the LayerPanel-side picker so a layer
+// dragged across panels keeps a consistent colour identity.
+const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [
+  { label: 'None',    hex: null      },
+  { label: 'Blue',    hex: '#3B82F6' },
+  { label: 'Cyan',    hex: '#06B6D4' },
+  { label: 'Green',   hex: '#22C55E' },
+  { label: 'Yellow',  hex: '#EAB308' },
+  { label: 'Orange',  hex: '#F97316' },
+  { label: 'Red',     hex: '#EF4444' },
+  { label: 'Purple',  hex: '#A855F7' },
+  { label: 'Pink',    hex: '#EC4899' },
+]
 
 interface Props {
   scene: ChronoScene
@@ -85,6 +107,88 @@ export default function TimelinePanel({
 
   // ── Per-layer expand state (default: all layers expanded) ────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
+  // ── Layer filter (BL-38) — substring match on layer name + tracked properties
+  const [layerFilter, setLayerFilter] = useState('')
+
+  // ── Bookmarks (BL-43) — up to 9 saved playhead positions. Cmd+B saves to
+  //    the lowest empty slot (cycling if full); Cmd+1..9 jumps. Persisted
+  //    in localStorage so they survive reloads of the same project.
+  const [bookmarks, setBookmarks] = useState<(number | null)[]>(() => {
+    if (typeof window === 'undefined') return Array(9).fill(null)
+    try {
+      const raw = localStorage.getItem('chorono.timeline.bookmarks')
+      if (!raw) return Array(9).fill(null)
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length === 9) return parsed
+    } catch { /* fall through */ }
+    return Array(9).fill(null)
+  })
+  useEffect(() => {
+    try { localStorage.setItem('chorono.timeline.bookmarks', JSON.stringify(bookmarks)) }
+    catch { /* localStorage full or disabled — silent skip */ }
+  }, [bookmarks])
+  const saveBookmark = useCallback(() => {
+    setBookmarks((prev) => {
+      const next = [...prev]
+      const empty = next.findIndex((v) => v == null)
+      if (empty >= 0) next[empty] = currentTimeMs
+      else { next.shift(); next.push(currentTimeMs) }       // cycle if full
+      return next
+    })
+  }, [currentTimeMs])
+  const jumpToBookmark = useCallback((slot: number) => {
+    const t = bookmarks[slot]
+    if (t == null) return
+    onTimeChange(Math.max(0, Math.min(duration, t)))
+  }, [bookmarks, duration, onTimeChange])
+
+  // Keyboard: Cmd/Ctrl+B = save bookmark · Cmd/Ctrl+1..9 = jump to slot.
+  // Scoped to when the timeline panel itself is hovered so it doesn't fight
+  // with other panels' shortcuts. Skips when typing in inputs.
+  const [timelineHovered, setTimelineHovered] = useState(false)
+  useEffect(() => {
+    if (!timelineHovered) return
+    const onKey = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
+      const meta = e.metaKey || e.ctrlKey
+      if (meta && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault(); saveBookmark(); return
+      }
+      if (meta && /^[1-9]$/.test(e.key)) {
+        e.preventDefault(); jumpToBookmark(parseInt(e.key, 10) - 1); return
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [timelineHovered, saveBookmark, jumpToBookmark])
+  const visibleLayers = useMemo(() => {
+    const q = layerFilter.trim().toLowerCase()
+    // Step 1: solo mode — if any layer is solo'd, hide everything else.
+    const anySolo = scene.layers.some((l) => l.solo)
+    let next = anySolo ? scene.layers.filter((l) => l.solo) : scene.layers
+    // Step 2: text filter
+    if (q) {
+      next = next.filter((l) => {
+        if (l.name.toLowerCase().includes(q)) return true
+        if (l.type.toLowerCase().includes(q)) return true
+        const tracks = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${l.id}.`)) ?? []
+        return tracks.some((t) => t.target.toLowerCase().includes(q))
+      })
+    }
+    // Step 3: pinned to the top, preserve original order within each group.
+    const pinned   = next.filter((l) =>  l.pinned)
+    const unpinned = next.filter((l) => !l.pinned)
+    return [...pinned, ...unpinned]
+  }, [scene.layers, layerFilter, timeline])
+
+  // Map: layerId → pin index (0,1,2…) — only set for pinned layers.
+  const pinIndexFor = useMemo(() => {
+    const m = new Map<string, number>()
+    let i = 0
+    for (const l of visibleLayers) { if (l.pinned) { m.set(l.id, i); i++ } }
+    return m
+  }, [visibleLayers])
   const toggleLayerExpand = useCallback((id: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev)
@@ -173,25 +277,28 @@ export default function TimelinePanel({
     })
   }, [scene, selectedTimelineId, timeline, dispatchCommand])
 
-  const addKeyframeAtPlayhead = useCallback((trackTarget: string) => {
+  const addKeyframeAtTime = useCallback((trackTarget: string, ms: number) => {
     if (!selectedTimelineId || !timeline) return
     const track = timeline.tracks.find((t) => t.target === trackTarget)
     if (!track) return
-    // Use the property path to find the originating layer
     const m = trackTarget.match(/^layers\.([^.]+)\.(.+)$/)
     if (!m) return
     const [, layerId, propPath] = m
     const layer = scene.layers.find((l) => l.id === layerId)
     if (!layer) return
     const defaultVal = readLayerPropAsNumber(layer, propPath)
-    const existingVal = evaluateTrack(track, currentTimeMs) ?? defaultVal ?? 0
+    const existingVal = evaluateTrack(track, ms) ?? defaultVal ?? 0
 
     const kf: Keyframe = {
-      id: nextKfId(), timeMs: currentTimeMs, value: existingVal,
+      id: nextKfId(), timeMs: Math.max(0, Math.min(duration, ms)), value: existingVal,
       easing: { type: 'easeOut' },
     }
     dispatchCommand(makeAddKfCmd(selectedTimelineId, trackTarget, kf))
-  }, [scene.layers, timeline, selectedTimelineId, currentTimeMs, dispatchCommand])
+  }, [scene.layers, timeline, selectedTimelineId, duration, dispatchCommand])
+
+  const addKeyframeAtPlayhead = useCallback((trackTarget: string) => {
+    addKeyframeAtTime(trackTarget, currentTimeMs)
+  }, [addKeyframeAtTime, currentTimeMs])
 
   const deleteKf = useCallback((trackTarget: string, kfId: string) => {
     if (!selectedTimelineId || !timeline) return
@@ -295,8 +402,18 @@ export default function TimelinePanel({
   const ctxMenu = useContextMenu()
   const [ctxKf, setCtxKf] = useState<{ trackTarget: string; kfId: string } | null>(null)
   const [ctxLayerBar, setCtxLayerBar] = useState<{ layerId: string } | null>(null)
+  // Right-click on the empty area of a property row → "Add Keyframe Here" menu.
+  const [ctxTrackArea, setCtxTrackArea] = useState<{ trackTarget: string; timeMs: number } | null>(null)
   const [editingKf, setEditingKf] = useState<{
-    trackTarget: string; kfId: string; leftPx: number; topPx: number; draft: string
+    trackTarget: string; kfId: string
+    /** Initial anchor (in viewport space) — used to pick the first open
+     *  position. Once the user drags the window, posX/posY take over. */
+    anchorX: number; anchorY: number
+    /** User-controlled window position. Null = derive from anchor. */
+    posX: number | null
+    posY: number | null
+    draftTime:  string
+    draftValue: string
   } | null>(null)
 
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
@@ -314,6 +431,12 @@ export default function TimelinePanel({
     setCtxKf({ trackTarget, kfId })
     ctxMenu.open(e)
   }, [selectedKfIds, onSelectKeyframes, ctxMenu])
+
+  const openTrackAreaMenu = useCallback((trackTarget: string, timeMs: number, e: React.MouseEvent) => {
+    setCtxKf(null); setCtxLayerBar(null)
+    setCtxTrackArea({ trackTarget, timeMs })
+    ctxMenu.open(e)
+  }, [ctxMenu])
 
   // ── Lasso selection ──────────────────────────────────────────────────────
   // Alt+drag in the layer-sections container draws a rectangle; pointerup
@@ -388,12 +511,18 @@ export default function TimelinePanel({
     const tr = tl?.tracks.find((t) => t.target === trackTarget)
     const kf = tr?.keyframes.find((k) => k.id === kfId)
     if (!kf || typeof kf.value !== 'number') return
-    // The keyframe DOM node is the event target; lock the editor near it.
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    // Anchor at the actual MOUSE position rather than the keyframe element's
+    // bbox. The kf wrapper has weird CSS (translate -50%/-50% + a hover
+    // tooltip that inflates its bounding rect mid-double-click) so reading
+    // its rect gives a moving target. The mouse coords are always exactly
+    // where the user clicked.
     setEditingKf({
       trackTarget, kfId,
-      leftPx: rect.left, topPx: rect.top - 26,
-      draft: String(kf.value),
+      anchorX: e.clientX,
+      anchorY: e.clientY,
+      posX: null, posY: null,
+      draftTime:  String(Math.round(kf.timeMs)),
+      draftValue: String(kf.value),
     })
   }, [scene.timelines, selectedTimelineId])
 
@@ -425,6 +554,8 @@ export default function TimelinePanel({
     <div
       className="flex flex-col h-full bg-gray-900 relative overflow-hidden"
       onContextMenu={(e) => e.preventDefault()}
+      onMouseEnter={() => setTimelineHovered(true)}
+      onMouseLeave={() => setTimelineHovered(false)}
     >
       <TimelineToolbar
         timelines={scene.timelines}
@@ -436,6 +567,15 @@ export default function TimelinePanel({
         zoomFactor={vp.zoomFactor}
         playbackSpeed={playbackSpeed}
         timelineMode={settings.timelineMode}
+        autoKeyMode={settings.autoKeyMode ?? (settings.autoKeyframe ? 'auto' : 'manual')}
+        onAutoKeyModeChange={(mode) => onSettingsChange({
+          ...settings,
+          autoKeyMode: mode,
+          // Keep the legacy boolean true ONLY when 'auto' — record mode
+          // is conditional (only fires during playback) and is evaluated
+          // dynamically in page.tsx's autoKeyChangedProps, not via this flag.
+          autoKeyframe: mode === 'auto',
+        })}
         hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
         onSelectTimeline={onSelectTimeline}
@@ -459,9 +599,26 @@ export default function TimelinePanel({
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
       <div className="flex border-b border-gray-700 shrink-0">
-        <div className="w-60 shrink-0 border-r border-gray-700 bg-gray-900 flex items-center px-3">
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Layers</span>
-          <span className="ml-auto text-[10px] font-mono text-gray-500">{scene.layers.length}</span>
+        <div className="w-60 shrink-0 border-r border-gray-700 bg-gray-900 flex items-center px-2 gap-1.5">
+          <span className="text-[10px] text-gray-500 shrink-0">🔍</span>
+          <input
+            type="text"
+            value={layerFilter}
+            onChange={(e) => setLayerFilter(e.target.value)}
+            placeholder="Filter layers…"
+            className="flex-1 bg-transparent border-0 text-[10px] text-gray-300 placeholder-gray-600
+                       focus:outline-none focus:text-gray-100 min-w-0"
+          />
+          {layerFilter && (
+            <button
+              onClick={() => setLayerFilter('')}
+              className="text-[10px] text-gray-500 hover:text-gray-300 shrink-0"
+              title="Clear filter"
+            >✕</button>
+          )}
+          <span className="text-[10px] font-mono text-gray-500 shrink-0">
+            {layerFilter ? `${visibleLayers.length}/${scene.layers.length}` : scene.layers.length}
+          </span>
         </div>
         <div
           ref={vp.trackAreaRef}
@@ -477,6 +634,24 @@ export default function TimelinePanel({
             clientXToMs={vp.clientXToMs}
             onSeek={onTimeChange}
           />
+          {/* Bookmark flags — overlayed on top of the ruler */}
+          {bookmarks.map((bk, i) => bk == null ? null : (
+            <div
+              key={i}
+              className="absolute top-0 h-6 flex items-end justify-center pointer-events-auto cursor-pointer
+                         text-[8px] font-mono text-purple-200 hover:text-white group z-10"
+              style={{ left: `${vp.msToScreenPx(bk) - 6}px`, width: 12 }}
+              onClick={() => jumpToBookmark(i)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setBookmarks((prev) => { const n = [...prev]; n[i] = null; return n })
+              }}
+              title={`Bookmark ${i + 1} @ ${Math.round(bk)}ms · Cmd+${i + 1} jump · Right-click clear`}
+            >
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-full bg-purple-500/60 group-hover:bg-purple-300" />
+              <span className="relative bg-purple-700 px-1 rounded-sm leading-none">{i + 1}</span>
+            </div>
+          ))}
           {timeline && (
             <SegmentStrip
               segments={timeline.segments ?? []}
@@ -496,6 +671,42 @@ export default function TimelinePanel({
               }}
               onEdit={(seg) => setSegmentModal({ mode: 'edit', segment: seg })}
               onPlay={(segId) => onPlaySegment?.(timeline.id, segId)}
+              onDelete={(seg) => dispatchCommand(makeDeleteSegmentCmd(timeline.id, seg))}
+            />
+          )}
+          {/* ── EventStrip (BL-36) ───────────────────────────────────────── */}
+          {timeline && (
+            <EventStrip
+              events={timeline.events ?? []}
+              durationMs={duration}
+              totalContentPx={vp.totalContentPx}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              onCreateAt={(ms) => {
+                if (!selectedTimelineId) return
+                const name = window.prompt('Event name', 'event')
+                if (!name) return
+                const ev: TimelineEvent = {
+                  id: nextEventId(),
+                  timeMs: Math.max(0, Math.min(duration, Math.round(ms))),
+                  name: name.trim() || 'event',
+                }
+                dispatchCommand(makeAddEventCmd(selectedTimelineId, ev))
+              }}
+              onEdit={(ev) => {
+                if (!selectedTimelineId) return
+                const nextName = window.prompt('Rename event', ev.name)
+                if (nextName == null) return
+                dispatchCommand(makeUpdateEventCmd(
+                  selectedTimelineId, ev.id,
+                  { name: ev.name,         timeMs: ev.timeMs, payload: ev.payload },
+                  { name: nextName.trim(), timeMs: ev.timeMs, payload: ev.payload },
+                ))
+              }}
+              onDelete={(ev) => {
+                if (!selectedTimelineId) return
+                dispatchCommand(makeDeleteEventCmd(selectedTimelineId, ev))
+              }}
             />
           )}
         </div>
@@ -516,8 +727,17 @@ export default function TimelinePanel({
             No layers yet. Add one from the left panel.
           </div>
         )}
+        {scene.layers.length > 0 && visibleLayers.length === 0 && (
+          <div className="p-6 text-center text-xs text-gray-600">
+            No layers match &ldquo;{layerFilter}&rdquo;.
+            <button
+              onClick={() => setLayerFilter('')}
+              className="ml-2 text-blue-400 hover:text-blue-300 underline underline-offset-2"
+            >clear filter</button>
+          </div>
+        )}
 
-        {scene.layers.map((layer) => (
+        {visibleLayers.map((layer) => (
           <LayerTimelineSection
             key={layer.id}
             layer={layer}
@@ -533,6 +753,10 @@ export default function TimelinePanel({
             selectedKfIds={selectedKfIds}
             previewMs={drag.previewMs}
             durationMs={duration}
+            pinIndex={pinIndexFor.get(layer.id) ?? -1}
+            audioUrl={layer.type === 'audio' && layer.audio
+              ? scene.assets?.find((a) => a.id === layer.audio!.assetId)?.url
+              : undefined}
             onToggleExpand={() => toggleLayerExpand(layer.id)}
             onSelectLayer={(shift) => onSelectLayer(layer.id, shift)}
             onToggleFlag={(field) => onToggleLayerFlag(layer.id, field)}
@@ -546,6 +770,9 @@ export default function TimelinePanel({
             onKfContextMenu={openKfMenu}
             onKfDoubleClick={openKfInlineEdit}
             onLayerBarContextMenu={openLayerBarMenu}
+            onTrackAreaContextMenu={openTrackAreaMenu}
+            onTrackAreaDoubleClick={(target, ms) => addKeyframeAtTime(target, ms)}
+            clientXToMs={vp.clientXToMs}
             onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
               // Single command handles move + trim — linearly remaps every
               // keyframe on this layer so the inner animation scales/shifts
@@ -610,31 +837,67 @@ export default function TimelinePanel({
         const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
         const tr = tl?.tracks.find((t) => t.target === editingKf.trackTarget)
         const kf = tr?.keyframes.find((k) => k.id === editingKf.kfId)
-        if (!kf || typeof kf.value !== 'number') { setEditingKf(null); return null }
+        if (!kf || typeof kf.value !== 'number' || !selectedTimelineId || !tr) {
+          setEditingKf(null); return null
+        }
+        // Find prev / next kfs to know if IN/OUT easing is meaningful.
+        const sorted   = [...tr.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+        const idx      = sorted.findIndex((k) => k.id === kf.id)
+        const prevKf   = idx > 0                   ? sorted[idx - 1] : null
+        const nextKf   = idx < sorted.length - 1   ? sorted[idx + 1] : null
+        // IN easing = the easing on the PREVIOUS kf (controls the segment
+        // entering THIS kf). OUT easing = this kf's own easing.
+        const inEasing  = prevKf?.easing.type ?? null
+        const outEasing = nextKf ? kf.easing.type : null   // no segment → no OUT
+
+        const close = () => setEditingKf(null)
         const commit = () => {
-          const v = Number(editingKf.draft)
-          if (Number.isFinite(v) && v !== kf.value && selectedTimelineId) {
+          const nextTime  = Number(editingKf.draftTime)
+          const nextValue = Number(editingKf.draftValue)
+          if (Number.isFinite(nextValue) && nextValue !== kf.value) {
             dispatchCommand(makeUpdateKfValueCmd(
-              selectedTimelineId, editingKf.trackTarget, kf.id, kf.value, v,
+              selectedTimelineId, editingKf.trackTarget, kf.id, kf.value, nextValue,
             ))
           }
-          setEditingKf(null)
+          if (Number.isFinite(nextTime) && Math.round(nextTime) !== Math.round(kf.timeMs)) {
+            const clamped = Math.max(0, Math.min(duration, Math.round(nextTime)))
+            dispatchCommand(makeBulkMoveKfCmd([{
+              kfId: kf.id, target: editingKf.trackTarget, timelineId: selectedTimelineId!,
+              fromMs: kf.timeMs, toMs: clamped,
+            }]))
+          }
+          close()
         }
+        const setInEasing = (type: EasingType) => {
+          if (!prevKf) return
+          dispatchCommand(makeUpdateEasingCmd(
+            selectedTimelineId!, editingKf.trackTarget, prevKf.id,
+            prevKf.easing, { type },
+          ))
+        }
+        const setOutEasing = (type: EasingType) => {
+          if (!nextKf) return
+          dispatchCommand(makeUpdateEasingCmd(
+            selectedTimelineId!, editingKf.trackTarget, kf.id,
+            kf.easing, { type },
+          ))
+        }
+
         return (
-          <input
-            autoFocus type="number" value={editingKf.draft}
-            onChange={(e) => setEditingKf({ ...editingKf, draft: e.target.value })}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter')  { e.preventDefault(); commit() }
-              if (e.key === 'Escape') { e.preventDefault(); setEditingKf(null) }
-              e.stopPropagation()
-            }}
-            onFocus={(e) => e.currentTarget.select()}
-            className="fixed z-50 w-20 px-1 py-0.5 text-[11px] font-mono
-                       bg-gray-950 text-white border border-blue-500 rounded
-                       focus:outline-none"
-            style={{ left: editingKf.leftPx, top: editingKf.topPx }}
+          <KeyframeEditWindow
+            editingKf={editingKf}
+            propPath={editingKf.trackTarget.replace(`layers.`, '')}
+            inEasing={inEasing}
+            outEasing={outEasing}
+            hasPrev={!!prevKf}
+            hasNext={!!nextKf}
+            onChangeDraftTime={(v)  => setEditingKf({ ...editingKf, draftTime:  v })}
+            onChangeDraftValue={(v) => setEditingKf({ ...editingKf, draftValue: v })}
+            onMove={(x, y)          => setEditingKf({ ...editingKf, posX: x, posY: y })}
+            onSetInEasing={setInEasing}
+            onSetOutEasing={setOutEasing}
+            onClose={close}
+            onCommit={commit}
           />
         )
       })()}
@@ -735,12 +998,76 @@ export default function TimelinePanel({
               makeTrimLayerCmd(layer.id, 'end', layer.endMs ?? scene.composition.durationMs, splitMs)
             ),
           },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: layer.pinned ? '📌 Unpin Layer' : '📌 Pin Layer to Top',
+            shortcut: undefined, disabled: false,
+            onSelect: () => dispatchCommand(
+              makeUpdateLayerCmd(layer.id, { pinned: !layer.pinned }, layer)
+            ),
+          },
+          {
+            kind: 'action' as const,
+            label: layer.solo ? 'Exit Solo' : 'Solo in Timeline',
+            shortcut: undefined, disabled: false,
+            onSelect: () => dispatchCommand(
+              makeUpdateLayerCmd(layer.id, { solo: !layer.solo }, layer)
+            ),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'submenu' as const, label: 'Color Label',
+            disabled: false,
+            items: LAYER_COLOR_LABELS.map((c) => ({
+              kind: 'action' as const,
+              label: c.label,
+              shortcut: undefined,
+              disabled: false,
+              onSelect: () => dispatchCommand(
+                makeUpdateLayerCmd(layer.id, { colorLabel: c.hex ?? undefined }, layer)
+              ),
+            })),
+          },
         ]
         return (
           <ContextMenu
             x={ctxMenu.state!.x} y={ctxMenu.state!.y}
             items={items}
             onClose={() => { ctxMenu.close(); setCtxLayerBar(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Track-area right-click menu (empty space inside a property row) ── */}
+      {ctxMenu.isOpen && ctxTrackArea && (() => {
+        const ms = ctxTrackArea.timeMs
+        const items = [
+          {
+            kind: 'action' as const,
+            label: `Add Keyframe Here  (${Math.round(ms)}ms)`,
+            shortcut: undefined, disabled: false,
+            onSelect: () => addKeyframeAtTime(ctxTrackArea.trackTarget, ms),
+          },
+          {
+            kind: 'action' as const,
+            label: 'Add Keyframe at Playhead',
+            shortcut: undefined, disabled: false,
+            onSelect: () => addKeyframeAtPlayhead(ctxTrackArea.trackTarget),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: 'Set Playhead Here',
+            shortcut: undefined, disabled: false,
+            onSelect: () => onTimeChange(Math.max(0, Math.min(duration, ms))),
+          },
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxTrackArea(null) }}
           />
         )
       })()}
@@ -783,6 +1110,18 @@ export default function TimelinePanel({
         </div>
       )}
 
+      {/* ── Minimap (BL-43) — quick overview + pan ────────────────────────── */}
+      <TimelineMinimap
+        durationMs={duration}
+        currentTimeMs={currentTimeMs}
+        timeline={timeline}
+        scrollLeftPx={vp.scrollLeftPx}
+        totalContentPx={vp.totalContentPx}
+        trackWidth={vp.trackWidth}
+        setScrollLeftPx={vp.setScrollLeftPx}
+        onSeek={onTimeChange}
+      />
+
       {/* ── Status bar ───────────────────────────────────────────────────── */}
       <TimelineStatusBar
         currentTimeMs={currentTimeMs}
@@ -793,6 +1132,7 @@ export default function TimelinePanel({
         snapLabel={drag.snapIndicatorMs != null
           ? `${Math.round(drag.snapIndicatorMs)}ms`
           : null}
+        autoKeyMode={settings.autoKeyMode ?? (settings.autoKeyframe ? 'auto' : 'manual')}
       />
     </div>
   )
@@ -873,4 +1213,242 @@ function readLayerPropAsNumber(layer: Layer, prop: string): number | undefined {
     } else { return undefined }
   }
   return typeof cur === 'number' ? cur : undefined
+}
+
+// ── KeyframeEditWindow ─────────────────────────────────────────────────────
+// Floating, draggable, modeless edit window. Non-modal so the underlying
+// timeline stays fully interactive while it's open. Opens to the right of
+// the clicked keyframe (or flipped to the left if there's no room),
+// vertically centred on the kf. After the first paint the user can drag
+// it anywhere by the title bar; the position sticks in `editingKf.posX/Y`
+// so re-renders don't bounce it back.
+
+const POPOVER_W = 252
+const POPOVER_H = 220
+const ANCHOR_GAP = 14
+
+function KeyframeEditWindow({
+  editingKf, propPath, inEasing, outEasing, hasPrev, hasNext,
+  onChangeDraftTime, onChangeDraftValue, onMove,
+  onSetInEasing, onSetOutEasing, onClose, onCommit,
+}: {
+  editingKf: {
+    anchorX: number; anchorY: number
+    posX: number | null; posY: number | null
+    draftTime: string; draftValue: string
+  }
+  propPath: string
+  inEasing: EasingType | null
+  outEasing: EasingType | null
+  hasPrev: boolean
+  hasNext: boolean
+  onChangeDraftTime:  (v: string) => void
+  onChangeDraftValue: (v: string) => void
+  onMove:             (x: number, y: number) => void
+  onSetInEasing:      (t: EasingType) => void
+  onSetOutEasing:     (t: EasingType) => void
+  onClose:            () => void
+  onCommit:           () => void
+}) {
+  const { left, top } = useMemo(() => {
+    if (editingKf.posX != null && editingKf.posY != null) {
+      return { left: editingKf.posX, top: editingKf.posY }
+    }
+    // Initial placement relative to the click point. Default = pop up and
+    // to the right of the cursor (like a context menu). If the popover
+    // wouldn't fit on a given side, flip to the opposite.
+    const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
+    const vh = typeof window !== 'undefined' ? window.innerHeight :  720
+    const ax = editingKf.anchorX
+    const ay = editingKf.anchorY
+    // Horizontal: right of cursor unless it would overflow.
+    let l = ax + ANCHOR_GAP
+    if (l + POPOVER_W > vw - 8) l = ax - ANCHOR_GAP - POPOVER_W
+    // Vertical: above the cursor (so the popover's BOTTOM is just above
+    // the click) — this keeps the kf visible while editing. Flip below
+    // if there's no room above.
+    let t = ay - POPOVER_H - ANCHOR_GAP
+    if (t < 8) t = ay + ANCHOR_GAP
+    // Final clamp so a tiny viewport never lets the window escape.
+    l = Math.max(8, Math.min(vw - POPOVER_W - 8, l))
+    t = Math.max(8, Math.min(vh - POPOVER_H - 8, t))
+    return { left: l, top: t }
+  }, [editingKf.anchorX, editingKf.anchorY, editingKf.posX, editingKf.posY])
+
+  // Drag from the title bar — global pointer listeners so the drag tracks
+  // even when the cursor leaves the title bar mid-drag.
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null)
+  useEffect(() => {
+    if (!dragRef.current) return
+    const onMoveEv = (e: PointerEvent) => {
+      const d = dragRef.current; if (!d) return
+      const vw = window.innerWidth, vh = window.innerHeight
+      const nx = Math.max(8, Math.min(vw - POPOVER_W - 8, d.origX + e.clientX - d.startX))
+      const ny = Math.max(8, Math.min(vh - POPOVER_H - 8, d.origY + e.clientY - d.startY))
+      onMove(nx, ny)
+    }
+    const onUp = () => { dragRef.current = null }
+    window.addEventListener('pointermove', onMoveEv)
+    window.addEventListener('pointerup',   onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMoveEv)
+      window.removeEventListener('pointerup',   onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }) // re-arm each render — ref drives the actual gating
+
+  // Click-outside close — non-modal, so we listen at the document level
+  // and ignore clicks inside the window. Stop closing if the user is
+  // mid-drag (rare race when releasing the pointer over an unrelated area).
+  const windowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (dragRef.current) return
+      if (windowRef.current && windowRef.current.contains(e.target as Node)) return
+      onClose()
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [onClose])
+
+  const beginDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      origX: left, origY: top,
+    }
+  }
+
+  return (
+    <div
+      ref={windowRef}
+      className="fixed z-50 bg-gray-900 border border-gray-700 rounded-md shadow-2xl
+                 text-[11px] text-gray-300 select-none"
+      style={{ left, top, width: POPOVER_W }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter')  { e.preventDefault(); onCommit() }
+        if (e.key === 'Escape') { e.preventDefault(); onClose() }
+        e.stopPropagation()
+      }}
+    >
+      {/* Title bar — drag handle + close */}
+      <div
+        className="flex items-center justify-between px-2 py-1 bg-gray-800
+                   rounded-t-md border-b border-gray-700 cursor-move"
+        onPointerDown={beginDrag}
+      >
+        <span className="text-[10px] font-mono text-gray-400 truncate" title={propPath}>
+          {propPath}
+        </span>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={onClose}
+          className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-white
+                     hover:bg-gray-700 rounded leading-none"
+          title="Close (Esc)"
+        >×</button>
+      </div>
+
+      <div className="p-3">
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-gray-600">Time (ms)</span>
+            <input
+              autoFocus type="number" value={editingKf.draftTime}
+              onChange={(e) => onChangeDraftTime(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                         text-white font-mono focus:outline-none focus:border-blue-500"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-gray-600">Value</span>
+            <input
+              type="number" step="any" value={editingKf.draftValue}
+              onChange={(e) => onChangeDraftValue(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                         text-white font-mono focus:outline-none focus:border-blue-500"
+            />
+          </label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <EasingSlot
+            label="In"
+            value={inEasing}
+            disabled={!hasPrev}
+            emptyLabel={!hasPrev ? '— no prev key —' : undefined}
+            onChange={onSetInEasing}
+          />
+          <EasingSlot
+            label="Out"
+            value={outEasing}
+            disabled={!hasNext}
+            emptyLabel={!hasNext ? '— no next key —' : undefined}
+            onChange={onSetOutEasing}
+          />
+        </div>
+
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={onClose}
+            className="px-2 py-1 text-[10px] bg-gray-800 hover:bg-gray-700 rounded text-gray-400"
+          >Cancel</button>
+          <button
+            onClick={onCommit}
+            className="px-2 py-1 text-[10px] bg-blue-600 hover:bg-blue-500 rounded text-white"
+          >Apply  ↵</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── EasingSlot ─────────────────────────────────────────────────────────────
+// Small <select> used in the keyframe edit popover for IN / OUT easing.
+// When `disabled` is true (no neighbouring keyframe) we render a flat
+// placeholder line instead of an empty <select> so the user instantly sees
+// "nothing to set here" without trying to interact.
+const EASING_OPTIONS: { value: EasingType; label: string }[] = [
+  { value: 'linear',       label: 'Linear' },
+  { value: 'easeIn',       label: 'Ease In' },
+  { value: 'easeOut',      label: 'Ease Out' },
+  { value: 'easeInOut',    label: 'Ease In/Out' },
+  { value: 'hold',         label: 'Hold' },
+  { value: 'customBezier', label: 'Custom Bezier' },
+]
+function EasingSlot({
+  label, value, disabled, emptyLabel, onChange,
+}: {
+  label:      string
+  value:      EasingType | null
+  disabled:   boolean
+  emptyLabel?: string
+  onChange:   (type: EasingType) => void
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] uppercase tracking-wider text-gray-600">{label}</span>
+      {disabled ? (
+        <div className="px-1.5 py-1 bg-gray-950/50 border border-dashed border-gray-800
+                        rounded text-[9px] text-gray-600 italic text-center select-none">
+          {emptyLabel ?? '— n/a —'}
+        </div>
+      ) : (
+        <select
+          value={value ?? 'linear'}
+          onChange={(e) => onChange(e.target.value as EasingType)}
+          className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                     text-white font-mono focus:outline-none focus:border-blue-500"
+        >
+          {EASING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
 }

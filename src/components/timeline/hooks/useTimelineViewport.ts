@@ -62,34 +62,22 @@ export function useTimelineViewport(durationMs: number): ViewportReturn {
   const visibleStartMs = pixelToMs(scrollLeftPx,                durationMs, zoomFactor, trackWidth)
   const visibleEndMs   = pixelToMs(scrollLeftPx + trackWidth,   durationMs, zoomFactor, trackWidth)
 
-  // ── Wheel: zoom around cursor (anchor), or pan horizontally with shift ───
+  // ── Wheel: pan horizontally (zoom intentionally removed) ─────────────────
+  //
+  // Cursor-anchored wheel zoom was disabled per user request — the math was
+  // drifting in edge cases (zoom factor not landing on a clean value, cursor
+  // not staying glued under repeated rapid wheels). Zoom now lives only in
+  // the toolbar slider, which directly sets a discrete factor.
+  //
+  // Plain wheel and shift+wheel both pan horizontally so the user keeps the
+  // muscle memory of "scroll the timeline" without accidentally zooming.
   const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const el = trackAreaRef.current
     if (!el) return
-    const rect = el.getBoundingClientRect()
-
-    // Shift+wheel = pan horizontally
-    if (e.shiftKey) {
-      setScrollLeftPx((s) => clamp(s + e.deltaY, 0, maxScrollPx))
-      return
-    }
-
-    // Plain wheel = zoom around the cursor's time position
-    const cursorOffsetInViewportPx = e.clientX - rect.left
-    const cursorMs = clientXToMs(e.clientX, rect.left, scrollLeftPx, durationMs, zoomFactor, trackWidth)
-
-    const zoomDelta = e.deltaY > 0 ? 0.85 : 1 / 0.85
-    const newZoom   = clamp(zoomFactor * zoomDelta, MIN_ZOOM, MAX_ZOOM)
-    if (newZoom === zoomFactor) return
-
-    // Where the cursor's ms would land in the new zoomed coordinate system
-    const newCursorPx = msToPixel(cursorMs, durationMs, newZoom, trackWidth)
-    const newMaxScrollPx = Math.max(0, trackWidth * newZoom - trackWidth)
-    const newScrollLeftPx = clamp(newCursorPx - cursorOffsetInViewportPx, 0, newMaxScrollPx)
-
-    setZoomFactor(newZoom)
-    setScrollLeftPx(newScrollLeftPx)
-  }, [zoomFactor, scrollLeftPx, trackWidth, durationMs, maxScrollPx])
+    const delta = e.shiftKey ? e.deltaY : (e.deltaX || e.deltaY)
+    if (delta === 0) return
+    setScrollLeftPx((s) => clamp(s + delta, 0, maxScrollPx))
+  }, [maxScrollPx])
 
   // ── Helpers for components ────────────────────────────────────────────────
   const clientXToMsHelper = useCallback((clientX: number): number => {

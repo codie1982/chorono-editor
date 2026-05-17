@@ -78,6 +78,11 @@ export interface InteractiveRuntimeReturn {
 
   /** Per-frame pipeline. Call from the render loop with the global time. */
   evaluateFrame: (globalTimeMs: number) => FrameEvalResult
+  /** Monotonic counter that increments every animation frame while a
+   *  segment is actively playing. Consumers add it to `useMemo` deps to
+   *  force re-evaluation on each frame without polling. Returns 0 when
+   *  no segment is active. */
+  segmentTick: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +131,24 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     segmentRef.current = null
     setSegmentState(null)
   }, [])
+
+  // ── Per-frame tick while a segment is active ──────────────────────────
+  // evaluateFrame is wrapped in useMemo by callers — without a state
+  // change there's nothing to invalidate the memo. Segment playback time
+  // is derived from `performance.now()` in computeSegmentTime, so we just
+  // need to force a re-render at the display rate. A simple RAF loop
+  // bumps `segmentTick` which the consumer adds to its useMemo deps.
+  const [segmentTick, setSegmentTick] = useState(0)
+  useEffect(() => {
+    if (!segmentState) return
+    let raf = 0
+    const loop = () => {
+      setSegmentTick((t) => (t + 1) | 0)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [segmentState])
 
   // ── Listener registry ──────────────────────────────────────────────────
   const listenersRef = useRef<Set<(event: RuntimeEvent) => void>>(new Set())
@@ -265,5 +288,6 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     stopSegment,
     onEvent,
     evaluateFrame,
+    segmentTick,
   }
 }

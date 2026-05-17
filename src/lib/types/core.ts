@@ -109,6 +109,11 @@ export interface Track {
   target: string
   label?: string
   keyframes: Keyframe[]
+  /** Track-kind discriminator (BL-35). Optional for backward compat:
+   *  legacy tracks without a `kind` are treated as 'property'. See
+   *  `src/lib/timeline/tracks.ts` for the full union (event / audio /
+   *  marker / state / trigger track types). */
+  kind?: 'property'
   // TODO(big-feature): controller type — currently every track is implicit
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
@@ -155,6 +160,11 @@ export interface Timeline {
   workAreaOutMs?: number
   markers?: TimelineMarker[]
   segments?: TimelineSegment[]
+  /** BL-36 — discrete event markers fired when the playhead crosses them
+   *  (e.g. playSound, emitParticles, openModal). Imported via the AnyTrack
+   *  union when displayed but stored separately so existing scene data
+   *  doesn't need migration. */
+  events?: import('../timeline/tracks').TimelineEvent[]
 }
 
 // ── Transform ─────────────────────────────────────────────────────────────────
@@ -255,6 +265,9 @@ export interface Layer {
   locked?:     boolean
   hidden?:     boolean
   solo?:       boolean
+  /** Pinned layers stick to the top of the timeline list, scroll-independent.
+   *  Useful for keeping a controller / camera / master layer always visible. */
+  pinned?:     boolean
   colorLabel?: string  // e.g. '#3B82F6'
 }
 

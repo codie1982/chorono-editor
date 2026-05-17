@@ -68,7 +68,7 @@ export { buildEffectsFilter } from './effects'
 
 export type {
   AnimatableGroup, AnimatableProperty,
-  TimelineMode,
+  TimelineMode, AutoKeyMode,
   TimelineSettings,
   EditorSelection,
   CompositionPreset,
@@ -79,3 +79,17 @@ export {
   DEFAULT_TIMELINE_SETTINGS,
   COMPOSITION_PRESETS,
 } from './editor'
+
+// ── Track Type Architecture (BL-35) ─────────────────────────────────────────
+// Re-export the discriminated track union and guards so consumers don't
+// need to know which submodule owns the types.
+export type {
+  TrackKind, TrackBase, PropertyTrack, EventTrack, AudioTrack,
+  MarkerTrack, StateTrack, TriggerTrack, AnyTrack,
+  TimelineEvent, StateRegion, TriggerRegion,
+} from '../timeline/tracks'
+export {
+  isPropertyTrack, isEventTrack, isAudioTrack,
+  isMarkerTrack, isStateTrack, isTriggerTrack,
+  asPropertyTrack, propertyTracksOf,
+} from '../timeline/tracks'
