@@ -18,6 +18,7 @@ import { useAssetCache }       from './hooks/useAssetCache'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
+import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
@@ -709,6 +710,19 @@ export default function BuilderPage() {
     currentTimeMs, dispatchCommand,
   })
 
+  // ── BL-56 Timeline Ghost / Onion-Skin (page-level state so SceneCanvas
+  //    and TimelinePanel both read from the same source of truth) ─────────
+  const {
+    ghostSettings,
+    updateGhostSettings,
+    toggleGhost,
+    applyPreset: applyGhostPreset,
+  } = useTimelineGhost()
+  const selectedTimelineForGhost = useMemo(
+    () => scene.timelines.find((t) => t.id === selectedTlId) ?? null,
+    [scene.timelines, selectedTlId],
+  )
+
   // ── Bulk delete selected keyframes (single undo step) ───────────────────
   const deleteSelectedKeyframes = useCallback(() => {
     if (selectedKfIds.size === 0) return false
@@ -967,6 +981,8 @@ export default function BuilderPage() {
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}
+                    ghostSettings={ghostSettings}
+                    selectedTimeline={selectedTimelineForGhost}
                     menuHandlers={{
                       cut:        cutSelectedLayers,
                       copy:       copySelectedLayers,
@@ -1045,6 +1061,10 @@ export default function BuilderPage() {
                       onPlaybackSpeedChange={setPlaybackSpeed}
                       onPlaySegment={(tlId, segId, loop) => runtime.playSegment(tlId, segId, loop)}
                       activeSegmentId={runtime.segmentState?.segmentId ?? null}
+                      ghostSettings={ghostSettings}
+                      onGhostUpdate={updateGhostSettings}
+                      onGhostToggle={toggleGhost}
+                      onGhostPreset={applyGhostPreset}
                     />
                   </div>
                 ),

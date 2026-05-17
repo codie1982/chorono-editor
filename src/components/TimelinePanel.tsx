@@ -29,6 +29,7 @@ import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 import { buildKeyframeMenu } from './timeline/keyframeMenuItems'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
+import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { useKeyframeDrag, type DragSnapshot } from './timeline/hooks/useKeyframeDrag'
 import TimelineRuler           from './timeline/TimelineRuler'
 import TimelineToolbar         from './timeline/TimelineToolbar'
@@ -80,6 +81,11 @@ interface Props {
   onPlaySegment?: (timelineId: string, segmentId: string, loop?: boolean) => void
   /** Optional: currently active runtime-preview segment, highlighted in strip. */
   activeSegmentId?: string | null
+  /** BL-56 — Ghost / Onion-Skin (owned by page.tsx for cross-panel sync). */
+  ghostSettings: TimelineGhostSettings
+  onGhostUpdate: (patch: Partial<TimelineGhostSettings>) => void
+  onGhostToggle: () => void
+  onGhostPreset: (preset: 'off' | 'light' | 'medium' | 'heavy') => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,6 +96,7 @@ export default function TimelinePanel({
   currentTimeMs, isPlaying, playbackSpeed,
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
+  ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -587,6 +594,11 @@ export default function TimelinePanel({
         onPlaybackSpeedChange={onPlaybackSpeedChange}
         onModeChange={(mode) => onSettingsChange({ ...settings, timelineMode: mode })}
         onKeyframeProperties={keyframeSelectedLayers}
+        ghostSettings={ghostSettings}
+        selectedLayerIds={selectedLayerIds}
+        onGhostUpdate={onGhostUpdate}
+        onGhostToggle={onGhostToggle}
+        onGhostPreset={onGhostPreset}
       />
 
       <TrackToolBar

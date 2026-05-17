@@ -326,6 +326,37 @@ export class CanvasRenderer {
     ctx.stroke()
     ctx.restore()
   }
+
+  /**
+   * BL-56 — Render a SINGLE layer at the given overrides, used for ghost /
+   * onion-skin frames. Bypasses the scene-wide solo/hidden filter so the
+   * caller fully controls which layer is drawn.
+   *
+   * Caller is responsible for ctx.save() / ctx.restore() and globalAlpha
+   * adjustments (typically a multiplier for the ghost opacity).
+   */
+  renderSingleLayer(
+    ctx:        CanvasRenderingContext2D,
+    layer:      Layer,
+    scene:      ChronoScene,
+    assets:     AssetElementMap,
+    options: {
+      overrides?:   OverrideMap
+      paramValues?: ParamValueMap
+      timeMs:       number
+    },
+  ): void {
+    this.renderLayer(
+      ctx,
+      layer,
+      options.overrides   ?? new Map(),
+      options.paramValues ?? new Map(),
+      assets,
+      scene,
+      options.timeMs,
+      false, // never show selection outline on ghost frames
+    )
+  }
 }
 
 /** Default app-wide instance — SceneCanvas uses this. */

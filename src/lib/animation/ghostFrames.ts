@@ -86,7 +86,10 @@ function computeFrameAtTime(
 
   for (const track of tracks) {
     const value = evaluateTrack(track, timeMs)
-    if (value === undefined) continue
+    // evaluateTrack returns null when the track has no keyframes covering timeMs;
+    // ghost frames just inherit the layer's static value in that case.
+    if (value === null || value === undefined) continue
+    if (typeof value !== 'number') continue
 
     // Map track path to layer property
     const path = track.target.substring(layerPrefix.length)
