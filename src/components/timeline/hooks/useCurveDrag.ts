@@ -7,7 +7,7 @@ import {
 import { updateKfTimeMs, updateKfValue } from '@/lib/timeline/keyframeOps'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { CurveViewport } from '@/lib/timeline/curveMath'
-import { xToMs, yToValue } from '@/lib/timeline/curveMath'
+import { xToMs, yToValue, snapValue } from '@/lib/timeline/curveMath'
 
 export interface DragRef {
   kfId:        string
@@ -99,8 +99,15 @@ export function useCurveDrag({
     const useY = lock !== 'x'
 
     // Convert pointer position back into ms / value space.
-    const nextMs    = useX ? clampMs(xToMs(viewport, x), viewport) : d.startMs
-    const nextValue = useY ? yToValue(viewport, y)                  : d.startValue
+    const nextMs       = useX ? clampMs(xToMs(viewport, x), viewport) : d.startMs
+    let   nextValue    = useY ? yToValue(viewport, y)                  : d.startValue
+    // Value snap (BL-40) — opacity to 0/0.25/0.5/0.75/1, rotation to 45°
+    // increments, scale to integer ratios. Cmd/Ctrl bypasses, matching the
+    // X-axis snap convention from useKeyframeDrag.
+    if (useY && !(e.metaKey || e.ctrlKey)) {
+      const snap = snapValue(d.trackTarget, nextValue, viewport)
+      nextValue = snap.value
+    }
 
     setPreview({ ms: nextMs, value: nextValue })
 

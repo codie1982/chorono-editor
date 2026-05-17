@@ -156,3 +156,48 @@ export function formatTickValue(v: number): string {
        : Math.abs(v) >= 1   ? v.toFixed(1).replace(/\.0$/, '')
        : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
+
+// ── Value snap ──────────────────────────────────────────────────────────────
+//
+// Per-property snap targets for the vertical (value) axis. Returns common
+// "round" values that users almost always want to land on: 90° for rotation,
+// 0/1 for opacity, integer scales, etc. Threshold is in screen px so the
+// snap feels consistent regardless of how zoomed in/out the Y axis is.
+//
+// Returns the snapped value when a target is within `thresholdPx`, otherwise
+// the raw value untouched. `target` is set to the chosen snap point (or null)
+// so callers can show a visual indicator.
+
+/** Common values for a given track target, derived from the property suffix. */
+export function getValueSnapTargets(trackTarget: string): number[] {
+  const prop = trackTarget.replace(/^layers\.[^.]+\./, '')
+  if (prop.includes('rotation')) {
+    return [0, 45, 90, 135, 180, 225, 270, 315, 360, -45, -90, -135, -180, -225, -270, -315, -360]
+  }
+  if (prop === 'opacity' || prop.endsWith('.opacity')) {
+    return [0, 0.25, 0.5, 0.75, 1]
+  }
+  if (prop.includes('scale')) {
+    return [0, 0.25, 0.5, 1, 1.5, 2, 3]
+  }
+  return []
+}
+
+export function snapValue(
+  trackTarget: string,
+  rawValue:    number,
+  vp:          CurveViewport,
+  thresholdPx: number = 8,
+): { value: number; snapped: boolean; target: number | null } {
+  const targets = getValueSnapTargets(trackTarget)
+  if (targets.length === 0) return { value: rawValue, snapped: false, target: null }
+  const pxPerValue = vp.heightPx / Math.max(0.0001, vp.range.max - vp.range.min)
+  let best: { target: number; dpx: number } | null = null
+  for (const t of targets) {
+    const dpx = Math.abs((rawValue - t) * pxPerValue)
+    if (dpx <= thresholdPx && (!best || dpx < best.dpx)) best = { target: t, dpx }
+  }
+  return best
+    ? { value: best.target, snapped: true, target: best.target }
+    : { value: rawValue, snapped: false, target: null }
+}
