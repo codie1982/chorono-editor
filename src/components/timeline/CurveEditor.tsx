@@ -446,8 +446,42 @@ export default function CurveEditor({
     // overshoot for bounce/back-style curves.
     const cxRaw = (ms  - d.kfA.timeMs) / dt
     const cyRaw = (val - (d.kfA.value as number)) / dv
-    const cx = Math.max(0, Math.min(1, cxRaw))
-    const cy = Math.max(-0.5, Math.min(1.5, cyRaw))
+    let cx = Math.max(0, Math.min(1, cxRaw))
+    let cy = Math.max(-0.5, Math.min(1.5, cyRaw))
+
+    // ── Weighted-tangent axis lock (BL-40) ─────────────────────────────
+    // Shift → adjust WEIGHT (handle length along its original direction).
+    // Alt   → adjust ANGLE  (preserve original length, rotate handle).
+    // No modifier → free 2D drag (default — both weight and angle change).
+    //
+    // For P1 the handle vector is from (0,0); for P2 it's from (1,1).
+    // Project / scale the new (cx, cy) in that handle's local frame.
+    if (e.shiftKey || e.altKey) {
+      const origP = d.handle === 'p1'
+        ? { ox: 0, oy: 0, vx: d.originalBezier.cx1,     vy: d.originalBezier.cy1 }
+        : { ox: 1, oy: 1, vx: d.originalBezier.cx2 - 1, vy: d.originalBezier.cy2 - 1 }
+      const newVx = cx - origP.ox
+      const newVy = cy - origP.oy
+      const origLen2 = origP.vx * origP.vx + origP.vy * origP.vy
+      if (origLen2 > 1e-6) {
+        if (e.shiftKey) {
+          // Project (newV) onto origV — weight = magnitude along original dir
+          const scale = (newVx * origP.vx + newVy * origP.vy) / origLen2
+          cx = origP.ox + scale * origP.vx
+          cy = origP.oy + scale * origP.vy
+          cx = Math.max(0, Math.min(1, cx))
+        } else {
+          // Alt: preserve original length, just rotate to new direction
+          const newLen = Math.hypot(newVx, newVy)
+          if (newLen > 1e-6) {
+            const origLen = Math.sqrt(origLen2)
+            cx = origP.ox + (newVx / newLen) * origLen
+            cy = origP.oy + (newVy / newLen) * origLen
+            cx = Math.max(0, Math.min(1, cx))
+          }
+        }
+      }
+    }
 
     // ── Tangent-mode-aware mutation ───────────────────────────────────
     // 'broken' (default) → only the dragged handle moves.
@@ -1065,6 +1099,14 @@ export default function CurveEditor({
               const p1y = ay + bez.cy1 * (by - ay)
               const p2x = ax + bez.cx2 * (bx - ax)
               const p2y = ay + bez.cy2 * (by - ay)
+              // Weighted-tangent radius: handle vector magnitude in [0,1]²
+              // easing space. The further the handle is from its anchor, the
+              // more "weight" it has on the curve — so we draw it slightly
+              // bigger. r ∈ [3, 7] px.
+              const w1 = Math.hypot(bez.cx1,     bez.cy1)
+              const w2 = Math.hypot(bez.cx2 - 1, bez.cy2 - 1)
+              const r1 = 3 + Math.max(0, Math.min(1, w1 / Math.SQRT2)) * 4
+              const r2 = 3 + Math.max(0, Math.min(1, w2 / Math.SQRT2)) * 4
               out.push(
                 <g key={`bz-${t.target}-${kfA.id}`}>
                   {/* Tangent lines from anchor → handle */}
@@ -1072,21 +1114,21 @@ export default function CurveEditor({
                   <line x1={bx} y1={by} x2={p2x} y2={p2y} stroke="#22d3ee" strokeWidth={1} opacity={0.7} />
                   {/* P1 (orange = outgoing tangent from kfA) */}
                   <circle
-                    cx={p1x} cy={p1y} r={5}
+                    cx={p1x} cy={p1y} r={r1}
                     fill="#f59e0b" stroke="#1e1b4b" strokeWidth={1.5}
                     style={{ cursor: 'pointer' }}
                     onPointerDown={(e) => beginBezierDrag(e, kfA, kfB, t.target, 'p1')}
                   >
-                    <title>Bezier P1 — drag to reshape easing from this keyframe</title>
+                    <title>Bezier P1 — drag to reshape · Shift = weight only · Alt = angle only</title>
                   </circle>
                   {/* P2 (cyan = incoming tangent into kfB) */}
                   <circle
-                    cx={p2x} cy={p2y} r={5}
+                    cx={p2x} cy={p2y} r={r2}
                     fill="#22d3ee" stroke="#1e1b4b" strokeWidth={1.5}
                     style={{ cursor: 'pointer' }}
                     onPointerDown={(e) => beginBezierDrag(e, kfA, kfB, t.target, 'p2')}
                   >
-                    <title>Bezier P2 — drag to reshape easing into next keyframe</title>
+                    <title>Bezier P2 — drag to reshape · Shift = weight only · Alt = angle only</title>
                   </circle>
                 </g>
               )
