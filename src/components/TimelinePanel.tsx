@@ -511,13 +511,15 @@ export default function TimelinePanel({
     const tr = tl?.tracks.find((t) => t.target === trackTarget)
     const kf = tr?.keyframes.find((k) => k.id === kfId)
     if (!kf || typeof kf.value !== 'number') return
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    // Anchor at the actual MOUSE position rather than the keyframe element's
+    // bbox. The kf wrapper has weird CSS (translate -50%/-50% + a hover
+    // tooltip that inflates its bounding rect mid-double-click) so reading
+    // its rect gives a moving target. The mouse coords are always exactly
+    // where the user clicked.
     setEditingKf({
       trackTarget, kfId,
-      // Anchor at the kf node's centre — popover opens to the right/left
-      // of this point, vertically centred. Drag handle lets the user reposition.
-      anchorX: rect.left + rect.width / 2,
-      anchorY: rect.top  + rect.height / 2,
+      anchorX: e.clientX,
+      anchorY: e.clientY,
       posX: null, posY: null,
       draftTime:  String(Math.round(kf.timeMs)),
       draftValue: String(kf.value),
@@ -1249,15 +1251,21 @@ function KeyframeEditWindow({
     if (editingKf.posX != null && editingKf.posY != null) {
       return { left: editingKf.posX, top: editingKf.posY }
     }
-    // Pick a side based on free space — right by default, left if it
-    // wouldn't fit.
+    // Initial placement relative to the click point. Default = pop up and
+    // to the right of the cursor (like a context menu). If the popover
+    // wouldn't fit on a given side, flip to the opposite.
     const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
     const vh = typeof window !== 'undefined' ? window.innerHeight :  720
-    const wantRight = editingKf.anchorX + ANCHOR_GAP + POPOVER_W <= vw - 8
-    let l = wantRight
-      ? editingKf.anchorX + ANCHOR_GAP
-      : editingKf.anchorX - ANCHOR_GAP - POPOVER_W
-    let t = editingKf.anchorY - POPOVER_H / 2
+    const ax = editingKf.anchorX
+    const ay = editingKf.anchorY
+    // Horizontal: right of cursor unless it would overflow.
+    let l = ax + ANCHOR_GAP
+    if (l + POPOVER_W > vw - 8) l = ax - ANCHOR_GAP - POPOVER_W
+    // Vertical: above the cursor (so the popover's BOTTOM is just above
+    // the click) — this keeps the kf visible while editing. Flip below
+    // if there's no room above.
+    let t = ay - POPOVER_H - ANCHOR_GAP
+    if (t < 8) t = ay + ANCHOR_GAP
     // Final clamp so a tiny viewport never lets the window escape.
     l = Math.max(8, Math.min(vw - POPOVER_W - 8, l))
     t = Math.max(8, Math.min(vh - POPOVER_H - 8, t))
