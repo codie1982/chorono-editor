@@ -12,6 +12,7 @@ import {
   buildSnapTargets, snapRect, type Guide,
 } from '@/lib/snap/AlignmentGuides'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
+import MotionPathOverlay from './MotionPathOverlay'
 
 interface Props {
   scene: ChronoScene
@@ -1170,6 +1171,18 @@ export default function SceneCanvas({
               />
             )
           })()}
+
+          {/* Motion path — trajectory the selected layer follows over time,
+              sampled from the position-keyframe interpolation. Drawn UNDER
+              the selection frame so handles stay clickable. */}
+          {selectedLayer && (
+            <MotionPathOverlay
+              layer={selectedLayer}
+              scene={scene}
+              zoom={zoom}
+              currentTimeMs={timeMs}
+            />
+          )}
 
           {showFrame && selectedLayer.size && (
             <SelectionFrame
