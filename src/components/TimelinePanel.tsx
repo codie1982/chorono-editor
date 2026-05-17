@@ -405,7 +405,11 @@ export default function TimelinePanel({
   // Right-click on the empty area of a property row → "Add Keyframe Here" menu.
   const [ctxTrackArea, setCtxTrackArea] = useState<{ trackTarget: string; timeMs: number } | null>(null)
   const [editingKf, setEditingKf] = useState<{
-    trackTarget: string; kfId: string; leftPx: number; topPx: number; draft: string
+    trackTarget: string; kfId: string
+    /** Anchor coords (in viewport space) — popover positions itself near this. */
+    anchorX: number; anchorY: number
+    draftTime:  string
+    draftValue: string
   } | null>(null)
 
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
@@ -503,12 +507,13 @@ export default function TimelinePanel({
     const tr = tl?.tracks.find((t) => t.target === trackTarget)
     const kf = tr?.keyframes.find((k) => k.id === kfId)
     if (!kf || typeof kf.value !== 'number') return
-    // The keyframe DOM node is the event target; lock the editor near it.
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setEditingKf({
       trackTarget, kfId,
-      leftPx: rect.left, topPx: rect.top - 26,
-      draft: String(kf.value),
+      anchorX: rect.left + rect.width / 2,
+      anchorY: rect.top,
+      draftTime:  String(Math.round(kf.timeMs)),
+      draftValue: String(kf.value),
     })
   }, [scene.timelines, selectedTimelineId])
 
@@ -820,32 +825,135 @@ export default function TimelinePanel({
         const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
         const tr = tl?.tracks.find((t) => t.target === editingKf.trackTarget)
         const kf = tr?.keyframes.find((k) => k.id === editingKf.kfId)
-        if (!kf || typeof kf.value !== 'number') { setEditingKf(null); return null }
+        if (!kf || typeof kf.value !== 'number' || !selectedTimelineId || !tr) {
+          setEditingKf(null); return null
+        }
+        // Find prev / next kfs to know if IN/OUT easing is meaningful.
+        const sorted   = [...tr.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+        const idx      = sorted.findIndex((k) => k.id === kf.id)
+        const prevKf   = idx > 0                   ? sorted[idx - 1] : null
+        const nextKf   = idx < sorted.length - 1   ? sorted[idx + 1] : null
+        // IN easing = the easing on the PREVIOUS kf (controls the segment
+        // entering THIS kf). OUT easing = this kf's own easing.
+        const inEasing  = prevKf?.easing.type ?? null
+        const outEasing = nextKf ? kf.easing.type : null   // no segment → no OUT
+
+        const close = () => setEditingKf(null)
         const commit = () => {
-          const v = Number(editingKf.draft)
-          if (Number.isFinite(v) && v !== kf.value && selectedTimelineId) {
+          const nextTime  = Number(editingKf.draftTime)
+          const nextValue = Number(editingKf.draftValue)
+          if (Number.isFinite(nextValue) && nextValue !== kf.value) {
             dispatchCommand(makeUpdateKfValueCmd(
-              selectedTimelineId, editingKf.trackTarget, kf.id, kf.value, v,
+              selectedTimelineId, editingKf.trackTarget, kf.id, kf.value, nextValue,
             ))
           }
-          setEditingKf(null)
+          if (Number.isFinite(nextTime) && Math.round(nextTime) !== Math.round(kf.timeMs)) {
+            const clamped = Math.max(0, Math.min(duration, Math.round(nextTime)))
+            dispatchCommand(makeBulkMoveKfCmd([{
+              kfId: kf.id, target: editingKf.trackTarget, timelineId: selectedTimelineId!,
+              fromMs: kf.timeMs, toMs: clamped,
+            }]))
+          }
+          close()
         }
+        const setInEasing = (type: EasingType) => {
+          if (!prevKf) return
+          dispatchCommand(makeUpdateEasingCmd(
+            selectedTimelineId!, editingKf.trackTarget, prevKf.id,
+            prevKf.easing, { type },
+          ))
+        }
+        const setOutEasing = (type: EasingType) => {
+          if (!nextKf) return
+          dispatchCommand(makeUpdateEasingCmd(
+            selectedTimelineId!, editingKf.trackTarget, kf.id,
+            kf.easing, { type },
+          ))
+        }
+
+        // Position: anchor under the keyframe; clamp to viewport so it
+        // doesn't fall off the right edge or sit underneath the bottom.
+        const POPOVER_W = 240
+        const POPOVER_H = 200
+        const margin    = 8
+        let left = editingKf.anchorX - POPOVER_W / 2
+        let top  = editingKf.anchorY + 16          // 16px below the kf
+        if (typeof window !== 'undefined') {
+          left = Math.max(margin, Math.min(window.innerWidth  - POPOVER_W - margin, left))
+          top  = Math.max(margin, Math.min(window.innerHeight - POPOVER_H - margin, top))
+        }
+
         return (
-          <input
-            autoFocus type="number" value={editingKf.draft}
-            onChange={(e) => setEditingKf({ ...editingKf, draft: e.target.value })}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter')  { e.preventDefault(); commit() }
-              if (e.key === 'Escape') { e.preventDefault(); setEditingKf(null) }
-              e.stopPropagation()
-            }}
-            onFocus={(e) => e.currentTarget.select()}
-            className="fixed z-50 w-20 px-1 py-0.5 text-[11px] font-mono
-                       bg-gray-950 text-white border border-blue-500 rounded
-                       focus:outline-none"
-            style={{ left: editingKf.leftPx, top: editingKf.topPx }}
-          />
+          <>
+            {/* Click-outside catcher */}
+            <div className="fixed inset-0 z-40" onMouseDown={close} />
+            <div
+              className="fixed z-50 bg-gray-900 border border-gray-700 rounded shadow-xl
+                         p-3 w-60 text-[11px] text-gray-300"
+              style={{ left, top }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter')  { e.preventDefault(); commit() }
+                if (e.key === 'Escape') { e.preventDefault(); close() }
+                e.stopPropagation()
+              }}
+            >
+              <div className="text-[10px] text-gray-500 mb-2 truncate font-mono">
+                {editingKf.trackTarget.replace(`layers.`, '')}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[9px] uppercase tracking-wider text-gray-600">Time (ms)</span>
+                  <input
+                    autoFocus type="number" value={editingKf.draftTime}
+                    onChange={(e) => setEditingKf({ ...editingKf, draftTime: e.target.value })}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                               text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[9px] uppercase tracking-wider text-gray-600">Value</span>
+                  <input
+                    type="number" step="any" value={editingKf.draftValue}
+                    onChange={(e) => setEditingKf({ ...editingKf, draftValue: e.target.value })}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                               text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <EasingSlot
+                  label="In"
+                  value={inEasing}
+                  disabled={!prevKf}
+                  emptyLabel={!prevKf ? '— no prev key —' : undefined}
+                  onChange={setInEasing}
+                />
+                <EasingSlot
+                  label="Out"
+                  value={outEasing}
+                  disabled={!nextKf}
+                  emptyLabel={!nextKf ? '— no next key —' : undefined}
+                  onChange={setOutEasing}
+                />
+              </div>
+
+              <div className="flex justify-end gap-1">
+                <button
+                  onClick={close}
+                  className="px-2 py-1 text-[10px] bg-gray-800 hover:bg-gray-700 rounded text-gray-400"
+                >Cancel</button>
+                <button
+                  onClick={commit}
+                  className="px-2 py-1 text-[10px] bg-blue-600 hover:bg-blue-500 rounded text-white"
+                >Apply  ↵</button>
+              </div>
+            </div>
+          </>
         )
       })()}
 
@@ -1160,4 +1268,50 @@ function readLayerPropAsNumber(layer: Layer, prop: string): number | undefined {
     } else { return undefined }
   }
   return typeof cur === 'number' ? cur : undefined
+}
+
+// ── EasingSlot ─────────────────────────────────────────────────────────────
+// Small <select> used in the keyframe edit popover for IN / OUT easing.
+// When `disabled` is true (no neighbouring keyframe) we render a flat
+// placeholder line instead of an empty <select> so the user instantly sees
+// "nothing to set here" without trying to interact.
+const EASING_OPTIONS: { value: EasingType; label: string }[] = [
+  { value: 'linear',       label: 'Linear' },
+  { value: 'easeIn',       label: 'Ease In' },
+  { value: 'easeOut',      label: 'Ease Out' },
+  { value: 'easeInOut',    label: 'Ease In/Out' },
+  { value: 'hold',         label: 'Hold' },
+  { value: 'customBezier', label: 'Custom Bezier' },
+]
+function EasingSlot({
+  label, value, disabled, emptyLabel, onChange,
+}: {
+  label:      string
+  value:      EasingType | null
+  disabled:   boolean
+  emptyLabel?: string
+  onChange:   (type: EasingType) => void
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] uppercase tracking-wider text-gray-600">{label}</span>
+      {disabled ? (
+        <div className="px-1.5 py-1 bg-gray-950/50 border border-dashed border-gray-800
+                        rounded text-[9px] text-gray-600 italic text-center select-none">
+          {emptyLabel ?? '— n/a —'}
+        </div>
+      ) : (
+        <select
+          value={value ?? 'linear'}
+          onChange={(e) => onChange(e.target.value as EasingType)}
+          className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                     text-white font-mono focus:outline-none focus:border-blue-500"
+        >
+          {EASING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
 }
