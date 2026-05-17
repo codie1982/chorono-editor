@@ -1,0 +1,113 @@
+// ── ActionRegistry ────────────────────────────────────────────────────────────
+// Central registry for AI/UI actions. Each ActionDef wraps an EditorCommand
+// factory with JSON schema metadata so that the same registration drives:
+//   • AI tool definitions (toAITools)
+//   • MCP tool definitions (toMCPTools — future)
+//   • Optional UI macro recording (future)
+//
+// Existing EditorCommand system is untouched — ActionDef.toCommand() builds
+// commands from typed params, and dispatchCommand() consumes them as usual.
+
+import type { ChronoScene } from '@/lib/types'
+import type { EditorCommand } from '@/lib/editor/commands-keyframe'
+import type { AITool, AIToolProperty } from './types'
+
+export interface ActionDef<P = Record<string, unknown>> {
+  /** Dot-notation id, e.g. "layer.add", "keyframe.addBatch". */
+  id: string
+  /** AI tool name surfaced to the LLM. Often matches id with underscores. */
+  toolName: string
+  description: string
+  parameters: {
+    type: 'object'
+    properties: Record<string, AIToolProperty>
+    required?: string[]
+  }
+  /**
+   * Build an EditorCommand from validated params. The `scene` argument is the
+   * working scene at this step (PlannerExecutor advances it between tool calls
+   * so e.g. create_timeline → add_keyframes ordering works).
+   *
+   * Return value semantics:
+   *   • EditorCommand → dispatched normally
+   *   • null         → silently skipped (action chose not to act)
+   *   • For validation errors, return a no-op command with label
+   *     "AI ERROR: …" — the chat panel surfaces it as an error chip.
+   */
+  toCommand(params: P, scene: ChronoScene): EditorCommand | null
+}
+
+export class ActionRegistry {
+  private actions = new Map<string, ActionDef>()
+
+  register<P>(def: ActionDef<P>): void {
+    if (this.actions.has(def.id)) {
+      throw new Error(`Action "${def.id}" already registered`)
+    }
+    this.actions.set(def.id, def as ActionDef)
+  }
+
+  /** Look up by id OR by toolName (LLM uses toolName). */
+  get(idOrToolName: string): ActionDef | undefined {
+    const byId = this.actions.get(idOrToolName)
+    if (byId) return byId
+    // Fallback: scan toolName (Array.from avoids downlevelIteration on Map iterator)
+    const all = Array.from(this.actions.values())
+    for (const def of all) {
+      if (def.toolName === idOrToolName) return def
+    }
+    return undefined
+  }
+
+  getAll(): ActionDef[] {
+    return Array.from(this.actions.values())
+  }
+
+  /** Emit AITool[] for providers.ts (Anthropic / OpenAI / Custom). */
+  toAITools(): AITool[] {
+    return this.getAll().map((a) => ({
+      name: a.toolName,
+      description: a.description,
+      parameters: a.parameters,
+    }))
+  }
+
+  clear(): void {
+    this.actions.clear()
+  }
+}
+
+// ── Singleton + lazy bootstrap ────────────────────────────────────────────────
+
+export const actionRegistry = new ActionRegistry()
+
+let bootstrapped = false
+
+/**
+ * Register all built-in actions. Idempotent — safe to call from multiple
+ * entry points (API route, hook, tests). Imports are inside the function
+ * to keep ActionRegistry module-level imports zero (avoids circular hazards
+ * even though all action files only `import type` from this module).
+ */
+export async function bootstrapAIActions(): Promise<void> {
+  if (bootstrapped) return
+  bootstrapped = true
+  const [
+    { registerSceneActions },
+    { registerCompositionActions },
+    { registerLayerActions },
+    { registerTimelineActions },
+    { registerKeyframeActions },
+  ] = await Promise.all([
+    import('./actions/scene'),
+    import('./actions/composition'),
+    import('./actions/layer'),
+    import('./actions/timeline'),
+    import('./actions/keyframe'),
+  ])
+  registerSceneActions(actionRegistry)
+  registerCompositionActions(actionRegistry)
+  registerLayerActions(actionRegistry)
+  registerTimelineActions(actionRegistry)
+  registerKeyframeActions(actionRegistry)
+}

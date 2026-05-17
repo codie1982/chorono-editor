@@ -46,6 +46,7 @@ import { useDockLayout } from '@/components/dock/useDockLayout'
 import { makeRegistry, type PanelDefinition } from '@/components/dock/registry'
 import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
+import AIPanel                from '@/components/AIPanel'
 
 // ── Demo scene shown on first load ────────────────────────────────────────────
 
@@ -112,6 +113,7 @@ export default function BuilderPage() {
   const [showJson,        setShowJson]      = useState(false)
   const [showCompModal,   setShowCompModal] = useState(false)
   const [showHelp,        setShowHelp]      = useState(false)
+  const [showAI,          setShowAI]        = useState(false)
 
   // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
   // The id list is the contract validated against the persisted tree —
@@ -806,6 +808,18 @@ export default function BuilderPage() {
           {manualPreview ? <>⏹ Exit Preview</> : <>▶ Preview</>}
         </button>
 
+        {/* AI Planner toggle — chat panel for natural-language animation control */}
+        <button
+          onClick={() => setShowAI((v) => !v)}
+          title="AI Planner (right side chat panel)"
+          className={`px-3 py-1.5 text-xs rounded font-medium transition-colors flex items-center gap-1.5
+            ${showAI
+              ? 'bg-purple-500 hover:bg-purple-400 text-white'
+              : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
+        >
+          🤖 AI
+        </button>
+
         {/* Primary export — rest live inside FileMenu */}
         <button
           onClick={() => setShowJson(true)}
@@ -1069,6 +1083,15 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── AI Planner side panel ──────────────────────────────────── */}
+      {showAI && (
+        <AIPanel
+          scene={scene}
+          dispatchCommand={dispatchCommand}
+          onClose={() => setShowAI(false)}
+        />
+      )}
 
       {/* ── Toast notifications (lives above everything) ───────────── */}
       <ToastContainer />
