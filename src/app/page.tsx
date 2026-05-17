@@ -823,12 +823,15 @@ export default function BuilderPage() {
             if (fullscreenCanvas) {
               const canvasDef = registry.get('canvas')
               return (
-                <div className="absolute inset-0 bg-gray-950">
+                // `fixed inset-0` so the canvas covers the ENTIRE viewport,
+                // not just the dock work area — the page header / toolbar
+                // is hidden underneath while fullscreen is active.
+                <div className="fixed inset-0 z-[100] bg-gray-800">
                   {canvasDef?.render()}
                   <button
                     onClick={() => setFullscreenCanvas(false)}
                     title="Exit fullscreen (Esc)"
-                    className="absolute top-3 left-3 z-50 px-2.5 py-1 text-xs font-mono
+                    className="absolute top-3 left-3 z-[110] px-2.5 py-1 text-xs font-mono
                                bg-gray-900/90 border border-gray-700 text-gray-300
                                hover:bg-gray-800 rounded"
                   >

@@ -24,52 +24,20 @@ const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
 export default function DockLeafComponent({
   leaf, registry, onTabSelect, onToggleCollapse, collapseSide,
 }: Props) {
+  // NOTE on hook ordering — every hook below MUST be called on every
+  // render, even when the leaf is collapsed. The early-return for the
+  // collapsed rail therefore happens AFTER all hooks; otherwise React
+  // throws "Rendered fewer hooks than expected" when toggling collapse.
   const { drag, beginDrag, hoverTarget, setHoverTarget } = useDockDrag()
   const containerRef = useRef<HTMLDivElement>(null)
   const [localEdge, setLocalEdge] = useState<DockEdge | null>(null)
 
-  // Collapsed rail — thin strip with just an expand arrow pointing toward
-  // the original panel content direction.
-  if (leaf.collapsed) {
-    const chevron =
-      collapseSide === 'h-right' ? '〉' :  // panel was on the left, expand right
-      collapseSide === 'h-left'  ? '〈' :  // panel was on the right, expand left
-      collapseSide === 'v-bottom'? '∨' :  // panel was on top, expand down
-                                   '∧'    // panel was on bottom, expand up
-    return (
-      <div
-        key={leaf.id}
-        className="relative flex flex-col items-center justify-start
-                   bg-gray-900 border border-gray-800 dock-leaf-in"
-        style={{
-          width:  (collapseSide?.startsWith('h')) ? '24px'  : '100%',
-          height: (collapseSide?.startsWith('v')) ? '24px'  : '100%',
-        }}
-      >
-        <button
-          onClick={() => onToggleCollapse?.(false)}
-          title={`Expand · ${leaf.panels.map(p => registry.get(p)?.title ?? p).join(' / ')}`}
-          className="w-6 h-6 mt-1 flex items-center justify-center text-gray-400
-                     hover:text-white hover:bg-gray-800 rounded text-xs"
-        >
-          {chevron}
-        </button>
-        {/* Vertical label so the user knows what's hidden */}
-        {(collapseSide?.startsWith('h')) && (
-          <div className="mt-2 text-[9px] uppercase tracking-wider text-gray-500
-                          [writing-mode:vertical-rl] rotate-180 select-none">
-            {leaf.panels.map(p => registry.get(p)?.title ?? p).join(' · ')}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   // Compute hovered edge based on pointer position while dragging.
   // Source leaf is excluded — you can't drop a panel back onto its own leaf.
+  // Collapsed leaves also opt out (no useful drop target inside a 24px rail).
   const isSource = drag?.sourceLeafId === leaf.id
   useEffect(() => {
-    if (!drag || isSource) { setLocalEdge(null); return }
+    if (!drag || isSource || leaf.collapsed) { setLocalEdge(null); return }
     const el = containerRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
@@ -88,11 +56,48 @@ export default function DockLeafComponent({
     else if (fy > 1 - EDGE_THRESHOLD)    edge = 'bottom'
     setLocalEdge(edge)
     setHoverTarget({ leafId: leaf.id, edge })
-  }, [drag, isSource, leaf.id, hoverTarget?.leafId, setHoverTarget])
+  }, [drag, isSource, leaf.collapsed, leaf.id, hoverTarget?.leafId, setHoverTarget])
 
   const activePanelId = leaf.panels[leaf.activeIndex]
   const activeDef = activePanelId ? registry.get(activePanelId) : null
   const dropZoneStyle = getEdgeOverlayStyle(localEdge)
+
+  // ── Collapsed rail — thin strip with just an expand arrow ────────────────
+  //    Rendered AFTER all hooks above so React's hook count stays constant
+  //    across the collapsed ↔ expanded transition.
+  if (leaf.collapsed) {
+    const chevron =
+      collapseSide === 'h-right' ? '〉' :
+      collapseSide === 'h-left'  ? '〈' :
+      collapseSide === 'v-bottom'? '∨' :
+                                   '∧'
+    return (
+      <div
+        key={leaf.id}
+        className="relative flex flex-col items-center justify-start
+                   bg-gray-900 border border-gray-800 dock-leaf-in"
+        style={{
+          width:  (collapseSide?.startsWith('h')) ? '24px'  : '100%',
+          height: (collapseSide?.startsWith('v')) ? '24px'  : '100%',
+        }}
+      >
+        <button
+          onClick={() => onToggleCollapse?.(false)}
+          title={`Expand · ${leaf.panels.map(p => registry.get(p)?.title ?? p).join(' / ')}`}
+          className="w-6 h-6 mt-1 flex items-center justify-center text-gray-400
+                     hover:text-white hover:bg-gray-800 rounded text-xs"
+        >
+          {chevron}
+        </button>
+        {(collapseSide?.startsWith('h')) && (
+          <div className="mt-2 text-[9px] uppercase tracking-wider text-gray-500
+                          [writing-mode:vertical-rl] rotate-180 select-none">
+            {leaf.panels.map(p => registry.get(p)?.title ?? p).join(' · ')}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div

@@ -1051,7 +1051,7 @@ export default function SceneCanvas({
   return (
     <div
       ref={containerRef}
-      className={`flex-1 flex items-center justify-center bg-gray-950 overflow-hidden relative ${
+      className={`flex-1 flex items-center justify-center bg-neutral-800 overflow-hidden relative ${
         panDragRef.current ? 'cursor-grabbing' : panMode ? 'cursor-grab' : ''
       }`}
       onWheel={handleWheel}
