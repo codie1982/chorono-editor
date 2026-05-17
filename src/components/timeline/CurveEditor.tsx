@@ -8,7 +8,11 @@ import {
   type CurveViewport, type ValueRange,
 } from '@/lib/timeline/curveMath'
 import { useCurveDrag } from './hooks/useCurveDrag'
-import { makeUpdateEasingCmd, makeAddKfCmd, makeDeleteKfCmd, makeUpdateKfValueCmd, makeMirrorTimingCmd } from '@/lib/editor/commands-keyframe'
+import {
+  makeUpdateEasingCmd, makeAddKfCmd, makeDeleteKfCmd, makeUpdateKfValueCmd,
+  makeMirrorTimingCmd, makeFlattenSegmentCmd, makeReverseValuesCmd,
+  type KfValueRef,
+} from '@/lib/editor/commands-keyframe'
 import { evaluateTrack } from '@/lib/evaluator'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { TangentMode } from '@/lib/types'
@@ -1338,6 +1342,16 @@ export default function CurveEditor({
           const cmd = makeMirrorTimingCmd(scene, refs)
           if (cmd) editor.dispatchCommand(cmd)
         } : undefined,
+        reverseValues: selectedKfIds.size > 1 ? () => {
+          const refs: KfValueRef[] = []
+          for (const tr of tl.tracks) {
+            for (const k of tr.keyframes) {
+              if (selectedKfIds.has(k.id)) refs.push({ kfId: k.id, target: tr.target, timelineId: selectedTimelineId! })
+            }
+          }
+          const cmd = makeReverseValuesCmd(scene, refs)
+          if (cmd) editor.dispatchCommand(cmd)
+        } : undefined,
         setTangentMode: (k, mode) => {
           const prev = k.tangentMode
           editor.dispatchCommand({
@@ -1368,7 +1382,16 @@ export default function CurveEditor({
         setEaseOut:   () => setSeg('easeOut'),
         setEaseInOut: () => setSeg('easeInOut'),
         setHold:      () => setSeg('hold'),
-        // TODO(sprint 3+): Flatten segment — sets kfB.value = kfA.value.
+        flatten:      () => {
+          // Flatten the segment under the cursor: find the kf at-or-before
+          // the click and the kf right after; equalise B.value = A.value.
+          if (!seg) return
+          const idx = sorted.findIndex((k) => k.id === seg.id)
+          const kfB = sorted[idx + 1]
+          if (!kfB) return
+          const cmd = makeFlattenSegmentCmd(scene, tl.id, ctxData.trackTarget, seg.id, kfB.id)
+          if (cmd) editor.dispatchCommand(cmd)
+        },
       })
     }
 

@@ -29,6 +29,8 @@ export interface KeyframeMenuHandlers {
   convertToHold?: (kf: Keyframe) => void
   /** Mirror selected keyframes' times within their bounding window. */
   mirrorTiming?:  () => void
+  /** Mirror selected keyframes' VALUES around their min/max midpoint. */
+  reverseValues?: () => void
   /** Change the keyframe's tangent linkage mode (Sprint 3). */
   setTangentMode?: (kf: Keyframe, mode: TangentMode) => void
   /** Cross-panel: jump to the same kf in the OTHER view. */
@@ -68,7 +70,8 @@ export function buildKeyframeMenu(
       ],
     },
     sep(),
-    action('Mirror Timing', undefined, h.mirrorTiming, selCount < 2),
+    action('Mirror Timing',  undefined, h.mirrorTiming,  selCount < 2),
+    action('Reverse Values', undefined, h.reverseValues, selCount < 2),
     sep(),
     action('Copy',          '⌘C', h.copyKf),
     action('Cut',           '⌘X', h.cutKf),
