@@ -1,5 +1,6 @@
 'use client'
 import { useEffect } from 'react'
+import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
 
 interface Handlers {
   onUndo: () => void
@@ -14,6 +15,8 @@ interface Handlers {
   onShowHelp?: () => void
   onGroupSelected?: () => void
   onUngroupSelected?: () => void
+  /** Single-key tool shortcuts (V/H/P/G/R/S/A). No-op if absent. */
+  onToolChange?: (mode: ToolMode) => void
   frameRate?: number
 }
 
@@ -28,6 +31,7 @@ export function useKeyboard(handlers: Handlers) {
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
+    onToolChange,
     frameRate: _frameRate = 60,
   } = handlers
 
@@ -83,6 +87,19 @@ export function useKeyboard(handlers: Handlers) {
       if (meta && e.shiftKey && (e.key === 'g' || e.key === 'G') && onUngroupSelected) {
         e.preventDefault(); onUngroupSelected(); return
       }
+
+      // ── Tool shortcuts (single key, no modifier) ───────────────────────
+      // V Select, H Pan, P Pen, G Move, R Rotate, S Scale, A Anchor.
+      // Skip when any modifier is held so Cmd+G (group) keeps working.
+      if (onToolChange && !meta && !e.shiftKey && !e.altKey) {
+        const k = e.key.toLowerCase()
+        const map: Record<string, ToolMode> = {
+          v: 'select', h: 'pan', p: 'pen',
+          g: 'move', r: 'rotate', s: 'scale', a: 'anchor',
+        }
+        const next = map[k]
+        if (next) { e.preventDefault(); onToolChange(next); return }
+      }
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -93,5 +110,6 @@ export function useKeyboard(handlers: Handlers) {
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
+    onToolChange,
   ])
 }

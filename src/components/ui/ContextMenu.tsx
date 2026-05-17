@@ -76,11 +76,21 @@ interface LayerProps {
   onClose: () => void
   /** True only for the outermost menu — drives the global click/escape listeners. */
   root?: boolean
+  /** Provided by a parent MenuLayer to its child submenu. The child calls
+   *  this on mouse-enter so the parent's pending close-timer is cancelled
+   *  (cursor crossed the gap and landed safely in the submenu). */
+  cancelParentClose?:   () => void
+  /** Provided by a parent MenuLayer to its child submenu. The child calls
+   *  this on mouse-leave so the parent re-arms its close timer (cursor
+   *  left the submenu — close after the standard delay unless re-entered). */
+  scheduleParentClose?: () => void
 }
 
 const SUBMENU_CLOSE_DELAY_MS = 220   // long enough to cross the gap to submenu
 
-function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
+function MenuLayer({
+  x, y, items, onClose, root, cancelParentClose, scheduleParentClose,
+}: LayerProps) {
   const ref = useRef<HTMLDivElement>(null)
   /** Which submenu item is currently expanded (by index in `items`). */
   const [openSub, setOpenSub] = useState<number | null>(null)
@@ -98,6 +108,16 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
       window.clearTimeout(closeTimer.current)
       closeTimer.current = null
     }
+  }, [])
+
+  /** Schedule our own pending submenu-close (idempotent). Exposed so the
+   *  CHILD submenu can call back into us on its own mouse-leave. */
+  const scheduleClose = useCallback(() => {
+    if (closeTimer.current != null) return
+    closeTimer.current = window.setTimeout(() => {
+      setOpenSub(null)
+      closeTimer.current = null
+    }, SUBMENU_CLOSE_DELAY_MS)
   }, [])
 
   // ── Flip if the menu would clip the viewport edge ────────────────────────
@@ -145,24 +165,27 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
       // Hovering an action row schedules the currently-open submenu to
       // close — but only after a short delay so transit through this row
       // on the way to the submenu doesn't immediately dismiss it.
-      if (openSub != null) {
-        closeTimer.current = window.setTimeout(() => {
-          setOpenSub(null)
-          closeTimer.current = null
-        }, SUBMENU_CLOSE_DELAY_MS)
-      }
+      if (openSub != null) scheduleClose()
     }
   }
 
+  /** Layer-level mouse-enter: kill any pending close on OUR own timer AND
+   *  on the parent's timer. The latter matters because when the cursor
+   *  travels parent-row → gap → submenu-layer, the PARENT had scheduled
+   *  the submenu's close on its leave; we need to cancel that. */
+  const handleEnterLayer = () => {
+    cancelClose()
+    cancelParentClose?.()
+  }
+
   const handleLeaveLayer = () => {
-    // Leaving the entire layer queues a close — re-entering the submenu
-    // (also data-context-menu="true") will cancel it via its own enter.
-    if (openSub != null && closeTimer.current == null) {
-      closeTimer.current = window.setTimeout(() => {
-        setOpenSub(null)
-        closeTimer.current = null
-      }, SUBMENU_CLOSE_DELAY_MS)
-    }
+    // Leaving the entire layer queues OUR own pending submenu close.
+    if (openSub != null) scheduleClose()
+    // Also tell the parent to re-arm its close timer — if the cursor is
+    // now floating away from the entire menu tree, parent will fire after
+    // the delay; if it re-enters the parent / grandparent, that enter
+    // will cancel via handleEnterLayer.
+    scheduleParentClose?.()
   }
 
   return (
@@ -177,7 +200,7 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
         style={{ left: pos.left, top: pos.top }}
         onContextMenu={(e) => e.preventDefault()}
         onMouseLeave={handleLeaveLayer}
-        onMouseEnter={cancelClose}
+        onMouseEnter={handleEnterLayer}
       >
         {items.map((item, i) => {
           if (item.kind === 'separator') {
@@ -205,13 +228,19 @@ function MenuLayer({ x, y, items, onClose, root }: LayerProps) {
       </div>
 
       {/* Submenu — sibling layer so it can overflow the parent rect. We
-          pass root=false so it doesn't double-bind the global listeners. */}
+          pass root=false so it doesn't double-bind the global listeners.
+          cancelParentClose / scheduleParentClose let the submenu keep OUR
+          (parent's) timer alive while the cursor sits inside it; otherwise
+          a stray parent-leave would close the submenu out from under the
+          cursor mid-transit. */}
       {openSub != null && subAnchor && items[openSub].kind === 'submenu' && (
         <MenuLayer
           x={subAnchor.right - 2}
           y={subAnchor.top}
           items={(items[openSub] as MenuSubmenuItem).items}
           onClose={onClose}
+          cancelParentClose={cancelClose}
+          scheduleParentClose={scheduleClose}
         />
       )}
     </>

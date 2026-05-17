@@ -12,6 +12,7 @@ import {
   buildSnapTargets, snapRect, type Guide,
 } from '@/lib/snap/AlignmentGuides'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
+import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
 import ContextMenu, { useContextMenu } from './ui/ContextMenu'
 import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
@@ -53,9 +54,19 @@ interface Props {
    *  the canvas tool state without lifting all state. */
   panMode?: boolean
   onPanModeChange?: (next: boolean) => void
-  /** External tool mode (select/pan/pen). When 'pen' and a path layer is
-   *  selected, canvas clicks insert new anchors instead of starting drags. */
-  toolMode?: 'select' | 'pan' | 'pen'
+  /** External tool mode. Drives gizmo visibility (3DS Max-style isolated
+   *  transform modes) plus the legacy Select / Pan / Pen utilities.
+   *    select  → all gizmos visible (resize + rotate + anchor + axis arrows)
+   *    move    → frame + axis arrows only (no resize / rotate / anchor)
+   *    rotate  → frame + rotation handles only
+   *    scale   → frame + resize handles only
+   *    anchor  → anchor crosshair only (no frame, no resize/rotate)
+   *    pan     → canvas drag mode (no gizmos)
+   *    pen     → path anchor editing (existing behaviour) */
+  toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
+  /** Snap settings — owned by the page so the dockable SnapPanel + the
+   *  in-canvas SnapMenu both read/write the same source of truth. */
+  snap: SnapSettingsHook
   /** Fullscreen toggle — when provided, FitMenu shows an "⛶ Fullscreen
    *  canvas" item and reflects the current state. */
   fullscreen?: boolean
@@ -104,6 +115,10 @@ interface MoveState {
   startClientY: number
   width:  number
   height: number
+  /** Forced single-axis constraint (Move-mode axis arrows). Null = free.
+   *  Distinct from Shift-while-dragging which dynamically picks the
+   *  dominant axis — this is a hard lock set by the user clicking an arrow. */
+  axisLock?: 'x' | 'y' | null
 }
 
 interface ResizeState {
@@ -152,7 +167,19 @@ interface PathPointDrag {
   part: 'anchor' | 'inHandle' | 'outHandle'
 }
 
-type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | RotateState
+/** Scale-mode axis gizmo drag — modifies transform.scaleX / scaleY
+ *  rather than the layer's width/height (which is what ResizeState does). */
+interface ScaleAxisState {
+  kind: 'scaleAxis'
+  layerId: string
+  originalLayer: Layer
+  /** Which axis the user grabbed: x / y / both (centre uniform). */
+  axis: 'x' | 'y' | 'both'
+  startClientX: number
+  startClientY: number
+}
+
+type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | RotateState | ScaleAxisState
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -173,7 +200,7 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
-  panMode: controlledPanMode, onPanModeChange, toolMode,
+  panMode: controlledPanMode, onPanModeChange, toolMode, snap,
   fullscreen, onToggleFullscreen,
   menuHandlers,
 }: Props) {
@@ -186,20 +213,23 @@ export default function SceneCanvas({
   const [zoom, setZoom]       = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
 
-  // ── Snap config (master toggle + per-type) + grid size ──────────────────
-  // Master Enable Snapping (Alt+S) overrides everything; per-type checkboxes
-  // let the user keep, e.g., guides on while turning grid off. Keeping the
-  // structure mirrors SVGator / Figma / Sketch.
-  const [snapEnabled,   setSnapEnabled]   = useState(true)   // master
-  const [snapToGridOn,  setSnapToGridOn]  = useState(false)  // grid only
-  const [snapToObjects, setSnapToObjects] = useState(true)
-  const [snapToPoints,  setSnapToPoints]  = useState(true)
-  const [snapToGuides,  setSnapToGuides]  = useState(true)
-  const [snapToPixel,   setSnapToPixel]   = useState(false)
-  const [gridSize, setGridSize]           = useState(20)
+  // ── Snap config — owned upstream by useSnapSettings ─────────────────────
+  // Mirror to a ref so pointermove closures see fresh values without being
+  // re-created every settings change (drag handlers run thousands of times).
+  // Naming kept ("master/grid/objects/...") so the algorithm below didn't
+  // need to be rewritten when the source moved up the tree.
+  const snapSettings = snap.settings
+  const snapEnabled   = snapSettings.enabled
+  const snapToGridOn  = snapSettings.targets.grid
+  const snapToObjects = snapSettings.targets.objects
+  const snapToPoints  = snapSettings.targets.points
+  const snapToGuides  = snapSettings.targets.guides
+  const snapToPixel   = snapSettings.targets.pixel
+  const gridSize      = snapSettings.grid.sizePx
   const snapRef = useRef({
-    master: true, grid: false, objects: true, points: true, guides: true, pixel: false,
-    size: 20,
+    master: snapEnabled, grid: snapToGridOn, objects: snapToObjects,
+    points: snapToPoints, guides: snapToGuides, pixel: snapToPixel,
+    size:   gridSize,
   })
   useEffect(() => {
     snapRef.current = {
@@ -364,6 +394,10 @@ export default function SceneCanvas({
 
   const dragRef = useRef<ActiveDrag | null>(null)
 
+  // ── Drag-time numeric HUD (position / rotation / size readout) ───────────
+  // Mirrors AE / Figma — appears next to the cursor while transforming.
+  const [dragHud, setDragHud] = useState<{ x: number; y: number; label: string } | null>(null)
+
   // ── Pointer handlers shared by move + resize (window-level) ──────────────
   const handlePointerMove = useCallback((e: PointerEvent) => {
     const drag = dragRef.current
@@ -406,7 +440,10 @@ export default function SceneCanvas({
       // vertical" mappings: one key, intuitive, no need to remember which
       // modifier means which axis.
       let dxLocked = dx, dyLocked = dy
-      if (e.shiftKey) {
+      // Hard axis lock from Move-mode arrows beats Shift's dominant-axis logic.
+      if (drag.axisLock === 'x')      dyLocked = 0
+      else if (drag.axisLock === 'y') dxLocked = 0
+      else if (e.shiftKey) {
         if (Math.abs(dx) >= Math.abs(dy)) dyLocked = 0
         else                              dxLocked = 0
       }
@@ -459,6 +496,10 @@ export default function SceneCanvas({
         next = updateLayerProperty(next, id, 'transform.y', originalLayer.transform.y + actualDy)
       }
       editorRef.current.previewTransaction(next)
+      setDragHud({
+        x: e.clientX, y: e.clientY,
+        label: `X ${Math.round(pnx)}   Y ${Math.round(pny)}`,
+      })
       return
     }
 
@@ -489,6 +530,41 @@ export default function SceneCanvas({
       return
     }
 
+    if (drag.kind === 'scaleAxis') {
+      // Sensitivity — 100 composition px of drag doubles the scale.
+      // Positive drag (right/down) = bigger; negative = smaller. Shift =
+      // uniform regardless of which arrow was grabbed.
+      const SENS = 100
+      const o = drag.originalLayer.transform
+      let nsx = o.scaleX
+      let nsy = o.scaleY
+      const fx = 1 + dx / SENS
+      const fy = 1 + dy / SENS
+      const axis = e.shiftKey ? 'both' : drag.axis
+      if (axis === 'x')    nsx = o.scaleX * fx
+      if (axis === 'y')    nsy = o.scaleY * fy
+      if (axis === 'both') {
+        // Uniform: prefer the dominant axis direction so the drag feels
+        // natural whether the user moves diagonally or mostly one way.
+        const f = Math.abs(dx) >= Math.abs(dy) ? fx : fy
+        nsx = o.scaleX * f
+        nsy = o.scaleY * f
+      }
+      // Clamp to prevent flipping past zero (negative scale = flip; not
+      // what the user wants from a "scale bigger" drag). Min 0.05 keeps
+      // tiny shapes still selectable.
+      nsx = Math.max(0.05, nsx)
+      nsy = Math.max(0.05, nsy)
+      let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.scaleX', nsx)
+      next     = updateLayerProperty(next,             drag.layerId, 'transform.scaleY', nsy)
+      editorRef.current.previewTransaction(next)
+      setDragHud({
+        x: e.clientX, y: e.clientY,
+        label: `SX ${nsx.toFixed(2)}   SY ${nsy.toFixed(2)}`,
+      })
+      return
+    }
+
     if (drag.kind === 'rotate') {
       // Pointer angle from layer's anchor center (world coords) → delta from
       // start angle → add to original rotation. Shift = snap to 15°.
@@ -507,37 +583,62 @@ export default function SceneCanvas({
 
       const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
       editorRef.current.previewTransaction(next)
+      setDragHud({
+        x: e.clientX, y: e.clientY,
+        label: `${nextRot.toFixed(1)}°`,
+      })
       return
     }
 
     if (drag.kind === 'anchor') {
       // Anchor lives in layer-local coords. Snap is applied to the layer's
       // local axis (so the grid you see on canvas still aligns 1:1).
-      const origAX = drag.originalLayer.transform.anchorX
-      const origAY = drag.originalLayer.transform.anchorY
+      const orig = drag.originalLayer.transform
+      const origAX = orig.anchorX
+      const origAY = orig.anchorY
       let nAX = origAX + dx
       let nAY = origAY + dy
       if (snap.grid) {
         // Snap the WORLD position of the anchor to the grid, then translate
         // back to local coords. That way the visible anchor handle lands
         // exactly on a grid line.
-        const wx = drag.originalLayer.transform.x + nAX
-        const wy = drag.originalLayer.transform.y + nAY
-        nAX = snapToGrid(wx, snap.size) - drag.originalLayer.transform.x
-        nAY = snapToGrid(wy, snap.size) - drag.originalLayer.transform.y
+        const wx = orig.x + nAX
+        const wy = orig.y + nAY
+        nAX = snapToGrid(wx, snap.size) - orig.x
+        nAY = snapToGrid(wy, snap.size) - orig.y
       }
       if (snap.pixel) {
         nAX = Math.round(nAX)
         nAY = Math.round(nAY)
       }
+
+      // Visual-preserving compensation — when the layer is rotated/scaled,
+      // changing the anchor moves the rendered pivot which shifts every
+      // pixel. Counter that by translating transform.x/y so the layer
+      // stays visually pinned. (Derived from: screenP = T + A + R·S·(P − A);
+      // solving for new T that keeps screenP fixed for any P.)
+      const r  = (orig.rotationDeg * Math.PI) / 180
+      const cR = Math.cos(r), sR = Math.sin(r)
+      const sx = orig.scaleX, sy = orig.scaleY
+      const dAX = nAX - origAX
+      const dAY = nAY - origAY
+      const compX = dAX * (sx * cR - 1) - sy * sR * dAY
+      const compY = sx * sR * dAX + dAY * (sy * cR - 1)
+      const nX = orig.x + compX
+      const nY = orig.y + compY
+
       const nextScene: ChronoScene = {
         ...sceneRef.current,
         layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : {
           ...l,
-          transform: { ...l.transform, anchorX: nAX, anchorY: nAY },
+          transform: { ...l.transform, anchorX: nAX, anchorY: nAY, x: nX, y: nY },
         }),
       }
       editorRef.current.previewTransaction(nextScene)
+      setDragHud({
+        x: e.clientX, y: e.clientY,
+        label: `Anchor  ${Math.round(nAX)}, ${Math.round(nAY)}`,
+      })
       return
     }
 
@@ -609,6 +710,10 @@ export default function SceneCanvas({
       }),
     }
     editorRef.current.previewTransaction(nextScene)
+    setDragHud({
+      x: e.clientX, y: e.clientY,
+      label: `W ${Math.round(nw)}   H ${Math.round(nh)}`,
+    })
   }, [])
 
   const handlePointerUp = useCallback(() => {
@@ -617,8 +722,9 @@ export default function SceneCanvas({
     dragRef.current = null
     window.removeEventListener('pointermove', handlePointerMove)
     window.removeEventListener('pointerup',   handlePointerUp)
-    // Clear alignment guides once the drag is over
+    // Clear alignment guides + drag HUD once the drag is over
     setGuides([])
+    setDragHud(null)
 
     const ed = editorRef.current
     const finalLayer = ed.scene.layers.find((l) => l.id === drag.layerId)
@@ -891,6 +997,54 @@ export default function SceneCanvas({
     window.addEventListener('pointerup',   handlePointerUp)
   }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
 
+  // ── Move-mode axis arrow pointerdown → constrained move drag ─────────────
+  // Click X arrow → drag locked to horizontal. Click Y arrow → vertical.
+  // Click center square → free (no lock). Mirrors 3DS Max move gizmo.
+  const beginAxisMove = useCallback((axis: 'x' | 'y' | null) => (e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!layer || layer.locked) return
+    editor.beginTransaction()
+    dragRef.current = {
+      kind: 'move',
+      layerId: layer.id,
+      originalLayer: layer,
+      movingLayers: [{ id: layer.id, originalLayer: layer }],
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      width:  layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80),
+      height: layer.size?.height ?? (layer.text?.fontSize ?? 24),
+      axisLock: axis,
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup',   handlePointerUp)
+  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+
+  // ── Scale-mode axis gizmo pointerdown → scaleX/scaleY drag ──────────────
+  // X arrow → modifies transform.scaleX. Y → scaleY. Centre → uniform.
+  // Distinct from frame-resize (which mutates width/height) — this drives
+  // the scale MATRIX, which is what keyframe animations interpolate.
+  const beginScaleAxis = useCallback((axis: 'x' | 'y' | 'both') => (e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!layer || layer.locked) return
+    editor.beginTransaction()
+    dragRef.current = {
+      kind: 'scaleAxis',
+      layerId: layer.id,
+      originalLayer: layer,
+      axis,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup',   handlePointerUp)
+  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+
   // ── Preview-mode drag: fires dragStart/Move/End on draggable layers ────
   // Also writes a TEMPORARY override map entry so the dragged layer visibly
   // follows the cursor (no scene mutation — pure render-time override).
@@ -1082,8 +1236,29 @@ export default function SceneCanvas({
 
   // ── Selection frame geometry (uses preview layer state) ──────────────────
   const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
+
+  // ── 3DS Max-style gizmo visibility per toolMode ──────────────────────────
+  // Each mode shows only its own handle set so the user always sees the
+  // gizmo they're using. `select` is the legacy "everything visible" mode.
+  //   frame       — blue selection rectangle
+  //   resize      — 8 corner/edge handles that mutate width/height
+  //   cornerRot   — 4 tiny dots outside corners (Select-mode legacy)
+  //   ring        — big orange circle around anchor (Rotate-mode gizmo)
+  //   axisMove    — red/blue X/Y arrows for constrained move (Move-mode)
+  //   axisScale   — red/blue X/Y arrows for scaleX/Y (Scale-mode gizmo)
+  //   anchor      — orange crosshair at the pivot
+  const gizmo = {
+    frame:     toolMode !== 'anchor' && toolMode !== 'pan' && toolMode !== 'pen',
+    resize:    toolMode === 'select' || toolMode === 'scale',
+    cornerRot: toolMode === 'select',
+    ring:      toolMode === 'rotate',
+    axisMove:  toolMode === 'move',
+    axisScale: toolMode === 'scale',
+    anchor:    toolMode === 'select' || toolMode === 'anchor',
+  }
   const showFrame =
     !!selectedLayer && !!selectedLayer.size && !selectedLayer.locked && !selectedLayer.hidden
+    && gizmo.frame
 
   return (
     <div
@@ -1247,13 +1422,52 @@ export default function SceneCanvas({
               anchorOffsetX={selectedLayer.transform.anchorX * zoom}
               anchorOffsetY={selectedLayer.transform.anchorY * zoom}
               rotationDeg={selectedLayer.transform.rotationDeg}
-              onHandlePointerDown={beginResize}
-              onRotatePointerDown={beginRotate}
+              onHandlePointerDown={gizmo.resize ? beginResize : undefined}
+              onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
             />
           )}
 
-          {/* Anchor handle — visible for any unlocked selected layer */}
-          {selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+          {/* Move-mode axis arrows — X (red) / Y (blue) / center square.
+              Anchored at the layer's pivot in world space, screen-aligned so
+              they don't rotate with the layer (matches 3DS Max behaviour). */}
+          {gizmo.axisMove && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+            <MoveAxisGizmo
+              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
+              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              onAxisPointerDown={beginAxisMove}
+            />
+          )}
+
+          {/* Scale-mode axis gizmo — X/Y arrows with SQUARE caps + centre
+              uniform handle. Drives transform.scaleX/Y (matrix), distinct
+              from frame resize which mutates width/height (geometry). */}
+          {gizmo.axisScale && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+            <ScaleAxisGizmo
+              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
+              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              onAxisPointerDown={beginScaleAxis}
+            />
+          )}
+
+          {/* Rotate-mode ring — big orange circle around anchor.
+              Radius scales with the layer size (min 60 CSS px) so the ring
+              stays clearly outside the frame even for big shapes. */}
+          {gizmo.ring && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+            <RotateRing
+              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
+              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              radius={Math.max(
+                60,
+                ((selectedLayer.size?.width ?? 120) * 0.6) * zoom,
+                ((selectedLayer.size?.height ?? 80) * 0.6) * zoom,
+              )}
+              isDragging={dragRef.current?.kind === 'rotate'}
+              onPointerDown={beginRotate}
+            />
+          )}
+
+          {/* Anchor handle — visible in Select + Anchor modes */}
+          {gizmo.anchor && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <AnchorHandle
               x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
               y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
@@ -1261,6 +1475,9 @@ export default function SceneCanvas({
               onPointerDown={beginAnchorDrag}
             />
           )}
+
+          {/* Drag-time numeric readout (position / rotation / size) */}
+          {dragHud && <TransformHUD {...dragHud} />}
 
           {/* Alignment guide overlay — pink lines while snapping */}
           {activeGuides.length > 0 && (
@@ -1343,13 +1560,13 @@ export default function SceneCanvas({
           showGuides={showGuides}     onToggleGuides={() => setShowGuides((v) => !v)}
         />
         <SnapMenu
-          enabled={snapEnabled}     onToggleEnabled={() => setSnapEnabled((v) => !v)}
-          toObjects={snapToObjects} onToggleObjects={() => setSnapToObjects((v) => !v)}
-          toPoints={snapToPoints}   onTogglePoints={() => setSnapToPoints((v) => !v)}
-          toGuides={snapToGuides}   onToggleGuides={() => setSnapToGuides((v) => !v)}
-          toGrid={snapToGridOn}     onToggleGrid={() => setSnapToGridOn((v) => !v)}
-          toPixel={snapToPixel}     onTogglePixel={() => setSnapToPixel((v) => !v)}
-          gridSize={gridSize}       onGridSizeChange={setGridSize}
+          enabled={snapEnabled}     onToggleEnabled={() => snap.setEnabled(!snapEnabled)}
+          toObjects={snapToObjects} onToggleObjects={() => snap.setTarget('objects', !snapToObjects)}
+          toPoints={snapToPoints}   onTogglePoints={()  => snap.setTarget('points',  !snapToPoints)}
+          toGuides={snapToGuides}   onToggleGuides={()  => snap.setTarget('guides',  !snapToGuides)}
+          toGrid={snapToGridOn}     onToggleGrid={()    => snap.setTarget('grid',    !snapToGridOn)}
+          toPixel={snapToPixel}     onTogglePixel={()   => snap.setTarget('pixel',   !snapToPixel)}
+          gridSize={gridSize}       onGridSizeChange={snap.setGridSize}
         />
       </div>
 
@@ -1517,7 +1734,9 @@ interface FrameProps {
   anchorOffsetX: number
   anchorOffsetY: number
   rotationDeg: number
-  onHandlePointerDown: (h: Handle) => (e: React.PointerEvent) => void
+  /** Resize handles render only when provided (Scale + Select modes). */
+  onHandlePointerDown?: (h: Handle) => (e: React.PointerEvent) => void
+  /** Rotate handles render only when provided (Rotate + Select modes). */
   onRotatePointerDown?: (e: React.PointerEvent) => void
 }
 
@@ -2032,7 +2251,7 @@ function SelectionFrame({
 
       {/* Resize handles — circles (Figma / SVGator style), drawn on top so
           a click on the corner resizes, not rotates. */}
-      {handles.map((h) => (
+      {onHandlePointerDown && handles.map((h) => (
         <div
           key={h.key}
           onPointerDown={onHandlePointerDown(h.key)}
@@ -2041,6 +2260,224 @@ function SelectionFrame({
           style={{ left: `${h.cx}px`, top: `${h.cy}px`, cursor: HANDLE_CURSORS[h.key] }}
         />
       ))}
+    </div>
+  )
+}
+
+// ── Move-mode axis gizmo ──────────────────────────────────────────────────
+// X arrow (red), Y arrow (blue), centre square. Pure DIV — no SVG so we
+// avoid viewBox / translate positioning ambiguity. Anchored at the layer's
+// pivot in world space; screen-aligned (does NOT rotate with the layer)
+// so the user always knows which direction "X" actually goes.
+interface MoveAxisGizmoProps {
+  x: number; y: number
+  onAxisPointerDown: (axis: 'x' | 'y' | null) => (e: React.PointerEvent) => void
+}
+function MoveAxisGizmo({ x, y, onAxisPointerDown }: MoveAxisGizmoProps) {
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{ left: `${x}px`, top: `${y}px`, zIndex: 49 }}
+    >
+      <AxisArrow direction="x" color="#ef4444" cap="triangle" onPointerDown={onAxisPointerDown('x')}
+        title="Drag — locks to X axis" cursor="ew-resize" />
+      <AxisArrow direction="y" color="#3b82f6" cap="triangle" onPointerDown={onAxisPointerDown('y')}
+        title="Drag — locks to Y axis" cursor="ns-resize" />
+      <CenterHandle color="#facc15" border="#ca8a04"
+        title="Drag — free move (X + Y together)" cursor="move"
+        onPointerDown={onAxisPointerDown(null)} />
+    </div>
+  )
+}
+
+// ── Scale-mode axis gizmo ──────────────────────────────────────────────────
+// Same shape as Move gizmo but with SQUARE caps (3DS Max convention) and
+// drives transform.scaleX / scaleY instead of position. Centre square does
+// uniform scale (both axes by the same factor).
+interface ScaleAxisGizmoProps {
+  x: number; y: number
+  onAxisPointerDown: (axis: 'x' | 'y' | 'both') => (e: React.PointerEvent) => void
+}
+function ScaleAxisGizmo({ x, y, onAxisPointerDown }: ScaleAxisGizmoProps) {
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{ left: `${x}px`, top: `${y}px`, zIndex: 49 }}
+    >
+      <AxisArrow direction="x" color="#ef4444" cap="square" onPointerDown={onAxisPointerDown('x')}
+        title="Drag — scale X axis" cursor="ew-resize" />
+      <AxisArrow direction="y" color="#3b82f6" cap="square" onPointerDown={onAxisPointerDown('y')}
+        title="Drag — scale Y axis" cursor="ns-resize" />
+      <CenterHandle color="#facc15" border="#ca8a04"
+        title="Drag — uniform scale (X + Y together)" cursor="nwse-resize"
+        onPointerDown={onAxisPointerDown('both')} />
+    </div>
+  )
+}
+
+// ── Shared sub-components for the axis gizmos ──────────────────────────────
+const ARROW_LEN = 56  // axis line length in CSS px
+const ARROW_THICK = 2 // line thickness
+const ARROW_CAP = 8   // triangle / square cap size
+
+interface AxisArrowProps {
+  direction: 'x' | 'y'
+  color: string
+  cap: 'triangle' | 'square'
+  cursor: 'ew-resize' | 'ns-resize'
+  title: string
+  onPointerDown: (e: React.PointerEvent) => void
+}
+function AxisArrow({ direction, color, cap, cursor, title, onPointerDown }: AxisArrowProps) {
+  const isX = direction === 'x'
+  const hitW = isX ? ARROW_LEN + ARROW_CAP : 14
+  const hitH = isX ? 14 : ARROW_LEN + ARROW_CAP
+  const hitLeft = isX ? 0 : -7
+  const hitTop  = isX ? -7 : 0
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      title={title}
+      className="absolute pointer-events-auto"
+      style={{ left: hitLeft, top: hitTop, width: hitW, height: hitH, cursor }}
+    >
+      {/* Line */}
+      <div
+        className="absolute"
+        style={
+          isX
+            ? { left: 0, top: '50%', width: ARROW_LEN, height: ARROW_THICK, marginTop: -ARROW_THICK / 2, background: color }
+            : { left: '50%', top: 0, width: ARROW_THICK, height: ARROW_LEN, marginLeft: -ARROW_THICK / 2, background: color }
+        }
+      />
+      {/* Cap */}
+      {cap === 'triangle' ? (
+        <div
+          className="absolute"
+          style={
+            isX
+              ? {
+                  right: 0, top: '50%', width: 0, height: 0, marginTop: -ARROW_CAP,
+                  borderTop:    `${ARROW_CAP}px solid transparent`,
+                  borderBottom: `${ARROW_CAP}px solid transparent`,
+                  borderLeft:   `${ARROW_CAP + 2}px solid ${color}`,
+                }
+              : {
+                  left: '50%', bottom: 0, width: 0, height: 0, marginLeft: -ARROW_CAP,
+                  borderLeft:  `${ARROW_CAP}px solid transparent`,
+                  borderRight: `${ARROW_CAP}px solid transparent`,
+                  borderTop:   `${ARROW_CAP + 2}px solid ${color}`,
+                }
+          }
+        />
+      ) : (
+        <div
+          className="absolute"
+          style={
+            isX
+              ? {
+                  right: 0, top: '50%', width: ARROW_CAP, height: ARROW_CAP,
+                  marginTop: -ARROW_CAP / 2, background: color,
+                }
+              : {
+                  left: '50%', bottom: 0, width: ARROW_CAP, height: ARROW_CAP,
+                  marginLeft: -ARROW_CAP / 2, background: color,
+                }
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+interface CenterHandleProps {
+  color: string
+  border: string
+  title: string
+  cursor: string
+  onPointerDown: (e: React.PointerEvent) => void
+}
+function CenterHandle({ color, border, title, cursor, onPointerDown }: CenterHandleProps) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      title={title}
+      className="absolute pointer-events-auto"
+      style={{
+        left: -6, top: -6, width: 12, height: 12,
+        background: color, border: `1px solid ${border}`, cursor,
+      }}
+    />
+  )
+}
+
+// ── Rotate-mode visible ring ──────────────────────────────────────────────
+// Big orange ring around the anchor — pointer down anywhere on the ring's
+// 16px-wide click band starts a rotation. Replaces the corner dots in
+// Rotate mode (those become invisible in this mode). Radius adapts to
+// the layer's size so the ring stays outside the frame even on big shapes.
+interface RotateRingProps {
+  x: number; y: number
+  radius: number
+  isDragging: boolean
+  onPointerDown: (e: React.PointerEvent) => void
+}
+function RotateRing({ x, y, radius, isDragging, onPointerDown }: RotateRingProps) {
+  const BAND = 8                // click-band width on each side
+  const outer = radius + BAND
+  const dim = outer * 2
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{ left: `${x}px`, top: `${y}px`, zIndex: 48 }}
+    >
+      {/* Visible ring (dashed when idle, solid when dragging) */}
+      <div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          left: -radius, top: -radius, width: radius * 2, height: radius * 2,
+          border: `2px ${isDragging ? 'solid' : 'dashed'} ${isDragging ? '#fb923c' : '#fb923c99'}`,
+          boxShadow: isDragging ? '0 0 8px #fb923c66' : undefined,
+        }}
+      />
+      {/* Wider transparent click band — use SVG circle stroke since
+          CSS-only ring hit-testing would also cover the disc interior. */}
+      <svg
+        width={dim} height={dim}
+        viewBox={`0 0 ${dim} ${dim}`}
+        className="absolute"
+        style={{ left: -outer, top: -outer, overflow: 'visible' }}
+      >
+        <circle
+          cx={outer} cy={outer} r={radius}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={BAND * 2}
+          style={{ pointerEvents: 'stroke', cursor: 'grab' }}
+          onPointerDown={onPointerDown}
+        />
+      </svg>
+    </div>
+  )
+}
+
+// ── Transform HUD ─────────────────────────────────────────────────────────
+// Floats near the cursor during a drag, showing the live numeric value
+// (X/Y for move, angle for rotate, W/H for resize, anchor coords for anchor).
+// Pinned to the viewport (position: fixed) so it stays visible regardless
+// of canvas scroll/pan.
+interface TransformHUDProps {
+  x: number; y: number
+  label: string
+}
+function TransformHUD({ x, y, label }: TransformHUDProps) {
+  return (
+    <div
+      className="fixed pointer-events-none z-[100] px-2 py-1 rounded text-[11px] font-mono
+                 bg-gray-900/90 text-white border border-gray-700 shadow-lg whitespace-nowrap"
+      style={{ left: x + 16, top: y + 16 }}
+    >
+      {label}
     </div>
   )
 }

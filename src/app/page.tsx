@@ -12,6 +12,7 @@ import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
+import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
@@ -39,6 +40,7 @@ import EventsPanel         from '@/components/panels/EventsPanel'
 import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
+import SnapPanel           from '@/components/panels/SnapPanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
@@ -116,9 +118,14 @@ export default function BuilderPage() {
   const [showAI,          setShowAI]        = useState(false)
 
   // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
-  // The id list is the contract validated against the persisted tree —
-  // mismatches reset back to the default layout (recovery from corrupt state).
-  const dock = useDockLayout(['layers', 'canvas', 'properties', 'timeline'])
+  // The id list must enumerate EVERY panel the registry exposes — the
+  // validator rejects a saved tree containing any id outside this set
+  // AND requires every id here to be present in the tree. Keep in sync
+  // with the registry below.
+  const dock = useDockLayout([
+    'layers', 'canvas', 'properties', 'timeline', 'curveEditor',
+    'parameters', 'events', 'motionBinding', 'runtimePreview', 'assets', 'snap',
+  ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
   // Escape exits fullscreen
@@ -553,6 +560,10 @@ export default function BuilderPage() {
   // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
   const [toolMode, setToolMode] = useState<ToolMode>('select')
 
+  // ── Snap settings — lifted from SceneCanvas so the dockable SnapPanel
+  //    and the in-canvas SnapMenu share one source of truth. ─────────────
+  const snap = useSnapSettings()
+
   // ── Manual preview-mode toggle (so user can test draggable / tappable
   //    layers without setting up segments / clicking the Preview tab) ──────
   const [manualPreview, setManualPreview] = useState(false)
@@ -702,6 +713,7 @@ export default function BuilderPage() {
     onShowHelp: () => setShowHelp(true),
     onGroupSelected:   groupSelected,
     onUngroupSelected: ungroupSelected,
+    onToolChange:      setToolMode,
     frameRate,
   })
 
@@ -915,6 +927,7 @@ export default function BuilderPage() {
                     panMode={toolMode === 'pan'}
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
+                    snap={snap}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     menuHandlers={{
@@ -1031,6 +1044,10 @@ export default function BuilderPage() {
                     onSelectLayer={(id) => selectLayer(id)}
                   />
                 ),
+              },
+              {
+                id: 'snap', title: 'Snap',
+                render: () => <SnapPanel snap={snap} />,
               },
             ] satisfies PanelDefinition[])
             // Fullscreen canvas: skip the dock entirely and render only the
