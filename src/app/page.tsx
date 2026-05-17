@@ -517,11 +517,44 @@ export default function BuilderPage() {
     }
   }, [scene.layers, selectedLayerIds, dispatchCommand])
 
+  // Auto-key dispatch helper (BL-41). Returns true if the mode is currently
+  // effective. Two modes write keyframes:
+  //   • autoKeyMode === 'auto'   → always (paused or playing)
+  //   • autoKeyMode === 'record' → only WHEN PLAYBACK IS RUNNING
+  //     (mimics 3ds Max / Maya record mode — live performance capture).
+  // Manual mode never auto-writes; user must press K or use ◆ buttons.
+  const isAutoKeyActive = useCallback((): boolean => {
+    const mode = timelineSettings.autoKeyMode
+      ?? (timelineSettings.autoKeyframe ? 'auto' : 'manual')
+    if (mode === 'auto')   return true
+    if (mode === 'record') return isPlaying
+    return false
+  }, [timelineSettings.autoKeyMode, timelineSettings.autoKeyframe, isPlaying])
+
+  // Snapshot any animatable properties that changed between prev → next.
+  // Called after a Layer property mutation when auto-key is active.
+  const autoKeyChangedProps = useCallback((prev: Layer, next: Layer) => {
+    if (!selectedTlId || !isAutoKeyActive()) return
+    const candidates: string[] = [
+      'opacity',
+      'transform.x', 'transform.y',
+      'transform.scaleX', 'transform.scaleY',
+      'transform.rotationDeg',
+    ]
+    const changed = candidates.filter((p) => {
+      const a = readNumber(prev, p), b = readNumber(next, p)
+      return a !== b && typeof b === 'number'
+    })
+    if (changed.length === 0) return
+    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, changed))
+  }, [selectedTlId, currentTimeMs, dispatchCommand, isAutoKeyActive])
+
   const updateLayer = useCallback((next: Layer) => {
     const prev = scene.layers.find((l) => l.id === next.id)
     if (!prev) return
     dispatchCommand(makeUpdateLayerCmd(next.id, next, prev))
-  }, [scene.layers, dispatchCommand])
+    autoKeyChangedProps(prev, next)
+  }, [scene.layers, dispatchCommand, autoKeyChangedProps])
 
   /** Inline-rename a layer (LayerPanel double-click). Single undo step. */
   const renameLayer = useCallback((id: string, name: string) => {
@@ -932,6 +965,7 @@ export default function BuilderPage() {
                     snap={snap}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
+                    onAfterLayerCommit={autoKeyChangedProps}
                     menuHandlers={{
                       cut:        cutSelectedLayers,
                       copy:       copySelectedLayers,
@@ -1119,4 +1153,18 @@ export default function BuilderPage() {
       <ToastContainer />
     </div>
   )
+}
+
+// ── Helper: dotted-path numeric reader for Layer property comparison ───────
+// Used by the auto-key pipeline to detect which animatable fields actually
+// changed between two Layer snapshots so we only emit keyframes for those.
+function readNumber(obj: unknown, path: string): number | undefined {
+  const parts = path.split('.')
+  let cur: unknown = obj
+  for (const p of parts) {
+    if (cur && typeof cur === 'object' && p in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[p]
+    } else { return undefined }
+  }
+  return typeof cur === 'number' ? cur : undefined
 }

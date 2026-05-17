@@ -571,8 +571,10 @@ export default function TimelinePanel({
         onAutoKeyModeChange={(mode) => onSettingsChange({
           ...settings,
           autoKeyMode: mode,
-          // Derive legacy boolean so existing autoKeyframe consumers stay in sync.
-          autoKeyframe: mode !== 'manual',
+          // Keep the legacy boolean true ONLY when 'auto' — record mode
+          // is conditional (only fires during playback) and is evaluated
+          // dynamically in page.tsx's autoKeyChangedProps, not via this flag.
+          autoKeyframe: mode === 'auto',
         })}
         hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
