@@ -65,6 +65,8 @@ export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
 
 // ── Timeline Settings ─────────────────────────────────────────────────────────
 
+export type TimelineMode = 'dope' | 'curve' | 'segments'
+
 export interface TimelineSettings {
   autoKeyframe: boolean
   snapEnabled: boolean
@@ -72,6 +74,7 @@ export interface TimelineSettings {
   snapToGrid: boolean
   snapToKeyframes: boolean
   snapToMarkers: boolean
+  timelineMode: TimelineMode
   showGraphEditor: boolean
   /** Playback speed multiplier: 0.25 | 0.5 | 1 | 2 */
   playbackSpeed: number
@@ -84,6 +87,7 @@ export const DEFAULT_TIMELINE_SETTINGS: TimelineSettings = {
   snapToGrid: false,
   snapToKeyframes: true,
   snapToMarkers: true,
+  timelineMode: 'dope',
   showGraphEditor: false,
   playbackSpeed: 1,
 }
