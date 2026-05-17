@@ -8,9 +8,8 @@ import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { hitTestPath, moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
-import {
-  buildSnapTargets, snapRect, type Guide,
-} from '@/lib/snap/AlignmentGuides'
+import type { Guide } from '@/lib/snap/AlignmentGuides'
+import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
@@ -97,6 +96,8 @@ interface Props {
     alignBottom?: () => void
     distributeHorizontally?: () => void
     distributeVertically?:   () => void
+    /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
+    convertToSpline?: () => void
   }
 }
 
@@ -230,6 +231,12 @@ export default function SceneCanvas({
   const snapToGuides  = snapSettings.targets.guides
   const snapToPixel   = snapSettings.targets.pixel
   const gridSize      = snapSettings.grid.sizePx
+  // BL-26 — central SnapEngine, lazy-init + setSettings on change.
+  // Held in a ref so drag closures pick up the live engine without
+  // re-creating the handlers on every settings toggle.
+  const engineRef = useRef<SnapEngine | null>(null)
+  if (engineRef.current === null) engineRef.current = new SnapEngine(snapSettings as SnapEngineSettings)
+  useEffect(() => { engineRef.current?.setSettings(snapSettings as SnapEngineSettings) }, [snapSettings])
   const snapRef = useRef({
     master: snapEnabled, grid: snapToGridOn, objects: snapToObjects,
     points: snapToPoints, guides: snapToGuides, pixel: snapToPixel,
@@ -454,40 +461,27 @@ export default function SceneCanvas({
       let pnx = primaryOx + dxLocked
       let pny = primaryOy + dyLocked
 
-      // ── Snap to Objects / Points (alignment to OTHER layers + canvas) ───
-      // Threshold = ~6 screen px regardless of zoom. Snap runs BEFORE grid
-      // so pixel-perfect alignment wins over the grid lattice.
-      if (snap.objects || snap.points) {
-        const SNAP_PX = 6
-        const movingIds = new Set(drag.movingLayers.map(m => m.id))
-        const otherRects = sceneRef.current.layers
-          .filter(l => !movingIds.has(l.id) && !l.hidden && l.type !== 'audio' && l.size)
-          .map(l => ({
-            id: l.id, x: l.transform.x, y: l.transform.y,
-            width: l.size!.width, height: l.size!.height,
-          }))
-        const targets = buildSnapTargets(cw, ch, otherRects)
-        const movingRect = { x: pnx, y: pny, width: drag.width, height: drag.height }
-        const snapped = snapRect(movingRect, targets, SNAP_PX)
-        pnx = snapped.x
-        pny = snapped.y
-        setGuides(snapped.guides)
-      } else {
-        // No object snap → make sure any leftover guides disappear
-        if (guidesRef.current.length > 0) setGuides([])
-      }
-
-      // ── Snap to Grid ────────────────────────────────────────────────────
-      if (snap.grid) {
-        pnx = snapToGrid(pnx, snap.size)
-        pny = snapToGrid(pny, snap.size)
-      }
-
-      // ── Snap to Pixel — always last, rounds the final position ─────────
-      if (snap.pixel) {
-        pnx = Math.round(pnx)
-        pny = Math.round(pny)
-      }
+      // ── BL-26: delegate the object → grid → pixel chain to SnapEngine ──
+      // The engine reads master + per-type toggles + grid size from its
+      // settings (kept fresh by the engineRef useEffect above). Same math
+      // as before, just routed through one place so vertex / segment snap
+      // (BL-27) can plug into the same pipeline.
+      const movingIds = new Set(drag.movingLayers.map(m => m.id))
+      const otherRects = sceneRef.current.layers
+        .filter(l => !movingIds.has(l.id) && !l.hidden && l.type !== 'audio' && l.size)
+        .map(l => ({
+          id: l.id, x: l.transform.x, y: l.transform.y,
+          width: l.size!.width, height: l.size!.height,
+        }))
+      const snapped = engineRef.current!.snapRect(
+        { x: pnx, y: pny, width: drag.width, height: drag.height },
+        { canvasWidth: cw, canvasHeight: ch, otherLayers: otherRects },
+      )
+      pnx = snapped.point.x
+      pny = snapped.point.y
+      // Guide overlay — clear if the engine returned none, otherwise show.
+      if (snapped.guides.length > 0) setGuides(snapped.guides)
+      else if (guidesRef.current.length > 0) setGuides([])
 
       pnx = clamp(pnx, 0, Math.max(0, cw - drag.width))
       pny = clamp(pny, 0, Math.max(0, ch - drag.height))
@@ -1663,6 +1657,12 @@ export default function SceneCanvas({
           alignBottom: menuHandlers?.alignBottom,
           distributeHorizontally: menuHandlers?.distributeHorizontally,
           distributeVertically:   menuHandlers?.distributeVertically,
+          // BL-17 Faz 1 — wired only for shape layers with a size; non-shape
+          // selections leave it undefined, which the menu renders disabled.
+          convertToPath:
+            menuHandlers?.convertToSpline && target.type === 'shape' && target.size
+              ? menuHandlers.convertToSpline
+              : undefined,
 
           // ── Locally implemented (no page state needed) ──────────────────
           centerOrigin: () => editor.dispatchCommand(

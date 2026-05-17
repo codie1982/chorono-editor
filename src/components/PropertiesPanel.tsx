@@ -52,6 +52,9 @@ interface Props {
   allLayers?: Layer[]
   /** Scene timelines — exposed for the Drag scrubs-timeline picker. */
   allTimelines?: Array<{ id: string; durationMs: number }>
+  /** BL-17 Faz 1 — Convert shape layer to editable BezierPath. Button is
+   *  hidden when callback isn't wired (eg. text/image/group selected). */
+  onConvertToSpline?: () => void
 }
 
 // ── Genel giriş bileşenleri ─────────────────────────────────────────────────
@@ -129,6 +132,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function PropertiesPanel({
   layer, composition, onLayerChange, onCompositionChange,
   parameters = [], allLayers = [], allTimelines = [],
+  onConvertToSpline,
 }: Props) {
   // Shadow `scene` shape for the inline mask + motion path UI below.
   const scene = { layers: allLayers }
@@ -323,6 +327,25 @@ export default function PropertiesPanel({
                   </Field>
                 )}
               </Section>
+            )}
+
+            {/* ── Convert to Spline (BL-17 Faz 1) ────────────────────── */}
+            {layer.type === 'shape' && layer.size && onConvertToSpline && (
+              <div className="px-3 py-2">
+                <button
+                  onClick={onConvertToSpline}
+                  title="Bake the primitive into an editable BezierPath. Style + transform + effects preserved. Undoable."
+                  className="w-full px-2 py-1.5 text-xs rounded
+                             bg-indigo-600/80 hover:bg-indigo-500 text-white
+                             border border-indigo-500 transition-colors"
+                >
+                  ✎  Convert to Spline
+                </button>
+                <div className="text-[9px] text-gray-500 mt-1 leading-tight">
+                  Required before applying modifiers (Bend / Boolean / Fractal …).
+                  Once converted, the layer becomes editable in Edit mode (W).
+                </div>
+              </div>
             )}
 
             {/* ── Geometry (parametric shape params) ─────────────────── */}

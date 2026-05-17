@@ -106,7 +106,7 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
     },
 
     action('Set motion path',  undefined, h.setMotionPath),
-    action('Convert to path',  '⇧⌘P',    h.convertToPath),
+    action('Convert to Spline', undefined, h.convertToPath),
     action('Save to library',  undefined, h.saveToLibrary),
 
     sep(),
