@@ -166,25 +166,25 @@ export default function TimelineToolbar(props: Props) {
         ))}
       </div>
 
-      {/* Zoom controls */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => onZoomChange(Math.max(0.25, zoomFactor / 1.5))}
-          className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400"
-          title="Zoom out"
-        >−</button>
-        <span className="text-[10px] font-mono text-gray-500 w-10 text-center">
-          {zoomFactor.toFixed(1)}×
+      {/* Zoom slider (replaces cursor-anchored wheel zoom — see useTimelineViewport).
+          Logarithmic mapping so 1× sits near the middle of the track. */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] text-gray-600 select-none">Zoom</span>
+        <input
+          type="range"
+          min={0} max={100} step={1}
+          value={zoomToSlider(zoomFactor)}
+          onChange={(e) => onZoomChange(sliderToZoom(Number(e.target.value)))}
+          className="w-28 accent-blue-500 cursor-pointer"
+          title={`${zoomFactor.toFixed(2)}× — drag to scale timeline`}
+        />
+        <span className="text-[10px] font-mono text-gray-500 w-10 text-right">
+          {zoomFactor.toFixed(zoomFactor < 1 ? 2 : 1)}×
         </span>
         <button
-          onClick={() => onZoomChange(Math.min(20, zoomFactor * 1.5))}
-          className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400"
-          title="Zoom in"
-        >+</button>
-        <button
           onClick={onFit}
-          className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400"
-          title="Fit"
+          className="px-2 py-0.5 text-[10px] rounded bg-gray-700 hover:bg-gray-600 text-gray-400"
+          title="Fit (1×)"
         >Fit</button>
       </div>
 
@@ -256,4 +256,20 @@ export default function TimelineToolbar(props: Props) {
       )}
     </div>
   )
+}
+
+// ── Zoom slider mapping ──────────────────────────────────────────────────
+// Slider runs [0, 100] in UI space. Zoom factor runs [MIN_ZOOM, MAX_ZOOM]
+// in log space so 1× lands near the middle of the slider track (instead of
+// the far left, which would happen with a linear map given MAX is 20).
+const MIN_ZOOM = 0.25
+const MAX_ZOOM = 20
+const LOG_RANGE = Math.log(MAX_ZOOM / MIN_ZOOM)
+function zoomToSlider(zoom: number): number {
+  const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom))
+  return (Math.log(z / MIN_ZOOM) / LOG_RANGE) * 100
+}
+function sliderToZoom(s: number): number {
+  const t = Math.max(0, Math.min(100, s)) / 100
+  return MIN_ZOOM * Math.exp(t * LOG_RANGE)
 }
