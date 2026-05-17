@@ -1,6 +1,6 @@
 // ── Timeline Commands ─────────────────────────────────────────────────────────
 
-import type { ChronoScene, Timeline, TimelineMarker } from '../types'
+import type { ChronoScene, Timeline, TimelineMarker, TimelineEvent } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 import { newTimeline } from '../defaults'
 
@@ -65,5 +65,50 @@ export function makeAddMarkerCmd(timelineId: string, marker: TimelineMarker): Ed
         t.id !== timelineId ? t : { ...t, markers: (t.markers ?? []).filter((m) => m.id !== marker.id) }
       ),
     }),
+  }
+}
+
+// ── Events (BL-36) ───────────────────────────────────────────────────────────
+
+function mapTimelineEvents(
+  scene: ChronoScene,
+  timelineId: string,
+  fn: (events: TimelineEvent[]) => TimelineEvent[],
+): ChronoScene {
+  return {
+    ...scene,
+    timelines: scene.timelines.map((t) =>
+      t.id !== timelineId ? t : { ...t, events: fn(t.events ?? []) }
+    ),
+  }
+}
+
+export function makeAddEventCmd(timelineId: string, event: TimelineEvent): EditorCommand {
+  return {
+    label: `Add Event: ${event.name}`,
+    execute: (s) => mapTimelineEvents(s, timelineId, (es) => [...es, event].sort((a, b) => a.timeMs - b.timeMs)),
+    undo:    (s) => mapTimelineEvents(s, timelineId, (es) => es.filter((e) => e.id !== event.id)),
+  }
+}
+
+export function makeDeleteEventCmd(timelineId: string, event: TimelineEvent): EditorCommand {
+  return {
+    label: `Delete Event: ${event.name}`,
+    execute: (s) => mapTimelineEvents(s, timelineId, (es) => es.filter((e) => e.id !== event.id)),
+    undo:    (s) => mapTimelineEvents(s, timelineId, (es) => [...es, event].sort((a, b) => a.timeMs - b.timeMs)),
+  }
+}
+
+export function makeUpdateEventCmd(
+  timelineId: string, eventId: string,
+  prev: Pick<TimelineEvent, 'name' | 'timeMs' | 'payload'>,
+  next: Pick<TimelineEvent, 'name' | 'timeMs' | 'payload'>,
+): EditorCommand {
+  return {
+    label: `Update Event: ${next.name}`,
+    execute: (s) => mapTimelineEvents(s, timelineId, (es) =>
+      es.map((e) => e.id !== eventId ? e : { ...e, ...next }).sort((a, b) => a.timeMs - b.timeMs)),
+    undo: (s) => mapTimelineEvents(s, timelineId, (es) =>
+      es.map((e) => e.id !== eventId ? e : { ...e, ...prev }).sort((a, b) => a.timeMs - b.timeMs)),
   }
 }

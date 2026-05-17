@@ -160,6 +160,11 @@ export interface Timeline {
   workAreaOutMs?: number
   markers?: TimelineMarker[]
   segments?: TimelineSegment[]
+  /** BL-36 — discrete event markers fired when the playhead crosses them
+   *  (e.g. playSound, emitParticles, openModal). Imported via the AnyTrack
+   *  union when displayed but stored separately so existing scene data
+   *  doesn't need migration. */
+  events?: import('../timeline/tracks').TimelineEvent[]
 }
 
 // ── Transform ─────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import {
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
+  makeAddEventCmd, makeDeleteEventCmd, makeUpdateEventCmd,
 } from '@/lib/editor/commands-timeline'
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
@@ -36,7 +37,10 @@ import TimelineStatusBar       from './timeline/TimelineStatusBar'
 import TimelineMinimap         from './timeline/TimelineMinimap'
 import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
+import EventStrip              from './timeline/EventStrip'
 import SegmentModal            from './modals/SegmentModal'
+import type { TimelineEvent } from '@/lib/types'
+import { nextEventId } from '@/lib/defaults'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
 // the label. Same set is used by the LayerPanel-side picker so a layer
@@ -644,6 +648,41 @@ export default function TimelinePanel({
               }}
               onEdit={(seg) => setSegmentModal({ mode: 'edit', segment: seg })}
               onPlay={(segId) => onPlaySegment?.(timeline.id, segId)}
+            />
+          )}
+          {/* ── EventStrip (BL-36) ───────────────────────────────────────── */}
+          {timeline && (
+            <EventStrip
+              events={timeline.events ?? []}
+              durationMs={duration}
+              totalContentPx={vp.totalContentPx}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              onCreateAt={(ms) => {
+                if (!selectedTimelineId) return
+                const name = window.prompt('Event name', 'event')
+                if (!name) return
+                const ev: TimelineEvent = {
+                  id: nextEventId(),
+                  timeMs: Math.max(0, Math.min(duration, Math.round(ms))),
+                  name: name.trim() || 'event',
+                }
+                dispatchCommand(makeAddEventCmd(selectedTimelineId, ev))
+              }}
+              onEdit={(ev) => {
+                if (!selectedTimelineId) return
+                const nextName = window.prompt('Rename event', ev.name)
+                if (nextName == null) return
+                dispatchCommand(makeUpdateEventCmd(
+                  selectedTimelineId, ev.id,
+                  { name: ev.name,         timeMs: ev.timeMs, payload: ev.payload },
+                  { name: nextName.trim(), timeMs: ev.timeMs, payload: ev.payload },
+                ))
+              }}
+              onDelete={(ev) => {
+                if (!selectedTimelineId) return
+                dispatchCommand(makeDeleteEventCmd(selectedTimelineId, ev))
+              }}
             />
           )}
         </div>
