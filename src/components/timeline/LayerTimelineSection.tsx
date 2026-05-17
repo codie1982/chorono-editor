@@ -61,6 +61,9 @@ interface Props {
     toStartMs:   number,
     toEndMs:     number | undefined,
   ) => void
+  /** Index among pinned layers (0,1,2…). Undefined or -1 → not pinned.
+   *  Used to set sticky `top` offset so multiple pins stack. */
+  pinIndex?: number
 }
 
 const ROW_HEADER  = 32
@@ -76,8 +79,10 @@ export default function LayerTimelineSection({
   onAddTrack, onRemoveTrack, onAddKeyframeAtPlayhead,
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
-  durationMs, onLayerBarCommit,
+  durationMs, onLayerBarCommit, pinIndex,
 }: Props) {
+
+  const isPinned = pinIndex != null && pinIndex >= 0
 
   const rowH = graphMode ? ROW_TRACK_G : ROW_TRACK
 
@@ -95,8 +100,16 @@ export default function LayerTimelineSection({
       {/* ── Layer header row (label + activity bar) ───────────────────────── */}
       <div
         className={`flex items-stretch border-b border-gray-800
-          ${isPrimary ? 'bg-blue-950/40' : ''} ${layer.hidden ? 'opacity-60' : ''}`}
-        style={{ height: ROW_HEADER }}
+          ${isPrimary ? 'bg-blue-950/40' : ''} ${layer.hidden ? 'opacity-60' : ''}
+          ${isPinned ? 'bg-gray-900 shadow-md shadow-black/40' : ''}`}
+        style={{
+          height: ROW_HEADER,
+          ...(isPinned ? {
+            position: 'sticky',
+            top: pinIndex! * ROW_HEADER,
+            zIndex: 5,
+          } : null),
+        }}
       >
         {/* Left: label */}
         <div
@@ -115,7 +128,11 @@ export default function LayerTimelineSection({
             className="w-4 text-xs text-gray-500 hover:text-gray-300"
           >{expanded ? '▾' : '▸'}</button>
           <span className="w-4 text-xs text-center">{LAYER_ICON[layer.shape ?? layer.type] ?? '□'}</span>
-          <span className="flex-1 truncate text-xs text-gray-200">{layer.name}</span>
+          <span className="flex-1 truncate text-xs text-gray-200">
+            {layer.pinned && <span className="text-blue-400 mr-1" title="Pinned">📌</span>}
+            {layer.solo && !layer.pinned && <span className="text-amber-400 mr-1" title="Solo">★</span>}
+            {layer.name}
+          </span>
           <span className="text-[9px] font-mono text-gray-500">{tracks.length}</span>
           <LayerFlag active={!layer.hidden} on="●" off="○" onClick={(e) => { e.stopPropagation(); onToggleFlag('hidden') }} />
           <LayerFlag active={!!layer.locked} on="🔒" off="🔓" onClick={(e) => { e.stopPropagation(); onToggleFlag('locked') }} />

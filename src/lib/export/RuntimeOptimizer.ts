@@ -38,7 +38,7 @@ export class RuntimeOptimizer {
       ...scene,
       layers: scene.layers.map(l => {
         const {
-          locked: _l, hidden: _h, solo: _s, colorLabel: _c, internalGrid: _g,
+          locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c, internalGrid: _g,
           ...keep
         } = l
         return keep as Layer

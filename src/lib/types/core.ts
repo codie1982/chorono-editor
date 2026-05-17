@@ -255,6 +255,9 @@ export interface Layer {
   locked?:     boolean
   hidden?:     boolean
   solo?:       boolean
+  /** Pinned layers stick to the top of the timeline list, scroll-independent.
+   *  Useful for keeping a controller / camera / master layer always visible. */
+  pinned?:     boolean
   colorLabel?: string  // e.g. '#3B82F6'
 }
 

@@ -106,16 +106,31 @@ export default function TimelinePanel({
   const [layerFilter, setLayerFilter] = useState('')
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
-    if (!q) return scene.layers
-    return scene.layers.filter((l) => {
-      if (l.name.toLowerCase().includes(q)) return true
-      if (l.type.toLowerCase().includes(q)) return true
-      // Match by tracked property path too — "rotation" should surface
-      // layers with rotation tracks even if names don't mention it.
-      const tracks = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${l.id}.`)) ?? []
-      return tracks.some((t) => t.target.toLowerCase().includes(q))
-    })
+    // Step 1: solo mode — if any layer is solo'd, hide everything else.
+    const anySolo = scene.layers.some((l) => l.solo)
+    let next = anySolo ? scene.layers.filter((l) => l.solo) : scene.layers
+    // Step 2: text filter
+    if (q) {
+      next = next.filter((l) => {
+        if (l.name.toLowerCase().includes(q)) return true
+        if (l.type.toLowerCase().includes(q)) return true
+        const tracks = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${l.id}.`)) ?? []
+        return tracks.some((t) => t.target.toLowerCase().includes(q))
+      })
+    }
+    // Step 3: pinned to the top, preserve original order within each group.
+    const pinned   = next.filter((l) =>  l.pinned)
+    const unpinned = next.filter((l) => !l.pinned)
+    return [...pinned, ...unpinned]
   }, [scene.layers, layerFilter, timeline])
+
+  // Map: layerId → pin index (0,1,2…) — only set for pinned layers.
+  const pinIndexFor = useMemo(() => {
+    const m = new Map<string, number>()
+    let i = 0
+    for (const l of visibleLayers) { if (l.pinned) { m.set(l.id, i); i++ } }
+    return m
+  }, [visibleLayers])
   const toggleLayerExpand = useCallback((id: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev)
@@ -590,6 +605,7 @@ export default function TimelinePanel({
             selectedKfIds={selectedKfIds}
             previewMs={drag.previewMs}
             durationMs={duration}
+            pinIndex={pinIndexFor.get(layer.id) ?? -1}
             onToggleExpand={() => toggleLayerExpand(layer.id)}
             onSelectLayer={(shift) => onSelectLayer(layer.id, shift)}
             onToggleFlag={(field) => onToggleLayerFlag(layer.id, field)}
@@ -790,6 +806,23 @@ export default function TimelinePanel({
             disabled: splitMs >= (layer.endMs ?? scene.composition.durationMs),
             onSelect: () => dispatchCommand(
               makeTrimLayerCmd(layer.id, 'end', layer.endMs ?? scene.composition.durationMs, splitMs)
+            ),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: layer.pinned ? '📌 Unpin Layer' : '📌 Pin Layer to Top',
+            shortcut: undefined, disabled: false,
+            onSelect: () => dispatchCommand(
+              makeUpdateLayerCmd(layer.id, { pinned: !layer.pinned }, layer)
+            ),
+          },
+          {
+            kind: 'action' as const,
+            label: layer.solo ? 'Exit Solo' : 'Solo in Timeline',
+            shortcut: undefined, disabled: false,
+            onSelect: () => dispatchCommand(
+              makeUpdateLayerCmd(layer.id, { solo: !layer.solo }, layer)
             ),
           },
           { kind: 'separator' as const },
