@@ -84,6 +84,10 @@ export default function CurveEditor({
 
   // ── Per-track visibility toggle (3ds Max-style: click curve name to hide) ─
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  // ── Curve isolation (BL-40) — when set, all other tracks render as low-opacity
+  // ghosts so the user can focus on this one curve without losing peripheral
+  // shape context. Esc clears. Toggling the same track also clears.
+  const [isolatedTrack, setIsolatedTrack] = useState<string | null>(null)
   const visibleTracks = useMemo(
     () => tracks.filter((t) => !hidden.has(t.target)),
     [tracks, hidden],
@@ -237,13 +241,23 @@ export default function CurveEditor({
         e.preventDefault(); setViewStartMs(0); setViewEndMs(duration)
       }
       else if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHandles((v) => !v) }
+      else if (e.key === 'i' || e.key === 'I') {
+        // Toggle isolation: hovered track → solo it; else if anything is
+        // isolated → clear; else no-op (no hover target).
+        e.preventDefault()
+        if (hoveredTrack) setIsolatedTrack((cur) => cur === hoveredTrack ? null : hoveredTrack)
+        else if (isolatedTrack) setIsolatedTrack(null)
+      }
+      else if (e.key === 'Escape' && isolatedTrack) {
+        e.preventDefault(); setIsolatedTrack(null)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // fitToSelection captured below where it's defined; close over deps via
     // the latest-ref pattern is unnecessary here because state changes
     // re-create the listener.
-  }, [isHovered, duration]) // fitToSelection is stable enough; small cycle is OK
+  }, [isHovered, duration, hoveredTrack, isolatedTrack]) // fitToSelection is stable enough; small cycle is OK
 
   // ── Fit-to-selection — zooms the X axis to the selected keyframes' range ─
   const fitToSelection = useCallback(() => {
@@ -738,23 +752,32 @@ export default function CurveEditor({
           {tracks.map((t, i) => {
             const color = pickTrackColor(t.target, i)
             const isHidden = hidden.has(t.target)
+            const isIso    = isolatedTrack === t.target
             const label = t.target.replace(`layers.${layer.id}.`, '')
             return (
               <button
                 key={t.target}
-                onClick={() => setHidden((prev) => {
-                  const next = new Set(prev)
-                  if (next.has(t.target)) next.delete(t.target)
-                  else                    next.add(t.target)
-                  return next
-                })}
+                onClick={(e) => {
+                  // Shift+click → toggle isolation (BL-40); plain click → hide/show.
+                  if (e.shiftKey) {
+                    setIsolatedTrack((cur) => cur === t.target ? null : t.target)
+                    return
+                  }
+                  setHidden((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(t.target)) next.delete(t.target)
+                    else                    next.add(t.target)
+                    return next
+                  })
+                }}
                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity ${
                   isHidden ? 'opacity-30 hover:opacity-60' : 'opacity-100'
-                } hover:bg-gray-800`}
-                title={isHidden ? 'Show this curve' : 'Hide this curve'}
+                } ${isIso ? 'ring-1 ring-blue-400 bg-blue-950/40' : 'hover:bg-gray-800'}`}
+                title={`${isHidden ? 'Show' : 'Hide'} curve · Shift+click to ${isIso ? 'exit isolate' : 'isolate'} (I)`}
               >
                 <span style={{ color }}>■</span>
                 <span className="ml-1 text-gray-300">{label}</span>
+                {isIso && <span className="ml-1 text-blue-400 text-[8px]">SOLO</span>}
               </button>
             )
           })}
@@ -916,7 +939,11 @@ export default function CurveEditor({
               const ms = viewStartMs + (x / plotW) * Math.max(1, viewEndMs - viewStartMs)
               addKeyframeAt(t.target, Math.max(0, Math.min(duration, ms)))
             }
-            const isHovered = hoveredTrack === t.target
+            const isHovered  = hoveredTrack === t.target
+            const isIsolated = isolatedTrack === t.target
+            // When something is isolated, non-isolated tracks are dimmed
+            // ghosts (still visible for shape reference, not interactive).
+            const isDimmed = isolatedTrack != null && !isIsolated
             // Find which segment the pointer is over (used by click + ctx)
             const sortedKfs = [...t.keyframes].sort((a, b) => a.timeMs - b.timeMs)
             const findSegmentAt = (ms: number) => {
@@ -947,6 +974,7 @@ export default function CurveEditor({
                   fill="none" stroke="transparent"
                   strokeWidth={10}
                   style={{ cursor: 'pointer' }}
+                  pointerEvents={isDimmed ? 'none' : undefined}
                   onMouseEnter={() => setHoveredTrack(t.target)}
                   onMouseLeave={() => setHoveredTrack((cur) => cur === t.target ? null : cur)}
                   onClick={(e) => {
@@ -975,9 +1003,13 @@ export default function CurveEditor({
                 <path
                   d={d}
                   fill="none" stroke={color}
-                  strokeWidth={isHovered ? 3 : 1.5}
-                  opacity={isHovered ? 1 : 0.95}
-                  style={isHovered ? { filter: `drop-shadow(0 0 3px ${color})` } : undefined}
+                  strokeWidth={isIsolated ? 2.5 : isHovered ? 3 : 1.5}
+                  opacity={isDimmed ? 0.18 : isHovered ? 1 : 0.95}
+                  style={
+                    isIsolated ? { filter: `drop-shadow(0 0 4px ${color})` }
+                    : isHovered ? { filter: `drop-shadow(0 0 3px ${color})` }
+                    : undefined
+                  }
                   pointerEvents="none"
                 />
                 {selSegD && (
