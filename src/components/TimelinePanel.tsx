@@ -671,6 +671,7 @@ export default function TimelinePanel({
               }}
               onEdit={(seg) => setSegmentModal({ mode: 'edit', segment: seg })}
               onPlay={(segId) => onPlaySegment?.(timeline.id, segId)}
+              onDelete={(seg) => dispatchCommand(makeDeleteSegmentCmd(timeline.id, seg))}
             />
           )}
           {/* ── EventStrip (BL-36) ───────────────────────────────────────── */}

@@ -23,13 +23,14 @@ interface Props {
   onCreateAt?:     (timeMs: number) => void
   onEdit?:         (segment: TimelineSegment) => void
   onPlay?:         (segmentId: string) => void
+  onDelete?:       (segment: TimelineSegment) => void
   activeSegmentId?: string | null
 }
 
 export default function SegmentStrip({
   segments, durationMs, totalContentPx,
   msToScreenPx, clientXToMs,
-  onCreateAt, onEdit, onPlay, activeSegmentId,
+  onCreateAt, onEdit, onPlay, onDelete, activeSegmentId,
 }: Props) {
   const [hover, setHover] = useState<{ x: number; ms: number } | null>(null)
 
@@ -66,7 +67,7 @@ export default function SegmentStrip({
         return (
           <div
             key={s.id}
-            className={`absolute top-0.5 bottom-0.5 rounded-sm flex items-center px-1.5 overflow-hidden ${
+            className={`group absolute top-0.5 bottom-0.5 rounded-sm flex items-center px-1.5 overflow-hidden ${
               active ? 'ring-1 ring-white/70' : ''
             }`}
             style={{
@@ -76,9 +77,26 @@ export default function SegmentStrip({
             }}
             onClick={(e) => { e.stopPropagation(); onPlay?.(s.id) }}
             onDoubleClick={(e) => { e.stopPropagation(); onEdit?.(s) }}
-            title={`${s.name} (${s.startMs}–${s.endMs}ms)\nClick: play · Double-click: edit`}
+            onContextMenu={(e) => {
+              e.preventDefault(); e.stopPropagation()
+              if (!onDelete) return
+              if (window.confirm(`Delete segment "${s.name}"?`)) onDelete(s)
+            }}
+            title={`${s.name} (${s.startMs}–${s.endMs}ms)\nClick: play · Double-click: edit · Right-click: delete`}
           >
-            <span className="text-[9px] text-gray-900 font-semibold truncate">{s.name}</span>
+            <span className="text-[9px] text-gray-900 font-semibold truncate flex-1">{s.name}</span>
+            {onDelete && width > 30 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (window.confirm(`Delete segment "${s.name}"?`)) onDelete(s)
+                }}
+                onDoubleClick={(e) => e.stopPropagation()}
+                className="hidden group-hover:flex shrink-0 w-3 h-3 items-center justify-center
+                           rounded-full bg-black/30 hover:bg-rose-600 text-white text-[10px] leading-none"
+                title="Delete segment"
+              >×</button>
+            )}
           </div>
         )
       })}
