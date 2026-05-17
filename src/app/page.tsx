@@ -203,8 +203,10 @@ export default function BuilderPage() {
   const frame = useMemo(
     () => runtime.evaluateFrame(currentTimeMs),
     // We deliberately include paramValues so slider edits cause a re-eval.
+    // runtime.segmentTick increments on every animation frame while a
+    // segment is playing — without it the segment freezes at startMs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, currentTimeMs, runtime.paramValues, runtime.segmentState],
+    [scene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.segmentTick],
   )
 
   /**
