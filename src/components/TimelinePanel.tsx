@@ -102,6 +102,20 @@ export default function TimelinePanel({
 
   // ── Per-layer expand state (default: all layers expanded) ────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
+  // ── Layer filter (BL-38) — substring match on layer name + tracked properties
+  const [layerFilter, setLayerFilter] = useState('')
+  const visibleLayers = useMemo(() => {
+    const q = layerFilter.trim().toLowerCase()
+    if (!q) return scene.layers
+    return scene.layers.filter((l) => {
+      if (l.name.toLowerCase().includes(q)) return true
+      if (l.type.toLowerCase().includes(q)) return true
+      // Match by tracked property path too — "rotation" should surface
+      // layers with rotation tracks even if names don't mention it.
+      const tracks = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${l.id}.`)) ?? []
+      return tracks.some((t) => t.target.toLowerCase().includes(q))
+    })
+  }, [scene.layers, layerFilter, timeline])
   const toggleLayerExpand = useCallback((id: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev)
@@ -476,9 +490,26 @@ export default function TimelinePanel({
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
       <div className="flex border-b border-gray-700 shrink-0">
-        <div className="w-60 shrink-0 border-r border-gray-700 bg-gray-900 flex items-center px-3">
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Layers</span>
-          <span className="ml-auto text-[10px] font-mono text-gray-500">{scene.layers.length}</span>
+        <div className="w-60 shrink-0 border-r border-gray-700 bg-gray-900 flex items-center px-2 gap-1.5">
+          <span className="text-[10px] text-gray-500 shrink-0">🔍</span>
+          <input
+            type="text"
+            value={layerFilter}
+            onChange={(e) => setLayerFilter(e.target.value)}
+            placeholder="Filter layers…"
+            className="flex-1 bg-transparent border-0 text-[10px] text-gray-300 placeholder-gray-600
+                       focus:outline-none focus:text-gray-100 min-w-0"
+          />
+          {layerFilter && (
+            <button
+              onClick={() => setLayerFilter('')}
+              className="text-[10px] text-gray-500 hover:text-gray-300 shrink-0"
+              title="Clear filter"
+            >✕</button>
+          )}
+          <span className="text-[10px] font-mono text-gray-500 shrink-0">
+            {layerFilter ? `${visibleLayers.length}/${scene.layers.length}` : scene.layers.length}
+          </span>
         </div>
         <div
           ref={vp.trackAreaRef}
@@ -533,8 +564,17 @@ export default function TimelinePanel({
             No layers yet. Add one from the left panel.
           </div>
         )}
+        {scene.layers.length > 0 && visibleLayers.length === 0 && (
+          <div className="p-6 text-center text-xs text-gray-600">
+            No layers match &ldquo;{layerFilter}&rdquo;.
+            <button
+              onClick={() => setLayerFilter('')}
+              className="ml-2 text-blue-400 hover:text-blue-300 underline underline-offset-2"
+            >clear filter</button>
+          </div>
+        )}
 
-        {scene.layers.map((layer) => (
+        {visibleLayers.map((layer) => (
           <LayerTimelineSection
             key={layer.id}
             layer={layer}
