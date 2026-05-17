@@ -332,10 +332,26 @@ export default function SceneCanvas({
     const { width: cw, height: ch } = compositionRef.current
 
     const snapState = snapRef.current
-    // Derived: grid snap is "active" iff master is on AND user enabled the
-    // 'grid' type. Kept as a single boolean so the move/anchor handlers
-    // remain unchanged below.
-    const snap = { enabled: snapState.master && snapState.grid, size: snapState.size }
+    // Each snap type is independently gated on the master Enable Snapping.
+    //   objects → snap moving layer edges/centres to OTHER layers + canvas
+    //   points  → snap moving layer corner points to other layers' corners
+    //             (currently shares the snapRect target set with objects)
+    //   grid    → snap to the visible composition grid (uses gridSize)
+    //   pixel   → round final position / size to integer composition px
+    //   guides  → user-placed ruler guides (no ruler-guide UI yet — wired
+    //             as a future-proof flag, no behaviour change today)
+    const snap = {
+      master:  snapState.master,
+      objects: snapState.master && snapState.objects,
+      points:  snapState.master && snapState.points,
+      guides:  snapState.master && snapState.guides,
+      grid:    snapState.master && snapState.grid,
+      pixel:   snapState.master && snapState.pixel,
+      size:    snapState.size,
+      // Legacy alias preserved for the anchor branch which only knows about
+      // grid snap (anchor doesn't align to other layers — it's a pivot).
+      enabled: snapState.master && snapState.grid,
+    }
 
     if (drag.kind === 'move') {
       // Compute delta from the PRIMARY layer's drag — apply that delta to
@@ -355,33 +371,39 @@ export default function SceneCanvas({
       let pnx = primaryOx + dxLocked
       let pny = primaryOy + dyLocked
 
-      // ── Alignment guides (canvas / other layers / centerlines) ──────────
-      // Snap applies BEFORE grid snap so guides win. Threshold scales with
-      // zoom so it feels like ~6 screen pixels regardless of zoom level.
-      const SNAP_PX = 6
-      const threshold = SNAP_PX / Math.max(0.01, snap.enabled ? 1 : 1)
-      // Build snap targets from OTHER layers (skip every layer being moved).
-      const movingIds = new Set(drag.movingLayers.map(m => m.id))
-      const otherRects = sceneRef.current.layers
-        .filter(l => !movingIds.has(l.id) && !l.hidden && l.type !== 'audio' && l.size)
-        .map(l => ({
-          id: l.id, x: l.transform.x, y: l.transform.y,
-          width: l.size!.width, height: l.size!.height,
-        }))
-      const targets = buildSnapTargets(cw, ch, otherRects)
-      const movingRect = {
-        x: pnx, y: pny,
-        width: drag.width, height: drag.height,
+      // ── Snap to Objects / Points (alignment to OTHER layers + canvas) ───
+      // Threshold = ~6 screen px regardless of zoom. Snap runs BEFORE grid
+      // so pixel-perfect alignment wins over the grid lattice.
+      if (snap.objects || snap.points) {
+        const SNAP_PX = 6
+        const movingIds = new Set(drag.movingLayers.map(m => m.id))
+        const otherRects = sceneRef.current.layers
+          .filter(l => !movingIds.has(l.id) && !l.hidden && l.type !== 'audio' && l.size)
+          .map(l => ({
+            id: l.id, x: l.transform.x, y: l.transform.y,
+            width: l.size!.width, height: l.size!.height,
+          }))
+        const targets = buildSnapTargets(cw, ch, otherRects)
+        const movingRect = { x: pnx, y: pny, width: drag.width, height: drag.height }
+        const snapped = snapRect(movingRect, targets, SNAP_PX)
+        pnx = snapped.x
+        pny = snapped.y
+        setGuides(snapped.guides)
+      } else {
+        // No object snap → make sure any leftover guides disappear
+        if (guidesRef.current.length > 0) setGuides([])
       }
-      const snapped = snapRect(movingRect, targets, threshold)
-      pnx = snapped.x
-      pny = snapped.y
-      setGuides(snapped.guides)
 
-      // ── Grid snap (legacy) ─────────────────────────────────────────────
-      if (snap.enabled) {
+      // ── Snap to Grid ────────────────────────────────────────────────────
+      if (snap.grid) {
         pnx = snapToGrid(pnx, snap.size)
         pny = snapToGrid(pny, snap.size)
+      }
+
+      // ── Snap to Pixel — always last, rounds the final position ─────────
+      if (snap.pixel) {
+        pnx = Math.round(pnx)
+        pny = Math.round(pny)
       }
 
       pnx = clamp(pnx, 0, Math.max(0, cw - drag.width))
@@ -453,7 +475,7 @@ export default function SceneCanvas({
       const origAY = drag.originalLayer.transform.anchorY
       let nAX = origAX + dx
       let nAY = origAY + dy
-      if (snap.enabled) {
+      if (snap.grid) {
         // Snap the WORLD position of the anchor to the grid, then translate
         // back to local coords. That way the visible anchor handle lands
         // exactly on a grid line.
@@ -461,6 +483,10 @@ export default function SceneCanvas({
         const wy = drag.originalLayer.transform.y + nAY
         nAX = snapToGrid(wx, snap.size) - drag.originalLayer.transform.x
         nAY = snapToGrid(wy, snap.size) - drag.originalLayer.transform.y
+      }
+      if (snap.pixel) {
+        nAX = Math.round(nAX)
+        nAY = Math.round(nAY)
       }
       const nextScene: ChronoScene = {
         ...sceneRef.current,
@@ -502,10 +528,19 @@ export default function SceneCanvas({
       if (h === 'nw' || h === 'ne' || h === 'n') ny = oy + (oh - nh)
     }
 
-    // Minimum size + composition-bounds clamp (resize never snaps to grid —
-    // only anchor does, so users get pixel-precise resize regardless).
+    // Minimum size + composition-bounds clamp
     nw = Math.max(MIN_SIZE, nw)
     nh = Math.max(MIN_SIZE, nh)
+
+    // ── Snap to Pixel during resize → integer position + integer dim ──────
+    // Grid/Object snap is intentionally NOT applied to resize (the moving
+    // EDGE has no canonical "rect" to snap relative to and grid-snapping
+    // each axis independently produces jarring jumps). Pixel is fine.
+    if (snap.pixel) {
+      nx = Math.round(nx); ny = Math.round(ny)
+      nw = Math.round(nw); nh = Math.round(nh)
+    }
+
     nx = clamp(nx, 0, Math.max(0, cw - nw))
     ny = clamp(ny, 0, Math.max(0, ch - nh))
     nw = Math.min(nw, cw - nx)
