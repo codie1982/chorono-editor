@@ -16,6 +16,12 @@ interface AIPanelProps {
   scene: ChronoScene
   dispatchCommand: (cmd: EditorCommand) => void
   onClose: () => void
+  /** Playhead time — passed to AI as PLAYHEAD reference. */
+  currentTimeMs?: number
+  /** Selected layer id — AI gets fully detailed view of just this layer. */
+  selectedLayerId?: string | null
+  /** Selected timeline id — surfaces first in scene context. */
+  selectedTimelineId?: string | null
 }
 
 const QUICK_ACTIONS = [
@@ -27,8 +33,12 @@ const QUICK_ACTIONS = [
 
 export default function AIPanel({
   scene, dispatchCommand, onClose,
+  currentTimeMs, selectedLayerId, selectedTimelineId,
 }: AIPanelProps) {
-  const planner = useAIPlanner({ scene, dispatchCommand })
+  const planner = useAIPlanner({
+    scene, dispatchCommand,
+    currentTimeMs, selectedLayerId, selectedTimelineId,
+  })
   const [text, setText]               = useState('')
   const [provider, setProvider]       = useState<AIProviderName>('anthropic')
   const [model, setModel]             = useState(DEFAULT_MODELS.anthropic[0] ?? '')

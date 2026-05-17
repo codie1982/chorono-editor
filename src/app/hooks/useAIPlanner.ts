@@ -12,7 +12,7 @@ import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import type {
   AIUIMessage, AIProviderConfig, AIResponse, AIMessage,
 } from '@/lib/ai/types'
-import { serializeScene } from '@/lib/ai/SceneSerializer'
+import { serializeScene, type SerializeOptions } from '@/lib/ai/SceneSerializer'
 import { buildCommandsFromToolCalls } from '@/lib/ai/PlannerExecutor'
 // Ensure registry is populated on the client too — PlannerExecutor.get() needs it.
 import { bootstrapAIActions } from '@/lib/ai/ActionRegistry'
@@ -20,6 +20,12 @@ import { bootstrapAIActions } from '@/lib/ai/ActionRegistry'
 export interface UseAIPlannerArgs {
   scene: ChronoScene
   dispatchCommand: (cmd: EditorCommand) => void
+  /** Current playhead time — surfaces to AI as PLAYHEAD reference. */
+  currentTimeMs?: number
+  /** Selected layer id — AI gets a detailed view of just this layer. */
+  selectedLayerId?: string | null
+  /** Selected timeline id — surfaces first in the context. */
+  selectedTimelineId?: string | null
 }
 
 export interface UseAIPlannerReturn {
@@ -32,6 +38,9 @@ export interface UseAIPlannerReturn {
 
 export function useAIPlanner({
   scene, dispatchCommand,
+  currentTimeMs = 0,
+  selectedLayerId = null,
+  selectedTimelineId = null,
 }: UseAIPlannerArgs): UseAIPlannerReturn {
   const [messages, setMessages]   = useState<AIUIMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -55,7 +64,9 @@ export function useAIPlanner({
       // Ensure action registry is ready (PlannerExecutor needs it for lookups)
       await bootstrapAIActions()
 
-      const sceneContext = serializeScene(scene)
+      const sceneContext = serializeScene(scene, {
+        currentTimeMs, selectedLayerId, selectedTimelineId,
+      } satisfies SerializeOptions)
       // History sent to the LLM excludes the placeholder we just added.
       const history: AIMessage[] = messages.map((m) => ({
         role: m.role, content: m.content,
@@ -112,7 +123,7 @@ export function useAIPlanner({
     } finally {
       setIsLoading(false)
     }
-  }, [scene, messages, dispatchCommand])
+  }, [scene, messages, dispatchCommand, currentTimeMs, selectedLayerId, selectedTimelineId])
 
   const clear = useCallback(() => {
     setMessages([])

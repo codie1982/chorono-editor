@@ -1089,6 +1089,9 @@ export default function BuilderPage() {
         <AIPanel
           scene={scene}
           dispatchCommand={dispatchCommand}
+          currentTimeMs={currentTimeMs}
+          selectedLayerId={selectedLayerId}
+          selectedTimelineId={selectedTlId}
           onClose={() => setShowAI(false)}
         />
       )}
