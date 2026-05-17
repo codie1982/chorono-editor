@@ -155,6 +155,65 @@ export function makeMoveLayerToCmdWithSnapshot(
   }
 }
 
+// ── Split layer at a given time ──────────────────────────────────────────────
+//
+// MVP behaviour: the original layer's end is trimmed to `splitMs`, and a
+// fresh clone (new UUID) is inserted right after it with startMs = splitMs.
+// Animation tracks are NOT copied — they continue to belong to the original
+// layer. Users who need split-with-animation should duplicate the layer
+// first, then trim each side.
+//
+// TODO(big-feature): true "split with animation" — fork the timeline tracks
+//   so the clone gets its own copies (kf times offset by -splitMs relative
+//   to clone's local time). Requires deciding whether tracks should be
+//   layer-id-targeted (current) or kept on the original (this MVP).
+
+export function makeSplitLayerCmd(
+  layerId: string,
+  splitMs: number,
+  /** Used as the fallback for the clone's endMs when the original has no
+   *  explicit end (i.e. layer is active until composition end). */
+  defaultEndMs: number,
+  cloneFactory: (orig: Layer) => Layer,
+): EditorCommand | null {
+  // Snapshot captured at command-build for clean undo.
+  return {
+    label: 'Split Layer at Playhead',
+    execute(scene) {
+      const idx = scene.layers.findIndex((l) => l.id === layerId)
+      if (idx < 0) return scene
+      const orig = scene.layers[idx]
+      const origEnd = orig.endMs ?? defaultEndMs
+      // No-op if the split point is outside the layer's active range.
+      if (splitMs <= (orig.startMs ?? 0) || splitMs >= origEnd) return scene
+      const trimmed: Layer = { ...orig, endMs: splitMs }
+      const clone   = cloneFactory(orig)
+      clone.startMs = splitMs
+      clone.endMs   = origEnd
+      const next = [...scene.layers]
+      next[idx] = trimmed
+      next.splice(idx + 1, 0, clone)        // clone right after original
+      return { ...scene, layers: next }
+    },
+    undo(scene) {
+      // We don't have the clone id pre-baked (factory generates fresh each
+      // execute), so locate the clone via "the layer right after `layerId`
+      // whose startMs == splitMs". Defensive — only restores if matches.
+      const idx = scene.layers.findIndex((l) => l.id === layerId)
+      if (idx < 0) return scene
+      const cloneIdx = idx + 1
+      const clone = scene.layers[cloneIdx]
+      if (!clone || clone.startMs !== splitMs) return scene
+      const restored: Layer[] = [...scene.layers]
+      restored.splice(cloneIdx, 1)
+      // Reconstruct the original's endMs by reading the clone's endMs (since
+      // the clone's endMs IS what the original's endMs was before split).
+      restored[idx] = { ...restored[idx], endMs: clone.endMs }
+      return { ...scene, layers: restored }
+    },
+  }
+}
+
 // ── Trim layer (shift startMs / endMs) ───────────────────────────────────────
 
 export function makeTrimLayerCmd(

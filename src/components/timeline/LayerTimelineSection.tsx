@@ -38,6 +38,12 @@ interface Props {
   onSetEasing:   (trackTarget: string, kfId: string, easing: EasingType) => void
   onSelectKf:    (kfId: string, shiftHeld: boolean) => void
   onBeginKfDrag: (leader: DragSnapshot, isLone: boolean, shiftHeld: boolean) => (e: React.PointerEvent) => void
+  /** Right-click on a keyframe → opens context menu in TimelinePanel. */
+  onKfContextMenu?: (trackTarget: string, kfId: string, e: React.MouseEvent) => void
+  /** Double-click on a keyframe → opens inline value editor. */
+  onKfDoubleClick?: (trackTarget: string, kfId: string, e: React.MouseEvent) => void
+  /** Right-click on the layer's activity bar → opens layer-bar context menu. */
+  onLayerBarContextMenu?: (layerId: string, e: React.MouseEvent) => void
 }
 
 const ROW_HEADER  = 32
@@ -52,6 +58,7 @@ export default function LayerTimelineSection({
   onToggleExpand, onSelectLayer, onToggleFlag,
   onAddTrack, onRemoveTrack, onAddKeyframeAtPlayhead,
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
+  onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
 }: Props) {
 
   const rowH = graphMode ? ROW_TRACK_G : ROW_TRACK
@@ -92,7 +99,10 @@ export default function LayerTimelineSection({
         </div>
 
         {/* Right: layer activity bar */}
-        <div className="flex-1 relative">
+        <div
+          className="flex-1 relative"
+          onContextMenu={onLayerBarContextMenu && ((e) => onLayerBarContextMenu(layer.id, e))}
+        >
           <LayerActivityBar layer={layer} msToScreenPx={msToScreenPx} />
         </div>
       </div>
@@ -151,6 +161,8 @@ export default function LayerTimelineSection({
                       )
                       handler(e)
                     }}
+                    onContextMenu={onKfContextMenu && ((e) => onKfContextMenu(track.target, kf.id, e))}
+                    onDoubleClick={onKfDoubleClick && ((e) => onKfDoubleClick(track.target, kf.id, e))}
                   />
                 )
               })}

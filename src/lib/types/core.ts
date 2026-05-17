@@ -76,12 +76,30 @@ export interface EasingDefinition {
 
 // ── Keyframe ──────────────────────────────────────────────────────────────────
 
+/**
+ * How the in / out bezier handles of a customBezier easing behave when one
+ * of them is dragged.
+ *   • broken  — handles are fully independent (default; what we shipped first)
+ *   • aligned — dragging one handle mirrors the other across the keyframe so
+ *               the curve passes through smoothly (continuous tangent)
+ *   • auto    — handles are computed from neighbouring keyframes — user
+ *               doesn't edit them at all. (Sprint 3 reserves the field but
+ *               the auto-tangent solver lands in a later sprint.)
+ *   • linear  — segment renders as a straight line; bezier handles ignored
+ *
+ * Stored per-keyframe so different segments can have different curve
+ * characters in the same track.
+ */
+export type TangentMode = 'broken' | 'aligned' | 'auto' | 'linear'
+
 export interface Keyframe {
   /** Stable UUID — identity key that survives timeMs changes during drag */
   id: string
   timeMs: number
   value: AnimatableValue
   easing: EasingDefinition
+  /** Bezier-handle linkage mode. Defaults to 'broken' when undefined. */
+  tangentMode?: TangentMode
 }
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
@@ -91,7 +109,21 @@ export interface Track {
   target: string
   label?: string
   keyframes: Keyframe[]
+  // TODO(big-feature): controller type — currently every track is implicit
+  //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
+  //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
+  //   formula or procedural source instead of (or alongside) keyframes.
+  //   Renderer would dispatch per controller type; UI would offer a
+  //   "Convert Controller" submenu.
 }
+
+// TODO(big-feature): Vec2 / multi-channel tracks.
+//   Currently `transform.x` and `transform.y` are TWO separate tracks; a
+//   single position keyframe requires editing both in sync. A v2 model
+//   could introduce vec2 / color-valued keyframes (value: Vec2 | ColorValue)
+//   with the Curve Editor splitting them into per-channel curves visually
+//   while the data stays unified. Migration is non-trivial (every reader of
+//   `evaluateTrack` returns number today) so this is a dedicated sprint.
 
 export interface TimelineMarker {
   id: string
@@ -140,6 +172,16 @@ export interface Transform {
 }
 
 // ── Layer ─────────────────────────────────────────────────────────────────────
+//
+// TODO(big-feature): Layer modifiers (AE / SVGator-style).
+//   Add an optional `modifiers?: LayerModifier[]` field — each modifier
+//   transforms how the layer renders without baking new geometry:
+//     • Trim Path     (start/end %)
+//     • Repeat        (N copies, transform step)
+//     • Follow Path   (lay layer along a path)
+//     • Shadow / Blur / Glow (effects beyond `effects.blur`)
+//   Renderer applies modifiers in order, mutating the layer's draw context.
+//   UI: right-click layer → "Add Modifier ▶" submenu in LayerPanel.
 
 export interface Layer {
   id: string

@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
   TimelineSegment,
@@ -8,7 +8,8 @@ import { evaluateTrack } from '@/lib/evaluator'
 import { newTimeline, nextKfId, newTimelineSegment } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
-  makeKeyframeLayerSnapshotCmd,
+  makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd,
+  makeMirrorTimingCmd, makeAlignToFrameCmd,
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
@@ -16,7 +17,11 @@ import {
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
 } from '@/lib/editor/commands-interactive'
+import { makeSplitLayerCmd } from '@/lib/editor/commands-layer'
+import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs } from '@/lib/timeline/keyframeOps'
+import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
+import { buildKeyframeMenu } from './timeline/keyframeMenuItems'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
 import { useKeyframeDrag, type DragSnapshot } from './timeline/hooks/useKeyframeDrag'
@@ -237,6 +242,115 @@ export default function TimelinePanel({
     }
   }, [scene.layers, selectedLayerId, selectedLayerIds, selectedTimelineId, currentTimeMs, dispatchCommand])
 
+  // ── Right-click context menu + inline kf value editor ───────────────────
+  // Single shared menu for keyframe right-clicks (we can extend to property
+  // and layer rows later). Inline-edit input renders absolutely-positioned
+  // over the timeline body using the keyframe's px coordinates.
+  const ctxMenu = useContextMenu()
+  const [ctxKf, setCtxKf] = useState<{ trackTarget: string; kfId: string } | null>(null)
+  const [ctxLayerBar, setCtxLayerBar] = useState<{ layerId: string } | null>(null)
+  const [editingKf, setEditingKf] = useState<{
+    trackTarget: string; kfId: string; leftPx: number; topPx: number; draft: string
+  } | null>(null)
+
+  const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCtxKf(null)
+    setCtxLayerBar({ layerId })
+    ctxMenu.open(e)
+  }, [ctxMenu])
+
+  const openKfMenu = useCallback((trackTarget: string, kfId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!selectedKfIds.has(kfId)) onSelectKeyframes(new Set([kfId]))
+    setCtxKf({ trackTarget, kfId })
+    ctxMenu.open(e)
+  }, [selectedKfIds, onSelectKeyframes, ctxMenu])
+
+  // ── Lasso selection ──────────────────────────────────────────────────────
+  // Alt+drag in the layer-sections container draws a rectangle; pointerup
+  // collects every `[data-kf-id]` element whose bbox intersects and adds
+  // them to the selection (Shift+Alt+drag adds to existing selection).
+  const lassoContainerRef = useRef<HTMLDivElement | null>(null)
+  const lassoStartRef = useRef<{ x: number; y: number; addToExisting: boolean } | null>(null)
+  const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+
+  const onLassoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !e.altKey) return
+    // Only start lasso if the pointer landed on the container itself
+    // or on a non-interactive child (not a kf, not a button).
+    const t = e.target as HTMLElement
+    if (t.closest('[data-kf-id]') || t.closest('button')) return
+    const el = lassoContainerRef.current
+    if (!el) return
+    e.preventDefault()
+    el.setPointerCapture(e.pointerId)
+    const rect = el.getBoundingClientRect()
+    lassoStartRef.current = {
+      x: e.clientX - rect.left + el.scrollLeft,
+      y: e.clientY - rect.top  + el.scrollTop,
+      addToExisting: e.shiftKey,
+    }
+    setLassoRect({ x: lassoStartRef.current.x, y: lassoStartRef.current.y, w: 0, h: 0 })
+  }
+
+  const onLassoPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const s = lassoStartRef.current
+    const el = lassoContainerRef.current
+    if (!s || !el) return
+    const rect = el.getBoundingClientRect()
+    const cx = e.clientX - rect.left + el.scrollLeft
+    const cy = e.clientY - rect.top  + el.scrollTop
+    setLassoRect({
+      x: Math.min(s.x, cx), y: Math.min(s.y, cy),
+      w: Math.abs(cx - s.x), h: Math.abs(cy - s.y),
+    })
+  }
+
+  const onLassoPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const s = lassoStartRef.current
+    const el = lassoContainerRef.current
+    if (!s || !el || !lassoRect) { lassoStartRef.current = null; setLassoRect(null); return }
+    // Convert lasso (container-local) rect to viewport coords for hit-test.
+    const c = el.getBoundingClientRect()
+    const vx1 = c.left + lassoRect.x - el.scrollLeft
+    const vy1 = c.top  + lassoRect.y - el.scrollTop
+    const vx2 = vx1 + lassoRect.w
+    const vy2 = vy1 + lassoRect.h
+    const next = new Set<string>(s.addToExisting ? selectedKfIds : [])
+    el.querySelectorAll<HTMLElement>('[data-kf-id]').forEach((node) => {
+      const r = node.getBoundingClientRect()
+      const cx = r.left + r.width / 2
+      const cy = r.top  + r.height / 2
+      if (cx >= vx1 && cx <= vx2 && cy >= vy1 && cy <= vy2) {
+        const id = node.dataset.kfId
+        if (id) next.add(id)
+      }
+    })
+    onSelectKeyframes(next)
+    lassoStartRef.current = null
+    setLassoRect(null)
+    try { el.releasePointerCapture(e.pointerId) } catch { /* */ }
+  }
+
+  const openKfInlineEdit = useCallback((trackTarget: string, kfId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+    const tr = tl?.tracks.find((t) => t.target === trackTarget)
+    const kf = tr?.keyframes.find((k) => k.id === kfId)
+    if (!kf || typeof kf.value !== 'number') return
+    // The keyframe DOM node is the event target; lock the editor near it.
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setEditingKf({
+      trackTarget, kfId,
+      leftPx: rect.left, topPx: rect.top - 26,
+      draft: String(kf.value),
+    })
+  }, [scene.timelines, selectedTimelineId])
+
   // ── Timeline-level field changes (duration / loop / etc.) ────────────────
   const updateTlField = useCallback(<K extends keyof Timeline>(key: K, val: Timeline[K]) => {
     if (!selectedTimelineId || !timeline) return
@@ -332,8 +446,13 @@ export default function TimelinePanel({
 
       {/* ── Layer sections (scrollable vertically) ───────────────────────── */}
       <div
+        ref={lassoContainerRef}
         className="flex-1 overflow-y-auto relative"
         onClick={(e) => { if (e.target === e.currentTarget) onSelectKeyframes(new Set()) }}
+        onPointerDown={onLassoPointerDown}
+        onPointerMove={onLassoPointerMove}
+        onPointerUp={onLassoPointerUp}
+        onPointerCancel={onLassoPointerUp}
       >
         {scene.layers.length === 0 && (
           <div className="p-6 text-center text-xs text-gray-600">
@@ -366,6 +485,9 @@ export default function TimelinePanel({
             onSetEasing={setEasing}
             onSelectKf={selectKf}
             onBeginKfDrag={beginKfDrag}
+            onKfContextMenu={openKfMenu}
+            onKfDoubleClick={openKfInlineEdit}
+            onLayerBarContextMenu={openLayerBarMenu}
           />
         ))}
 
@@ -382,6 +504,19 @@ export default function TimelinePanel({
           className="absolute top-0 bottom-0 w-0.5 bg-red-500/40 pointer-events-none z-20"
           style={{ left: `${240 + vp.msToScreenPx(currentTimeMs)}px` }}
         />
+
+        {/* Lasso rectangle (visible while Alt+drag is active) */}
+        {lassoRect && (
+          <div
+            className="absolute pointer-events-none z-30 border border-blue-400"
+            style={{
+              left: lassoRect.x, top: lassoRect.y,
+              width: lassoRect.w, height: lassoRect.h,
+              background: 'rgba(59, 130, 246, 0.12)',
+              borderStyle: 'dashed',
+            }}
+          />
+        )}
       </div>
 
       {/* ── Segment create / edit modal ──────────────────────────────────── */}
@@ -403,11 +538,193 @@ export default function TimelinePanel({
             : undefined}
         />
       )}
+
+      {/* ── Inline value editor (kf double-click) ─────────────────────── */}
+      {editingKf && (() => {
+        const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+        const tr = tl?.tracks.find((t) => t.target === editingKf.trackTarget)
+        const kf = tr?.keyframes.find((k) => k.id === editingKf.kfId)
+        if (!kf || typeof kf.value !== 'number') { setEditingKf(null); return null }
+        const commit = () => {
+          const v = Number(editingKf.draft)
+          if (Number.isFinite(v) && v !== kf.value && selectedTimelineId) {
+            dispatchCommand(makeUpdateKfValueCmd(
+              selectedTimelineId, editingKf.trackTarget, kf.id, kf.value, v,
+            ))
+          }
+          setEditingKf(null)
+        }
+        return (
+          <input
+            autoFocus type="number" value={editingKf.draft}
+            onChange={(e) => setEditingKf({ ...editingKf, draft: e.target.value })}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter')  { e.preventDefault(); commit() }
+              if (e.key === 'Escape') { e.preventDefault(); setEditingKf(null) }
+              e.stopPropagation()
+            }}
+            onFocus={(e) => e.currentTarget.select()}
+            className="fixed z-50 w-20 px-1 py-0.5 text-[11px] font-mono
+                       bg-gray-950 text-white border border-blue-500 rounded
+                       focus:outline-none"
+            style={{ left: editingKf.leftPx, top: editingKf.topPx }}
+          />
+        )
+      })()}
+
+      {/* ── Keyframe right-click menu ─────────────────────────────────── */}
+      {ctxMenu.isOpen && ctxKf && (() => {
+        const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+        const tr = tl?.tracks.find((t) => t.target === ctxKf.trackTarget)
+        const kf = tr?.keyframes.find((k) => k.id === ctxKf.kfId)
+        if (!kf || !selectedTimelineId) { ctxMenu.close(); return null }
+        const frameMs = scene.composition.frameRate > 0 ? 1000 / scene.composition.frameRate : 0
+        // Collect the items the menu actions should operate on. If the user
+        // right-clicked a kf that's part of a multi-selection, operate on the
+        // whole selection; otherwise just the clicked kf.
+        const operatingIds = selectedKfIds.has(kf.id) && selectedKfIds.size > 1
+          ? Array.from(selectedKfIds)
+          : [kf.id]
+        const operatingItems = collectKfRefs(scene, selectedTimelineId, operatingIds)
+
+        const items = buildKeyframeMenu(kf, {
+          editValue: () => openKfInlineEdit(ctxKf.trackTarget, ctxKf.kfId, fakeEventFor(ctxMenu.state!)),
+          setEasing: (k, type) => {
+            const next = type === 'customBezier'
+              ? { type, bezier: k.easing?.bezier ?? { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } }
+              : { type }
+            dispatchCommand(makeUpdateEasingCmd(selectedTimelineId, ctxKf.trackTarget, k.id, k.easing, next))
+          },
+          deleteKf: () => dispatchCommand(makeDeleteKfCmd(selectedTimelineId, ctxKf.trackTarget, kf)),
+          duplicateKf: (k) => {
+            const clone = { ...k, id: nextKfId(), timeMs: k.timeMs + Math.max(100, frameMs) }
+            dispatchCommand(makeAddKfCmd(selectedTimelineId, ctxKf.trackTarget, clone))
+            onSelectKeyframes(new Set([clone.id]))
+          },
+          alignToFrame: frameMs > 0 ? () => {
+            const cmd = makeAlignToFrameCmd(scene, operatingItems, scene.composition.frameRate)
+            if (cmd) dispatchCommand(cmd)
+          } : undefined,
+          mirrorTiming: operatingItems.length > 1 ? () => {
+            const cmd = makeMirrorTimingCmd(scene, operatingItems)
+            if (cmd) dispatchCommand(cmd)
+          } : undefined,
+          setTangentMode: (k, mode) => {
+            const prevKf = k
+            dispatchCommand({
+              label: `Set Tangent: ${mode}`,
+              execute: (s) => mapKfInScene(s, selectedTimelineId, ctxKf.trackTarget, k.id,
+                (kk) => ({ ...kk, tangentMode: mode })),
+              undo:    (s) => mapKfInScene(s, selectedTimelineId, ctxKf.trackTarget, k.id,
+                (kk) => ({ ...kk, tangentMode: prevKf.tangentMode })),
+            })
+          },
+          convertToHold: (k) => dispatchCommand(
+            makeUpdateEasingCmd(selectedTimelineId, ctxKf.trackTarget, k.id, k.easing, { type: 'hold' }),
+          ),
+        }, selectedKfIds.size)
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxKf(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Layer-bar right-click menu ────────────────────────────────── */}
+      {ctxMenu.isOpen && ctxLayerBar && (() => {
+        const layer = scene.layers.find((l) => l.id === ctxLayerBar.layerId)
+        if (!layer) { ctxMenu.close(); return null }
+        const splitMs = currentTimeMs
+        const items = [
+          {
+            kind: 'action' as const, label: 'Split Layer at Playhead',
+            shortcut: undefined, disabled: false,
+            onSelect: () => {
+              const cmd = makeSplitLayerCmd(
+                layer.id,
+                splitMs,
+                scene.composition.durationMs,
+                (orig) => cloneLayerForDuplicate(orig),
+              )
+              if (cmd) dispatchCommand(cmd)
+            },
+          },
+          { kind: 'separator' as const },
+          // TODO(sprint 4+): Trim Start to Playhead, Trim End to Playhead,
+          //   Move Segment to Playhead, Stretch Segment, Reverse Layer Timing,
+          //   Reset Layer Timing. Each maps to a trim/move command on the
+          //   layer's startMs/endMs.
+          {
+            kind: 'action' as const, label: 'Trim Start to Playhead (soon)',
+            shortcut: undefined, disabled: true, onSelect: () => {},
+          },
+          {
+            kind: 'action' as const, label: 'Trim End to Playhead (soon)',
+            shortcut: undefined, disabled: true, onSelect: () => {},
+          },
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxLayerBar(null) }}
+          />
+        )
+      })()}
     </div>
   )
 }
 
+// Synthetic event shape used to fire openKfInlineEdit from the menu —
+// the input only reads clientX/Y, so this minimal shape is enough.
+function fakeEventFor(p: { x: number; y: number }): React.MouseEvent {
+  return {
+    preventDefault: () => {},
+    stopPropagation: () => {},
+    clientX: p.x, clientY: p.y,
+    currentTarget: { getBoundingClientRect: () => ({ left: p.x, top: p.y, right: p.x, bottom: p.y, width: 0, height: 0, x: p.x, y: p.y, toJSON: () => '' }) } as unknown as Element,
+  } as unknown as React.MouseEvent
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Collect (kfId, target, timelineId) refs for a set of kfIds — used by the
+ *  multi-kf commands (mirror, align-to-frame). */
+function collectKfRefs(
+  scene: ChronoScene,
+  timelineId: string,
+  kfIds: string[],
+): { kfId: string; target: string; timelineId: string }[] {
+  const set = new Set(kfIds)
+  const out: { kfId: string; target: string; timelineId: string }[] = []
+  const tl = scene.timelines.find((t) => t.id === timelineId)
+  if (!tl) return out
+  for (const track of tl.tracks) {
+    for (const kf of track.keyframes) {
+      if (set.has(kf.id)) out.push({ kfId: kf.id, target: track.target, timelineId })
+    }
+  }
+  return out
+}
+
+/** Immutable map over a single keyframe by id — used by tangent-mode command. */
+function mapKfInScene(
+  scene: ChronoScene,
+  timelineId: string,
+  trackTarget: string,
+  kfId: string,
+  fn: (kf: Keyframe) => Keyframe,
+): ChronoScene {
+  return {
+    ...scene,
+    timelines: scene.timelines.map((tl) => tl.id !== timelineId ? tl :
+      { ...tl, tracks: tl.tracks.map((t) => t.target !== trackTarget ? t :
+        { ...t, keyframes: t.keyframes.map((k) => k.id !== kfId ? k : fn(k)) }) }),
+  }
+}
 
 function collectGroupSnapshots(
   scene: ChronoScene,

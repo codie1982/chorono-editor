@@ -4,6 +4,7 @@ export type {
   LayerType, ShapeType, ShapeKind, ShapeParams, PlaybackAction,
   ColorValue, Vec2, AnimatableValue,
   EasingType, EasingDefinition,
+  TangentMode,
   Keyframe,
   Track, TimelineMarker, TimelineSegment, Timeline,
   Transform,

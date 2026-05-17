@@ -15,6 +15,10 @@ interface Props {
   onDelete: () => void
   onSetEasing: (e: EasingType) => void
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void
+  /** Right-click handler — opens the keyframe context menu in TimelinePanel. */
+  onContextMenu?: (e: React.MouseEvent<HTMLDivElement>) => void
+  /** Double-click — opens inline value editor in TimelinePanel. */
+  onDoubleClick?: (e: React.MouseEvent<HTMLDivElement>) => void
 }
 
 /**
@@ -28,7 +32,7 @@ interface Props {
  */
 export default function TimelineKeyframe({
   kf, x, y, isSelected, isDragging,
-  onSelect, onDelete, onSetEasing, onPointerDown,
+  onSelect, onDelete, onSetEasing, onPointerDown, onContextMenu, onDoubleClick,
 }: Props) {
 
   const colorClass = isSelected
@@ -43,9 +47,12 @@ export default function TimelineKeyframe({
   return (
     <div
       className="absolute group z-10"
+      data-kf-id={kf.id}
       style={positionStyle}
       onClick={(e) => { e.stopPropagation(); onSelect(e.shiftKey) }}
       onPointerDown={onPointerDown}
+      onContextMenu={onContextMenu}
+      onDoubleClick={onDoubleClick}
     >
       <div className={`w-3 h-3 rotate-45 cursor-grab active:cursor-grabbing border transition-transform
         ${colorClass}

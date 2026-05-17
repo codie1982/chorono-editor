@@ -229,6 +229,101 @@ export function makeUpdateKfValueCmd(
   }
 }
 
+// ── Mirror Timing ────────────────────────────────────────────────────────────
+//
+// Reverses the keyframe time pattern within a SHARED bounding window
+// [minMs, maxMs]. Each kf at relative position p from the left becomes the
+// kf at relative position (1 - p) — visually the sequence plays backward in
+// time without altering the values. Operates on a flat list of kfId+target
+// pairs so it works across multiple tracks (e.g. mirror a whole animation's
+// timing in one command).
+//
+// Implementation note: we capture each kf's PRIOR timeMs at command-build
+// time so undo restores exactly the original timings (not a recomputed
+// mirror, which would no-op in some edge cases).
+
+export interface KfMirror { kfId: string; target: string; timelineId: string }
+export function makeMirrorTimingCmd(
+  scene: ChronoScene,
+  items: KfMirror[],
+): EditorCommand | null {
+  if (items.length < 2) return null
+  // Collect (timelineId × target × kfId) → priorMs
+  type Snap = { timelineId: string; target: string; kfId: string; priorMs: number }
+  const snaps: Snap[] = []
+  for (const it of items) {
+    const tl = scene.timelines.find((t) => t.id === it.timelineId)
+    const tr = tl?.tracks.find((t) => t.target === it.target)
+    const kf = tr?.keyframes.find((k) => k.id === it.kfId)
+    if (!kf) continue
+    snaps.push({ timelineId: it.timelineId, target: it.target, kfId: it.kfId, priorMs: kf.timeMs })
+  }
+  if (snaps.length < 2) return null
+  const minMs = Math.min(...snaps.map((s) => s.priorMs))
+  const maxMs = Math.max(...snaps.map((s) => s.priorMs))
+  const mirroredFor = (ms: number) => minMs + (maxMs - ms)
+
+  return {
+    label: 'Mirror Timing',
+    execute(s: ChronoScene): ChronoScene {
+      let next = s
+      for (const sn of snaps) {
+        next = updateKfTimeMs(next, sn.timelineId, sn.target, sn.kfId, mirroredFor(sn.priorMs))
+      }
+      return next
+    },
+    undo(s: ChronoScene): ChronoScene {
+      let next = s
+      for (const sn of snaps) {
+        next = updateKfTimeMs(next, sn.timelineId, sn.target, sn.kfId, sn.priorMs)
+      }
+      return next
+    },
+  }
+}
+
+// ── Align selected kfs to nearest frame boundary ────────────────────────────
+
+export interface KfAlign { kfId: string; target: string; timelineId: string }
+export function makeAlignToFrameCmd(
+  scene: ChronoScene,
+  items: KfAlign[],
+  frameRate: number,
+): EditorCommand | null {
+  if (items.length === 0 || frameRate <= 0) return null
+  const frameMs = 1000 / frameRate
+  type Snap = { timelineId: string; target: string; kfId: string; priorMs: number; snappedMs: number }
+  const snaps: Snap[] = []
+  for (const it of items) {
+    const tl = scene.timelines.find((t) => t.id === it.timelineId)
+    const tr = tl?.tracks.find((t) => t.target === it.target)
+    const kf = tr?.keyframes.find((k) => k.id === it.kfId)
+    if (!kf) continue
+    const snapped = Math.round(kf.timeMs / frameMs) * frameMs
+    if (snapped === kf.timeMs) continue
+    snaps.push({ timelineId: it.timelineId, target: it.target, kfId: it.kfId, priorMs: kf.timeMs, snappedMs: snapped })
+  }
+  if (snaps.length === 0) return null
+
+  return {
+    label: 'Align Keyframes to Frame',
+    execute(s: ChronoScene): ChronoScene {
+      let next = s
+      for (const sn of snaps) {
+        next = updateKfTimeMs(next, sn.timelineId, sn.target, sn.kfId, sn.snappedMs)
+      }
+      return next
+    },
+    undo(s: ChronoScene): ChronoScene {
+      let next = s
+      for (const sn of snaps) {
+        next = updateKfTimeMs(next, sn.timelineId, sn.target, sn.kfId, sn.priorMs)
+      }
+      return next
+    },
+  }
+}
+
 // ── Update easing ─────────────────────────────────────────────────────────────
 
 export function makeUpdateEasingCmd(
