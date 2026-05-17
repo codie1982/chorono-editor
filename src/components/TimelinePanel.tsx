@@ -9,7 +9,8 @@ import { newTimeline, nextKfId, newTimelineSegment } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
   makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd,
-  makeMirrorTimingCmd, makeAlignToFrameCmd,
+  makeMirrorTimingCmd, makeAlignToFrameCmd, makeBulkDeleteKfCmd,
+  type KfDeletion,
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
@@ -17,9 +18,10 @@ import {
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
 } from '@/lib/editor/commands-interactive'
-import { makeSplitLayerCmd } from '@/lib/editor/commands-layer'
+import { makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd } from '@/lib/editor/commands-layer'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
-import { updateKfTimeMs } from '@/lib/timeline/keyframeOps'
+import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
+import type { EasingDefinition } from '@/lib/types'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 import { buildKeyframeMenu } from './timeline/keyframeMenuItems'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -27,6 +29,8 @@ import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
 import { useKeyframeDrag, type DragSnapshot } from './timeline/hooks/useKeyframeDrag'
 import TimelineRuler           from './timeline/TimelineRuler'
 import TimelineToolbar         from './timeline/TimelineToolbar'
+import TrackToolBar            from './timeline/TrackToolBar'
+import TimelineStatusBar       from './timeline/TimelineStatusBar'
 import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
 import SegmentModal            from './modals/SegmentModal'
@@ -242,6 +246,48 @@ export default function TimelinePanel({
     }
   }, [scene.layers, selectedLayerId, selectedLayerIds, selectedTimelineId, currentTimeMs, dispatchCommand])
 
+  // ── TrackToolBar handlers ────────────────────────────────────────────────
+  const selectAllKfs = useCallback(() => {
+    if (!timeline) return
+    const all = new Set<string>()
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) all.add(kf.id)
+    }
+    onSelectKeyframes(all)
+  }, [timeline, onSelectKeyframes])
+
+  const deleteSelectedKfs = useCallback(() => {
+    if (!selectedTimelineId || !timeline || selectedKfIds.size === 0) return
+    const items: KfDeletion[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (selectedKfIds.has(kf.id)) items.push({ timelineId: selectedTimelineId, target: track.target, kf })
+      }
+    }
+    if (items.length === 0) return
+    dispatchCommand(makeBulkDeleteKfCmd(items))
+    onSelectKeyframes(new Set())
+  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand, onSelectKeyframes])
+
+  const easeSelectedKfs = useCallback((easingType: EasingType) => {
+    if (!selectedTimelineId || !timeline || selectedKfIds.size === 0) return
+    type KfRef = { target: string; kfId: string; fromEasing: EasingDefinition }
+    const updates: KfRef[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (selectedKfIds.has(kf.id)) updates.push({ target: track.target, kfId: kf.id, fromEasing: kf.easing })
+      }
+    }
+    if (updates.length === 0) return
+    const toEasing: EasingDefinition = { type: easingType }
+    const tlId = selectedTimelineId
+    dispatchCommand({
+      label: `Set Easing: ${easingType} (${updates.length})`,
+      execute: (s) => updates.reduce((sc, u) => updateKfEasing(sc, tlId, u.target, u.kfId, toEasing), s),
+      undo:    (s) => updates.reduce((sc, u) => updateKfEasing(sc, tlId, u.target, u.kfId, u.fromEasing), s),
+    })
+  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
+
   // ── Right-click context menu + inline kf value editor ───────────────────
   // Single shared menu for keyframe right-clicks (we can extend to property
   // and layer rows later). Inline-edit input renders absolutely-positioned
@@ -376,7 +422,10 @@ export default function TimelinePanel({
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 relative overflow-hidden">
+    <div
+      className="flex flex-col h-full bg-gray-900 relative overflow-hidden"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <TimelineToolbar
         timelines={scene.timelines}
         selectedTimelineId={selectedTimelineId}
@@ -386,7 +435,7 @@ export default function TimelinePanel({
         isPlaying={isPlaying}
         zoomFactor={vp.zoomFactor}
         playbackSpeed={playbackSpeed}
-        graphEditorMode={settings.showGraphEditor}
+        timelineMode={settings.timelineMode}
         hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
         onSelectTimeline={onSelectTimeline}
@@ -396,8 +445,16 @@ export default function TimelinePanel({
         onFit={() => { vp.setZoomFactor(1); vp.setScrollLeftPx(0) }}
         onTimelineFieldChange={updateTlField}
         onPlaybackSpeedChange={onPlaybackSpeedChange}
-        onToggleGraphEditor={() => onSettingsChange({ ...settings, showGraphEditor: !settings.showGraphEditor })}
+        onModeChange={(mode) => onSettingsChange({ ...settings, timelineMode: mode })}
         onKeyframeProperties={keyframeSelectedLayers}
+      />
+
+      <TrackToolBar
+        hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
+        selectedCount={selectedKfIds.size}
+        onSelectAll={selectAllKfs}
+        onDeleteSelected={deleteSelectedKfs}
+        onEaseSelected={easeSelectedKfs}
       />
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
@@ -466,7 +523,7 @@ export default function TimelinePanel({
             layer={layer}
             tracks={tracksFor(layer.id)}
             expanded={!collapsedIds.has(layer.id)}
-            graphMode={settings.showGraphEditor}
+            graphMode={settings.timelineMode === 'curve'}
             isPrimary={selectedLayerId === layer.id}
             isInSet={selectedLayerIds.has(layer.id)}
             trackWidth={vp.trackWidth}
@@ -475,6 +532,7 @@ export default function TimelinePanel({
             visibleEndMs={vp.visibleEndMs}
             selectedKfIds={selectedKfIds}
             previewMs={drag.previewMs}
+            durationMs={duration}
             onToggleExpand={() => toggleLayerExpand(layer.id)}
             onSelectLayer={(shift) => onSelectLayer(layer.id, shift)}
             onToggleFlag={(field) => onToggleLayerFlag(layer.id, field)}
@@ -488,6 +546,14 @@ export default function TimelinePanel({
             onKfContextMenu={openKfMenu}
             onKfDoubleClick={openKfInlineEdit}
             onLayerBarContextMenu={openLayerBarMenu}
+            onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
+              // Single command handles move + trim — linearly remaps every
+              // keyframe on this layer so the inner animation scales/shifts
+              // along with the bar.
+              dispatchCommand(makeShiftLayerCmd(
+                layerId, fromStart, fromEnd, toStart, toEnd, duration,
+              ))
+            }}
           />
         ))}
 
@@ -653,17 +719,21 @@ export default function TimelinePanel({
             },
           },
           { kind: 'separator' as const },
-          // TODO(sprint 4+): Trim Start to Playhead, Trim End to Playhead,
-          //   Move Segment to Playhead, Stretch Segment, Reverse Layer Timing,
-          //   Reset Layer Timing. Each maps to a trim/move command on the
-          //   layer's startMs/endMs.
           {
-            kind: 'action' as const, label: 'Trim Start to Playhead (soon)',
-            shortcut: undefined, disabled: true, onSelect: () => {},
+            kind: 'action' as const, label: 'Trim Start to Playhead',
+            shortcut: undefined,
+            disabled: splitMs <= (layer.startMs ?? 0),
+            onSelect: () => dispatchCommand(
+              makeTrimLayerCmd(layer.id, 'start', layer.startMs ?? 0, splitMs)
+            ),
           },
           {
-            kind: 'action' as const, label: 'Trim End to Playhead (soon)',
-            shortcut: undefined, disabled: true, onSelect: () => {},
+            kind: 'action' as const, label: 'Trim End to Playhead',
+            shortcut: undefined,
+            disabled: splitMs >= (layer.endMs ?? scene.composition.durationMs),
+            onSelect: () => dispatchCommand(
+              makeTrimLayerCmd(layer.id, 'end', layer.endMs ?? scene.composition.durationMs, splitMs)
+            ),
           },
         ]
         return (
@@ -674,6 +744,56 @@ export default function TimelinePanel({
           />
         )
       })()}
+
+      {/* ── KeySelection floating toolbar (2+ keys selected) ─────────────── */}
+      {selectedKfIds.size >= 2 && (
+        <div className="flex items-center gap-2 px-3 py-1 border-t border-yellow-700/40
+                        bg-yellow-950/30 text-[10px] shrink-0">
+          <span className="text-yellow-600 font-mono">{selectedKfIds.size} keys</span>
+          <div className="w-px h-3 bg-yellow-800/50" />
+          {(['easeIn', 'easeOut', 'easeInOut', 'linear'] as EasingType[]).map((et) => (
+            <button
+              key={et}
+              onClick={() => easeSelectedKfs(et)}
+              className="px-2 py-0.5 rounded bg-yellow-900/40 hover:bg-yellow-800/60
+                         text-yellow-400 hover:text-yellow-200 border border-yellow-800/40
+                         transition-colors"
+            >{et}</button>
+          ))}
+          <div className="w-px h-3 bg-yellow-800/50" />
+          <button
+            onClick={() => {
+              if (!selectedTimelineId || !timeline) return
+              const operatingItems = Array.from(selectedKfIds).flatMap((kfId) => {
+                const track = timeline.tracks.find((t) => t.keyframes.some((k) => k.id === kfId))
+                return track ? [{ kfId, target: track.target, timelineId: selectedTimelineId }] : []
+              })
+              const cmd = makeAlignToFrameCmd(scene, operatingItems, scene.composition.frameRate)
+              if (cmd) dispatchCommand(cmd)
+            }}
+            className="px-2 py-0.5 rounded bg-yellow-900/40 hover:bg-yellow-800/60
+                       text-yellow-400 hover:text-yellow-200 border border-yellow-800/40
+                       transition-colors"
+          >Align ⌦</button>
+          <button
+            onClick={deleteSelectedKfs}
+            className="ml-auto px-2 py-0.5 rounded bg-red-950/40 hover:bg-red-900/60
+                       text-red-400 hover:text-red-200 border border-red-800/40 transition-colors"
+          >Delete</button>
+        </div>
+      )}
+
+      {/* ── Status bar ───────────────────────────────────────────────────── */}
+      <TimelineStatusBar
+        currentTimeMs={currentTimeMs}
+        frameRate={scene.composition.frameRate}
+        selectedKfCount={selectedKfIds.size}
+        zoomFactor={vp.zoomFactor}
+        snapEnabled={settings.snapEnabled}
+        snapLabel={drag.snapIndicatorMs != null
+          ? `${Math.round(drag.snapIndicatorMs)}ms`
+          : null}
+      />
     </div>
   )
 }

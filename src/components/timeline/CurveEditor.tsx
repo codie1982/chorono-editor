@@ -10,7 +10,8 @@ import {
 import { useCurveDrag } from './hooks/useCurveDrag'
 import { makeUpdateEasingCmd, makeAddKfCmd, makeDeleteKfCmd, makeUpdateKfValueCmd, makeMirrorTimingCmd } from '@/lib/editor/commands-keyframe'
 import { evaluateTrack } from '@/lib/evaluator'
-import { updateKfTimeMs } from '@/lib/timeline/keyframeOps'
+import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
+import type { TangentMode } from '@/lib/types'
 import { nextKfId } from '@/lib/defaults'
 import ContextMenu, { useContextMenu, type MenuItem } from '@/components/ui/ContextMenu'
 import type { EasingType } from '@/lib/types'
@@ -88,6 +89,42 @@ export default function CurveEditor({
     [tracks, hidden],
   )
 
+  // ── Normalize mode: per-track Y rescale ───────────────────────────────────
+  // When on, each curve is mapped to its own [min, max] on the Y axis so
+  // curves with very different value ranges (e.g. opacity 0–1 vs. x 0–1000)
+  // become visually comparable at the same height.
+  const [normalizeMode, setNormalizeMode] = useState(false)
+
+  const perTrackRanges = useMemo((): Map<string, ValueRange> => {
+    const m = new Map<string, ValueRange>()
+    for (const t of visibleTracks) {
+      const vals = t.keyframes
+        .map((k) => k.value)
+        .filter((v): v is number => typeof v === 'number')
+      if (vals.length === 0) { m.set(t.target, { min: -1, max: 1 }); continue }
+      const lo = Math.min(...vals)
+      const hi = Math.max(...vals)
+      const pad = (hi - lo) * 0.1 || 0.5
+      m.set(t.target, { min: lo - pad, max: hi + pad })
+    }
+    return m
+  }, [visibleTracks])
+
+  // ── Hover state — shows kf metadata in the status bar ────────────────────
+  const [hoveredKf, setHoveredKf] = useState<{
+    trackTarget: string; kfId: string; ms: number; value: number; easingType: string
+  } | null>(null)
+  // Track being hovered (over the curve line itself, not a keyframe node).
+  // Highlights the corresponding visible path so the user can tell which
+  // curve they're about to interact with.
+  const [hoveredTrack, setHoveredTrack] = useState<string | null>(null)
+  // Clicked segment — the portion of a curve between two consecutive keys.
+  // Clicking a segment ALSO selects its two bounding keyframes so the
+  // existing easing/delete toolbar acts on them.
+  const [selectedSegment, setSelectedSegment] = useState<{
+    trackTarget: string; kfAId: string; kfBId: string
+  } | null>(null)
+
   // ── Size observation (SVG fills its container) ────────────────────────────
   // Callback ref instead of useEffect+useRef so we measure correctly even
   // when the container is conditionally rendered (the editor shows several
@@ -129,6 +166,14 @@ export default function CurveEditor({
     startMs: viewStartMs, endMs: viewEndMs,
     range, widthPx: plotW, heightPx: plotH,
   }
+
+  // Per-track viewport resolver — returns viewport with per-track range when
+  // normalizeMode is on; falls back to shared range when off.
+  const getTrackViewport = useCallback((target: string): CurveViewport => {
+    if (!normalizeMode) return viewport
+    const r = perTrackRanges.get(target) ?? range
+    return { ...viewport, range: r }
+  }, [normalizeMode, perTrackRanges, viewport, range])
 
   // ── Pointer mapping (client → SVG-plot-local) ─────────────────────────────
   const clientToLocal = useCallback((clientX: number, clientY: number) => {
@@ -215,6 +260,97 @@ export default function CurveEditor({
     setViewStartMs(Math.max(0, lo - pad))
     setViewEndMs(hi + pad)
   }, [tracks, selectedKfIds])
+
+  // ── Select all visible keyframes ──────────────────────────────────────────
+  const selectAllKfs = useCallback(() => {
+    const next = new Set<string>()
+    for (const t of visibleTracks) for (const k of t.keyframes) next.add(k.id)
+    onSelectKeyframes(next)
+  }, [visibleTracks, onSelectKeyframes])
+
+  // ── Bulk easing — applies to all selected kfs across all tracks ───────────
+  const applyEasingToSelected = useCallback((type: EasingType) => {
+    if (!selectedTimelineId || selectedKfIds.size === 0) return
+    const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+    if (!tl) return
+    interface KfRef { target: string; kfId: string; fromEasing: EasingType }
+    const refs: KfRef[] = []
+    for (const tr of tl.tracks) {
+      for (const k of tr.keyframes) {
+        if (selectedKfIds.has(k.id)) {
+          refs.push({ target: tr.target, kfId: k.id, fromEasing: (k.easing?.type ?? 'easeOut') as EasingType })
+        }
+      }
+    }
+    if (refs.length === 0) return
+    const toEasing = type === 'customBezier'
+      ? { type: 'customBezier' as const, bezier: DEFAULT_BEZIER }
+      : { type }
+    editor.dispatchCommand({
+      label: `Set Easing: ${type} (${refs.length})`,
+      execute: (s) => refs.reduce((sc, r) => updateKfEasing(sc, selectedTimelineId, r.target, r.kfId, toEasing as { type: EasingType }), s),
+      undo:    (s) => refs.reduce((sc, r) => updateKfEasing(sc, selectedTimelineId, r.target, r.kfId, { type: r.fromEasing }), s),
+    })
+  }, [scene.timelines, selectedTimelineId, selectedKfIds, editor])
+
+  // ── Bulk tangent mode — applies to all selected kfs across all tracks ────
+  const applyTangentToSelected = useCallback((mode: TangentMode) => {
+    if (!selectedTimelineId || selectedKfIds.size === 0) return
+    const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+    if (!tl) return
+    interface KfRef { target: string; kfId: string; fromMode: TangentMode | undefined }
+    const refs: KfRef[] = []
+    for (const tr of tl.tracks) {
+      for (const k of tr.keyframes) {
+        if (selectedKfIds.has(k.id)) {
+          refs.push({ target: tr.target, kfId: k.id, fromMode: k.tangentMode as TangentMode | undefined })
+        }
+      }
+    }
+    if (refs.length === 0) return
+    editor.dispatchCommand({
+      label: `Set Tangent: ${mode} (${refs.length})`,
+      execute: (s) => refs.reduce((sc, r) =>
+        mapKfInScene(sc, selectedTimelineId, r.target, r.kfId, (k) => ({ ...k, tangentMode: mode })), s),
+      undo:    (s) => refs.reduce((sc, r) =>
+        mapKfInScene(sc, selectedTimelineId, r.target, r.kfId, (k) => ({ ...k, tangentMode: r.fromMode })), s),
+    })
+  }, [scene.timelines, selectedTimelineId, selectedKfIds, editor])
+
+  // ── Bulk delete selected kfs ──────────────────────────────────────────────
+  const deleteSelectedKfs = useCallback(() => {
+    if (!selectedTimelineId || selectedKfIds.size === 0) return
+    const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+    if (!tl) return
+    interface KfSnap { target: string; kf: Keyframe }
+    const snaps: KfSnap[] = []
+    for (const tr of tl.tracks) {
+      for (const k of tr.keyframes) {
+        if (selectedKfIds.has(k.id)) snaps.push({ target: tr.target, kf: k })
+      }
+    }
+    if (snaps.length === 0) return
+    editor.dispatchCommand({
+      label: `Delete ${snaps.length} Keyframe${snaps.length !== 1 ? 's' : ''}`,
+      execute: (s) => snaps.reduce((sc, { target, kf }) => {
+        const tl2 = sc.timelines.find((t) => t.id === selectedTimelineId)
+        if (!tl2) return sc
+        return {
+          ...sc,
+          timelines: sc.timelines.map((t) => t.id !== selectedTimelineId ? t :
+            { ...t, tracks: t.tracks.map((tr) => tr.target !== target ? tr :
+              { ...tr, keyframes: tr.keyframes.filter((k) => k.id !== kf.id) }) })
+        }
+      }, s),
+      undo: (s) => snaps.reduce((sc, { target, kf }) => ({
+        ...sc,
+        timelines: sc.timelines.map((t) => t.id !== selectedTimelineId ? t :
+          { ...t, tracks: t.tracks.map((tr) => tr.target !== target ? tr :
+            { ...tr, keyframes: [...tr.keyframes, kf].sort((a, b) => a.timeMs - b.timeMs) }) })
+      }), s),
+    })
+    onSelectKeyframes(new Set())
+  }, [scene.timelines, selectedTimelineId, selectedKfIds, editor, onSelectKeyframes])
 
   // ── Add-keyframe helper — used by segment-dblclick and context menu ──────
   // Evaluates the track at `ms` so the inserted keyframe sits ON the curve
@@ -439,6 +575,8 @@ export default function CurveEditor({
     // Scrub fires immediately so a single click still seeks (no drag required).
     if (mode === 'scrub') {
       onTimeChange(Math.max(0, Math.min(duration, xToTime(x))))
+      // Click on empty plot drops any segment highlight.
+      setSelectedSegment(null)
     }
     if (mode === 'lasso') {
       setLassoRect({ x1: x, y1: y, x2: x, y2: y })
@@ -496,10 +634,11 @@ export default function CurveEditor({
       const hi = { x: Math.max(lassoRect.x1, lassoRect.x2), y: Math.max(lassoRect.y1, lassoRect.y2) }
       const next = new Set<string>(e.shiftKey ? selectedKfIds : [])
       for (const t of visibleTracks) {
+        const tvp = getTrackViewport(t.target)
         for (const k of t.keyframes) {
           if (typeof k.value !== 'number') continue
-          const kx = msToX(viewport, k.timeMs)
-          const ky = valueToY(viewport, k.value)
+          const kx = msToX(tvp, k.timeMs)
+          const ky = valueToY(tvp, k.value)
           if (kx >= lo.x && kx <= hi.x && ky >= lo.y && ky <= hi.y) next.add(k.id)
         }
       }
@@ -559,57 +698,127 @@ export default function CurveEditor({
       tabIndex={0}
     >
 
-      {/* Top bar — toolbar (left) + track legend (centre) ─────────────────
-          Toolbar holds chart-wide toggles; legend follows for per-curve
-          visibility. Both share the same strip so vertical real estate
-          stays tight when the panel is small. */}
-      <div className="flex items-center gap-1 px-2 py-1 border-b border-gray-800 bg-gray-900/70 shrink-0">
-        {/* ── Toolbar buttons ───────────────────────────────────────── */}
-        <ToolbarBtn
-          title="Fit all curves to view (A)"
-          onClick={() => { setViewStartMs(0); setViewEndMs(duration) }}
-        >Fit</ToolbarBtn>
-        <ToolbarBtn
-          title="Fit selected keyframes to view (F)"
-          onClick={() => fitToSelection()}
-          disabled={selectedKfIds.size === 0}
-        >Fit Sel</ToolbarBtn>
-        <ToolbarBtn
-          title={showHandles ? 'Hide bezier handles (H)' : 'Show bezier handles (H)'}
-          onClick={() => setShowHandles((v) => !v)}
-          active={showHandles}
-        >Handles</ToolbarBtn>
-        {/* TODO(big-feature): Value Graph / Speed Graph toggle here.
-            TODO(big-feature): Normalize toggle (per-track Y rescale). */}
+      {/* Top bar — two rows:
+          Row 1: chart-wide toggles + curve legend
+          Row 2: (only when kfs selected) bulk easing / tangent / delete */}
+      <div className="flex flex-col border-b border-gray-800 bg-gray-900/70 shrink-0">
 
-        <span className="w-px h-4 bg-gray-700 mx-1.5" />
+        {/* ── Row 1: toolbar + curve legend ──────────────────────────── */}
+        <div className="flex items-center gap-1 px-2 py-1 flex-wrap">
+          <ToolbarBtn
+            title="Fit all curves to view (A)"
+            onClick={() => { setViewStartMs(0); setViewEndMs(duration) }}
+          >Fit</ToolbarBtn>
+          <ToolbarBtn
+            title="Fit selected keyframes to view (F)"
+            onClick={() => fitToSelection()}
+            disabled={selectedKfIds.size === 0}
+          >Fit Sel</ToolbarBtn>
+          <ToolbarBtn
+            title={showHandles ? 'Hide bezier handles (H)' : 'Show bezier handles (H)'}
+            onClick={() => setShowHandles((v) => !v)}
+            active={showHandles}
+          >Handles</ToolbarBtn>
+          <ToolbarBtn
+            title="Normalize: rescale each curve to its own min/max so all curves fill the same height"
+            onClick={() => setNormalizeMode((v) => !v)}
+            active={normalizeMode}
+          >Norm</ToolbarBtn>
+          <ToolbarBtn
+            title="Select all visible keyframes"
+            onClick={selectAllKfs}
+            disabled={visibleTracks.length === 0}
+          >All</ToolbarBtn>
 
-        <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mr-1">
-          Curves
-        </span>
-        {tracks.map((t, i) => {
-          const color = pickTrackColor(t.target, i)
-          const isHidden = hidden.has(t.target)
-          const label = t.target.replace(`layers.${layer.id}.`, '')
-          return (
+          <span className="w-px h-4 bg-gray-700 mx-1.5 shrink-0" />
+
+          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mr-1 shrink-0">
+            Curves
+          </span>
+          {tracks.map((t, i) => {
+            const color = pickTrackColor(t.target, i)
+            const isHidden = hidden.has(t.target)
+            const label = t.target.replace(`layers.${layer.id}.`, '')
+            return (
+              <button
+                key={t.target}
+                onClick={() => setHidden((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(t.target)) next.delete(t.target)
+                  else                    next.add(t.target)
+                  return next
+                })}
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity ${
+                  isHidden ? 'opacity-30 hover:opacity-60' : 'opacity-100'
+                } hover:bg-gray-800`}
+                title={isHidden ? 'Show this curve' : 'Hide this curve'}
+              >
+                <span style={{ color }}>■</span>
+                <span className="ml-1 text-gray-300">{label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Row 2: bulk easing/tangent/delete (only when kfs selected) ─ */}
+        {selectedKfIds.size > 0 && (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-900/90 border-t border-gray-800/60 flex-wrap">
+            <span className="text-[9px] uppercase tracking-wider text-gray-600 font-semibold pr-1 shrink-0">
+              Easing
+            </span>
+            {([
+              { type: 'linear'      as EasingType, label: 'Lin',        title: 'Linear'          },
+              { type: 'easeIn'      as EasingType, label: 'In',         title: 'Ease In'         },
+              { type: 'easeOut'     as EasingType, label: 'Out',        title: 'Ease Out'        },
+              { type: 'easeInOut'   as EasingType, label: 'In/Out',     title: 'Ease In-Out'     },
+              { type: 'hold'        as EasingType, label: 'Hold',       title: 'Hold (step)'     },
+              { type: 'customBezier'as EasingType, label: 'Bezier',     title: 'Custom Bezier'   },
+            ] as const).map(({ type, label, title }) => (
+              <button
+                key={type}
+                onClick={() => applyEasingToSelected(type)}
+                title={`Set easing to ${title} for selected keyframes`}
+                className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-800 hover:bg-blue-900
+                           text-gray-400 hover:text-blue-200 border border-gray-700 transition-colors"
+              >{label}</button>
+            ))}
+
+            <span className="w-px h-3 bg-gray-700 mx-1 shrink-0" />
+
+            <span className="text-[9px] uppercase tracking-wider text-gray-600 font-semibold pr-1 shrink-0">
+              Tangent
+            </span>
+            {([
+              { mode: 'broken'  as TangentMode, label: 'Broken',  title: 'Broken — each handle moves independently' },
+              { mode: 'aligned' as TangentMode, label: 'Aligned', title: 'Aligned — handles stay collinear (smooth)' },
+              { mode: 'auto'    as TangentMode, label: 'Auto',    title: 'Auto — Catmull-Rom smooth tangent'        },
+              { mode: 'linear'  as TangentMode, label: 'Linear',  title: 'Linear — flat tangent (no overshoot)'     },
+            ] as const).map(({ mode, label, title }) => (
+              <button
+                key={mode}
+                onClick={() => applyTangentToSelected(mode)}
+                title={title}
+                className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-800 hover:bg-purple-900
+                           text-gray-400 hover:text-purple-200 border border-gray-700 transition-colors"
+              >{label}</button>
+            ))}
+
+            <span className="w-px h-3 bg-gray-700 mx-1 shrink-0" />
+
             <button
-              key={t.target}
-              onClick={() => setHidden((prev) => {
-                const next = new Set(prev)
-                if (next.has(t.target)) next.delete(t.target)
-                else                    next.add(t.target)
-                return next
-              })}
-              className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity ${
-                isHidden ? 'opacity-30 hover:opacity-60' : 'opacity-100'
-              } hover:bg-gray-800`}
-              title={isHidden ? 'Show this curve' : 'Hide this curve'}
+              onClick={deleteSelectedKfs}
+              title={`Delete ${selectedKfIds.size} selected keyframe${selectedKfIds.size !== 1 ? 's' : ''}`}
+              className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-800 hover:bg-red-900
+                         text-gray-500 hover:text-red-300 border border-gray-700 transition-colors"
             >
-              <span style={{ color }}>■</span>
-              <span className="ml-1 text-gray-300">{label}</span>
+              Delete ({selectedKfIds.size})
             </button>
-          )
-        })}
+
+            <span className="ml-auto text-[9px] font-mono text-gray-600 shrink-0">
+              {selectedKfIds.size} selected
+            </span>
+          </div>
+        )}
       </div>
 
       <svg
@@ -700,11 +909,36 @@ export default function CurveEditor({
         <g transform={`translate(${LEFT_GUTTER} ${TOP_GUTTER})`}>
           {visibleTracks.map((t, i) => {
             const color = pickTrackColor(t.target, i)
-            const d = buildCurvePath(t, viewport)
+            const tvp = getTrackViewport(t.target)
+            const d = buildCurvePath(t, tvp)
             const handleDblClick = (e: React.MouseEvent) => {
               const { x } = clientToLocal(e.clientX, e.clientY)
               const ms = viewStartMs + (x / plotW) * Math.max(1, viewEndMs - viewStartMs)
               addKeyframeAt(t.target, Math.max(0, Math.min(duration, ms)))
+            }
+            const isHovered = hoveredTrack === t.target
+            // Find which segment the pointer is over (used by click + ctx)
+            const sortedKfs = [...t.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+            const findSegmentAt = (ms: number) => {
+              for (let i = 0; i < sortedKfs.length - 1; i++) {
+                if (ms >= sortedKfs[i].timeMs && ms <= sortedKfs[i + 1].timeMs) {
+                  return { kfA: sortedKfs[i], kfB: sortedKfs[i + 1] }
+                }
+              }
+              return null
+            }
+            // Highlighted segment path for THIS track, if selected.
+            let selSegD = ''
+            if (selectedSegment?.trackTarget === t.target) {
+              const a = sortedKfs.find((k) => k.id === selectedSegment.kfAId)
+              const b = sortedKfs.find((k) => k.id === selectedSegment.kfBId)
+              if (a && b) {
+                selSegD = buildCurvePath(
+                  { ...t, keyframes: [a, b] },
+                  { ...tvp, startMs: a.timeMs, endMs: b.timeMs,
+                    widthPx: msToX(tvp, b.timeMs) - msToX(tvp, a.timeMs) },
+                )
+              }
             }
             return (
               <g key={t.target}>
@@ -712,7 +946,20 @@ export default function CurveEditor({
                   d={d}
                   fill="none" stroke="transparent"
                   strokeWidth={10}
-                  style={{ cursor: 'copy' }}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={() => setHoveredTrack(t.target)}
+                  onMouseLeave={() => setHoveredTrack((cur) => cur === t.target ? null : cur)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const { x } = clientToLocal(e.clientX, e.clientY)
+                    const ms = viewStartMs + (x / plotW) * Math.max(1, viewEndMs - viewStartMs)
+                    const seg = findSegmentAt(ms)
+                    if (!seg) return
+                    setSelectedSegment({ trackTarget: t.target, kfAId: seg.kfA.id, kfBId: seg.kfB.id })
+                    const next = new Set(e.shiftKey ? selectedKfIds : [])
+                    next.add(seg.kfA.id); next.add(seg.kfB.id)
+                    onSelectKeyframes(next)
+                  }}
                   onDoubleClick={handleDblClick}
                   onContextMenu={(e) => {
                     e.preventDefault()
@@ -723,14 +970,34 @@ export default function CurveEditor({
                     ctxMenu.open(e)
                   }}
                 >
-                  <title>Double-click to add keyframe · Right-click for segment options</title>
+                  <title>Click to select segment · Double-click to add keyframe · Right-click for segment options</title>
                 </path>
                 <path
                   d={d}
                   fill="none" stroke={color}
-                  strokeWidth={1.5} opacity={0.95}
+                  strokeWidth={isHovered ? 3 : 1.5}
+                  opacity={isHovered ? 1 : 0.95}
+                  style={isHovered ? { filter: `drop-shadow(0 0 3px ${color})` } : undefined}
                   pointerEvents="none"
                 />
+                {selSegD && (
+                  <g
+                    transform={`translate(${msToX(tvp, sortedKfs.find((k) => k.id === selectedSegment!.kfAId)!.timeMs)} 0)`}
+                    pointerEvents="none"
+                  >
+                    <path
+                      d={selSegD}
+                      fill="none" stroke="#fff"
+                      strokeWidth={5} opacity={0.35}
+                    />
+                    <path
+                      d={selSegD}
+                      fill="none" stroke={color}
+                      strokeWidth={3.5} opacity={1}
+                      style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+                    />
+                  </g>
+                )}
               </g>
             )
           })}
@@ -746,6 +1013,7 @@ export default function CurveEditor({
             Globally hidden when the toolbar "Show Handles" toggle is off. */}
         {showHandles && <g transform={`translate(${LEFT_GUTTER} ${TOP_GUTTER})`}>
           {visibleTracks.flatMap((t) => {
+            const tvp = getTrackViewport(t.target)
             const sorted = [...t.keyframes].sort((a, b) => a.timeMs - b.timeMs)
             const out: React.ReactNode[] = []
             for (let i = 0; i < sorted.length - 1; i++) {
@@ -754,8 +1022,8 @@ export default function CurveEditor({
               if (kfA.easing?.type !== 'customBezier') continue
               if (typeof kfA.value !== 'number' || typeof kfB.value !== 'number') continue
               const bez = kfA.easing.bezier ?? DEFAULT_BEZIER
-              const ax = msToX(viewport, kfA.timeMs),  ay = valueToY(viewport, kfA.value)
-              const bx = msToX(viewport, kfB.timeMs),  by = valueToY(viewport, kfB.value)
+              const ax = msToX(tvp, kfA.timeMs),  ay = valueToY(tvp, kfA.value)
+              const bx = msToX(tvp, kfB.timeMs),  by = valueToY(tvp, kfB.value)
               // Map normalized (cx, cy) → segment-local pixel coords.
               const p1x = ax + bez.cx1 * (bx - ax)
               const p1y = ay + bez.cy1 * (by - ay)
@@ -795,25 +1063,41 @@ export default function CurveEditor({
         <g transform={`translate(${LEFT_GUTTER} ${TOP_GUTTER})`}>
           {visibleTracks.flatMap((t, i) => {
             const color = pickTrackColor(t.target, i)
+            const tvp = getTrackViewport(t.target)
             return t.keyframes.map((kf) => {
               const isDragged = drag.preview != null && drag.isDragging
                                 && drag.preview.value === kf.value && drag.preview.ms === kf.timeMs
               const ms  = isDragged ? drag.preview!.ms    : kf.timeMs
               const val = isDragged ? drag.preview!.value : (kf.value as number)
-              const cx = msToX(viewport, ms)
-              const cy = valueToY(viewport, val)
+              const cx = msToX(tvp, ms)
+              const cy = valueToY(tvp, val)
               const isSelected = selectedKfIds.has(kf.id)
+              const isHov = hoveredKf?.kfId === kf.id && hoveredKf.trackTarget === t.target
               return (
                 <g key={`${t.target}-${kf.id}`}>
+                  {/* Hover highlight ring */}
+                  {isHov && (
+                    <circle cx={cx} cy={cy} r={9}
+                      fill="none" stroke={color} strokeWidth={1} opacity={0.4}
+                      pointerEvents="none"
+                    />
+                  )}
                   <circle
                     cx={cx} cy={cy}
                     r={isSelected ? 5 : 4}
                     fill={isSelected ? '#fff' : color}
-                    stroke={color}
-                    strokeWidth={isSelected ? 2 : 1}
+                    stroke={isHov ? '#fff' : color}
+                    strokeWidth={isSelected ? 2 : isHov ? 1.5 : 1}
                     style={{ cursor: 'move' }}
+                    onMouseEnter={() => setHoveredKf({
+                      trackTarget: t.target, kfId: kf.id,
+                      ms: kf.timeMs, value: kf.value as number,
+                      easingType: kf.easing?.type ?? 'easeOut',
+                    })}
+                    onMouseLeave={() => setHoveredKf(null)}
                     onPointerDown={(e) => {
                       e.stopPropagation()
+                      setHoveredKf(null)
                       // Alt-drag duplicate: clone the keyframe first, then
                       // begin drag on the new one. The original stays put;
                       // the clone follows the cursor. Two undo steps
@@ -934,12 +1218,34 @@ export default function CurveEditor({
         />
       )}
 
-      {/* Status bar — hover hint + drag readout */}
-      <div className="px-2 py-1 text-[10px] font-mono text-gray-500 border-t border-gray-800 shrink-0">
-        {drag.preview
-          ? <>t = {Math.round(drag.preview.ms)}ms · v = {formatTickValue(drag.preview.value)}</>
-          : <>Drag = scrub · Ctrl+drag = pan · Shift+drag = zoom · Alt+drag = lasso select · Double-click curve = add kf · Right-click = menu · F / A / H = fit sel / all / toggle handles · Alt+drag node = duplicate</>
-        }
+      {/* Status bar — drag readout / hover info / hint ─────────────────────── */}
+      <div className="flex items-center gap-0 px-2 h-5 text-[9px] font-mono border-t border-gray-800
+                      bg-gray-950/80 text-gray-600 shrink-0 select-none overflow-hidden">
+        {drag.preview ? (
+          // Active drag — show time + value
+          <span className="text-yellow-400">
+            t = {Math.round(drag.preview.ms)}ms · v = {formatTickValue(drag.preview.value)}
+          </span>
+        ) : hoveredKf ? (
+          // Hovering a keyframe — show its metadata
+          <>
+            <span className="text-yellow-300">⬦</span>
+            <span className="ml-1 text-gray-400">{Math.round(hoveredKf.ms)}ms</span>
+            <span className="mx-1 text-gray-700">·</span>
+            <span className="text-gray-400">{formatTickValue(hoveredKf.value)}</span>
+            <span className="mx-1 text-gray-700">·</span>
+            <span className="text-blue-400">{hoveredKf.easingType}</span>
+            {normalizeMode && (
+              <><span className="mx-1 text-gray-700">·</span><span className="text-green-500">norm</span></>
+            )}
+          </>
+        ) : (
+          // Idle — show hint + normalize indicator
+          <span className="truncate">
+            {normalizeMode && <span className="text-green-500 mr-2">NORM</span>}
+            Drag=scrub · Ctrl+drag=pan · Shift+drag=zoom · Alt+drag=lasso · Dbl-click curve=add kf · F/A/H
+          </span>
+        )}
       </div>
     </div>
   )

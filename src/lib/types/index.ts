@@ -68,6 +68,7 @@ export { buildEffectsFilter } from './effects'
 
 export type {
   AnimatableGroup, AnimatableProperty,
+  TimelineMode,
   TimelineSettings,
   EditorSelection,
   CompositionPreset,

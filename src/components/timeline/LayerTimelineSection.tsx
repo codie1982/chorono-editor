@@ -1,4 +1,5 @@
 'use client'
+import { useEffect, useRef, useState } from 'react'
 import type { Layer, Track, EasingType, AnimatableProperty } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { sampleTrackValueRange, valueToY } from '@/lib/timeline/valueGraph'
@@ -44,6 +45,22 @@ interface Props {
   onKfDoubleClick?: (trackTarget: string, kfId: string, e: React.MouseEvent) => void
   /** Right-click on the layer's activity bar → opens layer-bar context menu. */
   onLayerBarContextMenu?: (layerId: string, e: React.MouseEvent) => void
+  /** Total duration of the selected timeline, for clamping drag. */
+  durationMs: number
+  /**
+   * Fired when the user finishes dragging the layer activity bar.
+   * `kind='move'`      → bar body was dragged (shift both start+end)
+   * `kind='trimStart'` → left edge was dragged (change startMs)
+   * `kind='trimEnd'`   → right edge was dragged (change endMs)
+   */
+  onLayerBarCommit?: (
+    layerId:     string,
+    kind:        'move' | 'trimStart' | 'trimEnd',
+    fromStartMs: number,
+    fromEndMs:   number | undefined,
+    toStartMs:   number,
+    toEndMs:     number | undefined,
+  ) => void
 }
 
 const ROW_HEADER  = 32
@@ -59,6 +76,7 @@ export default function LayerTimelineSection({
   onAddTrack, onRemoveTrack, onAddKeyframeAtPlayhead,
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
+  durationMs, onLayerBarCommit,
 }: Props) {
 
   const rowH = graphMode ? ROW_TRACK_G : ROW_TRACK
@@ -98,12 +116,22 @@ export default function LayerTimelineSection({
             onClick={(e) => { e.stopPropagation(); onToggleFlag('solo') }} />
         </div>
 
-        {/* Right: layer activity bar */}
+        {/* Right: layer activity bar (draggable) */}
         <div
           className="flex-1 relative"
           onContextMenu={onLayerBarContextMenu && ((e) => onLayerBarContextMenu(layer.id, e))}
         >
-          <LayerActivityBar layer={layer} msToScreenPx={msToScreenPx} />
+          <DraggableLayerBar
+            layer={layer}
+            msToScreenPx={msToScreenPx}
+            visibleStartMs={visibleStartMs}
+            visibleEndMs={visibleEndMs}
+            trackWidth={trackWidth}
+            durationMs={durationMs}
+            onCommit={(kind, fromStart, fromEnd, toStart, toEnd) =>
+              onLayerBarCommit?.(layer.id, kind, fromStart, fromEnd, toStart, toEnd)
+            }
+          />
         </div>
       </div>
 
@@ -201,32 +229,162 @@ export default function LayerTimelineSection({
   )
 }
 
-// ── Layer activity bar (right side of header row) ────────────────────────────
+// ── Draggable layer activity bar ─────────────────────────────────────────────
+//
+// Three interaction zones:
+//   left  HANDLE_W px → trimStart (resize left edge, changes startMs)
+//   body  (middle)   → move (shift both startMs + endMs, preserves duration)
+//   right HANDLE_W px → trimEnd   (resize right edge, changes endMs)
+//
+// Local `preview` state gives instant visual feedback while dragging.
+// The `onCommit` callback fires on pointerup so the parent can dispatch
+// the appropriate undo-able command.
 
-function LayerActivityBar({ layer, msToScreenPx }: {
-  layer: Layer
-  msToScreenPx: (ms: number) => number
+const HANDLE_W    = 6     // px width of each trim handle
+const MIN_DUR_MS  = 10    // minimum bar duration in ms
+
+type BarDragKind = 'move' | 'trimStart' | 'trimEnd'
+
+function DraggableLayerBar({
+  layer, msToScreenPx, visibleStartMs, visibleEndMs, trackWidth, durationMs, onCommit,
+}: {
+  layer:          Layer
+  msToScreenPx:   (ms: number) => number
+  visibleStartMs: number
+  visibleEndMs:   number
+  trackWidth:     number
+  durationMs:     number
+  onCommit: (
+    kind:        BarDragKind,
+    fromStartMs: number,
+    fromEndMs:   number | undefined,
+    toStartMs:   number,
+    toEndMs:     number | undefined,
+  ) => void
 }) {
-  // Without an explicit start/end we assume the layer is active for the whole timeline.
-  const startMs = layer.startMs ?? 0
-  const endMs   = layer.endMs   ?? msToScreenPxInverse(msToScreenPx)
-  const x0 = msToScreenPx(startMs)
-  const x1 = msToScreenPx(endMs)
-  const w  = Math.max(2, x1 - x0)
+  // drag state must live in React state so changing it triggers the useEffect
+  // below to (un)register global pointer listeners. previewRef mirrors preview
+  // state so the pointerup handler always sees the freshest value.
+  const [drag, setDrag] = useState<{
+    kind:        BarDragKind
+    startX:      number
+    origStartMs: number
+    origEndMs:   number | undefined
+  } | null>(null)
+  const previewRef = useRef<{ startMs: number; endMs: number } | null>(null)
+  const [preview, setPreviewState] = useState<{ startMs: number; endMs: number } | null>(null)
+  const setPreview = (v: typeof preview) => { previewRef.current = v; setPreviewState(v) }
+
+  const origStart = layer.startMs ?? 0
+  const origEnd   = layer.endMs   // undefined → whole timeline
+
+  const dispStartMs = preview?.startMs ?? origStart
+  const dispEndMs   = preview?.endMs   ?? origEnd ?? durationMs
+
+  const x0 = msToScreenPx(dispStartMs)
+  const x1 = msToScreenPx(dispEndMs)
+  const w  = Math.max(HANDLE_W * 2 + 2, x1 - x0)
+
+  const msPerPx = trackWidth > 0
+    ? (visibleEndMs - visibleStartMs) / trackWidth
+    : 1
+
+  const beginDrag = (e: React.PointerEvent, kind: BarDragKind) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    setDrag({ kind, startX: e.clientX, origStartMs: origStart, origEndMs: origEnd })
+  }
+
+  useEffect(() => {
+    if (!drag) return
+
+    const onMove = (e: PointerEvent) => {
+      const dMs = (e.clientX - drag.startX) * msPerPx
+      const oS  = drag.origStartMs
+      const oE  = drag.origEndMs ?? durationMs
+      const dur = oE - oS
+      if (drag.kind === 'move') {
+        const newS = Math.max(0, Math.min(durationMs - dur, oS + dMs))
+        setPreview({ startMs: newS, endMs: newS + dur })
+      } else if (drag.kind === 'trimStart') {
+        const newS = Math.max(0, Math.min(oE - MIN_DUR_MS, oS + dMs))
+        setPreview({ startMs: newS, endMs: oE })
+      } else {
+        const newE = Math.max(oS + MIN_DUR_MS, Math.min(durationMs, oE + dMs))
+        setPreview({ startMs: oS, endMs: newE })
+      }
+    }
+
+    const onUp = () => {
+      const p = previewRef.current
+      setDrag(null)
+      setPreview(null)
+      if (!p) return
+      onCommit(drag.kind, drag.origStartMs, drag.origEndMs, p.startMs, p.endMs)
+    }
+
+    const onCancel = () => { setDrag(null); setPreview(null) }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup',   onUp)
+    window.addEventListener('pointercancel', onCancel)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup',   onUp)
+      window.removeEventListener('pointercancel', onCancel)
+    }
+  }, [drag, msPerPx, durationMs, onCommit])
+
   return (
     <div
-      className="absolute top-1 bottom-1 rounded-sm bg-blue-500/30 border border-blue-500/50"
+      className="absolute top-1 bottom-1 select-none"
       style={{ left: `${x0}px`, width: `${w}px` }}
-      title={`${layer.name}: ${Math.round(startMs)}–${Math.round(endMs)} ms`}
-    />
-  )
-}
+    >
+      {/* Left trim handle */}
+      <div
+        className="absolute left-0 top-0 bottom-0 z-10 rounded-l-sm
+                   bg-blue-400/70 hover:bg-blue-300 cursor-ew-resize
+                   flex items-center justify-center"
+        style={{ width: HANDLE_W }}
+        onPointerDown={(e) => beginDrag(e, 'trimStart')}
+        title="Drag to trim start"
+      >
+        <div className="w-0.5 h-3 bg-white/40 rounded-full" />
+      </div>
 
-// Tiny helper: we don't know the duration here, so fall back to whatever
-// msToScreenPx(0) inverts to. In practice the parent will always pass real
-// startMs/endMs once we wire layer-time-range editing.
-function msToScreenPxInverse(_msToScreenPx: (ms: number) => number): number {
-  return 1000000  // arbitrary large — clipped by overflow-hidden on parent
+      {/* Body — move (grab to shift both start + end) */}
+      <div
+        className={`absolute top-0 bottom-0 rounded-sm border
+          ${preview
+            ? 'bg-blue-400/40 border-blue-300/70'
+            : 'bg-blue-500/30 border-blue-500/50 hover:bg-blue-500/40'}
+          cursor-grab active:cursor-grabbing`}
+        style={{ left: HANDLE_W, right: HANDLE_W }}
+        onPointerDown={(e) => beginDrag(e, 'move')}
+        title={`${layer.name}: ${Math.round(dispStartMs)}–${Math.round(dispEndMs)} ms`}
+      >
+        {preview && (
+          <span className="absolute inset-0 flex items-center justify-center
+                           text-[9px] font-mono text-blue-200 pointer-events-none truncate px-1">
+            {Math.round(dispStartMs)}–{Math.round(dispEndMs)}
+          </span>
+        )}
+      </div>
+
+      {/* Right trim handle */}
+      <div
+        className="absolute right-0 top-0 bottom-0 z-10 rounded-r-sm
+                   bg-blue-400/70 hover:bg-blue-300 cursor-ew-resize
+                   flex items-center justify-center"
+        style={{ width: HANDLE_W }}
+        onPointerDown={(e) => beginDrag(e, 'trimEnd')}
+        title="Drag to trim end"
+      >
+        <div className="w-0.5 h-3 bg-white/40 rounded-full" />
+      </div>
+    </div>
+  )
 }
 
 // ── Small flag toggle (eye / lock / solo) ────────────────────────────────────

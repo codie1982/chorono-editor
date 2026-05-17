@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import type { Timeline } from '@/lib/types'
+import type { Timeline, TimelineMode } from '@/lib/types'
 
 interface Props {
   timelines: Timeline[]
@@ -11,7 +11,7 @@ interface Props {
   isPlaying: boolean
   zoomFactor: number
   playbackSpeed: number
-  graphEditorMode: boolean
+  timelineMode: TimelineMode
   hasSelectedLayer: boolean
   onPlayToggle: () => void
   onSelectTimeline: (id: string) => void
@@ -21,7 +21,7 @@ interface Props {
   onFit:            () => void
   onTimelineFieldChange: <K extends keyof Timeline>(key: K, val: Timeline[K]) => void
   onPlaybackSpeedChange: (s: number) => void
-  onToggleGraphEditor:   () => void
+  onModeChange: (mode: TimelineMode) => void
   /** Snapshot a subset of properties for the selected layer at the playhead. */
   onKeyframeProperties: (properties: string[]) => void
 }
@@ -45,10 +45,10 @@ export default function TimelineToolbar(props: Props) {
   const {
     timelines, selectedTimelineId, selectedTimeline,
     currentTimeMs, duration, isPlaying, zoomFactor, playbackSpeed,
-    graphEditorMode, hasSelectedLayer,
+    timelineMode, hasSelectedLayer,
     onPlayToggle, onSelectTimeline, onAddTimeline, onDeleteTimeline,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
-    onToggleGraphEditor, onKeyframeProperties,
+    onModeChange, onKeyframeProperties,
   } = props
 
   // ── Keyframe dropdown ───────────────────────────────────────────────────
@@ -119,6 +119,27 @@ export default function TimelineToolbar(props: Props) {
         {SPEED_OPTIONS.map((s) => <option key={s} value={s}>{s}×</option>)}
       </select>
 
+      {/* View mode tabs: Dope Sheet / Curve / Segments */}
+      <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">
+        {([
+          { id: 'dope',     label: 'Dope',  title: 'Dope Sheet — keyframe timing' },
+          { id: 'curve',    label: 'Curve', title: 'Curve Editor — value graph' },
+          { id: 'segments', label: 'Seg',   title: 'Segments view' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => onModeChange(tab.id)}
+            title={tab.title}
+            className={`px-2 py-0.5 text-[10px] font-mono transition-colors
+              ${timelineMode === tab.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Zoom controls */}
       <div className="flex items-center gap-1">
         <button
@@ -139,14 +160,6 @@ export default function TimelineToolbar(props: Props) {
           className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400"
           title="Fit"
         >Fit</button>
-        <button
-          onClick={onToggleGraphEditor}
-          title="Toggle graph editor (value vs time)"
-          className={`px-2 py-0.5 text-xs rounded text-gray-300 ml-1
-            ${graphEditorMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}
-        >
-          ▦
-        </button>
       </div>
 
       {/* Timeline tabs */}
