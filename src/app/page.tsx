@@ -27,6 +27,7 @@ import LayerPanel      from '@/components/LayerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
+import CurveEditor     from '@/components/timeline/CurveEditor'
 import JsonModal       from '@/components/JsonModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
 import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
@@ -788,6 +789,21 @@ export default function BuilderPage() {
                       activeSegmentId={runtime.segmentState?.segmentId ?? null}
                     />
                   </div>
+                ),
+              },
+              {
+                id: 'curveEditor', title: 'Curve Editor',
+                render: () => (
+                  <CurveEditor
+                    scene={scene}
+                    editor={editor}
+                    selectedLayerId={selectedLayerId}
+                    selectedTimelineId={selectedTlId}
+                    currentTimeMs={currentTimeMs}
+                    onTimeChange={handleSeek}
+                    selectedKfIds={selectedKfIds}
+                    onSelectKeyframes={setSelectedKfIds}
+                  />
                 ),
               },
               {

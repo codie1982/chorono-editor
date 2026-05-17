@@ -287,7 +287,7 @@ export function defaultLayout(): DockNode {
         ],
       },
       // Bottom: timeline
-      { kind: 'leaf', id: 'timeline-leaf', panels: ['timeline'], activeIndex: 0 },
+      { kind: 'leaf', id: 'timeline-leaf', panels: ['timeline', 'curveEditor'], activeIndex: 0 },
     ],
   }
 }
