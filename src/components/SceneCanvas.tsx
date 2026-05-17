@@ -1151,7 +1151,9 @@ export default function SceneCanvas({
             const hh = hl.size?.height ?? (hl.text?.fontSize ?? 24)
             return (
               <div
-                className="absolute pointer-events-none border-2 border-red-500/80 box-border"
+                key={hoveredLayerId}
+                className="absolute pointer-events-none border-2 border-red-500/80 box-border
+                           hover-preview-in transition-[border-color,border-width] duration-150"
                 style={{
                   left: hl.transform.x * zoom,
                   top:  hl.transform.y * zoom,

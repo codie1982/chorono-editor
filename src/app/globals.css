@@ -49,9 +49,20 @@ select {
 .dock-leaf-in    { animation: dock-leaf-in 180ms ease-out both; }
 .dock-overlay-in { animation: dock-overlay-in 120ms ease-out both; }
 
+/* Canvas hover preview — gentle fade-in when the cursor settles on a layer.
+   Opacity only because the element carries an inline transform: rotate()
+   for layer rotation; touching transform here would clobber the rotation
+   mid-animation. Keyframe re-plays via React key when the cursor moves
+   between layers. */
+@keyframes hover-preview-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.hover-preview-in { animation: hover-preview-in 140ms ease-out both; }
+
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .dock-leaf-in, .dock-overlay-in { animation: none; }
+  .dock-leaf-in, .dock-overlay-in, .hover-preview-in { animation: none; }
 }
 
 /* ── Chorono Sprite Icon System ──────────────────────────────────────────── */
