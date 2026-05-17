@@ -63,3 +63,18 @@ export interface AITool {
     required?: string[]
   }
 }
+
+// ── MCP tool format (Model Context Protocol) ──────────────────────────────────
+// Used by chorono-mcp/ to expose actions over the MCP protocol. The shape
+// matches @modelcontextprotocol/sdk's Tool interface so adapter code stays
+// minimal.
+
+export interface MCPTool {
+  name: string
+  description: string
+  inputSchema: {
+    type: 'object'
+    properties: Record<string, AIToolProperty>
+    required?: string[]
+  }
+}

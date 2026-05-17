@@ -10,7 +10,7 @@
 
 import type { ChronoScene } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
-import type { AITool, AIToolProperty } from './types'
+import type { AITool, AIToolProperty, MCPTool } from './types'
 
 export interface ActionDef<P = Record<string, unknown>> {
   /** Dot-notation id, e.g. "layer.add", "keyframe.addBatch". */
@@ -69,6 +69,20 @@ export class ActionRegistry {
       name: a.toolName,
       description: a.description,
       parameters: a.parameters,
+    }))
+  }
+
+  /**
+   * Emit MCPTool[] for the MCP server (chorono-mcp/).
+   * Same registration, different output format — MCP uses `inputSchema`
+   * instead of `parameters`. Lets ChatGPT / Claude Desktop / Cursor / any
+   * MCP-compatible client invoke the same actions over MCP protocol.
+   */
+  toMCPTools(): MCPTool[] {
+    return this.getAll().map((a) => ({
+      name: a.toolName,
+      description: a.description,
+      inputSchema: a.parameters,
     }))
   }
 
