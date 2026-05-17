@@ -219,25 +219,28 @@ export default function TimelinePanel({
     })
   }, [scene, selectedTimelineId, timeline, dispatchCommand])
 
-  const addKeyframeAtPlayhead = useCallback((trackTarget: string) => {
+  const addKeyframeAtTime = useCallback((trackTarget: string, ms: number) => {
     if (!selectedTimelineId || !timeline) return
     const track = timeline.tracks.find((t) => t.target === trackTarget)
     if (!track) return
-    // Use the property path to find the originating layer
     const m = trackTarget.match(/^layers\.([^.]+)\.(.+)$/)
     if (!m) return
     const [, layerId, propPath] = m
     const layer = scene.layers.find((l) => l.id === layerId)
     if (!layer) return
     const defaultVal = readLayerPropAsNumber(layer, propPath)
-    const existingVal = evaluateTrack(track, currentTimeMs) ?? defaultVal ?? 0
+    const existingVal = evaluateTrack(track, ms) ?? defaultVal ?? 0
 
     const kf: Keyframe = {
-      id: nextKfId(), timeMs: currentTimeMs, value: existingVal,
+      id: nextKfId(), timeMs: Math.max(0, Math.min(duration, ms)), value: existingVal,
       easing: { type: 'easeOut' },
     }
     dispatchCommand(makeAddKfCmd(selectedTimelineId, trackTarget, kf))
-  }, [scene.layers, timeline, selectedTimelineId, currentTimeMs, dispatchCommand])
+  }, [scene.layers, timeline, selectedTimelineId, duration, dispatchCommand])
+
+  const addKeyframeAtPlayhead = useCallback((trackTarget: string) => {
+    addKeyframeAtTime(trackTarget, currentTimeMs)
+  }, [addKeyframeAtTime, currentTimeMs])
 
   const deleteKf = useCallback((trackTarget: string, kfId: string) => {
     if (!selectedTimelineId || !timeline) return
@@ -341,6 +344,8 @@ export default function TimelinePanel({
   const ctxMenu = useContextMenu()
   const [ctxKf, setCtxKf] = useState<{ trackTarget: string; kfId: string } | null>(null)
   const [ctxLayerBar, setCtxLayerBar] = useState<{ layerId: string } | null>(null)
+  // Right-click on the empty area of a property row → "Add Keyframe Here" menu.
+  const [ctxTrackArea, setCtxTrackArea] = useState<{ trackTarget: string; timeMs: number } | null>(null)
   const [editingKf, setEditingKf] = useState<{
     trackTarget: string; kfId: string; leftPx: number; topPx: number; draft: string
   } | null>(null)
@@ -360,6 +365,12 @@ export default function TimelinePanel({
     setCtxKf({ trackTarget, kfId })
     ctxMenu.open(e)
   }, [selectedKfIds, onSelectKeyframes, ctxMenu])
+
+  const openTrackAreaMenu = useCallback((trackTarget: string, timeMs: number, e: React.MouseEvent) => {
+    setCtxKf(null); setCtxLayerBar(null)
+    setCtxTrackArea({ trackTarget, timeMs })
+    ctxMenu.open(e)
+  }, [ctxMenu])
 
   // ── Lasso selection ──────────────────────────────────────────────────────
   // Alt+drag in the layer-sections container draws a rectangle; pointerup
@@ -619,6 +630,9 @@ export default function TimelinePanel({
             onKfContextMenu={openKfMenu}
             onKfDoubleClick={openKfInlineEdit}
             onLayerBarContextMenu={openLayerBarMenu}
+            onTrackAreaContextMenu={openTrackAreaMenu}
+            onTrackAreaDoubleClick={(target, ms) => addKeyframeAtTime(target, ms)}
+            clientXToMs={vp.clientXToMs}
             onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
               // Single command handles move + trim — linearly remaps every
               // keyframe on this layer so the inner animation scales/shifts
@@ -845,6 +859,39 @@ export default function TimelinePanel({
             x={ctxMenu.state!.x} y={ctxMenu.state!.y}
             items={items}
             onClose={() => { ctxMenu.close(); setCtxLayerBar(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Track-area right-click menu (empty space inside a property row) ── */}
+      {ctxMenu.isOpen && ctxTrackArea && (() => {
+        const ms = ctxTrackArea.timeMs
+        const items = [
+          {
+            kind: 'action' as const,
+            label: `Add Keyframe Here  (${Math.round(ms)}ms)`,
+            shortcut: undefined, disabled: false,
+            onSelect: () => addKeyframeAtTime(ctxTrackArea.trackTarget, ms),
+          },
+          {
+            kind: 'action' as const,
+            label: 'Add Keyframe at Playhead',
+            shortcut: undefined, disabled: false,
+            onSelect: () => addKeyframeAtPlayhead(ctxTrackArea.trackTarget),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: 'Set Playhead Here',
+            shortcut: undefined, disabled: false,
+            onSelect: () => onTimeChange(Math.max(0, Math.min(duration, ms))),
+          },
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxTrackArea(null) }}
           />
         )
       })()}

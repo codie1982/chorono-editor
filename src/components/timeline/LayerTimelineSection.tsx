@@ -45,6 +45,12 @@ interface Props {
   onKfDoubleClick?: (trackTarget: string, kfId: string, e: React.MouseEvent) => void
   /** Right-click on the layer's activity bar → opens layer-bar context menu. */
   onLayerBarContextMenu?: (layerId: string, e: React.MouseEvent) => void
+  /** Right-click on the empty part of a property track row → "Add Keyframe Here" etc. */
+  onTrackAreaContextMenu?: (trackTarget: string, timeMs: number, e: React.MouseEvent) => void
+  /** Double-click on the empty part of a property track row → add keyframe at click. */
+  onTrackAreaDoubleClick?: (trackTarget: string, timeMs: number) => void
+  /** Convert a client X position to ms for the events above. */
+  clientXToMs?: (clientX: number) => number
   /** Total duration of the selected timeline, for clamping drag. */
   durationMs: number
   /**
@@ -79,6 +85,7 @@ export default function LayerTimelineSection({
   onAddTrack, onRemoveTrack, onAddKeyframeAtPlayhead,
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
+  onTrackAreaContextMenu, onTrackAreaDoubleClick, clientXToMs,
   durationMs, onLayerBarCommit, pinIndex,
 }: Props) {
 
@@ -182,7 +189,21 @@ export default function LayerTimelineSection({
               >⊗</button>
             </div>
 
-            <div className="flex-1 relative bg-gray-900/40 overflow-hidden">
+            <div
+              className="flex-1 relative bg-gray-900/40 overflow-hidden"
+              onContextMenu={onTrackAreaContextMenu && clientXToMs ? (e) => {
+                // Skip if right-clicked on a keyframe — TimelineKeyframe handles its own ctx
+                const tgt = e.target as HTMLElement
+                if (tgt.closest('[data-kf-id]')) return
+                e.preventDefault()
+                onTrackAreaContextMenu(track.target, clientXToMs(e.clientX), e)
+              } : undefined}
+              onDoubleClick={onTrackAreaDoubleClick && clientXToMs ? (e) => {
+                const tgt = e.target as HTMLElement
+                if (tgt.closest('[data-kf-id]')) return
+                onTrackAreaDoubleClick(track.target, clientXToMs(e.clientX))
+              } : undefined}
+            >
               <TrackValueGraph
                 track={track} heightPx={rowH} trackWidthPx={trackWidth}
                 visibleStartMs={visibleStartMs} visibleEndMs={visibleEndMs}
