@@ -329,7 +329,10 @@ export const DEFAULT_COMPOSITION: Composition = {
   height: 240,
   durationMs: 1200,
   frameRate: 60,
-  backgroundColor: '#0F172A',
+  // White matches Figma / Jitter / SVGator defaults — feels like a fresh
+  // canvas, contrasts well with most layer fills, and pairs naturally
+  // with the grid stroke colours.
+  backgroundColor: '#FFFFFF',
 }
 
 export function emptyScene(): ChronoScene {

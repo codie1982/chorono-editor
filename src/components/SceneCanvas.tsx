@@ -181,6 +181,10 @@ export default function SceneCanvas({
     startClientX: number; startClientY: number; startPan: { x: number; y: number }
   } | null>(null)
 
+  // ── Hover preview (red outline of the layer that would be selected) ─────
+  const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null)
+  const hoverRafRef = useRef<number | null>(null)
+
   // ── Fit menu (dropdown opens above the Fit button) ──────────────────────
   const [fitMenuOpen, setFitMenuOpen] = useState(false)
   const fitMenuRef = useRef<HTMLDivElement>(null)
@@ -996,6 +1000,29 @@ export default function SceneCanvas({
             width={width}
             height={height}
             onPointerDown={handleCanvasPointerDown}
+            onPointerMove={(e) => {
+              // Hover preview — rAF-throttled hit test. Skip while any drag
+              // is active (avoids competing for state with move/resize/rotate
+              // handlers).
+              if (panMode || previewMode || dragRef.current || panDragRef.current) return
+              if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
+              const clientX = e.clientX, clientY = e.clientY
+              hoverRafRef.current = requestAnimationFrame(() => {
+                const cv = canvasRef.current
+                if (!cv) return
+                const rect = cv.getBoundingClientRect()
+                const sx = width  / rect.width
+                const sy = height / rect.height
+                const cx = (clientX - rect.left) * sx
+                const cy = (clientY - rect.top)  * sy
+                const hit = hitTestLayer(scene, timeMs, cx, cy)
+                setHoveredLayerId((cur) => (cur === hit ? cur : hit))
+              })
+            }}
+            onPointerLeave={() => {
+              if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
+              setHoveredLayerId(null)
+            }}
             className={`absolute inset-0 block ${
               previewMode ? 'cursor-pointer'
               : toolMode === 'pen' ? 'cursor-crosshair'
@@ -1011,12 +1038,39 @@ export default function SceneCanvas({
             }}
           />
 
+          {/* Hover preview — red outline showing which layer a click would select.
+              Only rendered when a non-selected layer is under the cursor and no
+              drag is in flight. Matches the layer's rotation so the rect lines
+              up with the actual rendered geometry. */}
+          {(() => {
+            if (!hoveredLayerId || hoveredLayerId === selectedLayerId) return null
+            const hl = scene.layers.find((l) => l.id === hoveredLayerId)
+            if (!hl || hl.hidden) return null
+            const hw = hl.size?.width  ?? (hl.text?.fontSize ? 120 : 80)
+            const hh = hl.size?.height ?? (hl.text?.fontSize ?? 24)
+            return (
+              <div
+                className="absolute pointer-events-none border-2 border-red-500/80 box-border"
+                style={{
+                  left: hl.transform.x * zoom,
+                  top:  hl.transform.y * zoom,
+                  width:  hw * zoom,
+                  height: hh * zoom,
+                  transform: `rotate(${hl.transform.rotationDeg}deg)`,
+                  transformOrigin: `${hl.transform.anchorX * zoom}px ${hl.transform.anchorY * zoom}px`,
+                }}
+              />
+            )
+          })()}
+
           {showFrame && selectedLayer.size && (
             <SelectionFrame
               x={selectedLayer.transform.x * zoom}
               y={selectedLayer.transform.y * zoom}
               w={selectedLayer.size.width  * zoom}
               h={selectedLayer.size.height * zoom}
+              anchorOffsetX={selectedLayer.transform.anchorX * zoom}
+              anchorOffsetY={selectedLayer.transform.anchorY * zoom}
               rotationDeg={selectedLayer.transform.rotationDeg}
               onHandlePointerDown={beginResize}
               onRotatePointerDown={beginRotate}
@@ -1169,11 +1223,14 @@ export default function SceneCanvas({
 
 interface FrameProps {
   x: number; y: number; w: number; h: number
+  /** Anchor position in screen px RELATIVE to the frame's top-left.
+   *  Used as the CSS transform-origin so the frame rotates around the
+   *  same pivot as the rendered layer. */
+  anchorOffsetX: number
+  anchorOffsetY: number
+  rotationDeg: number
   onHandlePointerDown: (h: Handle) => (e: React.PointerEvent) => void
-  /** Begin rotation drag — wired to corner-outer hit zones. */
   onRotatePointerDown?: (e: React.PointerEvent) => void
-  /** Layer rotation (degrees) so the frame can rotate visually if needed. */
-  rotationDeg?: number
 }
 
 // ── Fit / View menu (opens upward from the zoom pill) ───────────────────────
@@ -1283,7 +1340,11 @@ function AnchorHandle({ x, y, isDragging, onPointerDown }: AnchorProps) {
   )
 }
 
-function SelectionFrame({ x, y, w, h, onHandlePointerDown, onRotatePointerDown }: FrameProps) {
+function SelectionFrame({
+  x, y, w, h, anchorOffsetX, anchorOffsetY, rotationDeg,
+  onHandlePointerDown, onRotatePointerDown,
+}: FrameProps) {
+  // 8 resize handles on the frame perimeter (corners + edge midpoints)
   const handles: Array<{ key: Handle; cx: number; cy: number }> = [
     { key: 'nw', cx: 0,     cy: 0     },
     { key: 'n',  cx: w / 2, cy: 0     },
@@ -1294,46 +1355,48 @@ function SelectionFrame({ x, y, w, h, onHandlePointerDown, onRotatePointerDown }
     { key: 's',  cx: w / 2, cy: h     },
     { key: 'se', cx: w,     cy: h     },
   ]
-  // Corner-OUTER hit zones for rotation. Standard pattern: a larger
-  // transparent square placed just outside each corner; cursor = alias /
-  // grab. Drag = rotate around the layer's anchor (handled in beginRotate).
-  const ROT_HIT = 18  // px outer-area
+  // Rotation handles: 4 smaller dots 10px diagonally OUTSIDE each corner.
+  const ROT_OFFSET = 10
   const rotHandles: Array<{ key: string; cx: number; cy: number }> = [
-    { key: 'rot-nw', cx: 0, cy: 0 },
-    { key: 'rot-ne', cx: w, cy: 0 },
-    { key: 'rot-sw', cx: 0, cy: h },
-    { key: 'rot-se', cx: w, cy: h },
+    { key: 'rot-nw', cx: -ROT_OFFSET,     cy: -ROT_OFFSET     },
+    { key: 'rot-ne', cx: w + ROT_OFFSET,  cy: -ROT_OFFSET     },
+    { key: 'rot-sw', cx: -ROT_OFFSET,     cy: h + ROT_OFFSET  },
+    { key: 'rot-se', cx: w + ROT_OFFSET,  cy: h + ROT_OFFSET  },
   ]
+
   return (
-    <div className="absolute pointer-events-none" style={{ left: x, top: y, width: w, height: h }}>
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        left: x, top: y, width: w, height: h,
+        transform: `rotate(${rotationDeg}deg)`,
+        transformOrigin: `${anchorOffsetX}px ${anchorOffsetY}px`,
+      }}
+    >
       {/* Frame border */}
       <div className="absolute inset-0 border border-blue-400/90 box-border" />
 
-      {/* Rotation hit zones — sit BEHIND resize handles so corner resize wins
-          when the pointer is directly on the corner dot itself. */}
+      {/* Rotation handles — small white circles, drawn diagonally outside corners */}
       {onRotatePointerDown && rotHandles.map((r) => (
         <div
           key={r.key}
           onPointerDown={onRotatePointerDown}
-          className="absolute pointer-events-auto"
-          style={{
-            left:   `${r.cx - ROT_HIT}px`,
-            top:    `${r.cy - ROT_HIT}px`,
-            width:  `${ROT_HIT * 2}px`,
-            height: `${ROT_HIT * 2}px`,
-            cursor: 'alias',   // closest built-in cursor to "rotate"
-          }}
           title="Drag to rotate (Shift = snap 15°)"
+          className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2
+                     bg-white border border-blue-400 rounded-full shadow-sm pointer-events-auto
+                     hover:scale-125 hover:border-blue-300 transition-transform"
+          style={{ left: `${r.cx}px`, top: `${r.cy}px`, cursor: 'alias' }}
         />
       ))}
 
-      {/* Resize handles (drawn AFTER rotation zones so corner clicks resize) */}
+      {/* Resize handles — circles (Figma / SVGator style), drawn on top so
+          a click on the corner resizes, not rotates. */}
       {handles.map((h) => (
         <div
           key={h.key}
           onPointerDown={onHandlePointerDown(h.key)}
-          className="absolute w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2
-                     bg-white border border-blue-500 rounded-sm shadow pointer-events-auto"
+          className="absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2
+                     bg-white border border-blue-500 rounded-full shadow pointer-events-auto"
           style={{ left: `${h.cx}px`, top: `${h.cy}px`, cursor: HANDLE_CURSORS[h.key] }}
         />
       ))}
