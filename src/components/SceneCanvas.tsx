@@ -342,8 +342,18 @@ export default function SceneCanvas({
       // every layer in movingLayers (multi-select preserves relative spacing).
       const primaryOx = drag.originalLayer.transform.x
       const primaryOy = drag.originalLayer.transform.y
-      let pnx = primaryOx + dx
-      let pny = primaryOy + dy
+      // Shift held → constrain to the dominant axis (Figma / Illustrator
+      // standard — user just drags in the direction they want and Shift
+      // locks it). Cleaner than separate "Ctrl=horizontal, Ctrl+Shift=
+      // vertical" mappings: one key, intuitive, no need to remember which
+      // modifier means which axis.
+      let dxLocked = dx, dyLocked = dy
+      if (e.shiftKey) {
+        if (Math.abs(dx) >= Math.abs(dy)) dyLocked = 0
+        else                              dxLocked = 0
+      }
+      let pnx = primaryOx + dxLocked
+      let pny = primaryOy + dyLocked
 
       // ── Alignment guides (canvas / other layers / centerlines) ──────────
       // Snap applies BEFORE grid snap so guides win. Threshold scales with
@@ -1001,8 +1011,21 @@ export default function SceneCanvas({
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex items-center justify-center bg-gray-950 overflow-hidden relative"
+      className={`flex-1 flex items-center justify-center bg-gray-950 overflow-hidden relative ${
+        panDragRef.current ? 'cursor-grabbing' : panMode ? 'cursor-grab' : ''
+      }`}
       onWheel={handleWheel}
+      onPointerDown={(e) => {
+        // If the click was on the <canvas>, its own handler manages pan +
+        // selection. We only fire here when the user clicks the EMPTY leaf
+        // area around the artboard — so pan still works outside the canvas
+        // (matches Figma / SVGator behaviour).
+        if (e.target === canvasRef.current) return
+        if (e.button === 1 || (panMode && e.button === 0)) {
+          e.preventDefault()
+          beginPan(e)
+        }
+      }}
     >
       <div
         className="relative"
@@ -1067,7 +1090,11 @@ export default function SceneCanvas({
               : toolMode === 'pen' ? 'cursor-crosshair'
               : panMode ? 'cursor-grab'
               : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
-              : 'cursor-grab'
+              // Default tool: 4-arrow move cursor when over a draggable
+              // layer, plain pointer over empty canvas → so the cursor
+              // tells the user whether a click would grab something.
+              : hoveredLayerId ? 'cursor-move'
+              : 'cursor-default'
             } ${panDragRef.current ? '!cursor-grabbing' : ''}`}
             style={{
               width:  `${width  * zoom}px`,
@@ -1255,8 +1282,8 @@ export default function SceneCanvas({
       <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono text-gray-500 pointer-events-none
                       bg-gray-900/70 px-2 py-0.5 rounded whitespace-nowrap">
         {panMode
-          ? '✋ Pan mode · drag anywhere to pan the view (click ✋ again to turn off)'
-          : 'Drag to move · Handles to resize · Hold ⌘ for aspect-lock · Cmd+scroll zooms · Mid-mouse pans'}
+          ? '✋ Pan mode · drag ANYWHERE on the leaf to pan (click ✋ again to turn off)'
+          : 'Drag = move · Shift = axis-lock · Handles to resize · ⌘ = aspect-lock · ⌘+scroll = zoom · Mid-mouse = pan'}
       </div>
     </div>
   )
