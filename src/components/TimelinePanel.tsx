@@ -33,6 +33,7 @@ import TimelineRuler           from './timeline/TimelineRuler'
 import TimelineToolbar         from './timeline/TimelineToolbar'
 import TrackToolBar            from './timeline/TrackToolBar'
 import TimelineStatusBar       from './timeline/TimelineStatusBar'
+import TimelineMinimap         from './timeline/TimelineMinimap'
 import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
 import SegmentModal            from './modals/SegmentModal'
@@ -1006,6 +1007,18 @@ export default function TimelinePanel({
           >Delete</button>
         </div>
       )}
+
+      {/* ── Minimap (BL-43) — quick overview + pan ────────────────────────── */}
+      <TimelineMinimap
+        durationMs={duration}
+        currentTimeMs={currentTimeMs}
+        timeline={timeline}
+        scrollLeftPx={vp.scrollLeftPx}
+        totalContentPx={vp.totalContentPx}
+        trackWidth={vp.trackWidth}
+        setScrollLeftPx={vp.setScrollLeftPx}
+        onSeek={onTimeChange}
+      />
 
       {/* ── Status bar ───────────────────────────────────────────────────── */}
       <TimelineStatusBar
