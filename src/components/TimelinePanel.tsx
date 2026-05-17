@@ -406,8 +406,12 @@ export default function TimelinePanel({
   const [ctxTrackArea, setCtxTrackArea] = useState<{ trackTarget: string; timeMs: number } | null>(null)
   const [editingKf, setEditingKf] = useState<{
     trackTarget: string; kfId: string
-    /** Anchor coords (in viewport space) — popover positions itself near this. */
+    /** Initial anchor (in viewport space) — used to pick the first open
+     *  position. Once the user drags the window, posX/posY take over. */
     anchorX: number; anchorY: number
+    /** User-controlled window position. Null = derive from anchor. */
+    posX: number | null
+    posY: number | null
     draftTime:  string
     draftValue: string
   } | null>(null)
@@ -510,8 +514,11 @@ export default function TimelinePanel({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setEditingKf({
       trackTarget, kfId,
+      // Anchor at the kf node's centre — popover opens to the right/left
+      // of this point, vertically centred. Drag handle lets the user reposition.
       anchorX: rect.left + rect.width / 2,
-      anchorY: rect.top,
+      anchorY: rect.top  + rect.height / 2,
+      posX: null, posY: null,
       draftTime:  String(Math.round(kf.timeMs)),
       draftValue: String(kf.value),
     })
@@ -871,89 +878,22 @@ export default function TimelinePanel({
           ))
         }
 
-        // Position: anchor under the keyframe; clamp to viewport so it
-        // doesn't fall off the right edge or sit underneath the bottom.
-        const POPOVER_W = 240
-        const POPOVER_H = 200
-        const margin    = 8
-        let left = editingKf.anchorX - POPOVER_W / 2
-        let top  = editingKf.anchorY + 16          // 16px below the kf
-        if (typeof window !== 'undefined') {
-          left = Math.max(margin, Math.min(window.innerWidth  - POPOVER_W - margin, left))
-          top  = Math.max(margin, Math.min(window.innerHeight - POPOVER_H - margin, top))
-        }
-
         return (
-          <>
-            {/* Click-outside catcher */}
-            <div className="fixed inset-0 z-40" onMouseDown={close} />
-            <div
-              className="fixed z-50 bg-gray-900 border border-gray-700 rounded shadow-xl
-                         p-3 w-60 text-[11px] text-gray-300"
-              style={{ left, top }}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter')  { e.preventDefault(); commit() }
-                if (e.key === 'Escape') { e.preventDefault(); close() }
-                e.stopPropagation()
-              }}
-            >
-              <div className="text-[10px] text-gray-500 mb-2 truncate font-mono">
-                {editingKf.trackTarget.replace(`layers.`, '')}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-600">Time (ms)</span>
-                  <input
-                    autoFocus type="number" value={editingKf.draftTime}
-                    onChange={(e) => setEditingKf({ ...editingKf, draftTime: e.target.value })}
-                    onFocus={(e) => e.currentTarget.select()}
-                    className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
-                               text-white font-mono focus:outline-none focus:border-blue-500"
-                  />
-                </label>
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-600">Value</span>
-                  <input
-                    type="number" step="any" value={editingKf.draftValue}
-                    onChange={(e) => setEditingKf({ ...editingKf, draftValue: e.target.value })}
-                    onFocus={(e) => e.currentTarget.select()}
-                    className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
-                               text-white font-mono focus:outline-none focus:border-blue-500"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <EasingSlot
-                  label="In"
-                  value={inEasing}
-                  disabled={!prevKf}
-                  emptyLabel={!prevKf ? '— no prev key —' : undefined}
-                  onChange={setInEasing}
-                />
-                <EasingSlot
-                  label="Out"
-                  value={outEasing}
-                  disabled={!nextKf}
-                  emptyLabel={!nextKf ? '— no next key —' : undefined}
-                  onChange={setOutEasing}
-                />
-              </div>
-
-              <div className="flex justify-end gap-1">
-                <button
-                  onClick={close}
-                  className="px-2 py-1 text-[10px] bg-gray-800 hover:bg-gray-700 rounded text-gray-400"
-                >Cancel</button>
-                <button
-                  onClick={commit}
-                  className="px-2 py-1 text-[10px] bg-blue-600 hover:bg-blue-500 rounded text-white"
-                >Apply  ↵</button>
-              </div>
-            </div>
-          </>
+          <KeyframeEditWindow
+            editingKf={editingKf}
+            propPath={editingKf.trackTarget.replace(`layers.`, '')}
+            inEasing={inEasing}
+            outEasing={outEasing}
+            hasPrev={!!prevKf}
+            hasNext={!!nextKf}
+            onChangeDraftTime={(v)  => setEditingKf({ ...editingKf, draftTime:  v })}
+            onChangeDraftValue={(v) => setEditingKf({ ...editingKf, draftValue: v })}
+            onMove={(x, y)          => setEditingKf({ ...editingKf, posX: x, posY: y })}
+            onSetInEasing={setInEasing}
+            onSetOutEasing={setOutEasing}
+            onClose={close}
+            onCommit={commit}
+          />
         )
       })()}
 
@@ -1268,6 +1208,192 @@ function readLayerPropAsNumber(layer: Layer, prop: string): number | undefined {
     } else { return undefined }
   }
   return typeof cur === 'number' ? cur : undefined
+}
+
+// ── KeyframeEditWindow ─────────────────────────────────────────────────────
+// Floating, draggable, modeless edit window. Non-modal so the underlying
+// timeline stays fully interactive while it's open. Opens to the right of
+// the clicked keyframe (or flipped to the left if there's no room),
+// vertically centred on the kf. After the first paint the user can drag
+// it anywhere by the title bar; the position sticks in `editingKf.posX/Y`
+// so re-renders don't bounce it back.
+
+const POPOVER_W = 252
+const POPOVER_H = 220
+const ANCHOR_GAP = 14
+
+function KeyframeEditWindow({
+  editingKf, propPath, inEasing, outEasing, hasPrev, hasNext,
+  onChangeDraftTime, onChangeDraftValue, onMove,
+  onSetInEasing, onSetOutEasing, onClose, onCommit,
+}: {
+  editingKf: {
+    anchorX: number; anchorY: number
+    posX: number | null; posY: number | null
+    draftTime: string; draftValue: string
+  }
+  propPath: string
+  inEasing: EasingType | null
+  outEasing: EasingType | null
+  hasPrev: boolean
+  hasNext: boolean
+  onChangeDraftTime:  (v: string) => void
+  onChangeDraftValue: (v: string) => void
+  onMove:             (x: number, y: number) => void
+  onSetInEasing:      (t: EasingType) => void
+  onSetOutEasing:     (t: EasingType) => void
+  onClose:            () => void
+  onCommit:           () => void
+}) {
+  const { left, top } = useMemo(() => {
+    if (editingKf.posX != null && editingKf.posY != null) {
+      return { left: editingKf.posX, top: editingKf.posY }
+    }
+    // Pick a side based on free space — right by default, left if it
+    // wouldn't fit.
+    const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
+    const vh = typeof window !== 'undefined' ? window.innerHeight :  720
+    const wantRight = editingKf.anchorX + ANCHOR_GAP + POPOVER_W <= vw - 8
+    let l = wantRight
+      ? editingKf.anchorX + ANCHOR_GAP
+      : editingKf.anchorX - ANCHOR_GAP - POPOVER_W
+    let t = editingKf.anchorY - POPOVER_H / 2
+    // Final clamp so a tiny viewport never lets the window escape.
+    l = Math.max(8, Math.min(vw - POPOVER_W - 8, l))
+    t = Math.max(8, Math.min(vh - POPOVER_H - 8, t))
+    return { left: l, top: t }
+  }, [editingKf.anchorX, editingKf.anchorY, editingKf.posX, editingKf.posY])
+
+  // Drag from the title bar — global pointer listeners so the drag tracks
+  // even when the cursor leaves the title bar mid-drag.
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null)
+  useEffect(() => {
+    if (!dragRef.current) return
+    const onMoveEv = (e: PointerEvent) => {
+      const d = dragRef.current; if (!d) return
+      const vw = window.innerWidth, vh = window.innerHeight
+      const nx = Math.max(8, Math.min(vw - POPOVER_W - 8, d.origX + e.clientX - d.startX))
+      const ny = Math.max(8, Math.min(vh - POPOVER_H - 8, d.origY + e.clientY - d.startY))
+      onMove(nx, ny)
+    }
+    const onUp = () => { dragRef.current = null }
+    window.addEventListener('pointermove', onMoveEv)
+    window.addEventListener('pointerup',   onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMoveEv)
+      window.removeEventListener('pointerup',   onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }) // re-arm each render — ref drives the actual gating
+
+  // Click-outside close — non-modal, so we listen at the document level
+  // and ignore clicks inside the window. Stop closing if the user is
+  // mid-drag (rare race when releasing the pointer over an unrelated area).
+  const windowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (dragRef.current) return
+      if (windowRef.current && windowRef.current.contains(e.target as Node)) return
+      onClose()
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [onClose])
+
+  const beginDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      origX: left, origY: top,
+    }
+  }
+
+  return (
+    <div
+      ref={windowRef}
+      className="fixed z-50 bg-gray-900 border border-gray-700 rounded-md shadow-2xl
+                 text-[11px] text-gray-300 select-none"
+      style={{ left, top, width: POPOVER_W }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter')  { e.preventDefault(); onCommit() }
+        if (e.key === 'Escape') { e.preventDefault(); onClose() }
+        e.stopPropagation()
+      }}
+    >
+      {/* Title bar — drag handle + close */}
+      <div
+        className="flex items-center justify-between px-2 py-1 bg-gray-800
+                   rounded-t-md border-b border-gray-700 cursor-move"
+        onPointerDown={beginDrag}
+      >
+        <span className="text-[10px] font-mono text-gray-400 truncate" title={propPath}>
+          {propPath}
+        </span>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={onClose}
+          className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-white
+                     hover:bg-gray-700 rounded leading-none"
+          title="Close (Esc)"
+        >×</button>
+      </div>
+
+      <div className="p-3">
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-gray-600">Time (ms)</span>
+            <input
+              autoFocus type="number" value={editingKf.draftTime}
+              onChange={(e) => onChangeDraftTime(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                         text-white font-mono focus:outline-none focus:border-blue-500"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-gray-600">Value</span>
+            <input
+              type="number" step="any" value={editingKf.draftValue}
+              onChange={(e) => onChangeDraftValue(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
+                         text-white font-mono focus:outline-none focus:border-blue-500"
+            />
+          </label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <EasingSlot
+            label="In"
+            value={inEasing}
+            disabled={!hasPrev}
+            emptyLabel={!hasPrev ? '— no prev key —' : undefined}
+            onChange={onSetInEasing}
+          />
+          <EasingSlot
+            label="Out"
+            value={outEasing}
+            disabled={!hasNext}
+            emptyLabel={!hasNext ? '— no next key —' : undefined}
+            onChange={onSetOutEasing}
+          />
+        </div>
+
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={onClose}
+            className="px-2 py-1 text-[10px] bg-gray-800 hover:bg-gray-700 rounded text-gray-400"
+          >Cancel</button>
+          <button
+            onClick={onCommit}
+            className="px-2 py-1 text-[10px] bg-blue-600 hover:bg-blue-500 rounded text-white"
+          >Apply  ↵</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── EasingSlot ─────────────────────────────────────────────────────────────
