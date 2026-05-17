@@ -214,6 +214,68 @@ export function makeSplitLayerCmd(
   }
 }
 
+// ── Shift / Rescale layer in time (with proportional keyframe remap) ────────
+//
+// Linearly remaps every keyframe whose track targets this layer (target prefix
+// `layers.{layerId}.`) from the source window [fromStart..fromEnd] onto the
+// destination window [toStart..toEnd].
+//
+//   newMs = toStart + (kf.timeMs - fromStart) * (toDur / fromDur)
+//
+// • Pure shift (fromDur == toDur) → keyframes translate by (toStart-fromStart)
+// • Trim left/right (different durations) → keyframes scale proportionally
+//   so a 50% shorter bar makes a 5s key happen at 2.5s.
+//
+// `fromEnd` / `toEnd` may be `undefined`, meaning "layer plays until composition
+// end" — in that case we treat the effective end as `defaultEndMs` (caller
+// passes the timeline duration).
+
+export function makeShiftLayerCmd(
+  layerId:      string,
+  fromStartMs:  number,
+  fromEndMs:    number | undefined,
+  toStartMs:    number,
+  toEndMs:      number | undefined,
+  defaultEndMs: number,
+): EditorCommand {
+  const fromEnd = fromEndMs ?? defaultEndMs
+  const toEnd   = toEndMs   ?? defaultEndMs
+  const fromDur = Math.max(1e-6, fromEnd - fromStartMs)
+  const toDur   = Math.max(0,    toEnd   - toStartMs)
+  const scale   = toDur / fromDur
+
+  const targetPrefix = `layers.${layerId}.`
+  const remap = (ms: number) => toStartMs + (ms - fromStartMs) * scale
+  const inverse = (ms: number) => fromStartMs + (ms - toStartMs) / (scale || 1)
+
+  function applyToScene(scene: ChronoScene, mapFn: (ms: number) => number,
+                        newStart: number, newEnd: number | undefined): ChronoScene {
+    return {
+      ...scene,
+      layers: scene.layers.map((l) =>
+        l.id !== layerId ? l : { ...l, startMs: newStart, endMs: newEnd }),
+      timelines: scene.timelines.map((tl) => ({
+        ...tl,
+        tracks: tl.tracks.map((tr) => {
+          if (!tr.target.startsWith(targetPrefix)) return tr
+          return {
+            ...tr,
+            keyframes: tr.keyframes
+              .map((k) => ({ ...k, timeMs: mapFn(k.timeMs) }))
+              .sort((a, b) => a.timeMs - b.timeMs),
+          }
+        }),
+      })),
+    }
+  }
+
+  return {
+    label: 'Move Layer in Time',
+    execute: (scene) => applyToScene(scene, remap,   toStartMs,   toEndMs),
+    undo:    (scene) => applyToScene(scene, inverse, fromStartMs, fromEndMs),
+  }
+}
+
 // ── Trim layer (shift startMs / endMs) ───────────────────────────────────────
 
 export function makeTrimLayerCmd(
