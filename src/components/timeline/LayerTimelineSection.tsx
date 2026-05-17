@@ -100,9 +100,16 @@ export default function LayerTimelineSection({
       >
         {/* Left: label */}
         <div
-          className="w-60 shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer"
+          className="w-60 shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer relative"
           onClick={(e) => onSelectLayer(e.shiftKey)}
         >
+          {/* Color label stripe — left edge of the row */}
+          {layer.colorLabel && (
+            <div
+              className="absolute left-0 top-0 bottom-0 w-1 pointer-events-none"
+              style={{ backgroundColor: layer.colorLabel }}
+            />
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onToggleExpand() }}
             className="w-4 text-xs text-gray-500 hover:text-gray-300"
@@ -275,6 +282,10 @@ function DraggableLayerBar({
   const [preview, setPreviewState] = useState<{ startMs: number; endMs: number } | null>(null)
   const setPreview = (v: typeof preview) => { previewRef.current = v; setPreviewState(v) }
 
+  // Layer colour label (BL-38). Falls back to the default Tailwind blue-500
+  // so legacy layers without a label keep the previous visual.
+  const barColor = layer.colorLabel ?? '#3B82F6'
+
   const origStart = layer.startMs ?? 0
   const origEnd   = layer.endMs   // undefined → whole timeline
 
@@ -344,9 +355,8 @@ function DraggableLayerBar({
       {/* Left trim handle */}
       <div
         className="absolute left-0 top-0 bottom-0 z-10 rounded-l-sm
-                   bg-blue-400/70 hover:bg-blue-300 cursor-ew-resize
-                   flex items-center justify-center"
-        style={{ width: HANDLE_W }}
+                   cursor-ew-resize flex items-center justify-center"
+        style={{ width: HANDLE_W, backgroundColor: barColor, opacity: 0.85 }}
         onPointerDown={(e) => beginDrag(e, 'trimStart')}
         title="Drag to trim start"
       >
@@ -355,18 +365,19 @@ function DraggableLayerBar({
 
       {/* Body — move (grab to shift both start + end) */}
       <div
-        className={`absolute top-0 bottom-0 rounded-sm border
-          ${preview
-            ? 'bg-blue-400/40 border-blue-300/70'
-            : 'bg-blue-500/30 border-blue-500/50 hover:bg-blue-500/40'}
-          cursor-grab active:cursor-grabbing`}
-        style={{ left: HANDLE_W, right: HANDLE_W }}
+        className="absolute top-0 bottom-0 rounded-sm border cursor-grab active:cursor-grabbing"
+        style={{
+          left: HANDLE_W, right: HANDLE_W,
+          backgroundColor: barColor,
+          borderColor: barColor,
+          opacity: preview ? 0.55 : 0.45,
+        }}
         onPointerDown={(e) => beginDrag(e, 'move')}
         title={`${layer.name}: ${Math.round(dispStartMs)}–${Math.round(dispEndMs)} ms`}
       >
         {preview && (
           <span className="absolute inset-0 flex items-center justify-center
-                           text-[9px] font-mono text-blue-200 pointer-events-none truncate px-1">
+                           text-[9px] font-mono text-white/90 pointer-events-none truncate px-1">
             {Math.round(dispStartMs)}–{Math.round(dispEndMs)}
           </span>
         )}
@@ -375,9 +386,8 @@ function DraggableLayerBar({
       {/* Right trim handle */}
       <div
         className="absolute right-0 top-0 bottom-0 z-10 rounded-r-sm
-                   bg-blue-400/70 hover:bg-blue-300 cursor-ew-resize
-                   flex items-center justify-center"
-        style={{ width: HANDLE_W }}
+                   cursor-ew-resize flex items-center justify-center"
+        style={{ width: HANDLE_W, backgroundColor: barColor, opacity: 0.85 }}
         onPointerDown={(e) => beginDrag(e, 'trimEnd')}
         title="Drag to trim end"
       >

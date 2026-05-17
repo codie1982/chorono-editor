@@ -18,7 +18,9 @@ import {
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
 } from '@/lib/editor/commands-interactive'
-import { makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd } from '@/lib/editor/commands-layer'
+import {
+  makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd, makeUpdateLayerCmd,
+} from '@/lib/editor/commands-layer'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
@@ -34,6 +36,21 @@ import TimelineStatusBar       from './timeline/TimelineStatusBar'
 import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
 import SegmentModal            from './modals/SegmentModal'
+
+// Preset palette for the layer "Color Label" submenu. `hex: null` clears
+// the label. Same set is used by the LayerPanel-side picker so a layer
+// dragged across panels keeps a consistent colour identity.
+const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [
+  { label: 'None',    hex: null      },
+  { label: 'Blue',    hex: '#3B82F6' },
+  { label: 'Cyan',    hex: '#06B6D4' },
+  { label: 'Green',   hex: '#22C55E' },
+  { label: 'Yellow',  hex: '#EAB308' },
+  { label: 'Orange',  hex: '#F97316' },
+  { label: 'Red',     hex: '#EF4444' },
+  { label: 'Purple',  hex: '#A855F7' },
+  { label: 'Pink',    hex: '#EC4899' },
+]
 
 interface Props {
   scene: ChronoScene
@@ -734,6 +751,20 @@ export default function TimelinePanel({
             onSelect: () => dispatchCommand(
               makeTrimLayerCmd(layer.id, 'end', layer.endMs ?? scene.composition.durationMs, splitMs)
             ),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'submenu' as const, label: 'Color Label',
+            disabled: false,
+            items: LAYER_COLOR_LABELS.map((c) => ({
+              kind: 'action' as const,
+              label: c.label,
+              shortcut: undefined,
+              disabled: false,
+              onSelect: () => dispatchCommand(
+                makeUpdateLayerCmd(layer.id, { colorLabel: c.hex ?? undefined }, layer)
+              ),
+            })),
           },
         ]
         return (
