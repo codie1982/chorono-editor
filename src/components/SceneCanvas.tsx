@@ -575,11 +575,17 @@ export default function SceneCanvas({
       return
     }
 
-    // Only commit if something actually changed
+    // Only commit if something actually changed. Anchor lives on the
+    // transform too — must be included or anchor-only drags get reverted.
     const orig = drag.originalLayer
     const tChanged =
-      finalLayer.transform.x !== orig.transform.x ||
-      finalLayer.transform.y !== orig.transform.y
+      finalLayer.transform.x       !== orig.transform.x ||
+      finalLayer.transform.y       !== orig.transform.y ||
+      finalLayer.transform.anchorX !== orig.transform.anchorX ||
+      finalLayer.transform.anchorY !== orig.transform.anchorY ||
+      finalLayer.transform.rotationDeg !== orig.transform.rotationDeg ||
+      finalLayer.transform.scaleX  !== orig.transform.scaleX ||
+      finalLayer.transform.scaleY  !== orig.transform.scaleY
     const sChanged = !!finalLayer.size && !!orig.size && (
       finalLayer.size.width  !== orig.size.width ||
       finalLayer.size.height !== orig.size.height
