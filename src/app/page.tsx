@@ -376,6 +376,13 @@ export default function BuilderPage() {
     dispatchCommand(makeUpdateLayerCmd(next.id, next, prev))
   }, [scene.layers, dispatchCommand])
 
+  /** Inline-rename a layer (LayerPanel double-click). Single undo step. */
+  const renameLayer = useCallback((id: string, name: string) => {
+    const prev = scene.layers.find((l) => l.id === id)
+    if (!prev || prev.name === name) return
+    dispatchCommand(makeUpdateLayerCmd(id, { ...prev, name }, prev))
+  }, [scene.layers, dispatchCommand])
+
   // ── Group / Ungroup (Cmd+G / Cmd+Shift+G) ────────────────────────────────
   const groupSelected = useCallback(async () => {
     const ids = selectedLayerIds.size > 0
@@ -663,6 +670,7 @@ export default function BuilderPage() {
                     onReorder={reorderLayer}
                     onToggleFlag={toggleLayerFlag}
                     onApplyStagger={applyStaggeredPreset}
+                    onRename={renameLayer}
                   />
                 ),
               },

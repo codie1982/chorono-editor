@@ -151,11 +151,37 @@ export default function SceneCanvas({
   const [zoom, setZoom]       = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
 
-  // ── Snap-to-grid (visual + math while ANCHOR drags) ──────────────────────
-  const [snapEnabled, setSnapEnabled] = useState(false)
-  const [gridSize, setGridSize]       = useState(20)
-  const snapRef = useRef({ enabled: false, size: 20 })
-  useEffect(() => { snapRef.current = { enabled: snapEnabled, size: gridSize } }, [snapEnabled, gridSize])
+  // ── Snap config (master toggle + per-type) + grid size ──────────────────
+  // Master Enable Snapping (Alt+S) overrides everything; per-type checkboxes
+  // let the user keep, e.g., guides on while turning grid off. Keeping the
+  // structure mirrors SVGator / Figma / Sketch.
+  const [snapEnabled,   setSnapEnabled]   = useState(true)   // master
+  const [snapToGridOn,  setSnapToGridOn]  = useState(false)  // grid only
+  const [snapToObjects, setSnapToObjects] = useState(true)
+  const [snapToPoints,  setSnapToPoints]  = useState(true)
+  const [snapToGuides,  setSnapToGuides]  = useState(true)
+  const [snapToPixel,   setSnapToPixel]   = useState(false)
+  const [gridSize, setGridSize]           = useState(20)
+  const snapRef = useRef({
+    master: true, grid: false, objects: true, points: true, guides: true, pixel: false,
+    size: 20,
+  })
+  useEffect(() => {
+    snapRef.current = {
+      master: snapEnabled,
+      grid:   snapToGridOn,
+      objects: snapToObjects,
+      points:  snapToPoints,
+      guides:  snapToGuides,
+      pixel:   snapToPixel,
+      size:    gridSize,
+    }
+  }, [snapEnabled, snapToGridOn, snapToObjects, snapToPoints, snapToGuides, snapToPixel, gridSize])
+
+  // ── View options (rulers + grid front/back) ──────────────────────────────
+  const [showRulers,  setShowRulers]  = useState(true)
+  const [gridInFront, setGridInFront] = useState(false)
+  const [showGuides,  setShowGuides]  = useState(true)
 
   // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
   // Active guides are stored in a ref AND state so changes trigger render
@@ -305,7 +331,11 @@ export default function SceneCanvas({
     const dy = (e.clientY - drag.startClientY) * sy
     const { width: cw, height: ch } = compositionRef.current
 
-    const snap = snapRef.current
+    const snapState = snapRef.current
+    // Derived: grid snap is "active" iff master is on AND user enabled the
+    // 'grid' type. Kept as a single boolean so the move/anchor handlers
+    // remain unchanged below.
+    const snap = { enabled: snapState.master && snapState.grid, size: snapState.size }
 
     if (drag.kind === 'move') {
       // Compute delta from the PRIMARY layer's drag — apply that delta to
@@ -938,13 +968,16 @@ export default function SceneCanvas({
     canvasRenderer.render(
       ctx, scene, timeMs, selectedLayerId, assets,
       {
-        grid:        snapEnabled ? { size: gridSize } : undefined,
+        // Grid drawn only when both the master snap is on AND the "Snap to
+        // grid" type is enabled — matches the visual / behaviour contract
+        // ("grid açıksa snap olur, kapalıysa olmaz").
+        grid:        (snapEnabled && snapToGridOn) ? { size: gridSize } : undefined,
         overrides:   mergedOverrides,
         paramValues,
         selectedLayerIds,
       },
     )
-  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, gridSize, overrides, paramValues, dragOverrides])
+  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, overrides, paramValues, dragOverrides])
 
   // ── Wheel zoom (Cmd/Ctrl held) ────────────────────────────────────────────
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
@@ -1134,32 +1167,36 @@ export default function SceneCanvas({
         </div>
       </div>
 
-      {/* Bottom-right controls: zoom pill + snap pill */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-2 select-none">
-        {/* Snap pill — toggle + grid-size slider */}
-        <div className="flex items-center gap-2 bg-gray-900/90 border border-gray-700
-                        rounded px-2 py-1 text-xs font-mono text-gray-300">
-          <button
-            onClick={() => setSnapEnabled((s) => !s)}
-            title="Snap to grid (move / resize / anchor)"
-            className={`px-1.5 py-0.5 rounded transition-colors
-              ${snapEnabled ? 'bg-blue-600 text-white hover:bg-blue-500' : 'text-gray-400 hover:bg-gray-700'}`}
-          >
-            ⊞
-          </button>
-          <input
-            type="range" min={2} max={100} step={1}
-            value={gridSize}
-            onChange={(e) => setGridSize(Number(e.target.value))}
-            disabled={!snapEnabled}
-            title={`Grid size · ${gridSize}px`}
-            className="w-20 accent-blue-500 disabled:opacity-40"
-          />
-          <span className={`w-10 text-right ${snapEnabled ? 'text-gray-200' : 'text-gray-500'}`}>
-            {gridSize}px
-          </span>
-        </div>
+      {/* Rulers — top + left edges of the leaf, tick-aligned with the artboard */}
+      {showRulers && containerRef.current && (
+        <Rulers
+          composition={{ width, height }}
+          zoom={zoom}
+          pan={pan}
+          containerEl={containerRef.current}
+        />
+      )}
 
+      {/* Top-right controls: View + Snap dropdowns (SVGator-style) */}
+      <div className="absolute top-3 right-3 flex items-center gap-2 select-none z-30">
+        <ViewMenu
+          showRulers={showRulers}     onToggleRulers={() => setShowRulers((v) => !v)}
+          gridInFront={gridInFront}   onToggleGridFront={() => setGridInFront((v) => !v)}
+          showGuides={showGuides}     onToggleGuides={() => setShowGuides((v) => !v)}
+        />
+        <SnapMenu
+          enabled={snapEnabled}     onToggleEnabled={() => setSnapEnabled((v) => !v)}
+          toObjects={snapToObjects} onToggleObjects={() => setSnapToObjects((v) => !v)}
+          toPoints={snapToPoints}   onTogglePoints={() => setSnapToPoints((v) => !v)}
+          toGuides={snapToGuides}   onToggleGuides={() => setSnapToGuides((v) => !v)}
+          toGrid={snapToGridOn}     onToggleGrid={() => setSnapToGridOn((v) => !v)}
+          toPixel={snapToPixel}     onTogglePixel={() => setSnapToPixel((v) => !v)}
+          gridSize={gridSize}       onGridSizeChange={setGridSize}
+        />
+      </div>
+
+      {/* Bottom-right controls: zoom pill */}
+      <div className="absolute bottom-3 right-3 flex items-center gap-2 select-none">
         {/* Zoom + pan pill */}
         <div className="flex items-center gap-1 bg-gray-900/90 border border-gray-700
                         rounded px-2 py-1 text-xs font-mono text-gray-300">
@@ -1303,6 +1340,256 @@ function FitMenu({ hasSelection, actions, onPick }: FitMenuProps) {
         )
       })}
     </div>
+  )
+}
+
+// ── Snap menu (top-right dropdown — SVGator-style) ───────────────────────────
+
+interface SnapMenuProps {
+  enabled: boolean;     onToggleEnabled: () => void
+  toObjects: boolean;   onToggleObjects: () => void
+  toPoints:  boolean;   onTogglePoints:  () => void
+  toGuides:  boolean;   onToggleGuides:  () => void
+  toGrid:    boolean;   onToggleGrid:    () => void
+  toPixel:   boolean;   onTogglePixel:   () => void
+  gridSize:  number;    onGridSizeChange: (n: number) => void
+}
+
+function SnapMenu(p: SnapMenuProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const items: Array<{ label: string; value: boolean; onToggle: () => void; disabled?: boolean }> = [
+    { label: 'Snap to Objects', value: p.toObjects, onToggle: p.onToggleObjects, disabled: !p.enabled },
+    { label: 'Snap to Points',  value: p.toPoints,  onToggle: p.onTogglePoints,  disabled: !p.enabled },
+    { label: 'Snap to Guides',  value: p.toGuides,  onToggle: p.onToggleGuides,  disabled: !p.enabled },
+    { label: 'Snap to Grid',    value: p.toGrid,    onToggle: p.onToggleGrid,    disabled: !p.enabled },
+    { label: 'Snap to Pixel',   value: p.toPixel,   onToggle: p.onTogglePixel,   disabled: !p.enabled },
+  ]
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Snap settings"
+        className={`px-2 py-1 text-xs font-mono rounded border flex items-center gap-1
+          ${p.enabled
+            ? 'bg-blue-600/90 border-blue-500 text-white hover:bg-blue-500'
+            : 'bg-gray-900/90 border-gray-700 text-gray-400 hover:bg-gray-800'}`}
+      >
+        🧲 Snap <span className="text-[8px]">▾</span>
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 min-w-[220px] bg-gray-900 border border-gray-700
+                        rounded shadow-xl py-1 z-50 dock-overlay-in">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              disabled={it.disabled}
+              onClick={() => !it.disabled && it.onToggle()}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs
+                ${it.disabled
+                  ? 'text-gray-600 cursor-not-allowed'
+                  : 'text-gray-200 hover:bg-gray-800 cursor-pointer'}`}
+            >
+              <span className="w-3 inline-block">{it.value ? '✓' : ''}</span>
+              <span className="flex-1 text-left">{it.label}</span>
+            </button>
+          ))}
+          {/* Inline grid-size slider when Snap to Grid is on */}
+          {p.toGrid && p.enabled && (
+            <div className="px-3 py-1.5 flex items-center gap-2 border-t border-gray-800 mt-1 pt-2">
+              <span className="text-[10px] text-gray-400">Grid</span>
+              <input
+                type="range" min={2} max={100} step={1}
+                value={p.gridSize}
+                onChange={(e) => p.onGridSizeChange(Number(e.target.value))}
+                className="flex-1 accent-blue-500"
+              />
+              <span className="text-[10px] font-mono text-gray-300 w-10 text-right">{p.gridSize}px</span>
+            </div>
+          )}
+          <div className="h-px bg-gray-800 my-1" />
+          <button
+            onClick={p.onToggleEnabled}
+            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs
+                       text-gray-200 hover:bg-gray-800 cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <span className="w-3 inline-block">{p.enabled ? '✓' : ''}</span>
+              Enable Snapping
+            </span>
+            <span className="text-[10px] font-mono text-gray-500">Alt + S</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── View menu (rulers / grid front-back / guides) ───────────────────────────
+
+interface ViewMenuProps {
+  showRulers:    boolean; onToggleRulers:    () => void
+  gridInFront:   boolean; onToggleGridFront: () => void
+  showGuides:    boolean; onToggleGuides:    () => void
+}
+
+function ViewMenu(p: ViewMenuProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const rows: Array<{ label: string; value: boolean; onToggle: () => void; kbd?: string }> = [
+    { label: 'Show ruler',           value: p.showRulers,  onToggle: p.onToggleRulers,    kbd: 'Alt + R' },
+    { label: 'Show guides',          value: p.showGuides,  onToggle: p.onToggleGuides,    kbd: 'Alt + L' },
+    { label: 'Grid on top of layers',value: p.gridInFront, onToggle: p.onToggleGridFront },
+  ]
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="View options"
+        className="px-2 py-1 text-xs font-mono rounded border bg-gray-900/90 border-gray-700
+                   text-gray-300 hover:bg-gray-800 flex items-center gap-1"
+      >
+        ⊞ View <span className="text-[8px]">▾</span>
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 min-w-[220px] bg-gray-900 border border-gray-700
+                        rounded shadow-xl py-1 z-50 dock-overlay-in">
+          {rows.map((r) => (
+            <button
+              key={r.label}
+              onClick={r.onToggle}
+              className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs
+                         text-gray-200 hover:bg-gray-800 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <span className="w-3 inline-block">{r.value ? '✓' : ''}</span>
+                {r.label}
+              </span>
+              {r.kbd && <span className="text-[10px] font-mono text-gray-500">{r.kbd}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Rulers (px scales on top + left edges of the canvas leaf) ────────────────
+
+interface RulersProps {
+  composition: { width: number; height: number }
+  zoom: number
+  pan: { x: number; y: number }
+  containerEl: HTMLDivElement
+}
+
+const RULER_THICK = 18  // px — strip height/width
+
+/**
+ * Picks a "nice" tick interval (composition px) so that major ticks fall
+ * roughly every 80 screen px regardless of zoom.
+ */
+function pickRulerStep(zoom: number): number {
+  const TARGET_PX = 80
+  const compPx = TARGET_PX / Math.max(0.001, zoom)
+  const niceSteps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
+  for (const s of niceSteps) if (s >= compPx) return s
+  return niceSteps[niceSteps.length - 1]
+}
+
+function Rulers({ composition, zoom, pan, containerEl }: RulersProps) {
+  // Re-render when the container resizes so ruler ticks stay aligned with
+  // the leaf's current bounds.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const ro = new ResizeObserver(() => setTick((t) => t + 1))
+    ro.observe(containerEl)
+    return () => ro.disconnect()
+  }, [containerEl])
+
+  const rect = containerEl.getBoundingClientRect()
+  const cw = rect.width, ch = rect.height
+  // Canvas top-left in container-relative coords:
+  // flex centres the (canvas + 2×PADDING) wrapper, plus the pan translate.
+  const originX = cw / 2 - (composition.width  * zoom) / 2 + pan.x
+  const originY = ch / 2 - (composition.height * zoom) / 2 + pan.y
+
+  const step = pickRulerStep(zoom)
+  // X ticks (composition x = 0, step, 2·step, …, width)
+  const xTicks: number[] = []
+  for (let x = 0; x <= composition.width;  x += step) xTicks.push(x)
+  const yTicks: number[] = []
+  for (let y = 0; y <= composition.height; y += step) yTicks.push(y)
+
+  // Common style for tick labels
+  const label = 'absolute text-[9px] font-mono text-gray-500 pointer-events-none select-none'
+  const tickStroke = 'rgba(160,160,160,0.55)'
+
+  return (
+    <>
+      {/* TOP RULER — horizontal strip pinned to the leaf's top edge */}
+      <div
+        className="absolute top-0 left-0 right-0 bg-gray-900/95 border-b border-gray-700 pointer-events-none z-20"
+        style={{ height: RULER_THICK }}
+      >
+        {/* Corner spacer (overlaps the left ruler's gutter) */}
+        <div className="absolute top-0 left-0 bg-gray-900/95 border-r border-gray-700"
+             style={{ width: RULER_THICK, height: RULER_THICK }} />
+        {xTicks.map((cx) => {
+          const sx = originX + cx * zoom
+          if (sx < RULER_THICK || sx > cw) return null
+          return (
+            <div key={cx} className="absolute top-0 h-full" style={{ left: sx }}>
+              <div style={{ position: 'absolute', bottom: 0, width: 1, height: 6, background: tickStroke }} />
+              <span className={label} style={{ top: 2, left: 3 }}>{cx}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* LEFT RULER — vertical strip pinned to the leaf's left edge */}
+      <div
+        className="absolute top-0 left-0 bottom-0 bg-gray-900/95 border-r border-gray-700 pointer-events-none z-20"
+        style={{ width: RULER_THICK }}
+      >
+        {yTicks.map((cy) => {
+          const sy = originY + cy * zoom
+          if (sy < RULER_THICK || sy > ch) return null
+          return (
+            <div key={cy} className="absolute left-0 w-full" style={{ top: sy }}>
+              <div style={{ position: 'absolute', right: 0, height: 1, width: 6, background: tickStroke }} />
+              <span className={label}
+                style={{
+                  top: 0, left: 2,
+                  transform: 'rotate(-90deg) translate(-100%, 100%)',
+                  transformOrigin: '0 0',
+                  whiteSpace: 'nowrap',
+                }}>{cy}</span>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 

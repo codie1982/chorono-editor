@@ -18,6 +18,8 @@ interface Props {
   onDelete: (id: string) => void
   onReorder: (from: number, to: number) => void
   onToggleFlag: (id: string, field: 'locked' | 'hidden' | 'solo') => void
+  /** Inline rename — fired on Enter or blur of the rename input. */
+  onRename: (id: string, name: string) => void
   onApplyStagger?: (presetId: string, stepMs: number) => void
   /** Group the current selection (called when user clicks the Group icon
    *  button in the header). Wired to the same Cmd+G command from page.tsx. */
@@ -28,7 +30,7 @@ interface Props {
 export default function LayerPanel({
   layers, selectedId, selectedIds, onSelect, onAdd,
   onAddImage, onAddVideo, onAddAudio, onImportSvg,
-  onDelete, onReorder, onToggleFlag, onApplyStagger,
+  onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onGroupSelection, onUngroupSelection,
 }: Props) {
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -37,6 +39,23 @@ export default function LayerPanel({
   const svgInputRef   = useRef<HTMLInputElement>(null)
   const [menuOpen, setMenuOpen]       = useState(false)
   const [activeCategory, setCategory] = useState('Basic Shapes')
+
+  // ── Inline rename: double-click a layer name to edit, Enter / blur to
+  //    commit, Escape to cancel. Auto-focus + select-all on enter.
+  const [editingId,    setEditingId]    = useState<string | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+  const beginRename = (l: Layer) => {
+    setEditingId(l.id)
+    setEditingValue(l.name || l.id)
+  }
+  const commitRename = () => {
+    if (editingId) {
+      const trimmed = editingValue.trim()
+      if (trimmed.length > 0) onRename(editingId, trimmed)
+    }
+    setEditingId(null)
+  }
+  const cancelRename = () => setEditingId(null)
   // Tree expand state — collapsed groups hide their children. Persists across
   // re-renders. Newly created groups default to EXPANDED (not in the set).
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -285,9 +304,34 @@ export default function LayerPanel({
                 </span>
               )}
 
-              <span className={`flex-1 truncate ${isGroup ? 'text-[10px] uppercase tracking-wider font-medium' : 'text-xs'}`}>
-                {layer.name || layer.id}
-              </span>
+              {editingId === layer.id ? (
+                <input
+                  type="text"
+                  value={editingValue}
+                  onChange={(e) => setEditingValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter')  { e.preventDefault(); (e.target as HTMLInputElement).blur() }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelRename() }
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  // Auto-focus + select-all on mount
+                  autoFocus
+                  onFocus={(e) => e.currentTarget.select()}
+                  className={`flex-1 min-w-0 px-1 -mx-1 rounded outline-none
+                              bg-gray-950 text-white border border-blue-500
+                              ${isGroup ? 'text-[10px] uppercase tracking-wider font-medium' : 'text-xs'}`}
+                />
+              ) : (
+                <span
+                  onDoubleClick={(e) => { e.stopPropagation(); beginRename(layer) }}
+                  title="Double-click to rename"
+                  className={`flex-1 truncate ${isGroup ? 'text-[10px] uppercase tracking-wider font-medium' : 'text-xs'}`}
+                >
+                  {layer.name || layer.id}
+                </span>
+              )}
 
               {/* Reorder */}
               <button
