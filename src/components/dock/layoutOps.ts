@@ -55,6 +55,13 @@ export function setActiveTab(tree: DockNode, leafId: string, panelId: string): D
   })
 }
 
+/** Set the collapsed flag of one leaf. */
+export function setLeafCollapsed(tree: DockNode, leafId: string, collapsed: boolean): DockNode {
+  return mapNode(tree, (n) =>
+    n.kind === 'leaf' && n.id === leafId ? { ...n, collapsed } : n
+  )
+}
+
 // ── Insert / remove panels ───────────────────────────────────────────────────
 
 /**

@@ -22,6 +22,9 @@ export interface DockLeaf {
   panels: string[]
   /** Index into `panels` of the currently-active tab. */
   activeIndex: number
+  /** When true the leaf shrinks to a thin rail with just an expand arrow.
+   *  The sibling in its parent split takes all remaining space. */
+  collapsed?: boolean
 }
 
 export type DockNode = DockSplit | DockLeaf

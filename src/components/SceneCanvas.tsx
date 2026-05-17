@@ -50,6 +50,10 @@ interface Props {
   /** External tool mode (select/pan/pen). When 'pen' and a path layer is
    *  selected, canvas clicks insert new anchors instead of starting drags. */
   toolMode?: 'select' | 'pan' | 'pen'
+  /** Fullscreen toggle — when provided, FitMenu shows an "⛶ Fullscreen
+   *  canvas" item and reflects the current state. */
+  fullscreen?: boolean
+  onToggleFullscreen?: () => void
 }
 
 const PADDING   = 24
@@ -141,6 +145,7 @@ export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode,
+  fullscreen, onToggleFullscreen,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1301,6 +1306,7 @@ export default function SceneCanvas({
             {fitMenuOpen && (
               <FitMenu
                 hasSelection={!!selectedLayer && !selectedLayer.hidden}
+                fullscreen={!!fullscreen}
                 onPick={(action) => { setFitMenuOpen(false); action() }}
                 actions={{
                   fitAll, fitWidth, fitHeight, actualSize,
@@ -1308,6 +1314,7 @@ export default function SceneCanvas({
                   zoom50:  () => zoomTo(0.5),
                   zoom200: () => zoomTo(2),
                   zoom400: () => zoomTo(4),
+                  toggleFullscreen: onToggleFullscreen,
                 }}
               />
             )}
@@ -1352,15 +1359,17 @@ interface FitMenuActions {
   zoom50:          () => void
   zoom200:         () => void
   zoom400:         () => void
+  toggleFullscreen?: () => void
 }
 
 interface FitMenuProps {
   hasSelection: boolean
+  fullscreen:   boolean
   actions: FitMenuActions
   onPick: (action: () => void) => void
 }
 
-function FitMenu({ hasSelection, actions, onPick }: FitMenuProps) {
+function FitMenu({ hasSelection, fullscreen, actions, onPick }: FitMenuProps) {
   type Item =
     | { kind: 'item'; label: string; kbd?: string; action: () => void; disabled?: boolean }
     | { kind: 'separator' }
@@ -1381,6 +1390,13 @@ function FitMenu({ hasSelection, actions, onPick }: FitMenuProps) {
     { kind: 'item', label: '50%',                          action: actions.zoom50 },
     { kind: 'item', label: '200%',                         action: actions.zoom200 },
     { kind: 'item', label: '400%',                         action: actions.zoom400 },
+    ...(actions.toggleFullscreen ? [
+      { kind: 'separator' as const },
+      { kind: 'item' as const,
+        label: fullscreen ? '⛶ Exit fullscreen' : '⛶ Fullscreen canvas',
+        kbd: 'Esc / F11',
+        action: actions.toggleFullscreen },
+    ] : []),
   ]
 
   return (

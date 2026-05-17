@@ -8,6 +8,11 @@ interface Props {
   leaf: DockLeaf
   registry: PanelRegistry
   onTabSelect: (panelId: string) => void
+  onToggleCollapse?: (next: boolean) => void
+  /** Which side is the splitter on, so the collapse chevron points toward
+   *  the panel content. 'h-right' = panel is to the LEFT of a vertical
+   *  splitter; chevron points right when collapsed (expand to the right). */
+  collapseSide?: 'h-right' | 'h-left' | 'v-bottom' | 'v-top'
 }
 
 const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
@@ -16,10 +21,49 @@ const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
  * Renders one leaf of the dock tree: a tab strip + active panel body + drop
  * overlay (visible only while a drag is in progress).
  */
-export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props) {
+export default function DockLeafComponent({
+  leaf, registry, onTabSelect, onToggleCollapse, collapseSide,
+}: Props) {
   const { drag, beginDrag, hoverTarget, setHoverTarget } = useDockDrag()
   const containerRef = useRef<HTMLDivElement>(null)
   const [localEdge, setLocalEdge] = useState<DockEdge | null>(null)
+
+  // Collapsed rail — thin strip with just an expand arrow pointing toward
+  // the original panel content direction.
+  if (leaf.collapsed) {
+    const chevron =
+      collapseSide === 'h-right' ? '〉' :  // panel was on the left, expand right
+      collapseSide === 'h-left'  ? '〈' :  // panel was on the right, expand left
+      collapseSide === 'v-bottom'? '∨' :  // panel was on top, expand down
+                                   '∧'    // panel was on bottom, expand up
+    return (
+      <div
+        key={leaf.id}
+        className="relative flex flex-col items-center justify-start
+                   bg-gray-900 border border-gray-800 dock-leaf-in"
+        style={{
+          width:  (collapseSide?.startsWith('h')) ? '24px'  : '100%',
+          height: (collapseSide?.startsWith('v')) ? '24px'  : '100%',
+        }}
+      >
+        <button
+          onClick={() => onToggleCollapse?.(false)}
+          title={`Expand · ${leaf.panels.map(p => registry.get(p)?.title ?? p).join(' / ')}`}
+          className="w-6 h-6 mt-1 flex items-center justify-center text-gray-400
+                     hover:text-white hover:bg-gray-800 rounded text-xs"
+        >
+          {chevron}
+        </button>
+        {/* Vertical label so the user knows what's hidden */}
+        {(collapseSide?.startsWith('h')) && (
+          <div className="mt-2 text-[9px] uppercase tracking-wider text-gray-500
+                          [writing-mode:vertical-rl] rotate-180 select-none">
+            {leaf.panels.map(p => registry.get(p)?.title ?? p).join(' · ')}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // Compute hovered edge based on pointer position while dragging.
   // Source leaf is excluded — you can't drop a panel back onto its own leaf.
@@ -84,6 +128,18 @@ export default function DockLeafComponent({ leaf, registry, onTabSelect }: Props
           )
         })}
         <div className="flex-1" />
+        {onToggleCollapse && (
+          <button
+            onClick={() => onToggleCollapse(true)}
+            title="Collapse panel"
+            className="w-6 h-full flex items-center justify-center text-gray-500
+                       hover:text-white hover:bg-gray-700 text-[10px] shrink-0"
+          >
+            {collapseSide === 'h-right' ? '〈' :
+             collapseSide === 'h-left'  ? '〉' :
+             collapseSide === 'v-bottom'? '∧' : '∨'}
+          </button>
+        )}
       </div>
 
       {/* Panel body — flex container so children using flex-1 / h-full

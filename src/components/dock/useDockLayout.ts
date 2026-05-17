@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 import type { DockNode, DockEdge } from './types'
 import {
   defaultLayout, dropPanel, dropPanelToRoot,
-  setActiveTab, setSplitRatio, isValidLayout,
+  setActiveTab, setSplitRatio, setLeafCollapsed, isValidLayout,
 } from './layoutOps'
 import { ROOT_LEAF_ID } from './DockOuterEdges'
 
@@ -14,6 +14,7 @@ interface DockLayoutReturn {
   dispatchDrop:      (panelId: string, targetLeafId: string, edge: DockEdge) => void
   dispatchTab:       (leafId: string, panelId: string) => void
   dispatchResize:    (splitId: string, ratio: number) => void
+  dispatchCollapse:  (leafId: string, collapsed: boolean) => void
   resetLayout:       () => void
 }
 
@@ -70,7 +71,11 @@ export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn
     setLayout((tree) => setSplitRatio(tree, splitId, ratio))
   }, [])
 
+  const dispatchCollapse = useCallback((leafId: string, collapsed: boolean) => {
+    setLayout((tree) => setLeafCollapsed(tree, leafId, collapsed))
+  }, [])
+
   const resetLayout = useCallback(() => setLayout(defaultLayout()), [])
 
-  return { layout, dispatchDrop, dispatchTab, dispatchResize, resetLayout }
+  return { layout, dispatchDrop, dispatchTab, dispatchResize, dispatchCollapse, resetLayout }
 }

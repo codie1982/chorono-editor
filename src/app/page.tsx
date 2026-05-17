@@ -116,6 +116,17 @@ export default function BuilderPage() {
   // The id list is the contract validated against the persisted tree —
   // mismatches reset back to the default layout (recovery from corrupt state).
   const dock = useDockLayout(['layers', 'canvas', 'properties', 'timeline'])
+  // Fullscreen canvas — hides the dock and renders only the canvas leaf.
+  const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
+  // Escape exits fullscreen
+  useEffect(() => {
+    if (!fullscreenCanvas) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreenCanvas(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreenCanvas])
   const dockContainerRef = useRef<HTMLDivElement | null>(null)
   /** UUID-based keyframe multi-selection — survives drag, persists across renders */
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
@@ -647,10 +658,9 @@ export default function BuilderPage() {
       {/* ── Dockable work area ─────────────────────────────────────── */}
       <DockDragProvider onDrop={dock.dispatchDrop}>
         <div ref={dockContainerRef} className="flex-1 min-h-0 relative">
-          <DockOuterEdges containerRef={dockContainerRef} />
-          <DockLayout
-            node={dock.layout}
-            registry={makeRegistry([
+          {!fullscreenCanvas && <DockOuterEdges containerRef={dockContainerRef} />}
+          {(() => {
+            const registry = makeRegistry([
               {
                 id: 'layers', title: 'Layers',
                 render: () => (
@@ -723,6 +733,8 @@ export default function BuilderPage() {
                     panMode={toolMode === 'pan'}
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
+                    fullscreen={fullscreenCanvas}
+                    onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                   />
                 ),
               },
@@ -804,10 +816,37 @@ export default function BuilderPage() {
                   />
                 ),
               },
-            ] satisfies PanelDefinition[])}
-            onTabSelect={dock.dispatchTab}
-            onResize={dock.dispatchResize}
-          />
+            ] satisfies PanelDefinition[])
+            // Fullscreen canvas: skip the dock entirely and render only the
+            // canvas panel as a full-bleed surface. Esc (handled in the
+            // useEffect above) restores the normal dock layout.
+            if (fullscreenCanvas) {
+              const canvasDef = registry.get('canvas')
+              return (
+                <div className="absolute inset-0 bg-gray-950">
+                  {canvasDef?.render()}
+                  <button
+                    onClick={() => setFullscreenCanvas(false)}
+                    title="Exit fullscreen (Esc)"
+                    className="absolute top-3 left-3 z-50 px-2.5 py-1 text-xs font-mono
+                               bg-gray-900/90 border border-gray-700 text-gray-300
+                               hover:bg-gray-800 rounded"
+                  >
+                    ⛶ Exit fullscreen <span className="text-gray-500 ml-1">Esc</span>
+                  </button>
+                </div>
+              )
+            }
+            return (
+              <DockLayout
+                node={dock.layout}
+                registry={registry}
+                onTabSelect={dock.dispatchTab}
+                onResize={dock.dispatchResize}
+                onCollapse={dock.dispatchCollapse}
+              />
+            )
+          })()}
         </div>
       </DockDragProvider>
 
