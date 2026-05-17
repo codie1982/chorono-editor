@@ -96,6 +96,8 @@ interface Props {
     alignBottom?: () => void
     distributeHorizontally?: () => void
     distributeVertically?:   () => void
+    /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
+    convertToSpline?: () => void
   }
 }
 
@@ -1655,6 +1657,12 @@ export default function SceneCanvas({
           alignBottom: menuHandlers?.alignBottom,
           distributeHorizontally: menuHandlers?.distributeHorizontally,
           distributeVertically:   menuHandlers?.distributeVertically,
+          // BL-17 Faz 1 — wired only for shape layers with a size; non-shape
+          // selections leave it undefined, which the menu renders disabled.
+          convertToPath:
+            menuHandlers?.convertToSpline && target.type === 'shape' && target.size
+              ? menuHandlers.convertToSpline
+              : undefined,
 
           // ── Locally implemented (no page state needed) ──────────────────
           centerOrigin: () => editor.dispatchCommand(

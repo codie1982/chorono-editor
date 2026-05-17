@@ -23,6 +23,7 @@ import {
   makeDuplicateLayerCmd, makeMoveLayerCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
+import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
@@ -984,6 +985,9 @@ export default function BuilderPage() {
                       alignTop:    () => alignSelected('top'),
                       alignMiddle: () => alignSelected('middle'),
                       alignBottom: () => alignSelected('bottom'),
+                      convertToSpline: selectedLayer?.type === 'shape' && selectedLayer.size
+                        ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
+                        : undefined,
                     }}
                   />
                 ),
@@ -1000,6 +1004,11 @@ export default function BuilderPage() {
                       parameters={scene.parameters}
                       allLayers={scene.layers}
                       allTimelines={scene.timelines.map(t => ({ id: t.id, durationMs: t.durationMs }))}
+                      onConvertToSpline={
+                        selectedLayer?.type === 'shape' && selectedLayer.size
+                          ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
+                          : undefined
+                      }
                     />
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
