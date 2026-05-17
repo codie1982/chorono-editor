@@ -13,6 +13,11 @@ import {
 } from '@/lib/snap/AlignmentGuides'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import MotionPathOverlay from './MotionPathOverlay'
+import ContextMenu, { useContextMenu } from './ui/ContextMenu'
+import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
+import {
+  rotate90CW, rotate90CCW, flipHorizontal, flipVertical, centerOrigin,
+} from '@/lib/editor/layerTransforms'
 
 interface Props {
   scene: ChronoScene
@@ -55,6 +60,29 @@ interface Props {
    *  canvas" item and reflects the current state. */
   fullscreen?: boolean
   onToggleFullscreen?: () => void
+  /** Optional callbacks injected by page.tsx for right-click menu actions
+   *  that need access to page-level state (clipboard, grouping, etc.).
+   *  Anything not provided is shown as a disabled row in the menu. */
+  menuHandlers?: {
+    cut?:       () => void
+    copy?:      () => void
+    paste?:     () => void
+    canPaste?:  boolean
+    duplicate?: () => void
+    group?:     () => void
+    ungroup?:   () => void
+    canUngroup?:boolean
+    deleteLayer?: () => void
+    animateProperty?: (propertyPath: string) => void
+    alignLeft?:   () => void
+    alignCenter?: () => void
+    alignRight?:  () => void
+    alignTop?:    () => void
+    alignMiddle?: () => void
+    alignBottom?: () => void
+    distributeHorizontally?: () => void
+    distributeVertically?:   () => void
+  }
 }
 
 const PADDING   = 24
@@ -147,6 +175,7 @@ export default function SceneCanvas({
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode,
   fullscreen, onToggleFullscreen,
+  menuHandlers,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -188,6 +217,13 @@ export default function SceneCanvas({
   const [showRulers,  setShowRulers]  = useState(true)
   const [gridInFront, setGridInFront] = useState(false)
   const [showGuides,  setShowGuides]  = useState(true)
+
+  // ── Right-click context menu — opens at cursor on a layer hit ────────────
+  // Targets the right-clicked layer (not necessarily the selected one) so
+  // users can act on any object without changing selection first. Selection
+  // does, however, get updated so e.g. Animate can keyframe the right layer.
+  const ctxMenu = useContextMenu()
+  const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
 
   // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
   // Active guides are stored in a ref AND state so changes trigger render
@@ -1103,6 +1139,24 @@ export default function SceneCanvas({
             width={width}
             height={height}
             onPointerDown={handleCanvasPointerDown}
+            onContextMenu={(e) => {
+              if (previewMode) return                  // preview mode = no editing menus
+              const cv = canvasRef.current
+              if (!cv) return
+              const rect = cv.getBoundingClientRect()
+              const sx = width  / rect.width
+              const sy = height / rect.height
+              const cx = (e.clientX - rect.left) * sx
+              const cy = (e.clientY - rect.top)  * sy
+              const hit = hitTestLayer(scene, timeMs, cx, cy)
+              if (!hit) return                         // empty canvas → use browser default for now
+              e.preventDefault()
+              // Bring the right-clicked layer into selection so menu actions
+              // operate on what the user pointed at — matches every other editor.
+              if (hit !== selectedLayerId) onSelectLayer(hit)
+              setCtxTargetLayerId(hit)
+              ctxMenu.open(e)
+            }}
             onPointerMove={(e) => {
               // Hover preview — rAF-throttled hit test. Skip while any drag
               // is active (avoids competing for state with move/resize/rotate
@@ -1358,8 +1412,99 @@ export default function SceneCanvas({
           ? '✋ Pan mode · drag ANYWHERE on the leaf to pan (click ✋ again to turn off)'
           : 'Drag = move · Shift = axis-lock · Handles to resize · ⌘ = aspect-lock · ⌘+scroll = zoom · Mid-mouse = pan'}
       </div>
+
+      {/* ── Right-click context menu ─────────────────────────────────────────
+          Built each render from the latest layer state so toggled flags
+          (lock/hide) and selection size update the menu in real time. */}
+      {ctxMenu.isOpen && ctxTargetLayerId && (() => {
+        const target = scene.layers.find((l) => l.id === ctxTargetLayerId)
+        if (!target) { ctxMenu.close(); return null }
+        const handlers: CanvasMenuHandlers = {
+          // ── Page-injected handlers (clipboard, group, animate, align) ───
+          cut:        menuHandlers?.cut,
+          copy:       menuHandlers?.copy,
+          paste:      menuHandlers?.paste,
+          duplicate:  menuHandlers?.duplicate,
+          group:      menuHandlers?.group,
+          ungroup:    menuHandlers?.ungroup,
+          deleteLayer: menuHandlers?.deleteLayer,
+          animateProperty: menuHandlers?.animateProperty,
+          alignLeft:   menuHandlers?.alignLeft,
+          alignCenter: menuHandlers?.alignCenter,
+          alignRight:  menuHandlers?.alignRight,
+          alignTop:    menuHandlers?.alignTop,
+          alignMiddle: menuHandlers?.alignMiddle,
+          alignBottom: menuHandlers?.alignBottom,
+          distributeHorizontally: menuHandlers?.distributeHorizontally,
+          distributeVertically:   menuHandlers?.distributeVertically,
+
+          // ── Locally implemented (no page state needed) ──────────────────
+          centerOrigin: () => editor.dispatchCommand(
+            makeUpdateLayerCmd(target.id, centerOrigin(target), target),
+          ),
+          rotate90CW:  () => editor.dispatchCommand(
+            makeUpdateLayerCmd(target.id, rotate90CW(target),  target),
+          ),
+          rotate90CCW: () => editor.dispatchCommand(
+            makeUpdateLayerCmd(target.id, rotate90CCW(target), target),
+          ),
+          flipHorizontal: () => editor.dispatchCommand(
+            makeUpdateLayerCmd(target.id, flipHorizontal(target), target),
+          ),
+          flipVertical:   () => editor.dispatchCommand(
+            makeUpdateLayerCmd(target.id, flipVertical(target),   target),
+          ),
+          toggleLock: () => editor.dispatchCommand(
+            makeUpdateLayerCmd(target.id, { ...target, locked: !target.locked }, target),
+          ),
+
+          // ── Z-order (in-place layer array reorder) ──────────────────────
+          bringForward: () => moveLayerZ(scene, editor, target.id, +1),
+          bringToFront: () => moveLayerZ(scene, editor, target.id, +999),
+          sendBackward: () => moveLayerZ(scene, editor, target.id, -1),
+          sendToBack:   () => moveLayerZ(scene, editor, target.id, -999),
+        }
+        const multiCount = selectedLayerIds?.size ?? (selectedLayerId ? 1 : 0)
+        const items = buildCanvasMenu({
+          layer:      target,
+          multiCount,
+          canUngroup: menuHandlers?.canUngroup ?? false,
+          canPaste:   menuHandlers?.canPaste   ?? false,
+          handlers,
+        })
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x}
+            y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxTargetLayerId(null) }}
+          />
+        )
+      })()}
     </div>
   )
+}
+
+// ── Z-order helper ────────────────────────────────────────────────────────
+// Single source of truth for "bring forward / send to back" so the four menu
+// items share the same clamp + command construction. delta of ±999 is the
+// idiomatic way to ask for the end of the array without exposing the length
+// to the caller.
+function moveLayerZ(
+  scene:   ChronoScene,
+  editor:  EditorStateReturn,
+  layerId: string,
+  delta:   number,
+) {
+  const from = scene.layers.findIndex((l) => l.id === layerId)
+  if (from < 0) return
+  const to = Math.max(0, Math.min(scene.layers.length - 1, from + delta))
+  if (to === from) return
+  // Re-use the existing reorder command from the layer-list path so the
+  // undo/redo entry is consistent regardless of how the user triggered it.
+  import('@/lib/editor/commands-layer').then(({ makeMoveLayerCmd }) => {
+    editor.dispatchCommand(makeMoveLayerCmd(layerId, from, to))
+  })
 }
 
 // ── Selection frame with 8 resize handles ────────────────────────────────────

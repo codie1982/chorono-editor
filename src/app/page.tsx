@@ -21,7 +21,7 @@ import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
 } from '@/lib/editor/commands-layer'
-import { makeBulkDeleteKfCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
+import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
@@ -382,6 +382,90 @@ export default function BuilderPage() {
     selectLayer(next.id)
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
+  // ── In-memory layer clipboard (cut / copy / paste from right-click menu) ──
+  // Held in a ref because the clipboard is editor-state, not view-state — no
+  // re-render needed when it changes (the menu reads from `clipboardLayersRef`
+  // on the same render cycle when it's opened).
+  const clipboardLayersRef = useRef<Layer[]>([])
+  const [hasClipboard, setHasClipboard]   = useState(false)
+
+  const copySelectedLayers = useCallback(() => {
+    const ids = selectedLayerIds.size > 0
+      ? Array.from(selectedLayerIds)
+      : (selectedLayerId ? [selectedLayerId] : [])
+    if (ids.length === 0) return
+    // Deep clone via cloneLayerForDuplicate so paste produces fresh IDs each time.
+    clipboardLayersRef.current = ids
+      .map((id) => scene.layers.find((l) => l.id === id))
+      .filter((l): l is Layer => !!l)
+    setHasClipboard(clipboardLayersRef.current.length > 0)
+  }, [scene.layers, selectedLayerIds, selectedLayerId])
+
+  const cutSelectedLayers = useCallback(() => {
+    copySelectedLayers()
+    const ids = selectedLayerIds.size > 0
+      ? Array.from(selectedLayerIds)
+      : (selectedLayerId ? [selectedLayerId] : [])
+    for (const id of ids) deleteLayer(id)
+  }, [copySelectedLayers, selectedLayerIds, selectedLayerId, deleteLayer])
+
+  const pasteLayers = useCallback(() => {
+    const src = clipboardLayersRef.current
+    if (src.length === 0) return
+    let lastId: string | null = null
+    for (const orig of src) {
+      const next = cloneLayerForDuplicate(orig)
+      next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
+      dispatchCommand(makeDuplicateLayerCmd(orig, next))
+      lastId = next.id
+    }
+    if (lastId) selectLayer(lastId)
+  }, [dispatchCommand, selectLayer])
+
+  // ── Align selected layers to the shared bounding box edge ─────────────────
+  // Updates every selected layer in a single dispatch via composite command so
+  // undo restores all positions in one step. Anchor offset isn't touched —
+  // only `transform.x` / `transform.y` so already-animated rigs keep working.
+  const alignSelected = useCallback((edge:
+    'left' | 'centerX' | 'right' | 'top' | 'middle' | 'bottom',
+  ) => {
+    const ids = selectedLayerIds.size > 1
+      ? Array.from(selectedLayerIds)
+      : []
+    if (ids.length < 2) return
+    const targets = ids
+      .map((id) => scene.layers.find((l) => l.id === id))
+      .filter((l): l is Layer => !!l)
+    // Pre-compute each layer's bounding box (top-left in scene coords).
+    const boxes = targets.map((l) => {
+      const w = l.size?.width  ?? (l.text?.fontSize ? 120 : 80)
+      const h = l.size?.height ?? (l.text?.fontSize ?? 24)
+      return { l, x: l.transform.x, y: l.transform.y, w, h }
+    })
+    const minX = Math.min(...boxes.map((b) => b.x))
+    const maxX = Math.max(...boxes.map((b) => b.x + b.w))
+    const minY = Math.min(...boxes.map((b) => b.y))
+    const maxY = Math.max(...boxes.map((b) => b.y + b.h))
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    // Dispatch one command per layer — history's batch system collapses them
+    // into a single undo group already; doing this in a tight loop keeps the
+    // code small without growing the command surface.
+    for (const b of boxes) {
+      const nx =
+        edge === 'left'    ? minX           :
+        edge === 'right'   ? maxX - b.w     :
+        edge === 'centerX' ? cx - b.w / 2   : b.x
+      const ny =
+        edge === 'top'     ? minY           :
+        edge === 'bottom'  ? maxY - b.h     :
+        edge === 'middle'  ? cy - b.h / 2   : b.y
+      if (nx === b.x && ny === b.y) continue
+      const next = { ...b.l, transform: { ...b.l.transform, x: nx, y: ny } }
+      dispatchCommand(makeUpdateLayerCmd(b.l.id, next, b.l))
+    }
+  }, [scene.layers, selectedLayerIds, dispatchCommand])
+
   const updateLayer = useCallback((next: Layer) => {
     const prev = scene.layers.find((l) => l.id === next.id)
     if (!prev) return
@@ -394,6 +478,22 @@ export default function BuilderPage() {
     if (!prev || prev.name === name) return
     dispatchCommand(makeUpdateLayerCmd(id, { ...prev, name }, prev))
   }, [scene.layers, dispatchCommand])
+
+  // ── Quick-keyframe selected layers' chosen properties at the playhead ────
+  // Used by the canvas right-click "Animate ▶" submenu — snapshots the
+  // current value of one property into a fresh keyframe on the active
+  // timeline. If no timeline exists yet, this is a no-op.
+  const keyframeSelectedLayers = useCallback((properties: string[]) => {
+    if (!selectedTlId || properties.length === 0) return
+    const ids = selectedLayerIds.size > 0
+      ? Array.from(selectedLayerIds)
+      : (selectedLayerId ? [selectedLayerId] : [])
+    for (const id of ids) {
+      const layer = scene.layers.find((l) => l.id === id)
+      if (!layer) continue
+      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, layer, currentTimeMs, properties))
+    }
+  }, [scene.layers, selectedLayerIds, selectedLayerId, selectedTlId, currentTimeMs, dispatchCommand])
 
   // ── Group / Ungroup (Cmd+G / Cmd+Shift+G) ────────────────────────────────
   const groupSelected = useCallback(async () => {
@@ -736,6 +836,25 @@ export default function BuilderPage() {
                     toolMode={toolMode}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
+                    menuHandlers={{
+                      cut:        cutSelectedLayers,
+                      copy:       copySelectedLayers,
+                      paste:      pasteLayers,
+                      canPaste:   hasClipboard,
+                      duplicate:  duplicateSelectedLayer,
+                      group:      groupSelected,
+                      ungroup:    ungroupSelected,
+                      canUngroup: selectedLayer?.type === 'group',
+                      deleteLayer: () => selectedLayerId && deleteLayer(selectedLayerId),
+                      animateProperty: (propPath: string) =>
+                        selectedLayerId && keyframeSelectedLayers([propPath]),
+                      alignLeft:   () => alignSelected('left'),
+                      alignCenter: () => alignSelected('centerX'),
+                      alignRight:  () => alignSelected('right'),
+                      alignTop:    () => alignSelected('top'),
+                      alignMiddle: () => alignSelected('middle'),
+                      alignBottom: () => alignSelected('bottom'),
+                    }}
                   />
                 ),
               },
