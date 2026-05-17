@@ -27,6 +27,7 @@ import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } fr
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
+import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
@@ -353,7 +354,7 @@ export default function BuilderPage() {
     if (selectedLayerId === id) selectLayer(null)
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
-  const toggleLayerFlag = useCallback((id: string, field: 'locked' | 'hidden' | 'solo') => {
+  const toggleLayerFlag = useCallback((id: string, field: 'locked' | 'hidden' | 'solo' | 'pinned') => {
     dispatchCommand(makeToggleLayerCmd(id, field))
   }, [dispatchCommand])
 
@@ -925,6 +926,25 @@ export default function BuilderPage() {
                     onToggleFlag={toggleLayerFlag}
                     onApplyStagger={applyStaggeredPreset}
                     onRename={renameLayer}
+                  />
+                ),
+              },
+              {
+                // BL-52 — Scene Explorer (column-aware successor to LayerPanel).
+                // Kept side-by-side with LayerPanel so users can A/B during the
+                // foundation phase. BL-58 will remove the old LayerPanel entry.
+                id: 'sceneExplorer', title: 'Scene Explorer',
+                render: () => (
+                  <SceneExplorerPanel
+                    layers={scene.layers}
+                    timeline={selectedTimelineForGhost}
+                    selectedId={selectedLayerId}
+                    selectedIds={selectedLayerIds}
+                    onSelect={(id, shift, _meta) => selectLayer(id, shift)}
+                    onRename={renameLayer}
+                    onToggleFlag={toggleLayerFlag}
+                    onMoveInTree={moveLayerInTree}
+                    onGroupWith={groupLayersByDrop}
                   />
                 ),
               },

@@ -298,11 +298,13 @@ export function makeTrimLayerCmd(
   }
 }
 
-// ── Toggle layer flag (locked / hidden / solo) ────────────────────────────────
+// ── Toggle layer flag (locked / hidden / solo / pinned) ───────────────────────
+
+export type LayerToggleField = 'locked' | 'hidden' | 'solo' | 'pinned'
 
 export function makeToggleLayerCmd(
   layerId: string,
-  field: 'locked' | 'hidden' | 'solo',
+  field: LayerToggleField,
 ): EditorCommand {
   return {
     label: `Toggle ${field}`,
