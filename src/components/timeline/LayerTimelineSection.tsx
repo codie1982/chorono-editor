@@ -5,6 +5,7 @@ import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { sampleTrackValueRange, valueToY } from '@/lib/timeline/valueGraph'
 import TimelineKeyframe from './TimelineKeyframe'
 import TrackValueGraph  from './TrackValueGraph'
+import AudioWaveform    from './AudioWaveform'
 import type { DragSnapshot } from './hooks/useKeyframeDrag'
 
 /**
@@ -70,6 +71,9 @@ interface Props {
   /** Index among pinned layers (0,1,2…). Undefined or -1 → not pinned.
    *  Used to set sticky `top` offset so multiple pins stack. */
   pinIndex?: number
+  /** Resolved asset URL for audio layers — when present the activity bar
+   *  renders the audio waveform overlay (BL-37). */
+  audioUrl?: string
 }
 
 const ROW_HEADER  = 32
@@ -86,7 +90,7 @@ export default function LayerTimelineSection({
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
   onTrackAreaContextMenu, onTrackAreaDoubleClick, clientXToMs,
-  durationMs, onLayerBarCommit, pinIndex,
+  durationMs, onLayerBarCommit, pinIndex, audioUrl,
 }: Props) {
 
   const isPinned = pinIndex != null && pinIndex >= 0
@@ -159,6 +163,7 @@ export default function LayerTimelineSection({
             visibleEndMs={visibleEndMs}
             trackWidth={trackWidth}
             durationMs={durationMs}
+            audioUrl={audioUrl}
             onCommit={(kind, fromStart, fromEnd, toStart, toEnd) =>
               onLayerBarCommit?.(layer.id, kind, fromStart, fromEnd, toStart, toEnd)
             }
@@ -291,7 +296,7 @@ const MIN_DUR_MS  = 10    // minimum bar duration in ms
 type BarDragKind = 'move' | 'trimStart' | 'trimEnd'
 
 function DraggableLayerBar({
-  layer, msToScreenPx, visibleStartMs, visibleEndMs, trackWidth, durationMs, onCommit,
+  layer, msToScreenPx, visibleStartMs, visibleEndMs, trackWidth, durationMs, audioUrl, onCommit,
 }: {
   layer:          Layer
   msToScreenPx:   (ms: number) => number
@@ -299,6 +304,7 @@ function DraggableLayerBar({
   visibleEndMs:   number
   trackWidth:     number
   durationMs:     number
+  audioUrl?:      string
   onCommit: (
     kind:        BarDragKind,
     fromStartMs: number,
@@ -403,7 +409,7 @@ function DraggableLayerBar({
 
       {/* Body — move (grab to shift both start + end) */}
       <div
-        className="absolute top-0 bottom-0 rounded-sm border cursor-grab active:cursor-grabbing"
+        className="absolute top-0 bottom-0 rounded-sm border cursor-grab active:cursor-grabbing overflow-hidden"
         style={{
           left: HANDLE_W, right: HANDLE_W,
           backgroundColor: barColor,
@@ -413,6 +419,10 @@ function DraggableLayerBar({
         onPointerDown={(e) => beginDrag(e, 'move')}
         title={`${layer.name}: ${Math.round(dispStartMs)}–${Math.round(dispEndMs)} ms`}
       >
+        {/* Audio waveform overlay (BL-37) — drawn inside the bar for audio layers */}
+        {audioUrl && (
+          <AudioWaveform url={audioUrl} color="#ffffff" />
+        )}
         {preview && (
           <span className="absolute inset-0 flex items-center justify-center
                            text-[9px] font-mono text-white/90 pointer-events-none truncate px-1">

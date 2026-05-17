@@ -730,6 +730,9 @@ export default function TimelinePanel({
             previewMs={drag.previewMs}
             durationMs={duration}
             pinIndex={pinIndexFor.get(layer.id) ?? -1}
+            audioUrl={layer.type === 'audio' && layer.audio
+              ? scene.assets?.find((a) => a.id === layer.audio!.assetId)?.url
+              : undefined}
             onToggleExpand={() => toggleLayerExpand(layer.id)}
             onSelectLayer={(shift) => onSelectLayer(layer.id, shift)}
             onToggleFlag={(field) => onToggleLayerFlag(layer.id, field)}
