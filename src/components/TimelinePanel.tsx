@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
   TimelineSegment,
@@ -104,6 +104,59 @@ export default function TimelinePanel({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
   // ── Layer filter (BL-38) — substring match on layer name + tracked properties
   const [layerFilter, setLayerFilter] = useState('')
+
+  // ── Bookmarks (BL-43) — up to 9 saved playhead positions. Cmd+B saves to
+  //    the lowest empty slot (cycling if full); Cmd+1..9 jumps. Persisted
+  //    in localStorage so they survive reloads of the same project.
+  const [bookmarks, setBookmarks] = useState<(number | null)[]>(() => {
+    if (typeof window === 'undefined') return Array(9).fill(null)
+    try {
+      const raw = localStorage.getItem('chorono.timeline.bookmarks')
+      if (!raw) return Array(9).fill(null)
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length === 9) return parsed
+    } catch { /* fall through */ }
+    return Array(9).fill(null)
+  })
+  useEffect(() => {
+    try { localStorage.setItem('chorono.timeline.bookmarks', JSON.stringify(bookmarks)) }
+    catch { /* localStorage full or disabled — silent skip */ }
+  }, [bookmarks])
+  const saveBookmark = useCallback(() => {
+    setBookmarks((prev) => {
+      const next = [...prev]
+      const empty = next.findIndex((v) => v == null)
+      if (empty >= 0) next[empty] = currentTimeMs
+      else { next.shift(); next.push(currentTimeMs) }       // cycle if full
+      return next
+    })
+  }, [currentTimeMs])
+  const jumpToBookmark = useCallback((slot: number) => {
+    const t = bookmarks[slot]
+    if (t == null) return
+    onTimeChange(Math.max(0, Math.min(duration, t)))
+  }, [bookmarks, duration, onTimeChange])
+
+  // Keyboard: Cmd/Ctrl+B = save bookmark · Cmd/Ctrl+1..9 = jump to slot.
+  // Scoped to when the timeline panel itself is hovered so it doesn't fight
+  // with other panels' shortcuts. Skips when typing in inputs.
+  const [timelineHovered, setTimelineHovered] = useState(false)
+  useEffect(() => {
+    if (!timelineHovered) return
+    const onKey = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
+      const meta = e.metaKey || e.ctrlKey
+      if (meta && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault(); saveBookmark(); return
+      }
+      if (meta && /^[1-9]$/.test(e.key)) {
+        e.preventDefault(); jumpToBookmark(parseInt(e.key, 10) - 1); return
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [timelineHovered, saveBookmark, jumpToBookmark])
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
     // Step 1: solo mode — if any layer is solo'd, hide everything else.
@@ -482,6 +535,8 @@ export default function TimelinePanel({
     <div
       className="flex flex-col h-full bg-gray-900 relative overflow-hidden"
       onContextMenu={(e) => e.preventDefault()}
+      onMouseEnter={() => setTimelineHovered(true)}
+      onMouseLeave={() => setTimelineHovered(false)}
     >
       <TimelineToolbar
         timelines={scene.timelines}
@@ -551,6 +606,24 @@ export default function TimelinePanel({
             clientXToMs={vp.clientXToMs}
             onSeek={onTimeChange}
           />
+          {/* Bookmark flags — overlayed on top of the ruler */}
+          {bookmarks.map((bk, i) => bk == null ? null : (
+            <div
+              key={i}
+              className="absolute top-0 h-6 flex items-end justify-center pointer-events-auto cursor-pointer
+                         text-[8px] font-mono text-purple-200 hover:text-white group z-10"
+              style={{ left: `${vp.msToScreenPx(bk) - 6}px`, width: 12 }}
+              onClick={() => jumpToBookmark(i)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setBookmarks((prev) => { const n = [...prev]; n[i] = null; return n })
+              }}
+              title={`Bookmark ${i + 1} @ ${Math.round(bk)}ms · Cmd+${i + 1} jump · Right-click clear`}
+            >
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-full bg-purple-500/60 group-hover:bg-purple-300" />
+              <span className="relative bg-purple-700 px-1 rounded-sm leading-none">{i + 1}</span>
+            </div>
+          ))}
           {timeline && (
             <SegmentStrip
               segments={timeline.segments ?? []}
