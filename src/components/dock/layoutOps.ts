@@ -260,6 +260,23 @@ export function isValidLayout(node: DockNode, expectedPanels: Set<string>): bool
 
 // ── Default layout ───────────────────────────────────────────────────────────
 
+/**
+ * Add a panel to the first available leaf, or if no leaves exist, create a
+ * minimal single-leaf tree. Returns the modified tree.
+ */
+export function addPanelToLayout(tree: DockNode, panelId: string): DockNode {
+  let inserted = false
+  const result = mapNode(tree, (n) => {
+    if (inserted) return n
+    if (n.kind !== 'leaf') return n
+    inserted = true
+    return { ...n, panels: [...n.panels, panelId], activeIndex: n.panels.length }
+  })
+  if (inserted) return result
+  // Tree had no leaves — return single leaf with the panel
+  return { kind: 'leaf', id: nextId('leaf'), panels: [panelId], activeIndex: 0 }
+}
+
 /** Build the editor's default layout: LayerPanel | (Canvas | Properties) / Timeline. */
 export function defaultLayout(): DockNode {
   return {
