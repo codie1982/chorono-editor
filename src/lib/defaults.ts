@@ -450,15 +450,23 @@ export function newMarker(timeMs: number, label?: string): TimelineMarker {
 }
 
 /** Empty ParameterWire (BL-05) — defaults to identity passthrough.
- *  User picks source/target via the picker, then writes the expression. */
-export function newParameterWire(): ParameterWire {
+ *  User picks source/target via the picker, then writes the expression.
+ *  Either ref can be pre-filled (e.g. PropertiesPanel 🔗 click sets target). */
+export function newParameterWire(
+  overrides?: Partial<ParameterWire>,
+): ParameterWire {
   wireCounter++
+  const now = Date.now()
   return {
     id: `wire_${wireCounter}`,
-    sourceParamId: '',
-    targetParamId: '',
-    expression: 's',
     enabled: true,
+    source: { propertyPath: '', valueType: 'number' },
+    target: { propertyPath: '', valueType: 'number' },
+    expression: 'source',
+    blendMode: 'override',
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
   }
 }
 

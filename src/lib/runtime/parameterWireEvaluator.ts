@@ -1,6 +1,6 @@
 // ── Parameter Wire Evaluator (BL-05) ──────────────────────────────────────────
 // Expression-driven parameter wiring. Reads a source value, runs it through
-// a whitelist-safe expression like "map(s, 0, 1, 0, 360)", writes the
+// a whitelist-safe expression like "map(source, 0, 1, 0, 360)", writes the
 // computed value to the override map.
 //
 // Parsing is cached per (wireId, expression) — the AST is reused while the
@@ -9,11 +9,12 @@
 //
 // Single-pass like evaluateBindings; loops are tolerated but not iterated.
 
-import type { ParameterWire, Layer, ChronoScene } from '../types'
+import type { ParameterWire, Layer, ChronoScene, ParameterRef } from '../types'
 import type { OverrideMap } from '../evaluator'
 import type { ParamValueMap } from './paramResolver'
 import { parseExpression, evaluateExpression } from '../core/expression/expressionEvaluator'
 import type { ExpressionAST } from '../core/expression/expressionEvaluator'
+import { paramRefKey } from '../wiring/helpers'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AST cache — survives re-render cycles via module-scope Map
@@ -55,15 +56,14 @@ export function clearParameterWireCache(): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function readWireSource(
-  sourceParamId: string,
+  source: ParameterRef,
   overrides: OverrideMap,
   paramValues: ParamValueMap,
   layers: Layer[],
 ): number | null {
-  // params.<id> → runtime parameter
-  if (sourceParamId.startsWith('params.')) {
-    const id = sourceParamId.slice('params.'.length)
-    const v = paramValues.get(id)
+  // Scene parameter (no layerId)
+  if (!source.layerId) {
+    const v = paramValues.get(source.propertyPath)
     if (typeof v === 'number') return v
     if (typeof v === 'boolean') return v ? 1 : 0
     if (typeof v === 'string') {
@@ -73,21 +73,14 @@ function readWireSource(
     return null
   }
 
-  // layers.<id>.<property> → animated override or static fallback
-  if (sourceParamId.startsWith('layers.')) {
-    const animated = overrides.get(sourceParamId)
-    if (animated !== undefined) return animated
+  // Layer property — try animated override first, fall back to static value
+  const key = paramRefKey(source)
+  const animated = overrides.get(key)
+  if (animated !== undefined) return animated
 
-    const parts = sourceParamId.split('.')
-    if (parts.length < 3) return null
-    const layerId = parts[1]
-    const property = parts.slice(2).join('.')
-    const layer = layers.find((l) => l.id === layerId)
-    if (!layer) return null
-    return readLayerProperty(layer, property)
-  }
-
-  return null
+  const layer = layers.find((l) => l.id === source.layerId)
+  if (!layer) return null
+  return readLayerProperty(layer, source.propertyPath)
 }
 
 function readLayerProperty(layer: Layer, property: string): number | null {
@@ -107,6 +100,9 @@ function readLayerProperty(layer: Layer, property: string): number | null {
  * Apply every enabled ParameterWire to the override map. Returns a new Map
  * only when any wire wrote, otherwise the input map is preserved to keep
  * downstream change detection cheap (same convention as evaluateBindings).
+ *
+ * Wire's source is exposed inside the expression as both `source` (preferred,
+ * matches the doc) and `s` (legacy shorthand) so existing wires keep working.
  */
 export function evaluateParameterWires(
   wires: ParameterWire[] | undefined,
@@ -121,7 +117,7 @@ export function evaluateParameterWires(
   for (const wire of wires) {
     if (!wire.enabled) continue
 
-    const sourceVal = readWireSource(wire.sourceParamId, overrides, paramValues, scene.layers)
+    const sourceVal = readWireSource(wire.source, overrides, paramValues, scene.layers)
     if (sourceVal == null) continue
 
     const cached = getOrParseAst(wire.id, wire.expression)
@@ -129,15 +125,21 @@ export function evaluateParameterWires(
 
     let result: number
     try {
-      result = evaluateExpression(cached.ast, { s: sourceVal })
+      result = evaluateExpression(cached.ast, { source: sourceVal, s: sourceVal })
     } catch {
       continue // runtime error — skip; expression editor surfaces the issue
     }
 
     if (!Number.isFinite(result)) continue
 
+    // Optional output clamp (BL-05 schema)
+    if (wire.clamp?.enabled) {
+      if (wire.clamp.min != null && result < wire.clamp.min) result = wire.clamp.min
+      if (wire.clamp.max != null && result > wire.clamp.max) result = wire.clamp.max
+    }
+
     if (!cloned) { next = new Map(overrides); cloned = true }
-    next.set(wire.targetParamId, result)
+    next.set(paramRefKey(wire.target), result)
   }
 
   return next
