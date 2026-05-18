@@ -528,6 +528,26 @@ export interface Binding {
   map: BindingMap
 }
 
+// ── Parameter Wires (BL-05) ───────────────────────────────────────────────────
+// Expression-based parameter bindings — formula-driven (e.g. "map(s, 0, 1, 0, 360)")
+// rather than the linear inputMin/outputMax remap of `Binding`.
+// Keep both: Binding stays the simple/fast path; ParameterWire opens the
+// generic case (clamp + composition + trig + custom math).
+
+export interface ParameterWire {
+  id: string
+  /** Source identifier — same dot-path convention used by Binding sources.
+   *  Examples: "params.slider1", "layers.card.opacity". */
+  sourceParamId: string
+  /** Target identifier — track target string or layer property path.
+   *  Examples: "layers.rect1.rotationZ", "layers.card.scaleX". */
+  targetParamId: string
+  /** Whitelist-only expression evaluated each frame with `s` bound to the
+   *  source value. See src/lib/core/expression/expressionEvaluator.ts. */
+  expression: string
+  enabled: boolean
+}
+
 // ── Composition ───────────────────────────────────────────────────────────────
 
 export interface Composition {
@@ -551,5 +571,8 @@ export interface ChronoScene {
   parameters: SceneParameter[]
   triggers: Trigger[]
   bindings: Binding[]
+  /** Expression-based parameter wires (BL-05). Optional for backward compat;
+   *  legacy scenes without this field continue to work unchanged. */
+  parameterWires?: ParameterWire[]
   initialState: Record<string, unknown>
 }
