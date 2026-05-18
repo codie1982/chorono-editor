@@ -115,9 +115,16 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
     }
     return value
   }
-  // Keyframes are stored sorted; defensive sort here costs little for small arrays.
-  const kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+  // Keyframes are stored sorted; skip the copy + sort when already in order
+  // (the common case — saves a lot of garbage for hot-path evaluation).
+  let kfs = track.keyframes
   if (kfs.length === 0) return null
+  for (let i = 1; i < kfs.length; i++) {
+    if (kfs[i - 1].timeMs > kfs[i].timeMs) {
+      kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+      break
+    }
+  }
 
   const rangeStart = kfs[0].timeMs
   const rangeEnd = kfs[kfs.length - 1].timeMs
