@@ -212,6 +212,46 @@ export function makeUpdateTrackCurvesCmd(
   }
 }
 
+// ── Bake Track to Keyframes (BL-51 polish) ─────────────────────────────────
+//
+// Editor-side bake: replace the track in place with its baked equivalent
+// (keyframes only, all signal-system fields stripped). Snapshots the
+// original for undo. Use to "freeze" a noise/modifier-heavy track when
+// you want a deterministic kf list you can edit by hand.
+
+import { bakeTrack } from '../animation/baking/bake'
+import type { BakeOptions } from '../animation/baking/bake'
+
+export function makeBakeTrackToKeyframesCmd(
+  timelineId: string,
+  target:     string,
+  prevTrack:  Track,
+  options:    BakeOptions,
+): EditorCommand {
+  const baked = bakeTrack(prevTrack, options)
+  return {
+    label: `Bake Track to Keyframes (${baked.keyframes.length} kfs)`,
+    execute: (scene) => ({
+      ...scene,
+      timelines: scene.timelines.map((tl) =>
+        tl.id !== timelineId ? tl : {
+          ...tl,
+          tracks: tl.tracks.map((tr) => tr.target !== target ? tr : baked),
+        }
+      ),
+    }),
+    undo: (scene) => ({
+      ...scene,
+      timelines: scene.timelines.map((tl) =>
+        tl.id !== timelineId ? tl : {
+          ...tl,
+          tracks: tl.tracks.map((tr) => tr.target !== target ? tr : prevTrack),
+        }
+      ),
+    }),
+  }
+}
+
 // ── Procedural Controller (BL-50) ───────────────────────────────────────────
 
 import type { TrackController } from '../animation/controllers/types'

@@ -27,7 +27,7 @@ import {
 } from '@/lib/editor/commands-layer'
 import {
   makeSetOutOfRangeCmd, makeAddCurveModifierCmd, nextModifierId,
-  makeSetTrackControllerCmd,
+  makeSetTrackControllerCmd, makeBakeTrackToKeyframesCmd,
 } from '@/lib/editor/commands-track'
 import { defaultParametersFor } from '@/lib/types'
 import type { CurveModifier, CurveModifierType, TrackController } from '@/lib/types'
@@ -1606,6 +1606,27 @@ export default function TimelinePanel({
             })),
           },
         ]
+        // BL-51 polish — "Bake to Keyframes" appears when the track has
+        // any signal-system feature that a basic interpolator can't replay.
+        const usesSig =
+          (track.modifiers && track.modifiers.length > 0) ||
+          (track.controller && track.controller.type !== 'keyframe') ||
+          !!track.easeCurve || !!track.timeWarp || !!track.multiplierCurve ||
+          (track.outOfRange && (track.outOfRange.before !== 'constant' || track.outOfRange.after !== 'constant')) ||
+          (track.keyframes.some((k) => k.segmentModifiers && k.segmentModifiers.length > 0))
+        if (usesSig) {
+          items.push({ kind: 'separator' })
+          items.push({
+            kind: 'action', label: 'Bake Track to Keyframes',
+            shortcut: undefined, disabled: false,
+            onSelect: () => {
+              dispatchCommand(makeBakeTrackToKeyframesCmd(
+                selectedTimelineId, track.target, track,
+                { startMs: 0, endMs: duration, fps: 60, tolerance: 0.005 },
+              ))
+            },
+          })
+        }
         if (layerIdOnTrack && propertyPath && (onEditWire || onWireRequest)) {
           items.push({ kind: 'separator' })
           if (wireOnProp) {
