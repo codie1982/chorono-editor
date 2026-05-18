@@ -38,7 +38,9 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
-import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
+import ToolGroup, {
+  type ToolMode, type SelectionContainMode,
+} from '@/components/TopToolbar/ToolGroup'
 import ToastContainer  from '@/components/Toast/ToastContainer'
 import { toast }       from '@/lib/toast/toast'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
@@ -46,6 +48,7 @@ import ParametersPanel     from '@/components/panels/ParametersPanel'
 import EventsPanel         from '@/components/panels/EventsPanel'
 import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
 import WiringListPanel     from '@/components/panels/WiringListPanel'
+import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel           from '@/components/panels/SnapPanel'
@@ -134,7 +137,7 @@ export default function BuilderPage() {
   // with the registry below.
   const dock = useDockLayout([
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
-    'parameters', 'events', 'motionBinding', 'wiring', 'runtimePreview', 'assets', 'snap',
+    'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
@@ -604,6 +607,9 @@ export default function BuilderPage() {
 
   // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
   const [toolMode, setToolMode] = useState<ToolMode>('select')
+  // BL-60 Faz 3 — canvas selection containment mode (only matters with a
+  // selection tool active). Default 'touching' = Figma-style permissive.
+  const [selectionContainMode, setSelectionContainMode] = useState<SelectionContainMode>('touching')
 
   // ── Snap settings — lifted from SceneCanvas so the dockable SnapPanel
   //    and the in-canvas SnapMenu share one source of truth. ─────────────
@@ -791,6 +797,7 @@ export default function BuilderPage() {
       { id: 'events',         title: 'Events',         render: () => null },
       { id: 'motionBinding',  title: 'Bindings',       render: () => null },
       { id: 'wiring',         title: 'Wires',          render: () => null },
+      { id: 'selection',      title: 'Select',         render: () => null },
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
@@ -825,6 +832,8 @@ export default function BuilderPage() {
           mode={toolMode}
           onChange={setToolMode}
           penAuto={!!(scene.layers.find(l => l.id === selectedLayerId)?.type === 'path')}
+          containMode={selectionContainMode}
+          onContainModeChange={setSelectionContainMode}
         />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
@@ -1090,6 +1099,24 @@ export default function BuilderPage() {
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
                     snap={snap}
+                    onSelectByGeometry={(ids, mode) => {
+                      // BL-60 Faz 3 — canvas selection tools commit. Plain
+                      // drag replaces selection; Shift adds; Alt subtracts.
+                      let next: Set<string>
+                      if (mode === 'replace') {
+                        next = new Set(ids)
+                      } else if (mode === 'add') {
+                        next = new Set(selectedLayerIds)
+                        ids.forEach((id) => next.add(id))
+                      } else {
+                        next = new Set(selectedLayerIds)
+                        ids.forEach((id) => next.delete(id))
+                      }
+                      setSelectedLayerIds(next)
+                      const first = next.values().next().value
+                      setSelectedLayer(first ?? null)
+                    }}
+                    selectionContainMode={selectionContainMode}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}
@@ -1222,6 +1249,22 @@ export default function BuilderPage() {
                     editor={editor}
                     onEditWire={wireModal.openForEdit}
                     onCreateWire={wireModal.openNew}
+                  />
+                ),
+              },
+              {
+                id: 'selection', title: 'Select',
+                render: () => (
+                  <SelectionPanel
+                    scene={scene}
+                    selectedLayerId={selectedLayerId}
+                    onSelectMatched={(ids) => {
+                      // Mirror the multi-select flow used by the lasso: set
+                      // selectedLayerIds + bump primary to the first hit.
+                      setSelectedLayerIds(ids)
+                      const first = ids.values().next().value
+                      if (first) setSelectedLayer(first)
+                    }}
                   />
                 ),
               },
