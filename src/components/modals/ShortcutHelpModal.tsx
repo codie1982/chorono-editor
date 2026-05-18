@@ -42,6 +42,8 @@ const GROUPS: ShortcutGroup[] = [
       { keys: `${META} + C`,          description: 'Copy selected keyframes' },
       { keys: `${META} + V`,          description: 'Paste at playhead' },
       { keys: `${META} + D`,          description: 'Duplicate selected layer' },
+      { keys: `${META} + Alt + D`,    description: 'Clone Quick (BL-59 — also copies animation)' },
+      { keys: `${META} + Shift + A`,  description: 'Open Array dialog (BL-59 — Linear/Grid/Radial)' },
       { keys: 'Delete / Backspace',   description: 'Delete selected keyframes (or layer)' },
       { keys: 'Esc (while dragging)', description: 'Cancel drag' },
     ],

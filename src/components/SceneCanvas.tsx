@@ -5,6 +5,7 @@ import {
 import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
+import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
@@ -115,6 +116,20 @@ interface Props {
     distributeVertically?:   () => void
     /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
     convertToSpline?: () => void
+    /** BL-59 Clone & Array — quick clone (one new layer, default offset). */
+    cloneQuick?:    () => void
+    /** BL-59 Clone & Array — opens CloneModal. */
+    cloneSettings?: () => void
+    /** BL-59 Clone & Array — opens ArrayModal. */
+    arraySettings?: () => void
+    /** BL-59 — Select all layers sharing this layer's arrayGroupId. */
+    selectAllInArray?: (layerId: string) => void
+    /** BL-59 — Predicate: does the right-clicked layer belong to an array? */
+    isLayerInArray?: (layerId: string) => boolean
+    /** BL-59 — Clone & Align: this layer = source, other selected = targets. */
+    cloneAlignToSelected?: (sourceId: string) => void
+    /** BL-59 — Bake a Repeater wrapper layer into real cloned layers. */
+    bakeRepeater?: (repeaterId: string) => void
   }
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview). */
   ghostSettings?: TimelineGhostSettings
@@ -1704,7 +1719,16 @@ export default function SceneCanvas({
   }, [])
 
   // ── Selection frame geometry (uses preview layer state) ──────────────────
-  const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
+  //
+  // BL-59 Phase 3 — Instance layers carry no geometry; the gizmo needs the
+  // source's size/path/shape to draw resize handles in the right spots.
+  // We resolve the instance to its source HERE so all gizmo / bbox code
+  // below sees a "proxy" layer with full visual fields. The instance's
+  // own transform/opacity stay intact (resolveInstanceLayer keeps them).
+  const rawSelectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
+  const selectedLayer = rawSelectedLayer?.instanceOf
+    ? (resolveInstanceLayer(rawSelectedLayer, scene.layers) ?? rawSelectedLayer)
+    : rawSelectedLayer
 
   // ── 3DS Max-style gizmo visibility per toolMode ──────────────────────────
   // Each mode shows only its own handle set so the user always sees the
@@ -2174,6 +2198,22 @@ export default function SceneCanvas({
             menuHandlers?.convertToSpline && target.type === 'shape' && target.size
               ? menuHandlers.convertToSpline
               : undefined,
+
+          // BL-59 — Clone & Array entries
+          cloneQuick:    menuHandlers?.cloneQuick,
+          cloneSettings: menuHandlers?.cloneSettings,
+          arraySettings: menuHandlers?.arraySettings,
+          selectAllInArray: menuHandlers?.selectAllInArray
+            ? () => menuHandlers!.selectAllInArray!(target.id)
+            : undefined,
+          isArrayMember: menuHandlers?.isLayerInArray?.(target.id) ?? false,
+          cloneAlignToSelected: menuHandlers?.cloneAlignToSelected
+            ? () => menuHandlers!.cloneAlignToSelected!(target.id)
+            : undefined,
+          bakeRepeater: menuHandlers?.bakeRepeater && target.type === 'repeater'
+            ? () => menuHandlers!.bakeRepeater!(target.id)
+            : undefined,
+          isRepeater: target.type === 'repeater',
 
           // ── Locally implemented (no page state needed) ──────────────────
           centerOrigin: () => editor.dispatchCommand(

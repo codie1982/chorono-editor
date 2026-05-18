@@ -311,6 +311,23 @@ export interface Layer {
    *  not selectable, not editable, and rendered translucent. Different from
    *  `locked` (which keeps the layer fully opaque + selectable for inspection). */
   frozen?:     boolean
+  /**
+   * BL-59 Phase 3 — Live instance reference. When set, this layer is a
+   * THIN reference to another layer (the source):
+   *   - Geometry / style / size / text / image / path / etc. come from the
+   *     source at RENDER time (so source edits propagate live).
+   *   - Transform / opacity / parentId / effects / id / name stay on THIS
+   *     layer (each instance can sit anywhere with its own opacity).
+   *
+   * Instance layers have no shape / path / size of their own — those
+   * fields are deliberately stripped at creation time (CloneSingleLayer
+   * with mode='instance'). Resolution lives in
+   * `src/lib/clone/InstanceResolver.ts`.
+   *
+   * If the source is missing (deleted), the renderer skips the instance
+   * and bbox/hit-test treat it as empty.
+   */
+  instanceOf?: string
 }
 
 // ── Scene Parameters ──────────────────────────────────────────────────────────

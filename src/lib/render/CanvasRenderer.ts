@@ -25,6 +25,7 @@ import { effectRegistry } from '@/lib/effects'
 import { createOffscreen } from './OffscreenCanvasCache'
 import { defaultMaskRenderer } from '@/lib/mask/MaskRenderer'
 import { defaultPathMotionResolver } from '@/lib/path/PathMotionResolver'
+import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 
 export interface CanvasRenderOptions {
   /** Optional pre-computed override map (for runtime preview). */
@@ -105,6 +106,18 @@ export class CanvasRenderer {
     timeMs:       number,
     isSelected:   boolean,
   ): void {
+    // BL-59 Phase 3 — Live instance: pull visual fields from source while
+    // keeping the instance's own transform / opacity / id. Animation tracks
+    // ALSO read from the instance's id (intentional — each instance
+    // animates independently). Returns null when source is missing → skip.
+    if (layer.instanceOf) {
+      const resolved = resolveInstanceLayer(layer, scene.layers)
+      if (!resolved) return
+      // Use the resolved (composed) layer for the plugin dispatch but keep
+      // `layer.id` for overrides / selection / hit-testing.
+      layer = resolved
+    }
+
     let x      = getLayerValue(overrides, layer.id, 'transform.x',           layer.transform.x)
     let y      = getLayerValue(overrides, layer.id, 'transform.y',           layer.transform.y)
     let rot    = getLayerValue(overrides, layer.id, 'transform.rotationDeg', layer.transform.rotationDeg)
