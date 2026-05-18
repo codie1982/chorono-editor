@@ -76,49 +76,52 @@ interface LayerProps {
   onClose: () => void
   /** True only for the outermost menu — drives the global click/escape listeners. */
   root?: boolean
-  /** Provided by a parent MenuLayer to its child submenu. The child calls
-   *  this on mouse-enter so the parent's pending close-timer is cancelled
-   *  (cursor crossed the gap and landed safely in the submenu). */
-  cancelParentClose?:   () => void
-  /** Provided by a parent MenuLayer to its child submenu. The child calls
-   *  this on mouse-leave so the parent re-arms its close timer (cursor
-   *  left the submenu — close after the standard delay unless re-entered). */
-  scheduleParentClose?: () => void
+  /** Provided by a parent MenuLayer to its child submenu. The child invokes
+   *  it whenever its OWN hover state changes (self-hover OR descendant
+   *  sub-tree hover). Parent treats `true` as "submenu is alive — don't
+   *  close me". */
+  reportHover?: (hovered: boolean) => void
 }
 
-const SUBMENU_CLOSE_DELAY_MS = 220   // long enough to cross the gap to submenu
+const SUBMENU_CLOSE_DELAY_MS = 220   // grace window after losing hover
 
 function MenuLayer({
-  x, y, items, onClose, root, cancelParentClose, scheduleParentClose,
+  x, y, items, onClose, root, reportHover,
 }: LayerProps) {
   const ref = useRef<HTMLDivElement>(null)
   /** Which submenu item is currently expanded (by index in `items`). */
   const [openSub, setOpenSub] = useState<number | null>(null)
   /** Submenu anchor rect — used to position the sub-menu next to the parent row. */
   const [subAnchor, setSubAnchor] = useState<DOMRect | null>(null)
+  /** True while cursor is anywhere inside THIS layer's div. */
+  const [selfHovered, setSelfHovered] = useState(false)
+  /** True when the open child submenu reports it's hovered (self or deeper). */
+  const [childHovered, setChildHovered] = useState(false)
   /** Adjusted position after flip-on-overflow measurement. */
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y })
-  /** Pending close timer for the currently-open submenu (cleared if the user
-   *  re-enters the parent row OR enters the submenu itself). Lets the cursor
-   *  travel through the gap between parent row and submenu without losing it. */
-  const closeTimer = useRef<number | null>(null)
 
-  const cancelClose = useCallback(() => {
-    if (closeTimer.current != null) {
-      window.clearTimeout(closeTimer.current)
-      closeTimer.current = null
-    }
-  }, [])
+  // ── Hover-driven submenu auto-close ────────────────────────────────────
+  // Replaces the prior timer-juggling between parent/child layers. The new
+  // model: we keep the open submenu alive as long as EITHER our own layer
+  // is hovered OR the open submenu reports it's hovered (any descendant).
+  // When both go false, we wait one grace window before closing — that
+  // gives the cursor room to transit across the small gap from a parent
+  // row to the submenu's outer div without losing it.
+  useEffect(() => {
+    if (openSub == null) return
+    if (selfHovered || childHovered) return
+    const t = window.setTimeout(() => setOpenSub(null), SUBMENU_CLOSE_DELAY_MS)
+    return () => window.clearTimeout(t)
+  }, [openSub, selfHovered, childHovered])
 
-  /** Schedule our own pending submenu-close (idempotent). Exposed so the
-   *  CHILD submenu can call back into us on its own mouse-leave. */
-  const scheduleClose = useCallback(() => {
-    if (closeTimer.current != null) return
-    closeTimer.current = window.setTimeout(() => {
-      setOpenSub(null)
-      closeTimer.current = null
-    }, SUBMENU_CLOSE_DELAY_MS)
-  }, [])
+  // Report our combined hover state to the parent (if any). Lets the
+  // grandparent keep US alive while we're hovered.
+  useEffect(() => {
+    reportHover?.(selfHovered || childHovered)
+  }, [selfHovered, childHovered, reportHover])
+
+  const cancelClose = useCallback(() => { /* no-op — kept for API */ }, [])
+  const scheduleClose = useCallback(() => { /* no-op — kept for API */ }, [])
 
   // ── Flip if the menu would clip the viewport edge ────────────────────────
   useEffect(() => {
@@ -153,40 +156,25 @@ function MenuLayer({
     }
   }, [root, onClose])
 
-  // Clean up timer on unmount
-  useEffect(() => cancelClose, [cancelClose])
-
-  const handleEnter = (i: number, item: MenuItem, rowEl: HTMLElement) => {
-    cancelClose()
+  /** Row-hover: opens a submenu when its row is entered; switches to a new
+   *  submenu when a different submenu row is entered. Hovering an action
+   *  row IMMEDIATELY closes the currently-open submenu (so the user can
+   *  see they're now on a non-submenu row — no timer needed because we
+   *  know they've moved to a sibling action, not in transit).
+   *  Cancelled by selfHovered going false → effect-driven close. */
+  const handleRowEnter = (i: number, item: MenuItem, rowEl: HTMLElement) => {
     if (item.kind === 'submenu' && !item.disabled) {
       setOpenSub(i)
       setSubAnchor(rowEl.getBoundingClientRect())
-    } else if (item.kind === 'action') {
-      // Hovering an action row schedules the currently-open submenu to
-      // close — but only after a short delay so transit through this row
-      // on the way to the submenu doesn't immediately dismiss it.
-      if (openSub != null) scheduleClose()
+    } else if (item.kind === 'action' && openSub != null && openSub !== i) {
+      // User moved to a sibling action row — close the previously-open
+      // submenu right away (the grace window is for transit GAPS only).
+      setOpenSub(null)
     }
   }
 
-  /** Layer-level mouse-enter: kill any pending close on OUR own timer AND
-   *  on the parent's timer. The latter matters because when the cursor
-   *  travels parent-row → gap → submenu-layer, the PARENT had scheduled
-   *  the submenu's close on its leave; we need to cancel that. */
-  const handleEnterLayer = () => {
-    cancelClose()
-    cancelParentClose?.()
-  }
-
-  const handleLeaveLayer = () => {
-    // Leaving the entire layer queues OUR own pending submenu close.
-    if (openSub != null) scheduleClose()
-    // Also tell the parent to re-arm its close timer — if the cursor is
-    // now floating away from the entire menu tree, parent will fire after
-    // the delay; if it re-enters the parent / grandparent, that enter
-    // will cancel via handleEnterLayer.
-    scheduleParentClose?.()
-  }
+  const handleEnterLayer = () => setSelfHovered(true)
+  const handleLeaveLayer = () => setSelfHovered(false)
 
   return (
     <>
@@ -212,7 +200,7 @@ function MenuLayer({
               key={`row-${i}-${item.label}`}
               item={item}
               isOpen={isOpen}
-              onEnter={(e) => handleEnter(i, item, e.currentTarget as HTMLElement)}
+              onEnter={(e) => handleRowEnter(i, item, e.currentTarget as HTMLElement)}
               onActivate={() => {
                 if (item.kind === 'action' && !item.disabled) {
                   item.onSelect()
@@ -227,20 +215,18 @@ function MenuLayer({
         })}
       </div>
 
-      {/* Submenu — sibling layer so it can overflow the parent rect. We
-          pass root=false so it doesn't double-bind the global listeners.
-          cancelParentClose / scheduleParentClose let the submenu keep OUR
-          (parent's) timer alive while the cursor sits inside it; otherwise
-          a stray parent-leave would close the submenu out from under the
-          cursor mid-transit. */}
+      {/* Submenu — sibling fixed-positioned layer so it can overflow the
+          parent rect. We overlap the parent rect by a few px (subAnchor.right
+          - 4) so the cursor never falls into a true "no-menu" gap mid-transit.
+          reportHover lets the child tell us when it's hovered (anywhere in
+          its subtree) so we keep our own openSub alive. */}
       {openSub != null && subAnchor && items[openSub].kind === 'submenu' && (
         <MenuLayer
-          x={subAnchor.right - 2}
+          x={subAnchor.right - 4}
           y={subAnchor.top}
           items={(items[openSub] as MenuSubmenuItem).items}
           onClose={onClose}
-          cancelParentClose={cancelClose}
-          scheduleParentClose={scheduleClose}
+          reportHover={setChildHovered}
         />
       )}
     </>
