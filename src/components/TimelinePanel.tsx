@@ -25,7 +25,13 @@ import {
 import {
   makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd, makeUpdateLayerCmd,
 } from '@/lib/editor/commands-layer'
-import { makeSetOutOfRangeCmd } from '@/lib/editor/commands-track'
+import {
+  makeSetOutOfRangeCmd, makeAddCurveModifierCmd, nextModifierId,
+  makeSetTrackControllerCmd, makeBakeTrackToKeyframesCmd,
+} from '@/lib/editor/commands-track'
+import { defaultParametersFor } from '@/lib/types'
+import type { CurveModifier, CurveModifierType, TrackController } from '@/lib/types'
+import { DEFAULT_WAVEFORM_PARAMS, DEFAULT_NOISE_PARAMS } from '@/lib/types'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
@@ -56,6 +62,35 @@ import { nextEventId } from '@/lib/defaults'
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
 // the label. Same set is used by the LayerPanel-side picker so a layer
 // dragged across panels keeps a consistent colour identity.
+// Modifier types with shipped evaluators. Used by the track-header
+// context menu's "+ Add Modifier ▸" submenu. BL-50 procedural controllers
+// add no new types — this set is complete for BL-46..BL-49.
+const BL46_MODIFIER_TYPES: CurveModifierType[] = [
+  // Foundation (BL-46)
+  'sine', 'pulse', 'quantize', 'offset', 'scale', 'clamp',
+  // Noise pack (BL-47)
+  'noise', 'fractalNoise', 'jitter', 'wave',
+  // Physics pack (BL-49)
+  'overshoot', 'elastic', 'bounce', 'decay', 'spring',
+]
+const BL46_MODIFIER_LABEL: Partial<Record<CurveModifierType, string>> = {
+  sine:         '∿ Sine',
+  pulse:        '⎍ Pulse',
+  quantize:     '▥ Quantize',
+  offset:       '+ Offset',
+  scale:        '× Scale',
+  clamp:        '⊂⊃ Clamp',
+  noise:        '⌇ Noise',
+  fractalNoise: '≋ Fractal Noise',
+  jitter:       '⊕ Jitter',
+  wave:         '∼ Wave (square/tri/saw)',
+  overshoot:    '↟ Overshoot',
+  elastic:      '╳ Elastic',
+  bounce:       '⚬ Bounce',
+  decay:        '⏷ Decay',
+  spring:       '⌇ Spring (stateful)',
+}
+
 const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [
   { label: 'None',    hex: null      },
   { label: 'Blue',    hex: '#3B82F6' },
@@ -1516,7 +1551,82 @@ export default function TimelinePanel({
               makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),
             )
           }),
+          // BL-50 — Controller ▸ (switch between keyframe / waveform / noise)
+          {
+            kind: 'submenu', label: 'Controller', disabled: false,
+            items: [
+              {
+                kind: 'action' as const,
+                label: (!track.controller || track.controller.type === 'keyframe' ? '● ' : '  ') + 'Keyframe',
+                shortcut: undefined, disabled: false,
+                onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
+                  selectedTimelineId, track.target, track.controller, { type: 'keyframe' },
+                )),
+              },
+              {
+                kind: 'action' as const,
+                label: (track.controller?.type === 'waveform' ? '● ' : '  ') + 'Waveform (sine / square / saw)',
+                shortcut: undefined, disabled: false,
+                onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
+                  selectedTimelineId, track.target, track.controller,
+                  { type: 'waveform', waveform: { ...DEFAULT_WAVEFORM_PARAMS } },
+                )),
+              },
+              {
+                kind: 'action' as const,
+                label: (track.controller?.type === 'noise' ? '● ' : '  ') + 'Noise (deterministic fbm)',
+                shortcut: undefined, disabled: false,
+                onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
+                  selectedTimelineId, track.target, track.controller,
+                  { type: 'noise', noise: { ...DEFAULT_NOISE_PARAMS } },
+                )),
+              },
+            ],
+          },
+          // BL-46 — Add Modifier ▸ (track-scope)
+          {
+            kind: 'submenu', label: '+ Add Modifier', disabled: false,
+            items: BL46_MODIFIER_TYPES.map((type) => ({
+              kind: 'action' as const,
+              label: BL46_MODIFIER_LABEL[type] ?? type,
+              shortcut: undefined,
+              disabled: false,
+              onSelect: () => {
+                const m: CurveModifier = {
+                  id: nextModifierId(),
+                  type, enabled: true, blendMode: 'add', weight: 1,
+                  parameters: defaultParametersFor(type),
+                }
+                dispatchCommand(makeAddCurveModifierCmd(
+                  selectedTimelineId,
+                  { kind: 'track', target: track.target },
+                  m,
+                ))
+              },
+            })),
+          },
         ]
+        // BL-51 polish — "Bake to Keyframes" appears when the track has
+        // any signal-system feature that a basic interpolator can't replay.
+        const usesSig =
+          (track.modifiers && track.modifiers.length > 0) ||
+          (track.controller && track.controller.type !== 'keyframe') ||
+          !!track.easeCurve || !!track.timeWarp || !!track.multiplierCurve ||
+          (track.outOfRange && (track.outOfRange.before !== 'constant' || track.outOfRange.after !== 'constant')) ||
+          (track.keyframes.some((k) => k.segmentModifiers && k.segmentModifiers.length > 0))
+        if (usesSig) {
+          items.push({ kind: 'separator' })
+          items.push({
+            kind: 'action', label: 'Bake Track to Keyframes',
+            shortcut: undefined, disabled: false,
+            onSelect: () => {
+              dispatchCommand(makeBakeTrackToKeyframesCmd(
+                selectedTimelineId, track.target, track,
+                { startMs: 0, endMs: duration, fps: 60, tolerance: 0.005 },
+              ))
+            },
+          })
+        }
         if (layerIdOnTrack && propertyPath && (onEditWire || onWireRequest)) {
           items.push({ kind: 'separator' })
           if (wireOnProp) {

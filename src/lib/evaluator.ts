@@ -1,5 +1,8 @@
 import type { Timeline, Track, Keyframe } from './types'
 import { resolveOutOfRange } from './animation/out-of-range/resolvers'
+import { applyModifiers, hashTrackSeed } from './animation/modifiers/pipeline'
+import { sampleBezier } from './animation/timeWarp/sampler'
+import { sampleController } from './animation/controllers/sample'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -77,9 +80,51 @@ function interpolateKeyframes(kfA: Keyframe, kfB: Keyframe, timeMs: number): num
  *  Honors track.outOfRange (BL-45) by remapping timeMs into the keyframe range
  *  according to the track's before/after behavior (cycle/loop/pingPong/etc.). */
 export function evaluateTrack(track: Track, timeMs: number): number | null {
-  // Keyframes are stored sorted; defensive sort here costs little for small arrays.
-  const kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+  // BL-50: procedural controllers bypass the keyframe path entirely. Out-of-
+  // range (cycle/loop/pingPong) still pre-warps timeMs so a noise/waveform
+  // controller can naturally loop or ping-pong if the user wants. Track
+  // modifiers + multiplier curve still wrap the procedural output below.
+  if (track.controller && track.controller.type !== 'keyframe') {
+    const ctrl = track.controller
+    // For procedural controllers we don't have a kf range, so OOR is applied
+    // against the timeline-derived range hint when the user explicitly set
+    // OOR range overrides. Otherwise we just pass timeMs through.
+    let evalTimeProc = timeMs
+    if (track.outOfRange?.rangeStartMs != null && track.outOfRange?.rangeEndMs != null) {
+      const r = resolveOutOfRange(
+        timeMs, track.outOfRange,
+        track.outOfRange.rangeStartMs, track.outOfRange.rangeEndMs,
+      )
+      evalTimeProc = r.timeMs
+    }
+    let value = sampleController(ctrl, evalTimeProc)
+    // Track modifiers + multiplier curve still apply on top of the formula.
+    if (track.modifiers && track.modifiers.length > 0) {
+      const seed = hashTrackSeed(`${track.target}`)
+      value = applyModifiers(track.modifiers, value, {
+        timeMs: evalTimeProc, localT: 0,
+        segmentStartMs: 0, segmentEndMs: 0, durationMs: 1,
+        seed,
+      })
+    }
+    if (track.multiplierCurve && (track.outOfRange?.rangeStartMs != null) && (track.outOfRange?.rangeEndMs != null)) {
+      const dur = track.outOfRange.rangeEndMs - track.outOfRange.rangeStartMs
+      const tNorm = dur > 0 ? Math.max(0, Math.min(1, (evalTimeProc - track.outOfRange.rangeStartMs) / dur)) : 0
+      const amp = typeof track.multiplierAmplitude === 'number' ? track.multiplierAmplitude : 1
+      value *= 1 + (sampleBezier(track.multiplierCurve, tNorm) - 0.5) * amp * 2
+    }
+    return value
+  }
+  // Keyframes are stored sorted; skip the copy + sort when already in order
+  // (the common case — saves a lot of garbage for hot-path evaluation).
+  let kfs = track.keyframes
   if (kfs.length === 0) return null
+  for (let i = 1; i < kfs.length; i++) {
+    if (kfs[i - 1].timeMs > kfs[i].timeMs) {
+      kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+      break
+    }
+  }
 
   const rangeStart = kfs[0].timeMs
   const rangeEnd = kfs[kfs.length - 1].timeMs
@@ -96,17 +141,88 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
     offset !== 0 ? (kfs[kfs.length - 1].value as number) - (kfs[0].value as number) : 0
   const valueOffset = cycleValueDelta * offset
 
-  if (evalTime <= rangeStart) return (kfs[0].value as number) + valueOffset
-  if (evalTime >= rangeEnd) return (kfs[kfs.length - 1].value as number) + valueOffset
-
-  // Binary search for the keyframe bracket — O(log n)
-  let lo = 0, hi = kfs.length - 2
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    if (kfs[mid + 1].timeMs <= evalTime) lo = mid + 1
-    else hi = mid
+  // BL-48: ease curve + time warp — re-time the WHOLE track via two
+  // cubic-beziers applied to the local-T (track normalised time).
+  // Composes as `timeWarp(easeCurve(localT))`. Identity when both unset.
+  //
+  // Track localT = (evalTime - rangeStart) / (rangeEnd - rangeStart)
+  // We warp localT, then convert back to a warped evalTime, then proceed
+  // with the normal kf bracket search. Skipped when track has no warp
+  // or when there's only one keyframe (warp meaningless there).
+  let warpedEvalTime = evalTime
+  if (track.easeCurve || track.timeWarp) {
+    const trackDur = rangeEnd - rangeStart
+    if (trackDur > 0) {
+      const tNorm = Math.max(0, Math.min(1, (evalTime - rangeStart) / trackDur))
+      let warpedT = tNorm
+      if (track.easeCurve) warpedT = sampleBezier(track.easeCurve, warpedT)
+      if (track.timeWarp)  warpedT = sampleBezier(track.timeWarp,  warpedT)
+      warpedEvalTime = rangeStart + warpedT * trackDur
+    }
   }
-  return interpolateKeyframes(kfs[lo], kfs[lo + 1], evalTime) + valueOffset
+
+  // Resolve the kf bracket so we can compute the base value and
+  // pass segment timing into the modifier pipeline below.
+  let baseValue: number
+  let segStartMs: number
+  let segEndMs:   number
+  let leadingKf:  Keyframe
+  if (warpedEvalTime <= rangeStart) {
+    baseValue = (kfs[0].value as number) + valueOffset
+    leadingKf = kfs[0]
+    segStartMs = kfs[0].timeMs
+    segEndMs   = kfs[Math.min(1, kfs.length - 1)].timeMs
+  } else if (warpedEvalTime >= rangeEnd) {
+    baseValue = (kfs[kfs.length - 1].value as number) + valueOffset
+    leadingKf = kfs[Math.max(0, kfs.length - 2)]
+    segStartMs = leadingKf.timeMs
+    segEndMs   = kfs[kfs.length - 1].timeMs
+  } else {
+    // Binary search for the keyframe bracket — O(log n)
+    let lo = 0, hi = kfs.length - 2
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (kfs[mid + 1].timeMs <= warpedEvalTime) lo = mid + 1
+      else hi = mid
+    }
+    leadingKf = kfs[lo]
+    baseValue = interpolateKeyframes(kfs[lo], kfs[lo + 1], warpedEvalTime) + valueOffset
+    segStartMs = kfs[lo].timeMs
+    segEndMs   = kfs[lo + 1].timeMs
+  }
+
+  // BL-46: apply segment-scope then track-scope modifier stacks.
+  // BL-48: localT here is segment-local; warps above already happened.
+  const hasSegmentMods    = leadingKf.segmentModifiers && leadingKf.segmentModifiers.length > 0
+  const hasTrackMods      = track.modifiers && track.modifiers.length > 0
+  const hasMultiplier     = !!track.multiplierCurve
+  const needsCtx          = hasSegmentMods || hasTrackMods || hasMultiplier
+  if (!needsCtx) return baseValue
+
+  const durationMs = Math.max(1, segEndMs - segStartMs)
+  const localT = Math.max(0, Math.min(1, (warpedEvalTime - segStartMs) / durationMs))
+  const seed = hashTrackSeed(`${track.target}`)
+  const ctx = { timeMs: warpedEvalTime, localT, segmentStartMs: segStartMs, segmentEndMs: segEndMs, durationMs, seed }
+
+  let value = baseValue
+  if (hasSegmentMods) value = applyModifiers(leadingKf.segmentModifiers, value, ctx)
+  if (hasTrackMods)   value = applyModifiers(track.modifiers,             value, ctx)
+  // BL-48 multiplier — track-level value scale via bezier. Applied LAST
+  // so the curve controls the final output, not an intermediate. The
+  // bezier output is centred on 0.5 to allow attenuation AND amplification:
+  //    multiplier = 1 + (bezier(t) - 0.5) * amplitude * 2
+  //    amplitude=0 → multiplier=1 (no effect)
+  //    amplitude=1, bezier(t) ∈ [0,1] → multiplier ∈ [0,2]
+  if (hasMultiplier) {
+    const trackDur = rangeEnd - rangeStart
+    const tNorm = trackDur > 0
+      ? Math.max(0, Math.min(1, (evalTime - rangeStart) / trackDur))
+      : 0
+    const amp = typeof track.multiplierAmplitude === 'number' ? track.multiplierAmplitude : 1
+    const m = 1 + (sampleBezier(track.multiplierCurve!, tNorm) - 0.5) * amp * 2
+    value *= m
+  }
+  return value
 }
 
 /** Evaluate all timelines and return a map of property path → computed value. */

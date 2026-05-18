@@ -7,8 +7,8 @@ function makeTrack(outOfRange?: Track['outOfRange']): Track {
   return {
     target: 'layers.x.opacity',
     keyframes: [
-      { id: 'k1', timeMs: 1000, value: 0 },
-      { id: 'k2', timeMs: 2000, value: 100 },
+      { id: 'k1', timeMs: 1000, value: 0,   easing: { type: 'linear' } },
+      { id: 'k2', timeMs: 2000, value: 100, easing: { type: 'linear' } },
     ],
     outOfRange,
   }
@@ -68,8 +68,8 @@ describe('buildCurvePathSegments (BL-45)', () => {
     const track: Track = {
       target: 'x',
       keyframes: [
-        { id: 'k1', timeMs: 10000, value: 0 },
-        { id: 'k2', timeMs: 20000, value: 100 },
+        { id: 'k1', timeMs: 10000, value: 0,   easing: { type: 'linear' } },
+        { id: 'k2', timeMs: 20000, value: 100, easing: { type: 'linear' } },
       ],
       outOfRange: { before: 'cycle', after: 'cycle' },
     }

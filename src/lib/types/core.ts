@@ -101,6 +101,12 @@ export interface Keyframe {
   easing: EasingDefinition
   /** Bezier-handle linkage mode. Defaults to 'broken' when undefined. */
   tangentMode?: TangentMode
+  /** BL-46 — modifiers scoped to the segment from THIS keyframe to the
+   *  NEXT keyframe in time. Empty / undefined = no modifiers on this
+   *  segment. The last keyframe's segmentModifiers is unused (no next
+   *  segment exists). Stored on the leading kf rather than as a separate
+   *  KeyframeSegment entity so kf delete naturally removes the segment. */
+  segmentModifiers?: import('../animation/modifiers/types').CurveModifier[]
 }
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
@@ -119,7 +125,34 @@ export interface Track {
    *  and after last keyframe (Constant, Cycle, Loop, PingPong, Linear, RelativeRepeat).
    *  Optional for backward compat: undefined defaults to constant/constant. */
   outOfRange?: OutOfRangeSettings
-  // TODO(big-feature): controller type — currently every track is implicit
+  /** BL-46 — modifiers scoped to the WHOLE track. Applied AFTER keyframe
+   *  interpolation, AFTER out-of-range resolution, AFTER segment-scoped
+   *  modifiers. Use for "noise on the whole rotation track" or "clamp
+   *  opacity to [0,1] no matter what the upstream is producing". */
+  modifiers?: import('../animation/modifiers/types').CurveModifier[]
+  /** BL-48 — Ease Curve: re-times the whole track via a cubic-bezier.
+   *  Applied to localT BEFORE keyframe interpolation. A slow-start curve
+   *  makes the entire animation appear to start slow. */
+  easeCurve?: import('../animation/timeWarp/types').BezierTuple
+  /** BL-48 — TimeWarp: secondary time remap applied AFTER easeCurve.
+   *  Composes with easeCurve as `timeWarp(easeCurve(localT))`. Lets the
+   *  user stack two layers of timing control (e.g., master ease + per-
+   *  section warp without disturbing each other). */
+  timeWarp?: import('../animation/timeWarp/types').BezierTuple
+  /** BL-48 — Multiplier Curve: scales the post-modifier value by a
+   *  bezier sampled at localT. `multiplierAmplitude` (default 1) controls
+   *  how much the curve influences the value:
+   *      value' = value * (1 + (bezier(localT) - 0.5) * amplitude * 2)
+   *  Amplitude 0 = no effect; 1 = bezier ∈ [0,1] becomes scale ∈ [0,2]. */
+  multiplierCurve?: import('../animation/timeWarp/types').BezierTuple
+  multiplierAmplitude?: number
+  /** BL-50 — Procedural controller. When set, the track ignores its
+   *  `keyframes` array and sources value from a formula (waveform / noise).
+   *  Backward compat: undefined → keyframe controller (existing behavior).
+   *  Track modifiers + multiplier curve + out-of-range still apply on top
+   *  of the procedural output. */
+  controller?: import('../animation/controllers/types').TrackController
+  // TODO(big-feature): expression / compound / layered controllers —
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
   //   formula or procedural source instead of (or alongside) keyframes.

@@ -95,3 +95,32 @@ export {
   isMarkerTrack, isStateTrack, isTriggerTrack,
   asPropertyTrack, propertyTracksOf,
 } from '../timeline/tracks'
+
+// ── Curve Modifier Stack (BL-46) ────────────────────────────────────────────
+export type {
+  CurveModifierType, CurveBlendMode, CurveModifier, CurveModifierContext,
+} from '../animation/modifiers/types'
+export { defaultParametersFor } from '../animation/modifiers/builtins'
+export { applyModifiers, blendModifierValue, hashTrackSeed } from '../animation/modifiers/pipeline'
+
+// ── Ease / TimeWarp / Multiplier curves (BL-48) ─────────────────────────────
+export type { BezierTuple } from '../animation/timeWarp/types'
+export { IDENTITY_BEZIER } from '../animation/timeWarp/types'
+export { sampleBezier } from '../animation/timeWarp/sampler'
+
+// ── Procedural Track Controllers (BL-50) ────────────────────────────────────
+export type {
+  WaveformShape, WaveformControllerParams,
+  NoiseControllerParams, TrackController,
+} from '../animation/controllers/types'
+export {
+  DEFAULT_WAVEFORM_PARAMS, DEFAULT_NOISE_PARAMS,
+} from '../animation/controllers/types'
+export {
+  sampleController, sampleWaveform, sampleNoise,
+} from '../animation/controllers/sample'
+
+// ── Baking & Simplification (BL-51) ─────────────────────────────────────────
+export type { BakeOptions } from '../animation/baking/bake'
+export { bakeTrack, bakeTrackToKeyframes, sampleTrackDense } from '../animation/baking/bake'
+export { simplifyRDP } from '../animation/baking/simplify'
