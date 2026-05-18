@@ -271,7 +271,7 @@ export function defaultLayout(): DockNode {
         kind: 'split', id: 'top',
         direction: 'h', ratio: 0.18,
         children: [
-          { kind: 'leaf', id: 'layers-leaf',  panels: ['layers'],     activeIndex: 0 },
+          { kind: 'leaf', id: 'layers-leaf',  panels: ['layers', 'sceneExplorer'], activeIndex: 0 },
           {
             kind: 'split', id: 'mid',
             direction: 'h', ratio: 0.72,
