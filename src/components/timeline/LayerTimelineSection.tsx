@@ -126,6 +126,15 @@ export default function LayerTimelineSection({
         <div
           className="w-60 shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer relative"
           onClick={(e) => onSelectLayer(e.shiftKey)}
+          onDoubleClick={(e) => {
+            // Double-click the layer header → toggle Solo (isolate in canvas).
+            // Avoids racing the chevron / flag buttons which stop propagation.
+            const tgt = e.target as HTMLElement
+            if (tgt.closest('button')) return
+            e.stopPropagation()
+            onToggleFlag('solo')
+          }}
+          title="Click: select · Double-click: solo (isolate)"
         >
           {/* Color label stripe — left edge of the row */}
           {layer.colorLabel && (
@@ -178,13 +187,18 @@ export default function LayerTimelineSection({
         return (
           <div key={track.target} className="flex items-stretch border-b border-gray-800/60"
             style={{ height: rowH }}>
-            <div className="w-60 shrink-0 flex items-center gap-1.5 pl-8 pr-2 border-r border-gray-700 group">
+            <div className="w-60 shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700 group">
               <button
                 onClick={() => onAddKeyframeAtPlayhead(track.target)}
-                className="text-[10px] text-yellow-400 hover:text-yellow-300 shrink-0"
-                title="Add keyframe at playhead for this property"
-              >◆</button>
-              <span className="flex-1 truncate text-[10px] font-mono text-gray-400" title={track.target}>
+                className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
+                           text-yellow-400 hover:text-yellow-200 hover:bg-yellow-600/30
+                           border border-transparent hover:border-yellow-700/40 transition-colors
+                           text-[12px] leading-none font-bold"
+                title="Add keyframe at playhead (◆)"
+              >+</button>
+              <span className="flex-1 truncate text-[10px] font-mono text-gray-400 cursor-pointer hover:text-gray-200"
+                    title={track.target}
+                    onClick={() => onAddKeyframeAtPlayhead(track.target)}>
                 {propPath}
               </span>
               <button

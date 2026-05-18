@@ -41,6 +41,7 @@ import SegmentStrip            from './timeline/SegmentStrip'
 import EventStrip              from './timeline/EventStrip'
 import SegmentModal            from './modals/SegmentModal'
 import type { TimelineEvent } from '@/lib/types'
+import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { nextEventId } from '@/lib/defaults'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
@@ -328,7 +329,16 @@ export default function TimelinePanel({
     if (shiftHeld && selectedKfIds.has(kfId)) next.delete(kfId)
     else                                       next.add(kfId)
     onSelectKeyframes(next)
-  }, [selectedKfIds, onSelectKeyframes])
+    // Lone-click (no shift) → seek the playhead to this keyframe's time so
+    // the canvas + inspector show the exact value that was authored here.
+    // Multi-select drags don't seek (would be jumpy).
+    if (!shiftHeld && timeline) {
+      for (const tr of timeline.tracks) {
+        const kf = tr.keyframes.find((k) => k.id === kfId)
+        if (kf) { onTimeChange(Math.max(0, Math.min(duration, kf.timeMs))); break }
+      }
+    }
+  }, [selectedKfIds, onSelectKeyframes, timeline, duration, onTimeChange])
 
   /**
    * Curried drag-begin: given a leader snapshot + selection-mode flags, return
@@ -979,7 +989,53 @@ export default function TimelinePanel({
         const layer = scene.layers.find((l) => l.id === ctxLayerBar.layerId)
         if (!layer) { ctxMenu.close(); return null }
         const splitMs = currentTimeMs
+        // Already-animated property paths so we don't list them twice in
+        // the "Add Animation" submenu.
+        const animatedOnLayer = new Set(
+          (timeline?.tracks ?? [])
+            .filter((t) => t.target.startsWith(`layers.${layer.id}.`))
+            .map((t) => t.target.replace(`layers.${layer.id}.`, ''))
+        )
+        const addableProps = ANIMATABLE_PROPERTIES.filter((p) => {
+          if (animatedOnLayer.has(p.path)) return false
+          return !p.layerTypes || p.layerTypes.includes(layer.type)
+        })
+        // Group by category for a nice submenu structure.
+        const propsByGroup = new Map<string, typeof addableProps>()
+        for (const p of addableProps) {
+          const arr = propsByGroup.get(p.group) ?? []
+          arr.push(p)
+          propsByGroup.set(p.group, arr)
+        }
         const items = [
+          {
+            kind: 'submenu' as const,
+            label: '+ Add Animation',
+            disabled: addableProps.length === 0,
+            items: Array.from(propsByGroup.entries()).flatMap(([groupName, list], i) => [
+              ...(i > 0 ? [{ kind: 'separator' as const }] : []),
+              {
+                kind: 'action' as const,
+                label: `── ${groupName} ──`,
+                shortcut: undefined,
+                disabled: true,
+                onSelect: () => { /* header row */ },
+              },
+              ...list.map((p) => ({
+                kind: 'action' as const,
+                label: p.label,
+                shortcut: undefined,
+                disabled: false,
+                onSelect: () => {
+                  addTrack(layer.id, p.path)
+                  // Immediately drop a keyframe at the playhead so the new
+                  // track isn't empty — common workflow.
+                  setTimeout(() => addKeyframeAtTime(`layers.${layer.id}.${p.path}`, currentTimeMs), 0)
+                },
+              })),
+            ]),
+          },
+          { kind: 'separator' as const },
           {
             kind: 'action' as const, label: 'Split Layer at Playhead',
             shortcut: undefined, disabled: false,
@@ -1266,22 +1322,29 @@ function KeyframeEditWindow({
     if (editingKf.posX != null && editingKf.posY != null) {
       return { left: editingKf.posX, top: editingKf.posY }
     }
-    // Initial placement relative to the click point. Default = pop up and
-    // to the right of the cursor (like a context menu). If the popover
-    // wouldn't fit on a given side, flip to the opposite.
+    // Initial placement. Pick the side (above/below, right/left) with more
+    // space. If neither side fits comfortably, fall back to anchoring at
+    // the centre of the viewport — guarantees the popover is fully visible
+    // even when the kf is in a tiny dock leaf at the screen edge.
     const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
     const vh = typeof window !== 'undefined' ? window.innerHeight :  720
     const ax = editingKf.anchorX
     const ay = editingKf.anchorY
-    // Horizontal: right of cursor unless it would overflow.
-    let l = ax + ANCHOR_GAP
-    if (l + POPOVER_W > vw - 8) l = ax - ANCHOR_GAP - POPOVER_W
-    // Vertical: above the cursor (so the popover's BOTTOM is just above
-    // the click) — this keeps the kf visible while editing. Flip below
-    // if there's no room above.
-    let t = ay - POPOVER_H - ANCHOR_GAP
-    if (t < 8) t = ay + ANCHOR_GAP
-    // Final clamp so a tiny viewport never lets the window escape.
+    // Horizontal — prefer the side with more space.
+    const rightSpace = vw - ax - 8
+    const leftSpace  = ax - 8
+    let l: number
+    if (rightSpace >= POPOVER_W + ANCHOR_GAP)      l = ax + ANCHOR_GAP
+    else if (leftSpace >= POPOVER_W + ANCHOR_GAP)  l = ax - ANCHOR_GAP - POPOVER_W
+    else                                           l = (vw - POPOVER_W) / 2
+    // Vertical — prefer above (keeps kf visible). Flip below if no room.
+    const topSpace    = ay - 8
+    const bottomSpace = vh - ay - 8
+    let t: number
+    if (topSpace >= POPOVER_H + ANCHOR_GAP)        t = ay - POPOVER_H - ANCHOR_GAP
+    else if (bottomSpace >= POPOVER_H + ANCHOR_GAP) t = ay + ANCHOR_GAP
+    else                                            t = (vh - POPOVER_H) / 2
+    // Final safety clamp — never let the window escape the viewport.
     l = Math.max(8, Math.min(vw - POPOVER_W - 8, l))
     t = Math.max(8, Math.min(vh - POPOVER_H - 8, t))
     return { left: l, top: t }
