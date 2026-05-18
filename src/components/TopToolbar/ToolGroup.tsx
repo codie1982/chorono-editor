@@ -12,11 +12,19 @@ export function isSelectionTool(m: ToolMode): boolean {
       || m === 'selection-circle' || m === 'selection-paint'
 }
 
+/** Selection containment mode (BL-60 Faz 3). Applies only when a canvas
+ *  selection tool is active. `'inside'` = layer's bounds must fit fully
+ *  in the dragged shape; `'touching'` = any overlap counts. */
+export type SelectionContainMode = 'inside' | 'touching'
+
 interface ToolGroupProps {
   mode:     ToolMode
   onChange: (m: ToolMode) => void
   /** When true, pen tool is auto-active because a path layer is selected. */
   penAuto?: boolean
+  /** BL-60 Faz 3 — Current containment mode for canvas selection tools. */
+  containMode?: SelectionContainMode
+  onContainModeChange?: (m: SelectionContainMode) => void
 }
 
 interface ToolBtnProps {
@@ -52,8 +60,11 @@ function Divider() {
  * other gizmos so the user always sees only the handles relevant to the
  * current operation.
  */
-export default function ToolGroup({ mode, onChange, penAuto }: ToolGroupProps) {
+export default function ToolGroup({
+  mode, onChange, penAuto, containMode, onContainModeChange,
+}: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
+  const showContainToggle = isSelectionTool(mode) && containMode != null && onContainModeChange != null
   return (
     <div className="flex items-center gap-1">
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
@@ -119,6 +130,46 @@ export default function ToolGroup({ mode, onChange, penAuto }: ToolGroupProps) {
           <path d="M3 13 L10 6 L11 5 L13 7 L12 8 L5 15 L2 14 Z" fill="currentColor" fillOpacity="0.15" />
         </svg>
       </ToolBtn>
+
+      {/* BL-60 Faz 3 — Containment mode toggle (visible only with a selection
+          tool active). Two-button segmented switch: Inside / Touching. */}
+      {showContainToggle && (
+        <>
+          <Divider />
+          <div className="flex items-center border border-gray-700 rounded overflow-hidden h-7">
+            <button
+              onClick={() => onContainModeChange!('inside')}
+              title="Inside — layer's bounding box must lie fully within the selection shape (3ds Max Window)"
+              className={`px-2 h-full text-[10px] font-mono flex items-center gap-1 transition-colors ${
+                containMode === 'inside'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+              }`}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="1" y="1" width="8" height="8" />
+                <rect x="3" y="3" width="4" height="4" fill="currentColor" fillOpacity="0.6" />
+              </svg>
+              Inside
+            </button>
+            <button
+              onClick={() => onContainModeChange!('touching')}
+              title="Touching — any layer overlapping the selection shape counts (3ds Max Crossing)"
+              className={`px-2 h-full text-[10px] font-mono flex items-center gap-1 transition-colors ${
+                containMode === 'touching'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+              }`}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="1" y="1" width="8" height="8" strokeDasharray="1.5 1" />
+                <rect x="4" y="4" width="5" height="5" fill="currentColor" fillOpacity="0.6" />
+              </svg>
+              Touching
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

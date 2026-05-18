@@ -76,6 +76,10 @@ interface Props {
    *  after a canvas selection-tool drag completes. Mode is 'replace' (plain
    *  drag), 'add' (Shift+drag), or 'subtract' (Alt+drag). */
   onSelectByGeometry?: (layerIds: Set<string>, mode: 'replace' | 'add' | 'subtract') => void
+  /** BL-60 Faz 3 — Hit-test mode for selection tools:
+   *  'touching' (default) = any layer whose bounds overlap the drawn shape
+   *  'inside'             = only layers whose bounds fit fully within the shape */
+  selectionContainMode?: 'inside' | 'touching'
   /** Snap settings — owned by the page so the dockable SnapPanel + the
    *  in-canvas SnapMenu both read/write the same source of truth. */
   snap: SnapSettingsHook
@@ -246,7 +250,8 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
-  panMode: controlledPanMode, onPanModeChange, toolMode, snap, onSelectByGeometry,
+  panMode: controlledPanMode, onPanModeChange, toolMode, snap,
+  onSelectByGeometry, selectionContainMode = 'touching',
   fullscreen, onToggleFullscreen,
   menuHandlers, onAfterLayerCommit,
   ghostSettings, selectedTimeline,
@@ -1040,6 +1045,7 @@ export default function SceneCanvas({
     window.removeEventListener('pointermove', handleSelectionDragMove)
     window.removeEventListener('pointerup',   handleSelectionDragUp)
 
+    const containMode = selectionContainMode
     let hits: Set<string> = new Set()
     switch (drag.tool) {
       case 'box': {
@@ -1052,7 +1058,7 @@ export default function SceneCanvas({
         const cy = (e.clientY - rect2.top)  * sy
         const x = Math.min(last.x, cx), y = Math.min(last.y, cy)
         const w = Math.abs(cx - last.x), h = Math.abs(cy - last.y)
-        hits = layersInRect(sceneRef.current, { x, y, w, h })
+        hits = layersInRect(sceneRef.current, { x, y, w, h }, containMode)
         break
       }
       case 'circle': {
@@ -1063,16 +1069,17 @@ export default function SceneCanvas({
         const cx = (e.clientX - rect2.left) * sx
         const cy = (e.clientY - rect2.top)  * sy
         const r = Math.hypot(cx - drag.startX, cy - drag.startY)
-        hits = layersInCircle(sceneRef.current, { x: drag.startX, y: drag.startY, r })
+        hits = layersInCircle(sceneRef.current, { x: drag.startX, y: drag.startY, r }, containMode)
         break
       }
       case 'lasso': {
         if (drag.points.length >= 3) {
-          hits = layersInPolygon(sceneRef.current, drag.points)
+          hits = layersInPolygon(sceneRef.current, drag.points, containMode)
         }
         break
       }
       case 'paint': {
+        // Paint is always 'touching' semantics — accumulates as user sweeps.
         hits = drag.paintAcc
         break
       }
@@ -1081,7 +1088,7 @@ export default function SceneCanvas({
     onSelectByGeometry?.(hits, drag.mode)
     selectionDragRef.current = null
     setSelectionOverlay(null)
-  }, [width, height, onSelectByGeometry, handleSelectionDragMove])
+  }, [width, height, onSelectByGeometry, handleSelectionDragMove, selectionContainMode])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     // Middle-mouse OR pan-mode + left button → pan the view, not the layer

@@ -38,7 +38,9 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
-import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
+import ToolGroup, {
+  type ToolMode, type SelectionContainMode,
+} from '@/components/TopToolbar/ToolGroup'
 import ToastContainer  from '@/components/Toast/ToastContainer'
 import { toast }       from '@/lib/toast/toast'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
@@ -605,6 +607,9 @@ export default function BuilderPage() {
 
   // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
   const [toolMode, setToolMode] = useState<ToolMode>('select')
+  // BL-60 Faz 3 — canvas selection containment mode (only matters with a
+  // selection tool active). Default 'touching' = Figma-style permissive.
+  const [selectionContainMode, setSelectionContainMode] = useState<SelectionContainMode>('touching')
 
   // ── Snap settings — lifted from SceneCanvas so the dockable SnapPanel
   //    and the in-canvas SnapMenu share one source of truth. ─────────────
@@ -827,6 +832,8 @@ export default function BuilderPage() {
           mode={toolMode}
           onChange={setToolMode}
           penAuto={!!(scene.layers.find(l => l.id === selectedLayerId)?.type === 'path')}
+          containMode={selectionContainMode}
+          onContainModeChange={setSelectionContainMode}
         />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
@@ -1109,6 +1116,7 @@ export default function BuilderPage() {
                       const first = next.values().next().value
                       setSelectedLayer(first ?? null)
                     }}
+                    selectionContainMode={selectionContainMode}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}
