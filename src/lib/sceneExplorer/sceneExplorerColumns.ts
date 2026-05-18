@@ -150,3 +150,61 @@ export function getVisibleColumns(
 export function defaultVisibleColumnIds(all: ColumnDefinition[] = DEFAULT_COLUMNS): Set<string> {
   return new Set(all.filter((c) => c.defaultVisible).map((c) => c.id))
 }
+
+// ── BL-58 — Column presets ───────────────────────────────────────────────────
+//
+// Named workspace profiles. Curated set keeps users from drowning in 10
+// checkboxes — pick "Animation" when authoring keyframes, "Design" when
+// arranging layers, "Compact" for narrow side docks.
+
+export interface ColumnPreset {
+  id: string
+  label: string
+  description: string
+  columnIds: string[]
+}
+
+export const COLUMN_PRESETS: ColumnPreset[] = [
+  {
+    id: 'default',
+    label: 'Default',
+    description: 'Name + visibility flags + type + color',
+    columnIds: ['name', 'visible', 'locked', 'solo', 'pinned', 'type', 'color'],
+  },
+  {
+    id: 'compact',
+    label: 'Compact',
+    description: 'Just name + the four visibility flags — for narrow docks',
+    columnIds: ['name', 'visible', 'locked', 'solo', 'pinned'],
+  },
+  {
+    id: 'animation',
+    label: 'Animation',
+    description: 'Name + start/end + animated-tracks count for keyframe work',
+    columnIds: ['name', 'visible', 'locked', 'type', 'startMs', 'endMs', 'tracks'],
+  },
+  {
+    id: 'design',
+    label: 'Design',
+    description: 'Name + type + color label + lock state',
+    columnIds: ['name', 'visible', 'locked', 'type', 'color'],
+  },
+  {
+    id: 'all',
+    label: 'Everything',
+    description: 'Every column on — power-user view',
+    columnIds: DEFAULT_COLUMNS.map((c) => c.id),
+  },
+]
+
+/** Try to match the current visible-column set to a preset id, else null. */
+export function detectActivePreset(visibleIds: Set<string>): string | null {
+  for (const p of COLUMN_PRESETS) {
+    const presetSet = new Set(p.columnIds)
+    if (presetSet.size !== visibleIds.size) continue
+    let match = true
+    presetSet.forEach((id) => { if (!visibleIds.has(id)) match = false })
+    if (match) return p.id
+  }
+  return null
+}

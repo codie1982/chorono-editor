@@ -18,10 +18,11 @@ import {
   DEFAULT_COLUMNS,
   defaultVisibleColumnIds,
   getVisibleColumns,
+  COLUMN_PRESETS,
+  detectActivePreset,
   type ColumnDefinition,
 } from '@/lib/sceneExplorer/sceneExplorerColumns'
 import SceneExplorerRow, {
-  SCENE_EXPLORER_ROW_HEIGHT,
   type DropTargetState,
   type DropZone,
 } from './SceneExplorerRow'
@@ -29,6 +30,8 @@ import ContextMenu from '@/components/ui/ContextMenu'
 import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
 import LayerVisibilityPanel from './LayerVisibilityPanel'
+import SceneExplorerStatusBar from './SceneExplorerStatusBar'
+import QuickFilterChips from './QuickFilterChips'
 import { DEFAULT_VISIBILITY_FILTERS, type LayerVisibilityFilters } from '@/lib/sceneExplorer/visibilityFilters'
 
 interface Props {
@@ -125,6 +128,10 @@ export default function SceneExplorerPanel({
   // Column-header right-click menu
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; columnId: string } | null>(null)
 
+  // BL-58 — Panel-scoped keyboard shortcuts. Scoped via hover state so they
+  // don't fight with other panels (Canvas / Timeline). Inputs are exempt.
+  const [hovered, setHovered] = useState(false)
+
   // BL-55 — Visibility filters (type / behaviour). Persisted in localStorage.
   const [visibilityFilters, setVisibilityFilters] = useState<LayerVisibilityFilters>(() => {
     if (typeof window === 'undefined') return DEFAULT_VISIBILITY_FILTERS
@@ -196,6 +203,85 @@ export default function SceneExplorerPanel({
     }),
     [layers, collapsedIds, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects],
   )
+
+  // ── BL-58 Keyboard shortcuts ─────────────────────────────────────────────
+  // Active only when the pointer is over the panel — keeps Delete / Cmd+D
+  // etc. from firing while the user is editing on the canvas or in the
+  // timeline. Inputs ignore the handler so renaming continues to work.
+  useEffect(() => {
+    if (!hovered) return
+    const onKey = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
+      // Don't intercept during an inline rename either (input already
+      // caught the keystroke above, but be defensive).
+      if (editingId) return
+
+      const meta = e.metaKey || e.ctrlKey
+      const shift = e.shiftKey
+      const selIds = Array.from(
+        selectedIds.size > 0 ? selectedIds : selectedId ? [selectedId] : []
+      )
+
+      // Esc → clear selection
+      if (e.key === 'Escape') {
+        if (menuState || columnMenu) {
+          // let the menu close naturally
+          return
+        }
+        if (selIds.length > 0 && onClearSelection) {
+          e.preventDefault()
+          onClearSelection()
+        }
+        return
+      }
+
+      // F2 → rename primary
+      if (e.key === 'F2' && selectedId) {
+        e.preventDefault()
+        const layer = layers.find((l) => l.id === selectedId)
+        if (layer) beginRename(layer)
+        return
+      }
+
+      // Delete / Backspace → delete selection
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selIds.length > 0) {
+        if (contextHandlers?.deleteLayers) {
+          e.preventDefault()
+          contextHandlers.deleteLayers(selIds)
+        }
+        return
+      }
+
+      // Cmd/Ctrl+D → duplicate
+      if (meta && (e.key === 'd' || e.key === 'D') && selIds.length > 0) {
+        if (contextHandlers?.duplicate) {
+          e.preventDefault()
+          selIds.forEach((id) => contextHandlers.duplicate!(id))
+        }
+        return
+      }
+
+      // Cmd/Ctrl+Shift+G → ungroup, Cmd/Ctrl+G → group
+      if (meta && (e.key === 'g' || e.key === 'G')) {
+        e.preventDefault()
+        if (shift) {
+          if (contextHandlers?.ungroupGroup && selectedId) {
+            const layer = layers.find((l) => l.id === selectedId)
+            if (layer?.type === 'group') contextHandlers.ungroupGroup(selectedId)
+          }
+        } else if (contextHandlers?.groupLayers && selIds.length > 0) {
+          contextHandlers.groupLayers(selIds)
+        }
+        return
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    hovered, editingId, selectedId, selectedIds, layers,
+    menuState, columnMenu, onClearSelection, beginRename, contextHandlers,
+  ])
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const toggleExpand = useCallback((id: string) => {
@@ -272,6 +358,8 @@ export default function SceneExplorerPanel({
     <div
       className="flex flex-col h-full bg-gray-900 text-gray-200"
       onContextMenu={(e) => e.preventDefault()}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gray-700 shrink-0">
@@ -298,6 +386,12 @@ export default function SceneExplorerPanel({
           {rows.length}/{layers.length}
         </span>
       </div>
+
+      {/* BL-58 — Quick filter chips (single-row type-solo presets) */}
+      <QuickFilterChips
+        filters={visibilityFilters}
+        onChange={setVisibilityFilters}
+      />
 
       {/* BL-53 — Bulk operations toolbar (appears when 2+ rows selected) */}
       {selectedIds.size >= 2 && contextHandlers && (
@@ -401,11 +495,15 @@ export default function SceneExplorerPanel({
         )}
       </div>
 
-      {/* Footer (placeholder for BL-58 status bar) */}
-      <div className="flex items-center justify-between px-2 py-1 border-t border-gray-800 text-[9px] font-mono text-gray-600 shrink-0">
-        <span>{layers.length} layers · {selectedIds.size} selected</span>
-        <span>row {SCENE_EXPLORER_ROW_HEIGHT}px</span>
-      </div>
+      {/* BL-58 — Rich status bar */}
+      <SceneExplorerStatusBar
+        layers={layers}
+        selectedIds={selectedIds}
+        visibleRowCount={rows.length}
+        textFilter={textFilter}
+        visibilityFilters={visibilityFilters}
+        isLayerAnimated={isLayerAnimated}
+      />
 
       {/* Column-header right-click menu (BL-53) — show/hide + sort */}
       {columnMenu && (() => {
@@ -460,6 +558,17 @@ export default function SceneExplorerPanel({
             })),
           },
           { kind: 'separator' as const },
+          {
+            // BL-58 — Column presets (named workspace profiles)
+            kind: 'submenu' as const,
+            label: 'Preset',
+            items: COLUMN_PRESETS.map((p) => ({
+              kind: 'action' as const,
+              label: `${p.label} — ${p.description}`,
+              icon: detectActivePreset(visibleColumnIds) === p.id ? '✓' : null,
+              onSelect: () => setVisibleColumnIds(new Set(p.columnIds)),
+            })),
+          },
           {
             kind: 'action' as const,
             label: 'Reset Columns',
