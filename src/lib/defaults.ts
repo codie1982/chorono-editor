@@ -1,7 +1,7 @@
 import type {
   Layer, Timeline, Composition, ChronoScene, Transform,
   SceneParameter, SceneParameterType, SceneParameterValue,
-  Trigger, Binding, TimelineSegment,
+  Trigger, Binding, ParameterWire, TimelineSegment,
   PathStrokeData,
 } from './types'
 
@@ -11,6 +11,7 @@ let kfCounter       = 0
 let paramCounter    = 0
 let triggerCounter  = 0
 let bindingCounter  = 0
+let wireCounter     = 0
 let segmentCounter  = 0
 let eventCounter    = 0
 
@@ -430,6 +431,19 @@ export function newBinding(): Binding {
       outputMin: 0, outputMax: 1,
       clamp: true,
     },
+  }
+}
+
+/** Empty ParameterWire (BL-05) — defaults to identity passthrough.
+ *  User picks source/target via the picker, then writes the expression. */
+export function newParameterWire(): ParameterWire {
+  wireCounter++
+  return {
+    id: `wire_${wireCounter}`,
+    sourceParamId: '',
+    targetParamId: '',
+    expression: 's',
+    enabled: true,
   }
 }
 
