@@ -25,7 +25,11 @@ import {
 import {
   makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd, makeUpdateLayerCmd,
 } from '@/lib/editor/commands-layer'
-import { makeSetOutOfRangeCmd } from '@/lib/editor/commands-track'
+import {
+  makeSetOutOfRangeCmd, makeAddCurveModifierCmd, nextModifierId,
+} from '@/lib/editor/commands-track'
+import { defaultParametersFor } from '@/lib/types'
+import type { CurveModifier, CurveModifierType } from '@/lib/types'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
@@ -56,6 +60,20 @@ import { nextEventId } from '@/lib/defaults'
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
 // the label. Same set is used by the LayerPanel-side picker so a layer
 // dragged across panels keeps a consistent colour identity.
+// BL-46 — the six modifier types shipped in the foundation sprint. Used
+// by the track-header context menu's "+ Add Modifier ▸" submenu.
+const BL46_MODIFIER_TYPES: CurveModifierType[] = [
+  'sine', 'pulse', 'quantize', 'offset', 'scale', 'clamp',
+]
+const BL46_MODIFIER_LABEL: Partial<Record<CurveModifierType, string>> = {
+  sine:     '∿ Sine',
+  pulse:    '⎍ Pulse',
+  quantize: '▥ Quantize',
+  offset:   '+ Offset',
+  scale:    '× Scale',
+  clamp:    '⊂⊃ Clamp',
+}
+
 const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [
   { label: 'None',    hex: null      },
   { label: 'Blue',    hex: '#3B82F6' },
@@ -1516,6 +1534,28 @@ export default function TimelinePanel({
               makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),
             )
           }),
+          // BL-46 — Add Modifier ▸ (track-scope)
+          {
+            kind: 'submenu', label: '+ Add Modifier', disabled: false,
+            items: BL46_MODIFIER_TYPES.map((type) => ({
+              kind: 'action' as const,
+              label: BL46_MODIFIER_LABEL[type] ?? type,
+              shortcut: undefined,
+              disabled: false,
+              onSelect: () => {
+                const m: CurveModifier = {
+                  id: nextModifierId(),
+                  type, enabled: true, blendMode: 'add', weight: 1,
+                  parameters: defaultParametersFor(type),
+                }
+                dispatchCommand(makeAddCurveModifierCmd(
+                  selectedTimelineId,
+                  { kind: 'track', target: track.target },
+                  m,
+                ))
+              },
+            })),
+          },
         ]
         if (layerIdOnTrack && propertyPath && (onEditWire || onWireRequest)) {
           items.push({ kind: 'separator' })

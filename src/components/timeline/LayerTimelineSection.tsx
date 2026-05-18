@@ -223,6 +223,15 @@ export default function LayerTimelineSection({
                 {track.outOfRange && (track.outOfRange.before !== 'constant' || track.outOfRange.after !== 'constant') && (
                   <span className="ml-1 text-purple-400" title="Out-of-Range behavior set">●</span>
                 )}
+                {/* BL-46 — modifier-count badge (track-scope). Hidden when 0. */}
+                {track.modifiers && track.modifiers.length > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center px-1 rounded
+                                   text-[8px] leading-none text-blue-200 bg-blue-900/60
+                                   border border-blue-700/50"
+                        title={`${track.modifiers.length} curve modifier(s) on this track`}>
+                    ƒ{track.modifiers.length}
+                  </span>
+                )}
               </span>
               {/* BL-05: 🔗 wire indicator (sky-tinted when wired, click opens editor) */}
               {wireOnProp && onEditWire && (

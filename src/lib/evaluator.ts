@@ -1,5 +1,6 @@
 import type { Timeline, Track, Keyframe } from './types'
 import { resolveOutOfRange } from './animation/out-of-range/resolvers'
+import { applyModifiers, hashTrackSeed } from './animation/modifiers/pipeline'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -96,17 +97,53 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
     offset !== 0 ? (kfs[kfs.length - 1].value as number) - (kfs[0].value as number) : 0
   const valueOffset = cycleValueDelta * offset
 
-  if (evalTime <= rangeStart) return (kfs[0].value as number) + valueOffset
-  if (evalTime >= rangeEnd) return (kfs[kfs.length - 1].value as number) + valueOffset
-
-  // Binary search for the keyframe bracket — O(log n)
-  let lo = 0, hi = kfs.length - 2
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    if (kfs[mid + 1].timeMs <= evalTime) lo = mid + 1
-    else hi = mid
+  // Resolve the kf bracket so we can compute the base value and
+  // pass segment timing into the modifier pipeline below.
+  let baseValue: number
+  let segStartMs: number
+  let segEndMs:   number
+  let leadingKf:  Keyframe
+  if (evalTime <= rangeStart) {
+    baseValue = (kfs[0].value as number) + valueOffset
+    leadingKf = kfs[0]
+    segStartMs = kfs[0].timeMs
+    segEndMs   = kfs[Math.min(1, kfs.length - 1)].timeMs
+  } else if (evalTime >= rangeEnd) {
+    baseValue = (kfs[kfs.length - 1].value as number) + valueOffset
+    leadingKf = kfs[Math.max(0, kfs.length - 2)]
+    segStartMs = leadingKf.timeMs
+    segEndMs   = kfs[kfs.length - 1].timeMs
+  } else {
+    // Binary search for the keyframe bracket — O(log n)
+    let lo = 0, hi = kfs.length - 2
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (kfs[mid + 1].timeMs <= evalTime) lo = mid + 1
+      else hi = mid
+    }
+    leadingKf = kfs[lo]
+    baseValue = interpolateKeyframes(kfs[lo], kfs[lo + 1], evalTime) + valueOffset
+    segStartMs = kfs[lo].timeMs
+    segEndMs   = kfs[lo + 1].timeMs
   }
-  return interpolateKeyframes(kfs[lo], kfs[lo + 1], evalTime) + valueOffset
+
+  // BL-46: apply segment-scope then track-scope modifier stacks. Both are
+  // optional — undefined / empty arrays pass through the base value
+  // unchanged. The ctx exposes pre-computed timing so noise / fractal
+  // modifiers (BL-47+) can read deterministic seeds.
+  const hasSegmentMods = leadingKf.segmentModifiers && leadingKf.segmentModifiers.length > 0
+  const hasTrackMods   = track.modifiers && track.modifiers.length > 0
+  if (!hasSegmentMods && !hasTrackMods) return baseValue
+
+  const durationMs = Math.max(1, segEndMs - segStartMs)
+  const localT = Math.max(0, Math.min(1, (evalTime - segStartMs) / durationMs))
+  const seed = hashTrackSeed(`${track.target}`)
+  const ctx = { timeMs: evalTime, localT, segmentStartMs: segStartMs, segmentEndMs: segEndMs, durationMs, seed }
+
+  let value = baseValue
+  if (hasSegmentMods) value = applyModifiers(leadingKf.segmentModifiers, value, ctx)
+  if (hasTrackMods)   value = applyModifiers(track.modifiers,             value, ctx)
+  return value
 }
 
 /** Evaluate all timelines and return a map of property path → computed value. */

@@ -44,6 +44,7 @@ import ToolGroup, {
 import ToastContainer  from '@/components/Toast/ToastContainer'
 import { toast }       from '@/lib/toast/toast'
 import KeyframeInspector from '@/components/panels/KeyframeInspector'
+import CurveModifierStackPanel from '@/components/panels/CurveModifierStackPanel'
 import ParametersPanel     from '@/components/panels/ParametersPanel'
 import EventsPanel         from '@/components/panels/EventsPanel'
 import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
@@ -137,6 +138,7 @@ export default function BuilderPage() {
   // with the registry below.
   const dock = useDockLayout([
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
+    'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
@@ -793,6 +795,7 @@ export default function BuilderPage() {
       { id: 'properties',     title: 'Properties',     render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
+      { id: 'curveModifiers', title: 'Modifiers',      render: () => null },
       { id: 'parameters',     title: 'Parameters',     render: () => null },
       { id: 'events',         title: 'Events',         render: () => null },
       { id: 'motionBinding',  title: 'Bindings',       render: () => null },
@@ -1226,6 +1229,17 @@ export default function BuilderPage() {
                     onTimeChange={handleSeek}
                     selectedKfIds={selectedKfIds}
                     onSelectKeyframes={setSelectedKfIds}
+                  />
+                ),
+              },
+              {
+                id: 'curveModifiers', title: 'Modifiers',
+                render: () => (
+                  <CurveModifierStackPanel
+                    scene={scene}
+                    selectedTimelineId={selectedTlId}
+                    selectedKfIds={selectedKfIds}
+                    editor={editor}
                   />
                 ),
               },

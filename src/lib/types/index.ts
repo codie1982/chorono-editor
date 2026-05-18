@@ -95,3 +95,10 @@ export {
   isMarkerTrack, isStateTrack, isTriggerTrack,
   asPropertyTrack, propertyTracksOf,
 } from '../timeline/tracks'
+
+// ── Curve Modifier Stack (BL-46) ────────────────────────────────────────────
+export type {
+  CurveModifierType, CurveBlendMode, CurveModifier, CurveModifierContext,
+} from '../animation/modifiers/types'
+export { defaultParametersFor } from '../animation/modifiers/builtins'
+export { applyModifiers, blendModifierValue, hashTrackSeed } from '../animation/modifiers/pipeline'
