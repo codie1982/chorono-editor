@@ -7,8 +7,8 @@ function makeRampTrack(outOfRange?: Track['outOfRange']): Track {
   return {
     target: 'layers.x.opacity',
     keyframes: [
-      { id: 'k1', timeMs: 0, value: 0 },
-      { id: 'k2', timeMs: 1000, value: 100 },
+      { id: 'k1', timeMs: 0,    value: 0,   easing: { type: 'linear' } },
+      { id: 'k2', timeMs: 1000, value: 100, easing: { type: 'linear' } },
     ],
     outOfRange,
   }
