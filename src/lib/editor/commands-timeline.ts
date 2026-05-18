@@ -98,6 +98,27 @@ export function makeUpdateMarkerCmd(
   }
 }
 
+/** Move-marker command (BL-11) — separate from update so drag commits aren't
+ *  conflated with rename/color edits in the undo stack. */
+export function makeMoveMarkerCmd(
+  timelineId: string,
+  markerId: string,
+  fromMs: number,
+  toMs: number,
+): EditorCommand {
+  return {
+    label: 'Move Marker',
+    execute: (scene) =>
+      mapTimelineMarkers(scene, timelineId, (ms) =>
+        ms.map((m) => (m.id !== markerId ? m : { ...m, timeMs: toMs }))
+      ),
+    undo: (scene) =>
+      mapTimelineMarkers(scene, timelineId, (ms) =>
+        ms.map((m) => (m.id !== markerId ? m : { ...m, timeMs: fromMs }))
+      ),
+  }
+}
+
 // ── Events (BL-36) ───────────────────────────────────────────────────────────
 
 function mapTimelineEvents(

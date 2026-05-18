@@ -2,10 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
-  TimelineSegment,
+  TimelineSegment, TimelineMarker,
 } from '@/lib/types'
 import { evaluateTrack } from '@/lib/evaluator'
-import { newTimeline, nextKfId, newTimelineSegment } from '@/lib/defaults'
+import { newTimeline, nextKfId, newTimelineSegment, newMarker } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
   makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd, makeMoveKfCmd,
@@ -16,6 +16,8 @@ import {
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
   makeAddEventCmd, makeDeleteEventCmd, makeUpdateEventCmd,
+  makeAddMarkerCmd, makeDeleteMarkerCmd, makeUpdateMarkerCmd, makeMoveMarkerCmd,
+  makeSetWorkAreaCmd,
 } from '@/lib/editor/commands-timeline'
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
@@ -45,6 +47,8 @@ import SegmentModal            from './modals/SegmentModal'
 import StaggerKeysModal, { type StaggerPreviewItem } from './modals/StaggerKeysModal'
 import ScaleHandlesOverlay     from './timeline/ScaleHandlesOverlay'
 import KeyframeSpreadsheet, { type KeyframeSheetRow } from './timeline/KeyframeSpreadsheet'
+import MarkerOverlay              from './timeline/MarkerOverlay'
+import WorkAreaOverlay            from './timeline/WorkAreaOverlay'
 import type { TimelineEvent } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { nextEventId } from '@/lib/defaults'
@@ -156,9 +160,23 @@ export default function TimelinePanel({
   }, [bookmarks, duration, onTimeChange])
 
   // Keyboard: Cmd/Ctrl+B = save bookmark · Cmd/Ctrl+1..9 = jump to slot.
+  // BL-11: [ / ] = jump to previous / next marker (no modifier — quick nav).
   // Scoped to when the timeline panel itself is hovered so it doesn't fight
   // with other panels' shortcuts. Skips when typing in inputs.
   const [timelineHovered, setTimelineHovered] = useState(false)
+
+  // BL-11: jump to nearest marker in a direction. Uses currentTimeMs as anchor;
+  // no markers → no-op. Wrap-around could be added later if requested.
+  const jumpToAdjacentMarker = useCallback((direction: 'prev' | 'next') => {
+    const markers = timeline?.markers
+    if (!markers || markers.length === 0) return
+    const sorted = [...markers].sort((a, b) => a.timeMs - b.timeMs)
+    const target = direction === 'prev'
+      ? [...sorted].reverse().find((m) => m.timeMs < currentTimeMs - 0.5)
+      : sorted.find((m) => m.timeMs > currentTimeMs + 0.5)
+    if (target) onTimeChange(Math.max(0, Math.min(duration, target.timeMs)))
+  }, [timeline, currentTimeMs, duration, onTimeChange])
+
   useEffect(() => {
     if (!timelineHovered) return
     const onKey = (e: KeyboardEvent) => {
@@ -171,10 +189,15 @@ export default function TimelinePanel({
       if (meta && /^[1-9]$/.test(e.key)) {
         e.preventDefault(); jumpToBookmark(parseInt(e.key, 10) - 1); return
       }
+      // BL-11: marker navigation — plain [ / ] (no modifier).
+      if (!meta && !e.altKey && !e.shiftKey) {
+        if (e.key === '[') { e.preventDefault(); jumpToAdjacentMarker('prev'); return }
+        if (e.key === ']') { e.preventDefault(); jumpToAdjacentMarker('next'); return }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [timelineHovered, saveBookmark, jumpToBookmark])
+  }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker])
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
     // Step 1: solo mode — if any layer is solo'd, hide everything else.
@@ -513,6 +536,65 @@ export default function TimelinePanel({
     dispatchCommand(makeStaggerKeysCmd(items, offsetMs, direction))
   }, [staggerSelectionItems, selectedTimelineId, dispatchCommand])
 
+  // BL-11: Marker handlers — Cmd/Ctrl+click on ruler drops one, drag moves
+  // it, [/] keys navigate between them. All mutations route through the
+  // command stack so undo/redo works.
+  const createMarkerAt = useCallback((timeMs: number) => {
+    if (!selectedTimelineId) return
+    dispatchCommand(makeAddMarkerCmd(selectedTimelineId, newMarker(Math.round(timeMs))))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const moveMarker = useCallback((markerId: string, fromMs: number, toMs: number) => {
+    if (!selectedTimelineId || fromMs === toMs) return
+    dispatchCommand(makeMoveMarkerCmd(selectedTimelineId, markerId, fromMs, Math.round(toMs)))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const renameMarker = useCallback((marker: TimelineMarker, nextLabel: string) => {
+    if (!selectedTimelineId || nextLabel === marker.label) return
+    dispatchCommand(makeUpdateMarkerCmd(
+      selectedTimelineId, marker.id,
+      { label: marker.label, color: marker.color },
+      { label: nextLabel,    color: marker.color },
+    ))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const recolorMarker = useCallback((marker: TimelineMarker, nextColor: string) => {
+    if (!selectedTimelineId || nextColor === marker.color) return
+    dispatchCommand(makeUpdateMarkerCmd(
+      selectedTimelineId, marker.id,
+      { label: marker.label, color: marker.color },
+      { label: marker.label, color: nextColor    },
+    ))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const deleteMarker = useCallback((marker: TimelineMarker) => {
+    if (!selectedTimelineId) return
+    dispatchCommand(makeDeleteMarkerCmd(selectedTimelineId, marker))
+  }, [selectedTimelineId, dispatchCommand])
+
+  // BL-11: Toolbar callback — initialize work area covering full duration if
+  // none exists, otherwise clear it. The drag handles take care of fine-tuning.
+  const toggleWorkArea = useCallback(() => {
+    if (!selectedTimelineId || !timeline) return
+    const inMs  = timeline.workAreaInMs
+    const outMs = timeline.workAreaOutMs
+    if (inMs == null || outMs == null) {
+      dispatchCommand(makeSetWorkAreaCmd(selectedTimelineId, inMs, outMs, 0, duration))
+    } else {
+      dispatchCommand(makeSetWorkAreaCmd(selectedTimelineId, inMs, outMs, undefined, undefined))
+    }
+  }, [selectedTimelineId, timeline, duration, dispatchCommand])
+
+  // Apply a work-area drag commit.
+  const setWorkAreaRange = useCallback((nextIn: number, nextOut: number) => {
+    if (!selectedTimelineId || !timeline) return
+    dispatchCommand(makeSetWorkAreaCmd(
+      selectedTimelineId,
+      timeline.workAreaInMs, timeline.workAreaOutMs,
+      Math.round(nextIn), Math.round(nextOut),
+    ))
+  }, [selectedTimelineId, timeline, dispatchCommand])
+
   // BL-07: Shift+drag on the ruler → select every keyframe whose time falls
   // inside the dragged [startMs, endMs] window. addToExisting=true (Shift+
   // Ctrl/Cmd) merges with the current selection instead of replacing it.
@@ -581,10 +663,13 @@ export default function TimelinePanel({
   const [staggerModalOpen, setStaggerModalOpen] = useState(false)
   const [keySheetOpen,     setKeySheetOpen]     = useState(false)
 
+  // BL-11: Marker right-click target — set by MarkerOverlay's onContextMenu.
+  const [ctxMarker, setCtxMarker] = useState<{ markerId: string } | null>(null)
+
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setCtxKf(null); setCtxTrackArea(null); setCtxTrackHeader(null)
+    setCtxKf(null); setCtxTrackArea(null); setCtxTrackHeader(null); setCtxMarker(null)
     setCtxLayerBar({ layerId })
     ctxMenu.open(e)
   }, [ctxMenu])
@@ -593,20 +678,20 @@ export default function TimelinePanel({
     e.preventDefault()
     e.stopPropagation()
     if (!selectedKfIds.has(kfId)) onSelectKeyframes(new Set([kfId]))
-    setCtxLayerBar(null); setCtxTrackArea(null); setCtxTrackHeader(null)
+    setCtxLayerBar(null); setCtxTrackArea(null); setCtxTrackHeader(null); setCtxMarker(null)
     setCtxKf({ trackTarget, kfId })
     ctxMenu.open(e)
   }, [selectedKfIds, onSelectKeyframes, ctxMenu])
 
   const openTrackAreaMenu = useCallback((trackTarget: string, timeMs: number, e: React.MouseEvent) => {
-    setCtxKf(null); setCtxLayerBar(null); setCtxTrackHeader(null)
+    setCtxKf(null); setCtxLayerBar(null); setCtxTrackHeader(null); setCtxMarker(null)
     setCtxTrackArea({ trackTarget, timeMs })
     ctxMenu.open(e)
   }, [ctxMenu])
 
   const openTrackHeaderMenu = useCallback((trackTarget: string, e: React.MouseEvent) => {
     e.preventDefault()
-    setCtxKf(null); setCtxLayerBar(null); setCtxTrackArea(null)
+    setCtxKf(null); setCtxLayerBar(null); setCtxTrackArea(null); setCtxMarker(null)
     setCtxTrackHeader({ trackTarget })
     ctxMenu.open(e)
   }, [ctxMenu])
@@ -765,6 +850,8 @@ export default function TimelinePanel({
         onGhostUpdate={onGhostUpdate}
         onGhostToggle={onGhostToggle}
         onGhostPreset={onGhostPreset}
+        onToggleWorkArea={toggleWorkArea}
+        workAreaActive={timeline?.workAreaInMs != null && timeline?.workAreaOutMs != null}
       />
 
       <TrackToolBar
@@ -816,7 +903,37 @@ export default function TimelinePanel({
             clientXToMs={vp.clientXToMs}
             onSeek={onTimeChange}
             onRangeSelect={rangeSelectKfs}
+            onCreateMarker={createMarkerAt}
           />
+          {/* BL-11: Work Area brackets — render below the ruler so the shaded
+              tint sits on top of ticks without hiding them. */}
+          {timeline && (
+            <WorkAreaOverlay
+              inMs={timeline.workAreaInMs}
+              outMs={timeline.workAreaOutMs}
+              durationMs={duration}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              onChange={setWorkAreaRange}
+            />
+          )}
+          {/* BL-11: Marker flags */}
+          {timeline?.markers && timeline.markers.length > 0 && (
+            <MarkerOverlay
+              markers={timeline.markers}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              durationMs={duration}
+              onSeek={onTimeChange}
+              onMoveMarker={(m, fromMs, toMs) => moveMarker(m.id, fromMs, toMs)}
+              onContextMenu={(m, e) => {
+                e.preventDefault()
+                setCtxKf(null); setCtxLayerBar(null); setCtxTrackArea(null); setCtxTrackHeader(null)
+                setCtxMarker({ markerId: m.id })
+                ctxMenu.open(e)
+              }}
+            />
+          )}
           {/* BL-07: Scale Handles overlay — only when 2+ kfs span a real range */}
           {selectionTimeBounds && (
             <ScaleHandlesOverlay
@@ -1318,6 +1435,55 @@ export default function TimelinePanel({
             x={ctxMenu.state!.x} y={ctxMenu.state!.y}
             items={items}
             onClose={() => { ctxMenu.close(); setCtxTrackArea(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Marker right-click menu (BL-11) ──────────────────────────────── */}
+      {ctxMenu.isOpen && ctxMarker && selectedTimelineId && timeline && (() => {
+        const marker = timeline.markers?.find((m) => m.id === ctxMarker.markerId)
+        if (!marker) return null
+        const items = [
+          {
+            kind: 'action' as const,
+            label: 'Rename…',
+            shortcut: undefined, disabled: false,
+            onSelect: () => {
+              const next = window.prompt('Marker label', marker.label)
+              if (next != null) renameMarker(marker, next)
+            },
+          },
+          {
+            kind: 'submenu' as const,
+            label: `Color (${marker.color ?? 'default'})`,
+            items: ['#a78bfa', '#fbbf24', '#34d399', '#f87171', '#22d3ee', '#fb7185', '#e5e7eb']
+              .map((c) => ({
+                kind: 'action' as const,
+                label: `${marker.color === c ? '✓ ' : '   '}${c}`,
+                disabled: false,
+                onSelect: () => recolorMarker(marker, c),
+              })),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: `Jump to marker  (${Math.round(marker.timeMs)}ms)`,
+            shortcut: undefined, disabled: false,
+            onSelect: () => onTimeChange(marker.timeMs),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: 'Delete Marker',
+            shortcut: '⌫', disabled: false,
+            onSelect: () => deleteMarker(marker),
+          },
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxMarker(null) }}
           />
         )
       })()}

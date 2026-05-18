@@ -14,6 +14,8 @@ interface Props {
   /** BL-07: Shift+drag on ruler → select all keyframes in the dragged range.
    *  `addToExisting` true when Shift+Ctrl/Cmd is held (additive). */
   onRangeSelect?: (startMs: number, endMs: number, addToExisting: boolean) => void
+  /** BL-11: Ctrl/Cmd+Click on ruler → drop a marker at the clicked time. */
+  onCreateMarker?: (timeMs: number) => void
 }
 
 /**
@@ -29,7 +31,7 @@ interface Props {
 export default function TimelineRuler(props: Props) {
   const {
     durationMs, currentTimeMs, totalContentPx, scrollLeftPx,
-    msToScreenPx, clientXToMs, onSeek, onRangeSelect,
+    msToScreenPx, clientXToMs, onSeek, onRangeSelect, onCreateMarker,
   } = props
 
   const scrub = usePlayheadScrub({ onSeek, clientXToMs, durationMs })
@@ -41,6 +43,16 @@ export default function TimelineRuler(props: Props) {
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
+    // BL-11: Ctrl/Cmd+Click → drop a marker at this time. Takes priority over
+    // range-select so users with both modifiers held still get the marker
+    // action (more common than "shift+ctrl range select with markers").
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && onCreateMarker) {
+      const ms = Math.max(0, Math.min(durationMs, clientXToMs(e.clientX)))
+      onCreateMarker(ms)
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     if (e.shiftKey && onRangeSelect) {
       // Range select mode — capture pointer, suppress scrub
       ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
@@ -52,7 +64,7 @@ export default function TimelineRuler(props: Props) {
       return
     }
     scrub.onPointerDown(e)
-  }, [clientXToMs, durationMs, onRangeSelect, scrub])
+  }, [clientXToMs, durationMs, onRangeSelect, onCreateMarker, scrub])
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (rangeStartRef.current) {
@@ -110,7 +122,11 @@ export default function TimelineRuler(props: Props) {
   return (
     <div
       className="h-6 bg-gray-800 border-b border-gray-700 relative cursor-ew-resize select-none overflow-hidden"
-      title={onRangeSelect ? 'Click/drag: scrub · Shift+drag: select keyframes in range' : 'Drag to scrub'}
+      title={[
+        'Click/drag: scrub playhead',
+        onRangeSelect ? 'Shift+drag: select keyframes in range' : null,
+        onCreateMarker ? 'Cmd/Ctrl+click: add marker' : null,
+      ].filter(Boolean).join(' · ')}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

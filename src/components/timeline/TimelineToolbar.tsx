@@ -34,6 +34,10 @@ interface Props {
   onGhostUpdate: (patch: Partial<TimelineGhostSettings>) => void
   onGhostToggle: () => void
   onGhostPreset: (preset: 'off' | 'light' | 'medium' | 'heavy') => void
+  /** BL-11 — Toggle work area: create covering full duration if none, clear if set. */
+  onToggleWorkArea?: () => void
+  /** BL-11 — True when work area is currently defined (changes button look). */
+  workAreaActive?: boolean
 }
 
 const KEYFRAME_PRESETS: Array<{ label: string; props: string[] }> = [
@@ -61,6 +65,7 @@ export default function TimelineToolbar(props: Props) {
     onModeChange, onKeyframeProperties,
     ghostSettings, selectedLayerIds,
     onGhostUpdate, onGhostToggle, onGhostPreset,
+    onToggleWorkArea, workAreaActive,
   } = props
 
   // ── Keyframe dropdown ───────────────────────────────────────────────────
@@ -184,6 +189,23 @@ export default function TimelineToolbar(props: Props) {
         onToggle={onGhostToggle}
         onApplyPreset={onGhostPreset}
       />
+
+      {/* BL-11 — Work area toggle (create / clear) */}
+      {onToggleWorkArea && (
+        <button
+          onClick={onToggleWorkArea}
+          title={workAreaActive
+            ? 'Clear work area  [ ]'
+            : 'Create work area covering the full duration · drag the brackets to adjust  [ ]'}
+          className={`px-2 py-1 text-[10px] rounded font-mono border transition-colors ${
+            workAreaActive
+              ? 'bg-sky-700 hover:bg-sky-600 text-white border-sky-500'
+              : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border-gray-600'
+          }`}
+        >
+          [ ] Work
+        </button>
+      )}
 
       {/* Zoom slider (replaces cursor-anchored wheel zoom — see useTimelineViewport).
           Logarithmic mapping so 1× sits near the middle of the track. */}
