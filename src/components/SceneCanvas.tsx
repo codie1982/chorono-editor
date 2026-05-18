@@ -5,6 +5,7 @@ import {
 import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
+import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
@@ -1718,7 +1719,16 @@ export default function SceneCanvas({
   }, [])
 
   // ── Selection frame geometry (uses preview layer state) ──────────────────
-  const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
+  //
+  // BL-59 Phase 3 — Instance layers carry no geometry; the gizmo needs the
+  // source's size/path/shape to draw resize handles in the right spots.
+  // We resolve the instance to its source HERE so all gizmo / bbox code
+  // below sees a "proxy" layer with full visual fields. The instance's
+  // own transform/opacity stay intact (resolveInstanceLayer keeps them).
+  const rawSelectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
+  const selectedLayer = rawSelectedLayer?.instanceOf
+    ? (resolveInstanceLayer(rawSelectedLayer, scene.layers) ?? rawSelectedLayer)
+    : rawSelectedLayer
 
   // ── 3DS Max-style gizmo visibility per toolMode ──────────────────────────
   // Each mode shows only its own handle set so the user always sees the

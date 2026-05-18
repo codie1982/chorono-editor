@@ -86,11 +86,13 @@ describe('cloneSingleLayer', () => {
     expect(() => cloneSingleLayer(src, { mode: 'virtual' })).toThrow()
   })
 
-  it('instance mode produces a tagged copy (geometry identical, mode recorded)', () => {
+  it('instance mode strips visual fields + sets instanceOf reference', () => {
     const src = makeRect()
     const { clonedLayer, metadata } = cloneSingleLayer(src, { mode: 'instance' })
     expect(clonedLayer.id).not.toBe(src.id)
-    expect(clonedLayer.shape).toBe('rect')
+    expect(clonedLayer.instanceOf).toBe(src.id)
+    // Visual fields stripped — resolved at render time via InstanceResolver
+    expect(clonedLayer.shape).toBeUndefined()
     expect(metadata.mode).toBe('instance')
     expect(metadata.sourceId).toBe(src.id)
   })

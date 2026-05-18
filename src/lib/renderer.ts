@@ -3,6 +3,7 @@ import { buildEffectsFilter } from './types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from './evaluator'
 import { evaluateMotionPath } from './motionPath'
 import { drawPathStrokeLayer } from './runtime/pathStrokeRenderer'
+import { resolveInstanceLayer } from './clone/InstanceResolver'
 import {
   resolveTextContent, getStringParamBinding,
   type ParamValueMap,
@@ -1040,7 +1041,16 @@ export function hitTestLayersAt(
     const lx = canvasX - x - po.x
     const ly = canvasY - y - po.y
 
-    if (hitTestLayerLocal(layer, lx, ly)) hits.push(layer.id)
+    // BL-59 Phase 3 — Instance layers have no geometry of their own;
+    // resolve to the source so hit-test uses the source's shape/size.
+    let hitLayer: Layer = layer
+    if (layer.instanceOf) {
+      const resolved = resolveInstanceLayer(layer, scene.layers)
+      if (!resolved) continue   // source missing → not hittable
+      hitLayer = resolved
+    }
+
+    if (hitTestLayerLocal(hitLayer, lx, ly)) hits.push(layer.id)
   }
 
   // BL-03: Group AABB hit-test. After per-leaf hits are collected, walk

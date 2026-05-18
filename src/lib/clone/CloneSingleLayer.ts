@@ -44,12 +44,34 @@ export function cloneSingleLayer<L extends Layer>(
     )
   }
 
-  // 'copy' and 'instance' both produce a fresh layer via JSON deep-clone +
-  // new id. The DIFFERENCE is metadata: 'instance' records sourceId so the
-  // renderer (Phase 3) can override geometry to mirror source mutations.
-  // For MVP+1 we ship 'instance' as a tagged copy — visually identical to
-  // 'copy' but discoverable via layerMetaById for future hot-swap rendering.
+  // 'copy' = full deep clone with independent visual fields.
+  // 'instance' (Phase 3) = thin reference layer: visual fields STRIPPED;
+  //   resolved at render time via InstanceResolver from source.
+  //
+  // We start with a deep clone so id/name/transform/opacity/parentId are
+  // all set, then for instance mode we strip the visual fields so the
+  // renderer falls back to the source.
   const clonedLayer = cloneLayerForDuplicate(source) as L
+
+  if (mode === 'instance') {
+    // Reference the source.
+    clonedLayer.instanceOf = source.id
+    // Strip ALL visual fields — they'll be resolved from the source at
+    // every render frame (so source edits propagate live).
+    const stripKeys: Array<keyof Layer> = [
+      'shape', 'shapeKind', 'shapeParams',
+      'path', 'style', 'size',
+      'text', 'image', 'video', 'audio',
+      'pathStroke', 'motionPath', 'followPath',
+      'masks', 'internalGrid', 'repeater',
+    ]
+    for (const k of stripKeys) {
+      delete (clonedLayer as Record<string, unknown>)[k as string]
+    }
+    // type intentionally stays — resolveInstanceLayer overwrites it with
+    // the source's type, but keeping a plausible value here helps any
+    // legacy code paths that read layer.type before resolution.
+  }
 
   // Apply offset in the source's local-translation space (simple x/y add).
   // World/local/parent space handling lives in ArrayTransformResolver —
