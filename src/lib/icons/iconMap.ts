@@ -102,6 +102,12 @@ export const ICON_MAP: Record<string, IconPosition> = {
   downloadBox:   { row: 6, col: 7 },
   lightningBox:  { row: 6, col: 8 },
   scrollMouse:   { row: 6, col: 9 },
+
+  // ── BL-24 placeholders ────────────────────────────────────────────────────
+  // Sprite sheet has no spiral/wave cells yet. Reuse visually similar icons
+  // until proper sprite cells are designed (separate art task).
+  spiral:        { row: 1, col: 0 },  // borrows 'arc' (curved shape)
+  wave:          { row: 0, col: 4 },  // borrows 'line' (horizontal stroke)
 }
 
 /** Resolve a position to CSS background-position value */
@@ -130,6 +136,8 @@ export const LAYER_TYPE_ICON: Record<string, string> = {
   pie:              'pie',
   capsule:          'capsule',
   blob:             'blob',
+  spiral:           'spiral',   // BL-24
+  wave:             'wave',     // BL-24
   // layer types
   text:             'text',
   image:            'image',
@@ -178,7 +186,9 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Arc',              type: 'arc',              icon: 'arc',              available: true  },
       { label: 'Pie',              type: 'pie',              icon: 'pie',              available: false },
       { label: 'Capsule',          type: 'capsule',          icon: 'capsule',          available: true  },
-      { label: 'Blob',             type: 'blob',             icon: 'blob',             available: false },
+      { label: 'Blob',             type: 'blob',             icon: 'blob',             available: true  }, // BL-24
+      { label: 'Spiral',           type: 'spiral',           icon: 'spiral',           available: true  }, // BL-24
+      { label: 'Wave',             type: 'wave',             icon: 'wave',             available: true  }, // BL-24
     ],
   },
   {

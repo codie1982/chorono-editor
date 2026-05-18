@@ -242,6 +242,7 @@ export function applyPatchToLayer(prev: Layer, patch: UpdateLayerParams): Layer 
 const LAYER_TYPE_ENUM = ['shape', 'text', 'group']
 const SHAPE_KIND_ENUM = [
   'rect', 'ellipse', 'polygon', 'star', 'ring', 'arc', 'line', 'arrow', 'capsule',
+  'spiral', 'wave', 'blob',   // BL-24
 ]
 const FONT_WEIGHT_ENUM = ['normal', 'bold', '300', '400', '500', '600', '700', '800']
 const TEXT_ALIGN_ENUM = ['left', 'center', 'right']
@@ -262,10 +263,20 @@ const COMMON_LAYER_PROPS = {
   strokeColor:  { type: 'string' },
   strokeWidth:  { type: 'number' },
   cornerRadius: { type: 'number' },
-  sides:        { type: 'number', description: 'Edge count for polygon/star (3-12)' },
+  sides:        { type: 'number', description: 'Edge count for polygon/star (3-12) or blob (5-64)' },
   innerRadius:  { type: 'number', description: 'Inner radius for star/ring' },
   startAngle:   { type: 'number', description: 'Start angle for arc/ring in degrees' },
   endAngle:     { type: 'number', description: 'End angle for arc/ring in degrees' },
+  // ── BL-24: Spiral / Wave / Blob ──────────────────────────────────────────
+  turns:        { type: 'number', description: 'Spiral turn count (0.5–20)' },
+  startRadius:  { type: 'number', description: 'Spiral inner starting radius in px' },
+  endRadius:    { type: 'number', description: 'Spiral outer ending radius in px' },
+  tightness:    { type: 'number', description: 'Spiral radius interpolation exponent (1=linear)' },
+  amplitude:    { type: 'number', description: 'Wave peak height in px' },
+  frequency:    { type: 'number', description: 'Wave full-cycle count across width (0.1–50)' },
+  phase:        { type: 'number', description: 'Wave phase offset in radians' },
+  irregularity: { type: 'number', minimum: 0, maximum: 1, description: 'Blob noise ratio 0–1' },
+  seed:         { type: 'number', description: 'Blob deterministic seed integer' },
   text:         { type: 'string', description: 'Text content (required when type=text)' },
   fontSize:     { type: 'number' },
   fontFamily:   { type: 'string' },

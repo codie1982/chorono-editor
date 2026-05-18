@@ -264,6 +264,65 @@ export function newCapsuleLayer(): Layer {
   }
 }
 
+// ── BL-24: Spiral / Wave / Blob factories ────────────────────────────────────
+//
+// Spiral & Wave default to STROKE only (open paths — fill would be meaningless).
+// Blob defaults to FILL (closed organic shape).
+
+export function newSpiralLayer(): Layer {
+  layerCounter++
+  const w = 120, h = 120
+  return {
+    id:        `spiral_${layerCounter}`,
+    name:      `Spiral ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'spiral',
+    shapeParams:{ kind: 'spiral', turns: 3, startRadius: 4, endRadius: 56, tightness: 1 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { stroke: { color: '#8B5CF6', width: 2, lineCap: 'round', lineJoin: 'round' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newWaveLayer(): Layer {
+  layerCounter++
+  const w = 200, h = 80
+  return {
+    id:        `wave_${layerCounter}`,
+    name:      `Wave ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'wave',
+    shapeParams:{ kind: 'wave', amplitude: 20, frequency: 2, phase: 0 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { stroke: { color: '#06B6D4', width: 2, lineCap: 'round', lineJoin: 'round' } },
+    size:    { width: w, height: h },
+  }
+}
+
+export function newBlobLayer(): Layer {
+  layerCounter++
+  const w = 120, h = 120
+  return {
+    id:        `blob_${layerCounter}`,
+    name:      `Blob ${layerCounter}`,
+    type:       'shape',
+    shapeKind:  'blob',
+    shapeParams:{ kind: 'blob', sides: 8, irregularity: 0.4, seed: 42 },
+    transform: { ...DEFAULT_TRANSFORM,
+                 x: 60 + (layerCounter % 5) * 20, y: 60 + (layerCounter % 5) * 20,
+                 anchorX: w / 2, anchorY: h / 2 },
+    opacity: 1,
+    style:   { fill: { type: 'solid', color: '#10B981' } },
+    size:    { width: w, height: h },
+  }
+}
+
 export function newBezierPathLayer(): Layer {
   layerCounter++
   // Default starter: a smooth-curve "S" — easy to recognise as a real Bezier
