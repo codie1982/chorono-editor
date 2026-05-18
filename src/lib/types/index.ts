@@ -107,3 +107,15 @@ export { applyModifiers, blendModifierValue, hashTrackSeed } from '../animation/
 export type { BezierTuple } from '../animation/timeWarp/types'
 export { IDENTITY_BEZIER } from '../animation/timeWarp/types'
 export { sampleBezier } from '../animation/timeWarp/sampler'
+
+// ── Procedural Track Controllers (BL-50) ────────────────────────────────────
+export type {
+  WaveformShape, WaveformControllerParams,
+  NoiseControllerParams, TrackController,
+} from '../animation/controllers/types'
+export {
+  DEFAULT_WAVEFORM_PARAMS, DEFAULT_NOISE_PARAMS,
+} from '../animation/controllers/types'
+export {
+  sampleController, sampleWaveform, sampleNoise,
+} from '../animation/controllers/sample'

@@ -208,14 +208,23 @@ export default function LayerTimelineSection({
                 onTrackHeaderContextMenu(track.target, e)
               } : undefined}
             >
-              <button
-                onClick={() => onAddKeyframeAtPlayhead(track.target)}
-                className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
-                           text-yellow-400 hover:text-yellow-200 hover:bg-yellow-600/30
-                           border border-transparent hover:border-yellow-700/40 transition-colors
-                           text-[12px] leading-none font-bold"
-                title="Add keyframe at playhead (◆)"
-              >+</button>
+              {track.controller && track.controller.type !== 'keyframe' ? (
+                <span
+                  className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
+                             text-fuchsia-300 bg-fuchsia-900/40 border border-fuchsia-700/50
+                             text-[10px] leading-none font-bold"
+                  title={`Procedural: ${track.controller.type} (keyframes ignored)`}
+                >ƒ</span>
+              ) : (
+                <button
+                  onClick={() => onAddKeyframeAtPlayhead(track.target)}
+                  className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
+                             text-yellow-400 hover:text-yellow-200 hover:bg-yellow-600/30
+                             border border-transparent hover:border-yellow-700/40 transition-colors
+                             text-[12px] leading-none font-bold"
+                  title="Add keyframe at playhead (◆)"
+                >+</button>
+              )}
               <span className="flex-1 truncate text-[10px] font-mono text-gray-400 cursor-pointer hover:text-gray-200"
                     title={`${track.target}${track.outOfRange ? `  ·  OOR: ${track.outOfRange.before ?? 'constant'} ◀ ▶ ${track.outOfRange.after ?? 'constant'}` : ''}`}
                     onClick={() => onAddKeyframeAtPlayhead(track.target)}>

@@ -146,7 +146,13 @@ export interface Track {
    *  Amplitude 0 = no effect; 1 = bezier ∈ [0,1] becomes scale ∈ [0,2]. */
   multiplierCurve?: import('../animation/timeWarp/types').BezierTuple
   multiplierAmplitude?: number
-  // TODO(big-feature): controller type — currently every track is implicit
+  /** BL-50 — Procedural controller. When set, the track ignores its
+   *  `keyframes` array and sources value from a formula (waveform / noise).
+   *  Backward compat: undefined → keyframe controller (existing behavior).
+   *  Track modifiers + multiplier curve + out-of-range still apply on top
+   *  of the procedural output. */
+  controller?: import('../animation/controllers/types').TrackController
+  // TODO(big-feature): expression / compound / layered controllers —
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
   //   formula or procedural source instead of (or alongside) keyframes.

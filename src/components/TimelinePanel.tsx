@@ -27,9 +27,11 @@ import {
 } from '@/lib/editor/commands-layer'
 import {
   makeSetOutOfRangeCmd, makeAddCurveModifierCmd, nextModifierId,
+  makeSetTrackControllerCmd,
 } from '@/lib/editor/commands-track'
 import { defaultParametersFor } from '@/lib/types'
-import type { CurveModifier, CurveModifierType } from '@/lib/types'
+import type { CurveModifier, CurveModifierType, TrackController } from '@/lib/types'
+import { DEFAULT_WAVEFORM_PARAMS, DEFAULT_NOISE_PARAMS } from '@/lib/types'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
@@ -1549,6 +1551,38 @@ export default function TimelinePanel({
               makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),
             )
           }),
+          // BL-50 — Controller ▸ (switch between keyframe / waveform / noise)
+          {
+            kind: 'submenu', label: 'Controller', disabled: false,
+            items: [
+              {
+                kind: 'action' as const,
+                label: (!track.controller || track.controller.type === 'keyframe' ? '● ' : '  ') + 'Keyframe',
+                shortcut: undefined, disabled: false,
+                onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
+                  selectedTimelineId, track.target, track.controller, { type: 'keyframe' },
+                )),
+              },
+              {
+                kind: 'action' as const,
+                label: (track.controller?.type === 'waveform' ? '● ' : '  ') + 'Waveform (sine / square / saw)',
+                shortcut: undefined, disabled: false,
+                onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
+                  selectedTimelineId, track.target, track.controller,
+                  { type: 'waveform', waveform: { ...DEFAULT_WAVEFORM_PARAMS } },
+                )),
+              },
+              {
+                kind: 'action' as const,
+                label: (track.controller?.type === 'noise' ? '● ' : '  ') + 'Noise (deterministic fbm)',
+                shortcut: undefined, disabled: false,
+                onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
+                  selectedTimelineId, track.target, track.controller,
+                  { type: 'noise', noise: { ...DEFAULT_NOISE_PARAMS } },
+                )),
+              },
+            ],
+          },
           // BL-46 — Add Modifier ▸ (track-scope)
           {
             kind: 'submenu', label: '+ Add Modifier', disabled: false,

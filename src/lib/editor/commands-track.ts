@@ -176,6 +176,37 @@ export function nextModifierId(): string {
   return `mod_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
 }
 
+// ── Procedural Controller (BL-50) ───────────────────────────────────────────
+
+import type { TrackController } from '../animation/controllers/types'
+
+export function makeSetTrackControllerCmd(
+  timelineId: string,
+  target:     string,
+  prev:       TrackController | undefined,
+  next:       TrackController | undefined,
+): EditorCommand {
+  function apply(scene: ChronoScene, controller: TrackController | undefined): ChronoScene {
+    return {
+      ...scene,
+      timelines: scene.timelines.map((tl) =>
+        tl.id !== timelineId ? tl : {
+          ...tl,
+          tracks: tl.tracks.map((tr) => tr.target !== target ? tr : { ...tr, controller }),
+        }
+      ),
+    }
+  }
+  const label = next?.type === 'keyframe' || next === undefined
+    ? 'Reset Controller (Keyframe)'
+    : `Set Controller: ${next.type}`
+  return {
+    label,
+    execute: (scene) => apply(scene, next),
+    undo:    (scene) => apply(scene, prev),
+  }
+}
+
 // Keyframe is intentionally imported above to keep this file as the single
 // source for "everything that touches a Track from the editor". Re-export
 // for callers that already pull from commands-track.

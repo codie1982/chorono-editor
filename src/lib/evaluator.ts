@@ -2,6 +2,7 @@ import type { Timeline, Track, Keyframe } from './types'
 import { resolveOutOfRange } from './animation/out-of-range/resolvers'
 import { applyModifiers, hashTrackSeed } from './animation/modifiers/pipeline'
 import { sampleBezier } from './animation/timeWarp/sampler'
+import { sampleController } from './animation/controllers/sample'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -79,6 +80,41 @@ function interpolateKeyframes(kfA: Keyframe, kfB: Keyframe, timeMs: number): num
  *  Honors track.outOfRange (BL-45) by remapping timeMs into the keyframe range
  *  according to the track's before/after behavior (cycle/loop/pingPong/etc.). */
 export function evaluateTrack(track: Track, timeMs: number): number | null {
+  // BL-50: procedural controllers bypass the keyframe path entirely. Out-of-
+  // range (cycle/loop/pingPong) still pre-warps timeMs so a noise/waveform
+  // controller can naturally loop or ping-pong if the user wants. Track
+  // modifiers + multiplier curve still wrap the procedural output below.
+  if (track.controller && track.controller.type !== 'keyframe') {
+    const ctrl = track.controller
+    // For procedural controllers we don't have a kf range, so OOR is applied
+    // against the timeline-derived range hint when the user explicitly set
+    // OOR range overrides. Otherwise we just pass timeMs through.
+    let evalTimeProc = timeMs
+    if (track.outOfRange?.rangeStartMs != null && track.outOfRange?.rangeEndMs != null) {
+      const r = resolveOutOfRange(
+        timeMs, track.outOfRange,
+        track.outOfRange.rangeStartMs, track.outOfRange.rangeEndMs,
+      )
+      evalTimeProc = r.timeMs
+    }
+    let value = sampleController(ctrl, evalTimeProc)
+    // Track modifiers + multiplier curve still apply on top of the formula.
+    if (track.modifiers && track.modifiers.length > 0) {
+      const seed = hashTrackSeed(`${track.target}`)
+      value = applyModifiers(track.modifiers, value, {
+        timeMs: evalTimeProc, localT: 0,
+        segmentStartMs: 0, segmentEndMs: 0, durationMs: 1,
+        seed,
+      })
+    }
+    if (track.multiplierCurve && (track.outOfRange?.rangeStartMs != null) && (track.outOfRange?.rangeEndMs != null)) {
+      const dur = track.outOfRange.rangeEndMs - track.outOfRange.rangeStartMs
+      const tNorm = dur > 0 ? Math.max(0, Math.min(1, (evalTimeProc - track.outOfRange.rangeStartMs) / dur)) : 0
+      const amp = typeof track.multiplierAmplitude === 'number' ? track.multiplierAmplitude : 1
+      value *= 1 + (sampleBezier(track.multiplierCurve, tNorm) - 0.5) * amp * 2
+    }
+    return value
+  }
   // Keyframes are stored sorted; defensive sort here costs little for small arrays.
   const kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
   if (kfs.length === 0) return null
