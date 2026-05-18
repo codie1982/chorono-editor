@@ -45,6 +45,7 @@ import KeyframeInspector from '@/components/panels/KeyframeInspector'
 import ParametersPanel     from '@/components/panels/ParametersPanel'
 import EventsPanel         from '@/components/panels/EventsPanel'
 import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
+import WiringListPanel     from '@/components/panels/WiringListPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel           from '@/components/panels/SnapPanel'
@@ -133,7 +134,7 @@ export default function BuilderPage() {
   // with the registry below.
   const dock = useDockLayout([
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
-    'parameters', 'events', 'motionBinding', 'runtimePreview', 'assets', 'snap',
+    'parameters', 'events', 'motionBinding', 'wiring', 'runtimePreview', 'assets', 'snap',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
@@ -789,6 +790,7 @@ export default function BuilderPage() {
       { id: 'parameters',     title: 'Parameters',     render: () => null },
       { id: 'events',         title: 'Events',         render: () => null },
       { id: 'motionBinding',  title: 'Bindings',       render: () => null },
+      { id: 'wiring',         title: 'Wires',          render: () => null },
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
@@ -1209,6 +1211,17 @@ export default function BuilderPage() {
               {
                 id: 'motionBinding', title: 'Bindings',
                 render: () => <MotionBindingPanel scene={scene} editor={editor} />,
+              },
+              {
+                id: 'wiring', title: 'Wires',
+                render: () => (
+                  <WiringListPanel
+                    scene={scene}
+                    editor={editor}
+                    onEditWire={wireModal.openForEdit}
+                    onCreateWire={wireModal.openNew}
+                  />
+                ),
               },
               {
                 id: 'runtimePreview', title: 'Preview',
