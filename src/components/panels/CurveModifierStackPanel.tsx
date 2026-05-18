@@ -35,11 +35,13 @@ interface Props {
   editor: EditorStateReturn
 }
 
-// The 6 modifier types shipped in BL-46. Future sprints (47, 48, 49) add
-// more to the type union without changing this panel; we'll surface those
-// in the same dropdown when their evaluators land.
+// Modifier types with shipped evaluators. BL-46 foundation + BL-47 noise
+// pack today; BL-48/49 will append as those sprints land.
 const FOUNDATION_TYPES: CurveModifierType[] = [
+  // BL-46
   'sine', 'pulse', 'quantize', 'offset', 'scale', 'clamp',
+  // BL-47
+  'noise', 'fractalNoise', 'jitter', 'wave',
 ]
 
 const BLEND_MODES: { value: CurveBlendMode; label: string }[] = [
