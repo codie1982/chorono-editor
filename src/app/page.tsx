@@ -35,6 +35,8 @@ import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
 import JsonModal       from '@/components/JsonModal'
+import WireParameterModal  from '@/components/wiring/WireParameterModal'
+import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
 import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
 import ToastContainer  from '@/components/Toast/ToastContainer'
@@ -119,6 +121,8 @@ export default function BuilderPage() {
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
   const [showJson,        setShowJson]      = useState(false)
   const [showCompModal,   setShowCompModal] = useState(false)
+  // BL-05: WireParameterModal state — opened by PropertiesPanel 🔗, WiringListPanel, etc.
+  const wireModal = useWireModal()
   const [showHelp,        setShowHelp]      = useState(false)
   const [showAI,          setShowAI]        = useState(false)
 
@@ -1282,6 +1286,17 @@ export default function BuilderPage() {
           selectedLayerId={selectedLayerId}
           selectedTimelineId={selectedTlId}
           onClose={() => setShowAI(false)}
+        />
+      )}
+
+      {/* ── BL-05: Wire Parameter modal (formula-driven parameter wiring) ── */}
+      {wireModal.isOpen && (
+        <WireParameterModal
+          scene={scene}
+          editor={editor}
+          existingWire={wireModal.editWire}
+          preFilledTarget={wireModal.newTarget}
+          onClose={wireModal.close}
         />
       )}
 
