@@ -2,36 +2,41 @@
  * Hook for managing timeline ghost/onion-skin state and persistence.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { DEFAULT_TIMELINE_GHOST_SETTINGS } from '@/lib/types/editor'
 
 const STORAGE_KEY = 'chorono.timeline.ghost'
 
 export function useTimelineGhost() {
-  const [ghostSettings, setGhostSettings] = useState<TimelineGhostSettings>(() => {
-    // Load from localStorage or use defaults
-    if (typeof window === 'undefined') return DEFAULT_TIMELINE_GHOST_SETTINGS
+  // Always start with defaults so server and client first-render agree.
+  // Hydration from localStorage happens in the post-mount effect below —
+  // this avoids the React hydration mismatch when stored settings differ
+  // from defaults (e.g. enabled=true after a previous session toggled it on).
+  const [ghostSettings, setGhostSettings] = useState<TimelineGhostSettings>(
+    DEFAULT_TIMELINE_GHOST_SETTINGS,
+  )
+  // Skip the first persist effect until after we've hydrated from storage,
+  // so we don't overwrite the stored value with the bare defaults.
+  const hydratedRef = useRef(false)
 
+  // Post-mount: read localStorage and adopt the persisted settings if any.
+  useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
-        // Validate and merge with defaults (in case new fields were added)
-        return {
-          ...DEFAULT_TIMELINE_GHOST_SETTINGS,
-          ...parsed,
-        }
+        setGhostSettings({ ...DEFAULT_TIMELINE_GHOST_SETTINGS, ...parsed })
       }
     } catch {
-      // localStorage error or invalid JSON — fall through to default
+      // localStorage error or invalid JSON — keep defaults
     }
+    hydratedRef.current = true
+  }, [])
 
-    return DEFAULT_TIMELINE_GHOST_SETTINGS
-  })
-
-  // Persist to localStorage whenever settings change
+  // Persist to localStorage on any change, but only after hydration completes.
   useEffect(() => {
+    if (!hydratedRef.current) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(ghostSettings))
     } catch {
