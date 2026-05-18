@@ -32,11 +32,21 @@ export interface SceneExplorerRow {
   pinned: boolean
 }
 
+export interface SceneExplorerSort {
+  /** Sort accessor — receives a layer, returns a comparable value. */
+  accessor: (layer: Layer) => number | string | boolean
+  /** Direction. 'asc' = ascending. */
+  direction: 'asc' | 'desc'
+}
+
 export interface SceneExplorerFilterOptions {
   /** Layer ids whose children are hidden (collapsed groups). */
   collapsedIds: Set<string>
   /** Optional substring filter — case-insensitive match on name + type. */
   textFilter?: string
+  /** Optional sort — applied per-parent so the parent-child hierarchy is
+   *  preserved (parents stay anchored, only their children get sorted). */
+  sort?: SceneExplorerSort
 }
 
 /**
@@ -56,8 +66,21 @@ export function buildSceneExplorerRows(
   layers: Layer[],
   options: SceneExplorerFilterOptions,
 ): SceneExplorerRow[] {
-  const { collapsedIds, textFilter } = options
+  const { collapsedIds, textFilter, sort } = options
   const query = textFilter?.trim().toLowerCase() ?? ''
+
+  // Stable comparator built from the sort accessor; falls back to original
+  // index so layers with equal sort keys keep their authored z-order.
+  const compare = sort
+    ? (a: SceneNode, b: SceneNode): number => {
+        const va = sort.accessor(a.layer)
+        const vb = sort.accessor(b.layer)
+        let r = 0
+        if (va < vb) r = -1
+        else if (va > vb) r = 1
+        return sort.direction === 'desc' ? -r : r
+      }
+    : null
 
   // Build tree once (cached in SceneTraversal).
   const roots = SceneTraversal.buildTree(layers)
@@ -113,14 +136,23 @@ export function buildSceneExplorerRows(
       pinned:      !!layer.pinned,
     })
     if (expanded) {
-      for (const child of node.children) emit(child)
+      const children = compare
+        ? [...node.children].sort(compare)
+        : node.children
+      for (const child of children) emit(child)
     }
   }
 
   // Root-level ordering: pinned roots float to the top (BL-38 parity).
+  // Within each (pinned / unpinned) bucket, apply the active sort so the
+  // parent-child hierarchy is preserved (parent stays at top of its
+  // subtree, children sort within their parent).
   const pinnedRoots   = roots.filter((n) => !!n.layer.pinned)
   const unpinnedRoots = roots.filter((n) => !n.layer.pinned)
-  for (const root of [...pinnedRoots, ...unpinnedRoots]) emit(root)
+  const orderedRoots = compare
+    ? [...pinnedRoots].sort(compare).concat([...unpinnedRoots].sort(compare))
+    : [...pinnedRoots, ...unpinnedRoots]
+  for (const root of orderedRoots) emit(root)
 
   return out
 }

@@ -59,6 +59,9 @@ interface Props {
   onDragEnd:        () => void
   onDragOverRow:    (id: string, zone: DropZone) => void
   onDropOnRow:      (id: string, zone: DropZone) => void
+
+  // Context menu (right-click). Panel owns the open/close state.
+  onContextMenu?:   (id: string, clientX: number, clientY: number) => void
 }
 
 const ROW_HEIGHT = 22
@@ -71,6 +74,7 @@ export default function SceneExplorerRow(props: Props) {
     onBeginRename, onCommitRename, onCancelRename,
     onSelect, onToggleExpand, onToggleFlag,
     onDragStart, onDragEnd, onDragOverRow, onDropOnRow,
+    onContextMenu,
   } = props
 
   const ref = useRef<HTMLDivElement>(null)
@@ -125,6 +129,12 @@ export default function SceneExplorerRow(props: Props) {
         onDropOnRow(row.id, dropZone)
       }}
       onClick={(e) => onSelect(row.id, e.shiftKey, e.metaKey || e.ctrlKey)}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return
+        e.preventDefault()
+        e.stopPropagation()
+        onContextMenu(row.id, e.clientX, e.clientY)
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={`relative flex items-stretch border-b border-gray-800/50 ${bg} ${ringClass}

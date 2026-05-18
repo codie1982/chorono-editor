@@ -11,19 +11,23 @@
  * undo/redo / AI / runtime preview pipelines keep working unchanged.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Layer, Timeline } from '@/lib/types'
-import { buildSceneExplorerRows, collectDescendants } from '@/lib/sceneExplorer/sceneExplorerModel'
+import { buildSceneExplorerRows, collectDescendants, type SceneExplorerSort } from '@/lib/sceneExplorer/sceneExplorerModel'
 import {
   DEFAULT_COLUMNS,
   defaultVisibleColumnIds,
   getVisibleColumns,
+  type ColumnDefinition,
 } from '@/lib/sceneExplorer/sceneExplorerColumns'
 import SceneExplorerRow, {
   SCENE_EXPLORER_ROW_HEIGHT,
   type DropTargetState,
   type DropZone,
 } from './SceneExplorerRow'
+import ContextMenu from '@/components/ui/ContextMenu'
+import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
+import BulkOperationsToolbar from './BulkOperationsToolbar'
 
 interface Props {
   layers: Layer[]
@@ -42,18 +46,68 @@ interface Props {
   // Drag/drop hierarchy
   onMoveInTree: (layerId: string, newParentId: string | undefined, toIndex: number) => void
   onGroupWith?: (draggedId: string, targetId: string) => void
+
+  // BL-53 — Context-menu actions (omit any you don't want to expose)
+  contextHandlers?: Partial<SceneExplorerMenuHandlers>
+  /** BL-53 — called when the bulk toolbar's ✕ button is pressed. */
+  onClearSelection?: () => void
 }
 
 export default function SceneExplorerPanel({
   layers, timeline, selectedId, selectedIds,
   onSelect, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
+  contextHandlers, onClearSelection,
 }: Props) {
   // ── State ────────────────────────────────────────────────────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
   const [textFilter, setTextFilter]     = useState('')
-  const [visibleColumnIds]              = useState<Set<string>>(() => defaultVisibleColumnIds())
-  // BL-53 will replace setVisibleColumnIds with a column-manager modal.
+
+  // Column visibility — persisted in localStorage (BL-53.7)
+  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return defaultVisibleColumnIds()
+    try {
+      const raw = window.localStorage.getItem('chorono.sceneExplorer.visibleColumns')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return new Set(parsed as string[])
+      }
+    } catch { /* fall through */ }
+    return defaultVisibleColumnIds()
+  })
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'chorono.sceneExplorer.visibleColumns',
+        JSON.stringify(Array.from(visibleColumnIds)),
+      )
+    } catch { /* localStorage full or disabled — silent skip */ }
+  }, [visibleColumnIds])
+
+  // Sort — { columnId, direction } persisted in localStorage
+  const [sortState, setSortState] = useState<{ columnId: string; direction: 'asc' | 'desc' } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const raw = window.localStorage.getItem('chorono.sceneExplorer.sort')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && 'columnId' in parsed) return parsed
+      }
+    } catch { /* */ }
+    return null
+  })
+  useEffect(() => {
+    try {
+      if (sortState) {
+        window.localStorage.setItem('chorono.sceneExplorer.sort', JSON.stringify(sortState))
+      } else {
+        window.localStorage.removeItem('chorono.sceneExplorer.sort')
+      }
+    } catch { /* */ }
+  }, [sortState])
+
+  // Column-header right-click menu
+  const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; columnId: string } | null>(null)
 
   // Inline rename state
   const [editingId, setEditingId]       = useState<string | null>(null)
@@ -75,14 +129,25 @@ export default function SceneExplorerPanel({
   const [dropTarget, setDropTarget]   = useState<DropTargetState | null>(null)
   const dragDescendantsRef            = useRef<Set<string>>(new Set())
 
-  // ── Derived: visible rows ────────────────────────────────────────────────
-  const rows = useMemo(
-    () => buildSceneExplorerRows(layers, { collapsedIds, textFilter }),
-    [layers, collapsedIds, textFilter],
-  )
+  // Context-menu state (BL-53)
+  const [menuState, setMenuState] = useState<{
+    x: number; y: number; targetId: string
+  } | null>(null)
+
+  // ── Derived: sort + visible rows ────────────────────────────────────────
   const columns = useMemo(
     () => getVisibleColumns(DEFAULT_COLUMNS, visibleColumnIds),
     [visibleColumnIds],
+  )
+  const activeSort: SceneExplorerSort | undefined = useMemo(() => {
+    if (!sortState) return undefined
+    const col = DEFAULT_COLUMNS.find((c) => c.id === sortState.columnId)
+    if (!col?.sortKey) return undefined
+    return { accessor: col.sortKey, direction: sortState.direction }
+  }, [sortState])
+  const rows = useMemo(
+    () => buildSceneExplorerRows(layers, { collapsedIds, textFilter, sort: activeSort }),
+    [layers, collapsedIds, textFilter, activeSort],
   )
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -117,6 +182,16 @@ export default function SceneExplorerPanel({
     if (target?.locked)                  return true
     return false
   }, [draggingId, layers])
+
+  // ── Context menu open handler ────────────────────────────────────────────
+  // If the right-clicked row isn't in the current selection, promote it to
+  // primary single-selection so the menu's "Selected (1)" labels read right.
+  const handleOpenContextMenu = useCallback((id: string, clientX: number, clientY: number) => {
+    if (!selectedIds.has(id) && id !== selectedId) {
+      onSelect(id, false, false)
+    }
+    setMenuState({ x: clientX, y: clientY, targetId: id })
+  }, [selectedId, selectedIds, onSelect])
 
   const handleDropOnRow = useCallback((targetId: string, zone: DropZone) => {
     if (!draggingId || isInvalidDrop(targetId)) return
@@ -166,31 +241,63 @@ export default function SceneExplorerPanel({
         </span>
       </div>
 
+      {/* BL-53 — Bulk operations toolbar (appears when 2+ rows selected) */}
+      {selectedIds.size >= 2 && contextHandlers && (
+        <BulkOperationsToolbar
+          selectedLayers={layers.filter((l) => selectedIds.has(l.id))}
+          onBulkToggleFlag={(ids, field, nextValue) =>
+            contextHandlers.bulkToggleFlag?.(ids, field, nextValue)}
+          onBulkColor={(ids, color) =>
+            contextHandlers.setColorLabel?.(ids, color)}
+          onGroup={(ids) => contextHandlers.groupLayers?.(ids)}
+          onDelete={(ids) => contextHandlers.deleteLayers?.(ids)}
+          onClear={() => onClearSelection?.()}
+        />
+      )}
+
       {/* Column header row */}
       <div
         className="flex items-stretch border-b border-gray-700 bg-gray-850 shrink-0"
         style={{ height: 20 }}
       >
-        {columns.map((col) => (
-          <div
-            key={col.id}
-            className={`flex items-center px-1.5 text-[9px] font-mono uppercase text-gray-500 ${
-              col.sticky ? 'sticky left-0 z-10 bg-gray-900 border-r border-gray-700' : ''
-            }`}
-            style={{
-              width:    col.width === 'flex' ? undefined : col.width,
-              flex:     col.width === 'flex' ? '1 1 auto' : '0 0 auto',
-              minWidth: col.width === 'flex' ? 120 : col.width,
-              justifyContent: col.kind === 'name' ? 'flex-start'
-                              : (col.kind === 'startMs' || col.kind === 'endMs')
-                                ? 'flex-end'
-                                : 'center',
-            }}
-            title={col.title ?? col.label}
-          >
-            {col.label}
-          </div>
-        ))}
+        {columns.map((col) => {
+          const isSorted    = sortState?.columnId === col.id
+          const sortArrow   = isSorted ? (sortState!.direction === 'asc' ? ' ▲' : ' ▼') : ''
+          const sortable    = !!col.sortKey
+          const handleClick = () => {
+            if (!sortable) return
+            if (!isSorted)                            setSortState({ columnId: col.id, direction: 'asc' })
+            else if (sortState!.direction === 'asc')  setSortState({ columnId: col.id, direction: 'desc' })
+            else                                       setSortState(null)  // third click clears
+          }
+          return (
+            <div
+              key={col.id}
+              onClick={handleClick}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setColumnMenu({ x: e.clientX, y: e.clientY, columnId: col.id })
+              }}
+              className={`flex items-center px-1.5 text-[9px] font-mono uppercase select-none ${
+                isSorted ? 'text-blue-300' : 'text-gray-500'
+              } ${sortable ? 'cursor-pointer hover:text-gray-300' : ''} ${
+                col.sticky ? 'sticky left-0 z-10 bg-gray-900 border-r border-gray-700' : ''
+              }`}
+              style={{
+                width:    col.width === 'flex' ? undefined : col.width,
+                flex:     col.width === 'flex' ? '1 1 auto' : '0 0 auto',
+                minWidth: col.width === 'flex' ? 120 : col.width,
+                justifyContent: col.kind === 'name' ? 'flex-start'
+                                : (col.kind === 'startMs' || col.kind === 'endMs')
+                                  ? 'flex-end'
+                                  : 'center',
+              }}
+              title={`${col.title ?? col.label}${sortable ? ' — click to sort, right-click for options' : ''}`}
+            >
+              {col.label}{sortArrow}
+            </div>
+          )
+        })}
       </div>
 
       {/* Scrollable rows */}
@@ -230,6 +337,7 @@ export default function SceneExplorerPanel({
               onDragEnd={handleDragEnd}
               onDragOverRow={handleDragOverRow}
               onDropOnRow={handleDropOnRow}
+              onContextMenu={contextHandlers ? handleOpenContextMenu : undefined}
             />
           ))
         )}
@@ -240,6 +348,111 @@ export default function SceneExplorerPanel({
         <span>{layers.length} layers · {selectedIds.size} selected</span>
         <span>row {SCENE_EXPLORER_ROW_HEIGHT}px</span>
       </div>
+
+      {/* Column-header right-click menu (BL-53) — show/hide + sort */}
+      {columnMenu && (() => {
+        const col = DEFAULT_COLUMNS.find((c) => c.id === columnMenu.columnId)
+        if (!col) return null
+        const isSorted = sortState?.columnId === col.id
+        const items = [
+          ...(col.sortKey ? [
+            {
+              kind: 'action' as const,
+              label: 'Sort Ascending',
+              icon: isSorted && sortState!.direction === 'asc' ? '✓' : null,
+              onSelect: () => setSortState({ columnId: col.id, direction: 'asc' }),
+            },
+            {
+              kind: 'action' as const,
+              label: 'Sort Descending',
+              icon: isSorted && sortState!.direction === 'desc' ? '✓' : null,
+              onSelect: () => setSortState({ columnId: col.id, direction: 'desc' }),
+            },
+            {
+              kind: 'action' as const,
+              label: 'Clear Sort',
+              disabled: !sortState,
+              onSelect: () => setSortState(null),
+            },
+            { kind: 'separator' as const },
+          ] : []),
+          {
+            kind: 'action' as const,
+            label: 'Hide This Column',
+            disabled: col.id === 'name',  // Name column is mandatory
+            onSelect: () => {
+              const next = new Set(visibleColumnIds)
+              next.delete(col.id)
+              setVisibleColumnIds(next)
+            },
+          },
+          {
+            kind: 'submenu' as const,
+            label: 'Show / Hide Columns',
+            items: DEFAULT_COLUMNS.map((c) => ({
+              kind: 'action' as const,
+              label: c.label + (c.title ? ` — ${c.title}` : ''),
+              icon: visibleColumnIds.has(c.id) ? '☑' : '☐',
+              disabled: c.id === 'name',  // Name always visible
+              onSelect: () => {
+                const next = new Set(visibleColumnIds)
+                if (next.has(c.id)) next.delete(c.id); else next.add(c.id)
+                setVisibleColumnIds(next)
+              },
+            })),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: 'Reset Columns',
+            onSelect: () => setVisibleColumnIds(defaultVisibleColumnIds()),
+          },
+        ]
+        return (
+          <ContextMenu
+            x={columnMenu.x}
+            y={columnMenu.y}
+            onClose={() => setColumnMenu(null)}
+            items={items}
+          />
+        )
+      })()}
+
+      {/* Context menu (BL-53) */}
+      {menuState && contextHandlers && (() => {
+        const target = layers.find((l) => l.id === menuState.targetId)
+        if (!target) return null
+        // Effective selection: include the target so single-row right-clicks
+        // operate on just that row.
+        const ids = selectedIds.has(target.id)
+          ? Array.from(selectedIds)
+          : [target.id]
+        // Provide safe defaults for any handlers the caller omitted.
+        const handlers: SceneExplorerMenuHandlers = {
+          rename:        contextHandlers.rename        ?? (() => {}),
+          duplicate:     contextHandlers.duplicate     ?? (() => {}),
+          deleteLayers:  contextHandlers.deleteLayers  ?? (() => {}),
+          groupLayers:   contextHandlers.groupLayers   ?? (() => {}),
+          ungroupGroup:  contextHandlers.ungroupGroup,
+          setColorLabel: contextHandlers.setColorLabel ?? (() => {}),
+          bulkToggleFlag: contextHandlers.bulkToggleFlag ?? (() => {}),
+          isolate:       contextHandlers.isolate,
+          showAll:       contextHandlers.showAll,
+        }
+        return (
+          <ContextMenu
+            x={menuState.x}
+            y={menuState.y}
+            onClose={() => setMenuState(null)}
+            items={buildSceneExplorerMenu({
+              target,
+              selectionIds: ids,
+              allLayers: layers,
+              handlers,
+            })}
+          />
+        )
+      })()}
     </div>
   )
 }

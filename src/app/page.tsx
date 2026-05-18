@@ -22,6 +22,7 @@ import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGho
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
+  makeBulkUpdateLayersCmd, makeBulkToggleFlagCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
@@ -971,6 +972,41 @@ export default function BuilderPage() {
                     onToggleFlag={toggleLayerFlag}
                     onMoveInTree={moveLayerInTree}
                     onGroupWith={groupLayersByDrop}
+                    onClearSelection={() => selectLayer(null)}
+                    contextHandlers={{
+                      // Rename re-uses the inline editor — selecting the
+                      // layer first lets the panel know which row to put
+                      // into edit mode (handled inside the panel via key).
+                      rename: (id) => { selectLayer(id); /* panel's "rename" entry triggers F2-style edit in BL-58 polish */ },
+                      duplicate: (id) => {
+                        const orig = scene.layers.find((l) => l.id === id)
+                        if (!orig) return
+                        const next = cloneLayerForDuplicate(orig)
+                        next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
+                        if (next.startMs != null) next.startMs += 100
+                        if (next.endMs   != null) next.endMs   += 100
+                        dispatchCommand(makeDuplicateLayerCmd(orig, next))
+                      },
+                      deleteLayers: (ids) => ids.forEach((id) => deleteLayer(id)),
+                      groupLayers: (ids) => {
+                        if (ids.length === 0) return
+                        // groupSelected uses the selection state directly,
+                        // so make sure it matches what the menu opened on.
+                        setSelectedLayerIds(new Set(ids))
+                        setSelectedLayer(ids[0])
+                        groupSelected()
+                      },
+                      ungroupGroup: (id) => {
+                        if (selectedLayerId !== id) selectLayer(id)
+                        ungroupSelected()
+                      },
+                      setColorLabel: (ids, color) => {
+                        dispatchCommand(makeBulkUpdateLayersCmd(ids, { colorLabel: color ?? undefined }, color ? 'Set color label' : 'Clear color label'))
+                      },
+                      bulkToggleFlag: (ids, field, nextValue) => {
+                        dispatchCommand(makeBulkToggleFlagCmd(ids, field, nextValue))
+                      },
+                    }}
                   />
                 ),
               },
