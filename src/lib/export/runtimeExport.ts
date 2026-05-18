@@ -65,7 +65,13 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
 
 function stripLayerMeta(layer: Layer): Layer {
   // Drop editor-only flags. Keep `name` for runtime debug logs.
-  const { locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c, ...rest } = layer
+  // BL-55 — strip `frozen` (freeze is an editor-only authoring affordance,
+  // runtime should treat the layer as fully selectable + opaque).
+  const {
+    locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c,
+    frozen: _f,
+    ...rest
+  } = layer
   return rest
 }
 

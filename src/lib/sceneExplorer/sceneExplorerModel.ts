@@ -16,6 +16,10 @@
 
 import type { Layer } from '@/lib/types'
 import { SceneTraversal, type SceneNode } from '@/lib/scene/SceneTraversal'
+import {
+  passesFilters, isPassThrough,
+  type LayerVisibilityFilters,
+} from './visibilityFilters'
 
 export interface SceneExplorerRow {
   /** Stable id (= layer.id). Used as React key + selection key. */
@@ -47,6 +51,16 @@ export interface SceneExplorerFilterOptions {
   /** Optional sort — applied per-parent so the parent-child hierarchy is
    *  preserved (parents stay anchored, only their children get sorted). */
   sort?: SceneExplorerSort
+  /** BL-55 — visibility filters (type / behaviour). Layers not passing the
+   *  filter are hidden from the row list; their parents still show so the
+   *  hierarchy stays readable. */
+  visibilityFilters?: LayerVisibilityFilters
+  /** Predicate: does a layer have any animated property tracks?
+   *  (Only consulted when visibilityFilters.onlyAnimated is on.) */
+  isAnimated?: (layer: Layer) => boolean
+  /** Predicate: does a layer have effects or masks?
+   *  (Only consulted when visibilityFilters.onlyWithEffects is on.) */
+  hasEffects?: (layer: Layer) => boolean
 }
 
 /**
@@ -66,8 +80,33 @@ export function buildSceneExplorerRows(
   layers: Layer[],
   options: SceneExplorerFilterOptions,
 ): SceneExplorerRow[] {
-  const { collapsedIds, textFilter, sort } = options
+  const {
+    collapsedIds, textFilter, sort,
+    visibilityFilters, isAnimated, hasEffects,
+  } = options
   const query = textFilter?.trim().toLowerCase() ?? ''
+
+  // Visibility-filter ancestor resolution: when a filter is active, only
+  // layers passing it are emitted — PLUS the ancestors of those layers
+  // (so a matching grandchild stays reachable). Mirrors the text-filter
+  // pattern so the hierarchy never breaks unexpectedly.
+  let visFilterSet: Set<string> | null = null
+  if (visibilityFilters && !isPassThrough(visibilityFilters)) {
+    const isAnim = isAnimated ?? (() => false)
+    const hasFx  = hasEffects ?? (() => false)
+    visFilterSet = new Set<string>()
+    for (const layer of layers) {
+      if (passesFilters(layer, visibilityFilters, isAnim, hasFx)) {
+        visFilterSet.add(layer.id)
+      }
+    }
+    // Add ancestors so collapsed-but-matching descendants stay reachable.
+    const initialMatches = Array.from(visFilterSet)
+    for (const id of initialMatches) {
+      const ancestors = SceneTraversal.getAncestors(SceneTraversal.buildTree(layers), id)
+      for (const node of ancestors) visFilterSet.add(node.layer.id)
+    }
+  }
 
   // Stable comparator built from the sort accessor; falls back to original
   // index so layers with equal sort keys keep their authored z-order.
@@ -124,6 +163,7 @@ export function buildSceneExplorerRows(
     const { layer } = node
     if (visibleByFilter && !visibleByFilter.has(layer.id)) return
     if (matchIds && !matchIds.has(layer.id)) return
+    if (visFilterSet && !visFilterSet.has(layer.id)) return
     // hidden layers are still emitted in the tree so the user can toggle
     // them back — the CELL renders a struck-through / dimmed style.
     const expanded = !collapsedIds.has(layer.id)

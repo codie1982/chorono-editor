@@ -383,6 +383,71 @@ export function makeBulkUpdateLayersCmd<P extends Partial<Layer>>(
   }
 }
 
+// ── Isolate / Show All (BL-55) ────────────────────────────────────────────────
+//
+// `isolate` is a special bulk-hide: hide every layer EXCEPT the targets.
+// `showAll` clears hidden+solo on every layer. Together they form the
+// 3ds Max "isolate selection" workflow: focus on a subset, then bring
+// everything back.
+
+export function makeIsolateLayersCmd(layerIdsToKeep: string[] | Set<string>): EditorCommand {
+  const keepSet = layerIdsToKeep instanceof Set ? layerIdsToKeep : new Set(layerIdsToKeep)
+  let prevHidden: Map<string, boolean | undefined> | null = null
+
+  return {
+    label: `Isolate ${keepSet.size} layer${keepSet.size === 1 ? '' : 's'}`,
+    execute: (scene) => {
+      const snap = new Map<string, boolean | undefined>()
+      const layers = scene.layers.map((l) => {
+        snap.set(l.id, l.hidden)
+        // Keep targets visible; hide everything else.
+        return { ...l, hidden: !keepSet.has(l.id) }
+      })
+      prevHidden = snap
+      return { ...scene, layers }
+    },
+    undo: (scene) => {
+      if (!prevHidden) return scene
+      const snap = prevHidden
+      return {
+        ...scene,
+        layers: scene.layers.map((l) =>
+          snap.has(l.id) ? { ...l, hidden: snap.get(l.id) } : l,
+        ),
+      }
+    },
+  }
+}
+
+export function makeShowAllLayersCmd(): EditorCommand {
+  // Snapshot ALL editor visibility state so undo restores the
+  // pre-"show all" view including solo'd layers etc.
+  let prev: Map<string, { hidden?: boolean; solo?: boolean }> | null = null
+
+  return {
+    label: 'Show All Layers',
+    execute: (scene) => {
+      const snap = new Map<string, { hidden?: boolean; solo?: boolean }>()
+      const layers = scene.layers.map((l) => {
+        snap.set(l.id, { hidden: l.hidden, solo: l.solo })
+        return { ...l, hidden: false, solo: false }
+      })
+      prev = snap
+      return { ...scene, layers }
+    },
+    undo: (scene) => {
+      if (!prev) return scene
+      const snap = prev
+      return {
+        ...scene,
+        layers: scene.layers.map((l) =>
+          snap.has(l.id) ? { ...l, ...snap.get(l.id) } : l,
+        ),
+      }
+    },
+  }
+}
+
 // ── Bulk toggle flag (BL-53) ──────────────────────────────────────────────────
 //
 // Sets a binary editor flag (locked/hidden/solo/pinned) on every layer in the

@@ -153,7 +153,10 @@ export class CanvasRenderer {
     }
 
     ctx.save()
-    ctx.globalAlpha             *= Math.max(0, Math.min(1, opacity))
+    // BL-55 — Frozen layers render translucent so the user can see they're
+    // present but inactive. Half-opacity is the 3ds Max default.
+    const frozenMultiplier = layer.frozen ? 0.4 : 1
+    ctx.globalAlpha             *= Math.max(0, Math.min(1, opacity)) * frozenMultiplier
     ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) ?? 'source-over'
     ctx.filter                   = buildEffectsFilter(layer.effects)
 

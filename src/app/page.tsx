@@ -23,6 +23,7 @@ import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
   makeBulkUpdateLayersCmd, makeBulkToggleFlagCmd,
+  makeIsolateLayersCmd, makeShowAllLayersCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
@@ -1006,7 +1007,30 @@ export default function BuilderPage() {
                       bulkToggleFlag: (ids, field, nextValue) => {
                         dispatchCommand(makeBulkToggleFlagCmd(ids, field, nextValue))
                       },
+                      isolate: (ids) => dispatchCommand(makeIsolateLayersCmd(ids)),
+                      showAll: () => dispatchCommand(makeShowAllLayersCmd()),
                     }}
+                    onFreezeSelection={() => {
+                      const ids = Array.from(selectedLayerIds.size > 0
+                        ? selectedLayerIds
+                        : selectedLayerId ? [selectedLayerId] : [])
+                      if (ids.length > 0) dispatchCommand(makeBulkUpdateLayersCmd(ids, { frozen: true }, 'Freeze'))
+                    }}
+                    onUnfreezeSelection={() => {
+                      const ids = Array.from(selectedLayerIds.size > 0
+                        ? selectedLayerIds
+                        : selectedLayerId ? [selectedLayerId] : [])
+                      if (ids.length > 0) dispatchCommand(makeBulkUpdateLayersCmd(ids, { frozen: false }, 'Unfreeze'))
+                    }}
+                    isLayerAnimated={(layer) => {
+                      const tl = selectedTimelineForGhost
+                      if (!tl) return false
+                      const prefix = `layers.${layer.id}.`
+                      return tl.tracks.some((t) => t.target.startsWith(prefix) && t.keyframes.length > 0)
+                    }}
+                    doesLayerHaveEffects={(layer) =>
+                      (layer.effectsChain?.length ?? 0) > 0 || (layer.masks?.length ?? 0) > 0
+                    }
                   />
                 ),
               },

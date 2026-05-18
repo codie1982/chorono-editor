@@ -269,6 +269,10 @@ export interface Layer {
    *  Useful for keeping a controller / camera / master layer always visible. */
   pinned?:     boolean
   colorLabel?: string  // e.g. '#3B82F6'
+  /** BL-55 — 3ds Max-style freeze: layer remains visible on canvas but is
+   *  not selectable, not editable, and rendered translucent. Different from
+   *  `locked` (which keeps the layer fully opaque + selectable for inspection). */
+  frozen?:     boolean
 }
 
 // ── Scene Parameters ──────────────────────────────────────────────────────────

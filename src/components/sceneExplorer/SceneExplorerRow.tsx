@@ -15,7 +15,7 @@
  *   - dropping onto a descendant of the dragged layer is rejected
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Layer, Timeline } from '@/lib/types'
 import type {
   ColumnDefinition,
@@ -79,6 +79,17 @@ export default function SceneExplorerRow(props: Props) {
 
   const ref = useRef<HTMLDivElement>(null)
   const [hovered, setHovered] = useState(false)
+
+  // BL-54 — When this row becomes the primary selection from an EXTERNAL
+  // source (canvas click, keyboard nav, AI), scroll it into view. We only
+  // react to isPrimary transitions, so clicking the row itself (which
+  // already had keyboard/mouse focus) won't re-scroll and yank the view.
+  useEffect(() => {
+    if (!isPrimary || !ref.current) return
+    // `block: 'nearest'` only scrolls when the row is actually off-screen —
+    // no jolt when the user is just clicking around in the visible list.
+    ref.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [isPrimary])
 
   // Compute drop indicator state for THIS row
   const dropZone = dropTarget?.id === row.id ? dropTarget.zone : null

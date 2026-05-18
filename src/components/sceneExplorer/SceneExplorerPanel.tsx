@@ -28,6 +28,8 @@ import SceneExplorerRow, {
 import ContextMenu from '@/components/ui/ContextMenu'
 import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
+import LayerVisibilityPanel from './LayerVisibilityPanel'
+import { DEFAULT_VISIBILITY_FILTERS, type LayerVisibilityFilters } from '@/lib/sceneExplorer/visibilityFilters'
 
 interface Props {
   layers: Layer[]
@@ -51,6 +53,18 @@ interface Props {
   contextHandlers?: Partial<SceneExplorerMenuHandlers>
   /** BL-53 — called when the bulk toolbar's ✕ button is pressed. */
   onClearSelection?: () => void
+
+  // BL-55 — Layer visibility & state actions
+  /** Predicate: does a layer have any animated property tracks?
+   *  Used by the "Only animated" filter. */
+  isLayerAnimated?: (layer: Layer) => boolean
+  /** Predicate: does a layer have effects or masks?
+   *  Used by the "Only with effects" filter. */
+  doesLayerHaveEffects?: (layer: Layer) => boolean
+  /** Freeze the current selection. */
+  onFreezeSelection?: () => void
+  /** Unfreeze the current selection. */
+  onUnfreezeSelection?: () => void
 }
 
 export default function SceneExplorerPanel({
@@ -58,6 +72,8 @@ export default function SceneExplorerPanel({
   onSelect, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
   contextHandlers, onClearSelection,
+  isLayerAnimated, doesLayerHaveEffects,
+  onFreezeSelection, onUnfreezeSelection,
 }: Props) {
   // ── State ────────────────────────────────────────────────────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
@@ -109,6 +125,32 @@ export default function SceneExplorerPanel({
   // Column-header right-click menu
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; columnId: string } | null>(null)
 
+  // BL-55 — Visibility filters (type / behaviour). Persisted in localStorage.
+  const [visibilityFilters, setVisibilityFilters] = useState<LayerVisibilityFilters>(() => {
+    if (typeof window === 'undefined') return DEFAULT_VISIBILITY_FILTERS
+    try {
+      const raw = window.localStorage.getItem('chorono.sceneExplorer.visibilityFilters')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        // Merge with defaults so newly-added type keys get default = true.
+        return {
+          ...DEFAULT_VISIBILITY_FILTERS,
+          ...parsed,
+          types: { ...DEFAULT_VISIBILITY_FILTERS.types, ...(parsed?.types ?? {}) },
+        }
+      }
+    } catch { /* */ }
+    return DEFAULT_VISIBILITY_FILTERS
+  })
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'chorono.sceneExplorer.visibilityFilters',
+        JSON.stringify(visibilityFilters),
+      )
+    } catch { /* */ }
+  }, [visibilityFilters])
+
   // Inline rename state
   const [editingId, setEditingId]       = useState<string | null>(null)
   const [editingValue, setEditingValue] = useState('')
@@ -146,8 +188,13 @@ export default function SceneExplorerPanel({
     return { accessor: col.sortKey, direction: sortState.direction }
   }, [sortState])
   const rows = useMemo(
-    () => buildSceneExplorerRows(layers, { collapsedIds, textFilter, sort: activeSort }),
-    [layers, collapsedIds, textFilter, activeSort],
+    () => buildSceneExplorerRows(layers, {
+      collapsedIds, textFilter, sort: activeSort,
+      visibilityFilters,
+      isAnimated: isLayerAnimated,
+      hasEffects: doesLayerHaveEffects,
+    }),
+    [layers, collapsedIds, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects],
   )
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -226,9 +273,20 @@ export default function SceneExplorerPanel({
       className="flex flex-col h-full bg-gray-900 text-gray-200"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Toolbar (minimal — BL-53 / BL-55 will flesh this out) */}
+      {/* Toolbar */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gray-700 shrink-0">
         <span className="text-[10px] font-mono uppercase text-gray-500">Scene Explorer</span>
+        <LayerVisibilityPanel
+          filters={visibilityFilters}
+          onChange={setVisibilityFilters}
+          selectionCount={selectedIds.size}
+          onIsolate={contextHandlers?.isolate
+            ? () => contextHandlers.isolate!(Array.from(selectedIds))
+            : undefined}
+          onShowAll={contextHandlers?.showAll}
+          onFreezeSelection={onFreezeSelection}
+          onUnfreezeSelection={onUnfreezeSelection}
+        />
         <input
           type="text"
           placeholder="Search…"

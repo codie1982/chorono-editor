@@ -1030,6 +1030,7 @@ export function hitTestLayersAt(
   for (let i = scene.layers.length - 1; i >= 0; i--) {
     const layer = scene.layers[i]
     if (layer.hidden || layer.locked) continue
+    if (layer.frozen) continue   // BL-55 — frozen layers render but aren't selectable
     if (layer.type === 'audio') continue
     if (layer.type === 'group') continue   // groups are tested via children union below
 
