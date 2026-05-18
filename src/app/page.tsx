@@ -48,7 +48,7 @@ import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
 import { useDockLayout } from '@/components/dock/useDockLayout'
-import { makeRegistry, type PanelDefinition } from '@/components/dock/registry'
+import { makeRegistry, type PanelDefinition, type PanelRegistry } from '@/components/dock/registry'
 import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 import AIPanel                from '@/components/AIPanel'
@@ -126,7 +126,7 @@ export default function BuilderPage() {
   // AND requires every id here to be present in the tree. Keep in sync
   // with the registry below.
   const dock = useDockLayout([
-    'layers', 'canvas', 'properties', 'timeline', 'curveEditor',
+    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
     'parameters', 'events', 'motionBinding', 'runtimePreview', 'assets', 'snap',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
@@ -768,6 +768,28 @@ export default function BuilderPage() {
     frameRate,
   })
 
+  // ── Lightweight panel registry (just id/title) for FileMenu ────────────────
+  // FileMenu only reads id+title for its "restore hidden panel" submenu, but
+  // its prop type is the full PanelRegistry (Map<string, PanelDefinition>),
+  // so we provide a placeholder render so the type checks.
+  const panelRegistry = useMemo<PanelRegistry>(() => {
+    const defs: PanelDefinition[] = [
+      { id: 'layers',         title: 'Layers',         render: () => null },
+      { id: 'sceneExplorer',  title: 'Scene Explorer', render: () => null },
+      { id: 'canvas',         title: 'Canvas',         render: () => null },
+      { id: 'properties',     title: 'Properties',     render: () => null },
+      { id: 'timeline',       title: 'Timeline',       render: () => null },
+      { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
+      { id: 'parameters',     title: 'Parameters',     render: () => null },
+      { id: 'events',         title: 'Events',         render: () => null },
+      { id: 'motionBinding',  title: 'Bindings',       render: () => null },
+      { id: 'runtimePreview', title: 'Preview',        render: () => null },
+      { id: 'assets',         title: 'Assets',         render: () => null },
+      { id: 'snap',           title: 'Snap',           render: () => null },
+    ]
+    return makeRegistry(defs)
+  }, [])
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
@@ -784,6 +806,9 @@ export default function BuilderPage() {
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
+          panelRegistry={panelRegistry}
+          dockLayout={dock.layout}
+          onRestorePanel={dock.dispatchRestorePanel}
         />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
@@ -883,6 +908,7 @@ export default function BuilderPage() {
           🤖 AI
         </button>
 
+        {/* Panel registry is created below — passed here via context/props */}
         {/* Primary export — rest live inside FileMenu */}
         <button
           onClick={() => setShowJson(true)}
@@ -1163,6 +1189,7 @@ export default function BuilderPage() {
                 node={dock.layout}
                 registry={registry}
                 onTabSelect={dock.dispatchTab}
+                onClosePanel={dock.dispatchClosePanel}
                 onResize={dock.dispatchResize}
                 onCollapse={dock.dispatchCollapse}
               />
