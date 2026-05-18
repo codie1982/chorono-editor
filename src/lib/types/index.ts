@@ -119,3 +119,8 @@ export {
 export {
   sampleController, sampleWaveform, sampleNoise,
 } from '../animation/controllers/sample'
+
+// ── Baking & Simplification (BL-51) ─────────────────────────────────────────
+export type { BakeOptions } from '../animation/baking/bake'
+export { bakeTrack, bakeTrackToKeyframes, sampleTrackDense } from '../animation/baking/bake'
+export { simplifyRDP } from '../animation/baking/simplify'

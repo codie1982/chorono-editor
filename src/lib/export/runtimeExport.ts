@@ -6,6 +6,7 @@ import type {
   ChronoScene, Layer, Timeline, Track, Keyframe, Composition,
   Asset, Trigger, Binding, SceneParameter,
 } from '../types'
+import { bakeTrack } from '../animation/baking/bake'
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -14,6 +15,19 @@ export interface RuntimeExportOptions {
   snapKeyframesToFrames?: boolean
   /** Drop two adjacent keyframes that have identical values (no animation between). */
   collapseIdenticalKeyframes?: boolean
+  /** BL-51 — bake every track that uses the signal system (modifiers,
+   *  out-of-range, easeCurve, timeWarp, multiplier curve, procedural
+   *  controller) into a flat linear-easing keyframe array. Result: the
+   *  exported JSON is consumable by a basic interpolation-only runtime.
+   *  Default: true (safe choice — runtime parity guaranteed). */
+  bakeSignalSystem?: boolean
+  /** BL-51 — sample rate for the bake (Hz). Higher = smoother but more
+   *  keyframes after RDP. Default 60. */
+  bakeFps?: number
+  /** BL-51 — RDP simplification tolerance in normalised bbox units.
+   *  0 = no simplify (keep all samples). Typical: 0.005-0.02.
+   *  Default: 0.005 (~0.5% of value range — visually lossless). */
+  bakeTolerance?: number
 }
 
 export interface RuntimeScene {
@@ -39,7 +53,13 @@ export interface RuntimeScene {
  *  - Optionally collapses redundant consecutive identical keyframes
  */
 export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions = {}): RuntimeScene {
-  const { snapKeyframesToFrames = true, collapseIdenticalKeyframes = true } = opts
+  const {
+    snapKeyframesToFrames = true,
+    collapseIdenticalKeyframes = true,
+    bakeSignalSystem = true,
+    bakeFps = 60,
+    bakeTolerance = 0.005,
+  } = opts
   const frameRate = Math.max(1, scene.composition.frameRate)
 
   return {
@@ -53,6 +73,7 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
       .map(stripLayerMeta),
     timelines: scene.timelines.map((tl) => normaliseTimeline(tl, {
       frameRate, snapKeyframesToFrames, collapseIdenticalKeyframes,
+      bakeSignalSystem, bakeFps, bakeTolerance, durationMs: tl.durationMs,
     })),
     triggers:     scene.triggers,
     bindings:     scene.bindings,
@@ -81,6 +102,10 @@ interface NormaliseTimelineOpts {
   frameRate: number
   snapKeyframesToFrames: boolean
   collapseIdenticalKeyframes: boolean
+  bakeSignalSystem: boolean
+  bakeFps: number
+  bakeTolerance: number
+  durationMs: number
 }
 
 function normaliseTimeline(tl: Timeline, opts: NormaliseTimelineOpts): Timeline {
@@ -90,8 +115,30 @@ function normaliseTimeline(tl: Timeline, opts: NormaliseTimelineOpts): Timeline 
   }
 }
 
+/** True if the track uses any BL-45..BL-50 feature that the basic runtime
+ *  interpolator can't replay — these tracks must be baked before export. */
+function usesSignalSystem(track: Track): boolean {
+  if (track.modifiers && track.modifiers.length > 0) return true
+  if (track.controller && track.controller.type !== 'keyframe') return true
+  if (track.outOfRange && (track.outOfRange.before !== 'constant' || track.outOfRange.after !== 'constant')) return true
+  if (track.easeCurve || track.timeWarp || track.multiplierCurve) return true
+  if (track.keyframes.some((k) => k.segmentModifiers && k.segmentModifiers.length > 0)) return true
+  return false
+}
+
 function normaliseTrack(track: Track, opts: NormaliseTimelineOpts): Track {
-  let kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+  // BL-51: bake signal-system tracks down to keyframe-only equivalents so
+  // the runtime never needs the modifier / noise / spring evaluators.
+  let working = track
+  if (opts.bakeSignalSystem && usesSignalSystem(track)) {
+    working = bakeTrack(track, {
+      startMs:  0,
+      endMs:    opts.durationMs,
+      fps:      opts.bakeFps,
+      tolerance: opts.bakeTolerance,
+    })
+  }
+  let kfs = [...working.keyframes].sort((a, b) => a.timeMs - b.timeMs)
 
   if (opts.snapKeyframesToFrames) {
     const frameMs = 1000 / opts.frameRate
@@ -102,7 +149,10 @@ function normaliseTrack(track: Track, opts: NormaliseTimelineOpts): Track {
     kfs = collapseConsecutiveIdentical(kfs)
   }
 
-  return { ...track, keyframes: kfs }
+  // Use `working` so baked tracks lose their signal-system fields too.
+  // (bakeTrack already returns a stripped Track; spreading `working`
+  // ensures we don't accidentally bring them back.)
+  return { ...working, keyframes: kfs }
 }
 
 /**
