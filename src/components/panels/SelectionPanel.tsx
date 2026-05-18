@@ -17,7 +17,11 @@ import {
 import {
   DEFAULT_SIMILARITY,
   type SimilarityOptions,
+  type SelectionRule, type NumericRule, type StringRule,
+  type CombineOp, type AttrName, type NumericAttr, type StringAttr,
+  type NumericOperator, type StringOperator,
 } from '@/lib/selection/types'
+import { matchesQuery, nextRuleId } from '@/lib/selection/SelectionManager'
 
 interface Props {
   scene: ChronoScene
@@ -53,7 +57,10 @@ export default function SelectionPanel({
           onSelectMatched={onSelectMatched}
         />
       ) : (
-        <ByTransformTabPlaceholder />
+        <SelectByTransformTab
+          scene={scene}
+          onSelectMatched={onSelectMatched}
+        />
       )}
     </div>
   )
@@ -223,21 +230,244 @@ function SelectSimilarTab({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab 2: Select By Transform (placeholder until next sprint)
+// Tab 2: Select By Transform — rule builder
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ByTransformTabPlaceholder() {
+const NUMERIC_ATTRS: NumericAttr[] = ['x', 'y', 'scaleX', 'scaleY', 'rotationDeg', 'opacity']
+const STRING_ATTRS:  StringAttr[]  = ['name', 'type']
+const NUMERIC_OPS:   NumericOperator[] = ['equals', 'near', 'between', 'less', 'greater']
+const STRING_OPS:    StringOperator[]  = ['contains', 'startsWith', 'endsWith', 'equals']
+const COMBINE_OPS:   CombineOp[]   = ['AND', 'OR', 'NOT']
+
+function isNumericAttr(a: AttrName): a is NumericAttr {
+  return (NUMERIC_ATTRS as readonly string[]).includes(a)
+}
+
+function freshRule(): NumericRule {
+  return {
+    id: nextRuleId(), enabled: true, kind: 'numeric',
+    attr: 'opacity', operator: 'less', value: 0.5,
+  }
+}
+
+function SelectByTransformTab({
+  scene, onSelectMatched,
+}: {
+  scene: ChronoScene
+  onSelectMatched: (ids: Set<string>) => void
+}) {
+  const [rules, setRules]         = useState<SelectionRule[]>([freshRule()])
+  const [combineOp, setCombineOp] = useState<CombineOp>('AND')
+
+  // Live preview — count layers that match the current query
+  const matchedIds = useMemo(() => {
+    const enabled = rules.filter((r) => r.enabled)
+    if (enabled.length === 0) return new Set<string>()
+    const ids = new Set<string>()
+    for (const l of scene.layers) {
+      if (matchesQuery(l, { rules: enabled, combineOp })) ids.add(l.id)
+    }
+    return ids
+  }, [rules, combineOp, scene.layers])
+
+  function updateRule(id: string, patch: Partial<SelectionRule>) {
+    setRules((prev) => prev.map((r) => (r.id === id ? ({ ...r, ...patch } as SelectionRule) : r)))
+  }
+
+  function removeRule(id: string) {
+    setRules((prev) => prev.filter((r) => r.id !== id))
+  }
+
+  function addRule() {
+    setRules((prev) => [...prev, freshRule()])
+  }
+
+  function changeAttr(id: string, attr: AttrName) {
+    // Switching from numeric ↔ string requires resetting the kind + operator
+    setRules((prev) => prev.map((r) => {
+      if (r.id !== id) return r
+      if (isNumericAttr(attr)) {
+        return {
+          id: r.id, enabled: r.enabled, kind: 'numeric',
+          attr, operator: 'equals', value: 0,
+        } as NumericRule
+      } else {
+        return {
+          id: r.id, enabled: r.enabled, kind: 'string',
+          attr, operator: 'contains', value: '',
+        } as StringRule
+      }
+    }))
+  }
+
+  function applySelection() {
+    onSelectMatched(new Set(matchedIds))
+  }
+
   return (
-    <div className="flex-1 flex items-center justify-center p-4 text-center text-[11px] text-gray-500">
-      <div>
-        <p>Rule builder coming in BL-60 Sprint 2.</p>
-        <p className="mt-2 text-gray-600 italic">
-          Will let you query layers by attributes (e.g. <code>rotation between 30 and 60</code>,
-          <br />
-          <code>name contains &quot;button&quot;</code>) with AND / OR / NOT combinators.
+    <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      {/* Combiner */}
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] uppercase tracking-wider text-gray-500">Combine</span>
+        <div className="flex border border-gray-700 rounded overflow-hidden">
+          {COMBINE_OPS.map((op) => (
+            <button
+              key={op}
+              onClick={() => setCombineOp(op)}
+              className={`px-2 py-0.5 text-[10px] font-mono ${
+                combineOp === op
+                  ? 'bg-blue-700 text-white'
+                  : 'bg-gray-900 text-gray-400 hover:bg-gray-800'
+              }`}
+            >{op}</button>
+          ))}
+        </div>
+        <button
+          onClick={addRule}
+          className="ml-auto px-2 py-0.5 text-[10px] rounded bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200"
+        >+ Add Rule</button>
+      </div>
+
+      {/* Rule list */}
+      <div className="space-y-1.5">
+        {rules.map((r) => (
+          <RuleRow
+            key={r.id} rule={r}
+            onChange={(patch) => updateRule(r.id, patch)}
+            onAttrChange={(attr) => changeAttr(r.id, attr)}
+            onRemove={() => removeRule(r.id)}
+          />
+        ))}
+      </div>
+
+      {/* Preview + apply */}
+      <div className="border-t border-gray-800 pt-2 space-y-2">
+        <p className="text-[11px] text-gray-400">
+          <span className="text-blue-300 font-semibold">{matchedIds.size}</span>
+          {' '}/ {scene.layers.length} layers match
         </p>
+        <button
+          onClick={applySelection}
+          disabled={matchedIds.size === 0}
+          className="w-full px-3 py-1.5 text-[11px] rounded bg-blue-700 hover:bg-blue-600 text-white border border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Select Matched ({matchedIds.size})
+        </button>
       </div>
     </div>
+  )
+}
+
+function RuleRow({
+  rule, onChange, onAttrChange, onRemove,
+}: {
+  rule: SelectionRule
+  onChange:    (patch: Partial<SelectionRule>) => void
+  onAttrChange: (attr: AttrName) => void
+  onRemove:    () => void
+}) {
+  return (
+    <div className={`flex items-center gap-1.5 px-1.5 py-1 rounded border ${
+      rule.enabled ? 'border-gray-700 bg-gray-900' : 'border-gray-800 bg-gray-950 opacity-50'
+    }`}>
+      <input
+        type="checkbox"
+        checked={rule.enabled}
+        onChange={(e) => onChange({ enabled: e.target.checked } as Partial<SelectionRule>)}
+        title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+      />
+
+      {/* Attribute */}
+      <select
+        value={rule.attr}
+        onChange={(e) => onAttrChange(e.target.value as AttrName)}
+        className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 outline-none"
+      >
+        <optgroup label="Numeric">
+          {NUMERIC_ATTRS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </optgroup>
+        <optgroup label="String">
+          {STRING_ATTRS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </optgroup>
+      </select>
+
+      {/* Operator + values */}
+      {rule.kind === 'numeric' ? (
+        <NumericRuleValues rule={rule} onChange={onChange as (p: Partial<NumericRule>) => void} />
+      ) : (
+        <StringRuleValues rule={rule} onChange={onChange as (p: Partial<StringRule>) => void} />
+      )}
+
+      {/* Delete */}
+      <button
+        onClick={onRemove}
+        className="ml-auto text-[10px] text-gray-500 hover:text-red-400"
+        title="Remove rule"
+      >✕</button>
+    </div>
+  )
+}
+
+function NumericRuleValues({
+  rule, onChange,
+}: {
+  rule: NumericRule
+  onChange: (patch: Partial<NumericRule>) => void
+}) {
+  const showValue2 = rule.operator === 'between' || rule.operator === 'near'
+  return (
+    <>
+      <select
+        value={rule.operator}
+        onChange={(e) => onChange({ operator: e.target.value as NumericOperator })}
+        className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 outline-none"
+      >
+        {NUMERIC_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
+      </select>
+      <input
+        type="number"
+        value={rule.value}
+        onChange={(e) => onChange({ value: Number(e.target.value) })}
+        className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 font-mono outline-none text-right"
+      />
+      {showValue2 && (
+        <>
+          <span className="text-[9px] text-gray-500">{rule.operator === 'between' ? '…' : '±'}</span>
+          <input
+            type="number"
+            value={rule.value2 ?? 0}
+            onChange={(e) => onChange({ value2: Number(e.target.value) })}
+            className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 font-mono outline-none text-right"
+          />
+        </>
+      )}
+    </>
+  )
+}
+
+function StringRuleValues({
+  rule, onChange,
+}: {
+  rule: StringRule
+  onChange: (patch: Partial<StringRule>) => void
+}) {
+  return (
+    <>
+      <select
+        value={rule.operator}
+        onChange={(e) => onChange({ operator: e.target.value as StringOperator })}
+        className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 outline-none"
+      >
+        {STRING_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
+      </select>
+      <input
+        type="text"
+        value={rule.value}
+        onChange={(e) => onChange({ value: e.target.value })}
+        placeholder="text"
+        className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-[10px] text-gray-100 outline-none"
+      />
+    </>
   )
 }
 
