@@ -8,9 +8,10 @@ import { evaluateTrack } from '@/lib/evaluator'
 import { newTimeline, nextKfId, newTimelineSegment } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
-  makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd,
+  makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd, makeMoveKfCmd,
   makeMirrorTimingCmd, makeAlignToFrameCmd, makeBulkDeleteKfCmd,
-  type KfDeletion,
+  makeStaggerKeysCmd, makeScaleKeysCmd,
+  type KfDeletion, type KfMove, type StaggerKfItem, type ScaleKfItem,
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
@@ -41,6 +42,9 @@ import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
 import EventStrip              from './timeline/EventStrip'
 import SegmentModal            from './modals/SegmentModal'
+import StaggerKeysModal, { type StaggerPreviewItem } from './modals/StaggerKeysModal'
+import ScaleHandlesOverlay     from './timeline/ScaleHandlesOverlay'
+import KeyframeSpreadsheet, { type KeyframeSheetRow } from './timeline/KeyframeSpreadsheet'
 import type { TimelineEvent } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { nextEventId } from '@/lib/defaults'
@@ -413,6 +417,141 @@ export default function TimelinePanel({
     })
   }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
 
+  // BL-07: Spreadsheet rows derived from the current selection. Cheap derivation
+  // — recomputed only when the selection or timeline changes.
+  const spreadsheetRows = useMemo<KeyframeSheetRow[]>(() => {
+    if (!timeline || selectedKfIds.size === 0) return []
+    const out: KeyframeSheetRow[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        const layerSeg = track.target.split('.').slice(1, 2)[0] ?? 'layer'
+        const propSeg  = track.target.replace(/^layers\.[^.]+\./, '')
+        out.push({
+          kfId:        kf.id,
+          trackTarget: track.target,
+          label:       `${layerSeg} / ${propSeg}`,
+          timeMs:      kf.timeMs,
+          value:       typeof kf.value === 'number' ? kf.value : null,
+          easingType:  kf.easing?.type ?? 'linear',
+        })
+      }
+    }
+    return out.sort((a, b) => a.timeMs - b.timeMs)
+  }, [timeline, selectedKfIds])
+
+  // BL-07: Selection time bounds — feeds the Scale Handles overlay. null if
+  // fewer than 2 kfs selected or they all share the same time.
+  const selectionTimeBounds = useMemo(() => {
+    if (!timeline || selectedKfIds.size < 2) return null
+    let lo = Infinity, hi = -Infinity, count = 0
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        if (kf.timeMs < lo) lo = kf.timeMs
+        if (kf.timeMs > hi) hi = kf.timeMs
+        count++
+      }
+    }
+    return count >= 2 && hi > lo ? { minMs: lo, maxMs: hi } : null
+  }, [timeline, selectedKfIds])
+
+  // BL-07: Apply Scale Keys command from on-canvas drag handles. Pivot is the
+  // anchored end (opposite the dragged handle); scaleFactor is new/old span.
+  const applyScale = useCallback((pivotMs: number, scaleFactor: number) => {
+    if (!selectedTimelineId || !timeline || selectedKfIds.size < 2) return
+    const items: ScaleKfItem[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        items.push({
+          timelineId: selectedTimelineId,
+          target:     track.target,
+          kfId:       kf.id,
+          fromMs:     kf.timeMs,
+        })
+      }
+    }
+    if (items.length >= 2) {
+      dispatchCommand(makeScaleKeysCmd(items, pivotMs, scaleFactor))
+    }
+  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
+
+  // BL-07: Build the StaggerKeysModal's preview list from the current selection.
+  // Items are passed in selection-order; the modal sorts by time for indexing.
+  const staggerSelectionItems = useMemo<StaggerPreviewItem[]>(() => {
+    if (!timeline || selectedKfIds.size === 0) return []
+    const out: StaggerPreviewItem[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        const layerSeg = track.target.split('.').slice(1, 2)[0] ?? 'layer'
+        const propSeg  = track.target.replace(/^layers\.[^.]+\./, '')
+        out.push({
+          kfId: kf.id,
+          trackTarget: track.target,
+          label: `${layerSeg} / ${propSeg}`,
+          fromMs: kf.timeMs,
+        })
+      }
+    }
+    return out
+  }, [timeline, selectedKfIds])
+
+  // BL-07: Apply Stagger Keys command from the modal.
+  const applyStagger = useCallback((offsetMs: number, direction: 'forward' | 'backward') => {
+    if (!selectedTimelineId || staggerSelectionItems.length < 2) return
+    // Sort by time, then assign index so the earliest kf is index 0 (anchor).
+    const sorted = [...staggerSelectionItems].sort((a, b) => a.fromMs - b.fromMs)
+    const items: StaggerKfItem[] = sorted.map((it, idx) => ({
+      timelineId: selectedTimelineId,
+      target:     it.trackTarget,
+      kfId:       it.kfId,
+      fromMs:     it.fromMs,
+      index:      idx,
+    }))
+    dispatchCommand(makeStaggerKeysCmd(items, offsetMs, direction))
+  }, [staggerSelectionItems, selectedTimelineId, dispatchCommand])
+
+  // BL-07: Shift+drag on the ruler → select every keyframe whose time falls
+  // inside the dragged [startMs, endMs] window. addToExisting=true (Shift+
+  // Ctrl/Cmd) merges with the current selection instead of replacing it.
+  const rangeSelectKfs = useCallback((startMs: number, endMs: number, addToExisting: boolean) => {
+    if (!timeline) return
+    const lo = Math.min(startMs, endMs)
+    const hi = Math.max(startMs, endMs)
+    const hits = new Set<string>(addToExisting ? selectedKfIds : [])
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (kf.timeMs >= lo && kf.timeMs <= hi) hits.add(kf.id)
+      }
+    }
+    onSelectKeyframes(hits)
+  }, [timeline, selectedKfIds, onSelectKeyframes])
+
+  // BL-07: Slide selected keyframes by delta ms. Clamped to [0, duration]
+  // so kfs can't fall off either side. Uses the existing bulk-move command
+  // so the whole shift is a single undo step.
+  const slideSelectedKfs = useCallback((deltaMs: number) => {
+    if (!selectedTimelineId || !timeline || selectedKfIds.size === 0) return
+    const moves: KfMove[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        const toMs = Math.max(0, Math.min(duration, kf.timeMs + deltaMs))
+        if (toMs === kf.timeMs) continue
+        moves.push({
+          timelineId: selectedTimelineId,
+          target: track.target,
+          kfId: kf.id,
+          fromMs: kf.timeMs,
+          toMs,
+        })
+      }
+    }
+    if (moves.length > 0) dispatchCommand(makeBulkMoveKfCmd(moves))
+  }, [timeline, selectedTimelineId, selectedKfIds, duration, dispatchCommand])
+
   // ── Right-click context menu + inline kf value editor ───────────────────
   // Single shared menu for keyframe right-clicks (we can extend to property
   // and layer rows later). Inline-edit input renders absolutely-positioned
@@ -437,6 +576,10 @@ export default function TimelinePanel({
   // BL-45: Track-header right-click target (state declared up here so all
   // openX callbacks below can clear it via setCtxTrackHeader(null)).
   const [ctxTrackHeader, setCtxTrackHeader] = useState<{ trackTarget: string } | null>(null)
+
+  // BL-07: Stagger modal + Keyframe Spreadsheet visibility
+  const [staggerModalOpen, setStaggerModalOpen] = useState(false)
+  const [keySheetOpen,     setKeySheetOpen]     = useState(false)
 
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -627,9 +770,13 @@ export default function TimelinePanel({
       <TrackToolBar
         hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
         selectedCount={selectedKfIds.size}
+        frameRate={scene.composition.frameRate}
         onSelectAll={selectAllKfs}
         onDeleteSelected={deleteSelectedKfs}
         onEaseSelected={easeSelectedKfs}
+        onSlideSelected={slideSelectedKfs}
+        onOpenStaggerModal={() => setStaggerModalOpen(true)}
+        onOpenKeySpreadsheet={() => setKeySheetOpen((o) => !o)}
       />
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
@@ -668,7 +815,19 @@ export default function TimelinePanel({
             msToScreenPx={vp.msToScreenPx}
             clientXToMs={vp.clientXToMs}
             onSeek={onTimeChange}
+            onRangeSelect={rangeSelectKfs}
           />
+          {/* BL-07: Scale Handles overlay — only when 2+ kfs span a real range */}
+          {selectionTimeBounds && (
+            <ScaleHandlesOverlay
+              minMs={selectionTimeBounds.minMs}
+              maxMs={selectionTimeBounds.maxMs}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              durationMs={duration}
+              onApply={applyScale}
+            />
+          )}
           {/* Bookmark flags — overlayed on top of the ruler */}
           {bookmarks.map((bk, i) => bk == null ? null : (
             <div
@@ -865,6 +1024,15 @@ export default function TimelinePanel({
           onDelete={segmentModal.mode === 'edit'
             ? () => dispatchCommand(makeDeleteSegmentCmd(timeline.id, segmentModal.segment))
             : undefined}
+        />
+      )}
+
+      {/* ── Stagger Keys modal (BL-07) ───────────────────────────────────── */}
+      {staggerModalOpen && (
+        <StaggerKeysModal
+          items={staggerSelectionItems}
+          onApply={applyStagger}
+          onClose={() => setStaggerModalOpen(false)}
         />
       )}
 
@@ -1223,6 +1391,32 @@ export default function TimelinePanel({
         setScrollLeftPx={vp.setScrollLeftPx}
         onSeek={onTimeChange}
       />
+
+      {/* ── BL-07: Keyframe Spreadsheet drawer (toggled by ⊞ Sheet) ─────── */}
+      {keySheetOpen && selectedTimelineId && (
+        <KeyframeSpreadsheet
+          rows={spreadsheetRows}
+          onUpdateTime={(kfId, target, fromMs, toMs) =>
+            dispatchCommand(makeMoveKfCmd(selectedTimelineId, target, kfId, fromMs, toMs))
+          }
+          onUpdateValue={(kfId, target, fromValue, toValue) =>
+            dispatchCommand(makeUpdateKfValueCmd(selectedTimelineId, target, kfId, fromValue, toValue))
+          }
+          onUpdateEasing={(kfId, target, toEasing) => {
+            const tr = timeline?.tracks.find((t) => t.target === target)
+            const kf = tr?.keyframes.find((k) => k.id === kfId)
+            if (!kf) return
+            dispatchCommand(makeUpdateEasingCmd(selectedTimelineId, target, kfId, kf.easing, { type: toEasing }))
+          }}
+          onDelete={(kfId, target) => {
+            const tr = timeline?.tracks.find((t) => t.target === target)
+            const kf = tr?.keyframes.find((k) => k.id === kfId)
+            if (!kf) return
+            dispatchCommand(makeDeleteKfCmd(selectedTimelineId, target, kf))
+          }}
+          onClose={() => setKeySheetOpen(false)}
+        />
+      )}
 
       {/* ── Status bar ───────────────────────────────────────────────────── */}
       <TimelineStatusBar

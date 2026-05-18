@@ -1,5 +1,5 @@
 'use client'
-import { useMemo } from 'react'
+import { useMemo, useRef, useState, useCallback } from 'react'
 import { computeTickIntervalMs } from '@/lib/timeline/coordinates'
 import { usePlayheadScrub } from './hooks/usePlayheadScrub'
 
@@ -11,6 +11,9 @@ interface Props {
   msToScreenPx: (timeMs: number) => number
   clientXToMs: (clientX: number) => number
   onSeek: (timeMs: number) => void
+  /** BL-07: Shift+drag on ruler → select all keyframes in the dragged range.
+   *  `addToExisting` true when Shift+Ctrl/Cmd is held (additive). */
+  onRangeSelect?: (startMs: number, endMs: number, addToExisting: boolean) => void
 }
 
 /**
@@ -18,14 +21,65 @@ interface Props {
  *
  * The ruler stays fixed in viewport while the tracks scroll behind it; both
  * use the same msToScreenPx function so they stay in sync.
+ *
+ * Interactions:
+ *   - Plain click/drag → scrub the playhead (usePlayheadScrub)
+ *   - Shift+drag       → range-select keyframes (BL-07)
  */
 export default function TimelineRuler(props: Props) {
   const {
     durationMs, currentTimeMs, totalContentPx, scrollLeftPx,
-    msToScreenPx, clientXToMs, onSeek,
+    msToScreenPx, clientXToMs, onSeek, onRangeSelect,
   } = props
 
   const scrub = usePlayheadScrub({ onSeek, clientXToMs, durationMs })
+
+  // BL-07: range-select drag state. Active only when Shift was held on
+  // pointerDown — plain drags fall through to the playhead scrub.
+  const rangeStartRef = useRef<{ startMs: number; addToExisting: boolean } | null>(null)
+  const [rangePreview, setRangePreview] = useState<{ startMs: number; endMs: number } | null>(null)
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    if (e.shiftKey && onRangeSelect) {
+      // Range select mode — capture pointer, suppress scrub
+      ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+      const startMs = Math.max(0, Math.min(durationMs, clientXToMs(e.clientX)))
+      rangeStartRef.current = { startMs, addToExisting: e.ctrlKey || e.metaKey }
+      setRangePreview({ startMs, endMs: startMs })
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    scrub.onPointerDown(e)
+  }, [clientXToMs, durationMs, onRangeSelect, scrub])
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (rangeStartRef.current) {
+      const endMs = Math.max(0, Math.min(durationMs, clientXToMs(e.clientX)))
+      setRangePreview({ startMs: rangeStartRef.current.startMs, endMs })
+      return
+    }
+    scrub.onPointerMove(e)
+  }, [clientXToMs, durationMs, scrub])
+
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (rangeStartRef.current) {
+      const start = rangeStartRef.current
+      const endMs = Math.max(0, Math.min(durationMs, clientXToMs(e.clientX)))
+      const lo = Math.min(start.startMs, endMs)
+      const hi = Math.max(start.startMs, endMs)
+      // Only emit if the user actually dragged — bare clicks fall through
+      if (Math.abs(hi - lo) >= 1 && onRangeSelect) {
+        onRangeSelect(lo, hi, start.addToExisting)
+      }
+      rangeStartRef.current = null
+      setRangePreview(null)
+      ;(e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId)
+      return
+    }
+    scrub.onPointerUp(e)
+  }, [clientXToMs, durationMs, onRangeSelect, scrub])
 
   // ── Compute visible tick positions ────────────────────────────────────────
   const ticks = useMemo(() => {
@@ -43,12 +97,23 @@ export default function TimelineRuler(props: Props) {
 
   const playheadX = msToScreenPx(currentTimeMs)
 
+  // BL-07: range preview rectangle pixel coords
+  const rangeRect = useMemo(() => {
+    if (!rangePreview) return null
+    const lo = Math.min(rangePreview.startMs, rangePreview.endMs)
+    const hi = Math.max(rangePreview.startMs, rangePreview.endMs)
+    const xLo = msToScreenPx(lo)
+    const xHi = msToScreenPx(hi)
+    return { x: xLo, w: Math.max(1, xHi - xLo), lo, hi }
+  }, [rangePreview, msToScreenPx])
+
   return (
     <div
       className="h-6 bg-gray-800 border-b border-gray-700 relative cursor-ew-resize select-none overflow-hidden"
-      onPointerDown={scrub.onPointerDown}
-      onPointerMove={scrub.onPointerMove}
-      onPointerUp={scrub.onPointerUp}
+      title={onRangeSelect ? 'Click/drag: scrub · Shift+drag: select keyframes in range' : 'Drag to scrub'}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
     >
       {/* Ticks + labels */}
       {ticks.map((ms) => {
@@ -63,6 +128,18 @@ export default function TimelineRuler(props: Props) {
           </div>
         )
       })}
+
+      {/* BL-07: Range-select preview overlay */}
+      {rangeRect && (
+        <div
+          className="absolute top-0 h-full bg-amber-400/20 border-x border-amber-400/60 pointer-events-none z-20"
+          style={{ left: `${rangeRect.x}px`, width: `${rangeRect.w}px` }}
+        >
+          <div className="absolute -top-px left-0 right-0 text-center text-[9px] font-mono text-amber-300 whitespace-nowrap">
+            {Math.round(rangeRect.lo)} – {Math.round(rangeRect.hi)}ms
+          </div>
+        </div>
+      )}
 
       {/* Playhead */}
       <div
