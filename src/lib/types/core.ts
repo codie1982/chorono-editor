@@ -7,6 +7,7 @@ import type { ImageData, VideoData, AudioData, Asset } from './media'
 import type { LayerEffects, MotionPath, PluginEffect, FollowPath } from './effects'
 import type { BezierPath } from './path'
 import type { MaskDefinition } from './mask'
+import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,10 @@ export interface Track {
    *  `src/lib/timeline/tracks.ts` for the full union (event / audio /
    *  marker / state / trigger track types). */
   kind?: 'property'
+  /** Out-of-range behavior (BL-45). Defines what happens before first keyframe
+   *  and after last keyframe (Constant, Cycle, Loop, PingPong, Linear, RelativeRepeat).
+   *  Optional for backward compat: undefined defaults to constant/constant. */
+  outOfRange?: OutOfRangeSettings
   // TODO(big-feature): controller type — currently every track is implicit
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
