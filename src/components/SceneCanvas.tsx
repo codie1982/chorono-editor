@@ -202,6 +202,19 @@ interface ScaleAxisState {
   axis: 'x' | 'y' | 'both'
   startClientX: number
   startClientY: number
+  /** BL-03: When set, the drag scales EVERY layer here around (pivotX, pivotY).
+   *  Each layer's origin snapshot is captured at drag start so positions are
+   *  recomputed from a stable baseline. */
+  multiLayerOrigins?: Array<{
+    layerId: string
+    originalLayer: Layer
+    originalX: number
+    originalY: number
+    originalScaleX: number
+    originalScaleY: number
+  }>
+  pivotX?: number
+  pivotY?: number
 }
 
 type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | RotateState | ScaleAxisState
@@ -559,33 +572,59 @@ export default function SceneCanvas({
       // Positive drag (right/down) = bigger; negative = smaller. Shift =
       // uniform regardless of which arrow was grabbed.
       const SENS = 100
-      const o = drag.originalLayer.transform
-      let nsx = o.scaleX
-      let nsy = o.scaleY
       const fx = 1 + dx / SENS
       const fy = 1 + dy / SENS
       const axis = e.shiftKey ? 'both' : drag.axis
-      if (axis === 'x')    nsx = o.scaleX * fx
-      if (axis === 'y')    nsy = o.scaleY * fy
+      let factorX = 1, factorY = 1
+      if (axis === 'x')    factorX = fx
+      if (axis === 'y')    factorY = fy
       if (axis === 'both') {
         // Uniform: prefer the dominant axis direction so the drag feels
         // natural whether the user moves diagonally or mostly one way.
         const f = Math.abs(dx) >= Math.abs(dy) ? fx : fy
-        nsx = o.scaleX * f
-        nsy = o.scaleY * f
+        factorX = f
+        factorY = f
       }
-      // Clamp to prevent flipping past zero (negative scale = flip; not
-      // what the user wants from a "scale bigger" drag). Min 0.05 keeps
-      // tiny shapes still selectable.
-      nsx = Math.max(0.05, nsx)
-      nsy = Math.max(0.05, nsy)
-      let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.scaleX', nsx)
-      next     = updateLayerProperty(next,             drag.layerId, 'transform.scaleY', nsy)
-      editorRef.current.previewTransaction(next)
-      setDragHud({
-        x: e.clientX, y: e.clientY,
-        label: `SX ${nsx.toFixed(2)}   SY ${nsy.toFixed(2)}`,
-      })
+      // Clamp to prevent flipping past zero (Min 0.05 keeps tiny shapes
+      // still selectable). Applied to the FINAL scale below.
+
+      if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0
+          && drag.pivotX != null && drag.pivotY != null) {
+        // BL-03: multi-select scale around common pivot. Each layer's
+        // position-offset from pivot is multiplied by the factor so layers
+        // both grow AND spread out (or shrink and pull in).
+        let scene = sceneRef.current
+        for (const o of drag.multiLayerOrigins) {
+          const ax = o.originalX + o.originalLayer.transform.anchorX
+          const ay = o.originalY + o.originalLayer.transform.anchorY
+          const ox = (ax - drag.pivotX) * factorX
+          const oy = (ay - drag.pivotY) * factorY
+          const nx = (drag.pivotX + ox) - o.originalLayer.transform.anchorX
+          const ny = (drag.pivotY + oy) - o.originalLayer.transform.anchorY
+          const nsx = Math.max(0.05, o.originalScaleX * factorX)
+          const nsy = Math.max(0.05, o.originalScaleY * factorY)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.x',      nx)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.y',      ny)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.scaleX', nsx)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.scaleY', nsy)
+        }
+        editorRef.current.previewTransaction(scene)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `${(factorX * 100).toFixed(0)}% × ${(factorY * 100).toFixed(0)}%  (${drag.multiLayerOrigins.length} layers)`,
+        })
+      } else {
+        const o = drag.originalLayer.transform
+        const nsx = Math.max(0.05, o.scaleX * factorX)
+        const nsy = Math.max(0.05, o.scaleY * factorY)
+        let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.scaleX', nsx)
+        next     = updateLayerProperty(next,             drag.layerId, 'transform.scaleY', nsy)
+        editorRef.current.previewTransaction(next)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `SX ${nsx.toFixed(2)}   SY ${nsy.toFixed(2)}`,
+        })
+      }
       return
     }
 
@@ -818,6 +857,31 @@ export default function SceneCanvas({
       if (!rChanged) { ed.cancelTransaction(); return }
       ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
       onAfterLayerCommit?.(drag.originalLayer, finalLayer)
+      return
+    }
+
+    // BL-03: Multi-layer scale → batch one undo step (same pattern as
+    // multi-rotate + multi-move).
+    if (drag.kind === 'scaleAxis' && drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
+      const ops: { layerId: string; next: Layer; prev: Layer }[] = []
+      for (const o of drag.multiLayerOrigins) {
+        const fl = ed.scene.layers.find((l) => l.id === o.layerId)
+        if (!fl) continue
+        const orig = o.originalLayer
+        const changed =
+          fl.transform.x      !== orig.transform.x ||
+          fl.transform.y      !== orig.transform.y ||
+          fl.transform.scaleX !== orig.transform.scaleX ||
+          fl.transform.scaleY !== orig.transform.scaleY
+        if (changed) ops.push({ layerId: o.layerId, next: fl, prev: orig })
+      }
+      if (ops.length === 0) { ed.cancelTransaction(); return }
+      const cmds = ops.map((op) => makeUpdateLayerCmd(op.layerId, op.next, op.prev))
+      ed.commitTransaction({
+        label: `Scale ${ops.length} Layers`,
+        execute: (s) => cmds.reduce((sc, c) => c.execute(sc), s),
+        undo:    (s) => cmds.slice().reverse().reduce((sc, c) => c.undo(sc), s),
+      })
       return
     }
 
@@ -1151,20 +1215,52 @@ export default function SceneCanvas({
     if (e.button !== 0) return
     e.stopPropagation()
     e.preventDefault()
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer || layer.locked) return
+    const primary = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!primary || primary.locked) return
+
+    // BL-03: Multi-select scale around shared pivot (centroid of selection).
+    const ids = selectedLayerIds && selectedLayerIds.size > 1
+      ? Array.from(selectedLayerIds)
+          .map((id) => scene.layers.find((l) => l.id === id))
+          .filter((l): l is Layer => !!l && !l.locked)
+      : null
+
+    let multiOrigins: ScaleAxisState['multiLayerOrigins']
+    let pivotX: number | undefined
+    let pivotY: number | undefined
+
+    if (ids && ids.length >= 2) {
+      let sumX = 0, sumY = 0
+      for (const l of ids) {
+        sumX += l.transform.x + l.transform.anchorX
+        sumY += l.transform.y + l.transform.anchorY
+      }
+      pivotX = sumX / ids.length
+      pivotY = sumY / ids.length
+      multiOrigins = ids.map((l) => ({
+        layerId: l.id,
+        originalLayer: l,
+        originalX: l.transform.x,
+        originalY: l.transform.y,
+        originalScaleX: l.transform.scaleX,
+        originalScaleY: l.transform.scaleY,
+      }))
+    }
+
     editor.beginTransaction()
     dragRef.current = {
       kind: 'scaleAxis',
-      layerId: layer.id,
-      originalLayer: layer,
+      layerId: primary.id,
+      originalLayer: primary,
       axis,
       startClientX: e.clientX,
       startClientY: e.clientY,
+      multiLayerOrigins: multiOrigins,
+      pivotX, pivotY,
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+  }, [scene.layers, selectedLayerId, selectedLayerIds, editor, handlePointerMove, handlePointerUp])
 
   // ── Preview-mode drag: fires dragStart/Move/End on draggable layers ────
   // Also writes a TEMPORARY override map entry so the dragged layer visibly
