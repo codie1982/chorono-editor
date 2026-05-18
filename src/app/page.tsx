@@ -60,7 +60,11 @@ import { useDockLayout } from '@/components/dock/useDockLayout'
 import { makeRegistry, type PanelDefinition, type PanelRegistry } from '@/components/dock/registry'
 import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
+import CloneModal             from '@/components/modals/CloneModal'
+import ArrayModal             from '@/components/modals/ArrayModal'
 import AIPanel                from '@/components/AIPanel'
+import { makeCloneCmd, makeArrayCmd } from '@/lib/editor/commands-clone'
+import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 
 // ── Demo scene shown on first load ────────────────────────────────────────────
 
@@ -130,6 +134,11 @@ export default function BuilderPage() {
   const wireModal = useWireModal()
   const [showHelp,        setShowHelp]      = useState(false)
   const [showAI,          setShowAI]        = useState(false)
+
+  // BL-59 — Clone & Array modals. Source layer is captured at open time
+  // so re-selection during the modal session doesn't change the target.
+  const [cloneModalSource, setCloneModalSource] = useState<Layer | null>(null)
+  const [arrayModalSource, setArrayModalSource] = useState<Layer | null>(null)
 
   // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
   // The id list must enumerate EVERY panel the registry exposes — the
@@ -447,6 +456,110 @@ export default function BuilderPage() {
     dispatchCommand(makeDuplicateLayerCmd(orig, next))
     selectLayer(next.id)
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
+
+  // ── BL-59 — Clone & Array System ──────────────────────────────────────────
+  //
+  // Three entry points:
+  //   • cloneQuick     — one new layer, default offset, no modal. Acts like
+  //                       a richer "Duplicate" that also copies animation.
+  //   • openCloneModal — opens CloneModal for count + offset + anim toggle.
+  //   • openArrayModal — opens ArrayModal (Linear/Grid/Radial).
+  //
+  // All three resolve the active timeline via `selectedTlId` so cloned
+  // animation tracks live alongside the source's existing tracks.
+
+  const getActiveTimeline = useCallback(() => {
+    return scene.timelines.find((tl) => tl.id === selectedTlId) ?? null
+  }, [scene.timelines, selectedTlId])
+
+  const sourceHasAnimation = useCallback((source: Layer): boolean => {
+    const tl = getActiveTimeline()
+    if (!tl) return false
+    return tl.tracks.some((t) => targetsLayer(t.target, source.id))
+  }, [getActiveTimeline])
+
+  const cloneQuick = useCallback(() => {
+    if (!selectedLayerId) return
+    const source = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!source) return
+    const cmd = makeCloneCmd({
+      source,
+      count: 1,
+      offsetX: 20,
+      offsetY: 20,
+      timeline: getActiveTimeline(),
+      allLayers: scene.layers,
+      duplicateAnimation: true,
+    })
+    dispatchCommand(cmd)
+    // Select the first new clone so subsequent transforms target it.
+    const firstNewId = cmd.result.suggestedSelection[0]
+    if (firstNewId) selectLayer(firstNewId)
+  }, [
+    selectedLayerId,
+    scene.layers,
+    getActiveTimeline,
+    dispatchCommand,
+    selectLayer,
+  ])
+
+  const openCloneModal = useCallback(() => {
+    if (!selectedLayerId) return
+    const source = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!source) return
+    setCloneModalSource(source)
+  }, [selectedLayerId, scene.layers])
+
+  const openArrayModal = useCallback(() => {
+    if (!selectedLayerId) return
+    const source = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!source) return
+    setArrayModalSource(source)
+  }, [selectedLayerId, scene.layers])
+
+  const handleCloneApply = useCallback((params: {
+    count: number
+    offsetX: number
+    offsetY: number
+    duplicateAnimation: boolean
+  }) => {
+    if (!cloneModalSource) return
+    const cmd = makeCloneCmd({
+      source: cloneModalSource,
+      count: params.count,
+      offsetX: params.offsetX,
+      offsetY: params.offsetY,
+      timeline: getActiveTimeline(),
+      allLayers: scene.layers,
+      duplicateAnimation: params.duplicateAnimation,
+    })
+    dispatchCommand(cmd)
+    const firstNewId = cmd.result.suggestedSelection[0]
+    if (firstNewId) selectLayer(firstNewId)
+    toast.success(
+      `Cloned "${cloneModalSource.name}" — ${cmd.result.createdLayerIds.length} new layer${
+        cmd.result.createdLayerIds.length === 1 ? '' : 's'
+      }`,
+    )
+  }, [cloneModalSource, getActiveTimeline, scene.layers, dispatchCommand, selectLayer])
+
+  const handleArrayApply = useCallback((settings: import('@/lib/array/ArrayTypes').ArraySettings) => {
+    if (!arrayModalSource) return
+    const cmd = makeArrayCmd({
+      source: arrayModalSource,
+      settings,
+      timeline: getActiveTimeline(),
+      allLayers: scene.layers,
+    })
+    dispatchCommand(cmd)
+    const firstNewId = cmd.result.suggestedSelection[0]
+    if (firstNewId) selectLayer(firstNewId)
+    toast.success(
+      `Array "${arrayModalSource.name}" — ${cmd.result.createdLayerIds.length} new layer${
+        cmd.result.createdLayerIds.length === 1 ? '' : 's'
+      }`,
+    )
+  }, [arrayModalSource, getActiveTimeline, scene.layers, dispatchCommand, selectLayer])
 
   // ── In-memory layer clipboard (cut / copy / paste from right-click menu) ──
   // Held in a ref because the clipboard is editor-state, not view-state — no
@@ -1146,6 +1259,10 @@ export default function BuilderPage() {
                       convertToSpline: selectedLayer?.type === 'shape' && selectedLayer.size
                         ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
                         : undefined,
+                      // BL-59 — Clone & Array context-menu entries
+                      cloneQuick:    cloneQuick,
+                      cloneSettings: openCloneModal,
+                      arraySettings: openArrayModal,
                     }}
                   />
                 ),
@@ -1352,6 +1469,26 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── BL-59 Clone Modal ──────────────────────────────────────── */}
+      {cloneModalSource && (
+        <CloneModal
+          source={cloneModalSource}
+          hasAnimationOnSource={sourceHasAnimation(cloneModalSource)}
+          onApply={handleCloneApply}
+          onClose={() => setCloneModalSource(null)}
+        />
+      )}
+
+      {/* ── BL-59 Array Modal ──────────────────────────────────────── */}
+      {arrayModalSource && (
+        <ArrayModal
+          source={arrayModalSource}
+          hasAnimationOnSource={sourceHasAnimation(arrayModalSource)}
+          onApply={handleArrayApply}
+          onClose={() => setArrayModalSource(null)}
+        />
+      )}
 
       {/* ── AI Planner side panel ──────────────────────────────────── */}
       {showAI && (

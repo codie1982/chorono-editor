@@ -115,6 +115,12 @@ interface Props {
     distributeVertically?:   () => void
     /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
     convertToSpline?: () => void
+    /** BL-59 Clone & Array — quick clone (one new layer, default offset). */
+    cloneQuick?:    () => void
+    /** BL-59 Clone & Array — opens CloneModal. */
+    cloneSettings?: () => void
+    /** BL-59 Clone & Array — opens ArrayModal. */
+    arraySettings?: () => void
   }
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview). */
   ghostSettings?: TimelineGhostSettings
@@ -2174,6 +2180,11 @@ export default function SceneCanvas({
             menuHandlers?.convertToSpline && target.type === 'shape' && target.size
               ? menuHandlers.convertToSpline
               : undefined,
+
+          // BL-59 — Clone & Array entries
+          cloneQuick:    menuHandlers?.cloneQuick,
+          cloneSettings: menuHandlers?.cloneSettings,
+          arraySettings: menuHandlers?.arraySettings,
 
           // ── Locally implemented (no page state needed) ──────────────────
           centerOrigin: () => editor.dispatchCommand(

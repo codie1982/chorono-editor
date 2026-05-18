@@ -17,6 +17,14 @@ export interface CanvasMenuHandlers {
   paste?:      () => void
   duplicate?:  () => void
 
+  // BL-59 — Clone & Array System
+  /** Quick clone with default offset (one new layer, opens no modal). */
+  cloneQuick?:    () => void
+  /** Opens CloneModal — full settings dialog. */
+  cloneSettings?: () => void
+  /** Opens ArrayModal — Linear/Grid/Radial dialog. */
+  arraySettings?: () => void
+
   // Layer ops
   group?:      () => void
   ungroup?:    () => void
@@ -88,6 +96,17 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
         action('Copy',      '⌘C', h.copy),
         action('Paste',     '⌘V', h.paste, !args.canPaste),
         action('Duplicate', '⌘D', h.duplicate),
+      ],
+    },
+
+    // ── BL-59 Clone & Array submenu ────────────────────────────────────────
+    {
+      kind: 'submenu', label: 'Clone / Array',
+      items: [
+        action('Clone (quick)',    '⌥⌘D', h.cloneQuick ?? h.duplicate),
+        action('Clone with settings…', undefined, h.cloneSettings),
+        sep(),
+        action('Array…',           undefined, h.arraySettings),
       ],
     },
 
