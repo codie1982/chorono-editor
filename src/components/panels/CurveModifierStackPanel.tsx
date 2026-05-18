@@ -16,12 +16,18 @@
 //   └─────────────────────────────────────┘
 
 import { useMemo, useState } from 'react'
-import type { ChronoScene, CurveModifier, CurveModifierType, CurveBlendMode, Keyframe } from '@/lib/types'
-import { defaultParametersFor } from '@/lib/types'
+import type {
+  ChronoScene, CurveModifier, CurveModifierType, CurveBlendMode, Keyframe,
+  TrackController, WaveformShape,
+} from '@/lib/types'
+import {
+  defaultParametersFor, DEFAULT_WAVEFORM_PARAMS, DEFAULT_NOISE_PARAMS,
+} from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   makeAddCurveModifierCmd, makeRemoveCurveModifierCmd, makeUpdateCurveModifierCmd,
-  makeReorderCurveModifierCmd, nextModifierId, type ModifierScope,
+  makeReorderCurveModifierCmd, nextModifierId, makeSetTrackControllerCmd,
+  type ModifierScope,
 } from '@/lib/editor/commands-track'
 
 interface Props {
@@ -97,6 +103,13 @@ export default function CurveModifierStackPanel({
   return (
     <div className="flex flex-col h-full bg-gray-900 text-[11px] text-gray-300">
       <Header label={`Track: ${focusTrack.target.replace(/^layers\./, '')}`} />
+
+      <ControllerSection
+        controller={focusTrack.controller}
+        timelineId={timeline.id}
+        trackTarget={focusTrack.target}
+        editor={editor}
+      />
 
       <ScopeSection
         title="TRACK MODIFIERS"
@@ -352,6 +365,127 @@ function ParamInput({ name, value, onChange }: {
       <input type="text" value={String(value)}
         onChange={(e) => onChange(e.target.value)}
         className="px-1.5 py-1 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-200" />
+    </label>
+  )
+}
+
+// ── Procedural Controller inspector (BL-50 follow-up polish) ───────────────
+// Surfaces waveform / noise parameters as proper inputs so the user doesn't
+// have to edit JSON. Section is HIDDEN when the controller is keyframe
+// (default) — that case is the dope sheet / curve editor's job.
+
+const WAVEFORM_SHAPES: WaveformShape[] = [
+  'sine', 'cosine', 'square', 'triangle', 'sawtooth', 'reverseSawtooth',
+]
+
+function ControllerSection({
+  controller, timelineId, trackTarget, editor,
+}: {
+  controller: TrackController | undefined
+  timelineId: string
+  trackTarget: string
+  editor: EditorStateReturn
+}) {
+  // Hidden for default (keyframe) controller — keyframe path is edited
+  // via the timeline directly.
+  if (!controller || controller.type === 'keyframe') return null
+
+  const dispatch = (next: TrackController) => {
+    editor.dispatchCommand(makeSetTrackControllerCmd(timelineId, trackTarget, controller, next))
+  }
+  const revertToKeyframe = () => {
+    editor.dispatchCommand(makeSetTrackControllerCmd(timelineId, trackTarget, controller, { type: 'keyframe' }))
+  }
+
+  return (
+    <div className="border-b border-gray-800">
+      <div className="flex items-center justify-between px-3 py-1 bg-fuchsia-950/30">
+        <span className="text-[9px] uppercase tracking-wider text-fuchsia-300">
+          ƒ Procedural · {controller.type}
+        </span>
+        <button
+          onClick={revertToKeyframe}
+          className="text-[10px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400"
+          title="Convert back to keyframe controller (resets to track.keyframes)"
+        >× Keyframe</button>
+      </div>
+
+      <div className="p-3 grid grid-cols-2 gap-2">
+        {controller.type === 'waveform' && (() => {
+          const wf = controller.waveform ?? DEFAULT_WAVEFORM_PARAMS
+          const patch = (p: Partial<typeof wf>) => dispatch({
+            type: 'waveform', waveform: { ...wf, ...p },
+          })
+          return (
+            <>
+              <label className="col-span-2 flex flex-col gap-0.5 text-[9px] text-gray-500">
+                <span className="uppercase tracking-wider">Shape</span>
+                <select value={wf.shape}
+                  onChange={(e) => patch({ shape: e.target.value as WaveformShape })}
+                  className="px-1.5 py-1 bg-gray-800 border border-gray-700 rounded text-[10px] text-gray-200">
+                  {WAVEFORM_SHAPES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <NumField label="Amplitude" value={wf.amplitude} onChange={(v) => patch({ amplitude: v })} />
+              <NumField label="Frequency (Hz)" value={wf.frequency} onChange={(v) => patch({ frequency: v })} />
+              <NumField label="Phase (rad)" value={wf.phase} step={0.1} onChange={(v) => patch({ phase: v })} />
+              <NumField label="Offset" value={wf.offset} onChange={(v) => patch({ offset: v })} />
+              {wf.shape === 'square' && (
+                <NumField label="Duty" value={wf.duty} step={0.05} min={0} max={1}
+                  onChange={(v) => patch({ duty: v })} />
+              )}
+            </>
+          )
+        })()}
+        {controller.type === 'noise' && (() => {
+          const nz = controller.noise ?? DEFAULT_NOISE_PARAMS
+          const patch = (p: Partial<typeof nz>) => dispatch({
+            type: 'noise', noise: { ...nz, ...p },
+          })
+          return (
+            <>
+              <NumField label="Seed" value={nz.seed} step={1}
+                onChange={(v) => patch({ seed: Math.round(v) })} />
+              <NumField label="Frequency (Hz)" value={nz.frequency} onChange={(v) => patch({ frequency: v })} />
+              <NumField label="Strength" value={nz.strength} onChange={(v) => patch({ strength: v })} />
+              <NumField label="Offset" value={nz.offset} onChange={(v) => patch({ offset: v })} />
+              <NumField label="Octaves" value={nz.octaves} step={1} min={1} max={8}
+                onChange={(v) => patch({ octaves: Math.max(1, Math.min(8, Math.round(v))) })} />
+              <NumField label="Lacunarity" value={nz.lacunarity} step={0.1}
+                onChange={(v) => patch({ lacunarity: v })} />
+              <NumField label="Gain" value={nz.gain} step={0.05} min={0} max={1}
+                onChange={(v) => patch({ gain: v })} />
+              <label className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-1">
+                <input type="checkbox" checked={nz.positiveOnly}
+                  onChange={(e) => patch({ positiveOnly: e.target.checked })}
+                  className="accent-blue-500" />
+                positiveOnly
+              </label>
+            </>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+function NumField({ label, value, onChange, step = 'any', min, max }: {
+  label: string; value: number
+  onChange: (v: number) => void
+  step?: number | 'any'
+  min?: number; max?: number
+}) {
+  return (
+    <label className="flex flex-col gap-0.5 text-[9px] text-gray-500">
+      <span className="uppercase tracking-wider">{label}</span>
+      <input type="number" value={Number.isFinite(value) ? value : 0}
+        step={step} min={min} max={max}
+        onChange={(e) => {
+          const v = Number(e.target.value)
+          if (Number.isFinite(v)) onChange(v)
+        }}
+        className="px-1.5 py-1 bg-gray-800 border border-gray-700 rounded text-[10px]
+                   text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
     </label>
   )
 }
