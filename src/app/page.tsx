@@ -1181,6 +1181,8 @@ export default function BuilderPage() {
                       onGhostUpdate={updateGhostSettings}
                       onGhostToggle={toggleGhost}
                       onGhostPreset={applyGhostPreset}
+                      onEditWire={wireModal.openForEdit}
+                      onWireRequest={wireModal.openForTarget}
                     />
                   </div>
                 ),

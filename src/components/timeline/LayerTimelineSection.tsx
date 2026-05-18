@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import type { Layer, Track, EasingType, AnimatableProperty } from '@/lib/types'
+import type { Layer, Track, EasingType, AnimatableProperty, ParameterWire } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { sampleTrackValueRange, valueToY } from '@/lib/timeline/valueGraph'
+import { findWireForProperty } from '@/lib/wiring/helpers'
 import TimelineKeyframe from './TimelineKeyframe'
 import TrackValueGraph  from './TrackValueGraph'
 import AudioWaveform    from './AudioWaveform'
@@ -52,6 +53,10 @@ interface Props {
   onTrackAreaDoubleClick?: (trackTarget: string, timeMs: number) => void
   /** Right-click on the property name in the track header → "Out of Range ▸ ..." menu (BL-45). */
   onTrackHeaderContextMenu?: (trackTarget: string, e: React.MouseEvent) => void
+  /** BL-05 — Scene parameter wires (for the 🔗 indicator on wired tracks). */
+  parameterWires?: ParameterWire[]
+  /** BL-05 — Click 🔗 on a track header → open WireParameterModal for that wire. */
+  onEditWire?: (wire: ParameterWire) => void
   /** Convert a client X position to ms for the events above. */
   clientXToMs?: (clientX: number) => number
   /** Total duration of the selected timeline, for clamping drag. */
@@ -93,6 +98,7 @@ export default function LayerTimelineSection({
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
   onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
   durationMs, onLayerBarCommit, pinIndex, audioUrl,
+  parameterWires, onEditWire,
 }: Props) {
 
   const isPinned = pinIndex != null && pinIndex >= 0
@@ -186,6 +192,8 @@ export default function LayerTimelineSection({
       {expanded && tracks.map((track) => {
         const propPath = track.target.replace(`layers.${layer.id}.`, '')
         const range = sampleTrackValueRange(track)
+        // BL-05: any enabled wire driving this property? Drives 🔗 indicator.
+        const wireOnProp = findWireForProperty(parameterWires, layer.id, propPath)
         return (
           <div key={track.target} className="flex items-stretch border-b border-gray-800/60"
             style={{ height: rowH }}>
@@ -216,6 +224,15 @@ export default function LayerTimelineSection({
                   <span className="ml-1 text-purple-400" title="Out-of-Range behavior set">●</span>
                 )}
               </span>
+              {/* BL-05: 🔗 wire indicator (sky-tinted when wired, click opens editor) */}
+              {wireOnProp && onEditWire && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onEditWire(wireOnProp) }}
+                  title="Wired — click to edit"
+                  className="text-[10px] leading-none w-3.5 h-3.5 flex items-center justify-center rounded text-sky-300 bg-sky-900/50 hover:bg-sky-800/70"
+                >🔗</button>
+              )}
               <button
                 onClick={() => onRemoveTrack(track.target)}
                 className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-500 hover:text-red-400"

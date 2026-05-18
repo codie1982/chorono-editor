@@ -96,6 +96,10 @@ interface Props {
   onGhostUpdate: (patch: Partial<TimelineGhostSettings>) => void
   onGhostToggle: () => void
   onGhostPreset: (preset: 'off' | 'light' | 'medium' | 'heavy') => void
+  /** BL-05 — Click 🔗 on a wired track row → open WireParameterModal. */
+  onEditWire?: (wire: import('@/lib/types').ParameterWire) => void
+  /** BL-05 — "Wire This Parameter…" right-click menu → open modal in new mode. */
+  onWireRequest?: (target: import('@/lib/types').ParameterRef) => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +111,7 @@ export default function TimelinePanel({
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
+  onEditWire, onWireRequest,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -1085,6 +1090,8 @@ export default function TimelinePanel({
             onTrackHeaderContextMenu={openTrackHeaderMenu}
             onTrackAreaDoubleClick={(target, ms) => addKeyframeAtTime(target, ms)}
             clientXToMs={vp.clientXToMs}
+            parameterWires={scene.parameterWires}
+            onEditWire={onEditWire}
             onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
               // Single command handles move + trim — linearly remaps every
               // keyframe on this layer so the inner animation scales/shifts
@@ -1488,17 +1495,44 @@ export default function TimelinePanel({
         )
       })()}
 
-      {/* ── Track-header right-click menu (BL-45: Out of Range) ─────────────── */}
+      {/* ── Track-header right-click menu (BL-45 OOR + BL-05 Wire actions) ─── */}
       {ctxMenu.isOpen && ctxTrackHeader && selectedTimelineId && timeline && (() => {
         const track = timeline.tracks.find((t) => t.target === ctxTrackHeader.trackTarget)
         if (!track) return null
-        const items = [
+        // Extract layerId + propertyPath from "layers.<id>.<prop>" track target
+        const layerMatch = /^layers\.([^.]+)\.(.+)$/.exec(track.target)
+        const layerIdOnTrack  = layerMatch?.[1]
+        const propertyPath    = layerMatch?.[2]
+        const wireOnProp = (layerIdOnTrack && propertyPath)
+          ? (scene.parameterWires ?? []).find(
+              (w) => w.enabled && w.target.layerId === layerIdOnTrack && w.target.propertyPath === propertyPath
+            ) ?? null
+          : null
+
+        type Item = Parameters<typeof ContextMenu>[0]['items'][number]
+        const items: Item[] = [
           buildOutOfRangeSubmenu(track.outOfRange, (next) => {
             dispatchCommand(
               makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),
             )
           }),
         ]
+        if (layerIdOnTrack && propertyPath && (onEditWire || onWireRequest)) {
+          items.push({ kind: 'separator' })
+          if (wireOnProp) {
+            items.push({
+              kind: 'action', label: 'Edit Wire…', shortcut: undefined, disabled: !onEditWire,
+              onSelect: () => { onEditWire?.(wireOnProp) },
+            })
+          } else if (onWireRequest) {
+            items.push({
+              kind: 'action', label: 'Wire This Parameter…', shortcut: undefined, disabled: false,
+              onSelect: () => onWireRequest({
+                layerId: layerIdOnTrack, propertyPath, valueType: 'number',
+              }),
+            })
+          }
+        }
         return (
           <ContextMenu
             x={ctxMenu.state!.x} y={ctxMenu.state!.y}
