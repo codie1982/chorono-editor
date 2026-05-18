@@ -27,8 +27,12 @@ import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   makeAddCurveModifierCmd, makeRemoveCurveModifierCmd, makeUpdateCurveModifierCmd,
   makeReorderCurveModifierCmd, nextModifierId, makeSetTrackControllerCmd,
+  makeUpdateTrackCurvesCmd,
   type ModifierScope,
 } from '@/lib/editor/commands-track'
+import type { BezierTuple } from '@/lib/types'
+import { IDENTITY_BEZIER } from '@/lib/types'
+import BezierEditor from '@/components/timeline/BezierEditor'
 
 interface Props {
   scene: ChronoScene
@@ -106,6 +110,16 @@ export default function CurveModifierStackPanel({
 
       <ControllerSection
         controller={focusTrack.controller}
+        timelineId={timeline.id}
+        trackTarget={focusTrack.target}
+        editor={editor}
+      />
+
+      <TrackCurvesSection
+        easeCurve={focusTrack.easeCurve}
+        timeWarp={focusTrack.timeWarp}
+        multiplierCurve={focusTrack.multiplierCurve}
+        multiplierAmplitude={focusTrack.multiplierAmplitude}
         timelineId={timeline.id}
         trackTarget={focusTrack.target}
         editor={editor}
@@ -465,6 +479,130 @@ function ControllerSection({
           )
         })()}
       </div>
+    </div>
+  )
+}
+
+// ── Track Curves: ease / time-warp / multiplier (BL-48 polish) ────────────
+// Three small bezier editors + an amplitude slider, all dispatched via the
+// generic makeUpdateTrackCurvesCmd so each edit is one undo step.
+
+function TrackCurvesSection({
+  easeCurve, timeWarp, multiplierCurve, multiplierAmplitude,
+  timelineId, trackTarget, editor,
+}: {
+  easeCurve:           BezierTuple | undefined
+  timeWarp:            BezierTuple | undefined
+  multiplierCurve:     BezierTuple | undefined
+  multiplierAmplitude: number | undefined
+  timelineId: string
+  trackTarget: string
+  editor: EditorStateReturn
+}) {
+  const [openId, setOpenId] = useState<null | 'ease' | 'warp' | 'mult'>(null)
+
+  const patch = (next: Parameters<typeof makeUpdateTrackCurvesCmd>[3]) => {
+    // prev mirrors the current keys we're changing so undo is precise.
+    const prev: Parameters<typeof makeUpdateTrackCurvesCmd>[2] = {}
+    if ('easeCurve'           in next) prev.easeCurve           = easeCurve
+    if ('timeWarp'            in next) prev.timeWarp            = timeWarp
+    if ('multiplierCurve'     in next) prev.multiplierCurve     = multiplierCurve
+    if ('multiplierAmplitude' in next) prev.multiplierAmplitude = multiplierAmplitude
+    editor.dispatchCommand(makeUpdateTrackCurvesCmd(timelineId, trackTarget, prev, next))
+  }
+
+  return (
+    <div className="border-b border-gray-800">
+      <div className="px-3 py-1 bg-gray-950/40 text-[9px] uppercase tracking-wider text-gray-500">
+        Track Curves
+      </div>
+      <CurveRow
+        label="Ease Curve"
+        hint="re-times the WHOLE track (slow start / fast end / etc.)"
+        value={easeCurve}
+        open={openId === 'ease'}
+        onToggle={() => setOpenId(openId === 'ease' ? null : 'ease')}
+        onChange={(next) => patch({ easeCurve: next })}
+        onClear={() => patch({ easeCurve: undefined })}
+      />
+      <CurveRow
+        label="Time Warp"
+        hint="stacked AFTER ease — additional time remap layer"
+        value={timeWarp}
+        open={openId === 'warp'}
+        onToggle={() => setOpenId(openId === 'warp' ? null : 'warp')}
+        onChange={(next) => patch({ timeWarp: next })}
+        onClear={() => patch({ timeWarp: undefined })}
+      />
+      <CurveRow
+        label="Multiplier"
+        hint="value-axis scale: final *= 1 + (bezier(t) - 0.5) · amp · 2"
+        value={multiplierCurve}
+        open={openId === 'mult'}
+        onToggle={() => setOpenId(openId === 'mult' ? null : 'mult')}
+        onChange={(next) => patch({ multiplierCurve: next })}
+        onClear={() => patch({ multiplierCurve: undefined, multiplierAmplitude: undefined })}
+        extra={multiplierCurve ? (
+          <NumField
+            label="Amplitude"
+            value={multiplierAmplitude ?? 1}
+            step={0.05} min={0} max={2}
+            onChange={(v) => patch({ multiplierAmplitude: v })}
+          />
+        ) : undefined}
+      />
+    </div>
+  )
+}
+
+function CurveRow({
+  label, hint, value, open, onToggle, onChange, onClear, extra,
+}: {
+  label: string
+  hint:  string
+  value: BezierTuple | undefined
+  open: boolean
+  onToggle: () => void
+  onChange: (next: BezierTuple) => void
+  onClear:  () => void
+  extra?: React.ReactNode
+}) {
+  const active = !!value
+  return (
+    <div className={`border-t border-gray-800/60 ${active ? '' : 'opacity-70'}`}>
+      <div className="flex items-center gap-1.5 px-3 py-1.5">
+        <button
+          onClick={onToggle}
+          className="flex-1 text-left text-[11px] hover:text-white truncate"
+        >
+          <span className="text-yellow-400 mr-1">{open ? '▾' : '▸'}</span>
+          {label}
+          {active && <span className="ml-1.5 text-[9px] text-blue-400">●</span>}
+        </button>
+        {!active ? (
+          <button
+            onClick={() => onChange({ ...IDENTITY_BEZIER })}
+            className="text-[10px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400"
+            title="Enable with identity (no-op) curve"
+          >+ Set</button>
+        ) : (
+          <button
+            onClick={onClear}
+            className="text-[10px] px-1 text-red-400 hover:text-red-300"
+            title="Remove curve"
+          >✕</button>
+        )}
+      </div>
+      {open && (
+        <div className="px-3 pb-2 flex flex-col gap-2 items-center">
+          <div className="text-[9px] text-gray-600 italic self-start">{hint}</div>
+          <BezierEditor
+            value={value ?? { ...IDENTITY_BEZIER }}
+            onChange={onChange}
+          />
+          {extra && <div className="self-stretch">{extra}</div>}
+        </div>
+      )}
     </div>
   )
 }

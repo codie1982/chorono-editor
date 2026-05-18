@@ -176,6 +176,42 @@ export function nextModifierId(): string {
   return `mod_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`
 }
 
+// ── Track curve fields (BL-48 polish) ──────────────────────────────────────
+//
+// Generic patcher for the small set of "curve / scalar" fields on Track:
+// easeCurve, timeWarp, multiplierCurve, multiplierAmplitude. Undoable
+// in one step regardless of how many fields the patch touches.
+
+type TrackCurvePatch = Partial<Pick<Track,
+  'easeCurve' | 'timeWarp' | 'multiplierCurve' | 'multiplierAmplitude'
+>>
+
+export function makeUpdateTrackCurvesCmd(
+  timelineId: string,
+  target:     string,
+  prev:       TrackCurvePatch,
+  next:       TrackCurvePatch,
+): EditorCommand {
+  function apply(scene: ChronoScene, patch: TrackCurvePatch): ChronoScene {
+    return {
+      ...scene,
+      timelines: scene.timelines.map((tl) =>
+        tl.id !== timelineId ? tl : {
+          ...tl,
+          tracks: tl.tracks.map((tr) => tr.target !== target ? tr : { ...tr, ...patch }),
+        }
+      ),
+    }
+  }
+  // Label describes the dominant edit for the undo stack.
+  const fields = Object.keys(next).join(', ')
+  return {
+    label: `Edit Track Curves (${fields || 'reset'})`,
+    execute: (scene) => apply(scene, next),
+    undo:    (scene) => apply(scene, prev),
+  }
+}
+
 // ── Procedural Controller (BL-50) ───────────────────────────────────────────
 
 import type { TrackController } from '../animation/controllers/types'
