@@ -1042,7 +1042,70 @@ export function hitTestLayersAt(
 
     if (hitTestLayerLocal(layer, lx, ly)) hits.push(layer.id)
   }
+
+  // BL-03: Group AABB hit-test. After per-leaf hits are collected, walk
+  // group layers and add the group when the click sits inside the union
+  // of its children's world bounds. This means clicking the EMPTY area
+  // between children of a group still selects the group — matches
+  // Figma / 3ds Max behavior.
+  for (let i = scene.layers.length - 1; i >= 0; i--) {
+    const layer = scene.layers[i]
+    if (layer.type !== 'group') continue
+    if (layer.hidden || layer.locked || layer.frozen) continue
+    const bounds = computeGroupWorldBounds(scene, overrides, layer)
+    if (!bounds) continue
+    if (canvasX >= bounds.x && canvasX <= bounds.x + bounds.w &&
+        canvasY >= bounds.y && canvasY <= bounds.y + bounds.h) {
+      hits.push(layer.id)
+    }
+  }
   return hits
+}
+
+/** Union of every child's world AABB for a group layer. Returns null when
+ *  the group is empty. Used by hitTestLayersAt (BL-03 group bbox hit). */
+function computeGroupWorldBounds(
+  scene: ChronoScene,
+  overrides: OverrideMap,
+  group: Layer,
+): { x: number; y: number; w: number; h: number } | null {
+  let minX =  Infinity, minY =  Infinity
+  let maxX = -Infinity, maxY = -Infinity
+  let count = 0
+
+  function walk(parentLayerId: string) {
+    for (const child of scene.layers) {
+      if (child.parentId !== parentLayerId) continue
+      if (child.hidden) continue
+      if (child.type === 'audio') continue
+      // Recurse into nested groups
+      if (child.type === 'group') { walk(child.id); continue }
+      // World position of this child
+      const cx = getLayerValue(overrides, child.id, 'transform.x', child.transform.x)
+      const cy = getLayerValue(overrides, child.id, 'transform.y', child.transform.y)
+      let acc = { x: 0, y: 0 }
+      let cur: Layer | undefined = child
+      while (cur?.parentId) {
+        const parent = scene.layers.find((p) => p.id === cur!.parentId)
+        if (!parent) break
+        acc.x += getLayerValue(overrides, parent.id, 'transform.x', parent.transform.x)
+        acc.y += getLayerValue(overrides, parent.id, 'transform.y', parent.transform.y)
+        cur = parent
+      }
+      const w = child.size?.width  ?? (child.text?.fontSize ?? 24) * 4
+      const h = child.size?.height ?? (child.text?.fontSize ?? 24)
+      const x = cx + acc.x
+      const y = cy + acc.y
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x + w > maxX) maxX = x + w
+      if (y + h > maxY) maxY = y + h
+      count++
+    }
+  }
+  walk(group.id)
+  if (count === 0) return null
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
 }
 
 /**

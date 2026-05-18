@@ -11,6 +11,7 @@
 import type { ChronoScene, Layer, Track, Keyframe } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 import { newGroupLayer } from '@/lib/registry/definitions/scene/GroupDefinition'
+import { Matrix2D } from '../geometry/Matrix2D'
 
 /** Generate a fresh keyframe id without depending on the global counter. */
 const freshKfId = () => `kf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
@@ -124,20 +125,35 @@ export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorComma
     label: 'Ungroup',
 
     execute(s: ChronoScene): ChronoScene {
-      // ── 1. Update layers: remove group, reparent + bake transform ─────────
+      // ── 1. Update layers: remove group, reparent + bake FULL group transform
+      //    into each child via matrix composition (BL-03). Used to be
+      //    translate-only; now rotation + scale are preserved so the visual
+      //    layout doesn't change when ungrouping a rotated/scaled group.
+      const gt = groupSnapshot.transform
+      const groupMat = Matrix2D.translation(gt.x, gt.y)
+        .rotate(gt.rotationDeg ?? 0)
+        .scale(gt.scaleX ?? 1, gt.scaleY ?? 1)
+
       const layers = s.layers
         .filter(l => l.id !== groupId)
         .map(l => {
           if (l.parentId !== groupId) return l
+          const ct = l.transform
+          const childMat = Matrix2D.translation(ct.x, ct.y)
+            .rotate(ct.rotationDeg ?? 0)
+            .scale(ct.scaleX ?? 1, ct.scaleY ?? 1)
+          const composed = groupMat.multiply(childMat)
+          const d = composed.decompose()
           return {
             ...l,
             parentId: newParentId,
-            // Bake group static transform into child (translate only — full
-            // affine composition with rotation/scale is V2)
             transform: {
               ...l.transform,
-              x: l.transform.x + groupSnapshot.transform.x,
-              y: l.transform.y + groupSnapshot.transform.y,
+              x: d.x,
+              y: d.y,
+              rotationDeg: d.rotation,
+              scaleX: d.scaleX,
+              scaleY: d.scaleY,
             },
           }
         })

@@ -131,4 +131,63 @@ describe('Matrix2D', () => {
       expect(m.isIdentity(1e-6)).toBe(true)
     })
   })
+
+  describe('decompose (BL-03)', () => {
+    const closeDeg = (a: number, b: number) => {
+      // normalize to (-180, 180] before comparing
+      const norm = (x: number) => ((x + 180) % 360 + 360) % 360 - 180
+      expect(Math.abs(norm(a - b))).toBeLessThan(1e-6)
+    }
+
+    it('decomposes identity to (0,0,0,1,1)', () => {
+      const d = Matrix2D.identity().decompose()
+      expect(d.x).toBe(0); expect(d.y).toBe(0)
+      expect(d.rotation).toBe(0)
+      expect(d.scaleX).toBe(1); expect(d.scaleY).toBe(1)
+    })
+
+    it('decomposes pure translation', () => {
+      const d = Matrix2D.translation(10, 20).decompose()
+      expect(d.x).toBe(10); expect(d.y).toBe(20)
+      expect(d.rotation).toBe(0)
+      expect(d.scaleX).toBe(1); expect(d.scaleY).toBe(1)
+    })
+
+    it('decomposes pure scale', () => {
+      const d = Matrix2D.scale(2, 3).decompose()
+      expect(d.scaleX).toBeCloseTo(2, 6)
+      expect(d.scaleY).toBeCloseTo(3, 6)
+      expect(d.rotation).toBeCloseTo(0, 6)
+    })
+
+    it('decomposes pure rotation', () => {
+      const d = Matrix2D.rotation(45).decompose()
+      closeDeg(d.rotation, 45)
+      expect(d.scaleX).toBeCloseTo(1, 6)
+      expect(d.scaleY).toBeCloseTo(1, 6)
+    })
+
+    it('decomposes translate × rotate × scale composition', () => {
+      const m = Matrix2D.translation(10, 20).rotate(30).scale(2, 1.5)
+      const d = m.decompose()
+      expect(d.x).toBeCloseTo(10, 6)
+      expect(d.y).toBeCloseTo(20, 6)
+      closeDeg(d.rotation, 30)
+      expect(d.scaleX).toBeCloseTo(2, 6)
+      expect(d.scaleY).toBeCloseTo(1.5, 6)
+    })
+
+    it('round-trip: decompose → recompose → original (no shear)', () => {
+      const original = Matrix2D.translation(5, 7).rotate(-25).scale(1.2, 0.8)
+      const d = original.decompose()
+      const reconstructed = Matrix2D.translation(d.x, d.y)
+        .rotate(d.rotation)
+        .scale(d.scaleX, d.scaleY)
+      const toArr = reconstructed.toArray()
+      const origArr = original.toArray()
+      for (let i = 0; i < 6; i++) {
+        expect(toArr[i]).toBeCloseTo(origArr[i], 6)
+      }
+    })
+  })
 })
