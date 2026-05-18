@@ -50,6 +50,8 @@ interface Props {
   onTrackAreaContextMenu?: (trackTarget: string, timeMs: number, e: React.MouseEvent) => void
   /** Double-click on the empty part of a property track row → add keyframe at click. */
   onTrackAreaDoubleClick?: (trackTarget: string, timeMs: number) => void
+  /** Right-click on the property name in the track header → "Out of Range ▸ ..." menu (BL-45). */
+  onTrackHeaderContextMenu?: (trackTarget: string, e: React.MouseEvent) => void
   /** Convert a client X position to ms for the events above. */
   clientXToMs?: (clientX: number) => number
   /** Total duration of the selected timeline, for clamping drag. */
@@ -89,7 +91,7 @@ export default function LayerTimelineSection({
   onAddTrack, onRemoveTrack, onAddKeyframeAtPlayhead,
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
-  onTrackAreaContextMenu, onTrackAreaDoubleClick, clientXToMs,
+  onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
   durationMs, onLayerBarCommit, pinIndex, audioUrl,
 }: Props) {
 
@@ -187,7 +189,17 @@ export default function LayerTimelineSection({
         return (
           <div key={track.target} className="flex items-stretch border-b border-gray-800/60"
             style={{ height: rowH }}>
-            <div className="w-60 shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700 group">
+            <div
+              className="w-60 shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700 group"
+              onContextMenu={onTrackHeaderContextMenu ? (e) => {
+                // Buttons (+, ⊗) have their own actions — let them handle the click
+                const tgt = e.target as HTMLElement
+                if (tgt.closest('button')) return
+                e.preventDefault()
+                e.stopPropagation()
+                onTrackHeaderContextMenu(track.target, e)
+              } : undefined}
+            >
               <button
                 onClick={() => onAddKeyframeAtPlayhead(track.target)}
                 className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
@@ -197,9 +209,12 @@ export default function LayerTimelineSection({
                 title="Add keyframe at playhead (◆)"
               >+</button>
               <span className="flex-1 truncate text-[10px] font-mono text-gray-400 cursor-pointer hover:text-gray-200"
-                    title={track.target}
+                    title={`${track.target}${track.outOfRange ? `  ·  OOR: ${track.outOfRange.before ?? 'constant'} ◀ ▶ ${track.outOfRange.after ?? 'constant'}` : ''}`}
                     onClick={() => onAddKeyframeAtPlayhead(track.target)}>
                 {propPath}
+                {track.outOfRange && (track.outOfRange.before !== 'constant' || track.outOfRange.after !== 'constant') && (
+                  <span className="ml-1 text-purple-400" title="Out-of-Range behavior set">●</span>
+                )}
               </span>
               <button
                 onClick={() => onRemoveTrack(track.target)}

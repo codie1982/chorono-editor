@@ -22,11 +22,12 @@ import {
 import {
   makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd, makeUpdateLayerCmd,
 } from '@/lib/editor/commands-layer'
+import { makeSetOutOfRangeCmd } from '@/lib/editor/commands-track'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
-import { buildKeyframeMenu } from './timeline/keyframeMenuItems'
+import { buildKeyframeMenu, buildOutOfRangeSubmenu } from './timeline/keyframeMenuItems'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -433,10 +434,14 @@ export default function TimelinePanel({
     draftValue: string
   } | null>(null)
 
+  // BL-45: Track-header right-click target (state declared up here so all
+  // openX callbacks below can clear it via setCtxTrackHeader(null)).
+  const [ctxTrackHeader, setCtxTrackHeader] = useState<{ trackTarget: string } | null>(null)
+
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setCtxKf(null)
+    setCtxKf(null); setCtxTrackArea(null); setCtxTrackHeader(null)
     setCtxLayerBar({ layerId })
     ctxMenu.open(e)
   }, [ctxMenu])
@@ -445,13 +450,21 @@ export default function TimelinePanel({
     e.preventDefault()
     e.stopPropagation()
     if (!selectedKfIds.has(kfId)) onSelectKeyframes(new Set([kfId]))
+    setCtxLayerBar(null); setCtxTrackArea(null); setCtxTrackHeader(null)
     setCtxKf({ trackTarget, kfId })
     ctxMenu.open(e)
   }, [selectedKfIds, onSelectKeyframes, ctxMenu])
 
   const openTrackAreaMenu = useCallback((trackTarget: string, timeMs: number, e: React.MouseEvent) => {
-    setCtxKf(null); setCtxLayerBar(null)
+    setCtxKf(null); setCtxLayerBar(null); setCtxTrackHeader(null)
     setCtxTrackArea({ trackTarget, timeMs })
+    ctxMenu.open(e)
+  }, [ctxMenu])
+
+  const openTrackHeaderMenu = useCallback((trackTarget: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    setCtxKf(null); setCtxLayerBar(null); setCtxTrackArea(null)
+    setCtxTrackHeader({ trackTarget })
     ctxMenu.open(e)
   }, [ctxMenu])
 
@@ -793,6 +806,7 @@ export default function TimelinePanel({
             onKfDoubleClick={openKfInlineEdit}
             onLayerBarContextMenu={openLayerBarMenu}
             onTrackAreaContextMenu={openTrackAreaMenu}
+            onTrackHeaderContextMenu={openTrackHeaderMenu}
             onTrackAreaDoubleClick={(target, ms) => addKeyframeAtTime(target, ms)}
             clientXToMs={vp.clientXToMs}
             onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
@@ -1136,6 +1150,26 @@ export default function TimelinePanel({
             x={ctxMenu.state!.x} y={ctxMenu.state!.y}
             items={items}
             onClose={() => { ctxMenu.close(); setCtxTrackArea(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Track-header right-click menu (BL-45: Out of Range) ─────────────── */}
+      {ctxMenu.isOpen && ctxTrackHeader && selectedTimelineId && timeline && (() => {
+        const track = timeline.tracks.find((t) => t.target === ctxTrackHeader.trackTarget)
+        if (!track) return null
+        const items = [
+          buildOutOfRangeSubmenu(track.outOfRange, (next) => {
+            dispatchCommand(
+              makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),
+            )
+          }),
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxTrackHeader(null) }}
           />
         )
       })()}

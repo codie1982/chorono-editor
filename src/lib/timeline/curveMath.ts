@@ -178,6 +178,94 @@ export function buildCurvePath(track: Track, vp: CurveViewport): string {
   return out
 }
 
+// ── Out-of-range path segmentation (BL-45) ─────────────────────────────────
+// Same sampler as buildCurvePath, but emits THREE separate path strings split
+// by where each sample falls relative to the track's keyframe range:
+//
+//   before  = [viewport start, first keyframe time)   → rendered dashed
+//   inRange = [first keyframe time, last keyframe time] → rendered solid
+//   after   = (last keyframe time, viewport end]      → rendered dashed
+//
+// CurveEditor consumes this to draw out-of-range extrapolation (cycle / loop
+// / pingPong / linear / relativeRepeat) with a different visual style so the
+// user can see at a glance which part of the curve is "real" vs "derived".
+//
+// Single keyframe → entire viewport is "after" (no in-range span). No keyframes
+// → all-empty result.
+
+export interface CurvePathSegments {
+  before:       string
+  inRange:      string
+  after:        string
+  /** Pixel X of the range boundary lines (null if outside viewport). */
+  rangeStartX:  number | null
+  rangeEndX:    number | null
+}
+
+export function buildCurvePathSegments(track: Track, vp: CurveViewport): CurvePathSegments {
+  const empty: CurvePathSegments = {
+    before: '', inRange: '', after: '', rangeStartX: null, rangeEndX: null,
+  }
+  if (track.keyframes.length < 1) return empty
+
+  const sortedKfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+  const rangeStart = sortedKfs[0].timeMs
+  const rangeEnd   = sortedKfs[sortedKfs.length - 1].timeMs
+
+  const stepPx = 2
+  const steps = Math.max(8, Math.floor(vp.widthPx / stepPx))
+  const visMs = Math.max(1, vp.endMs - vp.startMs)
+
+  type Seg = 'before' | 'inRange' | 'after'
+  const segments: Record<Seg, string> = { before: '', inRange: '', after: '' }
+  let prevSeg: Seg | null = null
+
+  for (let i = 0; i <= steps; i++) {
+    const tMs = vp.startMs + (i / steps) * visMs
+    const v = evaluateTrack(track, tMs)
+    if (v == null) { prevSeg = null; continue }
+    const x = msToX(vp, tMs)
+    const y = valueToY(vp, v)
+    const coord = `${x.toFixed(1)} ${y.toFixed(1)} `
+
+    const currentSeg: Seg =
+      tMs < rangeStart ? 'before' :
+      tMs > rangeEnd   ? 'after'  : 'inRange'
+
+    if (prevSeg !== null && prevSeg !== currentSeg) {
+      // Boundary crossing — extend prev segment to this point, then start the
+      // new segment at the same point so the two visually connect.
+      segments[prevSeg] += `L ${coord}`
+      segments[currentSeg] += `M ${coord}`
+    } else {
+      segments[currentSeg] += `${prevSeg === currentSeg ? 'L' : 'M'} ${coord}`
+    }
+
+    prevSeg = currentSeg
+  }
+
+  const inView = (ms: number) => ms >= vp.startMs && ms <= vp.endMs
+
+  return {
+    before:       segments.before.trim(),
+    inRange:      segments.inRange.trim(),
+    after:        segments.after.trim(),
+    rangeStartX:  inView(rangeStart) ? msToX(vp, rangeStart) : null,
+    rangeEndX:    inView(rangeEnd)   ? msToX(vp, rangeEnd)   : null,
+  }
+}
+
+/** True if the track has any non-constant out-of-range behavior. Cheap guard
+ *  so CurveEditor can fall through to the cached `buildCurvePath` path when
+ *  there's nothing special to show. */
+export function hasNonConstantOutOfRange(track: Track): boolean {
+  const oor = track.outOfRange
+  if (!oor) return false
+  return (oor.before && oor.before !== 'constant') ||
+         (oor.after  && oor.after  !== 'constant')
+         ? true : false
+}
+
 // ── Axis tick generation ────────────────────────────────────────────────────
 
 const NICE_TIME_STEPS_MS = [
