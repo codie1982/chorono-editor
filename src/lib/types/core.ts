@@ -30,11 +30,14 @@ export type ShapeKind =
   | 'ring'
   | 'arc'
   | 'capsule'
+  | 'spiral'   // BL-24
+  | 'wave'     // BL-24
+  | 'blob'     // BL-24
 
 /** Shape-specific geometry parameters. All fields optional — defaults live in renderer/factory. */
 export interface ShapeParams {
   kind: ShapeKind
-  /** polygon: edge count (3–12). star: point count (3–12). */
+  /** polygon: edge count (3–12). star: point count (3–12). blob: vertex count (5–64). */
   sides?: number
   /** star: inner arm radius (px). ring: hole radius (px). */
   innerRadius?: number
@@ -52,6 +55,30 @@ export interface ShapeParams {
   y2?: number
   /** arrow: arrowhead length in px. */
   arrowHeadSize?: number
+
+  // ── BL-24: Spiral ───────────────────────────────────────────────────────────
+  /** spiral: turn count (default 3, min 0.5, max 20). */
+  turns?: number
+  /** spiral: starting radius from center in px (default 4). */
+  startRadius?: number
+  /** spiral: ending radius from center in px (default min(w,h)/2). */
+  endRadius?: number
+  /** spiral: radius interpolation exponent (1=linear, <1 looser outer, >1 tighter inner). */
+  tightness?: number
+
+  // ── BL-24: Wave ─────────────────────────────────────────────────────────────
+  /** wave: peak amplitude in px (default h/4). */
+  amplitude?: number
+  /** wave: full cycle count across width (default 2, min 0.1, max 50). */
+  frequency?: number
+  /** wave: phase offset in radians (default 0, animatable). */
+  phase?: number
+
+  // ── BL-24: Blob ─────────────────────────────────────────────────────────────
+  /** blob: noise ratio 0–1 (default 0.4). */
+  irregularity?: number
+  /** blob: deterministic seed integer (default 42). NOT animatable — would jump per frame. */
+  seed?: number
 }
 
 /** Colour as four 0–255 channels — used for animated colour values */

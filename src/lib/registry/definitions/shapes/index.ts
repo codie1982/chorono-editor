@@ -198,6 +198,13 @@ export const capsuleDefinition: LayerDefinition = {
   toPath: toPathHelper,
 }
 
+// ── BL-24: Organic primitives ────────────────────────────────────────────────
+import { spiralDefinition }   from './SpiralDefinition'
+import { waveLineDefinition } from './WaveLineDefinition'
+import { blobDefinition }     from './BlobDefinition'
+
+export { spiralDefinition, waveLineDefinition, blobDefinition }
+
 export const ALL_SHAPE_DEFINITIONS: LayerDefinition[] = [
   rectDefinition,
   roundedRectDefinition,
@@ -210,4 +217,8 @@ export const ALL_SHAPE_DEFINITIONS: LayerDefinition[] = [
   ringDefinition,
   arcDefinition,
   capsuleDefinition,
+  // BL-24
+  spiralDefinition,
+  waveLineDefinition,
+  blobDefinition,
 ]

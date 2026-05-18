@@ -40,9 +40,18 @@ export class ShapeToPathConverter {
       case 'star':    return this.star(w, h, params)
       case 'ring':    return this.ring(w, h, params)
       case 'arc':     return this.arc(w, h, params)
+      case 'spiral':  return this.spiral(w, h, params)   // BL-24
+      case 'wave':    return this.wave(w, h, params)     // BL-24
+      case 'blob':    return this.blob(w, h, params)     // BL-24
       case 'rect':
       default:        return this.rect(w, h, cornerRadius)
     }
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  private static clamp(v: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, v))
   }
 
   // ── Rect (with optional rounded corners) ────────────────────────────────────
@@ -236,5 +245,91 @@ export class ShapeToPathConverter {
       cmds.push(i === 0 ? M(x, y) : L(x, y))
     }
     return { closed: false, commands: cmds }
+  }
+
+  // ── Spiral (BL-24) — Archimedean spiral, open path ──────────────────────────
+  //
+  // r(t) = startR + (endR - startR) * t^tightness
+  // angle(t) = t * turns * 2π - π/2   (starts at 12 o'clock)
+  //
+  // tightness = 1 → linear radius growth (uniform spacing)
+  // tightness < 1 → looser outer turns
+  // tightness > 1 → tighter inner turns
+
+  private static spiral(w: number, h: number, params?: ShapeParams): PathDefinition {
+    const minSize    = Math.max(1, Math.min(w, h))
+    const turns      = this.clamp(params?.turns       ?? 3,           0.5, 20)
+    const startR     = this.clamp(params?.startRadius ?? 4,           0,   minSize / 2)
+    const endR       = this.clamp(params?.endRadius   ?? minSize / 2, 1,   minSize / 2)
+    const tightness  = this.clamp(params?.tightness   ?? 1,           0.1, 5)
+    const cx = w / 2, cy = h / 2
+    const totalAngle = turns * Math.PI * 2
+    // ~2° per sample, capped between 24 and 4096 samples
+    const samples    = Math.min(4096, Math.max(24, Math.ceil(turns * 180)))
+    const cmds: PathDefinition['commands'] = []
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples
+      const a = t * totalAngle - Math.PI / 2
+      const r = startR + (endR - startR) * Math.pow(t, tightness)
+      const x = cx + r * Math.cos(a)
+      const y = cy + r * Math.sin(a)
+      cmds.push(i === 0 ? M(x, y) : L(x, y))
+    }
+    return { closed: false, commands: cmds }
+  }
+
+  // ── Wave (BL-24) — Sinusoidal wave line, open path ──────────────────────────
+  //
+  // y(t) = cy + amplitude * sin(2π * frequency * t + phase)
+  // x(t) = t * width
+  //
+  // Centered vertically. Animate `phase` for traveling-wave effect.
+
+  private static wave(w: number, h: number, params?: ShapeParams): PathDefinition {
+    const amplitude = this.clamp(params?.amplitude ?? h / 4, 0,   h / 2)
+    const frequency = this.clamp(params?.frequency ?? 2,     0.1, 50)
+    const phase     = params?.phase ?? 0
+    const cy        = h / 2
+    // ~1.5px per sample, capped between 48 and 4096 samples
+    const samples   = Math.min(4096, Math.max(48, Math.ceil(w / 1.5)))
+    const cmds: PathDefinition['commands'] = []
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples
+      const x = t * w
+      const y = cy + amplitude * Math.sin(2 * Math.PI * frequency * t + phase)
+      cmds.push(i === 0 ? M(x, y) : L(x, y))
+    }
+    return { closed: false, commands: cmds }
+  }
+
+  // ── Blob (BL-24) — Seeded irregular closed polygon ──────────────────────────
+  //
+  // Vertices placed evenly around a circle.
+  // Each vertex radius modulated by deterministic noise:
+  //   r(i) = baseR * (1 + irregularity * noise(seed, i))
+  //
+  // `seed` should NOT be animated — would cause per-frame jumping.
+
+  private static blob(w: number, h: number, params?: ShapeParams): PathDefinition {
+    const n     = this.clamp(Math.round(params?.sides ?? 8),         5, 64)
+    const irr   = this.clamp(params?.irregularity ?? 0.4,            0, 1)
+    const seed  = Math.round(params?.seed ?? 42)
+    const baseR = Math.min(w, h) / 2
+    const cx = w / 2, cy = h / 2
+    // Deterministic seeded PRNG (sine-hash). Same (seed, i) → same value.
+    const rng = (i: number) => {
+      const x = Math.sin(seed * 9301 + i * 49297 + 233) * 1000
+      return x - Math.floor(x)  // 0..1
+    }
+    const cmds: PathDefinition['commands'] = []
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (i / n) * Math.PI * 2
+      const r = baseR * (1 + irr * (rng(i) * 2 - 1))  // baseR ± irr*baseR
+      const x = cx + r * Math.cos(a)
+      const y = cy + r * Math.sin(a)
+      cmds.push(i === 0 ? M(x, y) : L(x, y))
+    }
+    cmds.push(Z())
+    return { closed: true, commands: cmds }
   }
 }
