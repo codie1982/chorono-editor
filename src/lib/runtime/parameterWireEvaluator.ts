@@ -96,6 +96,16 @@ function readLayerProperty(layer: Layer, property: string): number | null {
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Augmented return value (BL-05 Sprint 6). Holds the override map plus the
+ *  set of wire IDs whose source resolution failed during this frame — caller
+ *  surfaces these as red "broken" badges in WiringListPanel / Properties / etc. */
+export interface WireEvaluationResult {
+  overrides:        OverrideMap
+  brokenWireIds:    Set<string>
+  /** Wires that parsed but threw at runtime (divide-by-zero, etc.). */
+  runtimeErrorIds:  Set<string>
+}
+
 /**
  * Apply every enabled ParameterWire to the override map. Returns a new Map
  * only when any wire wrote, otherwise the input map is preserved to keep
@@ -143,4 +153,62 @@ export function evaluateParameterWires(
   }
 
   return next
+}
+
+/** Verbose variant that ALSO reports which wires couldn't resolve their
+ *  source (broken) or threw at runtime. Both sets are empty when wires is
+ *  empty/undefined. Returns identity-stable `overrides` when no wire wrote. */
+export function evaluateParameterWiresVerbose(
+  wires: ParameterWire[] | undefined,
+  overrides: OverrideMap,
+  paramValues: ParamValueMap,
+  scene: Pick<ChronoScene, 'layers'>,
+): WireEvaluationResult {
+  const brokenWireIds   = new Set<string>()
+  const runtimeErrorIds = new Set<string>()
+  if (!wires || wires.length === 0) {
+    return { overrides, brokenWireIds, runtimeErrorIds }
+  }
+
+  let next = overrides
+  let cloned = false
+
+  for (const wire of wires) {
+    if (!wire.enabled) continue
+
+    const sourceVal = readWireSource(wire.source, overrides, paramValues, scene.layers)
+    if (sourceVal == null) {
+      brokenWireIds.add(wire.id)
+      continue
+    }
+
+    const cached = getOrParseAst(wire.id, wire.expression)
+    if (!cached.ast) {
+      runtimeErrorIds.add(wire.id)
+      continue
+    }
+
+    let result: number
+    try {
+      result = evaluateExpression(cached.ast, { source: sourceVal, s: sourceVal })
+    } catch {
+      runtimeErrorIds.add(wire.id)
+      continue
+    }
+
+    if (!Number.isFinite(result)) {
+      runtimeErrorIds.add(wire.id)
+      continue
+    }
+
+    if (wire.clamp?.enabled) {
+      if (wire.clamp.min != null && result < wire.clamp.min) result = wire.clamp.min
+      if (wire.clamp.max != null && result > wire.clamp.max) result = wire.clamp.max
+    }
+
+    if (!cloned) { next = new Map(overrides); cloned = true }
+    next.set(paramRefKey(wire.target), result)
+  }
+
+  return { overrides: next, brokenWireIds, runtimeErrorIds }
 }

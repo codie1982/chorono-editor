@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { evaluateParameterWires, clearParameterWireCache } from '../parameterWireEvaluator'
+import {
+  evaluateParameterWires, evaluateParameterWiresVerbose, clearParameterWireCache,
+} from '../parameterWireEvaluator'
 import type { ParameterWire, Layer } from '../../types'
 import type { OverrideMap } from '../../evaluator'
 import type { ParamValueMap } from '../paramResolver'
@@ -188,5 +190,61 @@ describe('evaluateParameterWires (BL-05)', () => {
     const params: ParamValueMap = new Map([['slider1', 5]])
     const result = evaluateParameterWires(wires, new Map(), params, { layers: [] })
     expect(result.get('layers.rect1.rotationZ')).toBe(5000)
+  })
+})
+
+describe('evaluateParameterWiresVerbose (BL-05 Sprint 6)', () => {
+  beforeEach(() => clearParameterWireCache())
+
+  it('returns empty broken / runtimeError sets when wires array is empty', () => {
+    const { overrides, brokenWireIds, runtimeErrorIds } =
+      evaluateParameterWiresVerbose([], new Map(), new Map(), { layers: [] })
+    expect(overrides.size).toBe(0)
+    expect(brokenWireIds.size).toBe(0)
+    expect(runtimeErrorIds.size).toBe(0)
+  })
+
+  it('flags wires whose source value cannot be resolved (broken)', () => {
+    const wires = [makeWire({ id: 'wA' })] // slider1 not in paramValues
+    const { brokenWireIds, runtimeErrorIds, overrides } =
+      evaluateParameterWiresVerbose(wires, new Map(), new Map(), { layers: [] })
+    expect(brokenWireIds.has('wA')).toBe(true)
+    expect(runtimeErrorIds.size).toBe(0)
+    expect(overrides.has('layers.rect1.rotationZ')).toBe(false)
+  })
+
+  it('flags wires whose expression fails to parse (runtime error)', () => {
+    const wires = [makeWire({ id: 'wA', expression: '1 ++' })]
+    const params: ParamValueMap = new Map([['slider1', 0.5]])
+    const { runtimeErrorIds, brokenWireIds } =
+      evaluateParameterWiresVerbose(wires, new Map(), params, { layers: [] })
+    expect(runtimeErrorIds.has('wA')).toBe(true)
+    expect(brokenWireIds.size).toBe(0)
+  })
+
+  it('flags wires whose expression evaluates to a non-finite number', () => {
+    const wires = [makeWire({ id: 'wA', expression: 'source / 0' })]
+    const params: ParamValueMap = new Map([['slider1', 5]])
+    const { runtimeErrorIds } =
+      evaluateParameterWiresVerbose(wires, new Map(), params, { layers: [] })
+    expect(runtimeErrorIds.has('wA')).toBe(true)
+  })
+
+  it('successful wires aren\'t flagged', () => {
+    const wires = [makeWire({ id: 'wOK' })]
+    const params: ParamValueMap = new Map([['slider1', 0.5]])
+    const { overrides, brokenWireIds, runtimeErrorIds } =
+      evaluateParameterWiresVerbose(wires, new Map(), params, { layers: [] })
+    expect(overrides.get('layers.rect1.rotationZ')).toBe(180)
+    expect(brokenWireIds.size).toBe(0)
+    expect(runtimeErrorIds.size).toBe(0)
+  })
+
+  it('disabled wires are not flagged (silent skip)', () => {
+    const wires = [makeWire({ id: 'wOff', enabled: false })]
+    const { brokenWireIds, runtimeErrorIds } =
+      evaluateParameterWiresVerbose(wires, new Map(), new Map(), { layers: [] })
+    expect(brokenWireIds.size).toBe(0)
+    expect(runtimeErrorIds.size).toBe(0)
   })
 })
