@@ -160,13 +160,22 @@ export default function CurveEditor({
   // ── Time/value viewport ───────────────────────────────────────────────────
   const [viewStartMs, setViewStartMs] = useState(0)
   const [viewEndMs,   setViewEndMs]   = useState(duration)
+  /** Y-axis (value) zoom override. null → auto-fit the union of all visible
+   *  tracks (the default behaviour from earlier sprints). Set by "Fit
+   *  Selection" so the plot zooms in vertically too — without this, only
+   *  the time axis adjusts and the curve still occupies the whole chart
+   *  height regardless of how narrow the selected kf value range is. */
+  const [valueRangeOverride, setValueRangeOverride] = useState<ValueRange | null>(null)
 
-  // Re-fit the X axis when timeline duration changes
-  useEffect(() => { setViewStartMs(0); setViewEndMs(duration) }, [duration])
+  // Re-fit the X axis when timeline duration changes. Also drop any Y
+  // override since switching scenes invalidates the previous selection.
+  useEffect(() => {
+    setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null)
+  }, [duration])
 
   const range: ValueRange = useMemo(
-    () => unionValueRange(visibleTracks) ?? { min: -1, max: 1 },
-    [visibleTracks],
+    () => valueRangeOverride ?? unionValueRange(visibleTracks) ?? { min: -1, max: 1 },
+    [valueRangeOverride, visibleTracks],
   )
 
   const plotW = Math.max(50, size.w - LEFT_GUTTER - 8)
@@ -243,7 +252,7 @@ export default function CurveEditor({
       if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
       if (e.key === 'f' || e.key === 'F') { e.preventDefault(); fitToSelection() }
       else if (e.key === 'a' || e.key === 'A') {
-        e.preventDefault(); setViewStartMs(0); setViewEndMs(duration)
+        e.preventDefault(); setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null)
       }
       else if (e.key === 'h' || e.key === 'H') { e.preventDefault(); setShowHandles((v) => !v) }
       else if (e.key === 'i' || e.key === 'I') {
@@ -267,17 +276,30 @@ export default function CurveEditor({
   // ── Fit-to-selection — zooms the X axis to the selected keyframes' range ─
   const fitToSelection = useCallback(() => {
     if (selectedKfIds.size === 0) return
+    // X (time) range of selection
     let lo = Infinity, hi = -Infinity
+    // Y (value) range of selection — only numeric kfs contribute.
+    let vLo = Infinity, vHi = -Infinity
     for (const t of tracks) for (const k of t.keyframes) {
       if (!selectedKfIds.has(k.id)) continue
       if (k.timeMs < lo) lo = k.timeMs
       if (k.timeMs > hi) hi = k.timeMs
+      if (typeof k.value === 'number') {
+        if (k.value < vLo) vLo = k.value
+        if (k.value > vHi) vHi = k.value
+      }
     }
     if (lo === Infinity) return
     if (lo === hi) { lo -= 100; hi += 100 }      // single-kf: pad ±100ms
     const pad = (hi - lo) * 0.1
     setViewStartMs(Math.max(0, lo - pad))
     setViewEndMs(hi + pad)
+    // Y-axis fit — only when at least one numeric kf was in the selection.
+    if (vLo !== Infinity) {
+      if (vLo === vHi) { vLo -= 0.5; vHi += 0.5 }   // single value: pad ±0.5
+      const vPad = (vHi - vLo) * 0.15
+      setValueRangeOverride({ min: vLo - vPad, max: vHi + vPad })
+    }
   }, [tracks, selectedKfIds])
 
   // ── Select all visible keyframes ──────────────────────────────────────────
@@ -760,7 +782,7 @@ export default function CurveEditor({
         <div className="flex items-center gap-1 px-2 py-1 flex-wrap">
           <ToolbarBtn
             title="Fit all curves to view (A)"
-            onClick={() => { setViewStartMs(0); setViewEndMs(duration) }}
+            onClick={() => { setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null) }}
           >Fit</ToolbarBtn>
           <ToolbarBtn
             title="Fit selected keyframes to view (F)"
@@ -1526,7 +1548,7 @@ export default function CurveEditor({
     // Empty area menu
     return buildEmptyAreaMenu({
       setPlayheadHere: () => onTimeChange(ctxData.timeMs),
-      fitAll:          () => { setViewStartMs(0); setViewEndMs(duration) },
+      fitAll:          () => { setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null) },
       fitSelected:     fitToSelection,
       // TODO(sprint 2): paste/marker/work-area + select-before/after here —
       // wire when the keyframe clipboard reaches the curve editor.
