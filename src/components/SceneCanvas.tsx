@@ -9,7 +9,10 @@ import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
-import { hitTestPath, moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
+import {
+  hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
+  moveAnchor, moveInHandle, moveOutHandle,
+} from '@/lib/path/pathOps'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -411,6 +414,11 @@ export default function SceneCanvas({
   }, [zoom, width, height])
 
   const dragRef = useRef<ActiveDrag | null>(null)
+
+  // BL-03: Pen-tool close-path double-click detection. First click on the
+  // path's first anchor stores the timestamp; a second click within 350ms
+  // on the same anchor triggers togglePathClosed instead of starting a drag.
+  const closePathClickRef = useRef<{ layerId: string; timeMs: number } | null>(null)
 
   // ── Drag-time numeric HUD (position / rotation / size readout) ───────────
   // Mirrors AE / Figma — appears next to the cursor while transforming.
@@ -868,6 +876,34 @@ export default function SceneCanvas({
       const ly = cy - selectedLayer.transform.y
       const penHit = hitTestPath(selectedLayer.path, lx, ly, 8)
       if (penHit) {
+        // BL-03: Pen-tool double-click on FIRST anchor of an open path closes it.
+        // We detect "quick second click" via the click-time ref so the first
+        // click still starts a normal anchor drag — the second-within-350ms
+        // upgrades to a close action and bypasses the drag.
+        if (
+          toolMode === 'pen' &&
+          penHit.type === 'anchor' &&
+          penHit.anchorIndex === 0 &&
+          !selectedLayer.path.closed &&
+          selectedLayer.path.anchors.length >= 2
+        ) {
+          const now = performance.now()
+          const last = closePathClickRef.current
+          if (last && last.layerId === selectedLayer.id && now - last.timeMs <= 350) {
+            // Second click → close the path
+            closePathClickRef.current = null
+            const closed = togglePathClosed(selectedLayer.path)
+            editor.dispatchCommand(makeUpdateLayerCmd(
+              selectedLayer.id,
+              { ...selectedLayer, path: closed },
+              selectedLayer,
+            ))
+            return
+          }
+          closePathClickRef.current = { layerId: selectedLayer.id, timeMs: now }
+          // Fall through — start the normal anchor drag for the first click
+        }
+
         editor.beginTransaction()
         dragRef.current = {
           kind: 'pathPoint',
@@ -883,9 +919,23 @@ export default function SceneCanvas({
         return
       }
 
-      // Pen mode + click on empty area = APPEND a new anchor (corner type).
-      // Lets users build a path by clicking points in sequence.
+      // Pen mode + click on a SEGMENT (not an anchor) → insert anchor at the
+      // click point so the curve is unchanged but the user can now grab a
+      // new control point. Standard Figma/Illustrator behavior. (BL-03)
       if (toolMode === 'pen') {
+        const segHit = hitTestSegment(selectedLayer.path, lx, ly, 6)
+        if (segHit) {
+          const nextPath = insertAnchorOnSegment(selectedLayer.path, segHit.segmentIndex, segHit.t)
+          editor.dispatchCommand(makeUpdateLayerCmd(
+            selectedLayer.id,
+            { ...selectedLayer, path: nextPath },
+            selectedLayer,
+          ))
+          return
+        }
+
+        // Click on empty area = APPEND a new anchor (corner type).
+        // Lets users build a path by clicking points in sequence.
         const next = {
           ...selectedLayer,
           path: {
