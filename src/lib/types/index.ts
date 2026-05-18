@@ -102,3 +102,8 @@ export type {
 } from '../animation/modifiers/types'
 export { defaultParametersFor } from '../animation/modifiers/builtins'
 export { applyModifiers, blendModifierValue, hashTrackSeed } from '../animation/modifiers/pipeline'
+
+// ── Ease / TimeWarp / Multiplier curves (BL-48) ─────────────────────────────
+export type { BezierTuple } from '../animation/timeWarp/types'
+export { IDENTITY_BEZIER } from '../animation/timeWarp/types'
+export { sampleBezier } from '../animation/timeWarp/sampler'

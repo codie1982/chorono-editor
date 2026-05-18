@@ -130,6 +130,22 @@ export interface Track {
    *  modifiers. Use for "noise on the whole rotation track" or "clamp
    *  opacity to [0,1] no matter what the upstream is producing". */
   modifiers?: import('../animation/modifiers/types').CurveModifier[]
+  /** BL-48 — Ease Curve: re-times the whole track via a cubic-bezier.
+   *  Applied to localT BEFORE keyframe interpolation. A slow-start curve
+   *  makes the entire animation appear to start slow. */
+  easeCurve?: import('../animation/timeWarp/types').BezierTuple
+  /** BL-48 — TimeWarp: secondary time remap applied AFTER easeCurve.
+   *  Composes with easeCurve as `timeWarp(easeCurve(localT))`. Lets the
+   *  user stack two layers of timing control (e.g., master ease + per-
+   *  section warp without disturbing each other). */
+  timeWarp?: import('../animation/timeWarp/types').BezierTuple
+  /** BL-48 — Multiplier Curve: scales the post-modifier value by a
+   *  bezier sampled at localT. `multiplierAmplitude` (default 1) controls
+   *  how much the curve influences the value:
+   *      value' = value * (1 + (bezier(localT) - 0.5) * amplitude * 2)
+   *  Amplitude 0 = no effect; 1 = bezier ∈ [0,1] becomes scale ∈ [0,2]. */
+  multiplierCurve?: import('../animation/timeWarp/types').BezierTuple
+  multiplierAmplitude?: number
   // TODO(big-feature): controller type — currently every track is implicit
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a

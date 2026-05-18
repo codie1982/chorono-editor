@@ -1,6 +1,7 @@
 import type { Timeline, Track, Keyframe } from './types'
 import { resolveOutOfRange } from './animation/out-of-range/resolvers'
 import { applyModifiers, hashTrackSeed } from './animation/modifiers/pipeline'
+import { sampleBezier } from './animation/timeWarp/sampler'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -97,18 +98,38 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
     offset !== 0 ? (kfs[kfs.length - 1].value as number) - (kfs[0].value as number) : 0
   const valueOffset = cycleValueDelta * offset
 
+  // BL-48: ease curve + time warp — re-time the WHOLE track via two
+  // cubic-beziers applied to the local-T (track normalised time).
+  // Composes as `timeWarp(easeCurve(localT))`. Identity when both unset.
+  //
+  // Track localT = (evalTime - rangeStart) / (rangeEnd - rangeStart)
+  // We warp localT, then convert back to a warped evalTime, then proceed
+  // with the normal kf bracket search. Skipped when track has no warp
+  // or when there's only one keyframe (warp meaningless there).
+  let warpedEvalTime = evalTime
+  if (track.easeCurve || track.timeWarp) {
+    const trackDur = rangeEnd - rangeStart
+    if (trackDur > 0) {
+      const tNorm = Math.max(0, Math.min(1, (evalTime - rangeStart) / trackDur))
+      let warpedT = tNorm
+      if (track.easeCurve) warpedT = sampleBezier(track.easeCurve, warpedT)
+      if (track.timeWarp)  warpedT = sampleBezier(track.timeWarp,  warpedT)
+      warpedEvalTime = rangeStart + warpedT * trackDur
+    }
+  }
+
   // Resolve the kf bracket so we can compute the base value and
   // pass segment timing into the modifier pipeline below.
   let baseValue: number
   let segStartMs: number
   let segEndMs:   number
   let leadingKf:  Keyframe
-  if (evalTime <= rangeStart) {
+  if (warpedEvalTime <= rangeStart) {
     baseValue = (kfs[0].value as number) + valueOffset
     leadingKf = kfs[0]
     segStartMs = kfs[0].timeMs
     segEndMs   = kfs[Math.min(1, kfs.length - 1)].timeMs
-  } else if (evalTime >= rangeEnd) {
+  } else if (warpedEvalTime >= rangeEnd) {
     baseValue = (kfs[kfs.length - 1].value as number) + valueOffset
     leadingKf = kfs[Math.max(0, kfs.length - 2)]
     segStartMs = leadingKf.timeMs
@@ -118,31 +139,46 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
     let lo = 0, hi = kfs.length - 2
     while (lo < hi) {
       const mid = (lo + hi) >> 1
-      if (kfs[mid + 1].timeMs <= evalTime) lo = mid + 1
+      if (kfs[mid + 1].timeMs <= warpedEvalTime) lo = mid + 1
       else hi = mid
     }
     leadingKf = kfs[lo]
-    baseValue = interpolateKeyframes(kfs[lo], kfs[lo + 1], evalTime) + valueOffset
+    baseValue = interpolateKeyframes(kfs[lo], kfs[lo + 1], warpedEvalTime) + valueOffset
     segStartMs = kfs[lo].timeMs
     segEndMs   = kfs[lo + 1].timeMs
   }
 
-  // BL-46: apply segment-scope then track-scope modifier stacks. Both are
-  // optional — undefined / empty arrays pass through the base value
-  // unchanged. The ctx exposes pre-computed timing so noise / fractal
-  // modifiers (BL-47+) can read deterministic seeds.
-  const hasSegmentMods = leadingKf.segmentModifiers && leadingKf.segmentModifiers.length > 0
-  const hasTrackMods   = track.modifiers && track.modifiers.length > 0
-  if (!hasSegmentMods && !hasTrackMods) return baseValue
+  // BL-46: apply segment-scope then track-scope modifier stacks.
+  // BL-48: localT here is segment-local; warps above already happened.
+  const hasSegmentMods    = leadingKf.segmentModifiers && leadingKf.segmentModifiers.length > 0
+  const hasTrackMods      = track.modifiers && track.modifiers.length > 0
+  const hasMultiplier     = !!track.multiplierCurve
+  const needsCtx          = hasSegmentMods || hasTrackMods || hasMultiplier
+  if (!needsCtx) return baseValue
 
   const durationMs = Math.max(1, segEndMs - segStartMs)
-  const localT = Math.max(0, Math.min(1, (evalTime - segStartMs) / durationMs))
+  const localT = Math.max(0, Math.min(1, (warpedEvalTime - segStartMs) / durationMs))
   const seed = hashTrackSeed(`${track.target}`)
-  const ctx = { timeMs: evalTime, localT, segmentStartMs: segStartMs, segmentEndMs: segEndMs, durationMs, seed }
+  const ctx = { timeMs: warpedEvalTime, localT, segmentStartMs: segStartMs, segmentEndMs: segEndMs, durationMs, seed }
 
   let value = baseValue
   if (hasSegmentMods) value = applyModifiers(leadingKf.segmentModifiers, value, ctx)
   if (hasTrackMods)   value = applyModifiers(track.modifiers,             value, ctx)
+  // BL-48 multiplier — track-level value scale via bezier. Applied LAST
+  // so the curve controls the final output, not an intermediate. The
+  // bezier output is centred on 0.5 to allow attenuation AND amplification:
+  //    multiplier = 1 + (bezier(t) - 0.5) * amplitude * 2
+  //    amplitude=0 → multiplier=1 (no effect)
+  //    amplitude=1, bezier(t) ∈ [0,1] → multiplier ∈ [0,2]
+  if (hasMultiplier) {
+    const trackDur = rangeEnd - rangeStart
+    const tNorm = trackDur > 0
+      ? Math.max(0, Math.min(1, (evalTime - rangeStart) / trackDur))
+      : 0
+    const amp = typeof track.multiplierAmplitude === 'number' ? track.multiplierAmplitude : 1
+    const m = 1 + (sampleBezier(track.multiplierCurve!, tNorm) - 0.5) * amp * 2
+    value *= m
+  }
   return value
 }
 
