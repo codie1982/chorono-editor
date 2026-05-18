@@ -152,7 +152,7 @@ interface AnchorState {
   startClientY: number
 }
 
-/** Rotation drag — rotates the layer around its anchor point. */
+/** Rotation drag — rotates the layer (or multi-select group) around a pivot. */
 interface RotateState {
   kind: 'rotate'
   layerId: string
@@ -167,6 +167,17 @@ interface RotateState {
   /** World coords of the layer's anchor (rotation pivot). */
   anchorWorldX: number
   anchorWorldY: number
+  /** BL-03: When set, the drag rotates EVERY layer here around the common
+   *  pivot (anchorWorldX/Y, which is the selection center). Each layer's
+   *  origin is stored so the rotated position is computed from a stable
+   *  snapshot, not the live (intermediate-render) value. */
+  multiLayerOrigins?: Array<{
+    layerId: string
+    originalLayer: Layer
+    originalX: number
+    originalY: number
+    originalRotation: number
+  }>
 }
 
 interface PathPointDrag {
@@ -579,8 +590,7 @@ export default function SceneCanvas({
     }
 
     if (drag.kind === 'rotate') {
-      // Pointer angle from layer's anchor center (world coords) → delta from
-      // start angle → add to original rotation. Shift = snap to 15°.
+      // Pointer angle from pivot → delta vs. start angle. Shift = snap to 15°.
       const rect = canvasRef.current!.getBoundingClientRect()
       const wx = (e.clientX - rect.left) * (compositionRef.current.width  / rect.width)
       const wy = (e.clientY - rect.top)  * (compositionRef.current.height / rect.height)
@@ -588,18 +598,46 @@ export default function SceneCanvas({
       const dyA = wy - drag.anchorWorldY
       const curAngle = (Math.atan2(dyA, dxA) * 180) / Math.PI
       let delta = curAngle - drag.startAngle
-      let nextRot = drag.originalRotation + delta
-      if (e.shiftKey) nextRot = Math.round(nextRot / 15) * 15
-      // Wrap into [-180, 180]
-      while (nextRot > 180)  nextRot -= 360
-      while (nextRot < -180) nextRot += 360
+      if (e.shiftKey) delta = Math.round(delta / 15) * 15
 
-      const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
-      editorRef.current.previewTransaction(next)
-      setDragHud({
-        x: e.clientX, y: e.clientY,
-        label: `${nextRot.toFixed(1)}°`,
-      })
+      if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
+        // BL-03: multi-select rotation around common pivot.
+        const rad = (delta * Math.PI) / 180
+        const cos = Math.cos(rad), sin = Math.sin(rad)
+        let scene = sceneRef.current
+        for (const o of drag.multiLayerOrigins) {
+          // Anchor of this layer at drag start (its rotation pivot for translation)
+          const ax = o.originalX + o.originalLayer.transform.anchorX
+          const ay = o.originalY + o.originalLayer.transform.anchorY
+          const ox = ax - drag.anchorWorldX
+          const oy = ay - drag.anchorWorldY
+          const nx = drag.anchorWorldX + ox * cos - oy * sin
+          const ny = drag.anchorWorldY + ox * sin + oy * cos
+          // Apply rotated translation + cumulative rotation
+          let rot = o.originalRotation + delta
+          while (rot > 180)  rot -= 360
+          while (rot < -180) rot += 360
+          scene = updateLayerProperty(scene, o.layerId, 'transform.x', nx - o.originalLayer.transform.anchorX)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.y', ny - o.originalLayer.transform.anchorY)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.rotationDeg', rot)
+        }
+        editorRef.current.previewTransaction(scene)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `${delta.toFixed(1)}°  (${drag.multiLayerOrigins.length} layers)`,
+        })
+      } else {
+        // Single-layer (existing) behavior
+        let nextRot = drag.originalRotation + delta
+        while (nextRot > 180)  nextRot -= 360
+        while (nextRot < -180) nextRot += 360
+        const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
+        editorRef.current.previewTransaction(next)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `${nextRot.toFixed(1)}°`,
+        })
+      }
       return
     }
 
@@ -753,6 +791,29 @@ export default function SceneCanvas({
     }
 
     if (drag.kind === 'rotate') {
+      // BL-03: multi-select rotate → batch every changed layer into a single
+      // undo step (similar to the multi-move branch below).
+      if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
+        const ops: { layerId: string; next: Layer; prev: Layer }[] = []
+        for (const o of drag.multiLayerOrigins) {
+          const fl = ed.scene.layers.find((l) => l.id === o.layerId)
+          if (!fl) continue
+          const orig = o.originalLayer
+          const changed =
+            fl.transform.x !== orig.transform.x ||
+            fl.transform.y !== orig.transform.y ||
+            fl.transform.rotationDeg !== orig.transform.rotationDeg
+          if (changed) ops.push({ layerId: o.layerId, next: fl, prev: orig })
+        }
+        if (ops.length === 0) { ed.cancelTransaction(); return }
+        const cmds = ops.map((op) => makeUpdateLayerCmd(op.layerId, op.next, op.prev))
+        ed.commitTransaction({
+          label: `Rotate ${ops.length} Layers`,
+          execute: (s) => cmds.reduce((sc, c) => c.execute(sc), s),
+          undo:    (s) => cmds.slice().reverse().reduce((sc, c) => c.undo(sc), s),
+        })
+        return
+      }
       const rChanged = finalLayer.transform.rotationDeg !== drag.originalLayer.transform.rotationDeg
       if (!rChanged) { ed.cancelTransaction(); return }
       ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
@@ -1225,10 +1286,9 @@ export default function SceneCanvas({
     if (e.button !== 0) return
     e.stopPropagation()
     e.preventDefault()
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer || layer.locked) return
+    const primary = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!primary || primary.locked) return
 
-    // Convert click → world (composition) coords for the rotation pivot math.
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -1237,25 +1297,58 @@ export default function SceneCanvas({
     const wx = (e.clientX - rect.left) * sx
     const wy = (e.clientY - rect.top)  * sy
 
-    const anchorWorldX = layer.transform.x + layer.transform.anchorX
-    const anchorWorldY = layer.transform.y + layer.transform.anchorY
-    const startAngle   = (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
+    // BL-03: Multi-select rotation. When 2+ unlocked layers are selected,
+    // pivot becomes the centroid of their anchor positions and the drag
+    // rotates EVERY selected layer around that shared pivot.
+    const ids = selectedLayerIds && selectedLayerIds.size > 1
+      ? Array.from(selectedLayerIds)
+          .map((id) => scene.layers.find((l) => l.id === id))
+          .filter((l): l is Layer => !!l && !l.locked)
+      : null
+
+    let anchorWorldX: number
+    let anchorWorldY: number
+    let multiOrigins: RotateState['multiLayerOrigins']
+
+    if (ids && ids.length >= 2) {
+      // Centroid of anchor positions
+      let sumX = 0, sumY = 0
+      for (const l of ids) {
+        sumX += l.transform.x + l.transform.anchorX
+        sumY += l.transform.y + l.transform.anchorY
+      }
+      anchorWorldX = sumX / ids.length
+      anchorWorldY = sumY / ids.length
+      multiOrigins = ids.map((l) => ({
+        layerId: l.id,
+        originalLayer: l,
+        originalX: l.transform.x,
+        originalY: l.transform.y,
+        originalRotation: l.transform.rotationDeg,
+      }))
+    } else {
+      anchorWorldX = primary.transform.x + primary.transform.anchorX
+      anchorWorldY = primary.transform.y + primary.transform.anchorY
+    }
+
+    const startAngle = (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
 
     editor.beginTransaction()
     dragRef.current = {
       kind: 'rotate',
-      layerId: layer.id,
-      originalLayer: layer,
+      layerId: primary.id,
+      originalLayer: primary,
       startClientX: e.clientX,
       startClientY: e.clientY,
       startAngle,
-      originalRotation: layer.transform.rotationDeg,
+      originalRotation: primary.transform.rotationDeg,
       anchorWorldX,
       anchorWorldY,
+      multiLayerOrigins: multiOrigins,
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+  }, [scene.layers, selectedLayerId, selectedLayerIds, editor, handlePointerMove, handlePointerUp])
 
   // ── Render canvas ─────────────────────────────────────────────────────────
   useEffect(() => {
