@@ -1092,6 +1092,23 @@ export default function BuilderPage() {
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
                     snap={snap}
+                    onSelectByGeometry={(ids, mode) => {
+                      // BL-60 Faz 3 — canvas selection tools commit. Plain
+                      // drag replaces selection; Shift adds; Alt subtracts.
+                      let next: Set<string>
+                      if (mode === 'replace') {
+                        next = new Set(ids)
+                      } else if (mode === 'add') {
+                        next = new Set(selectedLayerIds)
+                        ids.forEach((id) => next.add(id))
+                      } else {
+                        next = new Set(selectedLayerIds)
+                        ids.forEach((id) => next.delete(id))
+                      }
+                      setSelectedLayerIds(next)
+                      const first = next.values().next().value
+                      setSelectedLayer(first ?? null)
+                    }}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}

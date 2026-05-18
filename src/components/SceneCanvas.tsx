@@ -13,6 +13,9 @@ import {
   hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
   moveAnchor, moveInHandle, moveOutHandle,
 } from '@/lib/path/pathOps'
+import {
+  layersInRect, layersInCircle, layersInPolygon, layersUnderPaintBrush,
+} from '@/lib/selection/canvasShapes'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -68,6 +71,11 @@ interface Props {
    *    pan     → canvas drag mode (no gizmos)
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
+    | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+  /** BL-60 Faz 3 — Replace / add / subtract layers from the current selection
+   *  after a canvas selection-tool drag completes. Mode is 'replace' (plain
+   *  drag), 'add' (Shift+drag), or 'subtract' (Alt+drag). */
+  onSelectByGeometry?: (layerIds: Set<string>, mode: 'replace' | 'add' | 'subtract') => void
   /** Snap settings — owned by the page so the dockable SnapPanel + the
    *  in-canvas SnapMenu both read/write the same source of truth. */
   snap: SnapSettingsHook
@@ -238,7 +246,7 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
-  panMode: controlledPanMode, onPanModeChange, toolMode, snap,
+  panMode: controlledPanMode, onPanModeChange, toolMode, snap, onSelectByGeometry,
   fullscreen, onToggleFullscreen,
   menuHandlers, onAfterLayerCommit,
   ghostSettings, selectedTimeline,
@@ -443,6 +451,28 @@ export default function SceneCanvas({
   // path's first anchor stores the timestamp; a second click within 350ms
   // on the same anchor triggers togglePathClosed instead of starting a drag.
   const closePathClickRef = useRef<{ layerId: string; timeMs: number } | null>(null)
+
+  // BL-60 Faz 3 — Canvas selection-tool drag state. ref stores the live
+  // shape (mutated continuously without re-render) and the modifier mode;
+  // a separate React state mirrors enough of it to drive the SVG overlay
+  // render.
+  const selectionDragRef = useRef<{
+    tool: 'box' | 'lasso' | 'circle' | 'paint'
+    mode: 'replace' | 'add' | 'subtract'
+    startX: number; startY: number
+    /** For lasso/paint — every point the cursor visited. */
+    points: Array<{ x: number; y: number }>
+    /** Accumulated paint-mode selection (built across pointermove). */
+    paintAcc: Set<string>
+  } | null>(null)
+  const [selectionOverlay, setSelectionOverlay] = useState<
+    | { kind: 'box',    x: number; y: number; w: number; h: number }
+    | { kind: 'circle', cx: number; cy: number; r: number }
+    | { kind: 'lasso',  points: Array<{ x: number; y: number }> }
+    | { kind: 'paint',  cx: number; cy: number; r: number }
+    | null
+  >(null)
+  const PAINT_BRUSH_RADIUS = 24  // composition px
 
   // ── Drag-time numeric HUD (position / rotation / size readout) ───────────
   // Mirrors AE / Figma — appears next to the cursor while transforming.
@@ -955,6 +985,104 @@ export default function SceneCanvas({
     window.addEventListener('pointerup',   handlePanUp)
   }, [pan, handlePanMove, handlePanUp])
 
+  // ── BL-60 Faz 3 — Canvas selection-tool drag handlers (move + up) ───────
+  // Defined before handleCanvasPointerDown so the callback dep array can
+  // reference them. Mutates selectionDragRef live; mirrors a slice to React
+  // state every move so the SVG overlay re-renders.
+  const handleSelectionDragMove = useCallback((e: PointerEvent) => {
+    const drag = selectionDragRef.current
+    if (!drag) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const sx = width  / rect.width
+    const sy = height / rect.height
+    const cx = (e.clientX - rect.left) * sx
+    const cy = (e.clientY - rect.top)  * sy
+
+    switch (drag.tool) {
+      case 'box': {
+        const x = Math.min(drag.startX, cx)
+        const y = Math.min(drag.startY, cy)
+        const w = Math.abs(cx - drag.startX)
+        const h = Math.abs(cy - drag.startY)
+        setSelectionOverlay({ kind: 'box', x, y, w, h })
+        break
+      }
+      case 'circle': {
+        const r = Math.hypot(cx - drag.startX, cy - drag.startY)
+        setSelectionOverlay({ kind: 'circle', cx: drag.startX, cy: drag.startY, r })
+        break
+      }
+      case 'lasso': {
+        // Skip if too close to last point (prevents thousands of useless verts)
+        const last = drag.points[drag.points.length - 1]
+        if (Math.hypot(cx - last.x, cy - last.y) >= 3) {
+          drag.points.push({ x: cx, y: cy })
+          setSelectionOverlay({ kind: 'lasso', points: drag.points.slice() })
+        }
+        break
+      }
+      case 'paint': {
+        const hits = layersUnderPaintBrush(sceneRef.current, { x: cx, y: cy }, PAINT_BRUSH_RADIUS)
+        hits.forEach((id) => drag.paintAcc.add(id))
+        setSelectionOverlay({ kind: 'paint', cx, cy, r: PAINT_BRUSH_RADIUS })
+        break
+      }
+    }
+  }, [width, height])
+
+  const handleSelectionDragUp = useCallback((e: PointerEvent) => {
+    const drag = selectionDragRef.current
+    if (!drag) return
+    const canvas = canvasRef.current
+    canvas?.releasePointerCapture(e.pointerId)
+    window.removeEventListener('pointermove', handleSelectionDragMove)
+    window.removeEventListener('pointerup',   handleSelectionDragUp)
+
+    let hits: Set<string> = new Set()
+    switch (drag.tool) {
+      case 'box': {
+        const last = drag.points[0]
+        const rect2 = canvasRef.current?.getBoundingClientRect()
+        if (!rect2) break
+        const sx = width  / rect2.width
+        const sy = height / rect2.height
+        const cx = (e.clientX - rect2.left) * sx
+        const cy = (e.clientY - rect2.top)  * sy
+        const x = Math.min(last.x, cx), y = Math.min(last.y, cy)
+        const w = Math.abs(cx - last.x), h = Math.abs(cy - last.y)
+        hits = layersInRect(sceneRef.current, { x, y, w, h })
+        break
+      }
+      case 'circle': {
+        const rect2 = canvasRef.current?.getBoundingClientRect()
+        if (!rect2) break
+        const sx = width  / rect2.width
+        const sy = height / rect2.height
+        const cx = (e.clientX - rect2.left) * sx
+        const cy = (e.clientY - rect2.top)  * sy
+        const r = Math.hypot(cx - drag.startX, cy - drag.startY)
+        hits = layersInCircle(sceneRef.current, { x: drag.startX, y: drag.startY, r })
+        break
+      }
+      case 'lasso': {
+        if (drag.points.length >= 3) {
+          hits = layersInPolygon(sceneRef.current, drag.points)
+        }
+        break
+      }
+      case 'paint': {
+        hits = drag.paintAcc
+        break
+      }
+    }
+
+    onSelectByGeometry?.(hits, drag.mode)
+    selectionDragRef.current = null
+    setSelectionOverlay(null)
+  }, [width, height, onSelectByGeometry, handleSelectionDragMove])
+
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     // Middle-mouse OR pan-mode + left button → pan the view, not the layer
     if (e.button === 1 || (panMode && e.button === 0)) {
@@ -970,6 +1098,44 @@ export default function SceneCanvas({
     const sy = height / rect.height
     const cx = (e.clientX - rect.left) * sx
     const cy = (e.clientY - rect.top)  * sy
+
+    // ── BL-60 Faz 3: Canvas selection tools (box / lasso / circle / paint) ──
+    if ((toolMode === 'selection-box' || toolMode === 'selection-lasso' ||
+         toolMode === 'selection-circle' || toolMode === 'selection-paint')
+        && onSelectByGeometry) {
+      e.preventDefault()
+      canvas.setPointerCapture(e.pointerId)
+      const mode: 'replace' | 'add' | 'subtract' =
+        e.shiftKey ? 'add' : e.altKey ? 'subtract' : 'replace'
+      const tool =
+        toolMode === 'selection-box'    ? 'box' :
+        toolMode === 'selection-lasso'  ? 'lasso' :
+        toolMode === 'selection-circle' ? 'circle' : 'paint'
+      selectionDragRef.current = {
+        tool, mode,
+        startX: cx, startY: cy,
+        points: [{ x: cx, y: cy }],
+        paintAcc: new Set<string>(),
+      }
+      // Initial overlay so the user sees something even on a zero-distance drag.
+      if (tool === 'box') {
+        setSelectionOverlay({ kind: 'box', x: cx, y: cy, w: 0, h: 0 })
+      } else if (tool === 'circle') {
+        setSelectionOverlay({ kind: 'circle', cx, cy, r: 0 })
+      } else if (tool === 'lasso') {
+        setSelectionOverlay({ kind: 'lasso', points: [{ x: cx, y: cy }] })
+      } else {
+        // paint
+        setSelectionOverlay({ kind: 'paint', cx, cy, r: PAINT_BRUSH_RADIUS })
+        // Seed with what's under the cursor at click-down
+        const drag = selectionDragRef.current!
+        const hits = layersUnderPaintBrush(sceneRef.current, { x: cx, y: cy }, PAINT_BRUSH_RADIUS)
+        hits.forEach((id) => drag.paintAcc.add(id))
+      }
+      window.addEventListener('pointermove', handleSelectionDragMove)
+      window.addEventListener('pointerup',   handleSelectionDragUp)
+      return
+    }
 
     // ── Runtime preview mode: clicks on tappable layers fire trigger events
     //    instead of changing selection. Lets the author exercise layer-click
@@ -1141,7 +1307,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview])
+  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, handleSelectionDragMove, handleSelectionDragUp])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1707,6 +1873,51 @@ export default function SceneCanvas({
               zoom={zoom}
               currentTimeMs={timeMs}
             />
+          )}
+
+          {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
+              Circle / Paint). zoom multiplier maps composition pixels to
+              the displayed canvas size. pointer-events:none so it never
+              eats the drag stream. */}
+          {selectionOverlay && (
+            <svg
+              className="absolute top-0 left-0 pointer-events-none"
+              width={width * zoom}
+              height={height * zoom}
+              style={{ overflow: 'visible' }}
+            >
+              {selectionOverlay.kind === 'box' && (
+                <rect
+                  x={selectionOverlay.x * zoom} y={selectionOverlay.y * zoom}
+                  width={selectionOverlay.w * zoom} height={selectionOverlay.h * zoom}
+                  fill="rgba(59, 130, 246, 0.15)" stroke="#60a5fa" strokeWidth={1}
+                  strokeDasharray="4 3"
+                />
+              )}
+              {selectionOverlay.kind === 'circle' && (
+                <circle
+                  cx={selectionOverlay.cx * zoom} cy={selectionOverlay.cy * zoom}
+                  r={selectionOverlay.r * zoom}
+                  fill="rgba(59, 130, 246, 0.15)" stroke="#60a5fa" strokeWidth={1}
+                  strokeDasharray="4 3"
+                />
+              )}
+              {selectionOverlay.kind === 'lasso' && selectionOverlay.points.length >= 2 && (
+                <polygon
+                  points={selectionOverlay.points.map((p) => `${p.x * zoom},${p.y * zoom}`).join(' ')}
+                  fill="rgba(59, 130, 246, 0.15)" stroke="#60a5fa" strokeWidth={1}
+                  strokeDasharray="4 3" strokeLinejoin="round"
+                />
+              )}
+              {selectionOverlay.kind === 'paint' && (
+                <circle
+                  cx={selectionOverlay.cx * zoom} cy={selectionOverlay.cy * zoom}
+                  r={selectionOverlay.r * zoom}
+                  fill="rgba(59, 130, 246, 0.10)" stroke="#60a5fa" strokeWidth={1.5}
+                  strokeOpacity={0.7}
+                />
+              )}
+            </svg>
           )}
 
           {showFrame && selectedLayer.size && (

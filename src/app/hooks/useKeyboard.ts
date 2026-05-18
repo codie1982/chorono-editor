@@ -90,12 +90,15 @@ export function useKeyboard(handlers: Handlers) {
 
       // ── Tool shortcuts (single key, no modifier) ───────────────────────
       // V Select, H Pan, P Pen, G Move, R Rotate, S Scale, A Anchor.
+      // BL-60 Faz 3: B Box-select, L Lasso, O Circle, W Paint.
       // Skip when any modifier is held so Cmd+G (group) keeps working.
       if (onToolChange && !meta && !e.shiftKey && !e.altKey) {
         const k = e.key.toLowerCase()
         const map: Record<string, ToolMode> = {
           v: 'select', h: 'pan', p: 'pen',
           g: 'move', r: 'rotate', s: 'scale', a: 'anchor',
+          b: 'selection-box', l: 'selection-lasso',
+          o: 'selection-circle', w: 'selection-paint',
         }
         const next = map[k]
         if (next) { e.preventDefault(); onToolChange(next); return }

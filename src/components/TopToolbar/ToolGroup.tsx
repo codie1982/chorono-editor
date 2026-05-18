@@ -3,6 +3,14 @@
 export type ToolMode =
   | 'select' | 'pan' | 'pen'
   | 'move' | 'rotate' | 'scale' | 'anchor'
+  // BL-60 Faz 3 — Canvas selection tools (drag a shape, select layers inside)
+  | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+
+/** True for any of the four canvas-shape selection tools. */
+export function isSelectionTool(m: ToolMode): boolean {
+  return m === 'selection-box' || m === 'selection-lasso'
+      || m === 'selection-circle' || m === 'selection-paint'
+}
 
 interface ToolGroupProps {
   mode:     ToolMode
@@ -85,6 +93,30 @@ export default function ToolGroup({ mode, onChange, penAuto }: ToolGroupProps) {
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="3" />
           <path d="M8 1 L8 4 M8 12 L8 15 M1 8 L4 8 M12 8 L15 8" strokeLinecap="round" />
+        </svg>
+      </ToolBtn>
+
+      <Divider />
+
+      {/* BL-60 Faz 3 — Canvas selection tools */}
+      <ToolBtn active={mode === 'selection-box'} hint="Box Select" shortcut="B" onClick={() => onChange('selection-box')}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="2.5" y="2.5" width="11" height="11" strokeDasharray="2 1.5" />
+        </svg>
+      </ToolBtn>
+      <ToolBtn active={mode === 'selection-lasso'} hint="Lasso Select" shortcut="L" onClick={() => onChange('selection-lasso')}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 6 Q2 2 7 2 Q12 2 13 6 Q13 11 7 11 Q4 11 4 13 L6 14" strokeDasharray="1.5 1" />
+        </svg>
+      </ToolBtn>
+      <ToolBtn active={mode === 'selection-circle'} hint="Circle Select" shortcut="O" onClick={() => onChange('selection-circle')}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="8" cy="8" r="5.5" strokeDasharray="2 1.5" />
+        </svg>
+      </ToolBtn>
+      <ToolBtn active={mode === 'selection-paint'} hint="Paint Select" shortcut="W" onClick={() => onChange('selection-paint')}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 13 L10 6 L11 5 L13 7 L12 8 L5 15 L2 14 Z" fill="currentColor" fillOpacity="0.15" />
         </svg>
       </ToolBtn>
     </div>
