@@ -48,23 +48,74 @@ export function makeSetWorkAreaCmd(
   }
 }
 
-// ── Add marker ────────────────────────────────────────────────────────────────
+// ── Markers (BL-11) ───────────────────────────────────────────────────────────
+
+function mapTimelineMarkers(
+  scene: ChronoScene,
+  timelineId: string,
+  fn: (markers: TimelineMarker[]) => TimelineMarker[],
+): ChronoScene {
+  return {
+    ...scene,
+    timelines: scene.timelines.map((t) =>
+      t.id !== timelineId ? t : { ...t, markers: fn(t.markers ?? []) }
+    ),
+  }
+}
 
 export function makeAddMarkerCmd(timelineId: string, marker: TimelineMarker): EditorCommand {
   return {
     label: 'Add Marker',
-    execute: (scene) => ({
-      ...scene,
-      timelines: scene.timelines.map((t) =>
-        t.id !== timelineId ? t : { ...t, markers: [...(t.markers ?? []), marker] }
+    execute: (scene) => mapTimelineMarkers(scene, timelineId, (ms) => [...ms, marker]),
+    undo: (scene) => mapTimelineMarkers(scene, timelineId, (ms) => ms.filter((m) => m.id !== marker.id)),
+  }
+}
+
+export function makeDeleteMarkerCmd(timelineId: string, marker: TimelineMarker): EditorCommand {
+  return {
+    label: 'Delete Marker',
+    execute: (scene) => mapTimelineMarkers(scene, timelineId, (ms) => ms.filter((m) => m.id !== marker.id)),
+    undo: (scene) => mapTimelineMarkers(scene, timelineId, (ms) => [...ms, marker]),
+  }
+}
+
+export function makeUpdateMarkerCmd(
+  timelineId: string,
+  markerId: string,
+  prev: Pick<TimelineMarker, 'label' | 'color'>,
+  next: Pick<TimelineMarker, 'label' | 'color'>,
+): EditorCommand {
+  return {
+    label: `Update Marker: ${next.label}`,
+    execute: (scene) =>
+      mapTimelineMarkers(scene, timelineId, (ms) =>
+        ms.map((m) => (m.id !== markerId ? m : { ...m, ...next }))
       ),
-    }),
-    undo: (scene) => ({
-      ...scene,
-      timelines: scene.timelines.map((t) =>
-        t.id !== timelineId ? t : { ...t, markers: (t.markers ?? []).filter((m) => m.id !== marker.id) }
+    undo: (scene) =>
+      mapTimelineMarkers(scene, timelineId, (ms) =>
+        ms.map((m) => (m.id !== markerId ? m : { ...m, ...prev }))
       ),
-    }),
+  }
+}
+
+/** Move-marker command (BL-11) — separate from update so drag commits aren't
+ *  conflated with rename/color edits in the undo stack. */
+export function makeMoveMarkerCmd(
+  timelineId: string,
+  markerId: string,
+  fromMs: number,
+  toMs: number,
+): EditorCommand {
+  return {
+    label: 'Move Marker',
+    execute: (scene) =>
+      mapTimelineMarkers(scene, timelineId, (ms) =>
+        ms.map((m) => (m.id !== markerId ? m : { ...m, timeMs: toMs }))
+      ),
+    undo: (scene) =>
+      mapTimelineMarkers(scene, timelineId, (ms) =>
+        ms.map((m) => (m.id !== markerId ? m : { ...m, timeMs: fromMs }))
+      ),
   }
 }
 

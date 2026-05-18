@@ -5,7 +5,7 @@
 
 import type {
   ChronoScene, SceneParameter,
-  Trigger, Binding, TimelineSegment, Timeline,
+  Trigger, Binding, ParameterWire, TimelineSegment, Timeline,
 } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 
@@ -120,6 +120,47 @@ export function makeUpdateBindingCmd(
       ...scene,
       bindings: scene.bindings.map((b) => b.id === bindingId ? prev : b),
     }),
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parameter Wires (BL-05) — expression-based bindings
+// ─────────────────────────────────────────────────────────────────────────────
+
+function withWires(
+  scene: ChronoScene,
+  mutate: (wires: ParameterWire[]) => ParameterWire[],
+): ChronoScene {
+  return { ...scene, parameterWires: mutate(scene.parameterWires ?? []) }
+}
+
+export function makeAddParameterWireCmd(wire: ParameterWire): EditorCommand {
+  return {
+    label: 'Add Parameter Wire',
+    execute: (scene) => withWires(scene, (ws) => [...ws, wire]),
+    undo:    (scene) => withWires(scene, (ws) => ws.filter((w) => w.id !== wire.id)),
+  }
+}
+
+export function makeDeleteParameterWireCmd(wire: ParameterWire): EditorCommand {
+  return {
+    label: 'Delete Parameter Wire',
+    execute: (scene) => withWires(scene, (ws) => ws.filter((w) => w.id !== wire.id)),
+    undo:    (scene) => withWires(scene, (ws) => [...ws, wire]),
+  }
+}
+
+export function makeUpdateParameterWireCmd(
+  wireId: string,
+  prev: ParameterWire,
+  next: ParameterWire,
+): EditorCommand {
+  return {
+    label: 'Update Parameter Wire',
+    execute: (scene) => withWires(scene, (ws) =>
+      ws.map((w) => (w.id === wireId ? next : w))),
+    undo:    (scene) => withWires(scene, (ws) =>
+      ws.map((w) => (w.id === wireId ? prev : w))),
   }
 }
 

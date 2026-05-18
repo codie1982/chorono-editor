@@ -7,9 +7,14 @@
 
 import type { Keyframe, EasingType, TangentMode } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import type { OutOfRangeType, OutOfRangeSettings } from '@/lib/animation/out-of-range/types'
 
 const EASING_TYPES: EasingType[] = [
   'linear', 'hold', 'easeIn', 'easeOut', 'easeInOut', 'customBezier',
+]
+
+const OOR_MODES: OutOfRangeType[] = [
+  'constant', 'cycle', 'loop', 'pingPong', 'linear', 'relativeRepeat',
 ]
 
 export interface KeyframeMenuHandlers {
@@ -195,5 +200,55 @@ function prettyEasing(t: EasingType): string {
     case 'easeInOut':    return 'Ease In/Out'
     case 'customBezier': return 'Custom Bezier…'
     default: return t
+  }
+}
+
+// ── Out-of-Range menu (BL-45) ──────────────────────────────────────────────
+// Two nested submenus (Before / After) × six modes each. Used by both the
+// track-header right-click in the Dope Sheet and the badge dropdown in the
+// Curve Editor.
+
+function prettyOorMode(t: OutOfRangeType): string {
+  switch (t) {
+    case 'constant':       return 'Constant'
+    case 'cycle':          return 'Cycle'
+    case 'loop':           return 'Loop'
+    case 'pingPong':       return 'Ping Pong'
+    case 'linear':         return 'Linear'
+    case 'relativeRepeat': return 'Relative Repeat'
+    default: return t
+  }
+}
+
+/** "Out of Range ▸ Before/After ▸ {6 modes}" submenu with active mode checkmarks.
+ *  Pass the current Track.outOfRange and an onSet callback that dispatches
+ *  the undoable command (makeSetOutOfRangeCmd). */
+export function buildOutOfRangeSubmenu(
+  current: OutOfRangeSettings | undefined,
+  onSet: (next: OutOfRangeSettings) => void,
+): MenuItem {
+  const before = current?.before ?? 'constant'
+  const after  = current?.after  ?? 'constant'
+
+  const modesFor = (which: 'before' | 'after', active: OutOfRangeType) =>
+    OOR_MODES.map((mode): MenuItem => ({
+      kind: 'action',
+      label: `${mode === active ? '✓ ' : '   '}${prettyOorMode(mode)}`,
+      disabled: false,
+      onSelect: () =>
+        onSet(
+          which === 'before'
+            ? { before: mode, after }
+            : { before, after: mode },
+        ),
+    }))
+
+  return {
+    kind: 'submenu',
+    label: 'Out of Range',
+    items: [
+      { kind: 'submenu', label: `Before  (${prettyOorMode(before)})`, items: modesFor('before', before) },
+      { kind: 'submenu', label: `After   (${prettyOorMode(after)})`,  items: modesFor('after',  after)  },
+    ],
   }
 }

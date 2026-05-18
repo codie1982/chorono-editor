@@ -4,12 +4,14 @@ import type {
   Layer, Composition,
   PathStrokeData, PathShapeType, PathTrimMode, StrokeCap,
   SceneParameter, PathAnchor,
+  ChronoScene, ParameterWire, ParameterRef,
 } from '@/lib/types'
 import {
   togglePathClosed, reversePath, cyclePointType, deleteAnchor,
 } from '@/lib/path/pathOps'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ScrubInput  from '@/components/inputs/ScrubInput'
+import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
@@ -55,6 +57,80 @@ interface Props {
   /** BL-17 Faz 1 — Convert shape layer to editable BezierPath. Button is
    *  hidden when callback isn't wired (eg. text/image/group selected). */
   onConvertToSpline?: () => void
+  /** BL-05 — Full scene reference for wire lookups (sources / labels). */
+  scene?: ChronoScene
+  /** BL-05 — Currently-defined parameter wires (scene.parameterWires). */
+  parameterWires?: ParameterWire[]
+  /** BL-05 — Open WireParameterModal pre-filled with a new wire targeting `target`. */
+  onRequestNewWire?: (target: ParameterRef) => void
+  /** BL-05 — Open WireParameterModal in edit mode for an existing wire. */
+  onEditWire?: (wire: ParameterWire) => void
+}
+
+// ── BL-05: Wireable field wrapper ──────────────────────────────────────────
+// Adds a 🔗 icon next to any animatable input. When a wire targets this
+// property, replaces the input with a "Driven by …" label so the user knows
+// the value is under formula control. Click 🔗 to open the wire editor.
+
+function WireableField({
+  label, layer, propertyPath, valueType = 'number',
+  scene, parameterWires, onRequestNewWire, onEditWire,
+  children,
+}: {
+  label: string
+  layer: Layer | null
+  propertyPath: string
+  valueType?: 'number' | 'boolean' | 'string' | 'color' | 'vec2'
+  scene?: ChronoScene
+  parameterWires?: ParameterWire[]
+  onRequestNewWire?: (target: ParameterRef) => void
+  onEditWire?: (wire: ParameterWire) => void
+  children: React.ReactNode
+}) {
+  const wire = layer ? findWireForProperty(parameterWires, layer.id, propertyPath) : null
+  const canWire = !!layer && (!!onRequestNewWire || !!onEditWire)
+
+  function handleClick() {
+    if (!layer) return
+    if (wire && onEditWire) { onEditWire(wire); return }
+    if (!wire && onRequestNewWire) {
+      onRequestNewWire({ layerId: layer.id, propertyPath, valueType })
+    }
+  }
+
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1">
+        <span className="flex-1">{label}</span>
+        {canWire && (
+          <button
+            type="button"
+            onClick={handleClick}
+            title={wire
+              ? `Driven by ${scene ? formatParameterRef(wire.source, scene) : 'wire'} — click to edit`
+              : 'Wire this parameter to a source via expression'}
+            className={`text-[10px] leading-none w-4 h-4 flex items-center justify-center rounded transition-colors ${
+              wire
+                ? 'text-sky-300 bg-sky-900/50 hover:bg-sky-800/70'
+                : 'text-gray-600 hover:text-sky-300 hover:bg-gray-800'
+            }`}
+          >
+            🔗
+          </button>
+        )}
+      </span>
+      {wire ? (
+        <button
+          type="button"
+          onClick={handleClick}
+          className="text-left bg-sky-900/20 border border-sky-800/40 rounded px-2 py-1 text-[11px] text-sky-200 font-mono truncate hover:bg-sky-900/40"
+          title="Click to edit this wire"
+        >
+          Driven by {scene ? formatParameterRef(wire.source, scene) : 'wire'}
+        </button>
+      ) : children}
+    </label>
+  )
 }
 
 // ── Genel giriş bileşenleri ─────────────────────────────────────────────────
@@ -133,9 +209,14 @@ export default function PropertiesPanel({
   layer, composition, onLayerChange, onCompositionChange,
   parameters = [], allLayers = [], allTimelines = [],
   onConvertToSpline,
+  scene, parameterWires, onRequestNewWire, onEditWire,
 }: Props) {
-  // Shadow `scene` shape for the inline mask + motion path UI below.
-  const scene = { layers: allLayers }
+  // Convenience: bundle the wire-related props so we don't list 4 of them on
+  // every WireableField call.
+  const wireProps = { scene, parameterWires, onRequestNewWire, onEditWire }
+  // Shadow `scene` shape for the inline mask + motion path UI below (local
+  // — distinct from the BL-05 `scene` prop above).
+  const sceneLite = { layers: allLayers }
 
   const update = (partial: Partial<Layer>) => layer && onLayerChange({ ...layer, ...partial })
   const updateTransform = (key: keyof Layer['transform'], val: number) =>
@@ -215,27 +296,27 @@ export default function PropertiesPanel({
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>
             <Section title="Transform">
               <Row2>
-                <Field label="X">
+                <WireableField label="X" layer={layer} propertyPath="transform.x" {...wireProps}>
                   <NumInput value={layer.transform.x} onChange={(v) => updateTransform('x', v)} />
-                </Field>
-                <Field label="Y">
+                </WireableField>
+                <WireableField label="Y" layer={layer} propertyPath="transform.y" {...wireProps}>
                   <NumInput value={layer.transform.y} onChange={(v) => updateTransform('y', v)} />
-                </Field>
+                </WireableField>
               </Row2>
               <Row2>
-                <Field label="Scale X">
+                <WireableField label="Scale X" layer={layer} propertyPath="transform.scaleX" {...wireProps}>
                   <NumInput value={layer.transform.scaleX} step={0.01} min={0.01}
                     onChange={(v) => updateTransform('scaleX', v)} />
-                </Field>
-                <Field label="Scale Y">
+                </WireableField>
+                <WireableField label="Scale Y" layer={layer} propertyPath="transform.scaleY" {...wireProps}>
                   <NumInput value={layer.transform.scaleY} step={0.01} min={0.01}
                     onChange={(v) => updateTransform('scaleY', v)} />
-                </Field>
+                </WireableField>
               </Row2>
-              <Field label="Rotation (deg)">
+              <WireableField label="Rotation (deg)" layer={layer} propertyPath="transform.rotationDeg" {...wireProps}>
                 <NumInput value={layer.transform.rotationDeg} min={-360} max={360}
                   onChange={(v) => updateTransform('rotationDeg', v)} />
-              </Field>
+              </WireableField>
               <Row2>
                 <Field label="Anchor X">
                   <NumInput value={layer.transform.anchorX}
@@ -269,7 +350,7 @@ export default function PropertiesPanel({
             </Section>
 
             <Section title="Appearance">
-              <Field label="Opacity">
+              <WireableField label="Opacity" layer={layer} propertyPath="opacity" {...wireProps}>
                 <div className="flex items-center gap-2">
                   <input
                     type="range" min={0} max={1} step={0.01}
@@ -281,7 +362,7 @@ export default function PropertiesPanel({
                     {(layer.opacity * 100).toFixed(0)}%
                   </span>
                 </div>
-              </Field>
+              </WireableField>
               <Field label="Blend Mode">
                 <select
                   value={layer.blendMode ?? 'source-over'}
@@ -1012,7 +1093,7 @@ export default function PropertiesPanel({
                              focus:outline-none focus:border-blue-500"
                 >
                   <option value="" disabled>+ Add mask from layer…</option>
-                  {scene.layers
+                  {sceneLite.layers
                     .filter(l => l.id !== layer.id && l.type !== 'audio')
                     .map(l => (
                       <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
@@ -1020,7 +1101,7 @@ export default function PropertiesPanel({
                 </select>
               </div>
               {(layer.masks ?? []).map((mask, i) => {
-                const ml = scene.layers.find(l => l.id === mask.maskLayerId)
+                const ml = sceneLite.layers.find(l => l.id === mask.maskLayerId)
                 return (
                   <div key={mask.id} className="border border-gray-700 rounded p-1.5 space-y-1.5 mb-1.5">
                     <div className="flex items-center justify-between">
@@ -1363,7 +1444,7 @@ export default function PropertiesPanel({
                              focus:outline-none focus:border-blue-500"
                 >
                   <option value="">(none)</option>
-                  {scene.layers
+                  {sceneLite.layers
                     .filter(l => l.type === 'path' && l.path && l.id !== layer.id)
                     .map(l => (
                       <option key={l.id} value={l.id}>{l.name}</option>

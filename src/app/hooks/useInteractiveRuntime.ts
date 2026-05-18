@@ -25,6 +25,7 @@ import {
   type ParamValueMap,
 } from '@/lib/runtime/paramResolver'
 import { evaluateBindings } from '@/lib/runtime/bindingEvaluator'
+import { evaluateParameterWires } from '@/lib/runtime/parameterWireEvaluator'
 import {
   evaluateTriggers,
   type RuntimeEvent, type ResolvedAction,
@@ -170,10 +171,13 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
       ? { timelineId: seg.timelineId, localTimeMs: computeSegmentTime(seg, performance.now()) }
       : null
 
-    const baseOverrides   = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
-    const paramOverrides  = applyParamBindingsToOverrides(scene.layers, paramValues, baseOverrides)
+    const baseOverrides    = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
+    const paramOverrides   = applyParamBindingsToOverrides(scene.layers, paramValues, baseOverrides)
     const bindingOverrides = evaluateBindings(scene.bindings, paramOverrides, paramValues, scene)
-    const overrides = mergeOverrides(bindingOverrides) // bindingOverrides already wraps paramOverrides
+    // BL-05: Apply expression-based parameter wires after linear bindings so
+    // expression wires can read values produced by the simpler binding system.
+    const wireOverrides    = evaluateParameterWires(scene.parameterWires, bindingOverrides, paramValues, scene)
+    const overrides = mergeOverrides(wireOverrides) // wireOverrides already wraps everything
 
     // ── Build new snapshot ────────────────────────────────────────────────
     const activeTimelineId = scene.timelines.find((t) => t.autoplay)?.id

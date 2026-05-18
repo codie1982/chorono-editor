@@ -1,7 +1,7 @@
 import type {
   Layer, Timeline, Composition, ChronoScene, Transform,
   SceneParameter, SceneParameterType, SceneParameterValue,
-  Trigger, Binding, TimelineSegment,
+  Trigger, Binding, ParameterWire, TimelineSegment, TimelineMarker,
   PathStrokeData,
 } from './types'
 
@@ -11,8 +11,10 @@ let kfCounter       = 0
 let paramCounter    = 0
 let triggerCounter  = 0
 let bindingCounter  = 0
+let wireCounter     = 0
 let segmentCounter  = 0
 let eventCounter    = 0
+let markerCounter   = 0
 
 /** Generate a lightweight unique ID for keyframes (no crypto dependency). */
 function nextKfId(): string {
@@ -430,6 +432,41 @@ export function newBinding(): Binding {
       outputMin: 0, outputMax: 1,
       clamp: true,
     },
+  }
+}
+
+/** Marker (BL-11) — Ctrl+Click on the ruler creates one. Default color
+ *  cycles through a small palette so consecutive markers stay distinct
+ *  without making the user pick. */
+const MARKER_COLORS = ['#a78bfa', '#fbbf24', '#34d399', '#f87171', '#22d3ee', '#fb7185']
+export function newMarker(timeMs: number, label?: string): TimelineMarker {
+  markerCounter++
+  return {
+    id:    `marker_${markerCounter}`,
+    timeMs,
+    label: label ?? `Marker ${markerCounter}`,
+    color: MARKER_COLORS[(markerCounter - 1) % MARKER_COLORS.length],
+  }
+}
+
+/** Empty ParameterWire (BL-05) — defaults to identity passthrough.
+ *  User picks source/target via the picker, then writes the expression.
+ *  Either ref can be pre-filled (e.g. PropertiesPanel 🔗 click sets target). */
+export function newParameterWire(
+  overrides?: Partial<ParameterWire>,
+): ParameterWire {
+  wireCounter++
+  const now = Date.now()
+  return {
+    id: `wire_${wireCounter}`,
+    enabled: true,
+    source: { propertyPath: '', valueType: 'number' },
+    target: { propertyPath: '', valueType: 'number' },
+    expression: 'source',
+    blendMode: 'override',
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
   }
 }
 

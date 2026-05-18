@@ -15,6 +15,8 @@ export type {
   // Bindings
   BindingSourceType, BindingTargetType, BindingSource, BindingTarget,
   BindingMap, Binding,
+  // Parameter Wires (BL-05)
+  ParameterWire, ParameterRef, ParameterValueType, ParameterWireClamp,
   // Scene Parameters
   SceneParameterType, SceneParameterValue, SceneParameter,
   // Repeater

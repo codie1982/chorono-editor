@@ -9,7 +9,10 @@ import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
-import { hitTestPath, moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
+import {
+  hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
+  moveAnchor, moveInHandle, moveOutHandle,
+} from '@/lib/path/pathOps'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -149,7 +152,7 @@ interface AnchorState {
   startClientY: number
 }
 
-/** Rotation drag — rotates the layer around its anchor point. */
+/** Rotation drag — rotates the layer (or multi-select group) around a pivot. */
 interface RotateState {
   kind: 'rotate'
   layerId: string
@@ -164,6 +167,17 @@ interface RotateState {
   /** World coords of the layer's anchor (rotation pivot). */
   anchorWorldX: number
   anchorWorldY: number
+  /** BL-03: When set, the drag rotates EVERY layer here around the common
+   *  pivot (anchorWorldX/Y, which is the selection center). Each layer's
+   *  origin is stored so the rotated position is computed from a stable
+   *  snapshot, not the live (intermediate-render) value. */
+  multiLayerOrigins?: Array<{
+    layerId: string
+    originalLayer: Layer
+    originalX: number
+    originalY: number
+    originalRotation: number
+  }>
 }
 
 interface PathPointDrag {
@@ -188,6 +202,19 @@ interface ScaleAxisState {
   axis: 'x' | 'y' | 'both'
   startClientX: number
   startClientY: number
+  /** BL-03: When set, the drag scales EVERY layer here around (pivotX, pivotY).
+   *  Each layer's origin snapshot is captured at drag start so positions are
+   *  recomputed from a stable baseline. */
+  multiLayerOrigins?: Array<{
+    layerId: string
+    originalLayer: Layer
+    originalX: number
+    originalY: number
+    originalScaleX: number
+    originalScaleY: number
+  }>
+  pivotX?: number
+  pivotY?: number
 }
 
 type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | RotateState | ScaleAxisState
@@ -412,6 +439,11 @@ export default function SceneCanvas({
 
   const dragRef = useRef<ActiveDrag | null>(null)
 
+  // BL-03: Pen-tool close-path double-click detection. First click on the
+  // path's first anchor stores the timestamp; a second click within 350ms
+  // on the same anchor triggers togglePathClosed instead of starting a drag.
+  const closePathClickRef = useRef<{ layerId: string; timeMs: number } | null>(null)
+
   // ── Drag-time numeric HUD (position / rotation / size readout) ───────────
   // Mirrors AE / Figma — appears next to the cursor while transforming.
   const [dragHud, setDragHud] = useState<{ x: number; y: number; label: string } | null>(null)
@@ -540,39 +572,64 @@ export default function SceneCanvas({
       // Positive drag (right/down) = bigger; negative = smaller. Shift =
       // uniform regardless of which arrow was grabbed.
       const SENS = 100
-      const o = drag.originalLayer.transform
-      let nsx = o.scaleX
-      let nsy = o.scaleY
       const fx = 1 + dx / SENS
       const fy = 1 + dy / SENS
       const axis = e.shiftKey ? 'both' : drag.axis
-      if (axis === 'x')    nsx = o.scaleX * fx
-      if (axis === 'y')    nsy = o.scaleY * fy
+      let factorX = 1, factorY = 1
+      if (axis === 'x')    factorX = fx
+      if (axis === 'y')    factorY = fy
       if (axis === 'both') {
         // Uniform: prefer the dominant axis direction so the drag feels
         // natural whether the user moves diagonally or mostly one way.
         const f = Math.abs(dx) >= Math.abs(dy) ? fx : fy
-        nsx = o.scaleX * f
-        nsy = o.scaleY * f
+        factorX = f
+        factorY = f
       }
-      // Clamp to prevent flipping past zero (negative scale = flip; not
-      // what the user wants from a "scale bigger" drag). Min 0.05 keeps
-      // tiny shapes still selectable.
-      nsx = Math.max(0.05, nsx)
-      nsy = Math.max(0.05, nsy)
-      let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.scaleX', nsx)
-      next     = updateLayerProperty(next,             drag.layerId, 'transform.scaleY', nsy)
-      editorRef.current.previewTransaction(next)
-      setDragHud({
-        x: e.clientX, y: e.clientY,
-        label: `SX ${nsx.toFixed(2)}   SY ${nsy.toFixed(2)}`,
-      })
+      // Clamp to prevent flipping past zero (Min 0.05 keeps tiny shapes
+      // still selectable). Applied to the FINAL scale below.
+
+      if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0
+          && drag.pivotX != null && drag.pivotY != null) {
+        // BL-03: multi-select scale around common pivot. Each layer's
+        // position-offset from pivot is multiplied by the factor so layers
+        // both grow AND spread out (or shrink and pull in).
+        let scene = sceneRef.current
+        for (const o of drag.multiLayerOrigins) {
+          const ax = o.originalX + o.originalLayer.transform.anchorX
+          const ay = o.originalY + o.originalLayer.transform.anchorY
+          const ox = (ax - drag.pivotX) * factorX
+          const oy = (ay - drag.pivotY) * factorY
+          const nx = (drag.pivotX + ox) - o.originalLayer.transform.anchorX
+          const ny = (drag.pivotY + oy) - o.originalLayer.transform.anchorY
+          const nsx = Math.max(0.05, o.originalScaleX * factorX)
+          const nsy = Math.max(0.05, o.originalScaleY * factorY)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.x',      nx)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.y',      ny)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.scaleX', nsx)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.scaleY', nsy)
+        }
+        editorRef.current.previewTransaction(scene)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `${(factorX * 100).toFixed(0)}% × ${(factorY * 100).toFixed(0)}%  (${drag.multiLayerOrigins.length} layers)`,
+        })
+      } else {
+        const o = drag.originalLayer.transform
+        const nsx = Math.max(0.05, o.scaleX * factorX)
+        const nsy = Math.max(0.05, o.scaleY * factorY)
+        let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.scaleX', nsx)
+        next     = updateLayerProperty(next,             drag.layerId, 'transform.scaleY', nsy)
+        editorRef.current.previewTransaction(next)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `SX ${nsx.toFixed(2)}   SY ${nsy.toFixed(2)}`,
+        })
+      }
       return
     }
 
     if (drag.kind === 'rotate') {
-      // Pointer angle from layer's anchor center (world coords) → delta from
-      // start angle → add to original rotation. Shift = snap to 15°.
+      // Pointer angle from pivot → delta vs. start angle. Shift = snap to 15°.
       const rect = canvasRef.current!.getBoundingClientRect()
       const wx = (e.clientX - rect.left) * (compositionRef.current.width  / rect.width)
       const wy = (e.clientY - rect.top)  * (compositionRef.current.height / rect.height)
@@ -580,18 +637,46 @@ export default function SceneCanvas({
       const dyA = wy - drag.anchorWorldY
       const curAngle = (Math.atan2(dyA, dxA) * 180) / Math.PI
       let delta = curAngle - drag.startAngle
-      let nextRot = drag.originalRotation + delta
-      if (e.shiftKey) nextRot = Math.round(nextRot / 15) * 15
-      // Wrap into [-180, 180]
-      while (nextRot > 180)  nextRot -= 360
-      while (nextRot < -180) nextRot += 360
+      if (e.shiftKey) delta = Math.round(delta / 15) * 15
 
-      const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
-      editorRef.current.previewTransaction(next)
-      setDragHud({
-        x: e.clientX, y: e.clientY,
-        label: `${nextRot.toFixed(1)}°`,
-      })
+      if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
+        // BL-03: multi-select rotation around common pivot.
+        const rad = (delta * Math.PI) / 180
+        const cos = Math.cos(rad), sin = Math.sin(rad)
+        let scene = sceneRef.current
+        for (const o of drag.multiLayerOrigins) {
+          // Anchor of this layer at drag start (its rotation pivot for translation)
+          const ax = o.originalX + o.originalLayer.transform.anchorX
+          const ay = o.originalY + o.originalLayer.transform.anchorY
+          const ox = ax - drag.anchorWorldX
+          const oy = ay - drag.anchorWorldY
+          const nx = drag.anchorWorldX + ox * cos - oy * sin
+          const ny = drag.anchorWorldY + ox * sin + oy * cos
+          // Apply rotated translation + cumulative rotation
+          let rot = o.originalRotation + delta
+          while (rot > 180)  rot -= 360
+          while (rot < -180) rot += 360
+          scene = updateLayerProperty(scene, o.layerId, 'transform.x', nx - o.originalLayer.transform.anchorX)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.y', ny - o.originalLayer.transform.anchorY)
+          scene = updateLayerProperty(scene, o.layerId, 'transform.rotationDeg', rot)
+        }
+        editorRef.current.previewTransaction(scene)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `${delta.toFixed(1)}°  (${drag.multiLayerOrigins.length} layers)`,
+        })
+      } else {
+        // Single-layer (existing) behavior
+        let nextRot = drag.originalRotation + delta
+        while (nextRot > 180)  nextRot -= 360
+        while (nextRot < -180) nextRot += 360
+        const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
+        editorRef.current.previewTransaction(next)
+        setDragHud({
+          x: e.clientX, y: e.clientY,
+          label: `${nextRot.toFixed(1)}°`,
+        })
+      }
       return
     }
 
@@ -745,10 +830,58 @@ export default function SceneCanvas({
     }
 
     if (drag.kind === 'rotate') {
+      // BL-03: multi-select rotate → batch every changed layer into a single
+      // undo step (similar to the multi-move branch below).
+      if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
+        const ops: { layerId: string; next: Layer; prev: Layer }[] = []
+        for (const o of drag.multiLayerOrigins) {
+          const fl = ed.scene.layers.find((l) => l.id === o.layerId)
+          if (!fl) continue
+          const orig = o.originalLayer
+          const changed =
+            fl.transform.x !== orig.transform.x ||
+            fl.transform.y !== orig.transform.y ||
+            fl.transform.rotationDeg !== orig.transform.rotationDeg
+          if (changed) ops.push({ layerId: o.layerId, next: fl, prev: orig })
+        }
+        if (ops.length === 0) { ed.cancelTransaction(); return }
+        const cmds = ops.map((op) => makeUpdateLayerCmd(op.layerId, op.next, op.prev))
+        ed.commitTransaction({
+          label: `Rotate ${ops.length} Layers`,
+          execute: (s) => cmds.reduce((sc, c) => c.execute(sc), s),
+          undo:    (s) => cmds.slice().reverse().reduce((sc, c) => c.undo(sc), s),
+        })
+        return
+      }
       const rChanged = finalLayer.transform.rotationDeg !== drag.originalLayer.transform.rotationDeg
       if (!rChanged) { ed.cancelTransaction(); return }
       ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
       onAfterLayerCommit?.(drag.originalLayer, finalLayer)
+      return
+    }
+
+    // BL-03: Multi-layer scale → batch one undo step (same pattern as
+    // multi-rotate + multi-move).
+    if (drag.kind === 'scaleAxis' && drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
+      const ops: { layerId: string; next: Layer; prev: Layer }[] = []
+      for (const o of drag.multiLayerOrigins) {
+        const fl = ed.scene.layers.find((l) => l.id === o.layerId)
+        if (!fl) continue
+        const orig = o.originalLayer
+        const changed =
+          fl.transform.x      !== orig.transform.x ||
+          fl.transform.y      !== orig.transform.y ||
+          fl.transform.scaleX !== orig.transform.scaleX ||
+          fl.transform.scaleY !== orig.transform.scaleY
+        if (changed) ops.push({ layerId: o.layerId, next: fl, prev: orig })
+      }
+      if (ops.length === 0) { ed.cancelTransaction(); return }
+      const cmds = ops.map((op) => makeUpdateLayerCmd(op.layerId, op.next, op.prev))
+      ed.commitTransaction({
+        label: `Scale ${ops.length} Layers`,
+        execute: (s) => cmds.reduce((sc, c) => c.execute(sc), s),
+        undo:    (s) => cmds.slice().reverse().reduce((sc, c) => c.undo(sc), s),
+      })
       return
     }
 
@@ -868,6 +1001,34 @@ export default function SceneCanvas({
       const ly = cy - selectedLayer.transform.y
       const penHit = hitTestPath(selectedLayer.path, lx, ly, 8)
       if (penHit) {
+        // BL-03: Pen-tool double-click on FIRST anchor of an open path closes it.
+        // We detect "quick second click" via the click-time ref so the first
+        // click still starts a normal anchor drag — the second-within-350ms
+        // upgrades to a close action and bypasses the drag.
+        if (
+          toolMode === 'pen' &&
+          penHit.type === 'anchor' &&
+          penHit.anchorIndex === 0 &&
+          !selectedLayer.path.closed &&
+          selectedLayer.path.anchors.length >= 2
+        ) {
+          const now = performance.now()
+          const last = closePathClickRef.current
+          if (last && last.layerId === selectedLayer.id && now - last.timeMs <= 350) {
+            // Second click → close the path
+            closePathClickRef.current = null
+            const closed = togglePathClosed(selectedLayer.path)
+            editor.dispatchCommand(makeUpdateLayerCmd(
+              selectedLayer.id,
+              { ...selectedLayer, path: closed },
+              selectedLayer,
+            ))
+            return
+          }
+          closePathClickRef.current = { layerId: selectedLayer.id, timeMs: now }
+          // Fall through — start the normal anchor drag for the first click
+        }
+
         editor.beginTransaction()
         dragRef.current = {
           kind: 'pathPoint',
@@ -883,9 +1044,23 @@ export default function SceneCanvas({
         return
       }
 
-      // Pen mode + click on empty area = APPEND a new anchor (corner type).
-      // Lets users build a path by clicking points in sequence.
+      // Pen mode + click on a SEGMENT (not an anchor) → insert anchor at the
+      // click point so the curve is unchanged but the user can now grab a
+      // new control point. Standard Figma/Illustrator behavior. (BL-03)
       if (toolMode === 'pen') {
+        const segHit = hitTestSegment(selectedLayer.path, lx, ly, 6)
+        if (segHit) {
+          const nextPath = insertAnchorOnSegment(selectedLayer.path, segHit.segmentIndex, segHit.t)
+          editor.dispatchCommand(makeUpdateLayerCmd(
+            selectedLayer.id,
+            { ...selectedLayer, path: nextPath },
+            selectedLayer,
+          ))
+          return
+        }
+
+        // Click on empty area = APPEND a new anchor (corner type).
+        // Lets users build a path by clicking points in sequence.
         const next = {
           ...selectedLayer,
           path: {
@@ -1040,20 +1215,52 @@ export default function SceneCanvas({
     if (e.button !== 0) return
     e.stopPropagation()
     e.preventDefault()
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer || layer.locked) return
+    const primary = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!primary || primary.locked) return
+
+    // BL-03: Multi-select scale around shared pivot (centroid of selection).
+    const ids = selectedLayerIds && selectedLayerIds.size > 1
+      ? Array.from(selectedLayerIds)
+          .map((id) => scene.layers.find((l) => l.id === id))
+          .filter((l): l is Layer => !!l && !l.locked)
+      : null
+
+    let multiOrigins: ScaleAxisState['multiLayerOrigins']
+    let pivotX: number | undefined
+    let pivotY: number | undefined
+
+    if (ids && ids.length >= 2) {
+      let sumX = 0, sumY = 0
+      for (const l of ids) {
+        sumX += l.transform.x + l.transform.anchorX
+        sumY += l.transform.y + l.transform.anchorY
+      }
+      pivotX = sumX / ids.length
+      pivotY = sumY / ids.length
+      multiOrigins = ids.map((l) => ({
+        layerId: l.id,
+        originalLayer: l,
+        originalX: l.transform.x,
+        originalY: l.transform.y,
+        originalScaleX: l.transform.scaleX,
+        originalScaleY: l.transform.scaleY,
+      }))
+    }
+
     editor.beginTransaction()
     dragRef.current = {
       kind: 'scaleAxis',
-      layerId: layer.id,
-      originalLayer: layer,
+      layerId: primary.id,
+      originalLayer: primary,
       axis,
       startClientX: e.clientX,
       startClientY: e.clientY,
+      multiLayerOrigins: multiOrigins,
+      pivotX, pivotY,
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+  }, [scene.layers, selectedLayerId, selectedLayerIds, editor, handlePointerMove, handlePointerUp])
 
   // ── Preview-mode drag: fires dragStart/Move/End on draggable layers ────
   // Also writes a TEMPORARY override map entry so the dragged layer visibly
@@ -1175,10 +1382,9 @@ export default function SceneCanvas({
     if (e.button !== 0) return
     e.stopPropagation()
     e.preventDefault()
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer || layer.locked) return
+    const primary = scene.layers.find((l) => l.id === selectedLayerId)
+    if (!primary || primary.locked) return
 
-    // Convert click → world (composition) coords for the rotation pivot math.
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -1187,25 +1393,58 @@ export default function SceneCanvas({
     const wx = (e.clientX - rect.left) * sx
     const wy = (e.clientY - rect.top)  * sy
 
-    const anchorWorldX = layer.transform.x + layer.transform.anchorX
-    const anchorWorldY = layer.transform.y + layer.transform.anchorY
-    const startAngle   = (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
+    // BL-03: Multi-select rotation. When 2+ unlocked layers are selected,
+    // pivot becomes the centroid of their anchor positions and the drag
+    // rotates EVERY selected layer around that shared pivot.
+    const ids = selectedLayerIds && selectedLayerIds.size > 1
+      ? Array.from(selectedLayerIds)
+          .map((id) => scene.layers.find((l) => l.id === id))
+          .filter((l): l is Layer => !!l && !l.locked)
+      : null
+
+    let anchorWorldX: number
+    let anchorWorldY: number
+    let multiOrigins: RotateState['multiLayerOrigins']
+
+    if (ids && ids.length >= 2) {
+      // Centroid of anchor positions
+      let sumX = 0, sumY = 0
+      for (const l of ids) {
+        sumX += l.transform.x + l.transform.anchorX
+        sumY += l.transform.y + l.transform.anchorY
+      }
+      anchorWorldX = sumX / ids.length
+      anchorWorldY = sumY / ids.length
+      multiOrigins = ids.map((l) => ({
+        layerId: l.id,
+        originalLayer: l,
+        originalX: l.transform.x,
+        originalY: l.transform.y,
+        originalRotation: l.transform.rotationDeg,
+      }))
+    } else {
+      anchorWorldX = primary.transform.x + primary.transform.anchorX
+      anchorWorldY = primary.transform.y + primary.transform.anchorY
+    }
+
+    const startAngle = (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
 
     editor.beginTransaction()
     dragRef.current = {
       kind: 'rotate',
-      layerId: layer.id,
-      originalLayer: layer,
+      layerId: primary.id,
+      originalLayer: primary,
       startClientX: e.clientX,
       startClientY: e.clientY,
       startAngle,
-      originalRotation: layer.transform.rotationDeg,
+      originalRotation: primary.transform.rotationDeg,
       anchorWorldX,
       anchorWorldY,
+      multiLayerOrigins: multiOrigins,
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene.layers, selectedLayerId, editor, handlePointerMove, handlePointerUp])
+  }, [scene.layers, selectedLayerId, selectedLayerIds, editor, handlePointerMove, handlePointerUp])
 
   // ── Render canvas ─────────────────────────────────────────────────────────
   useEffect(() => {

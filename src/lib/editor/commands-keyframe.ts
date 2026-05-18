@@ -409,3 +409,83 @@ export function makeUpdateEasingCmd(
     undo:    (scene) => updateKfEasing(scene, timelineId, target, kfId, fromEasing),
   }
 }
+
+// ── Scale keyframes (BL-07) ────────────────────────────────────────────────────
+// Scales time spacing of selected keyframes around a pivot point.
+
+export interface ScaleKfItem {
+  timelineId: string
+  target: string
+  kfId: string
+  fromMs: number
+}
+
+export function makeScaleKeysCmd(
+  items: ScaleKfItem[],
+  pivotMs: number,
+  scaleFactor: number,
+): EditorCommand {
+  const moves: KfMove[] = items.map((item) => ({
+    timelineId: item.timelineId,
+    target: item.target,
+    kfId: item.kfId,
+    fromMs: item.fromMs,
+    toMs: pivotMs + (item.fromMs - pivotMs) * scaleFactor,
+  }))
+
+  return {
+    label: `Scale ${items.length} Keyframes`,
+    execute: (scene) =>
+      moves.reduce(
+        (s, m) => updateKfTimeMs(s, m.timelineId, m.target, m.kfId, m.toMs),
+        scene,
+      ),
+    undo: (scene) =>
+      moves.reduce(
+        (s, m) => updateKfTimeMs(s, m.timelineId, m.target, m.kfId, m.fromMs),
+        scene,
+      ),
+  }
+}
+
+// ── Stagger keyframes (BL-07) ──────────────────────────────────────────────────
+// Applies cumulative time offset to create cascading timing.
+
+export interface StaggerKfItem {
+  timelineId: string
+  target: string
+  kfId: string
+  fromMs: number
+  index: number
+}
+
+export function makeStaggerKeysCmd(
+  items: StaggerKfItem[],
+  offsetMs: number,
+  direction: 'forward' | 'backward',
+): EditorCommand {
+  const moves: KfMove[] = items.map((item) => {
+    const multiplier = direction === 'forward' ? item.index : -(item.index)
+    return {
+      timelineId: item.timelineId,
+      target: item.target,
+      kfId: item.kfId,
+      fromMs: item.fromMs,
+      toMs: item.fromMs + offsetMs * multiplier,
+    }
+  })
+
+  return {
+    label: `Stagger ${items.length} Keyframes`,
+    execute: (scene) =>
+      moves.reduce(
+        (s, m) => updateKfTimeMs(s, m.timelineId, m.target, m.kfId, m.toMs),
+        scene,
+      ),
+    undo: (scene) =>
+      moves.reduce(
+        (s, m) => updateKfTimeMs(s, m.timelineId, m.target, m.kfId, m.fromMs),
+        scene,
+      ),
+  }
+}

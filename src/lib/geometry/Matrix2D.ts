@@ -142,6 +142,25 @@ export class Matrix2D {
     return this.a * this.d - this.b * this.c
   }
 
+  /** Decompose into translate / rotate / scale components, assuming the
+   *  matrix has NO shear (built from Translate × Rotate × Scale, the convention
+   *  Chorono layers follow). Rotation returned in degrees, range (-180, 180].
+   *  Used by makeUngroupCmd (BL-03) to bake a group's transform into children. */
+  decompose(): { x: number; y: number; rotation: number; scaleX: number; scaleY: number } {
+    // Translation lives in (e, f)
+    const x = this.e
+    const y = this.f
+    // Column 1 length = scaleX (assuming no shear)
+    const scaleX = Math.hypot(this.a, this.b)
+    // Column 2 length × sign-of-det → scaleY (preserve reflection via det sign)
+    const det = this.a * this.d - this.b * this.c
+    const rawScaleY = Math.hypot(this.c, this.d)
+    const scaleY = det < 0 ? -rawScaleY : rawScaleY
+    // Rotation = angle of column 1 vector (a, b)
+    const rotation = (Math.atan2(this.b, this.a) * 180) / Math.PI
+    return { x, y, rotation, scaleX, scaleY }
+  }
+
   /** Returns [a, b, c, d, e, f] — matches DOMMatrix / ctx.setTransform args. */
   toArray(): [number, number, number, number, number, number] {
     return [this.a, this.b, this.c, this.d, this.e, this.f]

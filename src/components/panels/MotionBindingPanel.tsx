@@ -1,12 +1,12 @@
 'use client'
 // ── MotionBindingPanel ────────────────────────────────────────────────────────
-// Visual editor for ChronoScene.bindings. A binding links a *source* (layer
-// property or runtime parameter) to a *target* (layer property, timeline
-// progress, or another parameter) through a linear remap.
+// Visual editor for ChronoScene.bindings — linear remap driver → driven.
 //
-// Typical use: drag handle's transform.x drives a card-flip timeline's
-// progress. Authoring is no-code — pick driver / driven / ranges, the
-// runtime applies the mapping every frame.
+// Note (BL-05): The expression-based parameter wires that briefly lived here
+// as a second tab moved to their own panel (WiringListPanel) + modal flow
+// (WireParameterModal), so they're discoverable from PropertiesPanel's 🔗
+// icon and don't crowd this panel's linear-remap UX. See
+// docs/parameter-wiring-ui-plan.md.
 
 import type {
   ChronoScene, Binding, BindingSource, BindingTarget, BindingSourceType, BindingTargetType,
@@ -31,7 +31,7 @@ export default function MotionBindingPanel({ scene, editor }: Props) {
     <div className="flex flex-col h-full text-xs text-gray-300">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-          Bindings
+          Linear Bindings
         </span>
         <button
           className="text-[11px] px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
@@ -43,8 +43,17 @@ export default function MotionBindingPanel({ scene, editor }: Props) {
 
       {scene.bindings.length === 0 && (
         <div className="flex-1 flex items-center justify-center p-4 text-center text-[11px] text-gray-500">
-          No bindings yet. Add one to link a layer&apos;s property (or a
-          parameter) to another layer / timeline through a remap.
+          <div>
+            <p>No linear bindings yet.</p>
+            <p className="mt-2 text-gray-600">
+              Add one to link a layer&apos;s property (or a parameter) to another
+              layer / timeline through a linear remap.
+            </p>
+            <p className="mt-2 text-gray-600 italic">
+              Need formulas (map, clamp, sin…)? Use the <b>Wires</b> panel
+              instead — or click 🔗 on any property in the Properties panel.
+            </p>
+          </div>
         </div>
       )}
 
@@ -267,7 +276,7 @@ function propertiesForLayer(scene: ChronoScene, layerId?: string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Range row + select helper
+// Shared UI helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function RangeRow({

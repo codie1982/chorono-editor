@@ -35,6 +35,8 @@ import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
 import JsonModal       from '@/components/JsonModal'
+import WireParameterModal  from '@/components/wiring/WireParameterModal'
+import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
 import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
 import ToastContainer  from '@/components/Toast/ToastContainer'
@@ -43,6 +45,7 @@ import KeyframeInspector from '@/components/panels/KeyframeInspector'
 import ParametersPanel     from '@/components/panels/ParametersPanel'
 import EventsPanel         from '@/components/panels/EventsPanel'
 import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
+import WiringListPanel     from '@/components/panels/WiringListPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel           from '@/components/panels/SnapPanel'
@@ -119,6 +122,8 @@ export default function BuilderPage() {
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
   const [showJson,        setShowJson]      = useState(false)
   const [showCompModal,   setShowCompModal] = useState(false)
+  // BL-05: WireParameterModal state — opened by PropertiesPanel 🔗, WiringListPanel, etc.
+  const wireModal = useWireModal()
   const [showHelp,        setShowHelp]      = useState(false)
   const [showAI,          setShowAI]        = useState(false)
 
@@ -129,7 +134,7 @@ export default function BuilderPage() {
   // with the registry below.
   const dock = useDockLayout([
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
-    'parameters', 'events', 'motionBinding', 'runtimePreview', 'assets', 'snap',
+    'parameters', 'events', 'motionBinding', 'wiring', 'runtimePreview', 'assets', 'snap',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
@@ -785,6 +790,7 @@ export default function BuilderPage() {
       { id: 'parameters',     title: 'Parameters',     render: () => null },
       { id: 'events',         title: 'Events',         render: () => null },
       { id: 'motionBinding',  title: 'Bindings',       render: () => null },
+      { id: 'wiring',         title: 'Wires',          render: () => null },
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
@@ -1131,6 +1137,10 @@ export default function BuilderPage() {
                           ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
                           : undefined
                       }
+                      scene={scene}
+                      parameterWires={scene.parameterWires}
+                      onRequestNewWire={wireModal.openForTarget}
+                      onEditWire={wireModal.openForEdit}
                     />
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
@@ -1171,6 +1181,8 @@ export default function BuilderPage() {
                       onGhostUpdate={updateGhostSettings}
                       onGhostToggle={toggleGhost}
                       onGhostPreset={applyGhostPreset}
+                      onEditWire={wireModal.openForEdit}
+                      onWireRequest={wireModal.openForTarget}
                     />
                   </div>
                 ),
@@ -1201,6 +1213,17 @@ export default function BuilderPage() {
               {
                 id: 'motionBinding', title: 'Bindings',
                 render: () => <MotionBindingPanel scene={scene} editor={editor} />,
+              },
+              {
+                id: 'wiring', title: 'Wires',
+                render: () => (
+                  <WiringListPanel
+                    scene={scene}
+                    editor={editor}
+                    onEditWire={wireModal.openForEdit}
+                    onCreateWire={wireModal.openNew}
+                  />
+                ),
               },
               {
                 id: 'runtimePreview', title: 'Preview',
@@ -1282,6 +1305,17 @@ export default function BuilderPage() {
           selectedLayerId={selectedLayerId}
           selectedTimelineId={selectedTlId}
           onClose={() => setShowAI(false)}
+        />
+      )}
+
+      {/* ── BL-05: Wire Parameter modal (formula-driven parameter wiring) ── */}
+      {wireModal.isOpen && (
+        <WireParameterModal
+          scene={scene}
+          editor={editor}
+          existingWire={wireModal.editWire}
+          preFilledTarget={wireModal.newTarget}
+          onClose={wireModal.close}
         />
       )}
 

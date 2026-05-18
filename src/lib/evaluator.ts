@@ -1,4 +1,5 @@
 import type { Timeline, Track, Keyframe } from './types'
+import { resolveOutOfRange } from './animation/out-of-range/resolvers'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -72,22 +73,40 @@ function interpolateKeyframes(kfA: Keyframe, kfB: Keyframe, timeMs: number): num
   return vA + (vB - vA) * easedT
 }
 
-/** Return the evaluated value for a single track at timeMs, or null if no keyframes. */
+/** Return the evaluated value for a single track at timeMs, or null if no keyframes.
+ *  Honors track.outOfRange (BL-45) by remapping timeMs into the keyframe range
+ *  according to the track's before/after behavior (cycle/loop/pingPong/etc.). */
 export function evaluateTrack(track: Track, timeMs: number): number | null {
   // Keyframes are stored sorted; defensive sort here costs little for small arrays.
   const kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
   if (kfs.length === 0) return null
-  if (timeMs <= kfs[0].timeMs) return kfs[0].value as number
-  if (timeMs >= kfs[kfs.length - 1].timeMs) return kfs[kfs.length - 1].value as number
+
+  const rangeStart = kfs[0].timeMs
+  const rangeEnd = kfs[kfs.length - 1].timeMs
+
+  // BL-45: Apply out-of-range behavior. For undefined outOfRange or single-keyframe
+  // tracks (rangeStart === rangeEnd), this is effectively a no-op clamp.
+  const resolved = resolveOutOfRange(timeMs, track.outOfRange, rangeStart, rangeEnd)
+  const evalTime = resolved.timeMs
+  const offset = resolved.relativeOffset
+
+  // For relativeRepeat, offset is the cycle index — multiply by (lastValue - firstValue)
+  // to get the actual value offset per cycle.
+  const cycleValueDelta =
+    offset !== 0 ? (kfs[kfs.length - 1].value as number) - (kfs[0].value as number) : 0
+  const valueOffset = cycleValueDelta * offset
+
+  if (evalTime <= rangeStart) return (kfs[0].value as number) + valueOffset
+  if (evalTime >= rangeEnd) return (kfs[kfs.length - 1].value as number) + valueOffset
 
   // Binary search for the keyframe bracket — O(log n)
   let lo = 0, hi = kfs.length - 2
   while (lo < hi) {
     const mid = (lo + hi) >> 1
-    if (kfs[mid + 1].timeMs <= timeMs) lo = mid + 1
+    if (kfs[mid + 1].timeMs <= evalTime) lo = mid + 1
     else hi = mid
   }
-  return interpolateKeyframes(kfs[lo], kfs[lo + 1], timeMs)
+  return interpolateKeyframes(kfs[lo], kfs[lo + 1], evalTime) + valueOffset
 }
 
 /** Evaluate all timelines and return a map of property path → computed value. */

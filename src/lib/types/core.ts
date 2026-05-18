@@ -7,6 +7,7 @@ import type { ImageData, VideoData, AudioData, Asset } from './media'
 import type { LayerEffects, MotionPath, PluginEffect, FollowPath } from './effects'
 import type { BezierPath } from './path'
 import type { MaskDefinition } from './mask'
+import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,10 @@ export interface Track {
    *  `src/lib/timeline/tracks.ts` for the full union (event / audio /
    *  marker / state / trigger track types). */
   kind?: 'property'
+  /** Out-of-range behavior (BL-45). Defines what happens before first keyframe
+   *  and after last keyframe (Constant, Cycle, Loop, PingPong, Linear, RelativeRepeat).
+   *  Optional for backward compat: undefined defaults to constant/constant. */
+  outOfRange?: OutOfRangeSettings
   // TODO(big-feature): controller type — currently every track is implicit
   //   keyframe controller. Adding `controller?: 'keyframe' | 'expression'
   //   | 'noise' | 'wave' | 'spring'` would let a property be driven by a
@@ -523,6 +528,53 @@ export interface Binding {
   map: BindingMap
 }
 
+// ── Parameter Wires (BL-05) ───────────────────────────────────────────────────
+// Expression-based parameter bindings — formula-driven (e.g. "map(s, 0, 1, 0, 360)")
+// rather than the linear inputMin/outputMax remap of `Binding`. Source/target
+// references are STRUCTURED (ParameterRef) so the UI can present typed pickers
+// rather than free-text strings.
+
+export type ParameterValueType = 'number' | 'boolean' | 'string' | 'color' | 'vec2'
+
+export interface ParameterRef {
+  /** Layer this property belongs to. Absent → top-level scene parameter. */
+  layerId?: string
+  /** Modifier instance within a layer (reserved for future modifier wiring). */
+  modifierId?: string
+  /** Dot-path within the layer/modifier (e.g. "transform.rotationDeg", "opacity"),
+   *  or — for scene parameters — the parameter id alone. */
+  propertyPath: string
+  /** Coarse type of the referenced value. Drives picker filtering + UI labels. */
+  valueType: ParameterValueType
+}
+
+export interface ParameterWireClamp {
+  enabled: boolean
+  min?: number
+  max?: number
+}
+
+export interface ParameterWire {
+  id: string
+  /** Optional user-given name; falls back to formatParameterRef(source→target). */
+  name?: string
+  enabled: boolean
+  source: ParameterRef
+  target: ParameterRef
+  /** Whitelist-only expression evaluated each frame with `source` bound to the
+   *  source value. See src/lib/core/expression/expressionEvaluator.ts. */
+  expression: string
+  /** Replacement semantics. 'override' (default) writes the result outright;
+   *  'add' will be the additive sum once multi-wire blending lands. MVP only
+   *  uses 'override'. */
+  blendMode: 'override' | 'add'
+  /** Optional output clamp — applied AFTER the expression evaluates. */
+  clamp?: ParameterWireClamp
+  /** Epoch ms timestamps for sorting + audit. */
+  createdAt: number
+  updatedAt: number
+}
+
 // ── Composition ───────────────────────────────────────────────────────────────
 
 export interface Composition {
@@ -546,5 +598,8 @@ export interface ChronoScene {
   parameters: SceneParameter[]
   triggers: Trigger[]
   bindings: Binding[]
+  /** Expression-based parameter wires (BL-05). Optional for backward compat;
+   *  legacy scenes without this field continue to work unchanged. */
+  parameterWires?: ParameterWire[]
   initialState: Record<string, unknown>
 }

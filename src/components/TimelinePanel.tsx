@@ -2,19 +2,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
-  TimelineSegment,
+  TimelineSegment, TimelineMarker,
 } from '@/lib/types'
 import { evaluateTrack } from '@/lib/evaluator'
-import { newTimeline, nextKfId, newTimelineSegment } from '@/lib/defaults'
+import { newTimeline, nextKfId, newTimelineSegment, newMarker } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
-  makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd,
+  makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd, makeMoveKfCmd,
   makeMirrorTimingCmd, makeAlignToFrameCmd, makeBulkDeleteKfCmd,
-  type KfDeletion,
+  makeStaggerKeysCmd, makeScaleKeysCmd,
+  type KfDeletion, type KfMove, type StaggerKfItem, type ScaleKfItem,
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
   makeAddEventCmd, makeDeleteEventCmd, makeUpdateEventCmd,
+  makeAddMarkerCmd, makeDeleteMarkerCmd, makeUpdateMarkerCmd, makeMoveMarkerCmd,
+  makeSetWorkAreaCmd,
 } from '@/lib/editor/commands-timeline'
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
@@ -22,11 +25,12 @@ import {
 import {
   makeSplitLayerCmd, makeTrimLayerCmd, makeShiftLayerCmd, makeUpdateLayerCmd,
 } from '@/lib/editor/commands-layer'
+import { makeSetOutOfRangeCmd } from '@/lib/editor/commands-track'
 import { cloneLayerForDuplicate } from '@/lib/defaults'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { EasingDefinition } from '@/lib/types'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
-import { buildKeyframeMenu } from './timeline/keyframeMenuItems'
+import { buildKeyframeMenu, buildOutOfRangeSubmenu } from './timeline/keyframeMenuItems'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useTimelineViewport }     from './timeline/hooks/useTimelineViewport'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -40,7 +44,13 @@ import LayerTimelineSection    from './timeline/LayerTimelineSection'
 import SegmentStrip            from './timeline/SegmentStrip'
 import EventStrip              from './timeline/EventStrip'
 import SegmentModal            from './modals/SegmentModal'
+import StaggerKeysModal, { type StaggerPreviewItem } from './modals/StaggerKeysModal'
+import ScaleHandlesOverlay     from './timeline/ScaleHandlesOverlay'
+import KeyframeSpreadsheet, { type KeyframeSheetRow } from './timeline/KeyframeSpreadsheet'
+import MarkerOverlay              from './timeline/MarkerOverlay'
+import WorkAreaOverlay            from './timeline/WorkAreaOverlay'
 import type { TimelineEvent } from '@/lib/types'
+import { ANIMATABLE_PROPERTIES } from '@/lib/types'
 import { nextEventId } from '@/lib/defaults'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
@@ -86,6 +96,10 @@ interface Props {
   onGhostUpdate: (patch: Partial<TimelineGhostSettings>) => void
   onGhostToggle: () => void
   onGhostPreset: (preset: 'off' | 'light' | 'medium' | 'heavy') => void
+  /** BL-05 — Click 🔗 on a wired track row → open WireParameterModal. */
+  onEditWire?: (wire: import('@/lib/types').ParameterWire) => void
+  /** BL-05 — "Wire This Parameter…" right-click menu → open modal in new mode. */
+  onWireRequest?: (target: import('@/lib/types').ParameterRef) => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,6 +111,7 @@ export default function TimelinePanel({
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
+  onEditWire, onWireRequest,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -150,9 +165,23 @@ export default function TimelinePanel({
   }, [bookmarks, duration, onTimeChange])
 
   // Keyboard: Cmd/Ctrl+B = save bookmark · Cmd/Ctrl+1..9 = jump to slot.
+  // BL-11: [ / ] = jump to previous / next marker (no modifier — quick nav).
   // Scoped to when the timeline panel itself is hovered so it doesn't fight
   // with other panels' shortcuts. Skips when typing in inputs.
   const [timelineHovered, setTimelineHovered] = useState(false)
+
+  // BL-11: jump to nearest marker in a direction. Uses currentTimeMs as anchor;
+  // no markers → no-op. Wrap-around could be added later if requested.
+  const jumpToAdjacentMarker = useCallback((direction: 'prev' | 'next') => {
+    const markers = timeline?.markers
+    if (!markers || markers.length === 0) return
+    const sorted = [...markers].sort((a, b) => a.timeMs - b.timeMs)
+    const target = direction === 'prev'
+      ? [...sorted].reverse().find((m) => m.timeMs < currentTimeMs - 0.5)
+      : sorted.find((m) => m.timeMs > currentTimeMs + 0.5)
+    if (target) onTimeChange(Math.max(0, Math.min(duration, target.timeMs)))
+  }, [timeline, currentTimeMs, duration, onTimeChange])
+
   useEffect(() => {
     if (!timelineHovered) return
     const onKey = (e: KeyboardEvent) => {
@@ -165,10 +194,15 @@ export default function TimelinePanel({
       if (meta && /^[1-9]$/.test(e.key)) {
         e.preventDefault(); jumpToBookmark(parseInt(e.key, 10) - 1); return
       }
+      // BL-11: marker navigation — plain [ / ] (no modifier).
+      if (!meta && !e.altKey && !e.shiftKey) {
+        if (e.key === '[') { e.preventDefault(); jumpToAdjacentMarker('prev'); return }
+        if (e.key === ']') { e.preventDefault(); jumpToAdjacentMarker('next'); return }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [timelineHovered, saveBookmark, jumpToBookmark])
+  }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker])
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
     // Step 1: solo mode — if any layer is solo'd, hide everything else.
@@ -328,7 +362,16 @@ export default function TimelinePanel({
     if (shiftHeld && selectedKfIds.has(kfId)) next.delete(kfId)
     else                                       next.add(kfId)
     onSelectKeyframes(next)
-  }, [selectedKfIds, onSelectKeyframes])
+    // Lone-click (no shift) → seek the playhead to this keyframe's time so
+    // the canvas + inspector show the exact value that was authored here.
+    // Multi-select drags don't seek (would be jumpy).
+    if (!shiftHeld && timeline) {
+      for (const tr of timeline.tracks) {
+        const kf = tr.keyframes.find((k) => k.id === kfId)
+        if (kf) { onTimeChange(Math.max(0, Math.min(duration, kf.timeMs))); break }
+      }
+    }
+  }, [selectedKfIds, onSelectKeyframes, timeline, duration, onTimeChange])
 
   /**
    * Curried drag-begin: given a leader snapshot + selection-mode flags, return
@@ -402,6 +445,200 @@ export default function TimelinePanel({
     })
   }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
 
+  // BL-07: Spreadsheet rows derived from the current selection. Cheap derivation
+  // — recomputed only when the selection or timeline changes.
+  const spreadsheetRows = useMemo<KeyframeSheetRow[]>(() => {
+    if (!timeline || selectedKfIds.size === 0) return []
+    const out: KeyframeSheetRow[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        const layerSeg = track.target.split('.').slice(1, 2)[0] ?? 'layer'
+        const propSeg  = track.target.replace(/^layers\.[^.]+\./, '')
+        out.push({
+          kfId:        kf.id,
+          trackTarget: track.target,
+          label:       `${layerSeg} / ${propSeg}`,
+          timeMs:      kf.timeMs,
+          value:       typeof kf.value === 'number' ? kf.value : null,
+          easingType:  kf.easing?.type ?? 'linear',
+        })
+      }
+    }
+    return out.sort((a, b) => a.timeMs - b.timeMs)
+  }, [timeline, selectedKfIds])
+
+  // BL-07: Selection time bounds — feeds the Scale Handles overlay. null if
+  // fewer than 2 kfs selected or they all share the same time.
+  const selectionTimeBounds = useMemo(() => {
+    if (!timeline || selectedKfIds.size < 2) return null
+    let lo = Infinity, hi = -Infinity, count = 0
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        if (kf.timeMs < lo) lo = kf.timeMs
+        if (kf.timeMs > hi) hi = kf.timeMs
+        count++
+      }
+    }
+    return count >= 2 && hi > lo ? { minMs: lo, maxMs: hi } : null
+  }, [timeline, selectedKfIds])
+
+  // BL-07: Apply Scale Keys command from on-canvas drag handles. Pivot is the
+  // anchored end (opposite the dragged handle); scaleFactor is new/old span.
+  const applyScale = useCallback((pivotMs: number, scaleFactor: number) => {
+    if (!selectedTimelineId || !timeline || selectedKfIds.size < 2) return
+    const items: ScaleKfItem[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        items.push({
+          timelineId: selectedTimelineId,
+          target:     track.target,
+          kfId:       kf.id,
+          fromMs:     kf.timeMs,
+        })
+      }
+    }
+    if (items.length >= 2) {
+      dispatchCommand(makeScaleKeysCmd(items, pivotMs, scaleFactor))
+    }
+  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
+
+  // BL-07: Build the StaggerKeysModal's preview list from the current selection.
+  // Items are passed in selection-order; the modal sorts by time for indexing.
+  const staggerSelectionItems = useMemo<StaggerPreviewItem[]>(() => {
+    if (!timeline || selectedKfIds.size === 0) return []
+    const out: StaggerPreviewItem[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        const layerSeg = track.target.split('.').slice(1, 2)[0] ?? 'layer'
+        const propSeg  = track.target.replace(/^layers\.[^.]+\./, '')
+        out.push({
+          kfId: kf.id,
+          trackTarget: track.target,
+          label: `${layerSeg} / ${propSeg}`,
+          fromMs: kf.timeMs,
+        })
+      }
+    }
+    return out
+  }, [timeline, selectedKfIds])
+
+  // BL-07: Apply Stagger Keys command from the modal.
+  const applyStagger = useCallback((offsetMs: number, direction: 'forward' | 'backward') => {
+    if (!selectedTimelineId || staggerSelectionItems.length < 2) return
+    // Sort by time, then assign index so the earliest kf is index 0 (anchor).
+    const sorted = [...staggerSelectionItems].sort((a, b) => a.fromMs - b.fromMs)
+    const items: StaggerKfItem[] = sorted.map((it, idx) => ({
+      timelineId: selectedTimelineId,
+      target:     it.trackTarget,
+      kfId:       it.kfId,
+      fromMs:     it.fromMs,
+      index:      idx,
+    }))
+    dispatchCommand(makeStaggerKeysCmd(items, offsetMs, direction))
+  }, [staggerSelectionItems, selectedTimelineId, dispatchCommand])
+
+  // BL-11: Marker handlers — Cmd/Ctrl+click on ruler drops one, drag moves
+  // it, [/] keys navigate between them. All mutations route through the
+  // command stack so undo/redo works.
+  const createMarkerAt = useCallback((timeMs: number) => {
+    if (!selectedTimelineId) return
+    dispatchCommand(makeAddMarkerCmd(selectedTimelineId, newMarker(Math.round(timeMs))))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const moveMarker = useCallback((markerId: string, fromMs: number, toMs: number) => {
+    if (!selectedTimelineId || fromMs === toMs) return
+    dispatchCommand(makeMoveMarkerCmd(selectedTimelineId, markerId, fromMs, Math.round(toMs)))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const renameMarker = useCallback((marker: TimelineMarker, nextLabel: string) => {
+    if (!selectedTimelineId || nextLabel === marker.label) return
+    dispatchCommand(makeUpdateMarkerCmd(
+      selectedTimelineId, marker.id,
+      { label: marker.label, color: marker.color },
+      { label: nextLabel,    color: marker.color },
+    ))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const recolorMarker = useCallback((marker: TimelineMarker, nextColor: string) => {
+    if (!selectedTimelineId || nextColor === marker.color) return
+    dispatchCommand(makeUpdateMarkerCmd(
+      selectedTimelineId, marker.id,
+      { label: marker.label, color: marker.color },
+      { label: marker.label, color: nextColor    },
+    ))
+  }, [selectedTimelineId, dispatchCommand])
+
+  const deleteMarker = useCallback((marker: TimelineMarker) => {
+    if (!selectedTimelineId) return
+    dispatchCommand(makeDeleteMarkerCmd(selectedTimelineId, marker))
+  }, [selectedTimelineId, dispatchCommand])
+
+  // BL-11: Toolbar callback — initialize work area covering full duration if
+  // none exists, otherwise clear it. The drag handles take care of fine-tuning.
+  const toggleWorkArea = useCallback(() => {
+    if (!selectedTimelineId || !timeline) return
+    const inMs  = timeline.workAreaInMs
+    const outMs = timeline.workAreaOutMs
+    if (inMs == null || outMs == null) {
+      dispatchCommand(makeSetWorkAreaCmd(selectedTimelineId, inMs, outMs, 0, duration))
+    } else {
+      dispatchCommand(makeSetWorkAreaCmd(selectedTimelineId, inMs, outMs, undefined, undefined))
+    }
+  }, [selectedTimelineId, timeline, duration, dispatchCommand])
+
+  // Apply a work-area drag commit.
+  const setWorkAreaRange = useCallback((nextIn: number, nextOut: number) => {
+    if (!selectedTimelineId || !timeline) return
+    dispatchCommand(makeSetWorkAreaCmd(
+      selectedTimelineId,
+      timeline.workAreaInMs, timeline.workAreaOutMs,
+      Math.round(nextIn), Math.round(nextOut),
+    ))
+  }, [selectedTimelineId, timeline, dispatchCommand])
+
+  // BL-07: Shift+drag on the ruler → select every keyframe whose time falls
+  // inside the dragged [startMs, endMs] window. addToExisting=true (Shift+
+  // Ctrl/Cmd) merges with the current selection instead of replacing it.
+  const rangeSelectKfs = useCallback((startMs: number, endMs: number, addToExisting: boolean) => {
+    if (!timeline) return
+    const lo = Math.min(startMs, endMs)
+    const hi = Math.max(startMs, endMs)
+    const hits = new Set<string>(addToExisting ? selectedKfIds : [])
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (kf.timeMs >= lo && kf.timeMs <= hi) hits.add(kf.id)
+      }
+    }
+    onSelectKeyframes(hits)
+  }, [timeline, selectedKfIds, onSelectKeyframes])
+
+  // BL-07: Slide selected keyframes by delta ms. Clamped to [0, duration]
+  // so kfs can't fall off either side. Uses the existing bulk-move command
+  // so the whole shift is a single undo step.
+  const slideSelectedKfs = useCallback((deltaMs: number) => {
+    if (!selectedTimelineId || !timeline || selectedKfIds.size === 0) return
+    const moves: KfMove[] = []
+    for (const track of timeline.tracks) {
+      for (const kf of track.keyframes) {
+        if (!selectedKfIds.has(kf.id)) continue
+        const toMs = Math.max(0, Math.min(duration, kf.timeMs + deltaMs))
+        if (toMs === kf.timeMs) continue
+        moves.push({
+          timelineId: selectedTimelineId,
+          target: track.target,
+          kfId: kf.id,
+          fromMs: kf.timeMs,
+          toMs,
+        })
+      }
+    }
+    if (moves.length > 0) dispatchCommand(makeBulkMoveKfCmd(moves))
+  }, [timeline, selectedTimelineId, selectedKfIds, duration, dispatchCommand])
+
   // ── Right-click context menu + inline kf value editor ───────────────────
   // Single shared menu for keyframe right-clicks (we can extend to property
   // and layer rows later). Inline-edit input renders absolutely-positioned
@@ -423,10 +660,21 @@ export default function TimelinePanel({
     draftValue: string
   } | null>(null)
 
+  // BL-45: Track-header right-click target (state declared up here so all
+  // openX callbacks below can clear it via setCtxTrackHeader(null)).
+  const [ctxTrackHeader, setCtxTrackHeader] = useState<{ trackTarget: string } | null>(null)
+
+  // BL-07: Stagger modal + Keyframe Spreadsheet visibility
+  const [staggerModalOpen, setStaggerModalOpen] = useState(false)
+  const [keySheetOpen,     setKeySheetOpen]     = useState(false)
+
+  // BL-11: Marker right-click target — set by MarkerOverlay's onContextMenu.
+  const [ctxMarker, setCtxMarker] = useState<{ markerId: string } | null>(null)
+
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setCtxKf(null)
+    setCtxKf(null); setCtxTrackArea(null); setCtxTrackHeader(null); setCtxMarker(null)
     setCtxLayerBar({ layerId })
     ctxMenu.open(e)
   }, [ctxMenu])
@@ -435,13 +683,21 @@ export default function TimelinePanel({
     e.preventDefault()
     e.stopPropagation()
     if (!selectedKfIds.has(kfId)) onSelectKeyframes(new Set([kfId]))
+    setCtxLayerBar(null); setCtxTrackArea(null); setCtxTrackHeader(null); setCtxMarker(null)
     setCtxKf({ trackTarget, kfId })
     ctxMenu.open(e)
   }, [selectedKfIds, onSelectKeyframes, ctxMenu])
 
   const openTrackAreaMenu = useCallback((trackTarget: string, timeMs: number, e: React.MouseEvent) => {
-    setCtxKf(null); setCtxLayerBar(null)
+    setCtxKf(null); setCtxLayerBar(null); setCtxTrackHeader(null); setCtxMarker(null)
     setCtxTrackArea({ trackTarget, timeMs })
+    ctxMenu.open(e)
+  }, [ctxMenu])
+
+  const openTrackHeaderMenu = useCallback((trackTarget: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    setCtxKf(null); setCtxLayerBar(null); setCtxTrackArea(null); setCtxMarker(null)
+    setCtxTrackHeader({ trackTarget })
     ctxMenu.open(e)
   }, [ctxMenu])
 
@@ -599,14 +855,20 @@ export default function TimelinePanel({
         onGhostUpdate={onGhostUpdate}
         onGhostToggle={onGhostToggle}
         onGhostPreset={onGhostPreset}
+        onToggleWorkArea={toggleWorkArea}
+        workAreaActive={timeline?.workAreaInMs != null && timeline?.workAreaOutMs != null}
       />
 
       <TrackToolBar
         hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
         selectedCount={selectedKfIds.size}
+        frameRate={scene.composition.frameRate}
         onSelectAll={selectAllKfs}
         onDeleteSelected={deleteSelectedKfs}
         onEaseSelected={easeSelectedKfs}
+        onSlideSelected={slideSelectedKfs}
+        onOpenStaggerModal={() => setStaggerModalOpen(true)}
+        onOpenKeySpreadsheet={() => setKeySheetOpen((o) => !o)}
       />
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
@@ -645,7 +907,49 @@ export default function TimelinePanel({
             msToScreenPx={vp.msToScreenPx}
             clientXToMs={vp.clientXToMs}
             onSeek={onTimeChange}
+            onRangeSelect={rangeSelectKfs}
+            onCreateMarker={createMarkerAt}
           />
+          {/* BL-11: Work Area brackets — render below the ruler so the shaded
+              tint sits on top of ticks without hiding them. */}
+          {timeline && (
+            <WorkAreaOverlay
+              inMs={timeline.workAreaInMs}
+              outMs={timeline.workAreaOutMs}
+              durationMs={duration}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              onChange={setWorkAreaRange}
+            />
+          )}
+          {/* BL-11: Marker flags */}
+          {timeline?.markers && timeline.markers.length > 0 && (
+            <MarkerOverlay
+              markers={timeline.markers}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              durationMs={duration}
+              onSeek={onTimeChange}
+              onMoveMarker={(m, fromMs, toMs) => moveMarker(m.id, fromMs, toMs)}
+              onContextMenu={(m, e) => {
+                e.preventDefault()
+                setCtxKf(null); setCtxLayerBar(null); setCtxTrackArea(null); setCtxTrackHeader(null)
+                setCtxMarker({ markerId: m.id })
+                ctxMenu.open(e)
+              }}
+            />
+          )}
+          {/* BL-07: Scale Handles overlay — only when 2+ kfs span a real range */}
+          {selectionTimeBounds && (
+            <ScaleHandlesOverlay
+              minMs={selectionTimeBounds.minMs}
+              maxMs={selectionTimeBounds.maxMs}
+              msToScreenPx={vp.msToScreenPx}
+              clientXToMs={vp.clientXToMs}
+              durationMs={duration}
+              onApply={applyScale}
+            />
+          )}
           {/* Bookmark flags — overlayed on top of the ruler */}
           {bookmarks.map((bk, i) => bk == null ? null : (
             <div
@@ -783,8 +1087,11 @@ export default function TimelinePanel({
             onKfDoubleClick={openKfInlineEdit}
             onLayerBarContextMenu={openLayerBarMenu}
             onTrackAreaContextMenu={openTrackAreaMenu}
+            onTrackHeaderContextMenu={openTrackHeaderMenu}
             onTrackAreaDoubleClick={(target, ms) => addKeyframeAtTime(target, ms)}
             clientXToMs={vp.clientXToMs}
+            parameterWires={scene.parameterWires}
+            onEditWire={onEditWire}
             onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
               // Single command handles move + trim — linearly remaps every
               // keyframe on this layer so the inner animation scales/shifts
@@ -841,6 +1148,15 @@ export default function TimelinePanel({
           onDelete={segmentModal.mode === 'edit'
             ? () => dispatchCommand(makeDeleteSegmentCmd(timeline.id, segmentModal.segment))
             : undefined}
+        />
+      )}
+
+      {/* ── Stagger Keys modal (BL-07) ───────────────────────────────────── */}
+      {staggerModalOpen && (
+        <StaggerKeysModal
+          items={staggerSelectionItems}
+          onApply={applyStagger}
+          onClose={() => setStaggerModalOpen(false)}
         />
       )}
 
@@ -979,7 +1295,53 @@ export default function TimelinePanel({
         const layer = scene.layers.find((l) => l.id === ctxLayerBar.layerId)
         if (!layer) { ctxMenu.close(); return null }
         const splitMs = currentTimeMs
+        // Already-animated property paths so we don't list them twice in
+        // the "Add Animation" submenu.
+        const animatedOnLayer = new Set(
+          (timeline?.tracks ?? [])
+            .filter((t) => t.target.startsWith(`layers.${layer.id}.`))
+            .map((t) => t.target.replace(`layers.${layer.id}.`, ''))
+        )
+        const addableProps = ANIMATABLE_PROPERTIES.filter((p) => {
+          if (animatedOnLayer.has(p.path)) return false
+          return !p.layerTypes || p.layerTypes.includes(layer.type)
+        })
+        // Group by category for a nice submenu structure.
+        const propsByGroup = new Map<string, typeof addableProps>()
+        for (const p of addableProps) {
+          const arr = propsByGroup.get(p.group) ?? []
+          arr.push(p)
+          propsByGroup.set(p.group, arr)
+        }
         const items = [
+          {
+            kind: 'submenu' as const,
+            label: '+ Add Animation',
+            disabled: addableProps.length === 0,
+            items: Array.from(propsByGroup.entries()).flatMap(([groupName, list], i) => [
+              ...(i > 0 ? [{ kind: 'separator' as const }] : []),
+              {
+                kind: 'action' as const,
+                label: `── ${groupName} ──`,
+                shortcut: undefined,
+                disabled: true,
+                onSelect: () => { /* header row */ },
+              },
+              ...list.map((p) => ({
+                kind: 'action' as const,
+                label: p.label,
+                shortcut: undefined,
+                disabled: false,
+                onSelect: () => {
+                  addTrack(layer.id, p.path)
+                  // Immediately drop a keyframe at the playhead so the new
+                  // track isn't empty — common workflow.
+                  setTimeout(() => addKeyframeAtTime(`layers.${layer.id}.${p.path}`, currentTimeMs), 0)
+                },
+              })),
+            ]),
+          },
+          { kind: 'separator' as const },
           {
             kind: 'action' as const, label: 'Split Layer at Playhead',
             shortcut: undefined, disabled: false,
@@ -1084,6 +1446,102 @@ export default function TimelinePanel({
         )
       })()}
 
+      {/* ── Marker right-click menu (BL-11) ──────────────────────────────── */}
+      {ctxMenu.isOpen && ctxMarker && selectedTimelineId && timeline && (() => {
+        const marker = timeline.markers?.find((m) => m.id === ctxMarker.markerId)
+        if (!marker) return null
+        const items = [
+          {
+            kind: 'action' as const,
+            label: 'Rename…',
+            shortcut: undefined, disabled: false,
+            onSelect: () => {
+              const next = window.prompt('Marker label', marker.label)
+              if (next != null) renameMarker(marker, next)
+            },
+          },
+          {
+            kind: 'submenu' as const,
+            label: `Color (${marker.color ?? 'default'})`,
+            items: ['#a78bfa', '#fbbf24', '#34d399', '#f87171', '#22d3ee', '#fb7185', '#e5e7eb']
+              .map((c) => ({
+                kind: 'action' as const,
+                label: `${marker.color === c ? '✓ ' : '   '}${c}`,
+                disabled: false,
+                onSelect: () => recolorMarker(marker, c),
+              })),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: `Jump to marker  (${Math.round(marker.timeMs)}ms)`,
+            shortcut: undefined, disabled: false,
+            onSelect: () => onTimeChange(marker.timeMs),
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const,
+            label: 'Delete Marker',
+            shortcut: '⌫', disabled: false,
+            onSelect: () => deleteMarker(marker),
+          },
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxMarker(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Track-header right-click menu (BL-45 OOR + BL-05 Wire actions) ─── */}
+      {ctxMenu.isOpen && ctxTrackHeader && selectedTimelineId && timeline && (() => {
+        const track = timeline.tracks.find((t) => t.target === ctxTrackHeader.trackTarget)
+        if (!track) return null
+        // Extract layerId + propertyPath from "layers.<id>.<prop>" track target
+        const layerMatch = /^layers\.([^.]+)\.(.+)$/.exec(track.target)
+        const layerIdOnTrack  = layerMatch?.[1]
+        const propertyPath    = layerMatch?.[2]
+        const wireOnProp = (layerIdOnTrack && propertyPath)
+          ? (scene.parameterWires ?? []).find(
+              (w) => w.enabled && w.target.layerId === layerIdOnTrack && w.target.propertyPath === propertyPath
+            ) ?? null
+          : null
+
+        type Item = Parameters<typeof ContextMenu>[0]['items'][number]
+        const items: Item[] = [
+          buildOutOfRangeSubmenu(track.outOfRange, (next) => {
+            dispatchCommand(
+              makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),
+            )
+          }),
+        ]
+        if (layerIdOnTrack && propertyPath && (onEditWire || onWireRequest)) {
+          items.push({ kind: 'separator' })
+          if (wireOnProp) {
+            items.push({
+              kind: 'action', label: 'Edit Wire…', shortcut: undefined, disabled: !onEditWire,
+              onSelect: () => { onEditWire?.(wireOnProp) },
+            })
+          } else if (onWireRequest) {
+            items.push({
+              kind: 'action', label: 'Wire This Parameter…', shortcut: undefined, disabled: false,
+              onSelect: () => onWireRequest({
+                layerId: layerIdOnTrack, propertyPath, valueType: 'number',
+              }),
+            })
+          }
+        }
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxTrackHeader(null) }}
+          />
+        )
+      })()}
+
       {/* ── KeySelection floating toolbar (2+ keys selected) ─────────────── */}
       {selectedKfIds.size >= 2 && (
         <div className="flex items-center gap-2 px-3 py-1 border-t border-yellow-700/40
@@ -1133,6 +1591,32 @@ export default function TimelinePanel({
         setScrollLeftPx={vp.setScrollLeftPx}
         onSeek={onTimeChange}
       />
+
+      {/* ── BL-07: Keyframe Spreadsheet drawer (toggled by ⊞ Sheet) ─────── */}
+      {keySheetOpen && selectedTimelineId && (
+        <KeyframeSpreadsheet
+          rows={spreadsheetRows}
+          onUpdateTime={(kfId, target, fromMs, toMs) =>
+            dispatchCommand(makeMoveKfCmd(selectedTimelineId, target, kfId, fromMs, toMs))
+          }
+          onUpdateValue={(kfId, target, fromValue, toValue) =>
+            dispatchCommand(makeUpdateKfValueCmd(selectedTimelineId, target, kfId, fromValue, toValue))
+          }
+          onUpdateEasing={(kfId, target, toEasing) => {
+            const tr = timeline?.tracks.find((t) => t.target === target)
+            const kf = tr?.keyframes.find((k) => k.id === kfId)
+            if (!kf) return
+            dispatchCommand(makeUpdateEasingCmd(selectedTimelineId, target, kfId, kf.easing, { type: toEasing }))
+          }}
+          onDelete={(kfId, target) => {
+            const tr = timeline?.tracks.find((t) => t.target === target)
+            const kf = tr?.keyframes.find((k) => k.id === kfId)
+            if (!kf) return
+            dispatchCommand(makeDeleteKfCmd(selectedTimelineId, target, kf))
+          }}
+          onClose={() => setKeySheetOpen(false)}
+        />
+      )}
 
       {/* ── Status bar ───────────────────────────────────────────────────── */}
       <TimelineStatusBar
@@ -1266,22 +1750,29 @@ function KeyframeEditWindow({
     if (editingKf.posX != null && editingKf.posY != null) {
       return { left: editingKf.posX, top: editingKf.posY }
     }
-    // Initial placement relative to the click point. Default = pop up and
-    // to the right of the cursor (like a context menu). If the popover
-    // wouldn't fit on a given side, flip to the opposite.
+    // Initial placement. Pick the side (above/below, right/left) with more
+    // space. If neither side fits comfortably, fall back to anchoring at
+    // the centre of the viewport — guarantees the popover is fully visible
+    // even when the kf is in a tiny dock leaf at the screen edge.
     const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
     const vh = typeof window !== 'undefined' ? window.innerHeight :  720
     const ax = editingKf.anchorX
     const ay = editingKf.anchorY
-    // Horizontal: right of cursor unless it would overflow.
-    let l = ax + ANCHOR_GAP
-    if (l + POPOVER_W > vw - 8) l = ax - ANCHOR_GAP - POPOVER_W
-    // Vertical: above the cursor (so the popover's BOTTOM is just above
-    // the click) — this keeps the kf visible while editing. Flip below
-    // if there's no room above.
-    let t = ay - POPOVER_H - ANCHOR_GAP
-    if (t < 8) t = ay + ANCHOR_GAP
-    // Final clamp so a tiny viewport never lets the window escape.
+    // Horizontal — prefer the side with more space.
+    const rightSpace = vw - ax - 8
+    const leftSpace  = ax - 8
+    let l: number
+    if (rightSpace >= POPOVER_W + ANCHOR_GAP)      l = ax + ANCHOR_GAP
+    else if (leftSpace >= POPOVER_W + ANCHOR_GAP)  l = ax - ANCHOR_GAP - POPOVER_W
+    else                                           l = (vw - POPOVER_W) / 2
+    // Vertical — prefer above (keeps kf visible). Flip below if no room.
+    const topSpace    = ay - 8
+    const bottomSpace = vh - ay - 8
+    let t: number
+    if (topSpace >= POPOVER_H + ANCHOR_GAP)        t = ay - POPOVER_H - ANCHOR_GAP
+    else if (bottomSpace >= POPOVER_H + ANCHOR_GAP) t = ay + ANCHOR_GAP
+    else                                            t = (vh - POPOVER_H) / 2
+    // Final safety clamp — never let the window escape the viewport.
     l = Math.max(8, Math.min(vw - POPOVER_W - 8, l))
     t = Math.max(8, Math.min(vh - POPOVER_H - 8, t))
     return { left: l, top: t }

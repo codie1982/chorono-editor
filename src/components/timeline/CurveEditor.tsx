@@ -4,6 +4,7 @@ import type { ChronoScene, Track, Layer, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   pickTrackColor, unionValueRange, buildCurvePath,
+  buildCurvePathSegments, hasNonConstantOutOfRange,
   msToX, valueToY, pickTimeTickMs, pickValueTick, formatTickValue,
   type CurveViewport, type ValueRange,
 } from '@/lib/timeline/curveMath'
@@ -792,6 +793,11 @@ export default function CurveEditor({
             const isHidden = hidden.has(t.target)
             const isIso    = isolatedTrack === t.target
             const label = t.target.replace(`layers.${layer.id}.`, '')
+            // BL-45: OOR badge — shown only if before/after has any non-constant mode
+            const oor = t.outOfRange
+            const oorBefore = oor?.before ?? 'constant'
+            const oorAfter  = oor?.after  ?? 'constant'
+            const hasOor = oorBefore !== 'constant' || oorAfter !== 'constant'
             return (
               <button
                 key={t.target}
@@ -811,11 +817,23 @@ export default function CurveEditor({
                 className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-opacity ${
                   isHidden ? 'opacity-30 hover:opacity-60' : 'opacity-100'
                 } ${isIso ? 'ring-1 ring-blue-400 bg-blue-950/40' : 'hover:bg-gray-800'}`}
-                title={`${isHidden ? 'Show' : 'Hide'} curve · Shift+click to ${isIso ? 'exit isolate' : 'isolate'} (I)`}
+                title={`${isHidden ? 'Show' : 'Hide'} curve · Shift+click to ${isIso ? 'exit isolate' : 'isolate'} (I)${
+                  hasOor ? ` · Out of Range: ${oorBefore} ◀ ▶ ${oorAfter}` : ''
+                }`}
               >
                 <span style={{ color }}>■</span>
                 <span className="ml-1 text-gray-300">{label}</span>
                 {isIso && <span className="ml-1 text-blue-400 text-[8px]">SOLO</span>}
+                {hasOor && (
+                  <span
+                    className="ml-1 text-purple-400 text-[8px] px-1 rounded bg-purple-950/40 border border-purple-800/40"
+                    title={`Out of Range — Before: ${oorBefore}, After: ${oorAfter}`}
+                  >
+                    {oorBefore !== 'constant' ? oorBefore[0].toUpperCase() : '·'}
+                    {'◀▶'}
+                    {oorAfter !== 'constant' ? oorAfter[0].toUpperCase() : '·'}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -1038,18 +1056,86 @@ export default function CurveEditor({
                 >
                   <title>Click to select segment · Double-click to add keyframe · Right-click for segment options</title>
                 </path>
-                <path
-                  d={d}
-                  fill="none" stroke={color}
-                  strokeWidth={isIsolated ? 2.5 : isHovered ? 3 : 1.5}
-                  opacity={isDimmed ? 0.18 : isHovered ? 1 : 0.95}
-                  style={
-                    isIsolated ? { filter: `drop-shadow(0 0 4px ${color})` }
-                    : isHovered ? { filter: `drop-shadow(0 0 3px ${color})` }
-                    : undefined
+                {/* BL-45: split visible curve into in-range (solid) + out-of-range
+                    (dashed) segments when the track has cycle/loop/pingPong/linear/
+                    relativeRepeat set. Falls through to a single cached path
+                    when out-of-range is constant/constant (the default). */}
+                {(() => {
+                  const strokeW = isIsolated ? 2.5 : isHovered ? 3 : 1.5
+                  const baseOpacity = isDimmed ? 0.18 : isHovered ? 1 : 0.95
+                  const filterStyle = isIsolated
+                    ? { filter: `drop-shadow(0 0 4px ${color})` }
+                    : isHovered
+                      ? { filter: `drop-shadow(0 0 3px ${color})` }
+                      : undefined
+
+                  if (!hasNonConstantOutOfRange(t)) {
+                    return (
+                      <path
+                        d={d}
+                        fill="none" stroke={color}
+                        strokeWidth={strokeW}
+                        opacity={baseOpacity}
+                        style={filterStyle}
+                        pointerEvents="none"
+                      />
+                    )
                   }
-                  pointerEvents="none"
-                />
+
+                  const segs = buildCurvePathSegments(t, tvp)
+                  const dashedOpacity = baseOpacity * 0.55
+                  const dashArray = '5 4'
+                  return (
+                    <>
+                      {segs.inRange && (
+                        <path
+                          d={segs.inRange} fill="none" stroke={color}
+                          strokeWidth={strokeW} opacity={baseOpacity}
+                          style={filterStyle} pointerEvents="none"
+                        />
+                      )}
+                      {segs.before && (
+                        <path
+                          d={segs.before} fill="none" stroke={color}
+                          strokeWidth={strokeW} strokeDasharray={dashArray}
+                          opacity={dashedOpacity}
+                          pointerEvents="none"
+                        >
+                          <title>Out-of-range (before): {t.outOfRange?.before ?? 'constant'}</title>
+                        </path>
+                      )}
+                      {segs.after && (
+                        <path
+                          d={segs.after} fill="none" stroke={color}
+                          strokeWidth={strokeW} strokeDasharray={dashArray}
+                          opacity={dashedOpacity}
+                          pointerEvents="none"
+                        >
+                          <title>Out-of-range (after): {t.outOfRange?.after ?? 'constant'}</title>
+                        </path>
+                      )}
+                      {/* Range boundary tick marks — small vertical guides */}
+                      {segs.rangeStartX !== null && (
+                        <line
+                          x1={segs.rangeStartX} y1={0}
+                          x2={segs.rangeStartX} y2={plotH}
+                          stroke={color} strokeOpacity={0.25}
+                          strokeWidth={1} strokeDasharray="2 3"
+                          pointerEvents="none"
+                        />
+                      )}
+                      {segs.rangeEndX !== null && (
+                        <line
+                          x1={segs.rangeEndX} y1={0}
+                          x2={segs.rangeEndX} y2={plotH}
+                          stroke={color} strokeOpacity={0.25}
+                          strokeWidth={1} strokeDasharray="2 3"
+                          pointerEvents="none"
+                        />
+                      )}
+                    </>
+                  )
+                })()}
                 {selSegD && (
                   <g
                     transform={`translate(${msToX(tvp, sortedKfs.find((k) => k.id === selectedSegment!.kfAId)!.timeMs)} 0)`}
