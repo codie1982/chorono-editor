@@ -60,14 +60,16 @@ import { nextEventId } from '@/lib/defaults'
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
 // the label. Same set is used by the LayerPanel-side picker so a layer
 // dragged across panels keeps a consistent colour identity.
-// BL-46 + BL-47 — modifier types that have evaluators today. Used by the
-// track-header context menu's "+ Add Modifier ▸" submenu. BL-48/49 types
-// will be added here as their evaluators land.
+// Modifier types with shipped evaluators. Used by the track-header
+// context menu's "+ Add Modifier ▸" submenu. BL-50 procedural controllers
+// add no new types — this set is complete for BL-46..BL-49.
 const BL46_MODIFIER_TYPES: CurveModifierType[] = [
   // Foundation (BL-46)
   'sine', 'pulse', 'quantize', 'offset', 'scale', 'clamp',
   // Noise pack (BL-47)
   'noise', 'fractalNoise', 'jitter', 'wave',
+  // Physics pack (BL-49)
+  'overshoot', 'elastic', 'bounce', 'decay', 'spring',
 ]
 const BL46_MODIFIER_LABEL: Partial<Record<CurveModifierType, string>> = {
   sine:         '∿ Sine',
@@ -80,6 +82,11 @@ const BL46_MODIFIER_LABEL: Partial<Record<CurveModifierType, string>> = {
   fractalNoise: '≋ Fractal Noise',
   jitter:       '⊕ Jitter',
   wave:         '∼ Wave (square/tri/saw)',
+  overshoot:    '↟ Overshoot',
+  elastic:      '╳ Elastic',
+  bounce:       '⚬ Bounce',
+  decay:        '⏷ Decay',
+  spring:       '⌇ Spring (stateful)',
 }
 
 const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [

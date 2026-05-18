@@ -18,6 +18,11 @@
 
 import type { CurveModifier, CurveModifierContext } from './types'
 import { signedNoise1D, fbm1D, envelopeRamp } from '../noise/noise'
+import {
+  overshootOut, elasticOut, bounceOut, decayOscillation,
+} from '../physics/easings'
+import { getSpringValue } from '../physics/springCache'
+import type { SpringParams } from '../physics/spring'
 
 // ── Param readers ──────────────────────────────────────────────────────────
 // All params are stored as Record<string, number | boolean | string> so
@@ -190,6 +195,68 @@ export function evalWave(ctx: CurveModifierContext, m: CurveModifier): number {
   return v * amplitude
 }
 
+// ── Physics modifiers (BL-49) ─────────────────────────────────────────────
+// All stateless except Spring (which caches state by track+modifier id —
+// see springCache.ts). They return the ABSOLUTE TARGET value when used
+// with blendMode='replace' weight=1; with blendMode='add' they layer the
+// easing curve on top of the base interpolation. Pick mode to taste.
+
+// Overshoot — eases u → 1 with a small overshoot then settle. Returns the
+// EASED value scaled to amplitude (default tension=1.70158 → ~10% overshoot).
+// Reads ctx.localT, ignores currentValue when amplitude is set.
+// Params: amplitude=1, tension=1.70158
+export function evalOvershoot(ctx: CurveModifierContext, m: CurveModifier): number {
+  const p = m.parameters
+  return overshootOut(ctx.localT, num(p, 'tension', 1.70158)) * num(p, 'amplitude', 1)
+}
+
+// Elastic — wobbling settle around target. amplitude=initial wobble size,
+// period=oscillation length (smaller = more bounces).
+// Params: amplitude=1, period=0.3
+export function evalElastic(ctx: CurveModifierContext, m: CurveModifier): number {
+  const p = m.parameters
+  return elasticOut(ctx.localT, num(p, 'amplitude', 1), num(p, 'period', 0.3))
+}
+
+// Bounce — accelerating drops, classic Robert Penner bounce.
+// Params: amplitude=1
+export function evalBounce(ctx: CurveModifierContext, m: CurveModifier): number {
+  return bounceOut(ctx.localT) * num(m.parameters, 'amplitude', 1)
+}
+
+// Decay — damped sinusoidal oscillation: A·e^(-λt)·sin(2πft + φ). Use
+// blendMode='add' to overlay on a base value (e.g. shake after impact).
+// Params: amplitude=10, frequency=4, damping=3, phase=0
+export function evalDecay(ctx: CurveModifierContext, m: CurveModifier): number {
+  const p = m.parameters
+  return decayOscillation(
+    ctx.localT,
+    num(p, 'amplitude', 10),
+    num(p, 'frequency', 4),
+    num(p, 'damping',   3),
+    num(p, 'phase',     0),
+  )
+}
+
+// Spring — stateful mass-spring-damper that chases ctx.baseValue. Returns
+// the spring's current value; blendMode='replace' weight=1 substitutes
+// it entirely (most natural use). Caches state by (track target, modId).
+// Params: stiffness=170, damping=26, mass=1
+export function evalSpring(ctx: CurveModifierContext, m: CurveModifier): number {
+  const p = m.parameters
+  const params: SpringParams = {
+    stiffness: num(p, 'stiffness', 170),
+    damping:   num(p, 'damping',   26),
+    mass:      num(p, 'mass',      1),
+  }
+  // segmentStartMs uniquely identifies a track within a scene for the
+  // cache; combined with modifier id it gives a stable bucket key.
+  // (Real trackTarget isn't directly in ctx — see pipeline.ts for the
+  // seed-passing convention.) Using `seed` is a deterministic stand-in.
+  const cacheTrackKey = String(ctx.seed)
+  return getSpringValue(cacheTrackKey, m.id, ctx.baseValue, ctx.timeMs, params)
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────────
 // Single entry point used by the pipeline. Unknown modifier kinds (those
 // reserved for future sprints) currently no-op by returning currentValue
@@ -206,7 +273,14 @@ export function evaluateModifier(ctx: CurveModifierContext, m: CurveModifier): n
     case 'fractalNoise': return evalFractalNoise(ctx, m)
     case 'jitter':       return evalJitter(ctx, m)
     case 'wave':         return evalWave(ctx, m)
-    // BL-48 / BL-49 modifiers — no-op until those sprints ship.
+    // BL-49 physics
+    case 'overshoot':    return evalOvershoot(ctx, m)
+    case 'elastic':      return evalElastic(ctx, m)
+    case 'bounce':       return evalBounce(ctx, m)
+    case 'decay':        return evalDecay(ctx, m)
+    case 'spring':       return evalSpring(ctx, m)
+    // BL-48 timeWarp modifier — track field handles the meaningful case;
+    // modifier slot reserved for future per-segment use.
     default:             return ctx.currentValue
   }
 }
@@ -227,6 +301,12 @@ export function defaultParametersFor(type: CurveModifier['type']): CurveModifier
     case 'fractalNoise': return { seed: 0, frequency: 4, strength: 10, positiveOnly: false, octaves: 4, lacunarity: 2, gain: 0.5, rampIn: 0, rampOut: 0 }
     case 'jitter':       return { seed: 0, frequency: 8, strength: 10 }
     case 'wave':         return { form: 'sine', amplitude: 1, frequency: 1, phase: 0, duty: 0.5 }
+    // BL-49
+    case 'overshoot':    return { amplitude: 1,  tension: 1.70158 }
+    case 'elastic':      return { amplitude: 1,  period: 0.3 }
+    case 'bounce':       return { amplitude: 1 }
+    case 'decay':        return { amplitude: 10, frequency: 4, damping: 3, phase: 0 }
+    case 'spring':       return { stiffness: 170, damping: 26, mass: 1 }
     default:             return {}
   }
 }

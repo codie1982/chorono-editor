@@ -35,13 +35,14 @@ interface Props {
   editor: EditorStateReturn
 }
 
-// Modifier types with shipped evaluators. BL-46 foundation + BL-47 noise
-// pack today; BL-48/49 will append as those sprints land.
+// Modifier types with shipped evaluators (BL-46 + BL-47 + BL-49).
 const FOUNDATION_TYPES: CurveModifierType[] = [
   // BL-46
   'sine', 'pulse', 'quantize', 'offset', 'scale', 'clamp',
   // BL-47
   'noise', 'fractalNoise', 'jitter', 'wave',
+  // BL-49
+  'overshoot', 'elastic', 'bounce', 'decay', 'spring',
 ]
 
 const BLEND_MODES: { value: CurveBlendMode; label: string }[] = [
