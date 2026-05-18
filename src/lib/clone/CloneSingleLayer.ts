@@ -37,15 +37,18 @@ export function cloneSingleLayer<L extends Layer>(
 ): CloneResult {
   const mode = options.mode ?? 'copy'
 
-  if (mode !== 'copy') {
-    // Phase 2 modes — fail loudly until implemented.
+  if (mode === 'reference' || mode === 'virtual') {
+    // Phase 2.5 / Phase 3 modes — fail loudly until implemented.
     throw new Error(
-      `CloneMode "${mode}" not implemented in MVP. Only 'copy' is supported.`,
+      `CloneMode "${mode}" not implemented yet. Use 'copy' or 'instance'.`,
     )
   }
 
-  // Deep clone via the existing legacy helper. It generates a fresh id
-  // and "Copy" suffix on the name; we override the name below if needed.
+  // 'copy' and 'instance' both produce a fresh layer via JSON deep-clone +
+  // new id. The DIFFERENCE is metadata: 'instance' records sourceId so the
+  // renderer (Phase 3) can override geometry to mirror source mutations.
+  // For MVP+1 we ship 'instance' as a tagged copy — visually identical to
+  // 'copy' but discoverable via layerMetaById for future hot-swap rendering.
   const clonedLayer = cloneLayerForDuplicate(source) as L
 
   // Apply offset in the source's local-translation space (simple x/y add).
@@ -69,7 +72,7 @@ export function cloneSingleLayer<L extends Layer>(
   // Build metadata — kept OUT of the Layer object (see CloneTypes.ts).
   const metadata: CloneMetadata = {
     sourceId: source.id,
-    mode: 'copy',
+    mode,
     createdAt: Date.now(),
     arrayGroupId: options.arrayGroupId,
   }

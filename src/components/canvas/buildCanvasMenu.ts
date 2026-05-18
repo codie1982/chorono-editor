@@ -24,6 +24,16 @@ export interface CanvasMenuHandlers {
   cloneSettings?: () => void
   /** Opens ArrayModal — Linear/Grid/Radial dialog. */
   arraySettings?: () => void
+  /** Select every layer sharing this layer's arrayGroupId. */
+  selectAllInArray?: () => void
+  /** True when the right-clicked layer has an arrayGroupId. */
+  isArrayMember?: boolean
+  /** Clone & Align: source clones one per selected target sibling. */
+  cloneAlignToSelected?: () => void
+  /** Bake an existing Repeater layer back into real cloned layers. */
+  bakeRepeater?: () => void
+  /** True when the right-clicked layer is a Repeater wrapper. */
+  isRepeater?: boolean
 
   // Layer ops
   group?:      () => void
@@ -106,7 +116,26 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
         action('Clone (quick)',    '⌥⌘D', h.cloneQuick ?? h.duplicate),
         action('Clone with settings…', undefined, h.cloneSettings),
         sep(),
-        action('Array…',           undefined, h.arraySettings),
+        action('Array…',           '⇧⌘A', h.arraySettings),
+        action(
+          'Clone & Align to selected targets',
+          undefined,
+          h.cloneAlignToSelected,
+          !multi,
+        ),
+        sep(),
+        action(
+          'Bake Repeater to layers',
+          undefined,
+          h.bakeRepeater,
+          !h.isRepeater,
+        ),
+        action(
+          'Select all instances in array',
+          undefined,
+          h.selectAllInArray,
+          !h.isArrayMember,
+        ),
       ],
     },
 

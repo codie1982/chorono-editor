@@ -130,12 +130,32 @@ export interface RadialArraySettings extends BaseArraySettings {
   rotationOffsetDeg: number
 }
 
+// ── Path Array (BL-59 Phase 2) ───────────────────────────────────────────────
+
+export interface PathArraySettings extends BaseArraySettings {
+  pattern: 'path'
+  /** Path-providing layer id (must be a 'path' layer with a BezierPath). */
+  pathLayerId: string
+  count: number
+  /** Skip the first `startOffset` arc-length units of the path. */
+  startOffset: number
+  /** Skip the last `endOffset` arc-length units. */
+  endOffset: number
+  /** Offset perpendicular to the path tangent (positive = "outside"). */
+  normalOffset: number
+  /** When true, each clone rotates to match the path tangent direction. */
+  alignToTangent: boolean
+  /** Distribute in reverse along the path. */
+  reverse: boolean
+}
+
 // ── Union ────────────────────────────────────────────────────────────────────
 
 export type ArraySettings =
   | LinearArraySettings
   | GridArraySettings
   | RadialArraySettings
+  | PathArraySettings
 
 export type ArrayPattern = ArraySettings['pattern']
 
@@ -214,6 +234,24 @@ export function defaultRadialArraySettings(): RadialArraySettings {
     transformMode: 'incremental',
     space: 'world',
     sourcePolicy: 'include-source',
+    duplicateAnimation: true,
+  }
+}
+
+export function defaultPathArraySettings(pathLayerId: string = ''): PathArraySettings {
+  return {
+    pattern: 'path',
+    pathLayerId,
+    count: 10,
+    startOffset: 0,
+    endOffset: 0,
+    normalOffset: 0,
+    alignToTangent: true,
+    reverse: false,
+    cloneMode: 'copy',
+    transformMode: 'incremental',
+    space: 'world',
+    sourcePolicy: 'clone-source-too',
     duplicateAnimation: true,
   }
 }

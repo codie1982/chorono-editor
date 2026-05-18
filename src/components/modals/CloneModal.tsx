@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import type { Layer } from '@/lib/types'
+import type { CloneMode } from '@/lib/clone/CloneTypes'
 
 interface Props {
   source:                Layer
@@ -22,6 +23,7 @@ export interface CloneApplyParams {
   offsetX: number
   offsetY: number
   duplicateAnimation: boolean
+  mode: CloneMode
 }
 
 const MIN_COUNT  = 1
@@ -36,6 +38,7 @@ export default function CloneModal({
   const [offsetX, setOffsetX] = useState(20)
   const [offsetY, setOffsetY] = useState(20)
   const [dupAnim, setDupAnim] = useState(true)
+  const [mode,    setMode]    = useState<CloneMode>('copy')
 
   const validCount = count >= MIN_COUNT && count <= MAX_COUNT
   const canApply   = validCount
@@ -47,6 +50,7 @@ export default function CloneModal({
       offsetX,
       offsetY,
       duplicateAnimation: dupAnim,
+      mode,
     })
     onClose()
   }
@@ -73,19 +77,28 @@ export default function CloneModal({
           </button>
         </div>
 
-        {/* Clone Mode (only Copy in MVP) */}
+        {/* Clone Mode — Copy + Instance enabled (Reference/Virtual Phase 3) */}
         <div className="mb-3">
           <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
             Mode
           </label>
           <div className="grid grid-cols-4 gap-1">
-            <ModePill label="Copy"      active disabled={false} />
-            <ModePill label="Instance"  active={false} disabled />
+            <ModePill label="Copy"
+              active={mode === 'copy'}
+              disabled={false}
+              onClick={() => setMode('copy')}
+            />
+            <ModePill label="Instance"
+              active={mode === 'instance'}
+              disabled={false}
+              onClick={() => setMode('instance')}
+            />
             <ModePill label="Reference" active={false} disabled />
             <ModePill label="Virtual"   active={false} disabled />
           </div>
           <div className="mt-1 text-[10px] text-gray-600 italic">
-            Instance / Reference / Virtual coming in Phase 2.
+            {mode === 'copy' && 'Independent deep copy. Editing source has no effect.'}
+            {mode === 'instance' && 'Tagged copy — linked to source via metadata (Phase 3 hot-swap render).'}
           </div>
         </div>
 
@@ -191,15 +204,17 @@ export default function CloneModal({
 // ── Subcomponents ───────────────────────────────────────────────────────────
 
 function ModePill({
-  label, active, disabled,
+  label, active, disabled, onClick,
 }: {
   label: string
   active: boolean
   disabled: boolean
+  onClick?: () => void
 }) {
   return (
     <button
       disabled={disabled}
+      onClick={onClick}
       className={
         'text-[10px] px-2 py-1 rounded border transition-colors ' +
         (active

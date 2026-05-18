@@ -14,37 +14,56 @@ import {
   type LinearArraySettings,
   type GridArraySettings,
   type RadialArraySettings,
+  type PathArraySettings,
   type ArrayPattern,
   type BaseArraySettings,
   defaultLinearArraySettings,
   defaultGridArraySettings,
   defaultRadialArraySettings,
+  defaultPathArraySettings,
 } from '@/lib/array/ArrayTypes'
 import { countArrayInstances, countNewClones } from '@/lib/array/ArrayTransformResolver'
+import ArrayPreviewMini from './ArrayPreviewMini'
 
 interface Props {
   source:                Layer
   hasAnimationOnSource:  boolean
-  onApply:               (settings: ArraySettings) => void
+  /** All scene layers — needed for the Path tab's path layer picker. */
+  allLayers:             Layer[]
+  onApply:               (settings: ArraySettings, asRepeater: boolean) => void
   onClose:               () => void
 }
 
 export default function ArrayModal({
-  source, hasAnimationOnSource, onApply, onClose,
+  source, hasAnimationOnSource, allLayers, onApply, onClose,
 }: Props) {
   const [pattern, setPattern] = useState<ArrayPattern>('linear')
+  // BL-59 Phase 2 — Non-destructive (Repeater Modifier) mode. Only Linear
+  // and Radial are supported by the renderer; Grid/Path fall back to
+  // destructive Array even when this checkbox is checked.
+  const [asRepeater, setAsRepeater] = useState(false)
+  const repeaterSupported = pattern === 'linear' || pattern === 'radial'
+
+  // Discover path layers in the scene for the Path tab picker.
+  const pathLayers = useMemo(
+    () => allLayers.filter((l) => l.type === 'path' && l.path && l.path.anchors.length >= 2),
+    [allLayers],
+  )
+  const firstPathId = pathLayers[0]?.id ?? ''
 
   // Per-pattern state — independent so switching tabs keeps prior values.
   const [linear,  setLinear]  = useState<LinearArraySettings>(defaultLinearArraySettings)
   const [grid,    setGrid]    = useState<GridArraySettings>(defaultGridArraySettings)
   const [radial,  setRadial]  = useState<RadialArraySettings>(defaultRadialArraySettings)
+  const [path,    setPath]    = useState<PathArraySettings>(() => defaultPathArraySettings(firstPathId))
 
   // Always read the live settings for whichever pattern is selected.
   const settings: ArraySettings = useMemo(() => {
     if (pattern === 'linear') return linear
     if (pattern === 'grid')   return grid
-    return radial
-  }, [pattern, linear, grid, radial])
+    if (pattern === 'radial') return radial
+    return path
+  }, [pattern, linear, grid, radial, path])
 
   const totalInstances = countArrayInstances(settings)
   const newClones      = countNewClones(settings)
@@ -52,7 +71,7 @@ export default function ArrayModal({
 
   function apply() {
     if (!valid) return
-    onApply(settings)
+    onApply(settings, asRepeater && repeaterSupported)
     onClose()
   }
 
@@ -80,10 +99,11 @@ export default function ArrayModal({
 
         {/* Pattern tabs */}
         <div className="mb-4">
-          <div className="grid grid-cols-3 gap-1 bg-gray-950 border border-gray-800 rounded p-1">
+          <div className="grid grid-cols-4 gap-1 bg-gray-950 border border-gray-800 rounded p-1">
             <TabBtn label="Linear" active={pattern === 'linear'} onClick={() => setPattern('linear')} />
             <TabBtn label="Grid"   active={pattern === 'grid'}   onClick={() => setPattern('grid')} />
             <TabBtn label="Radial" active={pattern === 'radial'} onClick={() => setPattern('radial')} />
+            <TabBtn label="Path"   active={pattern === 'path'}   onClick={() => setPattern('path')} />
           </div>
         </div>
 
@@ -97,6 +117,12 @@ export default function ArrayModal({
         {pattern === 'radial' && (
           <RadialFields settings={radial} onChange={setRadial} />
         )}
+        {pattern === 'path' && (
+          <PathFields settings={path} onChange={setPath} pathLayers={pathLayers} />
+        )}
+
+        {/* Live preview (BL-59 Phase 2) */}
+        {valid && <ArrayPreviewMini source={source} settings={settings} allLayers={allLayers} />}
 
         {/* Common section */}
         <CommonFields
@@ -109,16 +135,50 @@ export default function ArrayModal({
               setLinear({ ...linear, ...patch } as LinearArraySettings)
             } else if (pattern === 'grid') {
               setGrid({ ...grid, ...patch } as GridArraySettings)
-            } else {
+            } else if (pattern === 'radial') {
               setRadial({ ...radial, ...patch } as RadialArraySettings)
+            } else {
+              setPath({ ...path, ...patch } as PathArraySettings)
             }
           }}
         />
+
+        {/* Non-destructive (Repeater Modifier) toggle */}
+        <div className="mb-3">
+          <label
+            className={
+              'flex items-start gap-2 text-[11px] ' +
+              (repeaterSupported ? 'text-gray-300' : 'text-gray-600')
+            }
+          >
+            <input
+              type="checkbox"
+              checked={asRepeater && repeaterSupported}
+              disabled={!repeaterSupported}
+              onChange={(e) => setAsRepeater(e.target.checked)}
+              className="accent-blue-500 mt-0.5"
+            />
+            <span>
+              Apply as <span className="font-semibold">Repeater Modifier</span> (non-destructive)
+              <div className="text-[10px] text-gray-500 mt-0.5">
+                {repeaterSupported
+                  ? 'Adds one virtual repeater layer instead of N real layers — animatable count, instant Bake.'
+                  : 'Only Linear & Radial patterns support Repeater rendering today.'}
+              </div>
+            </span>
+          </label>
+        </div>
 
         {/* Summary */}
         <div className="mb-4 px-3 py-2 bg-gray-800/50 border border-gray-800 rounded text-[11px] text-gray-400">
           {totalInstances === 0 ? (
             <span className="text-rose-400">No instances — increase count.</span>
+          ) : asRepeater && repeaterSupported ? (
+            <>
+              Will add <span className="text-gray-200 font-medium">1 Repeater layer</span>
+              {' '}rendering <span className="text-gray-200 font-medium">{totalInstances}</span> virtual copies.
+              Source is hidden but not destroyed. One undo step.
+            </>
           ) : (
             <>
               Will create <span className="text-gray-200 font-medium">{newClones}</span> new layer
@@ -252,6 +312,76 @@ function GridFields({
           />
         </div>
       )}
+    </Section>
+  )
+}
+
+function PathFields({
+  settings, onChange, pathLayers,
+}: {
+  settings: PathArraySettings
+  onChange: (s: PathArraySettings) => void
+  pathLayers: Layer[]
+}) {
+  return (
+    <Section title="Path">
+      <div className="mb-2">
+        <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
+          Target path layer
+        </label>
+        {pathLayers.length === 0 ? (
+          <div className="text-[11px] text-rose-400 italic">
+            No path layers in scene. Draw one with the Pen Tool first.
+          </div>
+        ) : (
+          <select
+            value={settings.pathLayerId}
+            onChange={(e) => onChange({ ...settings, pathLayerId: e.target.value })}
+            className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[11px] text-gray-100"
+          >
+            {pathLayers.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      <NumberRow label="Count"
+        value={settings.count}
+        onChange={(n) => onChange({ ...settings, count: Math.max(1, Math.round(n)) })}
+        min={1} max={500}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <NumberRow label="Start offset (px)"
+          value={settings.startOffset}
+          onChange={(n) => onChange({ ...settings, startOffset: Math.max(0, n) })}
+        />
+        <NumberRow label="End offset (px)"
+          value={settings.endOffset}
+          onChange={(n) => onChange({ ...settings, endOffset: Math.max(0, n) })}
+        />
+      </div>
+      <NumberRow label="Normal offset"
+        value={settings.normalOffset}
+        onChange={(n) => onChange({ ...settings, normalOffset: n })}
+      />
+      <label className="flex items-center gap-2 text-[11px] text-gray-300 mt-1">
+        <input
+          type="checkbox"
+          checked={settings.alignToTangent}
+          onChange={(e) => onChange({ ...settings, alignToTangent: e.target.checked })}
+          className="accent-blue-500"
+        />
+        Align to path tangent
+      </label>
+      <label className="flex items-center gap-2 text-[11px] text-gray-300">
+        <input
+          type="checkbox"
+          checked={settings.reverse}
+          onChange={(e) => onChange({ ...settings, reverse: e.target.checked })}
+          className="accent-blue-500"
+        />
+        Distribute in reverse
+      </label>
     </Section>
   )
 }

@@ -63,7 +63,9 @@ import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 import CloneModal             from '@/components/modals/CloneModal'
 import ArrayModal             from '@/components/modals/ArrayModal'
 import AIPanel                from '@/components/AIPanel'
-import { makeCloneCmd, makeArrayCmd } from '@/lib/editor/commands-clone'
+import { makeCloneCmd, makeArrayCmd, makeCloneAlignCmd } from '@/lib/editor/commands-clone'
+import { makeConvertToRepeaterCmd, makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
+import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 
 // ── Demo scene shown on first load ────────────────────────────────────────────
@@ -121,7 +123,10 @@ function makeDemoScene(): ChronoScene {
 export default function BuilderPage() {
   // ── Central scene state with history + transactions ──────────────────────
   const editor = useEditorState(makeDemoScene())
-  const { scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo } = editor
+  const {
+    scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo,
+    layerMetaById, getSiblingsInArray,
+  } = editor
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
   const [selectedLayerId,  setSelectedLayer]  = useState<string | null>('card')
@@ -522,6 +527,7 @@ export default function BuilderPage() {
     offsetX: number
     offsetY: number
     duplicateAnimation: boolean
+    mode: import('@/lib/clone/CloneTypes').CloneMode
   }) => {
     if (!cloneModalSource) return
     const cmd = makeCloneCmd({
@@ -532,19 +538,40 @@ export default function BuilderPage() {
       timeline: getActiveTimeline(),
       allLayers: scene.layers,
       duplicateAnimation: params.duplicateAnimation,
+      mode: params.mode,
     })
     dispatchCommand(cmd)
     const firstNewId = cmd.result.suggestedSelection[0]
     if (firstNewId) selectLayer(firstNewId)
     toast.success(
-      `Cloned "${cloneModalSource.name}" — ${cmd.result.createdLayerIds.length} new layer${
+      `Cloned "${cloneModalSource.name}" — ${cmd.result.createdLayerIds.length} new ${params.mode === 'instance' ? 'instance' : 'layer'}${
         cmd.result.createdLayerIds.length === 1 ? '' : 's'
       }`,
     )
   }, [cloneModalSource, getActiveTimeline, scene.layers, dispatchCommand, selectLayer])
 
-  const handleArrayApply = useCallback((settings: import('@/lib/array/ArrayTypes').ArraySettings) => {
+  const handleArrayApply = useCallback((
+    settings: import('@/lib/array/ArrayTypes').ArraySettings,
+    asRepeater: boolean,
+  ) => {
     if (!arrayModalSource) return
+
+    // BL-59 Phase 2 — Non-destructive Repeater Modifier path.
+    if (asRepeater) {
+      const cmd = makeConvertToRepeaterCmd({
+        source: arrayModalSource,
+        settings,
+      })
+      if (cmd) {
+        dispatchCommand(cmd)
+        toast.success(
+          `Converted "${arrayModalSource.name}" to a Repeater Modifier (non-destructive)`,
+        )
+        return
+      }
+      toast.warning('Repeater rendering not supported for this pattern — falling back to Array.')
+    }
+
     const cmd = makeArrayCmd({
       source: arrayModalSource,
       settings,
@@ -1266,6 +1293,51 @@ export default function BuilderPage() {
                       cloneQuick:    cloneQuick,
                       cloneSettings: openCloneModal,
                       arraySettings: openArrayModal,
+                      selectAllInArray: (layerId: string) => {
+                        const siblings = getSiblingsInArray(layerId)
+                        if (siblings.length <= 1) return
+                        setSelectedLayerIds(new Set(siblings))
+                        toast.info(`Selected ${siblings.length} layers in array`)
+                      },
+                      isLayerInArray: (layerId: string) =>
+                        Boolean(layerMetaById[layerId]?.arrayGroupId),
+                      cloneAlignToSelected: (sourceId: string) => {
+                        const source = scene.layers.find((l) => l.id === sourceId)
+                        if (!source) return
+                        const targets = scene.layers.filter(
+                          (l) => l.id !== sourceId && selectedLayerIds.has(l.id),
+                        )
+                        if (targets.length === 0) {
+                          toast.warning('Select target layers first (Shift+click to add).')
+                          return
+                        }
+                        const cmd = makeCloneAlignCmd({
+                          source,
+                          targets,
+                          options: defaultCloneAlignOptions(),
+                          timeline: getActiveTimeline(),
+                          allLayers: scene.layers,
+                        })
+                        dispatchCommand(cmd)
+                        toast.success(
+                          `Cloned "${source.name}" to ${targets.length} target${
+                            targets.length === 1 ? '' : 's'
+                          }`,
+                        )
+                      },
+                      bakeRepeater: (repeaterId: string) => {
+                        const repeater = scene.layers.find((l) => l.id === repeaterId)
+                        if (!repeater || repeater.type !== 'repeater' || !repeater.repeater) return
+                        const source = scene.layers.find((l) => l.id === repeater.repeater!.sourceLayerId)
+                        if (!source) {
+                          toast.error('Repeater source layer not found')
+                          return
+                        }
+                        const cmd = makeBakeRepeaterCmd(repeater, source)
+                        if (!cmd) return
+                        dispatchCommand(cmd)
+                        toast.success(`Baked "${repeater.name}" — ${repeater.repeater.count} layers`)
+                      },
                     }}
                   />
                 ),
@@ -1488,6 +1560,7 @@ export default function BuilderPage() {
         <ArrayModal
           source={arrayModalSource}
           hasAnimationOnSource={sourceHasAnimation(arrayModalSource)}
+          allLayers={scene.layers}
           onApply={handleArrayApply}
           onClose={() => setArrayModalSource(null)}
         />

@@ -80,11 +80,19 @@ describe('cloneSingleLayer', () => {
     expect(clonedLayer.name).toBe('My Rect Copy')
   })
 
-  it('throws for unsupported modes in MVP', () => {
+  it('throws for unsupported modes (reference / virtual)', () => {
     const src = makeRect()
-    expect(() => cloneSingleLayer(src, { mode: 'instance' })).toThrow()
     expect(() => cloneSingleLayer(src, { mode: 'reference' })).toThrow()
     expect(() => cloneSingleLayer(src, { mode: 'virtual' })).toThrow()
+  })
+
+  it('instance mode produces a tagged copy (geometry identical, mode recorded)', () => {
+    const src = makeRect()
+    const { clonedLayer, metadata } = cloneSingleLayer(src, { mode: 'instance' })
+    expect(clonedLayer.id).not.toBe(src.id)
+    expect(clonedLayer.shape).toBe('rect')
+    expect(metadata.mode).toBe('instance')
+    expect(metadata.sourceId).toBe(src.id)
   })
 
   it('clone is deeply independent (mutating one does not affect the other)', () => {

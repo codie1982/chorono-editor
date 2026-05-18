@@ -121,6 +121,14 @@ interface Props {
     cloneSettings?: () => void
     /** BL-59 Clone & Array — opens ArrayModal. */
     arraySettings?: () => void
+    /** BL-59 — Select all layers sharing this layer's arrayGroupId. */
+    selectAllInArray?: (layerId: string) => void
+    /** BL-59 — Predicate: does the right-clicked layer belong to an array? */
+    isLayerInArray?: (layerId: string) => boolean
+    /** BL-59 — Clone & Align: this layer = source, other selected = targets. */
+    cloneAlignToSelected?: (sourceId: string) => void
+    /** BL-59 — Bake a Repeater wrapper layer into real cloned layers. */
+    bakeRepeater?: (repeaterId: string) => void
   }
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview). */
   ghostSettings?: TimelineGhostSettings
@@ -2185,6 +2193,17 @@ export default function SceneCanvas({
           cloneQuick:    menuHandlers?.cloneQuick,
           cloneSettings: menuHandlers?.cloneSettings,
           arraySettings: menuHandlers?.arraySettings,
+          selectAllInArray: menuHandlers?.selectAllInArray
+            ? () => menuHandlers!.selectAllInArray!(target.id)
+            : undefined,
+          isArrayMember: menuHandlers?.isLayerInArray?.(target.id) ?? false,
+          cloneAlignToSelected: menuHandlers?.cloneAlignToSelected
+            ? () => menuHandlers!.cloneAlignToSelected!(target.id)
+            : undefined,
+          bakeRepeater: menuHandlers?.bakeRepeater && target.type === 'repeater'
+            ? () => menuHandlers!.bakeRepeater!(target.id)
+            : undefined,
+          isRepeater: target.type === 'repeater',
 
           // ── Locally implemented (no page state needed) ──────────────────
           centerOrigin: () => editor.dispatchCommand(

@@ -21,7 +21,12 @@ import { nextKfId } from '../defaults'
 
 import { cloneSingleLayer } from '../clone/CloneSingleLayer'
 import { cloneLayerTree } from '../clone/CloneTreeResolver'
-import type { CloneMetadata, CloneOptions } from '../clone/CloneTypes'
+import type { CloneMetadata, CloneOptions, CloneMode } from '../clone/CloneTypes'
+import {
+  resolveCloneAlignSpecs,
+  type CloneAlignOptions,
+} from '../clone/CloneAlign'
+import { makeDeleteLayerCmd } from './commands-layer'
 
 import {
   resolveArrayTransforms,
@@ -159,6 +164,8 @@ export interface MakeCloneCmdParams {
   allLayers: Layer[]
   /** Default true. False → skip animation duplication for this op. */
   duplicateAnimation?: boolean
+  /** Default 'copy'. 'instance' tags the clone for future hot-swap render. */
+  mode?: CloneMode
 }
 
 export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
@@ -170,6 +177,7 @@ export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
     timeline,
     allLayers,
     duplicateAnimation = true,
+    mode = 'copy',
   } = params
 
   const newLayers: Layer[] = []
@@ -185,7 +193,7 @@ export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
     const stepOffsetY = offsetY * (i + 1)
 
     const cloneOptions: CloneOptions = {
-      mode: 'copy',
+      mode,
       offsetX: stepOffsetX,
       offsetY: stepOffsetY,
       arrayGroupId,
@@ -258,7 +266,7 @@ export function makeArrayCmd(params: MakeArrayCmdParams): CloneArrayCommand {
   const { source, settings, timeline, allLayers } = params
 
   // 1. Compute transforms (pure math).
-  const transforms = resolveArrayTransforms(source, settings)
+  const transforms = resolveArrayTransforms(source, settings, allLayers)
 
   // 2. Build new layers.
   const factory = buildArrayLayers(source, transforms, settings, allLayers)
@@ -302,6 +310,114 @@ export function makeArrayCmd(params: MakeArrayCmdParams): CloneArrayCommand {
     result: {
       label,
       createdLayerIds: factory.newLayers.map((l) => l.id),
+      createdTrackTargets: newTracks.map((t) => t.target),
+      suggestedSelection: rootCloneIds,
+    },
+  }
+}
+
+// ── makeCloneAlignCmd (BL-59 Phase 2) ────────────────────────────────────────
+
+export interface MakeCloneAlignCmdParams {
+  source: Layer
+  targets: Layer[]
+  options: CloneAlignOptions
+  timeline: Timeline | null
+  allLayers: Layer[]
+  /** Defaults to true (kept for parity with Clone/Array commands). */
+  duplicateAnimation?: boolean
+}
+
+/**
+ * For each target, clone `source` and align the clone to the target's
+ * transform. Optionally deletes the target (replaceTarget). All ops in
+ * one atomic undo step.
+ */
+export function makeCloneAlignCmd(params: MakeCloneAlignCmdParams): CloneArrayCommand {
+  const {
+    source, targets, options, timeline, allLayers,
+    duplicateAnimation = true,
+  } = params
+
+  const specs = resolveCloneAlignSpecs(source, targets, options)
+  const arrayGroupId = `clonealign_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+  const isGroupSource = source.type === 'group'
+
+  const newLayers: Layer[] = []
+  const newTracks: Track[] = []
+  const layerMetadata: Record<string, CloneMetadata> = {}
+  const replaceCmds: EditorCommand[] = []
+
+  for (const spec of specs) {
+    const cloneOptions: CloneOptions = { mode: 'copy', arrayGroupId }
+
+    if (isGroupSource) {
+      const tree = cloneLayerTree(source, allLayers, cloneOptions)
+      // Apply alignment to the cloned root only.
+      tree.clonedRoot.transform = {
+        ...tree.clonedRoot.transform,
+        x: spec.position.x,
+        y: spec.position.y,
+        rotationDeg: spec.rotation,
+        scaleX: spec.scaleX,
+        scaleY: spec.scaleY,
+      }
+      tree.allClones[0] = tree.clonedRoot
+      for (const c of tree.allClones) newLayers.push(c)
+      for (const [id, meta] of Object.entries(tree.metadata)) {
+        layerMetadata[id] = meta
+      }
+      if (duplicateAnimation && timeline) {
+        const tracks = duplicateAnimationTracksForIdMap(timeline, tree.idMap)
+        for (const t of tracks) newTracks.push(t)
+      }
+    } else {
+      const { clonedLayer, idMap, metadata } = cloneSingleLayer(source, cloneOptions)
+      clonedLayer.transform = {
+        ...clonedLayer.transform,
+        x: spec.position.x,
+        y: spec.position.y,
+        rotationDeg: spec.rotation,
+        scaleX: spec.scaleX,
+        scaleY: spec.scaleY,
+      }
+      newLayers.push(clonedLayer)
+      layerMetadata[clonedLayer.id] = metadata
+      if (duplicateAnimation && timeline) {
+        const tracks = duplicateAnimationTracksForIdMap(timeline, idMap)
+        for (const t of tracks) newTracks.push(t)
+      }
+    }
+
+    // Replace target by deleting it (atomic undo restores it).
+    if (options.replaceTarget) {
+      replaceCmds.push(makeDeleteLayerCmd(spec.target))
+    }
+  }
+
+  const label = `Clone & Align "${source.name}" → ${specs.length} target${
+    specs.length === 1 ? '' : 's'
+  }`
+  const subCommands: EditorCommand[] = [
+    makeAddLayersBatchCmd(newLayers, `Add ${newLayers.length} aligned clone(s)`),
+    ...replaceCmds,
+  ]
+  if (timeline && newTracks.length > 0) {
+    subCommands.push(makeAddTracksCmd(timeline.id, newTracks))
+  }
+
+  const batch = makeBatchCmd(label, subCommands)
+
+  const rootCloneIds = newLayers
+    .filter((l) => l.parentId === source.parentId)
+    .map((l) => l.id)
+
+  return {
+    ...batch,
+    layerMetadata,
+    result: {
+      label,
+      createdLayerIds: newLayers.map((l) => l.id),
       createdTrackTargets: newTracks.map((t) => t.target),
       suggestedSelection: rootCloneIds,
     },

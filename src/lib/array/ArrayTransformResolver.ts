@@ -17,6 +17,7 @@ import type {
 import { solveLinear } from './LinearArraySolver'
 import { solveGrid } from './GridArraySolver'
 import { solveRadial } from './RadialArraySolver'
+import { solvePathArray } from './PathArraySolver'
 
 /**
  * Compute per-instance transforms for an array operation.
@@ -38,6 +39,7 @@ import { solveRadial } from './RadialArraySolver'
 export function resolveArrayTransforms(
   source: Layer,
   settings: ArraySettings,
+  allLayers: Layer[] = [],
 ): ArrayInstanceTransform[] {
   switch (settings.pattern) {
     case 'linear':
@@ -46,6 +48,8 @@ export function resolveArrayTransforms(
       return solveGrid(source, settings)
     case 'radial':
       return solveRadial(source, settings)
+    case 'path':
+      return solvePathArray(source, settings, allLayers)
   }
 }
 
@@ -58,6 +62,7 @@ export function countArrayInstances(settings: ArraySettings): number {
   switch (settings.pattern) {
     case 'linear':
     case 'radial':
+    case 'path':
       return Math.max(0, settings.count)
     case 'grid':
       return Math.max(0, settings.columns) * Math.max(0, settings.rows)
