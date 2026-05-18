@@ -15,6 +15,10 @@ interface Handlers {
   onShowHelp?: () => void
   onGroupSelected?: () => void
   onUngroupSelected?: () => void
+  /** BL-59 — Quick Clone with animation copy (Cmd/Ctrl + Alt + D). */
+  onCloneQuick?: () => void
+  /** BL-59 — Open Array dialog (Cmd/Ctrl + Shift + A). */
+  onOpenArrayModal?: () => void
   /** Single-key tool shortcuts (V/H/P/G/R/S/A). No-op if absent. */
   onToolChange?: (mode: ToolMode) => void
   frameRate?: number
@@ -31,6 +35,7 @@ export function useKeyboard(handlers: Handlers) {
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
+    onCloneQuick, onOpenArrayModal,
     onToolChange,
     frameRate: _frameRate = 60,
   } = handlers
@@ -68,7 +73,22 @@ export function useKeyboard(handlers: Handlers) {
       if ((e.key === 'Delete' || e.key === 'Backspace') && !meta) {
         e.preventDefault(); onDeleteSelected(); return
       }
-      if (meta && e.key === 'd') { e.preventDefault(); onDuplicateSelected(); return }
+      // BL-59 — Cmd/Ctrl + Alt + D = "Clone Quick" (richer than Duplicate:
+      // also copies animation tracks, atomic undo). Checked BEFORE the plain
+      // Cmd+D handler below so the altKey-modified variant wins.
+      if (meta && e.altKey && (e.key === 'd' || e.key === 'D' || e.key === '∂') && onCloneQuick) {
+        e.preventDefault(); onCloneQuick(); return
+      }
+      if (meta && e.key === 'd' && !e.altKey) {
+        e.preventDefault(); onDuplicateSelected(); return
+      }
+
+      // BL-59 — Cmd/Ctrl + Shift + A = open Array dialog.
+      // (Single-key A is the "anchor" tool shortcut — handled later in the
+      // tool-shortcut block; we skip it when a modifier is held.)
+      if (meta && e.shiftKey && (e.key === 'a' || e.key === 'A') && onOpenArrayModal) {
+        e.preventDefault(); onOpenArrayModal(); return
+      }
 
       // ── Copy / Paste keyframes ─────────────────────────────────────────
       if (meta && e.key === 'c' && onCopy)  { e.preventDefault(); onCopy();  return }
@@ -113,6 +133,7 @@ export function useKeyboard(handlers: Handlers) {
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
+    onCloneQuick, onOpenArrayModal,
     onToolChange,
   ])
 }

@@ -892,6 +892,9 @@ export default function BuilderPage() {
     onShowHelp: () => setShowHelp(true),
     onGroupSelected:   groupSelected,
     onUngroupSelected: ungroupSelected,
+    // BL-59 — Clone & Array shortcuts
+    onCloneQuick:      cloneQuick,
+    onOpenArrayModal:  openArrayModal,
     onToolChange:      setToolMode,
     frameRate,
   })
