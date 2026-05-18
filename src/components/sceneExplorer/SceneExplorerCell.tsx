@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react'
 import type { Layer, Timeline } from '@/lib/types'
 import type { CellKind } from '@/lib/sceneExplorer/sceneExplorerColumns'
+import type { LayerInfoCounts } from '@/lib/sceneExplorer/sceneExplorerModel'
 import ChoronoIcon from '@/components/ui/ChoronoIcon'
 import { LAYER_TYPE_ICON } from '@/lib/icons/iconMap'
 
@@ -28,6 +29,10 @@ interface Props {
   onToggleFlag: (field: 'locked' | 'hidden' | 'solo' | 'pinned') => void
   /** Animated-property count for the `tracks` cell — pre-computed by parent. */
   trackCount?: number
+  // BL-57 C-lite — info-row toggle for the layer name cell
+  infoCounts?: LayerInfoCounts
+  subInfoExpanded?: boolean
+  onToggleSubInfo?: () => void
 }
 
 export default function SceneExplorerCell(props: Props) {
@@ -50,7 +55,8 @@ export default function SceneExplorerCell(props: Props) {
 function NameCell(p: Props) {
   const { layer, depth, hasChildren, expanded, isEditing,
           editingValue, onSetEditingValue, onCommitRename, onCancelRename,
-          onBeginRename, onToggleExpand } = p
+          onBeginRename, onToggleExpand,
+          infoCounts, subInfoExpanded, onToggleSubInfo } = p
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -106,6 +112,24 @@ function NameCell(p: Props) {
         >
           {layer.name || layer.id}
         </span>
+      )}
+
+      {/* BL-57 C-lite — info-row toggle. Shows a compact summary badge
+          ("◆3 🧩2 ⛓1 🌑1") when the layer has any animation/effect/
+          constraint/mask. Click toggles the sub-info rows below. */}
+      {infoCounts && infoCounts.total > 0 && onToggleSubInfo && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleSubInfo() }}
+          title={subInfoExpanded ? 'Hide layer info' : 'Show layer info'}
+          className={`shrink-0 ml-1 px-1 py-0 text-[9px] font-mono rounded transition-colors
+            ${subInfoExpanded ? 'bg-blue-700/50 text-blue-100' : 'text-gray-500 hover:bg-gray-700 hover:text-gray-300'}`}
+        >
+          <span className="mr-0.5">{subInfoExpanded ? '▾' : '▸'}</span>
+          {infoCounts.tracks      > 0 && <span className="mr-0.5">◆{infoCounts.tracks}</span>}
+          {infoCounts.effects     > 0 && <span className="mr-0.5">🧩{infoCounts.effects}</span>}
+          {infoCounts.constraints > 0 && <span className="mr-0.5">⛓{infoCounts.constraints}</span>}
+          {infoCounts.masks       > 0 && <span>🌑{infoCounts.masks}</span>}
+        </button>
       )}
     </div>
   )

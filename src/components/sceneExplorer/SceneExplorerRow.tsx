@@ -21,6 +21,7 @@ import type {
   ColumnDefinition,
 } from '@/lib/sceneExplorer/sceneExplorerColumns'
 import type { SceneExplorerRow as Row } from '@/lib/sceneExplorer/sceneExplorerModel'
+import { getLayerInfoCounts } from '@/lib/sceneExplorer/sceneExplorerModel'
 import SceneExplorerCell, { countLayerTracks } from './SceneExplorerCell'
 
 export type DropZone = 'before' | 'after' | 'into'
@@ -62,6 +63,10 @@ interface Props {
 
   // Context menu (right-click). Panel owns the open/close state.
   onContextMenu?:   (id: string, clientX: number, clientY: number) => void
+
+  // BL-57 C-lite — per-layer sub-info toggle
+  subInfoExpanded?: boolean
+  onToggleSubInfo?: (id: string) => void
 }
 
 const ROW_HEIGHT = 22
@@ -75,6 +80,7 @@ export default function SceneExplorerRow(props: Props) {
     onSelect, onToggleExpand, onToggleFlag,
     onDragStart, onDragEnd, onDragOverRow, onDropOnRow,
     onContextMenu,
+    subInfoExpanded, onToggleSubInfo,
   } = props
 
   const ref = useRef<HTMLDivElement>(null)
@@ -90,6 +96,27 @@ export default function SceneExplorerRow(props: Props) {
     // no jolt when the user is just clicking around in the visible list.
     ref.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [isPrimary])
+
+  // BL-57 C-lite — Read-only info rows. Render a slim, non-interactive row
+  // with just an icon + label. No drag, no select, no context menu — keeps
+  // the sub-info pure diagnostics and shields the panel's drag/select logic
+  // from a row kind it wasn't designed for.
+  if (row.kind === 'info') {
+    return (
+      <div
+        role="row"
+        aria-label={`${row.infoKind} ${row.infoLabel}`}
+        style={{
+          height:       ROW_HEIGHT,
+          paddingLeft:  4 + row.depth * 12,
+        }}
+        className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 bg-gray-950/40 border-b border-gray-800/50 select-none"
+      >
+        <span className="w-3 inline-block text-center text-gray-500">{row.infoIcon}</span>
+        <span className="truncate">{row.infoLabel}</span>
+      </div>
+    )
+  }
 
   // Compute drop indicator state for THIS row
   const dropZone = dropTarget?.id === row.id ? dropTarget.zone : null
@@ -108,6 +135,8 @@ export default function SceneExplorerRow(props: Props) {
 
   // Track count for the optional tracks column
   const trackCount = countLayerTracks(timeline, row.layer.id)
+  // BL-57 C-lite — info-row counts for the NameCell badge
+  const infoCounts = getLayerInfoCounts(row.layer, timeline)
 
   return (
     <div
@@ -186,6 +215,9 @@ export default function SceneExplorerRow(props: Props) {
             onToggleExpand={onToggleExpand}
             onToggleFlag={onToggleFlag}
             trackCount={trackCount}
+            infoCounts={col.kind === 'name' ? infoCounts : undefined}
+            subInfoExpanded={subInfoExpanded}
+            onToggleSubInfo={onToggleSubInfo ? () => onToggleSubInfo(row.id) : undefined}
           />
         </div>
       ))}

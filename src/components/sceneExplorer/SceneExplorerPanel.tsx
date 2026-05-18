@@ -32,6 +32,7 @@ import BulkOperationsToolbar from './BulkOperationsToolbar'
 import LayerVisibilityPanel from './LayerVisibilityPanel'
 import SceneExplorerStatusBar from './SceneExplorerStatusBar'
 import QuickFilterChips from './QuickFilterChips'
+import SearchInput from './SearchInput'
 import { DEFAULT_VISIBILITY_FILTERS, type LayerVisibilityFilters } from '@/lib/sceneExplorer/visibilityFilters'
 
 interface Props {
@@ -81,6 +82,10 @@ export default function SceneExplorerPanel({
   // ── State ────────────────────────────────────────────────────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
   const [textFilter, setTextFilter]     = useState('')
+  // BL-57 C-lite — which layers have their info sub-rows expanded inline.
+  // Independent of `collapsedIds` so the user can hide group children but
+  // still inspect the layer's animation / effect roster.
+  const [subInfoExpandedIds, setSubInfoExpandedIds] = useState<Set<string>>(() => new Set())
 
   // Column visibility — persisted in localStorage (BL-53.7)
   const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(() => {
@@ -196,12 +201,13 @@ export default function SceneExplorerPanel({
   }, [sortState])
   const rows = useMemo(
     () => buildSceneExplorerRows(layers, {
-      collapsedIds, textFilter, sort: activeSort,
+      collapsedIds, subInfoExpandedIds, timeline,
+      textFilter, sort: activeSort,
       visibilityFilters,
       isAnimated: isLayerAnimated,
       hasEffects: doesLayerHaveEffects,
     }),
-    [layers, collapsedIds, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects],
+    [layers, collapsedIds, subInfoExpandedIds, timeline, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects],
   )
 
   // ── BL-58 Keyboard shortcuts ─────────────────────────────────────────────
@@ -292,6 +298,15 @@ export default function SceneExplorerPanel({
     })
   }, [])
 
+  // BL-57 C-lite — toggle the info-row group beneath a layer.
+  const toggleSubInfo = useCallback((id: string) => {
+    setSubInfoExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+
   const handleDragStart = useCallback((id: string) => {
     setDraggingId(id)
     dragDescendantsRef.current = collectDescendants(layers, id)
@@ -375,12 +390,10 @@ export default function SceneExplorerPanel({
           onFreezeSelection={onFreezeSelection}
           onUnfreezeSelection={onUnfreezeSelection}
         />
-        <input
-          type="text"
-          placeholder="Search…"
+        <SearchInput
           value={textFilter}
-          onChange={(e) => setTextFilter(e.target.value)}
-          className="ml-auto w-32 px-1.5 py-0.5 text-[10px] bg-gray-800 border border-gray-700 rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+          onChange={setTextFilter}
+          layers={layers}
         />
         <span className="text-[9px] font-mono text-gray-600 shrink-0">
           {rows.length}/{layers.length}
@@ -490,6 +503,8 @@ export default function SceneExplorerPanel({
               onDragOverRow={handleDragOverRow}
               onDropOnRow={handleDropOnRow}
               onContextMenu={contextHandlers ? handleOpenContextMenu : undefined}
+              subInfoExpanded={subInfoExpandedIds.has(row.id)}
+              onToggleSubInfo={toggleSubInfo}
             />
           ))
         )}
