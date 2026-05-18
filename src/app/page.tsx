@@ -1135,6 +1135,10 @@ export default function BuilderPage() {
                           ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
                           : undefined
                       }
+                      scene={scene}
+                      parameterWires={scene.parameterWires}
+                      onRequestNewWire={wireModal.openForTarget}
+                      onEditWire={wireModal.openForEdit}
                     />
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
