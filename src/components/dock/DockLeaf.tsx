@@ -8,6 +8,7 @@ interface Props {
   leaf: DockLeaf
   registry: PanelRegistry
   onTabSelect: (panelId: string) => void
+  onClosePanel?: (panelId: string) => void
   onToggleCollapse?: (next: boolean) => void
   /** Which side is the splitter on, so the collapse chevron points toward
    *  the panel content. 'h-right' = panel is to the LEFT of a vertical
@@ -22,7 +23,7 @@ const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
  * overlay (visible only while a drag is in progress).
  */
 export default function DockLeafComponent({
-  leaf, registry, onTabSelect, onToggleCollapse, collapseSide,
+  leaf, registry, onTabSelect, onClosePanel, onToggleCollapse, collapseSide,
 }: Props) {
   // NOTE on hook ordering — every hook below MUST be called on every
   // render, even when the leaf is collapsed. The early-return for the
@@ -142,19 +143,36 @@ export default function DockLeafComponent({
               key={pid}
               onPointerDown={(e) => {
                 if (e.button !== 0) return
+                // Ignore close button clicks
+                if ((e.target as HTMLElement).closest('[data-close-btn]')) return
                 // Always select on press; if the pointer crosses the drag
                 // threshold afterwards, dragContext promotes it to a real drag.
                 onTabSelect(pid)
                 beginDrag(pid, leaf.id, e)
               }}
-              className={`relative px-3 h-full flex items-center text-xs cursor-grab active:cursor-grabbing
-                border-r border-gray-700/60 select-none
+              className={`relative px-2 h-full flex items-center gap-1 text-xs cursor-grab active:cursor-grabbing
+                border-r border-gray-700/60 select-none group
                 ${isActive
                   ? 'bg-gray-900 text-gray-100 border-t-2 border-t-blue-500'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
               title="Drag to rearrange — drop on another panel's edge"
             >
               {def.title}
+              {onClosePanel && (
+                <button
+                  data-close-btn
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onClosePanel(pid)
+                  }}
+                  className="ml-0.5 w-4 h-4 flex items-center justify-center rounded
+                             text-gray-500 hover:text-gray-200 hover:bg-gray-700
+                             opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Close panel"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           )
         })}

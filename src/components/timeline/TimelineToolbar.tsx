@@ -1,6 +1,8 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
+import type { TimelineGhostSettings } from '@/lib/types/editor'
+import TimelineGhostControl from './TimelineGhostControl'
 
 interface Props {
   timelines: Timeline[]
@@ -26,6 +28,12 @@ interface Props {
   onModeChange: (mode: TimelineMode) => void
   /** Snapshot a subset of properties for the selected layer at the playhead. */
   onKeyframeProperties: (properties: string[]) => void
+  /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview) */
+  ghostSettings: TimelineGhostSettings
+  selectedLayerIds: Set<string>
+  onGhostUpdate: (patch: Partial<TimelineGhostSettings>) => void
+  onGhostToggle: () => void
+  onGhostPreset: (preset: 'off' | 'light' | 'medium' | 'heavy') => void
 }
 
 const KEYFRAME_PRESETS: Array<{ label: string; props: string[] }> = [
@@ -51,6 +59,8 @@ export default function TimelineToolbar(props: Props) {
     onPlayToggle, onSelectTimeline, onAddTimeline, onDeleteTimeline,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
     onModeChange, onKeyframeProperties,
+    ghostSettings, selectedLayerIds,
+    onGhostUpdate, onGhostToggle, onGhostPreset,
   } = props
 
   // ── Keyframe dropdown ───────────────────────────────────────────────────
@@ -165,6 +175,15 @@ export default function TimelineToolbar(props: Props) {
           </button>
         ))}
       </div>
+
+      {/* BL-56 — Ghost / Onion-Skin control */}
+      <TimelineGhostControl
+        ghostSettings={ghostSettings}
+        selectedLayerIds={selectedLayerIds}
+        onUpdateSettings={onGhostUpdate}
+        onToggle={onGhostToggle}
+        onApplyPreset={onGhostPreset}
+      />
 
       {/* Zoom slider (replaces cursor-anchored wheel zoom — see useTimelineViewport).
           Logarithmic mapping so 1× sits near the middle of the track. */}

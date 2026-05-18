@@ -153,7 +153,10 @@ export class CanvasRenderer {
     }
 
     ctx.save()
-    ctx.globalAlpha             *= Math.max(0, Math.min(1, opacity))
+    // BL-55 — Frozen layers render translucent so the user can see they're
+    // present but inactive. Half-opacity is the 3ds Max default.
+    const frozenMultiplier = layer.frozen ? 0.4 : 1
+    ctx.globalAlpha             *= Math.max(0, Math.min(1, opacity)) * frozenMultiplier
     ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) ?? 'source-over'
     ctx.filter                   = buildEffectsFilter(layer.effects)
 
@@ -325,6 +328,37 @@ export class CanvasRenderer {
     for (let y = 0; y <= h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y) }
     ctx.stroke()
     ctx.restore()
+  }
+
+  /**
+   * BL-56 — Render a SINGLE layer at the given overrides, used for ghost /
+   * onion-skin frames. Bypasses the scene-wide solo/hidden filter so the
+   * caller fully controls which layer is drawn.
+   *
+   * Caller is responsible for ctx.save() / ctx.restore() and globalAlpha
+   * adjustments (typically a multiplier for the ghost opacity).
+   */
+  renderSingleLayer(
+    ctx:        CanvasRenderingContext2D,
+    layer:      Layer,
+    scene:      ChronoScene,
+    assets:     AssetElementMap,
+    options: {
+      overrides?:   OverrideMap
+      paramValues?: ParamValueMap
+      timeMs:       number
+    },
+  ): void {
+    this.renderLayer(
+      ctx,
+      layer,
+      options.overrides   ?? new Map(),
+      options.paramValues ?? new Map(),
+      assets,
+      scene,
+      options.timeMs,
+      false, // never show selection outline on ghost frames
+    )
   }
 }
 

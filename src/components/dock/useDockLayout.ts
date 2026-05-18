@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 import type { DockNode, DockEdge } from './types'
 import {
   defaultLayout, dropPanel, dropPanelToRoot,
-  setActiveTab, setSplitRatio, setLeafCollapsed, isValidLayout,
+  setActiveTab, setSplitRatio, setLeafCollapsed, removePanel, addPanelToLayout, isValidLayout,
 } from './layoutOps'
 import { ROOT_LEAF_ID } from './DockOuterEdges'
 
@@ -15,6 +15,8 @@ interface DockLayoutReturn {
   dispatchTab:       (leafId: string, panelId: string) => void
   dispatchResize:    (splitId: string, ratio: number) => void
   dispatchCollapse:  (leafId: string, collapsed: boolean) => void
+  dispatchClosePanel: (panelId: string) => void
+  dispatchRestorePanel: (panelId: string) => void
   resetLayout:       () => void
 }
 
@@ -75,7 +77,15 @@ export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn
     setLayout((tree) => setLeafCollapsed(tree, leafId, collapsed))
   }, [])
 
+  const dispatchClosePanel = useCallback((panelId: string) => {
+    setLayout((tree) => removePanel(tree, panelId))
+  }, [])
+
+  const dispatchRestorePanel = useCallback((panelId: string) => {
+    setLayout((tree) => addPanelToLayout(tree, panelId))
+  }, [])
+
   const resetLayout = useCallback(() => setLayout(defaultLayout()), [])
 
-  return { layout, dispatchDrop, dispatchTab, dispatchResize, dispatchCollapse, resetLayout }
+  return { layout, dispatchDrop, dispatchTab, dispatchResize, dispatchCollapse, dispatchClosePanel, dispatchRestorePanel, resetLayout }
 }

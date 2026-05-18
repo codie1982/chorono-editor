@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import type { PanelRegistry } from '@/components/dock/registry'
+import type { DockNode } from '@/components/dock/types'
 
 interface FileMenuProps {
   /** Current scene filename (composition.id by default). */
@@ -12,6 +14,9 @@ interface FileMenuProps {
   onCopySceneJson: () => void
   onShowShortcuts: () => void
   onResetLayout:   () => void
+  panelRegistry?:  PanelRegistry
+  dockLayout?:     DockNode
+  onRestorePanel?: (panelId: string) => void
 }
 
 /**
@@ -19,9 +24,25 @@ interface FileMenuProps {
  * controlled by local state. Closes on outside click + Esc.
  */
 export default function FileMenu(props: FileMenuProps) {
-  const { filename } = props
+  const { filename, panelRegistry, dockLayout, onRestorePanel } = props
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Helper: get set of panel ids currently visible in the layout
+  function getVisiblePanelIds(): Set<string> {
+    const visible = new Set<string>()
+    if (!dockLayout) return visible
+
+    function walk(node: any) {
+      if (node.kind === 'leaf' && Array.isArray(node.panels)) {
+        node.panels.forEach((p: string) => visible.add(p))
+      } else if (node.kind === 'split' && Array.isArray(node.children)) {
+        node.children.forEach((child: any) => walk(child))
+      }
+    }
+    walk(dockLayout)
+    return visible
+  }
 
   // ── Close on outside click / Esc ────────────────────────────────────────
   useEffect(() => {
@@ -106,13 +127,63 @@ export default function FileMenu(props: FileMenuProps) {
 
           <div className={divider} />
 
-          {/* ── Layout ── */}
-          <div className={sectionLabel}>Layout</div>
-          <button className={item} onClick={() => { setOpen(false); props.onResetLayout() }}>
-            ⊞ Reset Panel Layout
-          </button>
+          {/* ── View / Panels ── */}
+          {panelRegistry && dockLayout && (
+            <>
+              <div className={sectionLabel}>View</div>
+              {(() => {
+                const visible = getVisiblePanelIds()
+                const hiddenPanels: Array<{ id: string; title: string }> = []
+                panelRegistry.forEach((def) => {
+                  if (!visible.has(def.id)) {
+                    hiddenPanels.push({ id: def.id, title: def.title })
+                  }
+                })
 
-          <div className={divider} />
+                if (hiddenPanels.length === 0) {
+                  return (
+                    <div className="px-3 py-1.5 text-xs text-gray-500">
+                      All panels visible
+                    </div>
+                  )
+                }
+
+                return hiddenPanels.map((panel) => (
+                  <button
+                    key={panel.id}
+                    className={item}
+                    onClick={() => {
+                      setOpen(false)
+                      onRestorePanel?.(panel.id)
+                    }}
+                  >
+                    + {panel.title}
+                  </button>
+                ))
+              })()}
+
+              <div className={divider} />
+
+              {/* ── Layout ── */}
+              <div className={sectionLabel}>Layout</div>
+              <button className={item} onClick={() => { setOpen(false); props.onResetLayout() }}>
+                ⊞ Reset Panel Layout
+              </button>
+
+              <div className={divider} />
+            </>
+          )}
+          {(!panelRegistry || !dockLayout) && (
+            <>
+              {/* ── Layout ── */}
+              <div className={sectionLabel}>Layout</div>
+              <button className={item} onClick={() => { setOpen(false); props.onResetLayout() }}>
+                ⊞ Reset Panel Layout
+              </button>
+
+              <div className={divider} />
+            </>
+          )}
 
           {/* ── Help ── */}
           <div className={sectionLabel}>Help</div>

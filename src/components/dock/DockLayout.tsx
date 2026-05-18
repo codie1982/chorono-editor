@@ -8,6 +8,7 @@ interface Props {
   node: DockNode
   registry: PanelRegistry
   onTabSelect: (leafId: string, panelId: string) => void
+  onClosePanel?: (panelId: string) => void
   onResize:    (splitId: string, ratio: number) => void
   onCollapse?: (leafId: string, collapsed: boolean) => void
   /** Forwarded by parent split so leaves know which side they're on. */
@@ -20,7 +21,7 @@ interface Props {
  *  - Leaf nodes  → DockLeafComponent (tabs + body + drop overlay)
  */
 export default function DockLayout({
-  node, registry, onTabSelect, onResize, onCollapse, collapseSide,
+  node, registry, onTabSelect, onClosePanel, onResize, onCollapse, collapseSide,
 }: Props) {
   if (node.kind === 'leaf') {
     return (
@@ -28,6 +29,7 @@ export default function DockLayout({
         leaf={node}
         registry={registry}
         onTabSelect={(panelId) => onTabSelect(node.id, panelId)}
+        onClosePanel={onClosePanel}
         onToggleCollapse={onCollapse
           ? (next) => onCollapse(node.id, next)
           : undefined}
@@ -40,6 +42,7 @@ export default function DockLayout({
       split={node}
       registry={registry}
       onTabSelect={onTabSelect}
+      onClosePanel={onClosePanel}
       onResize={onResize}
       onCollapse={onCollapse}
     />
@@ -50,13 +53,14 @@ interface SplitProps {
   split: DockSplit
   registry: PanelRegistry
   onTabSelect: (leafId: string, panelId: string) => void
+  onClosePanel?: (panelId: string) => void
   onResize:    (splitId: string, ratio: number) => void
   onCollapse?: (leafId: string, collapsed: boolean) => void
 }
 
 const COLLAPSED_PX = 24
 
-function DockSplitComponent({ split, registry, onTabSelect, onResize, onCollapse }: SplitProps) {
+function DockSplitComponent({ split, registry, onTabSelect, onClosePanel, onResize, onCollapse }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   /** Suspends the size CSS transition while the user is actively dragging
    *  the splitter so the panel tracks the cursor with zero lag. */
@@ -129,6 +133,7 @@ function DockSplitComponent({ split, registry, onTabSelect, onResize, onCollapse
           node={a}
           registry={registry}
           onTabSelect={onTabSelect}
+          onClosePanel={onClosePanel}
           onResize={onResize}
           onCollapse={onCollapse}
           collapseSide={aSide}
@@ -156,6 +161,7 @@ function DockSplitComponent({ split, registry, onTabSelect, onResize, onCollapse
           node={b}
           registry={registry}
           onTabSelect={onTabSelect}
+          onClosePanel={onClosePanel}
           onResize={onResize}
           onCollapse={onCollapse}
           collapseSide={bSide}

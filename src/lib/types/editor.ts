@@ -94,6 +94,34 @@ export interface TimelineSettings {
   playbackSpeed: number
 }
 
+// ── Timeline Ghost/Onion Skin Settings ────────────────────────────────────────
+
+/** Ghost frame rendering settings for timeline playhead-relative visualization.
+ *  This is transient UI state, not persisted. */
+export interface TimelineGhostSettings {
+  /** Enable ghost frame visualization */
+  enabled: boolean
+  /** Show ghost frames for 'all' animated layers or 'selected' layers only */
+  scope: 'all' | 'selected'
+  /** Number of frames before playhead to show */
+  beforeFrames: number
+  /** Number of frames after playhead to show */
+  afterFrames: number
+  /** Opacity of ghost frames (0–100, typically 20–50) */
+  opacity: number
+  /** Frame rate for ghost interpolation (default 30 fps) */
+  fps?: number
+}
+
+export const DEFAULT_TIMELINE_GHOST_SETTINGS: TimelineGhostSettings = {
+  enabled: false,
+  scope: 'selected',
+  beforeFrames: 5,
+  afterFrames: 5,
+  opacity: 30,
+  fps: 30,
+}
+
 export const DEFAULT_TIMELINE_SETTINGS: TimelineSettings = {
   autoKeyframe: false,
   autoKeyMode: 'manual',

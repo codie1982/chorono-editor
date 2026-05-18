@@ -18,14 +18,18 @@ import { useAssetCache }       from './hooks/useAssetCache'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
+import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
+  makeBulkUpdateLayersCmd, makeBulkToggleFlagCmd,
+  makeIsolateLayersCmd, makeShowAllLayersCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
+import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
@@ -46,7 +50,7 @@ import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
 import { useDockLayout } from '@/components/dock/useDockLayout'
-import { makeRegistry, type PanelDefinition } from '@/components/dock/registry'
+import { makeRegistry, type PanelDefinition, type PanelRegistry } from '@/components/dock/registry'
 import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 import AIPanel                from '@/components/AIPanel'
@@ -124,7 +128,7 @@ export default function BuilderPage() {
   // AND requires every id here to be present in the tree. Keep in sync
   // with the registry below.
   const dock = useDockLayout([
-    'layers', 'canvas', 'properties', 'timeline', 'curveEditor',
+    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
     'parameters', 'events', 'motionBinding', 'runtimePreview', 'assets', 'snap',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
@@ -352,7 +356,7 @@ export default function BuilderPage() {
     if (selectedLayerId === id) selectLayer(null)
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
-  const toggleLayerFlag = useCallback((id: string, field: 'locked' | 'hidden' | 'solo') => {
+  const toggleLayerFlag = useCallback((id: string, field: 'locked' | 'hidden' | 'solo' | 'pinned') => {
     dispatchCommand(makeToggleLayerCmd(id, field))
   }, [dispatchCommand])
 
@@ -709,6 +713,19 @@ export default function BuilderPage() {
     currentTimeMs, dispatchCommand,
   })
 
+  // ── BL-56 Timeline Ghost / Onion-Skin (page-level state so SceneCanvas
+  //    and TimelinePanel both read from the same source of truth) ─────────
+  const {
+    ghostSettings,
+    updateGhostSettings,
+    toggleGhost,
+    applyPreset: applyGhostPreset,
+  } = useTimelineGhost()
+  const selectedTimelineForGhost = useMemo(
+    () => scene.timelines.find((t) => t.id === selectedTlId) ?? null,
+    [scene.timelines, selectedTlId],
+  )
+
   // ── Bulk delete selected keyframes (single undo step) ───────────────────
   const deleteSelectedKeyframes = useCallback(() => {
     if (selectedKfIds.size === 0) return false
@@ -753,6 +770,28 @@ export default function BuilderPage() {
     frameRate,
   })
 
+  // ── Lightweight panel registry (just id/title) for FileMenu ────────────────
+  // FileMenu only reads id+title for its "restore hidden panel" submenu, but
+  // its prop type is the full PanelRegistry (Map<string, PanelDefinition>),
+  // so we provide a placeholder render so the type checks.
+  const panelRegistry = useMemo<PanelRegistry>(() => {
+    const defs: PanelDefinition[] = [
+      { id: 'layers',         title: 'Layers',         render: () => null },
+      { id: 'sceneExplorer',  title: 'Scene Explorer', render: () => null },
+      { id: 'canvas',         title: 'Canvas',         render: () => null },
+      { id: 'properties',     title: 'Properties',     render: () => null },
+      { id: 'timeline',       title: 'Timeline',       render: () => null },
+      { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
+      { id: 'parameters',     title: 'Parameters',     render: () => null },
+      { id: 'events',         title: 'Events',         render: () => null },
+      { id: 'motionBinding',  title: 'Bindings',       render: () => null },
+      { id: 'runtimePreview', title: 'Preview',        render: () => null },
+      { id: 'assets',         title: 'Assets',         render: () => null },
+      { id: 'snap',           title: 'Snap',           render: () => null },
+    ]
+    return makeRegistry(defs)
+  }, [])
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
@@ -769,6 +808,9 @@ export default function BuilderPage() {
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
+          panelRegistry={panelRegistry}
+          dockLayout={dock.layout}
+          onRestorePanel={dock.dispatchRestorePanel}
         />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
@@ -868,6 +910,7 @@ export default function BuilderPage() {
           🤖 AI
         </button>
 
+        {/* Panel registry is created below — passed here via context/props */}
         {/* Primary export — rest live inside FileMenu */}
         <button
           onClick={() => setShowJson(true)}
@@ -911,6 +954,83 @@ export default function BuilderPage() {
                     onToggleFlag={toggleLayerFlag}
                     onApplyStagger={applyStaggeredPreset}
                     onRename={renameLayer}
+                  />
+                ),
+              },
+              {
+                // BL-52 — Scene Explorer (column-aware successor to LayerPanel).
+                // Kept side-by-side with LayerPanel so users can A/B during the
+                // foundation phase. BL-58 will remove the old LayerPanel entry.
+                id: 'sceneExplorer', title: 'Scene Explorer',
+                render: () => (
+                  <SceneExplorerPanel
+                    layers={scene.layers}
+                    timeline={selectedTimelineForGhost}
+                    selectedId={selectedLayerId}
+                    selectedIds={selectedLayerIds}
+                    onSelect={(id, shift, _meta) => selectLayer(id, shift)}
+                    onRename={renameLayer}
+                    onToggleFlag={toggleLayerFlag}
+                    onMoveInTree={moveLayerInTree}
+                    onGroupWith={groupLayersByDrop}
+                    onClearSelection={() => selectLayer(null)}
+                    contextHandlers={{
+                      // Rename re-uses the inline editor — selecting the
+                      // layer first lets the panel know which row to put
+                      // into edit mode (handled inside the panel via key).
+                      rename: (id) => { selectLayer(id); /* panel's "rename" entry triggers F2-style edit in BL-58 polish */ },
+                      duplicate: (id) => {
+                        const orig = scene.layers.find((l) => l.id === id)
+                        if (!orig) return
+                        const next = cloneLayerForDuplicate(orig)
+                        next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
+                        if (next.startMs != null) next.startMs += 100
+                        if (next.endMs   != null) next.endMs   += 100
+                        dispatchCommand(makeDuplicateLayerCmd(orig, next))
+                      },
+                      deleteLayers: (ids) => ids.forEach((id) => deleteLayer(id)),
+                      groupLayers: (ids) => {
+                        if (ids.length === 0) return
+                        // groupSelected uses the selection state directly,
+                        // so make sure it matches what the menu opened on.
+                        setSelectedLayerIds(new Set(ids))
+                        setSelectedLayer(ids[0])
+                        groupSelected()
+                      },
+                      ungroupGroup: (id) => {
+                        if (selectedLayerId !== id) selectLayer(id)
+                        ungroupSelected()
+                      },
+                      setColorLabel: (ids, color) => {
+                        dispatchCommand(makeBulkUpdateLayersCmd(ids, { colorLabel: color ?? undefined }, color ? 'Set color label' : 'Clear color label'))
+                      },
+                      bulkToggleFlag: (ids, field, nextValue) => {
+                        dispatchCommand(makeBulkToggleFlagCmd(ids, field, nextValue))
+                      },
+                      isolate: (ids) => dispatchCommand(makeIsolateLayersCmd(ids)),
+                      showAll: () => dispatchCommand(makeShowAllLayersCmd()),
+                    }}
+                    onFreezeSelection={() => {
+                      const ids = Array.from(selectedLayerIds.size > 0
+                        ? selectedLayerIds
+                        : selectedLayerId ? [selectedLayerId] : [])
+                      if (ids.length > 0) dispatchCommand(makeBulkUpdateLayersCmd(ids, { frozen: true }, 'Freeze'))
+                    }}
+                    onUnfreezeSelection={() => {
+                      const ids = Array.from(selectedLayerIds.size > 0
+                        ? selectedLayerIds
+                        : selectedLayerId ? [selectedLayerId] : [])
+                      if (ids.length > 0) dispatchCommand(makeBulkUpdateLayersCmd(ids, { frozen: false }, 'Unfreeze'))
+                    }}
+                    isLayerAnimated={(layer) => {
+                      const tl = selectedTimelineForGhost
+                      if (!tl) return false
+                      const prefix = `layers.${layer.id}.`
+                      return tl.tracks.some((t) => t.target.startsWith(prefix) && t.keyframes.length > 0)
+                    }}
+                    doesLayerHaveEffects={(layer) =>
+                      (layer.effectsChain?.length ?? 0) > 0 || (layer.masks?.length ?? 0) > 0
+                    }
                   />
                 ),
               },
@@ -967,6 +1087,8 @@ export default function BuilderPage() {
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}
+                    ghostSettings={ghostSettings}
+                    selectedTimeline={selectedTimelineForGhost}
                     menuHandlers={{
                       cut:        cutSelectedLayers,
                       copy:       copySelectedLayers,
@@ -1045,6 +1167,10 @@ export default function BuilderPage() {
                       onPlaybackSpeedChange={setPlaybackSpeed}
                       onPlaySegment={(tlId, segId, loop) => runtime.playSegment(tlId, segId, loop)}
                       activeSegmentId={runtime.segmentState?.segmentId ?? null}
+                      ghostSettings={ghostSettings}
+                      onGhostUpdate={updateGhostSettings}
+                      onGhostToggle={toggleGhost}
+                      onGhostPreset={applyGhostPreset}
                     />
                   </div>
                 ),
@@ -1123,6 +1249,7 @@ export default function BuilderPage() {
                 node={dock.layout}
                 registry={registry}
                 onTabSelect={dock.dispatchTab}
+                onClosePanel={dock.dispatchClosePanel}
                 onResize={dock.dispatchResize}
                 onCollapse={dock.dispatchCollapse}
               />
