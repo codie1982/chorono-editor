@@ -475,7 +475,12 @@ export default function PropertiesPanel({
               <Section title="Geometry">
                 {/* Polygon & Star — sides */}
                 {(layer.shapeKind === 'polygon' || layer.shapeKind === 'star') && (
-                  <Field label={layer.shapeKind === 'star' ? 'Points' : 'Sides'}>
+                  <ParamBindButton
+                    label={layer.shapeKind === 'star' ? 'Points' : 'Sides'}
+                    layer={layer} propertyPath="shapeParams.sides"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('shapeParams.sides', id)}
+                  >
                     <NumInput
                       value={layer.shapeParams?.sides ?? (layer.shapeKind === 'star' ? 5 : 6)}
                       min={3} max={12} step={1}
@@ -483,55 +488,75 @@ export default function PropertiesPanel({
                         shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, sides: v },
                       })}
                     />
-                  </Field>
+                  </ParamBindButton>
                 )}
 
                 {/* Star — inner / outer radius */}
                 {layer.shapeKind === 'star' && (
                   <Row2>
-                    <Field label="Outer R">
+                    <ParamBindButton
+                      label="Outer R" layer={layer} propertyPath="shapeParams.outerRadius"
+                      acceptedTypes={['number']} parameters={parameters}
+                      onBind={(id) => bindParam('shapeParams.outerRadius', id)}
+                    >
                       <NumInput value={layer.shapeParams?.outerRadius ?? 60} min={1}
                         onChange={(v) => update({
                           shapeParams: { ...(layer.shapeParams ?? { kind: 'star' }), kind: 'star', outerRadius: v },
                         })} />
-                    </Field>
-                    <Field label="Inner R">
+                    </ParamBindButton>
+                    <ParamBindButton
+                      label="Inner R" layer={layer} propertyPath="shapeParams.innerRadius"
+                      acceptedTypes={['number']} parameters={parameters}
+                      onBind={(id) => bindParam('shapeParams.innerRadius', id)}
+                    >
                       <NumInput value={layer.shapeParams?.innerRadius ?? 27} min={1}
                         onChange={(v) => update({
                           shapeParams: { ...(layer.shapeParams ?? { kind: 'star' }), kind: 'star', innerRadius: v },
                         })} />
-                    </Field>
+                    </ParamBindButton>
                   </Row2>
                 )}
 
                 {/* Polygon & Star — roundness */}
                 {(layer.shapeKind === 'polygon' || layer.shapeKind === 'star') && (
-                  <Field label="Roundness (0-1)">
+                  <ParamBindButton
+                    label="Roundness (0-1)" layer={layer} propertyPath="shapeParams.roundness"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('shapeParams.roundness', id)}
+                  >
                     <NumInput value={layer.shapeParams?.roundness ?? 0} min={0} max={1} step={0.05}
                       onChange={(v) => update({
                         shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, roundness: v },
                       })} />
-                  </Field>
+                  </ParamBindButton>
                 )}
 
                 {/* Ring & Arc — angles */}
                 {(layer.shapeKind === 'ring' || layer.shapeKind === 'arc') && (
                   <>
                     <Row2>
-                      <Field label="Start °">
+                      <ParamBindButton
+                        label="Start °" layer={layer} propertyPath="shapeParams.startAngle"
+                        acceptedTypes={['number']} parameters={parameters}
+                        onBind={(id) => bindParam('shapeParams.startAngle', id)}
+                      >
                         <NumInput value={layer.shapeParams?.startAngle ?? (layer.shapeKind === 'arc' ? -90 : 0)}
                           min={-360} max={360} step={1}
                           onChange={(v) => update({
                             shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, startAngle: v },
                           })} />
-                      </Field>
-                      <Field label="End °">
+                      </ParamBindButton>
+                      <ParamBindButton
+                        label="End °" layer={layer} propertyPath="shapeParams.endAngle"
+                        acceptedTypes={['number']} parameters={parameters}
+                        onBind={(id) => bindParam('shapeParams.endAngle', id)}
+                      >
                         <NumInput value={layer.shapeParams?.endAngle ?? (layer.shapeKind === 'arc' ? 90 : 360)}
                           min={-360} max={360} step={1}
                           onChange={(v) => update({
                             shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, endAngle: v },
                           })} />
-                      </Field>
+                      </ParamBindButton>
                     </Row2>
                     {layer.shapeKind === 'ring' && (
                       <Field label="Inner Radius">
