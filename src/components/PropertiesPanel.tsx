@@ -10,6 +10,7 @@ import {
   togglePathClosed, reversePath,
 } from '@/lib/path/pathOps'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
+import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 
@@ -222,6 +223,16 @@ export default function PropertiesPanel({
   const updateTransform = (key: keyof Layer['transform'], val: number) =>
     layer && update({ transform: { ...layer.transform, [key]: val } })
 
+  // BL-69 — Update the layer's paramBindings map. Null clears the binding.
+  // Omits the field entirely when empty so the scene stays JSON-clean.
+  const bindParam = (propertyPath: string, paramId: string | null) => {
+    if (!layer) return
+    const next = { ...(layer.paramBindings ?? {}) }
+    if (paramId) next[propertyPath] = paramId
+    else          delete next[propertyPath]
+    update({ paramBindings: Object.keys(next).length ? next : undefined })
+  }
+
   // Active section tab. Resets to first tab when selection changes layer kind.
   const [activeTab, setActiveTab] = useState<PropTab>('properties')
 
@@ -411,7 +422,14 @@ export default function PropertiesPanel({
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
-                <Field label="Fill Color">
+                <ParamBindButton
+                  label="Fill Color"
+                  layer={layer}
+                  propertyPath="style.fill.color"
+                  acceptedTypes={['color', 'string']}
+                  parameters={parameters}
+                  onBind={(id) => bindParam('style.fill.color', id)}
+                >
                   <ColorInput value={layer.style.fill?.color ?? '#000000'}
                     onChange={(v) => update({
                       style: {
@@ -419,7 +437,7 @@ export default function PropertiesPanel({
                         fill: { type: 'solid', ...layer.style!.fill, color: v },
                       },
                     })} />
-                </Field>
+                </ParamBindButton>
                 {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
                   <Field label="Corner Radius">
                     <NumInput value={layer.style.cornerRadius ?? 0} min={0}
@@ -628,13 +646,20 @@ export default function PropertiesPanel({
             {layer.type === 'shape' && (
               <Section title="Stroke">
                 <Row2>
-                  <Field label="Color">
+                  <ParamBindButton
+                    label="Color"
+                    layer={layer}
+                    propertyPath="style.stroke.color"
+                    acceptedTypes={['color', 'string']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('style.stroke.color', id)}
+                  >
                     <ColorInput value={layer.style?.stroke?.color ?? '#FFFFFF'}
                       onChange={(v) => update({
                         style: { ...(layer.style ?? {}),
                           stroke: { width: 2, ...(layer.style?.stroke ?? {}), color: v } },
                       })} />
-                  </Field>
+                  </ParamBindButton>
                   <Field label="Width">
                     <NumInput value={layer.style?.stroke?.width ?? 0} min={0} max={100}
                       onChange={(v) => update({
@@ -865,7 +890,14 @@ export default function PropertiesPanel({
             {/* ── Text özellikleri ──────────────────────────────────── */}
             {layer.type === 'text' && layer.text && (
               <Section title="Text">
-                <Field label="Content">
+                <ParamBindButton
+                  label="Content"
+                  layer={layer}
+                  propertyPath="text.value"
+                  acceptedTypes={['string']}
+                  parameters={parameters}
+                  onBind={(id) => bindParam('text.value', id)}
+                >
                   <input
                     type="text"
                     value={layer.text.value}
@@ -873,17 +905,24 @@ export default function PropertiesPanel({
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
                                focus:outline-none focus:border-blue-500"
                   />
-                </Field>
+                </ParamBindButton>
                 <Row2>
                   <Field label="Font Size">
                     <NumInput value={layer.text.fontSize} min={4}
                       onChange={(v) => update({ text: { ...layer.text!, fontSize: v } })} />
                   </Field>
-                  <Field label="Color">
+                  <ParamBindButton
+                    label="Color"
+                    layer={layer}
+                    propertyPath="text.color"
+                    acceptedTypes={['color', 'string']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('text.color', id)}
+                  >
                     <input type="color" value={layer.text.color}
                       onChange={(e) => update({ text: { ...layer.text!, color: e.target.value } })}
                       className="w-full h-7 rounded border border-gray-600 bg-transparent cursor-pointer p-0.5" />
-                  </Field>
+                  </ParamBindButton>
                 </Row2>
               </Section>
             )}
