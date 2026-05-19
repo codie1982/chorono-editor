@@ -51,6 +51,10 @@ export function setActiveTab(tree: DockNode, leafId: string, panelId: string): D
     if (n.kind !== 'leaf' || n.id !== leafId) return n
     const idx = n.panels.indexOf(panelId)
     if (idx < 0) return n
+    // Identity-preserve when no actual change — keeps consumers' useEffect /
+    // useMemo deps stable and prevents redundant re-renders when callers
+    // dispatch a no-op tab switch.
+    if (idx === n.activeIndex) return n
     return { ...n, activeIndex: idx }
   })
 }

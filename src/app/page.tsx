@@ -25,7 +25,9 @@ import {
   makeBulkUpdateLayersCmd, makeBulkToggleFlagCmd,
   makeIsolateLayersCmd, makeShowAllLayersCmd,
 } from '@/lib/editor/commands-layer'
-import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
+import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
+import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
+import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
@@ -91,7 +93,7 @@ function makeDemoScene(): ChronoScene {
   s.layers = [card, label]
 
   const tl = newTimeline()
-  Object.assign(tl, { id: 'intro', durationMs: 600, autoplay: true })
+  Object.assign(tl, { id: 'intro', durationMs: 600, autoplay: true, layerIds: ['card', 'label'] })
   tl.tracks = [
     {
       target: 'layers.card.opacity',
@@ -199,11 +201,19 @@ export default function BuilderPage() {
   // Auto-switch the right-hand dock column to the Particle tab whenever the
   // user selects a particleEmitter layer — saves an extra click. Switching
   // BACK to Properties is left to the user (no auto-revert on deselection).
+  //
+  // ⚠️ Critical: depend on `dispatchTab` (stable — wrapped in useCallback([])
+  // inside the hook), NOT on the wrapping `dock` object. `useDockLayout()`
+  // returns a fresh object literal every render, so including `dock` as a
+  // dep would re-fire this effect on every tab click: user clicks Properties
+  // → layout state updates → dock ref changes → effect re-runs → snaps the
+  // tab back to Particle → user can't escape the panel. Bug fix.
+  const { dispatchTab } = dock
   useEffect(() => {
     if (selectedLayer?.type === 'particleEmitter') {
-      dock.dispatchTab('properties-leaf', 'particles')
+      dispatchTab('properties-leaf', 'particles')
     }
-  }, [selectedLayer?.id, selectedLayer?.type, dock])
+  }, [selectedLayer?.id, selectedLayer?.type, dispatchTab])
 
   // ── Asset cache: loads images/videos referenced in scene.assets ──────────
   const assetCache = useAssetCache(scene.assets)
@@ -285,7 +295,56 @@ export default function BuilderPage() {
     const l = def.createDefault()
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
+    // BL-66: paths start empty — auto-switch to Pen tool so the next click
+    // on the canvas places the first anchor.
+    if (kind === 'bezierPath' || kind === 'motionPath') {
+      setToolMode('pen')
+    }
   }, [dispatchCommand, selectLayer])
+
+  /**
+   * BL-67 — Assign a path layer as another layer's motion path.
+   *
+   * Seeds two keyframes on `followPath.progress` (0 at startMs → 1 at endMs)
+   * so the motion plays back AND shows up as an editable curve on the
+   * timeline. Users can drag the keyframes, change easing, or delete them
+   * to keep the layer static at a single progress value.
+   *
+   * The whole binding + both keyframes collapse to a single undo entry.
+   */
+  const assignMotionPathToLayer = useCallback((
+    targetLayerId: string,
+    pathLayerId: string,
+  ) => {
+    const target = scene.layers.find((l) => l.id === targetLayerId)
+    if (!target) return
+    const tl = scene.timelines[0]
+    if (!tl) return
+    const startMs = target.startMs ?? 0
+    const endMs   = target.endMs   ?? tl.durationMs
+    const prev = target
+    const next: Layer = {
+      ...target,
+      followPath: {
+        ...target.followPath,
+        pathLayerId,
+        progress: 0,
+      },
+    }
+    const trackTarget = `layers.${targetLayerId}.followPath.progress`
+    const cmdLayer = makeUpdateLayerCmd(targetLayerId, next, prev)
+    const cmdKf0   = makeAddKfCmd(tl.id, trackTarget, {
+      id: nextKfId(), timeMs: startMs, value: 0, easing: { type: 'linear' },
+    })
+    const cmdKf1   = makeAddKfCmd(tl.id, trackTarget, {
+      id: nextKfId(), timeMs: endMs,   value: 1, easing: { type: 'linear' },
+    })
+    dispatchCommand({
+      label: 'Assign Motion Path',
+      execute: (s) => cmdKf1.execute(cmdKf0.execute(cmdLayer.execute(s))),
+      undo:    (s) => cmdLayer.undo(cmdKf0.undo(cmdKf1.undo(s))),
+    })
+  }, [scene.layers, scene.timelines, dispatchCommand])
 
   /**
    * Probe an asset file via a hidden element to get its natural dimensions
@@ -760,6 +819,43 @@ export default function BuilderPage() {
 
   // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
   const [toolMode, setToolMode] = useState<ToolMode>('select')
+
+  // BL-67 — Motion path pick mode. When non-null, the next click on a
+  // dashed path overlay assigns that path as the target layer's followPath
+  // and auto-creates a progress 0→1 animation.
+  const [pathPickMode, setPathPickMode] = useState<{ targetLayerId: string } | null>(null)
+
+  // Escape leaves pick mode.
+  useEffect(() => {
+    if (!pathPickMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPathPickMode(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pathPickMode])
+
+  // BL-66 — Pen Tool keyboard handling
+  //   • Enter         → finish drawing (keep open path, switch back to select)
+  //   • Escape        → cancel drawing: delete the in-progress path layer if it
+  //                     has < 2 anchors, otherwise just exit pen mode
+  useEffect(() => {
+    if (toolMode !== 'pen') return
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.key !== 'Enter' && e.key !== 'Escape') return
+      e.preventDefault()
+      const sel = scene.layers.find(l => l.id === selectedLayerId)
+      if (e.key === 'Escape' && sel?.type === 'path' && (sel.path?.anchors.length ?? 0) < 2) {
+        dispatchCommand(makeDeleteLayerCmd(sel))
+        selectLayer(null)
+      }
+      setToolMode('select')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toolMode, scene.layers, selectedLayerId, dispatchCommand, selectLayer])
   // BL-60 Faz 3 — canvas selection containment mode (only matters with a
   // selection tool active). Default 'touching' = Figma-style permissive.
   const [selectionContainMode, setSelectionContainMode] = useState<SelectionContainMode>('touching')
@@ -1127,6 +1223,25 @@ export default function BuilderPage() {
                     onToggleFlag={toggleLayerFlag}
                     onApplyStagger={applyStaggeredPreset}
                     onRename={renameLayer}
+                    timelineLayerIds={selectedTimelineForGhost?.layerIds}
+                    onToggleInTimeline={(layerId) => {
+                      if (!selectedTlId) return
+                      const tl = scene.timelines.find((t) => t.id === selectedTlId)
+                      if (!tl || tl.layerIds === undefined) return
+                      const cmd = tl.layerIds.includes(layerId)
+                        ? makeRemoveLayerFromTimelineCmd(selectedTlId, layerId)
+                        : makeAddLayerToTimelineCmd(selectedTlId, layerId)
+                      dispatchCommand(cmd)
+                    }}
+                    onDuplicate={(layerId) => {
+                      const orig = scene.layers.find((l) => l.id === layerId)
+                      if (!orig) return
+                      const next = cloneLayerForDuplicate(orig)
+                      next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
+                      if (next.startMs != null) next.startMs += 100
+                      if (next.endMs   != null) next.endMs   += 100
+                      dispatchCommand(makeDuplicateLayerCmd(orig, next))
+                    }}
                   />
                 ),
               },
@@ -1256,6 +1371,7 @@ export default function BuilderPage() {
                     panMode={toolMode === 'pan'}
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
+                    onToolModeChange={setToolMode}
                     snap={snap}
                     onSelectByGeometry={(ids, mode) => {
                       // BL-60 Faz 3 — canvas selection tools commit. Plain
@@ -1280,6 +1396,12 @@ export default function BuilderPage() {
                     onAfterLayerCommit={autoKeyChangedProps}
                     ghostSettings={ghostSettings}
                     selectedTimeline={selectedTimelineForGhost}
+                    pathPickMode={pathPickMode}
+                    onAssignPath={(targetId, pathId) => {
+                      assignMotionPathToLayer(targetId, pathId)
+                      setPathPickMode(null)
+                    }}
+                    onExitPathPickMode={() => setPathPickMode(null)}
                     menuHandlers={{
                       cut:        cutSelectedLayers,
                       copy:       copySelectedLayers,
@@ -1298,6 +1420,10 @@ export default function BuilderPage() {
                       alignTop:    () => alignSelected('top'),
                       alignMiddle: () => alignSelected('middle'),
                       alignBottom: () => alignSelected('bottom'),
+                      // BL-67 — Pick mode: next path clicked on canvas becomes this layer's motion guide.
+                      assignMotionPath: selectedLayerId
+                        ? () => setPathPickMode({ targetLayerId: selectedLayerId })
+                        : undefined,
                       // BL-24 fix: Convert to Spline shape nesnelerinde gösterilmez.
                       // Shape'ler parametrik kalmalı; spline dönüşümü gerekirse ileride
                       // sadece bezierPath layer'ı için ayrı bir akış olur.
