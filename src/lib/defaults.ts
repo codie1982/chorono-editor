@@ -552,6 +552,96 @@ export function cloneLayerForDuplicate<L extends Layer>(layer: L): L {
   return cloned
 }
 
+// ── Particle Emitter factory (BL-13) ─────────────────────────────────────────
+
+export function newParticleEmitterLayer(): Layer {
+  layerCounter++
+  // Inline the magicDust default config to avoid circular import with
+  // the preset registry (which imports defaults.ts indirectly).
+  // The full preset is loaded by bootstrap; here we just embed defaults.
+  return {
+    id:   `particleEmitter_${layerCounter}`,
+    name: `Particles ${layerCounter}`,
+    type: 'particleEmitter',
+    transform: {
+      x: 90 + (layerCounter % 5) * 20,
+      y: 90 + (layerCounter % 5) * 20,
+      scaleX: 1, scaleY: 1,
+      rotationDeg: 0,
+      anchorX: 0, anchorY: 0,
+    },
+    opacity: 1,
+    // size: 0×0 — the renderer draws particles in layer-local space; the
+    // size field is only used for hit-testing fallback (24×24 bounding box
+    // assigned by CanvasRenderer when size is missing or zero).
+    size: { width: 0, height: 0 },
+    particleEmitter: {
+      mode: 'simple',
+      emitter: {
+        mode:          'continuous',
+        shape:         'circle',
+        area:          { radius: 20 },
+        ratePerSecond: 25,
+        maxParticles:  80,
+        durationMs:    2000,
+        loop:          true,
+      },
+      particle: {
+        shape:     'circle',
+        size:      { min: 3, max: 8 },
+        colorMode: 'gradientOverLife',
+        colorOverLife: {
+          stops: [
+            { t: 0,   value: { r: 180, g: 100, b: 255, a: 255 } },
+            { t: 0.5, value: { r: 80,  g: 180, b: 255, a: 255 } },
+            { t: 1,   value: { r: 255, g: 200, b: 80,  a: 0   } },
+          ],
+        },
+      },
+      animation: {
+        lifetimeMs:     { min: 800, max: 1600 },
+        positionOffset: {
+          x: { min: -15, max: 15 },
+          y: { min: -60, max: -20 },
+          easing: 'easeOut',
+        },
+        scaleOverLife: {
+          stops: [
+            { t: 0,   value: 0.3 },
+            { t: 0.3, value: 1,  easing: 'easeOut' },
+            { t: 1,   value: 0,  easing: 'easeIn' },
+          ],
+        },
+        opacityOverLife: {
+          stops: [
+            { t: 0,   value: 0 },
+            { t: 0.2, value: 0.9, easing: 'easeOut' },
+            { t: 0.7, value: 0.7 },
+            { t: 1,   value: 0,   easing: 'easeIn' },
+          ],
+        },
+        motionModifiers: [
+          { type: 'noiseDrift', enabled: true, amount: 12, speed: 0.8 },
+        ],
+      },
+      random: {
+        seed:               42,
+        positionRandomness: 0.5,
+        sizeRandomness:     0.4,
+        rotationRandomness: 0,
+        delayRandomness:    0.8,
+        lifetimeRandomness: 0.4,
+        colorRandomness:    0,
+      },
+      rendering: {
+        blendMode: 'screen',
+        softEdges: true,
+        quality:   'medium',
+      },
+    },
+  }
+}
+
 // ── Keyframe factory ──────────────────────────────────────────────────────────
 
 export { nextKfId }

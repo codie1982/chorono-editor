@@ -11,7 +11,7 @@ import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke' | 'path' | 'group' | 'repeater'
+export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke' | 'path' | 'group' | 'repeater' | 'particleEmitter'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
@@ -307,6 +307,10 @@ export interface Layer {
   masks?: MaskDefinition[]
   /** Repeater config — only used when type === 'repeater'. */
   repeater?: RepeaterLayerData
+
+  // ── Particle Emitter (BL-13) ─────────────────────────────────────────────
+  /** Particle emitter config — only used when type === 'particleEmitter'. */
+  particleEmitter?: import('../particles/types').ParticleEmitterData
 
   // ── Interactive runtime ──────────────────────────────────────────────────
   /** When true, runtime hit-testing will fire 'click' triggers on this layer. */

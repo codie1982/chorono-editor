@@ -24,6 +24,7 @@ export type LayerCategory =
   | 'Masks'
   | 'Groups'
   | 'Interaction'
+  | 'Particles'
 
 export interface LayerDefinition<T extends Layer = Layer> {
   /** Stable identifier matching addLayer(kind) and ADD_LAYER_GROUPS entries. */

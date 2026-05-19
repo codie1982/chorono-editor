@@ -124,3 +124,21 @@ export {
 export type { BakeOptions } from '../animation/baking/bake'
 export { bakeTrack, bakeTrackToKeyframes, sampleTrackDense } from '../animation/baking/bake'
 export { simplifyRDP } from '../animation/baking/simplify'
+
+// ── Particle Effect Engine (BL-13) ───────────────────────────────────────────
+export type {
+  RangeNumber, RangeOrFixed,
+  EmitterMode, EmitterShape, EmitterArea,
+  ParticleEmitterConfig,
+  ParticleShape, ParticleColorMode,
+  ParticleStrokeConfig, ParticleVisualConfig,
+  ParticleRandomConfig,
+  ParticleEmitterData,
+  ParticleLifeGradient, LifeGradientStop,
+  MotionModifierType, MotionModifierConfig,
+  ParticleAnimationConfig,
+  ParticleBurstMarker,
+  ParticleBlendMode, ParticleGlowConfig, ParticleBlurConfig,
+  ParticleRenderingConfig,
+  ParticleChannels,
+} from '../particles/types'

@@ -68,7 +68,8 @@ export class LayerRegistry {
     if (layer.type === 'text')       return this.byKind.get('text')
     if (layer.type === 'image')      return this.byKind.get('image')
     if (layer.type === 'video')      return this.byKind.get('video')
-    if (layer.type === 'audio')      return this.byKind.get('audio')
+    if (layer.type === 'audio')            return this.byKind.get('audio')
+    if (layer.type === 'particleEmitter')  return this.byKind.get('particleEmitter')
     return undefined
   }
 
