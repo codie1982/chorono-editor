@@ -15,6 +15,7 @@ import type { Layer } from '@/lib/types'
 import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
 import ScrubInput from '@/components/inputs/ScrubInput'
+import ColorInput from '@/components/inputs/ColorInput'
 
 interface Props {
   layer: Layer
@@ -102,22 +103,10 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
       </span>
 
       {schema.valueType === 'color' && (
-        <div className="flex items-center gap-1.5">
-          <input
-            type="color"
-            value={String(value ?? '#000000')}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-7 h-7 rounded border border-gray-600 cursor-pointer"
-          />
-          <input
-            type="text"
-            value={String(value ?? '#000000')}
-            onChange={(e) => onChange(e.target.value)}
-            className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 font-mono uppercase
-                       focus:outline-none focus:border-blue-500"
-            maxLength={7}
-          />
-        </div>
+        <ColorInput
+          value={String(value ?? '#000000')}
+          onChange={(v) => onChange(v)}
+        />
       )}
 
       {schema.valueType === 'select' && (

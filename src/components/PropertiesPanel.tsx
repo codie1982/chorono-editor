@@ -12,6 +12,7 @@ import {
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
+import ColorInput  from '@/components/inputs/ColorInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
@@ -278,26 +279,6 @@ function NumInput({ value, onChange, min, max, step = 1 }: {
   return <ScrubInput value={value} onChange={onChange} min={min} max={max} step={step} />
 }
 
-function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-8 h-7 rounded border border-gray-600 bg-transparent cursor-pointer p-0.5"
-      />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
-                   focus:outline-none focus:border-blue-500 font-mono uppercase"
-        maxLength={7}
-      />
-    </div>
-  )
-}
 
 type PluginEffectType =
   | 'glow' | 'blur' | 'shadow'
