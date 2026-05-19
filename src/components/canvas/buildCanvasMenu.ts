@@ -7,7 +7,7 @@
 // a layer-list right-click later.
 
 import type { Layer } from '@/lib/types'
-import { ANIMATABLE_PROPERTIES } from '@/lib/types'
+import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
 
 export interface CanvasMenuHandlers {
@@ -232,7 +232,7 @@ function buildAnimateSubmenu(
 ): MenuItem[] {
   // Group → category headers (separator + items) to match the screenshot
   const allowed = ANIMATABLE_PROPERTIES.filter(
-    (p) => !p.layerTypes || p.layerTypes.includes(layer.type),
+    (p) => isPropertyAnimatableOn(p, layer.type),
   )
   const byGroup = new Map<string, typeof allowed>()
   for (const p of allowed) {

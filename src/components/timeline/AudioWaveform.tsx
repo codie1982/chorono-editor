@@ -28,17 +28,27 @@ export default function AudioWaveform({
   const containerRef = useRef<HTMLDivElement>(null)
   const [peaks, setPeaks] = useState<WaveformPeaks | null>(() => peekCachedPeaks(url, bucketCount))
   const [size, setSize] = useState({ w: 0, h: 0 })
+  const [decodeError, setDecodeError] = useState(false)
 
-  // Kick off fetch / decode if not cached.
+  // Kick off fetch / decode whenever the URL or bucketCount changes — relying
+  // on `peaks` in the dep list caused stale state when switching assets.
   useEffect(() => {
     let cancelled = false
-    if (!peeks_match(peaks, url, bucketCount)) {
-      loadWaveformPeaks(url, bucketCount)
-        .then((p) => { if (!cancelled) setPeaks(p) })
-        .catch(() => { /* logged inside loader */ })
+    const cached = peekCachedPeaks(url, bucketCount)
+    if (cached) {
+      setPeaks(cached); setDecodeError(false)
+      return
     }
+    setDecodeError(false)
+    loadWaveformPeaks(url, bucketCount)
+      .then((p) => { if (!cancelled) { setPeaks(p); setDecodeError(false) } })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('[AudioWaveform] decode failed for', url, err)
+        setDecodeError(true)
+      })
     return () => { cancelled = true }
-  }, [url, bucketCount, peaks])
+  }, [url, bucketCount])
 
   // ResizeObserver — re-paint when the container changes size.
   useLayoutEffect(() => {
@@ -66,6 +76,20 @@ export default function AudioWaveform({
       ctx.fillStyle = background
       ctx.fillRect(0, 0, size.w, size.h)
     }
+    if (decodeError) {
+      // Diagonal-stripe pattern so a failed decode is obvious instead of silent.
+      ctx.fillStyle = '#dc2626aa'
+      ctx.fillRect(0, 0, size.w, size.h)
+      ctx.strokeStyle = '#ffffff80'
+      ctx.lineWidth = 1
+      for (let x = -size.h; x < size.w; x += 6) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x + size.h, size.h)
+        ctx.stroke()
+      }
+      return
+    }
     if (!peaks || peaks.peaks.length === 0) {
       // Placeholder bar so the row isn't empty while decoding.
       ctx.fillStyle = color + '40'
@@ -89,7 +113,7 @@ export default function AudioWaveform({
       ctx.lineTo(x + 0.5, y2)
     }
     ctx.stroke()
-  }, [peaks, size, color, background])
+  }, [peaks, size, color, background, decodeError])
 
   return (
     <div ref={containerRef} className="absolute inset-0 pointer-events-none">
@@ -101,7 +125,3 @@ export default function AudioWaveform({
   )
 }
 
-function peeks_match(p: WaveformPeaks | null, _url: string, bc: number): boolean {
-  // Lightweight check — if the cached buckets match expected size, skip fetch.
-  return !!p && p.bucketCount === bc
-}

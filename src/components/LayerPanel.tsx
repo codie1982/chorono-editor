@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import ChoronoIcon from '@/components/ui/ChoronoIcon'
+import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 import { LAYER_TYPE_ICON, ADD_LAYER_GROUPS } from '@/lib/icons/iconMap'
 
 interface Props {
@@ -28,6 +29,13 @@ interface Props {
    *  wrap both in a new group (target is leaf) or re-parent into an
    *  existing group (target.type === 'group'). */
   onGroupWith?: (draggedId: string, targetId: string) => void
+  /** Layer IDs in the currently selected timeline. undefined = no timeline
+   *  selected, or timeline uses legacy "show all" mode (no opt-in). */
+  timelineLayerIds?: string[]
+  /** Toggle a layer's membership in the selected timeline. */
+  onToggleInTimeline?: (layerId: string) => void
+  /** Duplicate a layer (context-menu entry). */
+  onDuplicate?: (layerId: string) => void
 }
 
 type DropZone = 'before' | 'after' | 'into'
@@ -38,7 +46,11 @@ export default function LayerPanel({
   onAddImage, onAddVideo, onAddAudio, onImportSvg,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
+  timelineLayerIds, onToggleInTimeline, onDuplicate,
 }: Props) {
+  // ── Right-click context menu ─────────────────────────────────────────────
+  const ctxMenu = useContextMenu()
+  const [ctxLayerId, setCtxLayerId] = useState<string | null>(null)
   // ── Drag-drop state ──────────────────────────────────────────────────────
   // Only the dragged id + the current drop target row + zone — kept tiny so
   // re-renders during dragover are cheap (each only invalidates two rows).
@@ -130,7 +142,9 @@ export default function LayerPanel({
   }
 
   const onDragStart = (e: React.DragEvent<HTMLLIElement>, layerId: string) => {
-    e.dataTransfer.effectAllowed = 'move'
+    // 'copyMove' allows both intra-panel reorder (move) and cross-panel
+    // drop-to-timeline (copy) — receiver picks the appropriate dropEffect.
+    e.dataTransfer.effectAllowed = 'copyMove'
     e.dataTransfer.setData('text/x-chorono-layer', layerId)
     setDraggingId(layerId)
     dragDescendantsRef.current = collectDescendants(layerId)
@@ -352,6 +366,12 @@ export default function LayerPanel({
               }}
               onDrop={(e) => onDropRow(e, layer, realIdx)}
               onClick={(e) => onSelect(layer.id, e.shiftKey)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                if (!selectedIds.has(layer.id)) onSelect(layer.id, false)
+                setCtxLayerId(layer.id)
+                ctxMenu.open(e)
+              }}
               style={depth > 0 ? { paddingLeft: 6 + depth * 14 } : undefined}
               className={
                 (isGroup
@@ -490,6 +510,47 @@ export default function LayerPanel({
           {selectedIds.size > 1 ? ` · ${selectedIds.size} selected` : ''}
         </div>
       )}
+
+      {/* ── Layer row right-click context menu ───────────────────────────── */}
+      {ctxMenu.isOpen && ctxLayerId && (() => {
+        const layer = layers.find((l) => l.id === ctxLayerId)
+        if (!layer) { ctxMenu.close(); return null }
+        const inTimeline = timelineLayerIds?.includes(layer.id) ?? false
+        const canToggleTimeline = timelineLayerIds !== undefined && !!onToggleInTimeline
+        const items = [
+          {
+            kind: 'action' as const,
+            label: inTimeline ? '✕ Remove from Timeline' : '＋ Add to Timeline',
+            shortcut: undefined,
+            disabled: !canToggleTimeline,
+            onSelect: () => { onToggleInTimeline?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const, label: 'Rename',
+            shortcut: 'F2', disabled: false,
+            onSelect: () => { beginRename(layer); ctxMenu.close(); setCtxLayerId(null) },
+          },
+          {
+            kind: 'action' as const, label: 'Duplicate',
+            shortcut: '⌘D', disabled: !onDuplicate,
+            onSelect: () => { onDuplicate?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
+          },
+          { kind: 'separator' as const },
+          {
+            kind: 'action' as const, label: 'Delete',
+            shortcut: '⌫', disabled: false,
+            onSelect: () => { onDelete(layer.id); ctxMenu.close(); setCtxLayerId(null) },
+          },
+        ]
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={items}
+            onClose={() => { ctxMenu.close(); setCtxLayerId(null) }}
+          />
+        )
+      })()}
     </aside>
   )
 }

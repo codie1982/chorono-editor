@@ -11,7 +11,7 @@
 import type {
   ChronoScene, Binding, BindingSource, BindingTarget, BindingSourceType, BindingTargetType,
 } from '@/lib/types'
-import { ANIMATABLE_PROPERTIES } from '@/lib/types'
+import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { newBinding } from '@/lib/defaults'
 import {
@@ -271,7 +271,7 @@ function propertiesForLayer(scene: ChronoScene, layerId?: string) {
   const layer = scene.layers.find((l) => l.id === layerId)
   if (!layer) return ANIMATABLE_PROPERTIES
   return ANIMATABLE_PROPERTIES.filter(
-    (p) => !p.layerTypes || p.layerTypes.includes(layer.type),
+    (p) => isPropertyAnimatableOn(p, layer.type),
   )
 }
 

@@ -230,6 +230,10 @@ export interface Timeline {
    *  union when displayed but stored separately so existing scene data
    *  doesn't need migration. */
   events?: import('../timeline/tracks').TimelineEvent[]
+  /** Explicit list of layer IDs that appear in this timeline's track view.
+   * undefined = legacy / "show all layers" (backward compat).
+   * [] = new timeline with no layers yet; layers must be dragged in. */
+  layerIds?: string[]
 }
 
 // ── Transform ─────────────────────────────────────────────────────────────────

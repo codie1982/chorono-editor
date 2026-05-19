@@ -18,8 +18,15 @@ export function makeAddLayerCmd(layer: Layer): EditorCommand {
 export function makeDeleteLayerCmd(layer: Layer): EditorCommand {
   return {
     label: `Delete ${layer.name}`,
-    execute: (scene) => ({ ...scene, layers: scene.layers.filter((l) => l.id !== layer.id) }),
-    undo:    (scene) => ({ ...scene, layers: [...scene.layers, layer] }),
+    execute: (scene) => ({
+      ...scene,
+      layers: scene.layers.filter((l) => l.id !== layer.id),
+      timelines: scene.timelines.map((tl) =>
+        tl.layerIds === undefined ? tl
+          : { ...tl, layerIds: tl.layerIds.filter((id) => id !== layer.id) }
+      ),
+    }),
+    undo: (scene) => ({ ...scene, layers: [...scene.layers, layer] }),
   }
 }
 

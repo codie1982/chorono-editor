@@ -78,6 +78,7 @@ export type {
 
 export {
   ANIMATABLE_PROPERTIES,
+  isPropertyAnimatableOn,
   DEFAULT_TIMELINE_SETTINGS,
   COMPOSITION_PRESETS,
 } from './editor'

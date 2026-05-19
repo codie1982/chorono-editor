@@ -24,6 +24,58 @@ export function makeDeleteTimelineCmd(tl: Timeline): EditorCommand {
   }
 }
 
+// ── Timeline layer membership ─────────────────────────────────────────────────
+
+/** Add a layer to a timeline's explicit layer list (opt-in model). */
+export function makeAddLayerToTimelineCmd(timelineId: string, layerId: string): EditorCommand {
+  return {
+    label: 'Add Layer to Timeline',
+    execute: (scene) => ({
+      ...scene,
+      timelines: scene.timelines.map((t) => {
+        if (t.id !== timelineId) return t
+        const ids = t.layerIds ?? []
+        if (ids.includes(layerId)) return t
+        return { ...t, layerIds: [...ids, layerId] }
+      }),
+    }),
+    undo: (scene) => ({
+      ...scene,
+      timelines: scene.timelines.map((t) => {
+        if (t.id !== timelineId) return t
+        const ids = t.layerIds
+        if (!ids) return t
+        return { ...t, layerIds: ids.filter((id) => id !== layerId) }
+      }),
+    }),
+  }
+}
+
+/** Remove a layer from a timeline's explicit layer list. */
+export function makeRemoveLayerFromTimelineCmd(timelineId: string, layerId: string): EditorCommand {
+  return {
+    label: 'Remove Layer from Timeline',
+    execute: (scene) => ({
+      ...scene,
+      timelines: scene.timelines.map((t) => {
+        if (t.id !== timelineId) return t
+        const ids = t.layerIds
+        if (!ids) return t
+        return { ...t, layerIds: ids.filter((id) => id !== layerId) }
+      }),
+    }),
+    undo: (scene) => ({
+      ...scene,
+      timelines: scene.timelines.map((t) => {
+        if (t.id !== timelineId) return t
+        const ids = t.layerIds ?? []
+        if (ids.includes(layerId)) return t
+        return { ...t, layerIds: [...ids, layerId] }
+      }),
+    }),
+  }
+}
+
 // ── Work area ─────────────────────────────────────────────────────────────────
 
 export function makeSetWorkAreaCmd(

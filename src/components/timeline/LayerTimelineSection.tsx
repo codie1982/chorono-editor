@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import type { Layer, Track, EasingType, AnimatableProperty, ParameterWire } from '@/lib/types'
-import { ANIMATABLE_PROPERTIES } from '@/lib/types'
+import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import { sampleTrackValueRange, valueToY } from '@/lib/timeline/valueGraph'
 import { findWireForProperty } from '@/lib/wiring/helpers'
 import TimelineKeyframe from './TimelineKeyframe'
@@ -111,7 +111,7 @@ export default function LayerTimelineSection({
   )
   const availableProps = ANIMATABLE_PROPERTIES.filter((p) => {
     if (animatedPaths.has(p.path)) return false
-    return !p.layerTypes || p.layerTypes.includes(layer.type)
+    return isPropertyAnimatableOn(p, layer.type)
   })
 
   return (

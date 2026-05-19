@@ -392,11 +392,23 @@ export default function BuilderPage() {
       const v = document.createElement('video')
       v.preload  = 'metadata'
       v.muted    = true
-      v.onloadedmetadata = () => commit({
-        width: v.videoWidth, height: v.videoHeight,
-        durationMs: Number.isFinite(v.duration) ? v.duration * 1000 : undefined,
-      })
-      v.onerror = () => { URL.revokeObjectURL(url); console.error('video load failed:', file.name) }
+      v.onloadedmetadata = () => {
+        const rawDur = v.duration
+        const durationMs = Number.isFinite(rawDur) && rawDur * 1000 >= 100
+          ? rawDur * 1000
+          : undefined
+        if (!durationMs) {
+          console.warn('[video] duration probe returned', rawDur, '— bar will span full timeline')
+        }
+        commit({
+          width: v.videoWidth, height: v.videoHeight,
+          durationMs,
+        })
+      }
+      v.onerror = (err) => {
+        URL.revokeObjectURL(url)
+        console.error('[video] load failed:', file.name, err)
+      }
       v.src = url
       return
     }
@@ -404,10 +416,23 @@ export default function BuilderPage() {
     // audio
     const a = document.createElement('audio')
     a.preload  = 'metadata'
-    a.onloadedmetadata = () => commit({
-      durationMs: Number.isFinite(a.duration) ? a.duration * 1000 : undefined,
-    })
-    a.onerror = () => { URL.revokeObjectURL(url); console.error('audio load failed:', file.name) }
+    a.onloadedmetadata = () => {
+      const rawDur = a.duration
+      // Some encodings report duration in seconds; <100ms is almost always
+      // a metadata parsing failure rather than a genuinely tiny clip. Fall
+      // back to undefined so the bar spans the full timeline (user can trim).
+      const durationMs = Number.isFinite(rawDur) && rawDur * 1000 >= 100
+        ? rawDur * 1000
+        : undefined
+      if (!durationMs) {
+        console.warn('[audio] duration probe returned', rawDur, '— bar will span full timeline')
+      }
+      commit({ durationMs })
+    }
+    a.onerror = (err) => {
+      URL.revokeObjectURL(url)
+      console.error('[audio] load failed:', file.name, err)
+    }
     a.src = url
   }, [scene, dispatchCommand, selectLayer])
 

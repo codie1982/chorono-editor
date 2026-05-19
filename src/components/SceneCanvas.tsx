@@ -73,6 +73,9 @@ interface Props {
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
     | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+  /** Optional setter — lets SceneCanvas reset tool mode after one-shot
+   *  operations (e.g. cancelling path pick mode returns to 'select'). */
+  onToolModeChange?: (next: NonNullable<Props['toolMode']>) => void
   /** BL-60 Faz 3 — Replace / add / subtract layers from the current selection
    *  after a canvas selection-tool drag completes. Mode is 'replace' (plain
    *  drag), 'add' (Shift+drag), or 'subtract' (Alt+drag). */
@@ -130,11 +133,20 @@ interface Props {
     cloneAlignToSelected?: (sourceId: string) => void
     /** BL-59 — Bake a Repeater wrapper layer into real cloned layers. */
     bakeRepeater?: (repeaterId: string) => void
+    /** BL-67 — Enter motion-path pick mode for the right-clicked layer. */
+    assignMotionPath?: () => void
   }
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview). */
   ghostSettings?: TimelineGhostSettings
   /** BL-56 — Selected timeline used to source keyframe tracks for ghost frames. */
   selectedTimeline?: Timeline | null
+  /** BL-67 — Pick-mode state: when set, next path-layer click on the canvas
+   *  becomes the target layer's motion guide. `null` = not in pick mode. */
+  pathPickMode?: { targetLayerId: string } | null
+  /** BL-67 — Called when the user picks a path during pick mode. */
+  onAssignPath?: (targetLayerId: string, pathLayerId: string) => void
+  /** BL-67 — Called when pick mode is cancelled (Escape, blur). */
+  onExitPathPickMode?: () => void
 }
 
 const PADDING   = 24

@@ -5,7 +5,7 @@ import type { LayerType } from './core'
 
 // ── Animatable Property Descriptor ────────────────────────────────────────────
 
-export type AnimatableGroup = 'Transform' | 'Fill' | 'Stroke' | 'Text' | 'Effects' | 'Path' | 'Geometry' | 'Trim Path'
+export type AnimatableGroup = 'Transform' | 'Fill' | 'Stroke' | 'Text' | 'Effects' | 'Path' | 'Geometry' | 'Trim Path' | 'Audio'
 
 export interface AnimatableProperty {
   label: string
@@ -14,16 +14,34 @@ export interface AnimatableProperty {
   group: AnimatableGroup
   /** If set, property only appears for these layer types. undefined = all types. */
   layerTypes?: LayerType[]
+  /** If set, property is HIDDEN for these layer types. Use for visual-only
+   *  props that shouldn't appear on non-visual layers like audio. */
+  notLayerTypes?: LayerType[]
+}
+
+/** Layer types that have no visual representation — transform/effects/path
+ *  props don't apply. Excluded from any property whose visual relevance is
+ *  spatial or graphical. */
+const NON_VISUAL_LAYER_TYPES: LayerType[] = ['audio']
+
+/** Single source of truth for the "is property X animatable on layer type Y"
+ *  question. Used by the timeline "Add animation" menu, the canvas context
+ *  menu, the motion binding panel, and the layer header. */
+export function isPropertyAnimatableOn(p: AnimatableProperty, layerType: LayerType): boolean {
+  if (p.layerTypes && !p.layerTypes.includes(layerType)) return false
+  if (p.notLayerTypes && p.notLayerTypes.includes(layerType)) return false
+  return true
 }
 
 export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   // ── Transform ─────────────────────────────────────────────────────────────
-  { label: 'Opacity',         path: 'opacity',               group: 'Transform' },
-  { label: 'X',               path: 'transform.x',           group: 'Transform' },
-  { label: 'Y',               path: 'transform.y',           group: 'Transform' },
-  { label: 'Scale X',         path: 'transform.scaleX',      group: 'Transform' },
-  { label: 'Scale Y',         path: 'transform.scaleY',      group: 'Transform' },
-  { label: 'Rotation',        path: 'transform.rotationDeg', group: 'Transform' },
+  // Audio has no visual representation → exclude transform props.
+  { label: 'Opacity',         path: 'opacity',               group: 'Transform', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'X',               path: 'transform.x',           group: 'Transform', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Y',               path: 'transform.y',           group: 'Transform', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Scale X',         path: 'transform.scaleX',      group: 'Transform', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Scale Y',         path: 'transform.scaleY',      group: 'Transform', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Rotation',        path: 'transform.rotationDeg', group: 'Transform', notLayerTypes: NON_VISUAL_LAYER_TYPES },
   // ── Shape Fill ────────────────────────────────────────────────────────────
   { label: 'Fill Color',      path: 'style.fill.color',      group: 'Fill',   layerTypes: ['shape'] },
   { label: 'Fill Opacity',    path: 'style.fill.opacity',    group: 'Fill',   layerTypes: ['shape'] },
@@ -35,16 +53,20 @@ export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   { label: 'Font Size',       path: 'text.fontSize',         group: 'Text',   layerTypes: ['text'] },
   { label: 'Letter Spacing',  path: 'text.letterSpacing',    group: 'Text',   layerTypes: ['text'] },
   // ── Effects ───────────────────────────────────────────────────────────────
-  { label: 'Blur',            path: 'effects.blur',          group: 'Effects' },
-  { label: 'Brightness',      path: 'effects.brightness',    group: 'Effects' },
-  { label: 'Contrast',        path: 'effects.contrast',      group: 'Effects' },
-  { label: 'Saturate',        path: 'effects.saturate',      group: 'Effects' },
+  // Visual filters — irrelevant for audio.
+  { label: 'Blur',            path: 'effects.blur',          group: 'Effects', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Brightness',      path: 'effects.brightness',    group: 'Effects', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Contrast',        path: 'effects.contrast',      group: 'Effects', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Saturate',        path: 'effects.saturate',      group: 'Effects', notLayerTypes: NON_VISUAL_LAYER_TYPES },
   // ── Motion Path ───────────────────────────────────────────────────────────
-  { label: 'Path Offset',     path: 'motionPath.offset',     group: 'Path' },
+  // Spatial — irrelevant for audio.
+  { label: 'Path Offset',     path: 'motionPath.offset',     group: 'Path', notLayerTypes: NON_VISUAL_LAYER_TYPES },
   // ── Follow Path (binds layer position to another path layer) ──────────────
-  { label: 'Follow Progress',         path: 'followPath.progress',            group: 'Path' },
-  { label: 'Follow Rotation Offset',  path: 'followPath.rotationOffset',      group: 'Path' },
-  { label: 'Follow Perp Offset',      path: 'followPath.perpendicularOffset', group: 'Path' },
+  { label: 'Follow Progress',         path: 'followPath.progress',            group: 'Path', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Follow Rotation Offset',  path: 'followPath.rotationOffset',      group: 'Path', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  { label: 'Follow Perp Offset',      path: 'followPath.perpendicularOffset', group: 'Path', notLayerTypes: NON_VISUAL_LAYER_TYPES },
+  // ── Audio (audio-only properties) ─────────────────────────────────────────
+  { label: 'Volume',          path: 'audio.volume',          group: 'Audio',  layerTypes: ['audio'] },
   // ── Path Stroke Layer ─────────────────────────────────────────────────────
   { label: 'Trim Offset',     path: 'pathStroke.trim.offset',         group: 'Path', layerTypes: ['pathStroke'] },
   { label: 'Trim Length',     path: 'pathStroke.trim.segmentLength',  group: 'Path', layerTypes: ['pathStroke'] },

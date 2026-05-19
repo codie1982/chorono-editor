@@ -18,6 +18,7 @@ import {
   makeAddEventCmd, makeDeleteEventCmd, makeUpdateEventCmd,
   makeAddMarkerCmd, makeDeleteMarkerCmd, makeUpdateMarkerCmd, makeMoveMarkerCmd,
   makeSetWorkAreaCmd,
+  makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd,
 } from '@/lib/editor/commands-timeline'
 import {
   makeAddSegmentCmd, makeDeleteSegmentCmd, makeUpdateSegmentCmd,
@@ -56,7 +57,7 @@ import KeyframeSpreadsheet, { type KeyframeSheetRow } from './timeline/KeyframeS
 import MarkerOverlay              from './timeline/MarkerOverlay'
 import WorkAreaOverlay            from './timeline/WorkAreaOverlay'
 import type { TimelineEvent } from '@/lib/types'
-import { ANIMATABLE_PROPERTIES } from '@/lib/types'
+import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import { nextEventId } from '@/lib/defaults'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
@@ -167,6 +168,9 @@ export default function TimelinePanel({
   // ── Layer filter (BL-38) — substring match on layer name + tracked properties
   const [layerFilter, setLayerFilter] = useState('')
 
+  // ── Drag-to-timeline drop state ───────────────────────────────────────────
+  const [isDragOver, setIsDragOver] = useState(false)
+
   // ── Bookmarks (BL-43) — up to 9 saved playhead positions. Cmd+B saves to
   //    the lowest empty slot (cycling if full); Cmd+1..9 jumps. Persisted
   //    in localStorage so they survive reloads of the same project.
@@ -243,7 +247,12 @@ export default function TimelinePanel({
     // Step 1: solo mode — if any layer is solo'd, hide everything else.
     const anySolo = scene.layers.some((l) => l.solo)
     let next = anySolo ? scene.layers.filter((l) => l.solo) : scene.layers
-    // Step 2: text filter
+    // Step 2: timeline opt-in filter — when layerIds is set, only show those layers.
+    if (timeline?.layerIds !== undefined) {
+      const idSet = new Set(timeline.layerIds)
+      next = next.filter((l) => idSet.has(l.id))
+    }
+    // Step 3: text filter
     if (q) {
       next = next.filter((l) => {
         if (l.name.toLowerCase().includes(q)) return true
@@ -252,7 +261,7 @@ export default function TimelinePanel({
         return tracks.some((t) => t.target.toLowerCase().includes(q))
       })
     }
-    // Step 3: pinned to the top, preserve original order within each group.
+    // Step 4: pinned to the top, preserve original order within each group.
     const pinned   = next.filter((l) =>  l.pinned)
     const unpinned = next.filter((l) => !l.pinned)
     return [...pinned, ...unpinned]
@@ -375,6 +384,33 @@ export default function TimelinePanel({
   const addKeyframeAtPlayhead = useCallback((trackTarget: string) => {
     addKeyframeAtTime(trackTarget, currentTimeMs)
   }, [addKeyframeAtTime, currentTimeMs])
+
+  // ── Drag-to-timeline handlers ─────────────────────────────────────────────
+  const onTrackAreaDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!selectedTimelineId || timeline?.layerIds === undefined) return
+    if (!e.dataTransfer.types.includes('text/x-chorono-layer')) return
+    e.preventDefault()
+    // 'copy' is the most universally compatible dropEffect for cross-panel
+    // adds — must match the source's effectAllowed ('copyMove' from LayerPanel).
+    e.dataTransfer.dropEffect = 'copy'
+    setIsDragOver(true)
+  }, [selectedTimelineId, timeline?.layerIds])
+
+  const onTrackAreaDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    // Only clear if leaving the container entirely (not entering a child)
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setIsDragOver(false)
+  }, [])
+
+  const onTrackAreaDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    setIsDragOver(false)
+    if (!selectedTimelineId || timeline?.layerIds === undefined) return
+    const layerId = e.dataTransfer.getData('text/x-chorono-layer')
+    if (!layerId) return
+    e.preventDefault()
+    e.stopPropagation()
+    dispatchCommand(makeAddLayerToTimelineCmd(selectedTimelineId, layerId))
+  }, [selectedTimelineId, timeline?.layerIds, dispatchCommand])
 
   const deleteKf = useCallback((trackTarget: string, kfId: string) => {
     if (!selectedTimelineId || !timeline) return
@@ -850,10 +886,13 @@ export default function TimelinePanel({
 
   return (
     <div
-      className="flex flex-col h-full bg-gray-900 relative overflow-hidden"
+      className={`flex flex-col h-full bg-gray-900 relative overflow-hidden ${isDragOver ? 'ring-2 ring-blue-500/60 ring-inset' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
       onMouseEnter={() => setTimelineHovered(true)}
       onMouseLeave={() => setTimelineHovered(false)}
+      onDragOver={onTrackAreaDragOver}
+      onDragLeave={onTrackAreaDragLeave}
+      onDrop={onTrackAreaDrop}
     >
       <TimelineToolbar
         timelines={scene.timelines}
@@ -1066,7 +1105,7 @@ export default function TimelinePanel({
       {/* ── Layer sections (scrollable vertically) ───────────────────────── */}
       <div
         ref={lassoContainerRef}
-        className="flex-1 overflow-y-auto relative"
+        className="flex-1 min-h-[60px] overflow-y-auto relative"
         onClick={(e) => { if (e.target === e.currentTarget) onSelectKeyframes(new Set()) }}
         onPointerDown={onLassoPointerDown}
         onPointerMove={onLassoPointerMove}
@@ -1078,7 +1117,13 @@ export default function TimelinePanel({
             No layers yet. Add one from the left panel.
           </div>
         )}
-        {scene.layers.length > 0 && visibleLayers.length === 0 && (
+        {scene.layers.length > 0 && visibleLayers.length === 0 && !layerFilter && timeline?.layerIds !== undefined && (
+          <div className="p-8 text-center text-xs text-gray-500 select-none pointer-events-none">
+            <div className="text-2xl mb-2 opacity-40">⟶</div>
+            <div>Drag a layer from the Layers panel to animate it.</div>
+          </div>
+        )}
+        {scene.layers.length > 0 && visibleLayers.length === 0 && layerFilter && (
           <div className="p-6 text-center text-xs text-gray-600">
             No layers match &ldquo;{layerFilter}&rdquo;.
             <button
@@ -1339,7 +1384,7 @@ export default function TimelinePanel({
         )
         const addableProps = ANIMATABLE_PROPERTIES.filter((p) => {
           if (animatedOnLayer.has(p.path)) return false
-          return !p.layerTypes || p.layerTypes.includes(layer.type)
+          return isPropertyAnimatableOn(p, layer.type)
         })
         // Group by category for a nice submenu structure.
         const propsByGroup = new Map<string, typeof addableProps>()
@@ -1438,6 +1483,18 @@ export default function TimelinePanel({
               ),
             })),
           },
+          ...(timeline?.layerIds !== undefined ? [
+            { kind: 'separator' as const },
+            {
+              kind: 'action' as const,
+              label: 'Remove from Timeline',
+              shortcut: undefined, disabled: false,
+              onSelect: () => {
+                if (selectedTimelineId) dispatchCommand(makeRemoveLayerFromTimelineCmd(selectedTimelineId, layer.id))
+                ctxMenu.close(); setCtxLayerBar(null)
+              },
+            },
+          ] : []),
         ]
         return (
           <ContextMenu
