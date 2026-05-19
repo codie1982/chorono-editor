@@ -58,10 +58,11 @@ export const particleEmitterDefinition: LayerDefinition = {
             valueType: 'select', animatable: false, defaultValue: 'point',
             fullWidth: true,
             options: [
-              { value: 'point',     label: 'Point (single source)' },
-              { value: 'circle',    label: 'Circle (radial area)' },
-              { value: 'rectangle', label: 'Rectangle (box area)' },
-              { value: 'line',      label: 'Line (along a segment)' },
+              { value: 'point',       label: 'Point (single source)' },
+              { value: 'circle',      label: 'Circle (radial area)' },
+              { value: 'rectangle',   label: 'Rectangle (box area)' },
+              { value: 'line',        label: 'Line (along a segment)' },
+              { value: 'sourceLayer', label: 'Scene Layer (use any object as geometry)' },
             ],
           },
           // Area: radius (circle only)

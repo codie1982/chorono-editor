@@ -12,7 +12,7 @@ export type RangeOrFixed = number | RangeNumber
 // ── Emitter ───────────────────────────────────────────────────────────────────
 
 export type EmitterMode  = 'continuous' | 'burst'
-export type EmitterShape = 'point' | 'line' | 'circle' | 'rectangle' | 'path'
+export type EmitterShape = 'point' | 'line' | 'circle' | 'rectangle' | 'path' | 'sourceLayer'
 
 export interface EmitterArea {
   /** rectangle: half-extents */
@@ -25,6 +25,11 @@ export interface EmitterArea {
   lineEnd?:     Vec2
   /** path emitter: id of a sibling bezierPath layer */
   pathLayerId?: string
+  /** sourceLayer emitter: any layer id whose bounds drive the emit area.
+   *  The particle layer reads the source's transform.x/y, size, and shape to
+   *  sample spawn points. Updated live each frame so animating the source
+   *  also moves the emit region. */
+  sourceLayerId?: string
   /** If true, particles spawn on the edge, not inside the area */
   emitFromEdge?: boolean
 }

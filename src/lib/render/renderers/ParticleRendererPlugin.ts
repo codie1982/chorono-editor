@@ -112,11 +112,13 @@ function renderParticles(
   cfg:    ParticleEmitterData,
   timeMs: number,
   layerStartMs: number,
+  sourceCtx?: { allLayers: Layer[]; particleLayerX: number; particleLayerY: number },
 ): void {
   const relativeTime = Math.max(0, timeMs - layerStartMs)
 
-  // Compute alive particles (stateless)
-  const instances = computeSpawnParams(cfg, relativeTime)
+  // Compute alive particles (stateless). sourceCtx is forwarded so that
+  // sourceLayer emitters can resolve the geometry of the chosen layer.
+  const instances = computeSpawnParams(cfg, relativeTime, undefined, sourceCtx)
   if (instances.length === 0) return
 
   const evaluator = new ParticleEvaluator(cfg)
@@ -193,6 +195,18 @@ export const particleRendererPlugin: LayerRendererPlugin = {
 
     const layerStartMs = layer.startMs ?? 0
 
-    renderParticles(ctx.canvas, cfg, ctx.timeMs, layerStartMs)
+    // Pass source-layer context so 'sourceLayer' emit shape works.
+    // Particle layer coordinates are layer-local (the CanvasRenderer has
+    // already translated to transform.x/y), so we tell the spawner that
+    // the particle layer's WORLD position is the layer's transform.x/y —
+    // the resolver subtracts this from the source's world to get the
+    // relative offset.
+    const sourceCtx = {
+      allLayers:      ctx.scene.layers,
+      particleLayerX: layer.transform.x,
+      particleLayerY: layer.transform.y,
+    }
+
+    renderParticles(ctx.canvas, cfg, ctx.timeMs, layerStartMs, sourceCtx)
   },
 }

@@ -3,7 +3,7 @@
 // Computes the set of ParticleInstance spawn params for a given emitter config
 // and current time. Pure — no side-effects, no state.
 
-import type { Vec2, ColorValue } from '@/lib/types'
+import type { Vec2, ColorValue, Layer } from '@/lib/types'
 import type {
   ParticleEmitterConfig, ParticleEmitterData, ParticleVisualConfig,
   ParticleRandomConfig, ParticleAnimationConfig, RangeNumber,
@@ -37,8 +37,18 @@ function lerpColor(a: ColorValue, b: ColorValue, t: number): ColorValue {
  * Returns a spawn position in layer-local coordinates.
  * NOTE: Always consumes exactly 2 RNG values (even for 'point') to keep
  * the PRNG call sequence stable regardless of shape — this is the contract.
+ *
+ * `sourceLayer` is RELATIVE to the particle layer's own transform: the source
+ * layer's world position minus this layer's world position is added on top
+ * of the area sampling. The caller must pass `sourceLayerOffset` when using
+ * shape='sourceLayer'.
  */
-function computeSpawnPosition(rng: ParticleRandom, cfg: ParticleEmitterConfig): Vec2 {
+function computeSpawnPosition(
+  rng: ParticleRandom,
+  cfg: ParticleEmitterConfig,
+  sourceLayerOffset?: Vec2,
+  sourceLayerHalfSize?: { hw: number; hh: number },
+): Vec2 {
   const area = cfg.area ?? {}
 
   switch (cfg.shape) {
@@ -82,7 +92,57 @@ function computeSpawnPosition(rng: ParticleRandom, cfg: ParticleEmitterConfig): 
       rng.next()
       return { x: 0, y: 0 }
     }
+
+    case 'sourceLayer': {
+      // Sample uniformly within the source layer's bounding box.
+      // sourceLayerOffset is the source's position relative to OUR layer,
+      // so the result is a layer-local coord. If the source has no size
+      // (e.g. it's a path with anchors), fall back to point at offset.
+      if (!sourceLayerOffset) {
+        rng.next(); rng.next()
+        return { x: 0, y: 0 }
+      }
+      if (!sourceLayerHalfSize) {
+        rng.next(); rng.next()
+        return { x: sourceLayerOffset.x, y: sourceLayerOffset.y }
+      }
+      return {
+        x: sourceLayerOffset.x + rng.range(-sourceLayerHalfSize.hw, sourceLayerHalfSize.hw),
+        y: sourceLayerOffset.y + rng.range(-sourceLayerHalfSize.hh, sourceLayerHalfSize.hh),
+      }
+    }
   }
+}
+
+// ── Source-layer helper ───────────────────────────────────────────────────────
+//
+// Resolves a sourceLayerId into the offset + half-size the spawner needs.
+// Returns undefined if the source layer can't be found or has no size.
+
+export interface SourceLayerContext {
+  /** All scene layers (so the spawner can find the source by id) */
+  allLayers:        Layer[]
+  /** The particle emitter layer's OWN transform (used to compute relative offset) */
+  particleLayerX:   number
+  particleLayerY:   number
+}
+
+function resolveSourceLayer(
+  ctx:  SourceLayerContext,
+  cfg:  ParticleEmitterConfig,
+): { offset: Vec2; halfSize?: { hw: number; hh: number } } | undefined {
+  const id = cfg.area?.sourceLayerId
+  if (!id) return undefined
+  const src = ctx.allLayers.find(l => l.id === id)
+  if (!src) return undefined
+  const offset: Vec2 = {
+    x: src.transform.x - ctx.particleLayerX,
+    y: src.transform.y - ctx.particleLayerY,
+  }
+  if (src.size && src.size.width > 0 && src.size.height > 0) {
+    return { offset, halfSize: { hw: src.size.width / 2, hh: src.size.height / 2 } }
+  }
+  return { offset }
 }
 
 // ── Color selection ───────────────────────────────────────────────────────────
@@ -120,11 +180,15 @@ function pickColor(rng: ParticleRandom, cfg: ParticleVisualConfig): ColorValue {
 /**
  * Returns the array of ParticleInstanceParams for alive particles at `timeMs`.
  * Stateless — same inputs always produce the same output (deterministic).
+ *
+ * `sourceCtx` is required when the emitter shape is 'sourceLayer' so the
+ * spawner can resolve the source layer's bounds; otherwise it's ignored.
  */
 export function computeSpawnParams(
   cfg: ParticleEmitterData,
   relativeTimeMs: number,
   pool?: ParticlePool,
+  sourceCtx?: SourceLayerContext,
 ): ParticleInstance[] {
   const { emitter, particle: vis, animation, random, rendering } = cfg
 
@@ -142,6 +206,11 @@ export function computeSpawnParams(
 
   // Master RNG for spawn sequence — same seed = same particles
   const masterRng = new ParticleRandom(random.seed)
+
+  // Resolve sourceLayer geometry once per frame (constant across all particles)
+  const srcGeom = (emitter.shape === 'sourceLayer' && sourceCtx)
+    ? resolveSourceLayer(sourceCtx, emitter)
+    : undefined
 
   // Compute total particle count to simulate
   let totalParticles: number
@@ -177,7 +246,10 @@ export function computeSpawnParams(
     }
 
     // 2. spawnXY (2 slots consumed inside)
-    const spawnPos = computeSpawnPosition(masterRng, emitter)
+    const spawnPos = computeSpawnPosition(
+      masterRng, emitter,
+      srcGeom?.offset, srcGeom?.halfSize,
+    )
 
     // 3. lifetime
     const lifetimeMs = sampleRange(masterRng, animation.lifetimeMs)
