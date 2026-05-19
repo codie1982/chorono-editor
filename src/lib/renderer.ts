@@ -305,6 +305,7 @@ export function drawShape(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
   overrides: ReturnType<typeof evaluateTimelines>,
+  paramValues?: ParamValueMap,
 ) {
   const w = layer.size?.width  ?? 0
   const h = layer.size?.height ?? 0
@@ -343,10 +344,16 @@ export function drawShape(
     if (gradient) {
       ctx.fillStyle = gradient
     } else {
-      const color = getLayerValue(overrides, layer.id, 'style.fill.color' as string, 0)
-      ctx.fillStyle = overrides.has(`layers.${layer.id}.style.fill.color`)
-        ? `#${Math.round(color).toString(16).padStart(6, '0')}`
-        : (style.fill.color ?? '#000000')
+      // Priority: paramBinding (string color) → numeric wire override → static
+      const boundFill = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
+      if (boundFill) {
+        ctx.fillStyle = boundFill
+      } else {
+        const color = getLayerValue(overrides, layer.id, 'style.fill.color' as string, 0)
+        ctx.fillStyle = overrides.has(`layers.${layer.id}.style.fill.color`)
+          ? `#${Math.round(color).toString(16).padStart(6, '0')}`
+          : (style.fill.color ?? '#000000')
+      }
     }
     ctx.fill()
     ctx.restore()
@@ -366,7 +373,9 @@ export function drawShape(
   if (style.stroke) {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
-    const { color, alignment = 'center', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
+    const { color: staticStrokeColor, alignment = 'center', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
+    const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
+    const color = boundStroke ?? staticStrokeColor
 
     // ── Trim Path resolution ──────────────────────────────────────────────
     // If stroke.trim is defined (even with defaults), evaluate animated values
@@ -468,6 +477,7 @@ export function drawBezierPath(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
   overrides: ReturnType<typeof evaluateTimelines>,
+  paramValues?: ParamValueMap,
 ) {
   if (!layer.path) return
   const style: ShapeStyle = layer.style ?? {}
@@ -485,7 +495,8 @@ export function drawBezierPath(
     const fillOpacity = getLayerValue(overrides, layer.id, 'style.fill.opacity', style.fill.opacity ?? 100)
     ctx.save()
     ctx.globalAlpha *= fillOpacity / 100
-    ctx.fillStyle = style.fill.color ?? '#3B82F6'
+    const boundFill = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
+    ctx.fillStyle = boundFill ?? style.fill.color ?? '#3B82F6'
     ctx.fill()
     ctx.restore()
   }
@@ -494,7 +505,9 @@ export function drawBezierPath(
   if (style.stroke && style.stroke.width > 0) {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
-    const { color, dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
+    const { color: staticStrokeColor, dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
+    const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
+    const color = boundStroke ?? staticStrokeColor
 
     let lineDash       = dashArray
     let lineDashOffset = 0
@@ -674,8 +687,12 @@ export function drawText(
     stroke, shadow, uppercase, underline,
   } = layer.text
 
-  // Runtime parameter resolution — replaces "{paramId}" placeholders.
-  const resolvedValue = paramValues ? resolveTextContent(value, paramValues) : value
+  // Runtime parameter resolution:
+  //   1. paramBindings['text.value'] → entire text replaced by parameter value
+  //   2. {paramId} placeholders inside (raw or bound) text → substituted
+  const boundText = paramValues ? getStringParamBinding(layer, 'text.value', paramValues) : undefined
+  const rawText = boundText ?? value
+  const resolvedValue = paramValues ? resolveTextContent(rawText, paramValues) : rawText
   const displayText = uppercase ? resolvedValue.toUpperCase() : resolvedValue
   // Parameter-bound colour override (paramBindings['text.color']).
   const resolvedColor = paramValues
@@ -778,7 +795,7 @@ function renderLayer(
   // renderer.ts). The CanvasRenderer module (5.0.10) will replace this whole
   // block using the registry. Until then, the legacy switch stays.
   if (layer.type === 'shape' && layer.size) {
-    drawShape(ctx, layer, overrides)
+    drawShape(ctx, layer, overrides, paramValues)
   } else if (layer.type === 'text') {
     drawText(ctx, layer, paramValues)
   } else if (layer.type === 'image') {
@@ -788,7 +805,7 @@ function renderLayer(
   } else if (layer.type === 'pathStroke') {
     drawPathStrokeLayer(ctx, layer, overrides)
   } else if (layer.type === 'path' && layer.path) {
-    drawBezierPath(ctx, layer, overrides)
+    drawBezierPath(ctx, layer, overrides, paramValues)
   }
   // audio: no canvas rendering (handled by an AudioEngine)
 
