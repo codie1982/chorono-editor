@@ -368,6 +368,8 @@ export default function SceneCanvas({
   // does, however, get updated so e.g. Animate can keyframe the right layer.
   const ctxMenu = useContextMenu()
   const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
+  // ── Right-click on empty canvas area → fit / zoom shortcuts ──────────────
+  const emptyCanvasCtx = useContextMenu()
 
   // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
   // Active guides are stored in a ref AND state so changes trigger render
@@ -2008,7 +2010,11 @@ export default function SceneCanvas({
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
               const hit = hitTestLayer(scene, timeMs, cx, cy)
-              if (!hit) return                         // empty canvas → use browser default for now
+              if (!hit) {
+                e.preventDefault()
+                emptyCanvasCtx.open(e)
+                return
+              }
               e.preventDefault()
               // Bring the right-clicked layer into selection so menu actions
               // operate on what the user pointed at — matches every other editor.
@@ -2510,6 +2516,38 @@ export default function SceneCanvas({
             y={ctxMenu.state!.y}
             items={items}
             onClose={() => { ctxMenu.close(); setCtxTargetLayerId(null) }}
+          />
+        )
+      })()}
+
+      {/* ── Empty-canvas right-click → fit / zoom shortcuts ─────────────── */}
+      {emptyCanvasCtx.isOpen && (() => {
+        const hasSel = !!selectedLayerId
+        const close  = emptyCanvasCtx.close
+        const items: import('./ui/ContextMenu').MenuItem[] = [
+          { kind: 'action', label: 'Fit to View',   shortcut: 'F',   onSelect: () => { fitAll();         close() } },
+          { kind: 'action', label: 'Fit Width',                       onSelect: () => { fitWidth();       close() } },
+          { kind: 'action', label: 'Fit Height',                      onSelect: () => { fitHeight();      close() } },
+          { kind: 'action', label: 'Actual Size',   shortcut: '1',   onSelect: () => { actualSize();     close() } },
+          { kind: 'separator' },
+          { kind: 'submenu', label: 'Zoom', items: [
+            { kind: 'action', label: '25%',  onSelect: () => { zoomTo(0.25); close() } },
+            { kind: 'action', label: '50%',  onSelect: () => { zoomTo(0.50); close() } },
+            { kind: 'action', label: '75%',  onSelect: () => { zoomTo(0.75); close() } },
+            { kind: 'action', label: '100%', onSelect: () => { zoomTo(1.00); close() } },
+            { kind: 'action', label: '150%', onSelect: () => { zoomTo(1.50); close() } },
+            { kind: 'action', label: '200%', onSelect: () => { zoomTo(2.00); close() } },
+          ]},
+          { kind: 'separator' },
+          { kind: 'action', label: 'Fit Selection',    shortcut: '⇧2', disabled: !hasSel, onSelect: () => { fitSelection();    close() } },
+          { kind: 'action', label: 'Centre Selection',                  disabled: !hasSel, onSelect: () => { centreSelection(); close() } },
+        ]
+        return (
+          <ContextMenu
+            x={emptyCanvasCtx.state!.x}
+            y={emptyCanvasCtx.state!.y}
+            items={items}
+            onClose={close}
           />
         )
       })()}

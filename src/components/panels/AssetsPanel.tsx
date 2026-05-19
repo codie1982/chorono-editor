@@ -11,7 +11,7 @@
 // The asset registry is `scene.assets`. Each upload via LayerPanel populates
 // an Asset entry; this panel surfaces them in one place.
 
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { ChronoScene, Asset, AssetType } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
@@ -20,6 +20,7 @@ import {
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '@/lib/editor/commands-layer'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { toast } from '@/lib/toast/toast'
+import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 
 interface Props {
   scene:  ChronoScene
@@ -38,6 +39,8 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
+  const ctxMenu = useContextMenu()
+  const [ctxAssetId, setCtxAssetId] = useState<string | null>(null)
 
   // Track which layers reference each asset (so we know what gets deleted)
   const layersByAsset = useMemo(() => {
@@ -136,6 +139,11 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
             <div
               key={a.id}
               className="border border-gray-700 rounded overflow-hidden bg-gray-900/50 group hover:border-blue-500/60 transition-colors"
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setCtxAssetId(a.id)
+                ctxMenu.open(e)
+              }}
             >
               {/* Thumbnail */}
               <div className="relative aspect-square bg-gray-950 flex items-center justify-center overflow-hidden">
@@ -212,6 +220,29 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
           )
         })}
       </div>
+
+      {/* ── Asset right-click context menu ─────────────────────────────────── */}
+      {ctxMenu.isOpen && ctxAssetId && (() => {
+        const asset = scene.assets.find(a => a.id === ctxAssetId)
+        if (!asset) { ctxMenu.close(); return null }
+        return (
+          <ContextMenu
+            x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+            items={[
+              {
+                kind: 'action', label: '+ Add Layer',
+                onSelect: () => { addLayerFromAsset(asset); ctxMenu.close(); setCtxAssetId(null) },
+              },
+              { kind: 'separator' },
+              {
+                kind: 'action', label: 'Delete Asset',
+                onSelect: () => { deleteAsset(asset); ctxMenu.close(); setCtxAssetId(null) },
+              },
+            ]}
+            onClose={() => { ctxMenu.close(); setCtxAssetId(null) }}
+          />
+        )
+      })()}
     </div>
   )
 }
