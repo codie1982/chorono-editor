@@ -80,8 +80,8 @@ export default function ParamBindButton({
           type="button"
           onClick={() => setOpen((v) => !v)}
           title={boundParam
-            ? `Parametre: ${boundParam.name} — değiştir / kaldır`
-            : 'Bu property\'yi bir parametreye bağla'}
+            ? `Bound to ${boundParam.name} — click to change or unbind`
+            : 'Bind this property to a parameter'}
           className={`text-[10px] leading-none w-4 h-4 flex items-center justify-center rounded transition-colors ${
             boundParam
               ? 'text-amber-300 bg-amber-900/50 hover:bg-amber-800/70'
@@ -97,7 +97,7 @@ export default function ParamBindButton({
           type="button"
           onClick={() => setOpen((v) => !v)}
           className="text-left bg-amber-900/20 border border-amber-800/40 rounded px-2 py-1 text-[11px] text-amber-200 font-mono truncate hover:bg-amber-900/40 flex items-center gap-1.5"
-          title="Bağlı parametre — tıklayıp değiştir veya kaldır"
+          title="Bound parameter — click to change or unbind"
         >
           <span aria-hidden>📎</span>
           <span className="truncate">{boundParam.name}</span>
@@ -119,20 +119,20 @@ export default function ParamBindButton({
                 onClick={unbind}
                 className="w-full text-left px-2 py-1.5 text-[11px] text-red-300 hover:bg-red-900/30 flex items-center gap-1.5"
               >
-                <span aria-hidden>✕</span> Bağlantıyı Kaldır
+                <span aria-hidden>✕</span> Unbind parameter
               </button>
               <div className="border-t border-gray-700 my-1" />
             </>
           )}
           {compatible.length === 0 ? (
             <div className="px-2 py-2 text-[10px] text-gray-500 leading-snug">
-              Hiç uyumlu parametre yok.
+              No compatible parameters.
               <br />
-              Parameters panelinden{' '}
+              Add a{' '}
               <span className="text-gray-300 font-mono">
                 {acceptedTypes.join(' / ')}
               </span>{' '}
-              tipinde ekleyin.
+              parameter from the Parameters panel.
             </div>
           ) : (
             compatible.map((p) => {
