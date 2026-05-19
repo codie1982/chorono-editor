@@ -4,8 +4,9 @@ import {
 } from 'react'
 import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
-import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
+import { hitTestLayer, hitTestLayersAt, bezierPathBounds, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
+import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
 import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
@@ -22,6 +23,8 @@ import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
+import PathGuideOverlay from './PathGuideOverlay'
+import PathEditOverlay from './PathEditOverlay'
 import ContextMenu, { useContextMenu } from './ui/ContextMenu'
 import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
 import {
@@ -73,9 +76,10 @@ interface Props {
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
     | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
-  /** Optional setter — lets SceneCanvas reset tool mode after one-shot
-   *  operations (e.g. cancelling path pick mode returns to 'select'). */
-  onToolModeChange?: (next: NonNullable<Props['toolMode']>) => void
+  /** BL-66 — Push a tool-mode change up to the page (e.g. double-clicking a
+   *  path enters pen mode so the user can immediately edit it; cancelling
+   *  path pick mode returns to 'select'). */
+  onToolModeChange?: (next: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor') => void
   /** BL-60 Faz 3 — Replace / add / subtract layers from the current selection
    *  after a canvas selection-tool drag completes. Mode is 'replace' (plain
    *  drag), 'add' (Shift+drag), or 'subtract' (Alt+drag). */
@@ -136,17 +140,17 @@ interface Props {
     /** BL-67 — Enter motion-path pick mode for the right-clicked layer. */
     assignMotionPath?: () => void
   }
+  /** BL-67 — When set, all path layers are drawn as dashed pickable overlays
+   *  and a click on one assigns it as the target layer's followPath. */
+  pathPickMode?: { targetLayerId: string } | null
+  /** BL-67 — Called when the user clicks a path in pick mode. */
+  onAssignPath?: (targetLayerId: string, pathLayerId: string) => void
+  /** BL-67 — Called when the user presses Escape (or clicks outside) to leave pick mode. */
+  onExitPathPickMode?: () => void
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview). */
   ghostSettings?: TimelineGhostSettings
   /** BL-56 — Selected timeline used to source keyframe tracks for ghost frames. */
   selectedTimeline?: Timeline | null
-  /** BL-67 — Pick-mode state: when set, next path-layer click on the canvas
-   *  becomes the target layer's motion guide. `null` = not in pick mode. */
-  pathPickMode?: { targetLayerId: string } | null
-  /** BL-67 — Called when the user picks a path during pick mode. */
-  onAssignPath?: (targetLayerId: string, pathLayerId: string) => void
-  /** BL-67 — Called when pick mode is cancelled (Escape, blur). */
-  onExitPathPickMode?: () => void
 }
 
 const PADDING   = 24
@@ -231,6 +235,29 @@ interface PathPointDrag {
   part: 'anchor' | 'inHandle' | 'outHandle'
 }
 
+/**
+ * BL-66 — Pen Tool: placing a new anchor.
+ *
+ * On mousedown in pen mode (no hit), we begin a transaction and append a
+ * provisional corner anchor at the click point. As the user drags, we
+ * upgrade it to a smooth anchor with bezier handles (outHandle at the
+ * cursor, inHandle mirrored). On mouseup with drag distance ≤ 5px we
+ * commit a corner; otherwise we commit the smooth anchor.
+ */
+interface NewAnchorDrawDrag {
+  kind: 'newAnchorDraw'
+  layerId: string
+  originalLayer: Layer
+  /** Layer-local anchor position (where the user clicked). */
+  anchorX: number
+  anchorY: number
+  /** Client-space mousedown position to compute drag distance. */
+  startClientX: number
+  startClientY: number
+  /** Index of the anchor that was provisionally appended. */
+  anchorIndex: number
+}
+
 /** Scale-mode axis gizmo drag — modifies transform.scaleX / scaleY
  *  rather than the layer's width/height (which is what ResizeState does). */
 interface ScaleAxisState {
@@ -256,7 +283,7 @@ interface ScaleAxisState {
   pivotY?: number
 }
 
-type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | RotateState | ScaleAxisState
+type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | NewAnchorDrawDrag | RotateState | ScaleAxisState
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -277,12 +304,14 @@ const HANDLE_CURSORS: Record<Handle, string> = {
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
   overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
-  panMode: controlledPanMode, onPanModeChange, toolMode, snap,
+  panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
   fullscreen, onToggleFullscreen,
   menuHandlers, onAfterLayerCommit,
   ghostSettings, selectedTimeline,
+  pathPickMode = null, onAssignPath, onExitPathPickMode,
 }: Props) {
+  const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -629,6 +658,45 @@ export default function SceneCanvas({
       return
     }
 
+    // BL-66 — Pen Tool, new anchor being placed: drag distance turns a corner
+    // anchor into a smooth one with outHandle at the cursor (inHandle mirrored).
+    if (drag.kind === 'newAnchorDraw') {
+      const layer = sceneRef.current.layers.find(l => l.id === drag.layerId)
+      if (!layer?.path) return
+      const dragDist = Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY)
+      // Cursor in layer-local coordinates (dx,dy already in composition px).
+      const handleX = drag.anchorX + dx
+      const handleY = drag.anchorY + dy
+      const anchors = layer.path.anchors.slice()
+      if (dragDist > 5) {
+        anchors[drag.anchorIndex] = {
+          x: drag.anchorX, y: drag.anchorY,
+          outX: handleX, outY: handleY,
+          inX: 2 * drag.anchorX - handleX,
+          inY: 2 * drag.anchorY - handleY,
+          pointType: 'smooth',
+        }
+      } else {
+        anchors[drag.anchorIndex] = {
+          x: drag.anchorX, y: drag.anchorY,
+          pointType: 'corner',
+        }
+      }
+      const nextScene: ChronoScene = {
+        ...sceneRef.current,
+        layers: sceneRef.current.layers.map((l) =>
+          l.id !== drag.layerId ? l : { ...l, path: { ...layer.path!, anchors } },
+        ),
+      }
+      editorRef.current.previewTransaction(nextScene)
+      // Subtle HUD so the user sees the handle length
+      setDragHud({
+        x: e.clientX, y: e.clientY,
+        label: dragDist > 5 ? `Smooth · ${Math.round(dragDist)}px` : 'Corner',
+      })
+      return
+    }
+
     if (drag.kind === 'scaleAxis') {
       // Sensitivity — 100 composition px of drag doubles the scale.
       // Positive drag (right/down) = bigger; negative = smaller. Shift =
@@ -891,6 +959,30 @@ export default function SceneCanvas({
       return
     }
 
+    // BL-66 — New anchor placement commit. The preview already holds the
+    // final shape (corner or smooth with handles); just commit the diff.
+    // Anchor pivot is auto-centred on the path AABB so rotate / scale gizmos
+    // pivot around the path's visual centre instead of canvas origin.
+    if (drag.kind === 'newAnchorDraw') {
+      const pChanged = JSON.stringify(finalLayer.path) !== JSON.stringify(drag.originalLayer.path)
+      if (!pChanged) { ed.cancelTransaction(); return }
+      let committed = finalLayer
+      if (finalLayer.path && finalLayer.path.anchors.length > 0) {
+        const bb = bezierPathBounds(finalLayer.path)
+        committed = {
+          ...finalLayer,
+          transform: {
+            ...finalLayer.transform,
+            anchorX: bb.x + bb.width  / 2,
+            anchorY: bb.y + bb.height / 2,
+          },
+        }
+      }
+      ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, committed, drag.originalLayer))
+      onAfterLayerCommit?.(drag.originalLayer, committed)
+      return
+    }
+
     if (drag.kind === 'rotate') {
       // BL-03: multi-select rotate → batch every changed layer into a single
       // undo step (similar to the multi-move branch below).
@@ -1125,6 +1217,14 @@ export default function SceneCanvas({
       return
     }
     if (e.button !== 0) return
+
+    // BL-67 — While pick mode is active, clicks on the canvas itself (not on
+    // a pickable path) cancel the operation. Path clicks are handled by the
+    // SVG overlay above (with stopPropagation), so they don't reach here.
+    if (pathPickMode) {
+      onExitPathPickMode?.()
+      return
+    }
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -1259,9 +1359,11 @@ export default function SceneCanvas({
           return
         }
 
-        // Click on empty area = APPEND a new anchor (corner type).
-        // Lets users build a path by clicking points in sequence.
-        const next = {
+        // BL-66 — Click on empty area: APPEND a provisional corner anchor and
+        // start a `newAnchorDraw` drag. If the user drags > 5px before release,
+        // we upgrade it to a smooth anchor with bezier handles (outHandle at
+        // cursor, inHandle mirrored). Pure-click commits as a corner.
+        const provisional = {
           ...selectedLayer,
           path: {
             ...selectedLayer.path,
@@ -1271,7 +1373,23 @@ export default function SceneCanvas({
             ],
           },
         }
-        editor.dispatchCommand(makeUpdateLayerCmd(selectedLayer.id, next, selectedLayer))
+        editor.beginTransaction()
+        editor.previewTransaction({
+          ...sceneRef.current,
+          layers: sceneRef.current.layers.map(l => l.id === selectedLayer.id ? provisional : l),
+        })
+        dragRef.current = {
+          kind: 'newAnchorDraw',
+          layerId: selectedLayer.id,
+          originalLayer: selectedLayer,
+          anchorX: lx,
+          anchorY: ly,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          anchorIndex: provisional.path.anchors.length - 1,
+        }
+        window.addEventListener('pointermove', handlePointerMove)
+        window.addEventListener('pointerup',   handlePointerUp)
         return
       }
     }
@@ -1341,7 +1459,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, handleSelectionDragMove, handleSelectionDragUp])
+  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, handleSelectionDragMove, handleSelectionDragUp, pathPickMode, onExitPathPickMode])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1742,6 +1860,29 @@ export default function SceneCanvas({
     ? (resolveInstanceLayer(rawSelectedLayer, scene.layers) ?? rawSelectedLayer)
     : rawSelectedLayer
 
+  // BL-66 — Compute the LIVE rendered transform (motionPath / followPath /
+  // keyframe overrides applied) so the gizmo tracks the position the canvas
+  // is actually drawing the layer at. Falls back to the static transform
+  // when no overrides apply. `dragOverrides` ensures the frame moves
+  // smoothly mid-drag (preview transactions don't update overrides).
+  const selectedDisplayTransform = useMemo(() => {
+    if (!selectedLayer) return null
+    let ov: Map<string, number> = overrides ?? new Map()
+    if (dragOverrides.size > 0) {
+      const m = new Map<string, number>()
+      ov.forEach((v, k) => m.set(k, v))
+      dragOverrides.forEach((v, k) => m.set(k, v))
+      ov = m
+    }
+    return resolveDisplayTransform(selectedLayer, scene, timeMs, ov)
+  }, [selectedLayer, scene, timeMs, overrides, dragOverrides])
+  // Selection frame anchor: prefer live display transform but keep the
+  // static fallback so empty paths / unconfigured followPath layers still
+  // get a sensible gizmo origin.
+  const selDX = selectedDisplayTransform?.x ?? selectedLayer?.transform.x ?? 0
+  const selDY = selectedDisplayTransform?.y ?? selectedLayer?.transform.y ?? 0
+  const selDR = selectedDisplayTransform?.rotationDeg ?? selectedLayer?.transform.rotationDeg ?? 0
+
   // ── 3DS Max-style gizmo visibility per toolMode ──────────────────────────
   // Each mode shows only its own handle set so the user always sees the
   // gizmo they're using. `select` is the legacy "everything visible" mode.
@@ -1761,8 +1902,17 @@ export default function SceneCanvas({
     axisScale: toolMode === 'scale',
     anchor:    toolMode === 'select' || toolMode === 'anchor',
   }
+  // BL-66 — Path layers carry geometry in `path.anchors`, not `size`. Derive
+  // an AABB from the anchors so the selection frame (+ resize handles) can
+  // wrap the path the same way it wraps a shape.
+  const selectedPathBounds = useMemo(() => {
+    if (!selectedLayer || selectedLayer.type !== 'path' || !selectedLayer.path) return null
+    if (selectedLayer.path.anchors.length < 2) return null
+    return bezierPathBounds(selectedLayer.path)
+  }, [selectedLayer])
+  const hasFrameGeometry = !!selectedLayer && (!!selectedLayer.size || !!selectedPathBounds)
   const showFrame =
-    !!selectedLayer && !!selectedLayer.size && !selectedLayer.locked && !selectedLayer.hidden
+    !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.hidden
     && gizmo.frame
 
   return (
@@ -1814,11 +1964,40 @@ export default function SceneCanvas({
               ▶ Preview
             </div>
           )}
+
+          {/* BL-67 — Path pick mode banner. Click a dashed path to assign it. */}
+          {pathPickMode && (
+            <div className="absolute top-1 left-1 right-1 z-30 pointer-events-none
+                            px-3 py-1 rounded bg-blue-600/90 text-white text-[11px]
+                            font-medium shadow flex items-center justify-center gap-2">
+              <span>Click a dashed path to use it as a motion path.</span>
+              <span className="opacity-80">Press <kbd className="px-1 bg-white/20 rounded">Esc</kbd> to cancel.</span>
+            </div>
+          )}
           <canvas
             ref={canvasRef}
             width={width}
             height={height}
             onPointerDown={handleCanvasPointerDown}
+            onDoubleClick={(e) => {
+              // BL-66 — Çift tık path layer'a girer ve pen tool'u açar.
+              // Bu sayede kullanıcı menü/araç çubuğuna gitmeden ek anchor
+              // ekleyip mevcut anchorları sürükleyebilir.
+              if (previewMode) return
+              const cv = canvasRef.current
+              if (!cv) return
+              const rect = cv.getBoundingClientRect()
+              const sx = width  / rect.width
+              const sy = height / rect.height
+              const cx = (e.clientX - rect.left) * sx
+              const cy = (e.clientY - rect.top)  * sy
+              const hitId = hitTestLayer(scene, timeMs, cx, cy)
+              const hitLayer = hitId ? scene.layers.find((l) => l.id === hitId) : null
+              if (hitLayer?.type === 'path' && !hitLayer.locked) {
+                onSelectLayer(hitId!)
+                onToolModeChange?.('pen')
+              }
+            }}
             onContextMenu={(e) => {
               if (previewMode) return                  // preview mode = no editing menus
               const cv = canvasRef.current
@@ -1862,6 +2041,7 @@ export default function SceneCanvas({
             }}
             className={`absolute inset-0 block ${
               previewMode ? 'cursor-pointer'
+              : pathPickMode ? 'cursor-crosshair'
               : toolMode === 'pen' ? 'cursor-crosshair'
               : panMode ? 'cursor-grab'
               : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
@@ -1887,16 +2067,34 @@ export default function SceneCanvas({
             if (!hoveredLayerId || hoveredLayerId === selectedLayerId) return null
             const hl = scene.layers.find((l) => l.id === hoveredLayerId)
             if (!hl || hl.hidden) return null
-            const hw = hl.size?.width  ?? (hl.text?.fontSize ? 120 : 80)
-            const hh = hl.size?.height ?? (hl.text?.fontSize ?? 24)
+            // BL-66 — Path layers have no `size`; derive the hover rect from
+            // the path AABB so the red outline wraps the actual geometry
+            // (instead of an unrelated 80×24 box stuck at the layer origin).
+            // Empty paths (< 2 anchors) aren't hittable per renderer logic, so
+            // we shouldn't be here — but guard defensively.
+            if (hl.type === 'path') {
+              if (!hl.path || hl.path.anchors.length < 2) return null
+            }
+            let hx = hl.transform.x, hy = hl.transform.y
+            let hw: number, hh: number
+            if (hl.type === 'path' && hl.path && hl.path.anchors.length >= 2) {
+              const bb = bezierPathBounds(hl.path)
+              hx += bb.x
+              hy += bb.y
+              hw = bb.width
+              hh = bb.height
+            } else {
+              hw = hl.size?.width  ?? (hl.text?.fontSize ? 120 : 80)
+              hh = hl.size?.height ?? (hl.text?.fontSize ?? 24)
+            }
             return (
               <div
                 key={hoveredLayerId}
                 className="absolute pointer-events-none border-2 border-red-500/80 box-border
                            hover-preview-in transition-[border-color,border-width] duration-150"
                 style={{
-                  left: hl.transform.x * zoom,
-                  top:  hl.transform.y * zoom,
+                  left: hx * zoom,
+                  top:  hy * zoom,
                   width:  hw * zoom,
                   height: hh * zoom,
                   transform: `rotate(${hl.transform.rotationDeg}deg)`,
@@ -1916,6 +2114,31 @@ export default function SceneCanvas({
               zoom={zoom}
               currentTimeMs={timeMs}
             />
+          )}
+
+          {/* BL-66 / BL-67 — Dashed editor overlay for motion-role path layers
+              (hidden in CanvasRenderer) + clickable pick targets when the user
+              triggered "Assign motion path" from the right-click menu. */}
+          <PathGuideOverlay
+            scene={scene}
+            zoom={zoom}
+            pathPickMode={pathPickMode}
+            hoveredPickPathId={hoveredPickPathId}
+            onHoverPickPath={setHoveredPickPathId}
+            onAssignPath={(pathId) => {
+              if (pathPickMode) {
+                onAssignPath?.(pathPickMode.targetLayerId, pathId)
+                setHoveredPickPathId(null)
+              }
+            }}
+            showMotionGuides={!previewMode}
+          />
+
+          {/* BL-66 — Anchor + bezier handle visualization for the selected
+              path layer. Shown whenever a path layer is selected (not just
+              in pen mode) so users can see the structure they're editing. */}
+          {selectedLayer && selectedLayer.type === 'path' && selectedLayer.path && !previewMode && (
+            <PathEditOverlay layer={selectedLayer} zoom={zoom} />
           )}
 
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
@@ -1965,14 +2188,30 @@ export default function SceneCanvas({
 
           {showFrame && selectedLayer.size && (
             <SelectionFrame
-              x={selectedLayer.transform.x * zoom}
-              y={selectedLayer.transform.y * zoom}
+              x={selDX * zoom}
+              y={selDY * zoom}
               w={selectedLayer.size.width  * zoom}
               h={selectedLayer.size.height * zoom}
               anchorOffsetX={selectedLayer.transform.anchorX * zoom}
               anchorOffsetY={selectedLayer.transform.anchorY * zoom}
-              rotationDeg={selectedLayer.transform.rotationDeg}
+              rotationDeg={selDR}
               onHandlePointerDown={gizmo.resize ? beginResize : undefined}
+              onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
+            />
+          )}
+
+          {/* BL-66 — Path bounding-box frame. Pathlerin size'ı yok; AABB'yi
+              anchors'tan türetiyoruz. Resize handles devre dışı (pathler scale
+              değil pen tool ile düzenlenir), sadece rotate dotları aktif. */}
+          {showFrame && !selectedLayer.size && selectedPathBounds && (
+            <SelectionFrame
+              x={(selDX + selectedPathBounds.x) * zoom}
+              y={(selDY + selectedPathBounds.y) * zoom}
+              w={selectedPathBounds.width  * zoom}
+              h={selectedPathBounds.height * zoom}
+              anchorOffsetX={selectedLayer.transform.anchorX * zoom}
+              anchorOffsetY={selectedLayer.transform.anchorY * zoom}
+              rotationDeg={selDR}
               onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
             />
           )}
@@ -1982,8 +2221,8 @@ export default function SceneCanvas({
               they don't rotate with the layer (matches 3DS Max behaviour). */}
           {gizmo.axisMove && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <MoveAxisGizmo
-              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
-              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              x={(selDX + selectedLayer.transform.anchorX) * zoom}
+              y={(selDY + selectedLayer.transform.anchorY) * zoom}
               onAxisPointerDown={beginAxisMove}
             />
           )}
@@ -1993,8 +2232,8 @@ export default function SceneCanvas({
               from frame resize which mutates width/height (geometry). */}
           {gizmo.axisScale && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <ScaleAxisGizmo
-              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
-              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              x={(selDX + selectedLayer.transform.anchorX) * zoom}
+              y={(selDY + selectedLayer.transform.anchorY) * zoom}
               onAxisPointerDown={beginScaleAxis}
             />
           )}
@@ -2004,8 +2243,8 @@ export default function SceneCanvas({
               stays clearly outside the frame even for big shapes. */}
           {gizmo.ring && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <RotateRing
-              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
-              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              x={(selDX + selectedLayer.transform.anchorX) * zoom}
+              y={(selDY + selectedLayer.transform.anchorY) * zoom}
               radius={Math.max(
                 60,
                 ((selectedLayer.size?.width ?? 120) * 0.6) * zoom,
@@ -2019,8 +2258,8 @@ export default function SceneCanvas({
           {/* Anchor handle — visible in Select + Anchor modes */}
           {gizmo.anchor && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <AnchorHandle
-              x={(selectedLayer.transform.x + selectedLayer.transform.anchorX) * zoom}
-              y={(selectedLayer.transform.y + selectedLayer.transform.anchorY) * zoom}
+              x={(selDX + selectedLayer.transform.anchorX) * zoom}
+              y={(selDY + selectedLayer.transform.anchorY) * zoom}
               isDragging={dragRef.current?.kind === 'anchor'}
               onPointerDown={beginAnchorDrag}
             />
@@ -2226,6 +2465,10 @@ export default function SceneCanvas({
             ? () => menuHandlers!.bakeRepeater!(target.id)
             : undefined,
           isRepeater: target.type === 'repeater',
+
+          // BL-67 — Motion path assignment. Page lifts pick-mode state so the
+          // overlay can render the dashed pickable paths across the canvas.
+          assignMotionPath: menuHandlers?.assignMotionPath,
 
           // ── Locally implemented (no page state needed) ──────────────────
           centerOrigin: () => editor.dispatchCommand(

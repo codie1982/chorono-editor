@@ -17,15 +17,14 @@
 import type { ChronoScene, Layer } from '@/lib/types'
 import { buildEffectsFilter } from '@/lib/types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from '@/lib/evaluator'
-import { evaluateMotionPath } from '@/lib/motionPath'
 import type { AssetElementMap } from '@/lib/renderer'
 import { layerRegistry, rendererRegistry } from '@/lib/registry'
 import type { RenderContext, ParamValueMap } from './RenderContext'
 import { effectRegistry } from '@/lib/effects'
 import { createOffscreen } from './OffscreenCanvasCache'
 import { defaultMaskRenderer } from '@/lib/mask/MaskRenderer'
-import { defaultPathMotionResolver } from '@/lib/path/PathMotionResolver'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
+import { resolveDisplayTransform } from './resolveDisplayTransform'
 
 export interface CanvasRenderOptions {
   /** Optional pre-computed override map (for runtime preview). */
@@ -76,6 +75,12 @@ export class CanvasRenderer {
       for (const m of l.masks ?? []) usedAsMask.add(m.maskLayerId)
     }
 
+    // BL-66 — Motion path layers are editor-only guides used by followPath.
+    // The SceneCanvas overlay draws a dashed preview so the user can still
+    // see/edit them, but the rendered output (and runtime export) skips them.
+    const isMotionGuide = (l: Layer): boolean =>
+      l.type === 'path' && l.pathRole === 'motion'
+
     // ── Scene-graph walk: render ROOT layers (no parentId).
     //    Group renderer recursively walks its children. ─────────────────────
     const isSelected = (id: string): boolean =>
@@ -84,6 +89,7 @@ export class CanvasRenderer {
     for (const layer of rootLayers) {
       if (!isVisible(layer)) continue
       if (usedAsMask.has(layer.id)) continue
+      if (isMotionGuide(layer)) continue
       this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, timeMs, isSelected(layer.id))
     }
 
@@ -118,52 +124,13 @@ export class CanvasRenderer {
       layer = resolved
     }
 
-    let x      = getLayerValue(overrides, layer.id, 'transform.x',           layer.transform.x)
-    let y      = getLayerValue(overrides, layer.id, 'transform.y',           layer.transform.y)
-    let rot    = getLayerValue(overrides, layer.id, 'transform.rotationDeg', layer.transform.rotationDeg)
-    const scaleX  = getLayerValue(overrides, layer.id, 'transform.scaleX',   layer.transform.scaleX)
-    const scaleY  = getLayerValue(overrides, layer.id, 'transform.scaleY',   layer.transform.scaleY)
-    const opacity = getLayerValue(overrides, layer.id, 'opacity',            layer.opacity)
-
-    // Motion path override (SVG-string-based)
-    if (layer.motionPath?.pathData) {
-      const off = getLayerValue(overrides, layer.id, 'motionPath.offset', 0)
-      const mp  = evaluateMotionPath(layer.motionPath.pathData, off)
-      if (mp) {
-        x = mp.x; y = mp.y
-        if (layer.motionPath.autoRotate) rot = mp.rotationDeg
-      }
-    }
-
-    // Follow Path override (binds to another layer's Bezier path)
-    if (layer.followPath) {
-      const fp = layer.followPath
-      const pathLayer = scene.layers.find(l => l.id === fp.pathLayerId)
-      if (pathLayer?.type === 'path' && pathLayer.path) {
-        // Build a NormalizedPathDefinition from the BezierPath (anchors → C/L).
-        const def = layerRegistry.findForLayer(pathLayer)
-        if (def?.toPath) {
-          const pathDef = def.toPath(pathLayer)
-          if (pathDef.commands.length > 0) {
-            const progress = getLayerValue(overrides, layer.id, 'followPath.progress', fp.progress)
-            const result = defaultPathMotionResolver.resolve(
-              pathDef,
-              progress,
-              pathLayer.transform.x,
-              pathLayer.transform.y,
-              {
-                orientToPath:        fp.orientToPath,
-                rotationOffset:      getLayerValue(overrides, layer.id, 'followPath.rotationOffset', fp.rotationOffset ?? 0),
-                perpendicularOffset: getLayerValue(overrides, layer.id, 'followPath.perpendicularOffset', fp.perpendicularOffset ?? 0),
-              },
-            )
-            x = result.x
-            y = result.y
-            if (fp.orientToPath) rot = result.rotation
-          }
-        }
-      }
-    }
+    const opacity = getLayerValue(overrides, layer.id, 'opacity', layer.opacity)
+    const dt = resolveDisplayTransform(layer, scene, timeMs, overrides)
+    const x = dt.x
+    const y = dt.y
+    const rot = dt.rotationDeg
+    const scaleX = dt.scaleX
+    const scaleY = dt.scaleY
 
     ctx.save()
     // BL-55 — Frozen layers render translucent so the user can see they're

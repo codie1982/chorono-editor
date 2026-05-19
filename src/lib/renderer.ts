@@ -8,6 +8,7 @@ import {
   resolveTextContent, getStringParamBinding,
   type ParamValueMap,
 } from './runtime/paramResolver'
+import { hitTestSegment as hitTestSegmentLocal } from './path/pathOps'
 
 /** Element cache passed in from React (image / video DOM elements keyed by Asset.id). */
 export type AssetElementMap = Map<string, HTMLImageElement | HTMLVideoElement>
@@ -1123,6 +1124,24 @@ function computeGroupWorldBounds(
  * Returns true if the local point (lx, ly) is on the layer's body or stroke.
  */
 function hitTestLayerLocal(layer: Layer, lx: number, ly: number): boolean {
+  // BL-66 — Bezier path layers carry no `size`. Hit-test by proximity to the
+  // path's stroke (so empty space around the curve doesn't grab clicks) plus
+  // an interior fill check when the path is closed. Empty paths (< 2 anchors)
+  // are NOT hittable — they have no visible geometry yet.
+  if (layer.type === 'path' && layer.path) {
+    if (layer.path.anchors.length < 2) return false
+    const slop = Math.max(8, (layer.style?.stroke?.width ?? 2) / 2 + 6)
+    const segHit = hitTestSegmentLocal(layer.path, lx, ly, slop)
+    if (segHit) return true
+    // Closed path with fill → interior hits too (point-in-polygon over the
+    // anchor polygon is a good-enough proxy; the curve bulges slightly past
+    // it, covered by the stroke slop above).
+    if (layer.path.closed) {
+      return pointInPolygon(lx, ly, layer.path.anchors)
+    }
+    return false
+  }
+
   const w = layer.size?.width  ?? 80
   const h = layer.size?.height ?? (layer.text?.fontSize ?? 24)
   const shapeKind = layer.shapeKind ?? layer.shape
@@ -1200,6 +1219,20 @@ function pointToSegmentDistance(
   let t = ((px - x1) * dx + (py - y1) * dy) / lenSq
   t = Math.max(0, Math.min(1, t))
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+}
+
+/** Standard ray-cast point-in-polygon test (anchors form the polygon). */
+function pointInPolygon(lx: number, ly: number, anchors: PathAnchor[]): boolean {
+  let inside = false
+  const n = anchors.length
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = anchors[i].x, yi = anchors[i].y
+    const xj = anchors[j].x, yj = anchors[j].y
+    const intersect = ((yi > ly) !== (yj > ly))
+      && (lx < (xj - xi) * (ly - yi) / ((yj - yi) || 1e-9) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
 }
 
 /** Returns true if the angle `a` (degrees) falls inside the inclusive range [start, end]. */

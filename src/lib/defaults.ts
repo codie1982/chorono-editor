@@ -325,22 +325,35 @@ export function newBlobLayer(): Layer {
 
 export function newBezierPathLayer(): Layer {
   layerCounter++
-  // Default starter: a smooth-curve "S" — easy to recognise as a real Bezier
+  // Empty anchors — Pen Tool draws on first canvas click. See BL-66.
   return {
     id:    `path_${layerCounter}`,
     name:  `Path ${layerCounter}`,
     type:  'path',
-    transform: { ...DEFAULT_TRANSFORM,
-                 x: 60 + (layerCounter % 5) * 20, y: 80 + (layerCounter % 5) * 20 },
+    pathRole: 'visual',
+    transform: { ...DEFAULT_TRANSFORM, x: 0, y: 0 },
     opacity: 1,
     style: { stroke: { color: '#60A5FA', width: 3, lineCap: 'round', lineJoin: 'round' } },
-    path: {
-      closed: false,
-      anchors: [
-        { x:   0, y:  60, outX:  20, outY:   0, pointType: 'smooth' },
-        { x: 160, y:  60, inX:  140, inY: 120, outX: 180, outY:   0, pointType: 'smooth' },
-      ],
+    path: { closed: false, anchors: [] },
+  }
+}
+
+export function newMotionPathLayer(): Layer {
+  layerCounter++
+  // Motion guide path — drawn by the user, then assigned to other layers via
+  // followPath. Not rendered as a visible stroke during playback.
+  return {
+    id:    `mpath_${layerCounter}`,
+    name:  `Motion Path ${layerCounter}`,
+    type:  'path',
+    pathRole: 'motion',
+    transform: { ...DEFAULT_TRANSFORM, x: 0, y: 0 },
+    opacity: 1,
+    style: {
+      stroke: { color: '#F59E0B', width: 2, lineCap: 'round', lineJoin: 'round',
+                dashArray: [6, 4] },
     },
+    path: { closed: false, anchors: [] },
   }
 }
 
@@ -387,6 +400,7 @@ export function newTimeline(): Timeline {
     autoplay: true,
     loop: false,
     tracks: [],
+    layerIds: [],
   }
 }
 

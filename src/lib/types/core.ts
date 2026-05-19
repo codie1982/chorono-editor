@@ -275,6 +275,12 @@ export interface Layer {
   shapeParams?: ShapeParams
   /** Bezier path data — used when type === 'path'. Editable via Pen Tool. */
   path?: BezierPath
+  /**
+   * Visual vs motion guide path. Defaults to 'visual' when type === 'path'.
+   * Motion paths are not rendered as visible strokes during playback — they
+   * exist purely to drive `followPath` on other layers.
+   */
+  pathRole?: 'visual' | 'motion'
   /** Pivot for rotation/scale — set once in PropertiesPanel, NOT keyframed */
   transform: Transform
   opacity: number

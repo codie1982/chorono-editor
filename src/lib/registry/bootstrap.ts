@@ -8,6 +8,7 @@ import { ALL_SHAPE_DEFINITIONS }  from './definitions/shapes'
 import { textDefinition }         from './definitions/text/TextDefinition'
 import { ALL_MEDIA_DEFINITIONS }  from './definitions/media/MediaDefinitions'
 import { bezierPathDefinition }   from './definitions/path/BezierPathDefinition'
+import { motionPathDefinition }   from './definitions/path/MotionPathDefinition'
 import { pathStrokeDefinition }   from './definitions/path/PathStrokeDefinition'
 import { groupDefinition }        from './definitions/scene/GroupDefinition'
 import { repeaterDefinition }     from './definitions/scene/RepeaterDefinition'
@@ -31,6 +32,7 @@ export function bootstrapLayerRegistry(): void {
   // Path & Vector
   layerRegistry.register(pathStrokeDefinition)
   layerRegistry.register(bezierPathDefinition)
+  layerRegistry.register(motionPathDefinition)
 
   // Text
   layerRegistry.register(textDefinition)
