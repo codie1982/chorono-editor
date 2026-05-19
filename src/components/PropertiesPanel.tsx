@@ -426,7 +426,7 @@ export default function PropertiesPanel({
                   label="Fill Color"
                   layer={layer}
                   propertyPath="style.fill.color"
-                  acceptedTypes={['color', 'string']}
+                  acceptedTypes={['color']}
                   parameters={parameters}
                   onBind={(id) => bindParam('style.fill.color', id)}
                 >
@@ -650,7 +650,7 @@ export default function PropertiesPanel({
                     label="Color"
                     layer={layer}
                     propertyPath="style.stroke.color"
-                    acceptedTypes={['color', 'string']}
+                    acceptedTypes={['color']}
                     parameters={parameters}
                     onBind={(id) => bindParam('style.stroke.color', id)}
                   >
@@ -915,7 +915,7 @@ export default function PropertiesPanel({
                     label="Color"
                     layer={layer}
                     propertyPath="text.color"
-                    acceptedTypes={['color', 'string']}
+                    acceptedTypes={['color']}
                     parameters={parameters}
                     onBind={(id) => bindParam('text.color', id)}
                   >

@@ -68,8 +68,12 @@ export default function ParamBindButton({
     setOpen(false)
   }
 
+  // Intentionally NOT a <label>: when the wrapped child is an
+  // <input type="color">, label semantics would activate the native
+  // color picker whenever the user clicks anywhere inside the wrapper
+  // (including parameter items inside the popover).
   return (
-    <label className="flex flex-col gap-0.5 relative">
+    <div className="flex flex-col gap-0.5 relative">
       <span className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1">
         <span className="flex-1">{label}</span>
         <button
@@ -154,6 +158,6 @@ export default function ParamBindButton({
           )}
         </div>
       )}
-    </label>
+    </div>
   )
 }
