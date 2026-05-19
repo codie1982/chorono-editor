@@ -46,6 +46,10 @@ export interface CanvasMenuHandlers {
 
   // Motion path / conversion (placeholders for SVGator-parity, may be soon)
   setMotionPath?:   () => void
+  /** BL-67 — Enter motion path pick mode: the next path layer clicked on the
+   *  canvas becomes this layer's followPath target. Auto-creates a
+   *  followPath.progress 0→1 animation across the layer's lifetime. */
+  assignMotionPath?: () => void
   convertToPath?:   () => void
   saveToLibrary?:   () => void
   createClippingPath?: () => void
@@ -153,7 +157,9 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       items: buildAnimateSubmenu(args.layer, h.animateProperty),
     },
 
-    action('Set motion path',  undefined, h.setMotionPath),
+    // BL-67 — Pick a path layer on the canvas to drive this layer's position.
+    action('Assign motion path…', undefined,
+      args.layer.type === 'path' ? undefined : h.assignMotionPath),
     action('Convert to Spline', undefined, h.convertToPath),
     action('Save to library',  undefined, h.saveToLibrary),
 

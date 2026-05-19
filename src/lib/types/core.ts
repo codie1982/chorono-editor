@@ -230,6 +230,10 @@ export interface Timeline {
    *  union when displayed but stored separately so existing scene data
    *  doesn't need migration. */
   events?: import('../timeline/tracks').TimelineEvent[]
+  /** Explicit list of layer IDs that appear in this timeline's track view.
+   * undefined = legacy / "show all layers" (backward compat).
+   * [] = new timeline with no layers yet; layers must be dragged in. */
+  layerIds?: string[]
 }
 
 // ── Transform ─────────────────────────────────────────────────────────────────
@@ -271,6 +275,12 @@ export interface Layer {
   shapeParams?: ShapeParams
   /** Bezier path data — used when type === 'path'. Editable via Pen Tool. */
   path?: BezierPath
+  /**
+   * Visual vs motion guide path. Defaults to 'visual' when type === 'path'.
+   * Motion paths are not rendered as visible strokes during playback — they
+   * exist purely to drive `followPath` on other layers.
+   */
+  pathRole?: 'visual' | 'motion'
   /** Pivot for rotation/scale — set once in PropertiesPanel, NOT keyframed */
   transform: Transform
   opacity: number

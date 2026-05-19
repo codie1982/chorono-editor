@@ -17,7 +17,7 @@ const pathGroup = (): PropertyGroup => ({
 })
 
 /** Convert a layer.path (BezierPath with anchor handles) to a NormalizedPathDefinition. */
-const bezierPathToNormalized = (layer: Layer): PathDefinition => {
+export const bezierPathToNormalized = (layer: Layer): PathDefinition => {
   const path = layer.path
   if (!path || path.anchors.length === 0) {
     return { closed: false, commands: [] }

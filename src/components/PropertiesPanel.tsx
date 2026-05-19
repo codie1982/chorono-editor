@@ -7,7 +7,7 @@ import type {
   ChronoScene, ParameterWire, ParameterRef,
 } from '@/lib/types'
 import {
-  togglePathClosed, reversePath, cyclePointType, deleteAnchor,
+  togglePathClosed, reversePath,
 } from '@/lib/path/pathOps'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ScrubInput  from '@/components/inputs/ScrubInput'
@@ -795,20 +795,22 @@ export default function PropertiesPanel({
               </Section>
             )}
 
-            {/* ── Bezier Path (Pen Tool layer) ──────────────────────── */}
+            {/* ── Bezier Path (Pen Tool layer) — BL-66 ──────────────── */}
             {layer.type === 'path' && layer.path && (
               <Section title="Path">
                 <div className="flex gap-1.5 flex-wrap">
                   <button
                     onClick={() => update({ path: togglePathClosed(layer.path!) })}
-                    className="px-2 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 text-gray-200 transition-colors"
+                    disabled={layer.path.anchors.length < 2}
+                    className="px-2 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-gray-800 text-gray-200 transition-colors"
                     title={layer.path.closed ? 'Open path' : 'Close path'}
                   >
                     {layer.path.closed ? '◯ Open' : '◌ Close'}
                   </button>
                   <button
                     onClick={() => update({ path: reversePath(layer.path!) })}
-                    className="px-2 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 text-gray-200 transition-colors"
+                    disabled={layer.path.anchors.length < 2}
+                    className="px-2 py-1 text-[10px] rounded bg-gray-800 hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-gray-800 text-gray-200 transition-colors"
                     title="Reverse direction"
                   >
                     ⇄ Reverse
@@ -816,44 +818,18 @@ export default function PropertiesPanel({
                 </div>
 
                 <div className="text-[10px] text-gray-500 pt-1.5">
-                  {layer.path.anchors.length} anchors · {layer.path.closed ? 'closed' : 'open'}
-                </div>
-
-                {/* Anchor list — click to cycle point type, ✕ to delete */}
-                <div className="max-h-44 overflow-y-auto border border-gray-700 rounded">
-                  {layer.path.anchors.map((a, i) => (
-                    <div key={i}
-                      className="flex items-center gap-1 px-1.5 py-1 text-[10px] hover:bg-gray-800 border-b border-gray-800 last:border-b-0"
-                    >
-                      <span className="w-5 text-gray-500">#{i}</span>
-                      <button
-                        onClick={() => update({ path: cyclePointType(layer.path!, i) })}
-                        className={`px-1 rounded font-medium
-                          ${a.pointType === 'mirror' ? 'bg-amber-700 text-amber-100'
-                          : a.pointType === 'smooth' ? 'bg-blue-700 text-blue-100'
-                          : 'bg-gray-700 text-gray-300'}`}
-                        title="Cycle point type: corner → smooth → mirror"
-                      >
-                        {a.pointType?.[0]?.toUpperCase() ?? 'C'}
-                      </button>
-                      <span className="text-gray-400 tabular-nums flex-1">
-                        ({a.x.toFixed(0)}, {a.y.toFixed(0)})
-                      </span>
-                      <button
-                        onClick={() => update({ path: deleteAnchor(layer.path!, i) })}
-                        disabled={layer.path!.anchors.length <= 2}
-                        className="text-gray-600 hover:text-red-400 disabled:opacity-30 disabled:hover:text-gray-600"
-                        title="Delete anchor"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+                  {layer.path.anchors.length} anchor{layer.path.anchors.length === 1 ? '' : 's'} ·
+                  {' '}{layer.path.closed ? 'closed' : 'open'}
+                  {layer.pathRole === 'motion' && (
+                    <span className="ml-1 px-1 rounded bg-amber-900 text-amber-300 text-[9px]">MOTION</span>
+                  )}
                 </div>
 
                 <p className="text-[10px] text-gray-500 leading-snug pt-1">
-                  Drag white squares to move anchors, blue dots to bend curves.
-                  Click the C/S/M badge to switch corner / smooth / mirror.
+                  Double-click a path to edit it, or press <kbd className="px-1 bg-gray-800 rounded text-gray-300">P</kbd> for the Pen Tool.
+                  Click on the canvas to add anchors, click + drag for smooth curves.
+                  Double-click the first anchor to close. Press
+                  {' '}<kbd className="px-1 bg-gray-800 rounded text-gray-300">Enter</kbd> when done.
                 </p>
               </Section>
             )}
@@ -1508,7 +1484,8 @@ export default function PropertiesPanel({
             <Section title="Follow Path">
               <div className="text-[10px] text-gray-500 leading-snug pb-1">
                 Bind this layer&apos;s position to a path layer&apos;s curve.
-                Animate <span className="text-gray-400">followPath.progress</span> from 0→1.
+                Progress is driven by the timeline automatically — keyframe
+                <span className="text-gray-400"> followPath.progress</span> to override.
               </div>
               <Field label="Path Layer">
                 <select
@@ -1520,9 +1497,9 @@ export default function PropertiesPanel({
                     } else {
                       update({
                         followPath: {
-                          progress: 0,
                           ...layer.followPath,
                           pathLayerId: id,
+                          progress: layer.followPath?.progress ?? 0,
                         },
                       })
                     }
@@ -1545,6 +1522,11 @@ export default function PropertiesPanel({
                       followPath: { ...layer.followPath!, progress: v },
                     })} />
                 </Field>
+                <p className="text-[10px] text-gray-500 leading-snug pt-0.5">
+                  Animated by the <span className="text-gray-400">followPath.progress</span> track
+                  on the timeline — 0 → 1 keyframes are auto-seeded when the path is
+                  first assigned. Drag the keyframes to retime the motion.
+                </p>
                 <Row2>
                   <label className="flex flex-col gap-0.5">
                     <span className="text-[10px] text-gray-500 uppercase tracking-wide">Orient to Path</span>

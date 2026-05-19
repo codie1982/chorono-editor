@@ -45,8 +45,10 @@ export interface MotionPath {
 export interface FollowPath {
   /** Id of a path-type layer in the scene. */
   pathLayerId: string
-  /** 0–1 arc-length progress along the path. Animatable. */
-  progress: number
+  /** 0–1 arc-length progress along the path. Animatable via the
+   *  `followPath.progress` track on the timeline. `assignMotionPathToLayer`
+   *  seeds 0 → 1 keyframes on assign so the motion is editable visually. */
+  progress?: number
   /** Rotate the layer to face along the path tangent. */
   orientToPath?: boolean
   /** Extra rotation added on top of tangent (degrees). */

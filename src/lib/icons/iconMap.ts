@@ -199,7 +199,7 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Bezier Path',  type: 'bezierPath',   icon: 'bezierPath',   available: true  },
       { label: 'Freehand',     type: 'freehandPath', icon: 'freehandPath', available: false },
       { label: 'SVG Import',   type: 'svgImport',    icon: 'svgImport',    available: true  },
-      { label: 'Motion Path',  type: 'motionPath',   icon: 'motionPath',   available: false },
+      { label: 'Motion Path',  type: 'motionPath',   icon: 'motionPath',   available: true  },
     ],
   },
   {
@@ -226,43 +226,12 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Particle Emitter', type: 'particleEmitter', icon: 'noise', available: true },
     ],
   },
-  {
-    title: 'Effects',
-    items: [
-      { label: 'Glow',        type: 'glow',       icon: 'glow',       available: false },
-      { label: 'Blur',        type: 'blur',        icon: 'blur',        available: false },
-      { label: 'Shadow',      type: 'shadow',      icon: 'shadow',      available: false },
-      { label: 'Light Sweep', type: 'lightSweep',  icon: 'lightSweep',  available: false },
-      { label: 'Gradient',    type: 'gradient',    icon: 'gradient',    available: false },
-      { label: 'Trail',       type: 'trail',       icon: 'trail',       available: false },
-      { label: 'Noise',       type: 'noise',       icon: 'noise',       available: false },
-      { label: 'Adjustment',  type: 'adjustment',  icon: 'adjustment',  available: false },
-    ],
-  },
-  {
-    title: 'Groups',
-    items: [
-      { label: 'Group',      type: 'group',      icon: 'group',      available: true  },
-      { label: 'Pre-compose',type: 'precompose',  icon: 'precompose', available: false },
-      { label: 'Component',  type: 'component',  icon: 'component',  available: false },
-      { label: 'Repeater',   type: 'repeater',   icon: 'repeater',   available: true  },
-    ],
-  },
-  {
-    title: 'Masks',
-    items: [
-      { label: 'Rect Mask',    type: 'rectMask',    icon: 'rectMask',    available: false },
-      { label: 'Ellipse Mask', type: 'ellipseMask', icon: 'ellipseMask', available: false },
-      { label: 'Path Mask',    type: 'pathMask',    icon: 'pathMask',    available: false },
-    ],
-  },
-  {
-    title: 'Interaction',
-    items: [
-      { label: 'Hit Area',    type: 'hitArea',    icon: 'hitArea',    available: false },
-      { label: 'Gesture',     type: 'gesture',    icon: 'gestureArea',available: false },
-      { label: 'Drop Zone',   type: 'dropZone',   icon: 'dropZone',   available: false },
-      { label: 'Trigger',     type: 'triggerZone',icon: 'triggerZone',available: false },
-    ],
-  },
+  // Effects / Groups / Masks / Interaction were removed from the Layer Add menu
+  // because they aren't created here in practice:
+  //   • Effects → Properties Panel > Effects tab (effectsChain on a layer)
+  //   • Groups  → ⌘G shortcut + toolbar "Group" button + canvas right-click
+  //   • Repeater → ⇧⌘A Array modal (BL-59 Clone & Array)
+  //   • Masks   → Properties Panel > Effects > Masks (reference another layer)
+  //   • Hit Area / Gesture / Drop Zone / Trigger → Properties Panel > Interact
+  //     tab (tappable / draggable / dragConfig are layer properties)
 ]
