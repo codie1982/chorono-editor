@@ -48,9 +48,11 @@ export default function LayerPanel({
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate,
 }: Props) {
-  // ── Right-click context menu ─────────────────────────────────────────────
+  // ── Right-click context menu — layer rows ────────────────────────────────
   const ctxMenu = useContextMenu()
   const [ctxLayerId, setCtxLayerId] = useState<string | null>(null)
+  // ── Right-click context menu — empty list area (add layer shortcut) ───────
+  const emptyCtxMenu = useContextMenu()
   // ── Drag-drop state ──────────────────────────────────────────────────────
   // Only the dragged id + the current drop target row + zone — kept tiny so
   // re-renders during dragover are cheap (each only invalidates two rows).
@@ -292,6 +294,12 @@ export default function LayerPanel({
         className="flex-1 overflow-y-auto py-1"
         onDragOver={(e) => { if (draggingId) e.preventDefault() }}
         onDrop={onDropEmpty}
+        onContextMenu={(e) => {
+          // Only fire when the click landed on the list background (layer rows
+          // stop propagation so they handle their own context menu).
+          e.preventDefault()
+          emptyCtxMenu.open(e)
+        }}
       >
         {layers.length === 0 && (
           <li className="px-3 py-8 text-center text-xs text-gray-600 leading-relaxed">
@@ -368,6 +376,7 @@ export default function LayerPanel({
               onClick={(e) => onSelect(layer.id, e.shiftKey)}
               onContextMenu={(e) => {
                 e.preventDefault()
+                e.stopPropagation()
                 if (!selectedIds.has(layer.id)) onSelect(layer.id, false)
                 setCtxLayerId(layer.id)
                 ctxMenu.open(e)
@@ -510,6 +519,36 @@ export default function LayerPanel({
           {selectedIds.size > 1 ? ` · ${selectedIds.size} selected` : ''}
         </div>
       )}
+
+      {/* ── Empty-area right-click → Add Layer shortcut ─────────────────── */}
+      {emptyCtxMenu.isOpen && (() => {
+        const addItems = ADD_LAYER_GROUPS
+          .map(group => {
+            const available = group.items.filter(i => i.available)
+            if (available.length === 0) return null
+            return {
+              kind: 'submenu' as const,
+              label: group.title,
+              items: available.map(item => ({
+                kind: 'action' as const,
+                label: item.label,
+                onSelect: () => { handleAddItem(item.type); emptyCtxMenu.close() },
+              })),
+            }
+          })
+          .filter(Boolean) as import('@/components/ui/ContextMenu').MenuItem[]
+        return (
+          <ContextMenu
+            x={emptyCtxMenu.state!.x} y={emptyCtxMenu.state!.y}
+            items={[
+              { kind: 'action', label: 'Add Layer…', disabled: true, onSelect: () => {} },
+              { kind: 'separator' },
+              ...addItems,
+            ]}
+            onClose={emptyCtxMenu.close}
+          />
+        )
+      })()}
 
       {/* ── Layer row right-click context menu ───────────────────────────── */}
       {ctxMenu.isOpen && ctxLayerId && (() => {
