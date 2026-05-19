@@ -348,14 +348,22 @@ export default function PropertiesPanel({
                   onChange={(v) => updateTransform('rotationDeg', v)} />
               </WireableField>
               <Row2>
-                <Field label="Anchor X">
+                <ParamBindButton
+                  label="Anchor X" layer={layer} propertyPath="transform.anchorX"
+                  acceptedTypes={['number']} parameters={parameters}
+                  onBind={(id) => bindParam('transform.anchorX', id)}
+                >
                   <NumInput value={layer.transform.anchorX}
                     onChange={(v) => updateTransform('anchorX', v)} />
-                </Field>
-                <Field label="Anchor Y">
+                </ParamBindButton>
+                <ParamBindButton
+                  label="Anchor Y" layer={layer} propertyPath="transform.anchorY"
+                  acceptedTypes={['number']} parameters={parameters}
+                  onBind={(id) => bindParam('transform.anchorY', id)}
+                >
                   <NumInput value={layer.transform.anchorY}
                     onChange={(v) => updateTransform('anchorY', v)} />
-                </Field>
+                </ParamBindButton>
               </Row2>
               <button
                 onClick={() => {
@@ -439,10 +447,14 @@ export default function PropertiesPanel({
                     })} />
                 </ParamBindButton>
                 {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
-                  <Field label="Corner Radius">
+                  <ParamBindButton
+                    label="Corner Radius" layer={layer} propertyPath="style.cornerRadius"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('style.cornerRadius', id)}
+                  >
                     <NumInput value={layer.style.cornerRadius ?? 0} min={0}
                       onChange={(v) => update({ style: { ...layer.style!, cornerRadius: v } })} />
-                  </Field>
+                  </ParamBindButton>
                 )}
               </Section>
             )}
@@ -660,13 +672,17 @@ export default function PropertiesPanel({
                           stroke: { width: 2, ...(layer.style?.stroke ?? {}), color: v } },
                       })} />
                   </ParamBindButton>
-                  <Field label="Width">
+                  <ParamBindButton
+                    label="Width" layer={layer} propertyPath="style.stroke.width"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('style.stroke.width', id)}
+                  >
                     <NumInput value={layer.style?.stroke?.width ?? 0} min={0} max={100}
                       onChange={(v) => update({
                         style: { ...(layer.style ?? {}),
                           stroke: { color: '#FFFFFF', ...(layer.style?.stroke ?? {}), width: v } },
                       })} />
-                  </Field>
+                  </ParamBindButton>
                 </Row2>
                 {layer.style?.stroke && layer.style.stroke.width > 0 && (
                   <Row2>
@@ -907,10 +923,17 @@ export default function PropertiesPanel({
                   />
                 </ParamBindButton>
                 <Row2>
-                  <Field label="Font Size">
+                  <ParamBindButton
+                    label="Font Size"
+                    layer={layer}
+                    propertyPath="text.fontSize"
+                    acceptedTypes={['number']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('text.fontSize', id)}
+                  >
                     <NumInput value={layer.text.fontSize} min={4}
                       onChange={(v) => update({ text: { ...layer.text!, fontSize: v } })} />
-                  </Field>
+                  </ParamBindButton>
                   <ParamBindButton
                     label="Color"
                     layer={layer}

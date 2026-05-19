@@ -34,7 +34,7 @@ export const textRendererPlugin: LayerRendererPlugin = {
   id: 'text',
   supports: (layer: Layer) => layer.type === 'text',
   render(ctx: RenderContext, layer: Layer): void {
-    drawText(ctx.canvas, layer, ctx.paramValues)
+    drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides)
   },
 }
 

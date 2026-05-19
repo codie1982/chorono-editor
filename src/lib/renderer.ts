@@ -678,14 +678,19 @@ export function drawText(
   ctx: CanvasRenderingContext2D,
   layer: Layer,
   paramValues?: ParamValueMap,
+  overrides?: ReturnType<typeof evaluateTimelines>,
 ) {
   if (!layer.text) return
   const {
-    value, fontSize, color,
+    value, color,
     fontFamily = 'sans-serif', fontWeight = 'normal', fontStyle = 'normal',
     textAlign = 'left', letterSpacing = 0, lineHeight: _lh,
     stroke, shadow, uppercase, underline,
   } = layer.text
+  // text.fontSize can be driven by a paramBinding or keyframe override.
+  const fontSize = overrides
+    ? getLayerValue(overrides, layer.id, 'text.fontSize', layer.text.fontSize)
+    : layer.text.fontSize
 
   // Runtime parameter resolution:
   //   1. paramBindings['text.value'] → entire text replaced by parameter value
@@ -782,7 +787,8 @@ function renderLayer(
   ctx.globalCompositeOperation   = (layer.blendMode as GlobalCompositeOperation) ?? 'source-over'
   ctx.filter                     = buildEffectsFilter(layer.effects)
 
-  const { anchorX, anchorY } = layer.transform
+  const anchorX = getLayerValue(overrides, layer.id, 'transform.anchorX', layer.transform.anchorX)
+  const anchorY = getLayerValue(overrides, layer.id, 'transform.anchorY', layer.transform.anchorY)
   ctx.translate(x + anchorX, y + anchorY)
   if (rot   !== 0)           ctx.rotate((rot * Math.PI) / 180)
   if (scaleX !== 1 || scaleY !== 1) ctx.scale(scaleX, scaleY)
@@ -797,7 +803,7 @@ function renderLayer(
   if (layer.type === 'shape' && layer.size) {
     drawShape(ctx, layer, overrides, paramValues)
   } else if (layer.type === 'text') {
-    drawText(ctx, layer, paramValues)
+    drawText(ctx, layer, paramValues, overrides)
   } else if (layer.type === 'image') {
     drawImageLayer(ctx, layer, assets)
   } else if (layer.type === 'video') {
