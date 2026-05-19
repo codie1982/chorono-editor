@@ -1661,6 +1661,7 @@ export default function BuilderPage() {
                       parameterWires={scene.parameterWires}
                       onRequestNewWire={wireModal.openForTarget}
                       onEditWire={wireModal.openForEdit}
+                      dispatchCommand={dispatchCommand}
                     />
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector

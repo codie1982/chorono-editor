@@ -14,6 +14,8 @@ import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import ColorInput  from '@/components/inputs/ColorInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
+import { makeBakeMotionBlurCmd, makeUnbakeMotionBlurCmd } from '@/lib/editor/commands-motionblur'
+import { DEFAULT_MOTION_BLUR } from '@/lib/defaults'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
@@ -61,6 +63,8 @@ interface Props {
   onConvertToSpline?: () => void
   /** BL-05 — Full scene reference for wire lookups (sources / labels). */
   scene?: ChronoScene
+  /** Dispatch an EditorCommand (undo-safe). Used by motion blur bake buttons. */
+  dispatchCommand?: (cmd: import('@/lib/editor/commands-keyframe').EditorCommand) => void
   /** BL-05 — Currently-defined parameter wires (scene.parameterWires). */
   parameterWires?: ParameterWire[]
   /** BL-05 — Open WireParameterModal pre-filled with a new wire targeting `target`. */
@@ -319,6 +323,7 @@ export default function PropertiesPanel({
   parameters = [], allLayers = [], allTimelines = [],
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
+  dispatchCommand,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
   // every WireableField call. `parameters` is shared too; `acceptedTypes`
@@ -1679,6 +1684,58 @@ export default function PropertiesPanel({
                 </div>
               ))}
             </Section>
+
+            {/* ── Motion Blur ──────────────────────────────────────────── */}
+            {(() => {
+              const mb = layer.motionBlur
+              const updateMB = (patch: Partial<import('@/lib/types/effects').MotionBlurConfig>) =>
+                update({ motionBlur: { ...(mb ?? DEFAULT_MOTION_BLUR), ...patch } })
+              return (
+                <Section title="Motion Blur">
+                  <Row2>
+                    <label className="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mb?.enabled ?? false}
+                        onChange={(e) => updateMB({ enabled: e.target.checked })}
+                        className="accent-blue-500"
+                      />
+                      Enabled
+                    </label>
+                  </Row2>
+                  {mb?.enabled && (<>
+                    <Field label="Trail Count (3–12)">
+                      <NumInput value={mb.trailCount} min={3} max={12} step={1}
+                        onChange={(v) => updateMB({ trailCount: Math.round(v) })} />
+                    </Field>
+                    <Field label="Frame Interval ms (0=auto)">
+                      <NumInput value={mb.frameInterval} min={0} max={200} step={1}
+                        onChange={(v) => updateMB({ frameInterval: v })} />
+                    </Field>
+                    <Field label="Max Opacity (0–1)">
+                      <NumInput value={mb.maxOpacity} min={0} max={1} step={0.05}
+                        onChange={(v) => updateMB({ maxOpacity: v })} />
+                    </Field>
+                    <Field label="Speed Threshold (px)">
+                      <NumInput value={mb.velocityThreshold} min={0} max={50} step={0.1}
+                        onChange={(v) => updateMB({ velocityThreshold: v })} />
+                    </Field>
+                    {/* TODO: Bake system incomplete — time-shifted keyframe logic
+                        needs further testing before enabling. Re-enable once
+                        makeBakeMotionBlurCmd is verified end-to-end. */}
+                    <div className="flex flex-col gap-1 pt-1">
+                      <button
+                        disabled
+                        title="Bake system coming soon"
+                        className="w-full px-2 py-1 text-[11px] bg-gray-700 text-gray-500 rounded cursor-not-allowed"
+                      >
+                        Bake Motion Blur (coming soon)
+                      </button>
+                    </div>
+                  </>)}
+                </Section>
+              )
+            })()}
             </>)}{/* end of Effects tab */}
 
             {/* ── Follow Path + Motion Path (Motion tab) ────────────── */}

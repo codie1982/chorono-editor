@@ -4,6 +4,7 @@ import type {
   Trigger, Binding, ParameterWire, TimelineSegment, TimelineMarker,
   PathStrokeData,
 } from './types'
+import type { MotionBlurConfig } from './types/effects'
 
 let layerCounter    = 0
 let timelineCounter = 0
@@ -28,6 +29,15 @@ export function nextEventId(): string {
 
 export const DEFAULT_TRANSFORM: Transform = {
   x: 40, y: 40, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 0, anchorY: 0,
+}
+
+export const DEFAULT_MOTION_BLUR: MotionBlurConfig = {
+  enabled: false,
+  trailCount: 6,
+  frameInterval: 0,
+  maxOpacity: 0.6,
+  velocityThreshold: 0.5,
+  baked: false,
 }
 
 export function newRectLayer(): Layer {

@@ -4,7 +4,7 @@
 import type { ShapeStyle }  from './style'
 import type { TextStyle }   from './text'
 import type { ImageData, VideoData, AudioData, Asset } from './media'
-import type { LayerEffects, MotionPath, PluginEffect, FollowPath } from './effects'
+import type { LayerEffects, MotionPath, PluginEffect, FollowPath, MotionBlurConfig } from './effects'
 import type { BezierPath } from './path'
 import type { MaskDefinition } from './mask'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
@@ -297,6 +297,8 @@ export interface Layer {
   effects?:    LayerEffects
   /** Plugin-based effect chain (glow/shadow/etc.) applied AFTER rendering. */
   effectsChain?: PluginEffect[]
+  /** Temporal trail effect driven by layer velocity. See renderMotionBlurTrails. */
+  motionBlur?: MotionBlurConfig
   motionPath?: MotionPath
   /** Drives layer position from another path layer's geometry. */
   followPath?: FollowPath
