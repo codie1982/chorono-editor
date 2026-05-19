@@ -429,30 +429,18 @@ export default function PropertiesPanel({
               </Section>
             )}
 
-            {/* ── Convert to Spline (BL-17 Faz 1) ────────────────────── */}
-            {layer.type === 'shape' && layer.size && onConvertToSpline && (
-              <div className="px-3 py-2">
-                <button
-                  onClick={onConvertToSpline}
-                  title="Bake the primitive into an editable BezierPath. Style + transform + effects preserved. Undoable."
-                  className="w-full px-2 py-1.5 text-xs rounded
-                             bg-indigo-600/80 hover:bg-indigo-500 text-white
-                             border border-indigo-500 transition-colors"
-                >
-                  ✎  Convert to Spline
-                </button>
-                <div className="text-[9px] text-gray-500 mt-1 leading-tight">
-                  Required before applying modifiers (Bend / Boolean / Fractal …).
-                  Once converted, the layer becomes editable in Edit mode (W).
-                </div>
-              </div>
-            )}
+            {/* ── Convert to Spline kaldırıldı (BL-24 fix) ─────────────────
+                Shape nesneleri zaten parametrik. Spline'a dönüştürme
+                bezierPath layer'ı içindir, shape'ler için değil. Context menu'den
+                gerekirse ayrıca erişilebilir kalır. */}
 
             {/* ── Geometry (parametric shape params) ─────────────────── */}
             {layer.type === 'shape' && layer.shapeKind && (
               (layer.shapeKind === 'polygon' || layer.shapeKind === 'star' ||
                layer.shapeKind === 'ring'    || layer.shapeKind === 'arc'  ||
-               layer.shapeKind === 'line'    || layer.shapeKind === 'arrow')
+               layer.shapeKind === 'line'    || layer.shapeKind === 'arrow' ||
+               layer.shapeKind === 'spiral'  || layer.shapeKind === 'wave'  ||
+               layer.shapeKind === 'blob')
             ) && (
               <Section title="Geometry">
                 {/* Polygon & Star — sides */}
@@ -551,6 +539,86 @@ export default function PropertiesPanel({
                           })} />
                       </Field>
                     )}
+                  </>
+                )}
+
+                {/* BL-24 — Spiral: turns, startRadius, endRadius, tightness */}
+                {layer.shapeKind === 'spiral' && (
+                  <>
+                    <Field label="Turns">
+                      <NumInput value={layer.shapeParams?.turns ?? 3} min={0.5} max={20} step={0.5}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'spiral' }), kind: 'spiral', turns: v },
+                        })} />
+                    </Field>
+                    <Row2>
+                      <Field label="Inner R">
+                        <NumInput value={layer.shapeParams?.startRadius ?? 4} min={0}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: 'spiral' }), kind: 'spiral', startRadius: v },
+                          })} />
+                      </Field>
+                      <Field label="Outer R">
+                        <NumInput value={layer.shapeParams?.endRadius ?? 56} min={1}
+                          onChange={(v) => update({
+                            shapeParams: { ...(layer.shapeParams ?? { kind: 'spiral' }), kind: 'spiral', endRadius: v },
+                          })} />
+                      </Field>
+                    </Row2>
+                    <Field label="Tightness">
+                      <NumInput value={layer.shapeParams?.tightness ?? 1} min={0.1} max={5} step={0.1}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'spiral' }), kind: 'spiral', tightness: v },
+                        })} />
+                    </Field>
+                  </>
+                )}
+
+                {/* BL-24 — Wave: amplitude, frequency, phase */}
+                {layer.shapeKind === 'wave' && (
+                  <>
+                    <Field label="Amplitude">
+                      <NumInput value={layer.shapeParams?.amplitude ?? 20} min={0}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'wave' }), kind: 'wave', amplitude: v },
+                        })} />
+                    </Field>
+                    <Field label="Frequency">
+                      <NumInput value={layer.shapeParams?.frequency ?? 2} min={0.1} max={50} step={0.5}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'wave' }), kind: 'wave', frequency: v },
+                        })} />
+                    </Field>
+                    <Field label="Phase (rad)">
+                      <NumInput value={layer.shapeParams?.phase ?? 0} min={-6.283} max={6.283} step={0.1}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'wave' }), kind: 'wave', phase: v },
+                        })} />
+                    </Field>
+                  </>
+                )}
+
+                {/* BL-24 — Blob: sides, irregularity, seed */}
+                {layer.shapeKind === 'blob' && (
+                  <>
+                    <Field label="Points">
+                      <NumInput value={layer.shapeParams?.sides ?? 8} min={5} max={64} step={1}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'blob' }), kind: 'blob', sides: v },
+                        })} />
+                    </Field>
+                    <Field label="Irregularity (0-1)">
+                      <NumInput value={layer.shapeParams?.irregularity ?? 0.4} min={0} max={1} step={0.05}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'blob' }), kind: 'blob', irregularity: v },
+                        })} />
+                    </Field>
+                    <Field label="Seed">
+                      <NumInput value={layer.shapeParams?.seed ?? 42} min={0} step={1}
+                        onChange={(v) => update({
+                          shapeParams: { ...(layer.shapeParams ?? { kind: 'blob' }), kind: 'blob', seed: v },
+                        })} />
+                    </Field>
                   </>
                 )}
               </Section>
