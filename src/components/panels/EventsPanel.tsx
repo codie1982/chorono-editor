@@ -20,6 +20,7 @@ import { newTrigger } from '@/lib/defaults'
 import {
   makeAddTriggerCmd, makeDeleteTriggerCmd, makeUpdateTriggerCmd,
 } from '@/lib/editor/commands-interactive'
+import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 
 interface Props {
   scene: ChronoScene
@@ -83,6 +84,8 @@ function TriggerCard({
   scene: ChronoScene
   editor: EditorStateReturn
 }) {
+  const ctxMenu = useContextMenu()
+
   function patch(next: Partial<Trigger>) {
     const updated: Trigger = { ...trigger, ...next }
     editor.dispatchCommand(makeUpdateTriggerCmd(trigger.id, trigger, updated))
@@ -93,9 +96,22 @@ function TriggerCard({
   function patchActions(actions: TriggerAction[]) {
     patch({ actions })
   }
+  function duplicate() {
+    const dup: Trigger = {
+      ...newTrigger(),
+      event:     trigger.event,
+      condition: trigger.condition,
+      actions:   trigger.actions,
+      label:     (trigger.label ?? 'Rule') + ' copy',
+    }
+    editor.dispatchCommand(makeAddTriggerCmd(dup))
+  }
 
   return (
-    <div className="px-3 py-2 border-b border-gray-800">
+    <div
+      className="px-3 py-2 border-b border-gray-800"
+      onContextMenu={(e) => { e.preventDefault(); ctxMenu.open(e) }}
+    >
       {/* Label + delete */}
       <div className="flex items-center gap-2 mb-1.5">
         <input
@@ -156,6 +172,24 @@ function TriggerCard({
           + add action
         </button>
       </div>
+
+      {ctxMenu.isOpen && (
+        <ContextMenu
+          x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+          items={[
+            {
+              kind: 'action', label: 'Duplicate Rule',
+              onSelect: () => { duplicate(); ctxMenu.close() },
+            },
+            { kind: 'separator' },
+            {
+              kind: 'action', label: 'Delete Rule',
+              onSelect: () => { editor.dispatchCommand(makeDeleteTriggerCmd(trigger)); ctxMenu.close() },
+            },
+          ]}
+          onClose={ctxMenu.close}
+        />
+      )}
     </div>
   )
 }

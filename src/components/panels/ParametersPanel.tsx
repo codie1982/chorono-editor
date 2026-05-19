@@ -18,6 +18,7 @@ import { newSceneParameter } from '@/lib/defaults'
 import {
   makeAddParamCmd, makeDeleteParamCmd, makeUpdateParamCmd,
 } from '@/lib/editor/commands-interactive'
+import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 
 interface Props {
   scene: ChronoScene
@@ -97,6 +98,7 @@ function ParameterRow({ param, editor }: { param: SceneParameter; editor: Editor
   const [name, setName]         = useState(param.name)
   const [value, setValue]       = useState<SceneParameterValue>(param.defaultValue)
   const badge = TYPE_BADGES[param.type]
+  const ctxMenu = useContextMenu()
 
   // Commit the patched param. Captures `param` as `prev` so undo restores cleanly.
   function commit(patch: Partial<SceneParameter>) {
@@ -105,8 +107,22 @@ function ParameterRow({ param, editor }: { param: SceneParameter; editor: Editor
     editor.dispatchCommand(makeUpdateParamCmd(param.id, param, next))
   }
 
+  function duplicate() {
+    const dup = {
+      ...newSceneParameter(param.type),
+      name:         param.name + ' copy',
+      defaultValue: param.defaultValue,
+      min:          param.min,
+      max:          param.max,
+    }
+    editor.dispatchCommand(makeAddParamCmd(dup))
+  }
+
   return (
-    <div className="px-3 py-2 border-b border-gray-800 hover:bg-gray-800/40">
+    <div
+      className="px-3 py-2 border-b border-gray-800 hover:bg-gray-800/40"
+      onContextMenu={(e) => { e.preventDefault(); ctxMenu.open(e) }}
+    >
       <div className="flex items-center gap-2">
         <span className={`text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded ${badge.bg} ${badge.fg}`}>
           {param.type}
@@ -157,6 +173,24 @@ function ParameterRow({ param, editor }: { param: SceneParameter; editor: Editor
       <div className="mt-0.5 text-[9px] text-gray-500 font-mono">
         id: {param.id} · placeholder: {'{' + param.id + '}'}
       </div>
+
+      {ctxMenu.isOpen && (
+        <ContextMenu
+          x={ctxMenu.state!.x} y={ctxMenu.state!.y}
+          items={[
+            {
+              kind: 'action', label: 'Duplicate',
+              onSelect: () => { duplicate(); ctxMenu.close() },
+            },
+            { kind: 'separator' },
+            {
+              kind: 'action', label: 'Delete',
+              onSelect: () => { editor.dispatchCommand(makeDeleteParamCmd(param)); ctxMenu.close() },
+            },
+          ]}
+          onClose={ctxMenu.close}
+        />
+      )}
     </div>
   )
 }
