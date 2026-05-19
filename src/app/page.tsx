@@ -1298,9 +1298,10 @@ export default function BuilderPage() {
                       alignTop:    () => alignSelected('top'),
                       alignMiddle: () => alignSelected('middle'),
                       alignBottom: () => alignSelected('bottom'),
-                      convertToSpline: selectedLayer?.type === 'shape' && selectedLayer.size
-                        ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
-                        : undefined,
+                      // BL-24 fix: Convert to Spline shape nesnelerinde gösterilmez.
+                      // Shape'ler parametrik kalmalı; spline dönüşümü gerekirse ileride
+                      // sadece bezierPath layer'ı için ayrı bir akış olur.
+                      convertToSpline: undefined,
                       // BL-59 — Clone & Array context-menu entries
                       cloneQuick:    cloneQuick,
                       cloneSettings: openCloneModal,
@@ -1366,11 +1367,9 @@ export default function BuilderPage() {
                       parameters={scene.parameters}
                       allLayers={scene.layers}
                       allTimelines={scene.timelines.map(t => ({ id: t.id, durationMs: t.durationMs }))}
-                      onConvertToSpline={
-                        selectedLayer?.type === 'shape' && selectedLayer.size
-                          ? () => dispatchCommand(makeConvertToSplineCmd(selectedLayer))
-                          : undefined
-                      }
+                      // BL-24 fix: PropertiesPanel'den Convert to Spline butonu kaldırıldı.
+                      // Shape'ler parametrik kalır; properties'te geometry params görünür.
+                      onConvertToSpline={undefined}
                       scene={scene}
                       parameterWires={scene.parameterWires}
                       onRequestNewWire={wireModal.openForTarget}
