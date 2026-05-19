@@ -24,7 +24,7 @@ export const shapeRendererPlugin: LayerRendererPlugin = {
   id: 'shape',
   supports: (layer: Layer) => layer.type === 'shape' && !!layer.size,
   render(ctx: RenderContext, layer: Layer): void {
-    drawShape(ctx.canvas, layer, ctx.overrides)
+    drawShape(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
   },
 }
 
@@ -34,7 +34,7 @@ export const textRendererPlugin: LayerRendererPlugin = {
   id: 'text',
   supports: (layer: Layer) => layer.type === 'text',
   render(ctx: RenderContext, layer: Layer): void {
-    drawText(ctx.canvas, layer, ctx.paramValues)
+    drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides)
   },
 }
 
@@ -74,7 +74,7 @@ export const bezierPathRendererPlugin: LayerRendererPlugin = {
   id: 'bezierPath',
   supports: (layer: Layer) => layer.type === 'path' && !!layer.path,
   render(ctx: RenderContext, layer: Layer): void {
-    drawBezierPath(ctx.canvas, layer, ctx.overrides)
+    drawBezierPath(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
   },
 }
 

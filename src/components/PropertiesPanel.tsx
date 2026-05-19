@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   Layer, Composition,
   PathStrokeData, PathShapeType, PathTrimMode, StrokeCap,
@@ -10,6 +10,7 @@ import {
   togglePathClosed, reversePath,
 } from '@/lib/path/pathOps'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
+import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 
@@ -67,14 +68,19 @@ interface Props {
   onEditWire?: (wire: ParameterWire) => void
 }
 
-// ── BL-05: Wireable field wrapper ──────────────────────────────────────────
-// Adds a 🔗 icon next to any animatable input. When a wire targets this
-// property, replaces the input with a "Driven by …" label so the user knows
-// the value is under formula control. Click 🔗 to open the wire editor.
+// ── BL-05 + BL-69: Wireable + paramBindable field wrapper ─────────────────
+// Renders a property input with up to two binding affordances next to its
+// label:
+//   🔗 (BL-05) — opens the wire editor for expression-based mappings
+//   📎 (BL-69) — opens a parameter picker for direct paramBindings
+// They are independent features that can coexist on the same property.
+// Pill priority when both are active: wire wins (it overrides paramBinding
+// at runtime via mergeOverrides ordering), so the wire pill is shown.
 
 function WireableField({
   label, layer, propertyPath, valueType = 'number',
   scene, parameterWires, onRequestNewWire, onEditWire,
+  parameters, acceptedTypes, onBindParam,
   children,
 }: {
   label: string
@@ -85,12 +91,37 @@ function WireableField({
   parameterWires?: ParameterWire[]
   onRequestNewWire?: (target: ParameterRef) => void
   onEditWire?: (wire: ParameterWire) => void
+  parameters?: SceneParameter[]
+  acceptedTypes?: import('@/lib/types').SceneParameterType[]
+  onBindParam?: (paramId: string | null) => void
   children: React.ReactNode
 }) {
   const wire = layer ? findWireForProperty(parameterWires, layer.id, propertyPath) : null
   const canWire = !!layer && (!!onRequestNewWire || !!onEditWire)
 
-  function handleClick() {
+  const boundParamId = layer?.paramBindings?.[propertyPath]
+  const boundParam = boundParamId && parameters
+    ? parameters.find((p) => p.id === boundParamId)
+    : undefined
+  const canParam = !!layer && !!onBindParam && !!acceptedTypes && !!parameters
+
+  const [paramOpen, setParamOpen] = useState(false)
+  const paramPopRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!paramOpen) return
+    function onDown(e: MouseEvent) {
+      if (paramPopRef.current && !paramPopRef.current.contains(e.target as Node)) setParamOpen(false)
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setParamOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [paramOpen])
+
+  function handleWireClick() {
     if (!layer) return
     if (wire && onEditWire) { onEditWire(wire); return }
     if (!wire && onRequestNewWire) {
@@ -98,17 +129,24 @@ function WireableField({
     }
   }
 
+  const compatible = parameters && acceptedTypes
+    ? parameters.filter((p) => acceptedTypes.includes(p.type))
+    : []
+
   return (
-    <label className="flex flex-col gap-0.5">
+    // Intentionally a <div>, not a <label> — the popover lives inside this
+    // wrapper, and a <label> would re-focus the wrapped input whenever a
+    // popover item is clicked.
+    <div className="flex flex-col gap-0.5 relative">
       <span className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1">
         <span className="flex-1">{label}</span>
         {canWire && (
           <button
             type="button"
-            onClick={handleClick}
+            onClick={handleWireClick}
             title={wire
               ? `Driven by ${scene ? formatParameterRef(wire.source, scene) : 'wire'} — click to edit`
-              : 'Wire this parameter to a source via expression'}
+              : 'Wire this property to a source via expression'}
             className={`text-[10px] leading-none w-4 h-4 flex items-center justify-center rounded transition-colors ${
               wire
                 ? 'text-sky-300 bg-sky-900/50 hover:bg-sky-800/70'
@@ -118,19 +156,109 @@ function WireableField({
             🔗
           </button>
         )}
+        {canParam && (
+          <button
+            type="button"
+            onClick={() => setParamOpen((v) => !v)}
+            title={boundParam
+              ? `Bound to ${boundParam.name} — click to change or unbind`
+              : 'Bind this property to a parameter'}
+            className={`text-[10px] leading-none w-4 h-4 flex items-center justify-center rounded transition-colors ${
+              boundParam
+                ? 'text-amber-300 bg-amber-900/50 hover:bg-amber-800/70'
+                : 'text-gray-600 hover:text-amber-300 hover:bg-gray-800'
+            }`}
+          >
+            📎
+          </button>
+        )}
       </span>
+
       {wire ? (
         <button
           type="button"
-          onClick={handleClick}
+          onClick={handleWireClick}
           className="text-left bg-sky-900/20 border border-sky-800/40 rounded px-2 py-1 text-[11px] text-sky-200 font-mono truncate hover:bg-sky-900/40"
           title="Click to edit this wire"
         >
           Driven by {scene ? formatParameterRef(wire.source, scene) : 'wire'}
         </button>
+      ) : boundParam ? (
+        <button
+          type="button"
+          onClick={() => setParamOpen((v) => !v)}
+          className="text-left bg-amber-900/20 border border-amber-800/40 rounded px-2 py-1 text-[11px] text-amber-200 font-mono truncate hover:bg-amber-900/40 flex items-center gap-1.5"
+          title="Bound parameter — click to change or unbind"
+        >
+          <span aria-hidden>📎</span>
+          <span className="truncate">{boundParam.name}</span>
+          <span className={`ml-auto shrink-0 text-[9px] px-1 rounded ${PARAM_TYPE_BADGE[boundParam.type].bg} ${PARAM_TYPE_BADGE[boundParam.type].fg}`}>
+            {boundParam.type}
+          </span>
+        </button>
       ) : children}
-    </label>
+
+      {paramOpen && canParam && (
+        <div
+          ref={paramPopRef}
+          className="absolute z-50 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded shadow-xl py-1 max-h-64 overflow-y-auto"
+        >
+          {boundParam && onBindParam && (
+            <>
+              <button
+                type="button"
+                onClick={() => { onBindParam(null); setParamOpen(false) }}
+                className="w-full text-left px-2 py-1.5 text-[11px] text-red-300 hover:bg-red-900/30 flex items-center gap-1.5"
+              >
+                <span aria-hidden>✕</span> Unbind parameter
+              </button>
+              <div className="border-t border-gray-700 my-1" />
+            </>
+          )}
+          {compatible.length === 0 ? (
+            <div className="px-2 py-2 text-[10px] text-gray-500 leading-snug">
+              No compatible parameters.
+              <br />
+              Add a{' '}
+              <span className="text-gray-300 font-mono">
+                {acceptedTypes!.join(' / ')}
+              </span>{' '}
+              parameter from the Parameters panel.
+            </div>
+          ) : (
+            compatible.map((p) => {
+              const isBound = p.id === boundParamId
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { onBindParam!(p.id); setParamOpen(false) }}
+                  className={`w-full text-left px-2 py-1.5 text-[11px] flex items-center gap-1.5 transition-colors ${
+                    isBound
+                      ? 'bg-amber-900/30 text-amber-200'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  <span className="truncate flex-1 font-mono">{p.name}</span>
+                  <span className={`shrink-0 text-[9px] px-1 rounded ${PARAM_TYPE_BADGE[p.type].bg} ${PARAM_TYPE_BADGE[p.type].fg}`}>
+                    {p.type}
+                  </span>
+                </button>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
   )
+}
+
+const PARAM_TYPE_BADGE: Record<import('@/lib/types').SceneParameterType, { bg: string; fg: string }> = {
+  string:  { bg: 'bg-sky-900',     fg: 'text-sky-300'     },
+  number:  { bg: 'bg-emerald-900', fg: 'text-emerald-300' },
+  boolean: { bg: 'bg-amber-900',   fg: 'text-amber-300'   },
+  color:   { bg: 'bg-pink-900',    fg: 'text-pink-300'    },
+  image:   { bg: 'bg-violet-900',  fg: 'text-violet-300'  },
 }
 
 // ── Genel giriş bileşenleri ─────────────────────────────────────────────────
@@ -211,9 +339,10 @@ export default function PropertiesPanel({
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
 }: Props) {
-  // Convenience: bundle the wire-related props so we don't list 4 of them on
-  // every WireableField call.
-  const wireProps = { scene, parameterWires, onRequestNewWire, onEditWire }
+  // Convenience: bundle the wire-related props so we don't list them on
+  // every WireableField call. `parameters` is shared too; `acceptedTypes`
+  // and `onBindParam` stay inline since they vary per field.
+  const wireProps = { scene, parameterWires, onRequestNewWire, onEditWire, parameters }
   // Shadow `scene` shape for the inline mask + motion path UI below (local
   // — distinct from the BL-05 `scene` prop above).
   const sceneLite = { layers: allLayers }
@@ -221,6 +350,16 @@ export default function PropertiesPanel({
   const update = (partial: Partial<Layer>) => layer && onLayerChange({ ...layer, ...partial })
   const updateTransform = (key: keyof Layer['transform'], val: number) =>
     layer && update({ transform: { ...layer.transform, [key]: val } })
+
+  // BL-69 — Update the layer's paramBindings map. Null clears the binding.
+  // Drops the field entirely when empty so the scene stays JSON-clean.
+  const bindParam = (propertyPath: string, paramId: string | null) => {
+    if (!layer) return
+    const next = { ...(layer.paramBindings ?? {}) }
+    if (paramId) next[propertyPath] = paramId
+    else          delete next[propertyPath]
+    update({ paramBindings: Object.keys(next).length ? next : undefined })
+  }
 
   // Active section tab. Resets to first tab when selection changes layer kind.
   const [activeTab, setActiveTab] = useState<PropTab>('properties')
@@ -315,36 +454,49 @@ export default function PropertiesPanel({
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>
             <Section title="Transform">
               <Row2>
-                <WireableField label="X" layer={layer} propertyPath="transform.x" {...wireProps}>
+                <WireableField label="X" layer={layer} propertyPath="transform.x" {...wireProps}
+                  acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.x', id)}>
                   <NumInput value={layer.transform.x} onChange={(v) => updateTransform('x', v)} />
                 </WireableField>
-                <WireableField label="Y" layer={layer} propertyPath="transform.y" {...wireProps}>
+                <WireableField label="Y" layer={layer} propertyPath="transform.y" {...wireProps}
+                  acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.y', id)}>
                   <NumInput value={layer.transform.y} onChange={(v) => updateTransform('y', v)} />
                 </WireableField>
               </Row2>
               <Row2>
-                <WireableField label="Scale X" layer={layer} propertyPath="transform.scaleX" {...wireProps}>
+                <WireableField label="Scale X" layer={layer} propertyPath="transform.scaleX" {...wireProps}
+                  acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.scaleX', id)}>
                   <NumInput value={layer.transform.scaleX} step={0.01} min={0.01}
                     onChange={(v) => updateTransform('scaleX', v)} />
                 </WireableField>
-                <WireableField label="Scale Y" layer={layer} propertyPath="transform.scaleY" {...wireProps}>
+                <WireableField label="Scale Y" layer={layer} propertyPath="transform.scaleY" {...wireProps}
+                  acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.scaleY', id)}>
                   <NumInput value={layer.transform.scaleY} step={0.01} min={0.01}
                     onChange={(v) => updateTransform('scaleY', v)} />
                 </WireableField>
               </Row2>
-              <WireableField label="Rotation (deg)" layer={layer} propertyPath="transform.rotationDeg" {...wireProps}>
+              <WireableField label="Rotation (deg)" layer={layer} propertyPath="transform.rotationDeg" {...wireProps}
+                acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.rotationDeg', id)}>
                 <NumInput value={layer.transform.rotationDeg} min={-360} max={360}
                   onChange={(v) => updateTransform('rotationDeg', v)} />
               </WireableField>
               <Row2>
-                <Field label="Anchor X">
+                <ParamBindButton
+                  label="Anchor X" layer={layer} propertyPath="transform.anchorX"
+                  acceptedTypes={['number']} parameters={parameters}
+                  onBind={(id) => bindParam('transform.anchorX', id)}
+                >
                   <NumInput value={layer.transform.anchorX}
                     onChange={(v) => updateTransform('anchorX', v)} />
-                </Field>
-                <Field label="Anchor Y">
+                </ParamBindButton>
+                <ParamBindButton
+                  label="Anchor Y" layer={layer} propertyPath="transform.anchorY"
+                  acceptedTypes={['number']} parameters={parameters}
+                  onBind={(id) => bindParam('transform.anchorY', id)}
+                >
                   <NumInput value={layer.transform.anchorY}
                     onChange={(v) => updateTransform('anchorY', v)} />
-                </Field>
+                </ParamBindButton>
               </Row2>
               <button
                 onClick={() => {
@@ -369,7 +521,8 @@ export default function PropertiesPanel({
             </Section>
 
             <Section title="Appearance">
-              <WireableField label="Opacity" layer={layer} propertyPath="opacity" {...wireProps}>
+              <WireableField label="Opacity" layer={layer} propertyPath="opacity" {...wireProps}
+                acceptedTypes={['number']} onBindParam={(id) => bindParam('opacity', id)}>
                 <div className="flex items-center gap-2">
                   <input
                     type="range" min={0} max={1} step={0.01}
@@ -411,7 +564,14 @@ export default function PropertiesPanel({
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
-                <Field label="Fill Color">
+                <ParamBindButton
+                  label="Fill Color"
+                  layer={layer}
+                  propertyPath="style.fill.color"
+                  acceptedTypes={['color']}
+                  parameters={parameters}
+                  onBind={(id) => bindParam('style.fill.color', id)}
+                >
                   <ColorInput value={layer.style.fill?.color ?? '#000000'}
                     onChange={(v) => update({
                       style: {
@@ -419,12 +579,16 @@ export default function PropertiesPanel({
                         fill: { type: 'solid', ...layer.style!.fill, color: v },
                       },
                     })} />
-                </Field>
+                </ParamBindButton>
                 {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
-                  <Field label="Corner Radius">
+                  <ParamBindButton
+                    label="Corner Radius" layer={layer} propertyPath="style.cornerRadius"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('style.cornerRadius', id)}
+                  >
                     <NumInput value={layer.style.cornerRadius ?? 0} min={0}
                       onChange={(v) => update({ style: { ...layer.style!, cornerRadius: v } })} />
-                  </Field>
+                  </ParamBindButton>
                 )}
               </Section>
             )}
@@ -445,7 +609,12 @@ export default function PropertiesPanel({
               <Section title="Geometry">
                 {/* Polygon & Star — sides */}
                 {(layer.shapeKind === 'polygon' || layer.shapeKind === 'star') && (
-                  <Field label={layer.shapeKind === 'star' ? 'Points' : 'Sides'}>
+                  <ParamBindButton
+                    label={layer.shapeKind === 'star' ? 'Points' : 'Sides'}
+                    layer={layer} propertyPath="shapeParams.sides"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('shapeParams.sides', id)}
+                  >
                     <NumInput
                       value={layer.shapeParams?.sides ?? (layer.shapeKind === 'star' ? 5 : 6)}
                       min={3} max={12} step={1}
@@ -453,55 +622,75 @@ export default function PropertiesPanel({
                         shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, sides: v },
                       })}
                     />
-                  </Field>
+                  </ParamBindButton>
                 )}
 
                 {/* Star — inner / outer radius */}
                 {layer.shapeKind === 'star' && (
                   <Row2>
-                    <Field label="Outer R">
+                    <ParamBindButton
+                      label="Outer R" layer={layer} propertyPath="shapeParams.outerRadius"
+                      acceptedTypes={['number']} parameters={parameters}
+                      onBind={(id) => bindParam('shapeParams.outerRadius', id)}
+                    >
                       <NumInput value={layer.shapeParams?.outerRadius ?? 60} min={1}
                         onChange={(v) => update({
                           shapeParams: { ...(layer.shapeParams ?? { kind: 'star' }), kind: 'star', outerRadius: v },
                         })} />
-                    </Field>
-                    <Field label="Inner R">
+                    </ParamBindButton>
+                    <ParamBindButton
+                      label="Inner R" layer={layer} propertyPath="shapeParams.innerRadius"
+                      acceptedTypes={['number']} parameters={parameters}
+                      onBind={(id) => bindParam('shapeParams.innerRadius', id)}
+                    >
                       <NumInput value={layer.shapeParams?.innerRadius ?? 27} min={1}
                         onChange={(v) => update({
                           shapeParams: { ...(layer.shapeParams ?? { kind: 'star' }), kind: 'star', innerRadius: v },
                         })} />
-                    </Field>
+                    </ParamBindButton>
                   </Row2>
                 )}
 
                 {/* Polygon & Star — roundness */}
                 {(layer.shapeKind === 'polygon' || layer.shapeKind === 'star') && (
-                  <Field label="Roundness (0-1)">
+                  <ParamBindButton
+                    label="Roundness (0-1)" layer={layer} propertyPath="shapeParams.roundness"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('shapeParams.roundness', id)}
+                  >
                     <NumInput value={layer.shapeParams?.roundness ?? 0} min={0} max={1} step={0.05}
                       onChange={(v) => update({
                         shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, roundness: v },
                       })} />
-                  </Field>
+                  </ParamBindButton>
                 )}
 
                 {/* Ring & Arc — angles */}
                 {(layer.shapeKind === 'ring' || layer.shapeKind === 'arc') && (
                   <>
                     <Row2>
-                      <Field label="Start °">
+                      <ParamBindButton
+                        label="Start °" layer={layer} propertyPath="shapeParams.startAngle"
+                        acceptedTypes={['number']} parameters={parameters}
+                        onBind={(id) => bindParam('shapeParams.startAngle', id)}
+                      >
                         <NumInput value={layer.shapeParams?.startAngle ?? (layer.shapeKind === 'arc' ? -90 : 0)}
                           min={-360} max={360} step={1}
                           onChange={(v) => update({
                             shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, startAngle: v },
                           })} />
-                      </Field>
-                      <Field label="End °">
+                      </ParamBindButton>
+                      <ParamBindButton
+                        label="End °" layer={layer} propertyPath="shapeParams.endAngle"
+                        acceptedTypes={['number']} parameters={parameters}
+                        onBind={(id) => bindParam('shapeParams.endAngle', id)}
+                      >
                         <NumInput value={layer.shapeParams?.endAngle ?? (layer.shapeKind === 'arc' ? 90 : 360)}
                           min={-360} max={360} step={1}
                           onChange={(v) => update({
                             shapeParams: { ...(layer.shapeParams ?? { kind: layer.shapeKind! }), kind: layer.shapeKind!, endAngle: v },
                           })} />
-                      </Field>
+                      </ParamBindButton>
                     </Row2>
                     {layer.shapeKind === 'ring' && (
                       <Field label="Inner Radius">
@@ -628,20 +817,31 @@ export default function PropertiesPanel({
             {layer.type === 'shape' && (
               <Section title="Stroke">
                 <Row2>
-                  <Field label="Color">
+                  <ParamBindButton
+                    label="Color"
+                    layer={layer}
+                    propertyPath="style.stroke.color"
+                    acceptedTypes={['color']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('style.stroke.color', id)}
+                  >
                     <ColorInput value={layer.style?.stroke?.color ?? '#FFFFFF'}
                       onChange={(v) => update({
                         style: { ...(layer.style ?? {}),
                           stroke: { width: 2, ...(layer.style?.stroke ?? {}), color: v } },
                       })} />
-                  </Field>
-                  <Field label="Width">
+                  </ParamBindButton>
+                  <ParamBindButton
+                    label="Width" layer={layer} propertyPath="style.stroke.width"
+                    acceptedTypes={['number']} parameters={parameters}
+                    onBind={(id) => bindParam('style.stroke.width', id)}
+                  >
                     <NumInput value={layer.style?.stroke?.width ?? 0} min={0} max={100}
                       onChange={(v) => update({
                         style: { ...(layer.style ?? {}),
                           stroke: { color: '#FFFFFF', ...(layer.style?.stroke ?? {}), width: v } },
                       })} />
-                  </Field>
+                  </ParamBindButton>
                 </Row2>
                 {layer.style?.stroke && layer.style.stroke.width > 0 && (
                   <Row2>
@@ -865,7 +1065,14 @@ export default function PropertiesPanel({
             {/* ── Text özellikleri ──────────────────────────────────── */}
             {layer.type === 'text' && layer.text && (
               <Section title="Text">
-                <Field label="Content">
+                <ParamBindButton
+                  label="Content"
+                  layer={layer}
+                  propertyPath="text.value"
+                  acceptedTypes={['string']}
+                  parameters={parameters}
+                  onBind={(id) => bindParam('text.value', id)}
+                >
                   <input
                     type="text"
                     value={layer.text.value}
@@ -873,17 +1080,31 @@ export default function PropertiesPanel({
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
                                focus:outline-none focus:border-blue-500"
                   />
-                </Field>
+                </ParamBindButton>
                 <Row2>
-                  <Field label="Font Size">
+                  <ParamBindButton
+                    label="Font Size"
+                    layer={layer}
+                    propertyPath="text.fontSize"
+                    acceptedTypes={['number']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('text.fontSize', id)}
+                  >
                     <NumInput value={layer.text.fontSize} min={4}
                       onChange={(v) => update({ text: { ...layer.text!, fontSize: v } })} />
-                  </Field>
-                  <Field label="Color">
+                  </ParamBindButton>
+                  <ParamBindButton
+                    label="Color"
+                    layer={layer}
+                    propertyPath="text.color"
+                    acceptedTypes={['color']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('text.color', id)}
+                  >
                     <input type="color" value={layer.text.color}
                       onChange={(e) => update({ text: { ...layer.text!, color: e.target.value } })}
                       className="w-full h-7 rounded border border-gray-600 bg-transparent cursor-pointer p-0.5" />
-                  </Field>
+                  </ParamBindButton>
                 </Row2>
               </Section>
             )}
