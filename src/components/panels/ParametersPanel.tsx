@@ -12,6 +12,7 @@ import { useState } from 'react'
 import type {
   ChronoScene, SceneParameter, SceneParameterType, SceneParameterValue,
 } from '@/lib/types'
+import ColorInput from '@/components/inputs/ColorInput'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { newSceneParameter } from '@/lib/defaults'
 import {
@@ -206,20 +207,10 @@ function ParamValueInput({
       )
     case 'color':
       return (
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={String(value ?? '#000000')}
-            onChange={(e) => { onChange(e.target.value); onCommit(e.target.value) }}
-            className="w-7 h-6 rounded border border-gray-700 bg-transparent cursor-pointer"
-          />
-          <input
-            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[11px] text-gray-100 outline-none font-mono"
-            value={String(value ?? '#000000')}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={(e) => onCommit(e.target.value)}
-          />
-        </div>
+        <ColorInput
+          value={String(value ?? '#000000')}
+          onChange={(v) => { onChange(v); onCommit(v) }}
+        />
       )
   }
 }

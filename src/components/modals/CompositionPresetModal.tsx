@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import type { Composition, CompositionPreset } from '@/lib/types'
 import { COMPOSITION_PRESETS } from '@/lib/types'
+import ColorInput from '@/components/inputs/ColorInput'
 
 interface Props {
   composition: Composition
@@ -96,9 +97,7 @@ export default function CompositionPresetModal({ composition, onApply, onClose }
                 className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" />
             </Field>
             <Field label="Background">
-              <input type="color" value={bg}
-                onChange={(e) => setBg(e.target.value)}
-                className="w-full h-7 bg-transparent border border-gray-600 rounded cursor-pointer p-0.5" />
+              <ColorInput value={bg} onChange={(v) => setBg(v)} />
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">

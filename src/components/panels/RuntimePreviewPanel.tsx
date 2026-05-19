@@ -14,6 +14,7 @@
 import { useMemo, useState } from 'react'
 import type { ChronoScene, SceneParameterValue, SceneParameter } from '@/lib/types'
 import type { InteractiveRuntimeReturn } from '@/app/hooks/useInteractiveRuntime'
+import ColorInput from '@/components/inputs/ColorInput'
 
 interface Props {
   scene:   ChronoScene
@@ -205,16 +206,9 @@ function ParamControl({ param, runtime }: { param: SceneParameter; runtime: Inte
     case 'color':
       return (
         <ParamRow param={param}>
-          <input
-            type="color"
+          <ColorInput
             value={String(liveValue ?? '#000000')}
-            onChange={(e) => set(e.target.value)}
-            className="w-7 h-6 rounded border border-gray-700 bg-transparent cursor-pointer"
-          />
-          <input
-            value={String(liveValue ?? '#000000')}
-            onChange={(e) => set(e.target.value)}
-            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[11px] text-gray-100 outline-none font-mono"
+            onChange={(v) => set(v)}
           />
         </ParamRow>
       )
