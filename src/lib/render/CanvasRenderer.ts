@@ -25,6 +25,7 @@ import { createOffscreen } from './OffscreenCanvasCache'
 import { defaultMaskRenderer } from '@/lib/mask/MaskRenderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from './resolveDisplayTransform'
+import { renderMotionBlurTrails } from './renderMotionBlurTrails'
 
 export interface CanvasRenderOptions {
   /** Optional pre-computed override map (for runtime preview). */
@@ -38,6 +39,10 @@ export interface CanvasRenderOptions {
 }
 
 export class CanvasRenderer {
+  /** Tracks layers currently being rendered as motion blur trails — prevents
+   *  recursive trail rendering when renderSingleLayer calls renderLayer. */
+  private _mbRenderingSet = new Set<string>()
+
   render(
     ctx:             CanvasRenderingContext2D,
     scene:           ChronoScene,
@@ -122,6 +127,22 @@ export class CanvasRenderer {
       // Use the resolved (composed) layer for the plugin dispatch but keep
       // `layer.id` for overrides / selection / hit-testing.
       layer = resolved
+    }
+
+    // ── Motion Blur pre-render ────────────────────────────────────────────
+    // Render trailing copies BEFORE the main layer so they appear behind it.
+    // _mbRenderingSet prevents infinite recursion when renderSingleLayer
+    // calls back into renderLayer for the trail frames.
+    if (layer.motionBlur?.enabled && !layer.motionBlur.baked
+        && !this._mbRenderingSet.has(layer.id)) {
+      this._mbRenderingSet.add(layer.id)
+      try {
+        renderMotionBlurTrails(
+          this, ctx, layer, overrides, paramValues, assets, scene, timeMs, this._mbRenderingSet,
+        )
+      } finally {
+        this._mbRenderingSet.delete(layer.id)
+      }
     }
 
     const opacity = getLayerValue(overrides, layer.id, 'opacity', layer.opacity)

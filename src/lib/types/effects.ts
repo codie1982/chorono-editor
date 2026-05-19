@@ -24,6 +24,27 @@ export interface PluginEffect {
   params:  Record<string, unknown>
 }
 
+// ── Motion Blur ───────────────────────────────────────────────────────────────
+// Temporal trail effect: renders N low-opacity copies of a layer at past time
+// positions, driven by the layer's velocity. Computed in CanvasRenderer
+// (not in effectsChain — requires temporal evaluation).
+
+export interface MotionBlurConfig {
+  enabled: boolean
+  /** Number of trail copies rendered behind the layer (3–12). Default 6. */
+  trailCount: number
+  /** ms between each trail step. 0 = auto (1000 / composition.frameRate). */
+  frameInterval: number
+  /** Opacity of the nearest trail (0–1). Farthest trail opacity → 0. Default 0.6. */
+  maxOpacity: number
+  /** Min px/interval speed to activate trails. Prevents static flicker. Default 0.5. */
+  velocityThreshold: number
+  /** When true, real-time evaluation is skipped — bakedGroupId layers are used. */
+  baked: boolean
+  /** Id of the group layer containing time-shifted instanceOf trail layers. */
+  bakedGroupId?: string
+}
+
 // ── Motion Path ───────────────────────────────────────────────────────────────
 // Animate a layer along an SVG cubic-bezier path.
 // The path itself is NOT animatable — it is a static design decision.
