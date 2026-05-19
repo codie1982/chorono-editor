@@ -26,17 +26,6 @@ import {
   makeIsolateLayersCmd, makeShowAllLayersCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
-import { makeAlignCmd, makeDistributeCmd, makeSpreadCmd } from '@/lib/editor/align/commands-align'
-import {
-  type AlignOperation, type AlignToMode,
-  computeAlignTransforms,
-} from '@/lib/editor/align/AlignCompute'
-import {
-  type DistributeAxis,
-  computeDistributeTransforms,
-  computeSpreadAcrossCanvas,
-} from '@/lib/editor/align/DistributeCompute'
-import { isAlignable } from '@/lib/geometry/LayerBounds'
 import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
@@ -734,14 +723,49 @@ export default function BuilderPage() {
     if (lastId) selectLayer(lastId)
   }, [dispatchCommand, selectLayer])
 
-  // ── Align selected layers ────────────────────────────────────────────────
-  // Aligns to either the union bounds of the selection or the composition
-  // rectangle ("canvas"). Groups + audio layers are filtered out (no usable
-  // bounds). Anchor / scene-graph parent are untouched — only world x/y
-  // moves, so animated rigs keep behaving.
-  //
-  // The whole operation is a SINGLE EditorCommand so one Cmd+Z reverts every
-  // moved layer at once.
+  // ── Align selected layers to the shared bounding box edge ─────────────────
+  // Updates every selected layer in a single dispatch via composite command so
+  // undo restores all positions in one step. Anchor offset isn't touched —
+  // only `transform.x` / `transform.y` so already-animated rigs keep working.
+  const alignSelected = useCallback((edge:
+    'left' | 'centerX' | 'right' | 'top' | 'middle' | 'bottom',
+  ) => {
+    const ids = selectedLayerIds.size > 1
+      ? Array.from(selectedLayerIds)
+      : []
+    if (ids.length < 2) return
+    const targets = ids
+      .map((id) => scene.layers.find((l) => l.id === id))
+      .filter((l): l is Layer => !!l)
+    // Pre-compute each layer's bounding box (top-left in scene coords).
+    const boxes = targets.map((l) => {
+      const w = l.size?.width  ?? (l.text?.fontSize ? 120 : 80)
+      const h = l.size?.height ?? (l.text?.fontSize ?? 24)
+      return { l, x: l.transform.x, y: l.transform.y, w, h }
+    })
+    const minX = Math.min(...boxes.map((b) => b.x))
+    const maxX = Math.max(...boxes.map((b) => b.x + b.w))
+    const minY = Math.min(...boxes.map((b) => b.y))
+    const maxY = Math.max(...boxes.map((b) => b.y + b.h))
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    // Dispatch one command per layer — history's batch system collapses them
+    // into a single undo group already; doing this in a tight loop keeps the
+    // code small without growing the command surface.
+    for (const b of boxes) {
+      const nx =
+        edge === 'left'    ? minX           :
+        edge === 'right'   ? maxX - b.w     :
+        edge === 'centerX' ? cx - b.w / 2   : b.x
+      const ny =
+        edge === 'top'     ? minY           :
+        edge === 'bottom'  ? maxY - b.h     :
+        edge === 'middle'  ? cy - b.h / 2   : b.y
+      if (nx === b.x && ny === b.y) continue
+      const next = { ...b.l, transform: { ...b.l.transform, x: nx, y: ny } }
+      dispatchCommand(makeUpdateLayerCmd(b.l.id, next, b.l))
+    }
+  }, [scene.layers, selectedLayerIds, dispatchCommand])
 
   // Auto-key dispatch helper (BL-41). Returns true if the mode is currently
   // effective. Two modes write keyframes:
@@ -781,156 +805,6 @@ export default function BuilderPage() {
     dispatchCommand(makeUpdateLayerCmd(next.id, next, prev))
     autoKeyChangedProps(prev, next)
   }, [scene.layers, dispatchCommand, autoKeyChangedProps])
-
-  // ── Align / Distribute dispatchers ───────────────────────────────────────
-  // Build the request, run the pure compute via makeAlignCmd / makeDistributeCmd,
-  // dispatch the single command, then snapshot keyframes on each moved layer if
-  // auto-key is active. Single Cmd+Z reverts everything.
-
-  const alignSelected = useCallback((
-    operation: AlignOperation,
-    alignTo: AlignToMode = 'selection',
-  ) => {
-    const ids = Array.from(selectedLayerIds).filter((id) => {
-      const l = scene.layers.find((x) => x.id === id)
-      return !!l && isAlignable(l)
-    })
-    if (ids.length === 0) return
-    if (alignTo === 'selection' && ids.length < 2) return
-
-    const req = {
-      layerIds: ids,
-      operation,
-      alignTo,
-      composition: scene.composition,
-      scene,
-    }
-    // Run compute up-front so we know which layers actually move (needed
-    // for auto-key) AND so we can early-out without pushing a no-op command.
-    const result = computeAlignTransforms(req)
-    if (result.transforms.length === 0) return
-
-    const cmd = makeAlignCmd(req)
-    if (!cmd) return
-    dispatchCommand(cmd)
-
-    // Auto-key: write transform.x / transform.y keyframes at the playhead
-    // for every layer that moved. The post-align transform is the pre-align
-    // transform + delta — we reconstruct it here so we don't have to wait
-    // for React to flush the dispatched scene update.
-    if (!isAutoKeyActive() || !selectedTlId) return
-    for (const d of result.transforms) {
-      const prev = scene.layers.find((l) => l.id === d.layerId)
-      if (!prev) continue
-      const next: Layer = {
-        ...prev,
-        transform: {
-          ...prev.transform,
-          x: prev.transform.x + d.dx,
-          y: prev.transform.y + d.dy,
-        },
-      }
-      const props: string[] = []
-      if (d.dx !== 0) props.push('transform.x')
-      if (d.dy !== 0) props.push('transform.y')
-      if (props.length === 0) continue
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, props))
-    }
-  }, [
-    scene, selectedLayerIds, dispatchCommand,
-    isAutoKeyActive, selectedTlId, currentTimeMs,
-  ])
-
-  const distributeSelected = useCallback((axis: DistributeAxis) => {
-    const ids = Array.from(selectedLayerIds).filter((id) => {
-      const l = scene.layers.find((x) => x.id === id)
-      return !!l && isAlignable(l)
-    })
-    if (ids.length < 3) return
-
-    const req = {
-      layerIds: ids,
-      axis,
-      mode: 'centers' as const,
-      composition: scene.composition,
-      scene,
-    }
-    const result = computeDistributeTransforms(req)
-    if (result.transforms.length === 0) return
-
-    const cmd = makeDistributeCmd(req)
-    if (!cmd) return
-    dispatchCommand(cmd)
-
-    if (!isAutoKeyActive() || !selectedTlId) return
-    for (const d of result.transforms) {
-      const prev = scene.layers.find((l) => l.id === d.layerId)
-      if (!prev) continue
-      const next: Layer = {
-        ...prev,
-        transform: {
-          ...prev.transform,
-          x: prev.transform.x + d.dx,
-          y: prev.transform.y + d.dy,
-        },
-      }
-      const props: string[] = []
-      if (d.dx !== 0) props.push('transform.x')
-      if (d.dy !== 0) props.push('transform.y')
-      if (props.length === 0) continue
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, props))
-    }
-  }, [
-    scene, selectedLayerIds, dispatchCommand,
-    isAutoKeyActive, selectedTlId, currentTimeMs,
-  ])
-
-  // ── Spread selected layers across the canvas ─────────────────────────────
-  // Leftmost (or topmost) layer snaps to the canvas's matching edge, the
-  // opposite extreme to the far edge, and the rest are evenly spaced by
-  // center in between. Order is decided by current world position.
-  const spreadSelected = useCallback((axis: DistributeAxis) => {
-    const ids = Array.from(selectedLayerIds).filter((id) => {
-      const l = scene.layers.find((x) => x.id === id)
-      return !!l && isAlignable(l)
-    })
-    if (ids.length < 2) return
-
-    const req = {
-      layerIds: ids,
-      axis,
-      composition: scene.composition,
-      scene,
-    }
-    const result = computeSpreadAcrossCanvas(req)
-    if (result.transforms.length === 0) return
-
-    const cmd = makeSpreadCmd(req)
-    if (!cmd) return
-    dispatchCommand(cmd)
-
-    if (!isAutoKeyActive() || !selectedTlId) return
-    for (const d of result.transforms) {
-      const prev = scene.layers.find((l) => l.id === d.layerId)
-      if (!prev) continue
-      const next: Layer = {
-        ...prev,
-        transform: {
-          ...prev.transform,
-          x: prev.transform.x + d.dx,
-          y: prev.transform.y + d.dy,
-        },
-      }
-      const props: string[] = []
-      if (d.dx !== 0) props.push('transform.x')
-      if (d.dy !== 0) props.push('transform.y')
-      if (props.length === 0) continue
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, props))
-    }
-  }, [
-    scene, selectedLayerIds, dispatchCommand,
-    isAutoKeyActive, selectedTlId, currentTimeMs,
-  ])
 
   /** Inline-rename a layer (LayerPanel double-click). Single undo step. */
   const renameLayer = useCallback((id: string, name: string) => {
@@ -1569,18 +1443,8 @@ export default function BuilderPage() {
                       alignCenter: () => alignSelected('centerX'),
                       alignRight:  () => alignSelected('right'),
                       alignTop:    () => alignSelected('top'),
-                      alignMiddle: () => alignSelected('centerY'),
+                      alignMiddle: () => alignSelected('middle'),
                       alignBottom: () => alignSelected('bottom'),
-                      distributeHorizontally: () => distributeSelected('horizontal'),
-                      distributeVertically:   () => distributeSelected('vertical'),
-                      spreadAcrossCanvasH: () => spreadSelected('horizontal'),
-                      spreadAcrossCanvasV: () => spreadSelected('vertical'),
-                      alignLeftToCanvas:   () => alignSelected('left',    'canvas'),
-                      alignCenterToCanvas: () => alignSelected('centerX', 'canvas'),
-                      alignRightToCanvas:  () => alignSelected('right',   'canvas'),
-                      alignTopToCanvas:    () => alignSelected('top',     'canvas'),
-                      alignMiddleToCanvas: () => alignSelected('centerY', 'canvas'),
-                      alignBottomToCanvas: () => alignSelected('bottom',  'canvas'),
                       // BL-67 — Pick mode: next path clicked on canvas becomes this layer's motion guide.
                       assignMotionPath: selectedLayerId
                         ? () => setPathPickMode({ targetLayerId: selectedLayerId })
