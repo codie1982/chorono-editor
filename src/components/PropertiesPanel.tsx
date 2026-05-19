@@ -1720,31 +1720,17 @@ export default function PropertiesPanel({
                       <NumInput value={mb.velocityThreshold} min={0} max={50} step={0.1}
                         onChange={(v) => updateMB({ velocityThreshold: v })} />
                     </Field>
+                    {/* TODO: Bake system incomplete — time-shifted keyframe logic
+                        needs further testing before enabling. Re-enable once
+                        makeBakeMotionBlurCmd is verified end-to-end. */}
                     <div className="flex flex-col gap-1 pt-1">
-                      {!mb.baked && (
-                        <button
-                          onClick={() => {
-                            if (!scene || !dispatchCommand) return
-                            const cmd = makeBakeMotionBlurCmd(scene, layer.id)
-                            if (cmd) dispatchCommand(cmd)
-                          }}
-                          className="w-full px-2 py-1 text-[11px] bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-                        >
-                          Bake Motion Blur
-                        </button>
-                      )}
-                      {mb.baked && (
-                        <button
-                          onClick={() => {
-                            if (!scene || !dispatchCommand) return
-                            const cmd = makeUnbakeMotionBlurCmd(scene, layer.id)
-                            if (cmd) dispatchCommand(cmd)
-                          }}
-                          className="w-full px-2 py-1 text-[11px] bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
-                        >
-                          Clear Bake
-                        </button>
-                      )}
+                      <button
+                        disabled
+                        title="Bake system coming soon"
+                        className="w-full px-2 py-1 text-[11px] bg-gray-700 text-gray-500 rounded cursor-not-allowed"
+                      >
+                        Bake Motion Blur (coming soon)
+                      </button>
                     </div>
                   </>)}
                 </Section>
