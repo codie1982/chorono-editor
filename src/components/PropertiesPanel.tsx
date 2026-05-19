@@ -288,9 +288,28 @@ export default function PropertiesPanel({
           <>
             {/* Schema-driven properties: rendered for layer types that DON'T
                 already have a rich hand-written UI (group, repeater).
-                Shape / text / media layers keep their bespoke sections below. */}
+                particleEmitter has its own dedicated dock tab — see below for
+                the redirect hint. Shape / text / media layers keep their
+                bespoke sections below. */}
             {(layer.type === 'group' || layer.type === 'repeater') && activeTab === 'properties' && (
               <SchemaPanel layer={layer} onLayerChange={onLayerChange} />
+            )}
+
+            {/* Particle emitter — redirect to dedicated panel. We still show
+                Transform / Appearance below so the user can position the
+                emitter; everything else lives in the Particle tab. */}
+            {layer.type === 'particleEmitter' && activeTab === 'properties' && (
+              <div className="rounded border border-violet-800/40 bg-violet-950/30 px-3 py-2.5 flex items-start gap-2">
+                <span className="text-xl shrink-0" aria-hidden>✨</span>
+                <div className="flex flex-col gap-0.5 text-[11px] leading-snug">
+                  <span className="text-violet-200 font-semibold">Particle settings live in the “Particle” tab</span>
+                  <span className="text-gray-400">
+                    Switch to the Particle tab in this dock column to edit
+                    emitter, shape, animation, and randomness. Transform &amp;
+                    Appearance for this layer stay here.
+                  </span>
+                </div>
+              </div>
             )}
 
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>

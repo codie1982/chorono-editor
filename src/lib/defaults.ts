@@ -552,6 +552,99 @@ export function cloneLayerForDuplicate<L extends Layer>(layer: L): L {
   return cloned
 }
 
+// ── Particle Emitter factory (BL-13) ─────────────────────────────────────────
+
+export function newParticleEmitterLayer(): Layer {
+  layerCounter++
+  // Inline the magicDust default config to avoid circular import with
+  // the preset registry (which imports defaults.ts indirectly).
+  // The full preset is loaded by bootstrap; here we just embed defaults.
+  return {
+    id:   `particleEmitter_${layerCounter}`,
+    name: `Particles ${layerCounter}`,
+    type: 'particleEmitter',
+    transform: {
+      x: 90 + (layerCounter % 5) * 20,
+      y: 90 + (layerCounter % 5) * 20,
+      scaleX: 1, scaleY: 1,
+      rotationDeg: 0,
+      anchorX: 0, anchorY: 0,
+    },
+    opacity: 1,
+    // size: 0×0 — the renderer draws particles in layer-local space; the
+    // size field is only used for hit-testing fallback (24×24 bounding box
+    // assigned by CanvasRenderer when size is missing or zero).
+    size: { width: 0, height: 0 },
+    particleEmitter: {
+      mode: 'simple',
+      emitter: {
+        // Burst mode: particles are visible at t=0 (no warm-up needed).
+        // Continuous mode requires time > 0 before any particles appear —
+        // bad for a first impression in the editor.
+        mode:         'burst',
+        shape:        'point',
+        burstCount:   60,
+        maxParticles: 60,
+        durationMs:   2000,
+        loop:         false,
+      },
+      particle: {
+        shape:     'rect',
+        size:      { min: 5, max: 12 },
+        // Palette mode: vivid confetti colours work on both light and dark
+        // backgrounds. Avoid 'screen' blend for the default — screen(X, white)
+        // = white, making all particles invisible on a white canvas.
+        colorMode: 'palette',
+        palette: [
+          { r: 239, g: 68,  b: 68,  a: 255 },  // red
+          { r: 234, g: 179, b: 8,   a: 255 },  // yellow
+          { r: 34,  g: 197, b: 94,  a: 255 },  // green
+          { r: 59,  g: 130, b: 246, a: 255 },  // blue
+          { r: 168, g: 85,  b: 247, a: 255 },  // purple
+          { r: 236, g: 72,  b: 153, a: 255 },  // pink
+        ],
+      },
+      animation: {
+        lifetimeMs: { min: 700, max: 1400 },
+        positionOffset: {
+          x: { min: -80, max: 80 },
+          y: { min: -120, max: -20 },
+          easing: 'easeOut',
+        },
+        scaleOverLife: {
+          stops: [
+            { t: 0,   value: 0.5 },
+            { t: 0.2, value: 1,   easing: 'easeOut' },
+            { t: 1,   value: 0.3, easing: 'easeIn'  },
+          ],
+        },
+        opacityOverLife: {
+          stops: [
+            { t: 0,   value: 1   },
+            { t: 0.7, value: 1   },
+            { t: 1,   value: 0,  easing: 'easeIn' },
+          ],
+        },
+        rotationVelocity: { min: -360, max: 360 },
+      },
+      random: {
+        seed:               42,
+        positionRandomness: 0.6,
+        sizeRandomness:     0.5,
+        rotationRandomness: 1,
+        delayRandomness:    0.3,
+        lifetimeRandomness: 0.4,
+        colorRandomness:    0,
+      },
+      rendering: {
+        blendMode: 'normal',
+        softEdges: false,
+        quality:   'medium',
+      },
+    },
+  }
+}
+
 // ── Keyframe factory ──────────────────────────────────────────────────────────
 
 export { nextKfId }

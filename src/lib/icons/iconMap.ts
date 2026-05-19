@@ -139,6 +139,7 @@ export const LAYER_TYPE_ICON: Record<string, string> = {
   spiral:           'spiral',   // BL-24
   wave:             'wave',     // BL-24
   // layer types
+  particleEmitter: 'noise',  // BL-13: row 3, col 7 (existing sprite)
   text:             'text',
   image:            'image',
   video:            'video',
@@ -217,6 +218,12 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Video',    type: 'video', icon: 'video', available: true },
       { label: 'Audio',    type: 'audio', icon: 'audio', available: true },
       { label: 'GIF',      type: 'gif',   icon: 'gif',   available: false },
+    ],
+  },
+  {
+    title: 'Particles',
+    items: [
+      { label: 'Particle Emitter', type: 'particleEmitter', icon: 'noise', available: true },
     ],
   },
   {

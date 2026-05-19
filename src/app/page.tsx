@@ -53,6 +53,7 @@ import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel           from '@/components/panels/SnapPanel'
+import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
@@ -154,6 +155,7 @@ export default function BuilderPage() {
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
+    'particles',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
@@ -193,6 +195,15 @@ export default function BuilderPage() {
   const wrapAtEnd = useMemo(() => hasInfinitePlayback(scene.timelines), [scene.timelines])
   const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
   const frameRate     = scene.composition.frameRate
+
+  // Auto-switch the right-hand dock column to the Particle tab whenever the
+  // user selects a particleEmitter layer — saves an extra click. Switching
+  // BACK to Properties is left to the user (no auto-revert on deselection).
+  useEffect(() => {
+    if (selectedLayer?.type === 'particleEmitter') {
+      dock.dispatchTab('properties-leaf', 'particles')
+    }
+  }, [selectedLayer?.id, selectedLayer?.type, dock])
 
   // ── Asset cache: loads images/videos referenced in scene.assets ──────────
   const assetCache = useAssetCache(scene.assets)
@@ -947,6 +958,7 @@ export default function BuilderPage() {
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
+      { id: 'particles',      title: 'Particle',       render: () => null },
     ]
     return makeRegistry(defs)
   }, [])
@@ -1491,6 +1503,16 @@ export default function BuilderPage() {
               {
                 id: 'snap', title: 'Snap',
                 render: () => <SnapPanel snap={snap} />,
+              },
+              {
+                id: 'particles', title: 'Particle',
+                render: () => (
+                  <ParticlePanel
+                    scene={scene}
+                    selectedLayer={selectedLayer}
+                    onLayerChange={updateLayer}
+                  />
+                ),
               },
             ] satisfies PanelDefinition[])
             // Fullscreen canvas: skip the dock entirely and render only the

@@ -129,6 +129,11 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
   },
 }
 
+// ── Particle Emitter (BL-13) ─────────────────────────────────────────────────
+
+import { particleRendererPlugin } from './ParticleRendererPlugin'
+export { particleRendererPlugin }
+
 // ── All built-in renderers (registered by bootstrap) ─────────────────────────
 
 export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
@@ -140,4 +145,5 @@ export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
   bezierPathRendererPlugin,
   groupRendererPlugin,
   repeaterRendererPlugin,
+  particleRendererPlugin,
 ]

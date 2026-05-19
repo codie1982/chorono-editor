@@ -12,6 +12,9 @@ import { pathStrokeDefinition }   from './definitions/path/PathStrokeDefinition'
 import { groupDefinition }        from './definitions/scene/GroupDefinition'
 import { repeaterDefinition }     from './definitions/scene/RepeaterDefinition'
 import { ALL_BUILT_IN_RENDERERS } from '@/lib/render/renderers'
+// BL-13 — Particle Effect Engine
+import { particleEmitterDefinition } from './definitions/particles/ParticleEmitterDefinition'
+import '@/lib/particles/presets'   // registers all built-in presets as side-effect
 
 // Guard against re-running (HMR / tests reloading the module)
 let bootstrapped = false
@@ -38,6 +41,9 @@ export function bootstrapLayerRegistry(): void {
   // Groups & Scene Graph
   layerRegistry.register(groupDefinition)
   layerRegistry.register(repeaterDefinition)
+
+  // Particles (BL-13)
+  layerRegistry.register(particleEmitterDefinition)
 
   // ── LayerRendererPlugins (canvas dispatch) ──
   for (const plugin of ALL_BUILT_IN_RENDERERS) rendererRegistry.register(plugin)

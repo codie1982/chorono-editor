@@ -47,12 +47,13 @@ export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props
             </div>
             <div className="grid grid-cols-2 gap-2">
               {visible.map(schema => (
-                <SchemaField
-                  key={schema.id}
-                  schema={schema}
-                  value={getAtPath(layer, schema.path) ?? schema.defaultValue}
-                  onChange={(v) => onLayerChange(setAtPath(layer, schema.path, v))}
-                />
+                <div key={schema.id} className={schema.fullWidth ? 'col-span-2' : ''}>
+                  <SchemaField
+                    schema={schema}
+                    value={getAtPath(layer, schema.path) ?? schema.defaultValue}
+                    onChange={(v) => onLayerChange(setAtPath(layer, schema.path, v))}
+                  />
+                </div>
               ))}
             </div>
           </div>
