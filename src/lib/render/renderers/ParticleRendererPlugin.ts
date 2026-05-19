@@ -123,9 +123,13 @@ function renderParticles(
 
   // Apply blend mode
   const prevComposite = canvas.globalCompositeOperation
-  if (cfg.rendering.blendMode === 'screen')    canvas.globalCompositeOperation = 'screen'
+  if (cfg.rendering.blendMode === 'screen')        canvas.globalCompositeOperation = 'screen'
   else if (cfg.rendering.blendMode === 'additive') canvas.globalCompositeOperation = 'lighter'
   else if (cfg.rendering.blendMode === 'multiply') canvas.globalCompositeOperation = 'multiply'
+
+  // Capture the layer's accumulated globalAlpha so per-particle opacity
+  // multiplies it rather than overwriting it (layer opacity must be respected).
+  const layerAlpha = canvas.globalAlpha
 
   for (const p of instances) {
     // Skip if dead (safety check)
@@ -140,7 +144,8 @@ function renderParticles(
     canvas.translate(p.currentPosition.x, p.currentPosition.y)
     canvas.rotate((p.currentRotation * Math.PI) / 180)
     canvas.scale(p.currentScale, p.currentScale)
-    canvas.globalAlpha = Math.max(0, Math.min(1, p.currentOpacity))
+    // Multiply by layerAlpha so a semi-transparent layer dims all particles
+    canvas.globalAlpha = layerAlpha * Math.max(0, Math.min(1, p.currentOpacity))
 
     const r       = p.baseSize / 2
     const cssColor = colorToCss(p.currentColor)

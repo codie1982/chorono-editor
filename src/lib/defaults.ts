@@ -578,64 +578,67 @@ export function newParticleEmitterLayer(): Layer {
     particleEmitter: {
       mode: 'simple',
       emitter: {
-        mode:          'continuous',
-        shape:         'circle',
-        area:          { radius: 20 },
-        ratePerSecond: 25,
-        maxParticles:  80,
-        durationMs:    2000,
-        loop:          true,
+        // Burst mode: particles are visible at t=0 (no warm-up needed).
+        // Continuous mode requires time > 0 before any particles appear —
+        // bad for a first impression in the editor.
+        mode:         'burst',
+        shape:        'point',
+        burstCount:   60,
+        maxParticles: 60,
+        durationMs:   2000,
+        loop:         false,
       },
       particle: {
-        shape:     'circle',
-        size:      { min: 3, max: 8 },
-        colorMode: 'gradientOverLife',
-        colorOverLife: {
-          stops: [
-            { t: 0,   value: { r: 180, g: 100, b: 255, a: 255 } },
-            { t: 0.5, value: { r: 80,  g: 180, b: 255, a: 255 } },
-            { t: 1,   value: { r: 255, g: 200, b: 80,  a: 0   } },
-          ],
-        },
+        shape:     'rect',
+        size:      { min: 5, max: 12 },
+        // Palette mode: vivid confetti colours work on both light and dark
+        // backgrounds. Avoid 'screen' blend for the default — screen(X, white)
+        // = white, making all particles invisible on a white canvas.
+        colorMode: 'palette',
+        palette: [
+          { r: 239, g: 68,  b: 68,  a: 255 },  // red
+          { r: 234, g: 179, b: 8,   a: 255 },  // yellow
+          { r: 34,  g: 197, b: 94,  a: 255 },  // green
+          { r: 59,  g: 130, b: 246, a: 255 },  // blue
+          { r: 168, g: 85,  b: 247, a: 255 },  // purple
+          { r: 236, g: 72,  b: 153, a: 255 },  // pink
+        ],
       },
       animation: {
-        lifetimeMs:     { min: 800, max: 1600 },
+        lifetimeMs: { min: 700, max: 1400 },
         positionOffset: {
-          x: { min: -15, max: 15 },
-          y: { min: -60, max: -20 },
+          x: { min: -80, max: 80 },
+          y: { min: -120, max: -20 },
           easing: 'easeOut',
         },
         scaleOverLife: {
           stops: [
-            { t: 0,   value: 0.3 },
-            { t: 0.3, value: 1,  easing: 'easeOut' },
-            { t: 1,   value: 0,  easing: 'easeIn' },
+            { t: 0,   value: 0.5 },
+            { t: 0.2, value: 1,   easing: 'easeOut' },
+            { t: 1,   value: 0.3, easing: 'easeIn'  },
           ],
         },
         opacityOverLife: {
           stops: [
-            { t: 0,   value: 0 },
-            { t: 0.2, value: 0.9, easing: 'easeOut' },
-            { t: 0.7, value: 0.7 },
-            { t: 1,   value: 0,   easing: 'easeIn' },
+            { t: 0,   value: 1   },
+            { t: 0.7, value: 1   },
+            { t: 1,   value: 0,  easing: 'easeIn' },
           ],
         },
-        motionModifiers: [
-          { type: 'noiseDrift', enabled: true, amount: 12, speed: 0.8 },
-        ],
+        rotationVelocity: { min: -360, max: 360 },
       },
       random: {
         seed:               42,
-        positionRandomness: 0.5,
-        sizeRandomness:     0.4,
-        rotationRandomness: 0,
-        delayRandomness:    0.8,
+        positionRandomness: 0.6,
+        sizeRandomness:     0.5,
+        rotationRandomness: 1,
+        delayRandomness:    0.3,
         lifetimeRandomness: 0.4,
         colorRandomness:    0,
       },
       rendering: {
-        blendMode: 'screen',
-        softEdges: true,
+        blendMode: 'normal',
+        softEdges: false,
         quality:   'medium',
       },
     },
