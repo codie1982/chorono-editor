@@ -70,7 +70,7 @@ export interface CanvasMenuHandlers {
   flipHorizontal?:() => void
   flipVertical?:  () => void
 
-  // Align (only meaningful with multi-select — caller decides)
+  // Align to selection bounds (multi-select only — caller decides)
   alignLeft?:   () => void
   alignCenter?: () => void
   alignRight?:  () => void
@@ -79,6 +79,21 @@ export interface CanvasMenuHandlers {
   alignBottom?: () => void
   distributeHorizontally?: () => void
   distributeVertically?:   () => void
+
+  // Align to composition / canvas bounds. Works on a single layer too —
+  // every selected layer aligns independently to the canvas rectangle.
+  alignLeftToCanvas?:   () => void
+  alignCenterToCanvas?: () => void
+  alignRightToCanvas?:  () => void
+  alignTopToCanvas?:    () => void
+  alignMiddleToCanvas?: () => void
+  alignBottomToCanvas?: () => void
+
+  // Spread across canvas — first layer to one edge, last to the opposite
+  // edge, middle layers evenly spaced. Order decided by current world
+  // position along the axis.
+  spreadAcrossCanvasH?: () => void
+  spreadAcrossCanvasV?: () => void
 }
 
 export interface BuildMenuArgs {
@@ -170,19 +185,34 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
 
     sep(),
 
-    // ── Align (multi-select only) ─────────────────────────────────────────
+    // ── Align ─────────────────────────────────────────────────────────────
+    // Selection mode (multi-select required) vs. Canvas mode (works even
+    // on a single layer — each selected layer aligns to the composition
+    // rectangle independently).
     {
-      kind: 'submenu', label: 'Align', disabled: !multi,
+      kind: 'submenu', label: 'Align',
       items: [
-        action('Align Left',    undefined, h.alignLeft),
-        action('Align Center',  undefined, h.alignCenter),
-        action('Align Right',   undefined, h.alignRight),
-        action('Align Top',     undefined, h.alignTop),
-        action('Align Middle',  undefined, h.alignMiddle),
-        action('Align Bottom',  undefined, h.alignBottom),
+        // To selection bounds — needs ≥ 2 layers
+        action('Align Left',    undefined, h.alignLeft,   !multi),
+        action('Align Center',  undefined, h.alignCenter, !multi),
+        action('Align Right',   undefined, h.alignRight,  !multi),
+        action('Align Top',     undefined, h.alignTop,    !multi),
+        action('Align Middle',  undefined, h.alignMiddle, !multi),
+        action('Align Bottom',  undefined, h.alignBottom, !multi),
         sep(),
         action('Distribute Horizontally', undefined, h.distributeHorizontally, args.multiCount < 3),
         action('Distribute Vertically',   undefined, h.distributeVertically,   args.multiCount < 3),
+        sep(),
+        action('Spread Across Canvas (H)', undefined, h.spreadAcrossCanvasH, args.multiCount < 2),
+        action('Spread Across Canvas (V)', undefined, h.spreadAcrossCanvasV, args.multiCount < 2),
+        sep(),
+        // To canvas — works with any selection size (single layer OK)
+        action('Align Left to Canvas',   undefined, h.alignLeftToCanvas),
+        action('Align Center to Canvas', undefined, h.alignCenterToCanvas),
+        action('Align Right to Canvas',  undefined, h.alignRightToCanvas),
+        action('Align Top to Canvas',    undefined, h.alignTopToCanvas),
+        action('Align Middle to Canvas', undefined, h.alignMiddleToCanvas),
+        action('Align Bottom to Canvas', undefined, h.alignBottomToCanvas),
       ],
     },
 

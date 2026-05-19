@@ -6,7 +6,7 @@ import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { hitTestLayer, hitTestLayersAt, bezierPathBounds, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
-import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
+import { resolveWorldTransform } from '@/lib/render/resolveDisplayTransform'
 import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
@@ -121,6 +121,17 @@ interface Props {
     alignBottom?: () => void
     distributeHorizontally?: () => void
     distributeVertically?:   () => void
+    /** Align each selected layer to the composition rectangle. */
+    alignLeftToCanvas?:   () => void
+    alignCenterToCanvas?: () => void
+    alignRightToCanvas?:  () => void
+    alignTopToCanvas?:    () => void
+    alignMiddleToCanvas?: () => void
+    alignBottomToCanvas?: () => void
+    /** Spread selected layers across the canvas — extremes snap to the
+     *  composition edges, middle layers evenly spaced. */
+    spreadAcrossCanvasH?: () => void
+    spreadAcrossCanvasV?: () => void
     /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
     convertToSpline?: () => void
     /** BL-59 Clone & Array — quick clone (one new layer, default offset). */
@@ -1876,7 +1887,7 @@ export default function SceneCanvas({
       dragOverrides.forEach((v, k) => m.set(k, v))
       ov = m
     }
-    return resolveDisplayTransform(selectedLayer, scene, timeMs, ov)
+    return resolveWorldTransform(selectedLayer, scene, timeMs, ov)
   }, [selectedLayer, scene, timeMs, overrides, dragOverrides])
   // Selection frame anchor: prefer live display transform but keep the
   // static fallback so empty paths / unconfigured followPath layers still
@@ -2081,7 +2092,11 @@ export default function SceneCanvas({
             if (hl.type === 'path') {
               if (!hl.path || hl.path.anchors.length < 2) return null
             }
-            let hx = hl.transform.x, hy = hl.transform.y
+            // World (parent-accumulated) position so the hover outline
+            // wraps the layer where it actually appears on screen — not at
+            // its local-to-parent origin when grouped.
+            const hWorld = resolveWorldTransform(hl, scene, timeMs, overrides ?? new Map())
+            let hx = hWorld.x, hy = hWorld.y
             let hw: number, hh: number
             if (hl.type === 'path' && hl.path && hl.path.anchors.length >= 2) {
               const bb = bezierPathBounds(hl.path)
@@ -2335,8 +2350,10 @@ export default function SceneCanvas({
           selectedRect={
             selectedLayer && !selectedLayer.hidden
               ? {
-                  x: selectedLayer.transform.x,
-                  y: selectedLayer.transform.y,
+                  // Use world (parent-accumulated) position so the ruler
+                  // markers track grouped layers correctly.
+                  x: selDX,
+                  y: selDY,
                   width:  selectedLayer.size?.width
                           ?? (selectedLayer.text?.fontSize ? 120 : 80),
                   height: selectedLayer.size?.height
@@ -2449,6 +2466,14 @@ export default function SceneCanvas({
           alignBottom: menuHandlers?.alignBottom,
           distributeHorizontally: menuHandlers?.distributeHorizontally,
           distributeVertically:   menuHandlers?.distributeVertically,
+          alignLeftToCanvas:   menuHandlers?.alignLeftToCanvas,
+          alignCenterToCanvas: menuHandlers?.alignCenterToCanvas,
+          alignRightToCanvas:  menuHandlers?.alignRightToCanvas,
+          alignTopToCanvas:    menuHandlers?.alignTopToCanvas,
+          alignMiddleToCanvas: menuHandlers?.alignMiddleToCanvas,
+          alignBottomToCanvas: menuHandlers?.alignBottomToCanvas,
+          spreadAcrossCanvasH: menuHandlers?.spreadAcrossCanvasH,
+          spreadAcrossCanvasV: menuHandlers?.spreadAcrossCanvasV,
           // BL-17 Faz 1 — wired only for shape layers with a size; non-shape
           // selections leave it undefined, which the menu renders disabled.
           convertToPath:
