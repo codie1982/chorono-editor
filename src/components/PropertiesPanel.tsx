@@ -10,6 +10,7 @@ import {
   togglePathClosed, reversePath, cyclePointType, deleteAnchor,
 } from '@/lib/path/pathOps'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
+import ParticlePresetPicker from '@/components/PropertiesPanel/ParticlePresetPicker'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 
@@ -287,13 +288,19 @@ export default function PropertiesPanel({
         {layer && (
           <>
             {/* Schema-driven properties: rendered for layer types that DON'T
-                already have a rich hand-written UI (group, repeater).
+                already have a rich hand-written UI (group, repeater, particleEmitter).
                 Shape / text / media layers keep their bespoke sections below. */}
+            {layer.type === 'particleEmitter' && activeTab === 'properties' && (
+              <>
+                <ParticlePresetPicker layer={layer} onLayerChange={onLayerChange} />
+                <SchemaPanel layer={layer} onLayerChange={onLayerChange} />
+              </>
+            )}
             {(layer.type === 'group' || layer.type === 'repeater') && activeTab === 'properties' && (
               <SchemaPanel layer={layer} onLayerChange={onLayerChange} />
             )}
 
-            {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>
+            {layer.type !== 'group' && layer.type !== 'repeater' && layer.type !== 'particleEmitter' && activeTab === 'properties' && (<>
             <Section title="Transform">
               <Row2>
                 <WireableField label="X" layer={layer} propertyPath="transform.x" {...wireProps}>

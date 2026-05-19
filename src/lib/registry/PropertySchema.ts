@@ -45,6 +45,10 @@ export interface PropertySchema {
 
   /** Optional inline help text shown below the input. */
   help?: string
+
+  /** Span both columns of the 2-col grid — useful for selects with long labels,
+   *  preset pickers, or any field where the input needs breathing room. */
+  fullWidth?: boolean
 }
 
 /** A logical grouping of schemas displayed together in a panel section. */
