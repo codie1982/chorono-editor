@@ -40,7 +40,7 @@ interface Props {
    *  ALL of them together (group-style transform). */
   selectedLayerIds?: Set<string>
   assets: AssetElementMap
-  onSelectLayer: (id: string | null) => void
+  onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   /** Optional pre-computed override map from the interactive runtime hook
    *  (already merges timeline + param + binding overrides). */
   overrides?:    Map<string, number>
@@ -1439,6 +1439,13 @@ export default function SceneCanvas({
         }
       }
     }
+    // Shift+click: toggle layer in/out of the multi-selection set and stop —
+    // no drag is started, the user can re-click to drag their selection.
+    if (e.shiftKey && !e.altKey) {
+      onSelectLayer(hit, true)
+      return
+    }
+
     // Don't change selection when clicking on a layer that's already part of
     // the multi-selection (preserves the multi-select set so the upcoming
     // drag moves all peers).

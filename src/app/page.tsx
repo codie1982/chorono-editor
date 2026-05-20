@@ -55,7 +55,8 @@ import WiringListPanel     from '@/components/panels/WiringListPanel'
 import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
-import SnapPanel           from '@/components/panels/SnapPanel'
+import SnapPanel               from '@/components/panels/SnapPanel'
+import KeyboardShortcutsPanel  from '@/components/panels/KeyboardShortcutsPanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
@@ -158,7 +159,7 @@ export default function BuilderPage() {
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
-    'particles',
+    'particles', 'shortcuts',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
@@ -1149,6 +1150,7 @@ export default function BuilderPage() {
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
       { id: 'particles',      title: 'Particle',       render: () => null },
+      { id: 'shortcuts',      title: 'Shortcuts',      render: () => null },
     ]
     return makeRegistry(defs)
   }, [])
@@ -1742,6 +1744,10 @@ export default function BuilderPage() {
               {
                 id: 'snap', title: 'Snap',
                 render: () => <SnapPanel snap={snap} />,
+              },
+              {
+                id: 'shortcuts', title: 'Shortcuts',
+                render: () => <KeyboardShortcutsPanel />,
               },
               {
                 id: 'particles', title: 'Particle',
