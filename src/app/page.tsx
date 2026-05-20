@@ -31,7 +31,14 @@ import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type K
 import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
-import { makeAppendSplinePrimitiveCmd } from '@/lib/editor/commands-spline'
+import type { SplinePrimitiveKind } from '@/lib/types/spline'
+
+/** Maps Add-Layer menu kinds → spline primitive kinds for draw mode (BL-73). */
+const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
+  splineCircle: 'circle', splineLine: 'line', splineRect: 'rectangle',
+  splineEllipse: 'ellipse', splineArc: 'arc', splineDonut: 'donut',
+  splineNGon: 'ngon', splineStar: 'star',
+}
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
@@ -146,6 +153,8 @@ export default function BuilderPage() {
   /** BL-73 — when true, spline primitives append to the selected spline layer
    *  instead of starting a new one (3ds Max "Start New Shape" off). */
   const [splineAppendMode, setSplineAppendMode] = useState(false)
+  /** BL-73 — active spline primitive being drawn (null = not drawing). */
+  const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
   /** Multi-layer selection — primary is selectedLayerId, extras live here. */
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(() => new Set(['card']))
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
@@ -337,25 +346,21 @@ export default function BuilderPage() {
   // LayerDefinition and calls createDefault(). Adding a new shape no longer
   // requires touching this switch — just register a new LayerDefinition.
   const addLayer = useCallback((kind: string) => {
+    // BL-73 — Spline primitives are mouse-drawn, not instantly placed. Clicking
+    // one enters draw mode; the canvas handles the create/append gesture.
+    const splineKind = SPLINE_MENU_TO_KIND[kind]
+    if (splineKind) {
+      setSplineDrawKind(splineKind)
+      setToolMode('spline-draw')
+      return
+    }
+
     const def = layerRegistry.get(kind)
     if (!def) {
       console.warn(`addLayer: unknown layer kind "${kind}"`)
       return
     }
     const l = def.createDefault()
-
-    // BL-73 — Append mode: spline primitive merges into the selected spline
-    // layer as a new SubShape instead of creating a separate layer.
-    if (splineAppendMode && kind.startsWith('spline') && l.type === 'spline') {
-      const target = scene.layers.find(t => t.id === selectedLayerId)
-      const newSub = l.spline ? Object.values(l.spline.subShapes)[0] : undefined
-      if (target?.type === 'spline' && target.spline && newSub?.generatorParams) {
-        dispatchCommand(makeAppendSplinePrimitiveCmd(target.id, newSub.kind, newSub.generatorParams, target.spline))
-        return
-      }
-      // No valid spline target — fall through and create a new layer instead.
-    }
-
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
     // BL-66: paths start empty — auto-switch to Pen tool so the next click
@@ -363,7 +368,7 @@ export default function BuilderPage() {
     if (kind === 'bezierPath' || kind === 'motionPath') {
       setToolMode('pen')
     }
-  }, [dispatchCommand, selectLayer, splineAppendMode, scene.layers, selectedLayerId])
+  }, [dispatchCommand, selectLayer])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -1633,6 +1638,11 @@ export default function BuilderPage() {
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
                     onToolModeChange={setToolMode}
+                    splineDrawKind={splineDrawKind}
+                    splineAppendTargetId={
+                      splineAppendMode && selectedLayer?.type === 'spline' ? selectedLayerId : null
+                    }
+                    onSplineDrawCommit={() => { setSplineDrawKind(null); setToolMode('select') }}
                     snap={snap}
                     onSelectByGeometry={(ids, mode) => {
                       // BL-60 Faz 3 — canvas selection tools commit. Plain

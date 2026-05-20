@@ -10,6 +10,7 @@ import type {
   SplinePathData, SplinePrimitiveKind, SplineGeneratorParams,
 } from '@/lib/types/spline'
 import { createSplinePrimitive } from './createSplinePrimitive'
+import { mergeSplineData } from './mergeSplineData'
 
 export function appendSplinePrimitiveToSplineData(
   existing: SplinePathData,
@@ -18,13 +19,5 @@ export function appendSplinePrimitiveToSplineData(
 ): SplinePathData | null {
   const gen = createSplinePrimitive({ kind, params })
   if (!gen) return null
-
-  return {
-    subShapes: { ...existing.subShapes, ...gen.subShapes },
-    points:    { ...existing.points,    ...gen.points },
-    handles:   { ...existing.handles,   ...gen.handles },
-    segments:  { ...existing.segments,  ...gen.segments },
-    contours:  { ...existing.contours,  ...gen.contours },
-    fillRule:  gen.fillRule === 'evenodd' ? 'evenodd' : existing.fillRule,
-  }
+  return mergeSplineData(existing, gen)
 }

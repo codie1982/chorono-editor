@@ -5,7 +5,7 @@ import type {
   PathStrokeData,
   StateMachineDefinition, ChronoSMState, BaseSMTransition,
 } from './types'
-import type { SplinePrimitiveKind, SplineGeneratorParams } from './types/spline'
+import type { SplinePrimitiveKind, SplineGeneratorParams, SplinePathData } from './types/spline'
 import { createSplinePrimitive } from './spline/factory/createSplinePrimitive'
 import type { MotionBlurConfig } from './types/effects'
 import type { TextStyle } from './types/text'
@@ -405,6 +405,28 @@ export function newSplineLayerFromPrimitive(kind: SplinePrimitiveKind, params: S
 
 /** @deprecated use newSplineLayerFromPrimitive — kept for call-site compatibility. */
 export const newSplineLayer = newSplineLayerFromPrimitive
+
+/**
+ * Creates a spline layer directly from pre-built SplinePathData (drawn polyline,
+ * imported, converted text…). `openPath` selects a stroke-only default style.
+ */
+export function newSplineLayerFromData(
+  spline: SplinePathData,
+  opts?: { name?: string; openPath?: boolean; x?: number; y?: number },
+): Layer {
+  layerCounter++
+  return {
+    id:        `spline_${layerCounter}`,
+    name:      opts?.name ?? `Spline ${layerCounter}`,
+    type:      'spline',
+    transform: { ...DEFAULT_TRANSFORM, x: opts?.x ?? 80, y: opts?.y ?? 80 },
+    opacity:   1,
+    style: opts?.openPath
+      ? { stroke: { color: '#60A5FA', width: 3, lineCap: 'round', lineJoin: 'round' } }
+      : { fill:   { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } },
+    spline,
+  }
+}
 
 export function newRoundedRectLayer(): Layer {
   const l = newRectLayer()
