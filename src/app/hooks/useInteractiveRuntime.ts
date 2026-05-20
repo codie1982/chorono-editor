@@ -20,6 +20,8 @@ import {
   evaluateTimelines, mergeOverrides,
   type OverrideMap, type ExternalTimelineTime,
 } from '@/lib/evaluator'
+import { useSMRuntime } from './useSMRuntime'
+import type { ParamLookup } from '@/lib/statemachine'
 import {
   buildParamValues, applyParamBindingsToOverrides,
   type ParamValueMap,
@@ -67,6 +69,20 @@ export interface InteractiveRuntimeReturn {
   /** Queue an external event (button click, drag, customEvent). */
   fireEvent: (event: RuntimeEvent) => void
 
+  /** Dispatch a state-machine event (BL-09). Drives transitions whose
+   *  trigger matches `event`. Broadcast to all machines when `smId` omitted. */
+  dispatchSMEvent: (event: string, smId?: string) => void
+  /** Enable/disable SM test mode. While active, a rAF loop forces per-frame
+   *  re-evaluation so dispatched events + blends advance even when the global
+   *  playhead is paused. */
+  setSMTestActive: (active: boolean) => void
+  /** Monotonic counter bumped each frame while SM test mode is active. Add to
+   *  `useMemo` deps to re-run evaluateFrame without polling. 0 when inactive. */
+  smTestTick: number
+  /** Live SM runtime instances keyed by machine id — for the editor's active
+   *  state highlight and blend progress. */
+  smRuntimes: Map<string, import('@/lib/statemachine').StateMachineRuntime>
+
   /** Active segment state (null = normal full-timeline playback). */
   segmentState: SegmentPlaybackState | null
   /** Begin playing a named segment. */
@@ -112,6 +128,10 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     eventQueueRef.current.push(event)
   }, [])
 
+  // ── State machines (BL-09) ───────────────────────────────────────────────
+  // Inert when the scene has no machines, so the non-SM path is unchanged.
+  const sm = useSMRuntime(scene)
+
   // ── Segment playback ───────────────────────────────────────────────────
   const [segmentState, setSegmentState] = useState<SegmentPlaybackState | null>(null)
   const segmentRef = useRef<SegmentPlaybackState | null>(null)
@@ -151,6 +171,26 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     return () => cancelAnimationFrame(raf)
   }, [segmentState])
 
+  // ── SM test mode: per-frame tick (BL-09) ──────────────────────────────────
+  // Same RAF pattern as segments — while test mode is on we force a re-eval
+  // each frame so dispatched events fire and blends animate even when the
+  // global playhead is paused.
+  const [smTestActiveState, setSMTestActiveState] = useState(false)
+  const [smTestTick, setSMTestTick] = useState(0)
+  const setSMTestActive = useCallback((active: boolean) => {
+    setSMTestActiveState(active)
+  }, [])
+  useEffect(() => {
+    if (!smTestActiveState) return
+    let raf = 0
+    const loop = () => {
+      setSMTestTick((t) => (t + 1) | 0)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [smTestActiveState])
+
   // ── Listener registry ──────────────────────────────────────────────────
   const listenersRef = useRef<Set<(event: RuntimeEvent) => void>>(new Set())
   const onEvent = useCallback((listener: (event: RuntimeEvent) => void) => {
@@ -171,7 +211,46 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
       ? { timelineId: seg.timelineId, localTimeMs: computeSegmentTime(seg, performance.now()) }
       : null
 
-    const baseOverrides    = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
+    // ── State machine pass (BL-09) ────────────────────────────────────────
+    // When machines exist, the SM owns its state timelines: forward incoming
+    // customEvents into the machines, then evaluate the SM's blended output and
+    // overlay it on the non-SM timelines (which still play normally).
+    const getParam: ParamLookup = (name) => paramValues.get(name)
+    const wallMs = performance.now()
+    let baseOverrides: OverrideMap
+    let smActiveTimelineId: string | null = null
+
+    if (sm.hasSM) {
+      // Bridge: SDK / preview customEvent("hover") → SM event "hover".
+      // Peek (don't drain) — the trigger engine still consumes them below.
+      for (const e of eventQueueRef.current) {
+        if (e.type === 'customEvent' && e.refId) sm.dispatchSMEvent(e.refId)
+      }
+
+      const smRes = sm.tickFrame(globalTimeMs, getParam, wallMs)
+      const nonSmTimelines = scene.timelines.filter((t) => !smRes.ownedTimelineIds.has(t.id))
+      const nonSmOverrides = evaluateTimelines(nonSmTimelines, globalTimeMs, externalTime)
+      baseOverrides = mergeOverrides(nonSmOverrides, smRes.overrides)
+
+      // Apply entry/exit actions produced by transitions this frame.
+      for (const a of smRes.actions) {
+        if (a.type === 'setParam' && a.param !== undefined && a.value !== undefined) {
+          overridesRef.current.set(a.param, a.value)
+          setOverridesVersion((v) => v + 1)
+        } else if (a.type === 'emitEvent' && a.event) {
+          // Re-enters as a customEvent → bridged back to SM + trigger engine.
+          fireEvent({ type: 'customEvent', refId: a.event })
+        }
+      }
+
+      // Snapshot's active timeline prefers the first machine's active state.
+      for (const rt of Array.from(sm.runtimes.values())) {
+        if (rt.activeTimelineId) { smActiveTimelineId = rt.activeTimelineId; break }
+      }
+    } else {
+      baseOverrides = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
+    }
+
     const paramOverrides   = applyParamBindingsToOverrides(scene.layers, paramValues, baseOverrides)
     const bindingOverrides = evaluateBindings(scene.bindings, paramOverrides, paramValues, scene)
     // BL-05: Apply expression-based parameter wires after linear bindings so
@@ -180,7 +259,8 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     const overrides = mergeOverrides(wireOverrides) // wireOverrides already wraps everything
 
     // ── Build new snapshot ────────────────────────────────────────────────
-    const activeTimelineId = scene.timelines.find((t) => t.autoplay)?.id
+    const activeTimelineId = smActiveTimelineId
+      ?? scene.timelines.find((t) => t.autoplay)?.id
       ?? scene.timelines[0]?.id
       ?? null
     const nextSnapshot: PlaybackSnapshot = {
@@ -287,6 +367,10 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     setParamOverride,
     resetParams,
     fireEvent,
+    dispatchSMEvent: sm.dispatchSMEvent,
+    setSMTestActive,
+    smTestTick,
+    smRuntimes: sm.runtimes,
     segmentState,
     playSegment,
     stopSegment,

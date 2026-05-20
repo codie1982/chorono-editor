@@ -5,6 +5,7 @@
 import type {
   ChronoScene, Layer, Timeline, Track, Keyframe, Composition,
   Asset, Trigger, Binding, SceneParameter,
+  StateMachineDefinition, ChronoSMState,
 } from '../types'
 import { bakeTrack } from '../animation/baking/bake'
 
@@ -40,6 +41,9 @@ export interface RuntimeScene {
   bindings: Binding[]
   /** Runtime-tunable parameters — read by the host platform via setParam(). */
   parameters: SceneParameter[]
+  /** Interactive state machines (BL-09). Present only when the scene defines
+   *  any; editor-only node positions are stripped. */
+  stateMachines?: StateMachineDefinition[]
   initialState: Record<string, unknown>
 }
 
@@ -78,7 +82,24 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
     triggers:     scene.triggers,
     bindings:     scene.bindings,
     parameters:   scene.parameters,
+    // BL-09 — carry state machines into the runtime, minus editor node coords.
+    ...(scene.stateMachines && scene.stateMachines.length > 0
+      ? { stateMachines: scene.stateMachines.map(stripSMEditorMeta) }
+      : {}),
     initialState: scene.initialState,
+  }
+}
+
+// ── State machine cleanup ──────────────────────────────────────────────────────
+
+/** Drop editor-only node positions from each state — runtime ignores them. */
+function stripSMEditorMeta(sm: StateMachineDefinition): StateMachineDefinition {
+  return {
+    ...sm,
+    states: sm.states.map((s): ChronoSMState => {
+      const { x: _x, y: _y, ...rest } = s
+      return rest
+    }),
   }
 }
 

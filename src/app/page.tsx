@@ -58,12 +58,14 @@ import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel               from '@/components/panels/SnapPanel'
+import StateMachinePanel       from '@/components/panels/StateMachinePanel'
 import KeyboardShortcutsPanel  from '@/components/panels/KeyboardShortcutsPanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
 import { useDockLayout } from '@/components/dock/useDockLayout'
+import { findLeafOfPanel } from '@/components/dock/layoutOps'
 import { makeRegistry, type PanelDefinition, type PanelRegistry } from '@/components/dock/registry'
 import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
@@ -158,11 +160,38 @@ export default function BuilderPage() {
   // AND requires every id here to be present in the tree. Keep in sync
   // with the registry below.
   const dock = useDockLayout([
-    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
+    'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
     'particles', 'shortcuts',
   ])
+
+  // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
+  // The State Machine panel shares the canvas leaf as a tab. The toolbar
+  // toggle (and Cmd+Shift+M) just switches the active tab — no separate "mode"
+  // system. `smModeActive` reflects whichever leaf currently hosts the panel.
+  const smLeaf = findLeafOfPanel(dock.layout, 'stateMachine')
+  const smModeActive = !!smLeaf && smLeaf.panels[smLeaf.activeIndex] === 'stateMachine'
+  const toggleSMMode = useCallback(() => {
+    const leaf = findLeafOfPanel(dock.layout, 'stateMachine')
+    if (!leaf) return
+    const onSM = leaf.panels[leaf.activeIndex] === 'stateMachine'
+    const other = leaf.panels.find((p) => p !== 'stateMachine') ?? 'canvas'
+    dock.dispatchTab(leaf.id, onSM ? other : 'stateMachine')
+  }, [dock])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
+        const tag = (e.target as HTMLElement | null)?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        e.preventDefault()
+        toggleSMMode()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleSMMode])
+
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
   // Escape exits fullscreen
@@ -270,7 +299,7 @@ export default function BuilderPage() {
     // runtime.segmentTick increments on every animation frame while a
     // segment is playing — without it the segment freezes at startMs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.segmentTick],
+    [scene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.segmentTick, runtime.smTestTick],
   )
 
   /**
@@ -1215,6 +1244,7 @@ export default function BuilderPage() {
       { id: 'layers',         title: 'Layers',         render: () => null },
       { id: 'sceneExplorer',  title: 'Scene Explorer', render: () => null },
       { id: 'canvas',         title: 'Canvas',         render: () => null },
+      { id: 'stateMachine',   title: 'State Machine',  render: () => null },
       { id: 'properties',     title: 'Properties',     render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
@@ -1264,6 +1294,24 @@ export default function BuilderPage() {
           containMode={selectionContainMode}
           onContainModeChange={setSelectionContainMode}
         />
+
+        <div className="w-px h-6 bg-gray-700 mx-1" />
+
+        {/* ── Animation / State-Machine sub-mod (BL-09) ──────────────────── */}
+        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Toggle State Machine view (Cmd+Shift+M)">
+          <button
+            onClick={() => { if (smModeActive) toggleSMMode() }}
+            className={`px-2 py-1 text-xs rounded ${!smModeActive ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            ● Animation
+          </button>
+          <button
+            onClick={() => { if (!smModeActive) toggleSMMode() }}
+            className={`px-2 py-1 text-xs rounded ${smModeActive ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            ◇ SM
+          </button>
+        </div>
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
@@ -1654,6 +1702,12 @@ export default function BuilderPage() {
                       },
                     }}
                   />
+                ),
+              },
+              {
+                id: 'stateMachine', title: 'State Machine',
+                render: () => (
+                  <StateMachinePanel scene={scene} editor={editor} runtime={runtime} />
                 ),
               },
               {

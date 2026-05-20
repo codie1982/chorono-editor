@@ -31,6 +31,14 @@ export type {
   ChronoScene,
 } from './core'
 
+// ── State Machine (BL-09) ───────────────────────────────────────────────────
+export type {
+  BaseSMState, BaseSMTransition, SMGuard, SMAction,
+} from './statemachine-base'
+export type {
+  ChronoSMState, StateMachineDefinition,
+} from './statemachine-chorono'
+
 export type {
   GradientStop, GradientFill,
   ShapeFill,
