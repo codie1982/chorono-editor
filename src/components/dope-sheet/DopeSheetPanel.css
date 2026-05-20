@@ -293,6 +293,19 @@
   );
 }
 
+/* Segment bar connecting consecutive keys (active span of the track) */
+
+.keyframe-segment {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  background: #355079;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Keyframe symbol */
 
 .keyframe-symbol {
@@ -305,10 +318,11 @@
   align-items: center;
   justify-content: center;
   font-size: 9px;
-  color: #888;
+  color: #cbd5e1;
   cursor: pointer;
   transition: all 0.1s;
   user-select: none;
+  z-index: 2;
 }
 
 .keyframe-symbol:hover {
