@@ -5,6 +5,7 @@ import type {
   PathStrokeData, PathShapeType, PathTrimMode, StrokeCap,
   SceneParameter, PathAnchor,
   ChronoScene, ParameterWire, ParameterRef,
+  FontWeight, FontStyle,
 } from '@/lib/types'
 import {
   togglePathClosed, reversePath,
@@ -16,6 +17,7 @@ import ColorInput  from '@/components/inputs/ColorInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 import { makeBakeMotionBlurCmd, makeUnbakeMotionBlurCmd } from '@/lib/editor/commands-motionblur'
 import { DEFAULT_MOTION_BLUR } from '@/lib/defaults'
+import { syncTextLayerSize } from '@/lib/text/measureText'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
@@ -266,6 +268,35 @@ const PARAM_TYPE_BADGE: Record<import('@/lib/types').SceneParameterType, { bg: s
   image:   { bg: 'bg-violet-900',  fg: 'text-violet-300'  },
 }
 
+// ── Text panel option tables (BL-72 Phase 2) ────────────────────────────────
+// System / web-safe families only — the app loads no custom fonts, so these are
+// guaranteed to render. measureText reflects the chosen family in the browser.
+const FONT_FAMILIES: string[] = [
+  'sans-serif', 'serif', 'monospace',
+  'Arial', 'Helvetica', 'Georgia', 'Times New Roman',
+  'Courier New', 'Verdana', 'Trebuchet MS', 'Impact',
+]
+
+// Curated weight ramp. Values match the FontWeight union (numeric strings +
+// 'normal'/'bold'). drawText injects these straight into the canvas font string.
+const FONT_WEIGHTS: [FontWeight, string][] = [
+  ['100', '100 · Thin'],
+  ['300', '300 · Light'],
+  ['normal', '400 · Regular'],
+  ['500', '500 · Medium'],
+  ['600', '600 · Semibold'],
+  ['bold', '700 · Bold'],
+  ['800', '800 · Extra'],
+  ['900', '900 · Black'],
+]
+
+const TEXT_INPUT_CLASS =
+  'w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 ' +
+  'focus:outline-none focus:border-blue-500'
+
+const DEFAULT_TEXT_STROKE = { color: '#000000', width: 2 }
+const DEFAULT_TEXT_SHADOW = { x: 2, y: 2, blur: 4, color: '#000000' }
+
 // ── Genel giriş bileşenleri ─────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -336,6 +367,16 @@ export default function PropertiesPanel({
   const update = (partial: Partial<Layer>) => layer && onLayerChange({ ...layer, ...partial })
   const updateTransform = (key: keyof Layer['transform'], val: number) =>
     layer && update({ transform: { ...layer.transform, [key]: val } })
+
+  // BL-72 — Patch text style AND re-measure the layer's `size` so the
+  // selection frame / hit area / rulers track the visible glyphs. Routing
+  // content + font-metric edits through here is what fixes the "frame stays
+  // the same when fontSize changes" bug. (size-neutral edits like colour can
+  // still go through plain `update`.)
+  const updateText = (partial: Partial<NonNullable<Layer['text']>>) => {
+    if (!layer?.text) return
+    onLayerChange(syncTextLayerSize({ ...layer, text: { ...layer.text, ...partial } }))
+  }
 
   // BL-69 — Update the layer's paramBindings map. Null clears the binding.
   // Drops the field entirely when empty so the scene stays JSON-clean.
@@ -1049,6 +1090,7 @@ export default function PropertiesPanel({
             </Section>
 
             {/* ── Text özellikleri ──────────────────────────────────── */}
+            {/* ── Text: Character ───────────────────────────────────── */}
             {layer.type === 'text' && layer.text && (
               <Section title="Text">
                 <ParamBindButton
@@ -1062,11 +1104,43 @@ export default function PropertiesPanel({
                   <input
                     type="text"
                     value={layer.text.value}
-                    onChange={(e) => update({ text: { ...layer.text!, value: e.target.value } })}
-                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
-                               focus:outline-none focus:border-blue-500"
+                    onChange={(e) => updateText({ value: e.target.value })}
+                    className={TEXT_INPUT_CLASS}
                   />
                 </ParamBindButton>
+
+                <Field label="Font">
+                  <select
+                    value={layer.text.fontFamily ?? 'sans-serif'}
+                    onChange={(e) => updateText({ fontFamily: e.target.value })}
+                    className={TEXT_INPUT_CLASS}
+                  >
+                    {FONT_FAMILIES.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </Field>
+
+                <Row2>
+                  <Field label="Weight">
+                    <select
+                      value={String(layer.text.fontWeight ?? 'normal')}
+                      onChange={(e) => updateText({ fontWeight: e.target.value as FontWeight })}
+                      className={TEXT_INPUT_CLASS}
+                    >
+                      {FONT_WEIGHTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Style">
+                    <select
+                      value={layer.text.fontStyle ?? 'normal'}
+                      onChange={(e) => updateText({ fontStyle: e.target.value as FontStyle })}
+                      className={TEXT_INPUT_CLASS}
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="italic">Italic</option>
+                    </select>
+                  </Field>
+                </Row2>
+
                 <Row2>
                   <ParamBindButton
                     label="Font Size"
@@ -1077,7 +1151,7 @@ export default function PropertiesPanel({
                     onBind={(id) => bindParam('text.fontSize', id)}
                   >
                     <NumInput value={layer.text.fontSize} min={4}
-                      onChange={(v) => update({ text: { ...layer.text!, fontSize: v } })} />
+                      onChange={(v) => updateText({ fontSize: v })} />
                   </ParamBindButton>
                   <ParamBindButton
                     label="Color"
@@ -1087,11 +1161,90 @@ export default function PropertiesPanel({
                     parameters={parameters}
                     onBind={(id) => bindParam('text.color', id)}
                   >
-                    <input type="color" value={layer.text.color}
-                      onChange={(e) => update({ text: { ...layer.text!, color: e.target.value } })}
-                      className="w-full h-7 rounded border border-gray-600 bg-transparent cursor-pointer p-0.5" />
+                    <ColorInput value={layer.text.color}
+                      onChange={(v) => updateText({ color: v })} />
                   </ParamBindButton>
                 </Row2>
+
+                <Field label="Letter Spacing">
+                  <NumInput value={layer.text.letterSpacing ?? 0} step={0.5}
+                    onChange={(v) => updateText({ letterSpacing: v })} />
+                </Field>
+
+                <Row2>
+                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={!!layer.text.uppercase}
+                      onChange={(e) => updateText({ uppercase: e.target.checked })}
+                      className="accent-blue-500" />
+                    Uppercase
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={!!layer.text.underline}
+                      onChange={(e) => updateText({ underline: e.target.checked })}
+                      className="accent-blue-500" />
+                    Underline
+                  </label>
+                </Row2>
+              </Section>
+            )}
+
+            {/* ── Text: Stroke (outline) ────────────────────────────── */}
+            {layer.type === 'text' && layer.text && (
+              <Section title="Text Stroke">
+                <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                  <input type="checkbox" checked={!!layer.text.stroke}
+                    onChange={(e) => updateText({ stroke: e.target.checked ? (layer.text!.stroke ?? DEFAULT_TEXT_STROKE) : undefined })}
+                    className="accent-blue-500" />
+                  Enable outline
+                </label>
+                {layer.text.stroke && (
+                  <Row2>
+                    <Field label="Color">
+                      <ColorInput value={layer.text.stroke.color}
+                        onChange={(v) => updateText({ stroke: { ...layer.text!.stroke!, color: v } })} />
+                    </Field>
+                    <Field label="Width">
+                      <NumInput value={layer.text.stroke.width} min={0} step={0.5}
+                        onChange={(v) => updateText({ stroke: { ...layer.text!.stroke!, width: v } })} />
+                    </Field>
+                  </Row2>
+                )}
+              </Section>
+            )}
+
+            {/* ── Text: Shadow ──────────────────────────────────────── */}
+            {layer.type === 'text' && layer.text && (
+              <Section title="Text Shadow">
+                <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                  <input type="checkbox" checked={!!layer.text.shadow}
+                    onChange={(e) => updateText({ shadow: e.target.checked ? (layer.text!.shadow ?? DEFAULT_TEXT_SHADOW) : undefined })}
+                    className="accent-blue-500" />
+                  Enable shadow
+                </label>
+                {layer.text.shadow && (
+                  <>
+                    <Row2>
+                      <Field label="Color">
+                        <ColorInput value={layer.text.shadow.color}
+                          onChange={(v) => updateText({ shadow: { ...layer.text!.shadow!, color: v } })} />
+                      </Field>
+                      <Field label="Blur">
+                        <NumInput value={layer.text.shadow.blur} min={0} step={0.5}
+                          onChange={(v) => updateText({ shadow: { ...layer.text!.shadow!, blur: v } })} />
+                      </Field>
+                    </Row2>
+                    <Row2>
+                      <Field label="Offset X">
+                        <NumInput value={layer.text.shadow.x} step={0.5}
+                          onChange={(v) => updateText({ shadow: { ...layer.text!.shadow!, x: v } })} />
+                      </Field>
+                      <Field label="Offset Y">
+                        <NumInput value={layer.text.shadow.y} step={0.5}
+                          onChange={(v) => updateText({ shadow: { ...layer.text!.shadow!, y: v } })} />
+                      </Field>
+                    </Row2>
+                  </>
+                )}
               </Section>
             )}
 

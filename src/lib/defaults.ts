@@ -6,6 +6,8 @@ import type {
   StateMachineDefinition, ChronoSMState, BaseSMTransition,
 } from './types'
 import type { MotionBlurConfig } from './types/effects'
+import type { TextStyle } from './types/text'
+import { measureTextLayout } from './text/measureText'
 
 let layerCounter    = 0
 let timelineCounter = 0
@@ -385,11 +387,11 @@ export function newTextLayer(): Layer {
   layerCounter++
   const value = 'Chorono'
   const fontSize = 24
-  // Text has no exact bounding box without measureText — approximate so the
-  // anchor lands near the visual middle of the string. User can fine-tune
-  // via the Centre button in PropertiesPanel.
-  const estW = value.length * fontSize * 0.55
-  const estH = fontSize
+  const text: TextStyle = { value, fontSize, color: '#FFFFFF' }
+  // BL-72: measure the real glyph box so the layer carries a proper `size`.
+  // This is what makes the SelectionFrame render and the rulers/gizmos track
+  // the text — without it everything fell back to a hardcoded 120px width.
+  const { width: w, height: h } = measureTextLayout(text)
   return {
     id:   `text_${layerCounter}`,
     name: `Text ${layerCounter}`,
@@ -398,11 +400,12 @@ export function newTextLayer(): Layer {
       ...DEFAULT_TRANSFORM,
       x: 50,
       y: 100 + (layerCounter % 5) * 20,
-      anchorX: estW / 2,
-      anchorY: estH / 2,
+      anchorX: w / 2,
+      anchorY: h / 2,
     },
     opacity: 1,
-    text: { value, fontSize, color: '#FFFFFF' },
+    size: { width: w, height: h },
+    text,
   }
 }
 
