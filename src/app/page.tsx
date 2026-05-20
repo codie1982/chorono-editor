@@ -155,7 +155,7 @@ export default function BuilderPage() {
   // AND requires every id here to be present in the tree. Keep in sync
   // with the registry below.
   const dock = useDockLayout([
-    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
+    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
     'particles',
@@ -1138,6 +1138,7 @@ export default function BuilderPage() {
       { id: 'properties',     title: 'Properties',     render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
+      { id: 'dopeSheet',      title: 'Dope Sheet',     render: () => null },
       { id: 'curveModifiers', title: 'Modifiers',      render: () => null },
       { id: 'parameters',     title: 'Parameters',     render: () => null },
       { id: 'events',         title: 'Events',         render: () => null },

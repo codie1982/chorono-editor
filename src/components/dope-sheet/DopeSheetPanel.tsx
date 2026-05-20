@@ -46,15 +46,15 @@ export default function DopeSheetPanel({
     return scene.timelines.find(tl => tl.id === selectedTimelineId)
   }, [scene.timelines, selectedTimelineId])
 
-  // Update expand state
+  // Toggle collapse state (nodes expanded by default)
   const toggleNodeExpand = useCallback((nodeId: string) => {
     setUiState(prev => {
       const next = { ...prev }
-      next.expandedNodeIds = new Set(prev.expandedNodeIds)
-      if (next.expandedNodeIds.has(nodeId)) {
-        next.expandedNodeIds.delete(nodeId)
+      next.collapsedNodeIds = new Set(prev.collapsedNodeIds)
+      if (next.collapsedNodeIds.has(nodeId)) {
+        next.collapsedNodeIds.delete(nodeId)
       } else {
-        next.expandedNodeIds.add(nodeId)
+        next.collapsedNodeIds.add(nodeId)
       }
       return next
     })
@@ -95,7 +95,7 @@ export default function DopeSheetPanel({
         editor={editor}
         selectedLayerId={selectedLayerId}
         selectedKfIds={uiState.selectedKfIds}
-        expandedNodeIds={uiState.expandedNodeIds}
+        collapsedNodeIds={uiState.collapsedNodeIds}
         onToggleExpand={toggleNodeExpand}
         onSelectKeyframes={handleSelectKeyframes}
         onSelectLayer={onSelectLayer}

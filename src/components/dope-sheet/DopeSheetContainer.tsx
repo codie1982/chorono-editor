@@ -12,7 +12,7 @@ interface Props {
   editor: EditorStateReturn
   selectedLayerId: string | null
   selectedKfIds: Set<string>
-  expandedNodeIds: Set<string>
+  collapsedNodeIds: Set<string>
   onToggleExpand: (nodeId: string) => void
   onSelectKeyframes: (kfIds: Set<string>) => void
   onSelectLayer: (id: string | null) => void
@@ -29,7 +29,7 @@ export default function DopeSheetContainer({
   editor,
   selectedLayerId,
   selectedKfIds,
-  expandedNodeIds,
+  collapsedNodeIds,
   onToggleExpand,
   onSelectKeyframes,
   onSelectLayer,
@@ -46,7 +46,7 @@ export default function DopeSheetContainer({
           scene={scene}
           selectedTimeline={selectedTimeline}
           selectedLayerId={selectedLayerId}
-          expandedNodeIds={expandedNodeIds}
+          collapsedNodeIds={collapsedNodeIds}
           onToggleExpand={onToggleExpand}
           onSelectLayer={onSelectLayer}
           filterAnimatedOnly={uiState.filterAnimatedOnly}

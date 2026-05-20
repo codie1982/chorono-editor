@@ -1,8 +1,8 @@
 // DopeSheet component types & interfaces
 
 export interface DopeSheetUIState {
-  /** Track nodes' expand/collapse state */
-  expandedNodeIds: Set<string>
+  /** Collapsed track node ids (nodes are expanded by default) */
+  collapsedNodeIds: Set<string>
 
   /** Selected keyframe IDs (multi-select) */
   selectedKfIds: Set<string>
@@ -50,7 +50,7 @@ export interface TrackNode {
 }
 
 export const INITIAL_DOPE_SHEET_STATE: DopeSheetUIState = {
-  expandedNodeIds: new Set(['scene']),
+  collapsedNodeIds: new Set(),
   selectedKfIds: new Set(),
   selectedTrackTargets: new Set(),
   filterAnimatedOnly: false,

@@ -9,7 +9,7 @@ interface Props {
   scene: ChronoScene
   selectedTimeline: Timeline
   selectedLayerId: string | null
-  expandedNodeIds: Set<string>
+  collapsedNodeIds: Set<string>
   onToggleExpand: (nodeId: string) => void
   onSelectLayer: (id: string | null) => void
   filterAnimatedOnly: boolean
@@ -21,7 +21,7 @@ export default function DopeSheetHierarchy({
   scene,
   selectedTimeline,
   selectedLayerId,
-  expandedNodeIds,
+  collapsedNodeIds,
   onToggleExpand,
   onSelectLayer,
   filterAnimatedOnly,
@@ -42,9 +42,17 @@ export default function DopeSheetHierarchy({
     [scene, selectedTimeline, filterAnimatedOnly, filterSelectedObjectOnly, filterText, selectedLayerId],
   )
 
-  // Render tree (depth-first, showing only expanded parents)
+  // Fast lookup by id for child resolution
+  const nodeById = useMemo(() => {
+    const m = new Map<string, TrackNode>()
+    for (const n of nodes) m.set(n.id, n)
+    return m
+  }, [nodes])
+
+  // Render tree (depth-first). Nodes are expanded by default; a node is
+  // collapsed only if its id is present in collapsedNodeIds.
   const renderNode = (node: TrackNode): React.ReactNode => {
-    const isExpanded = expandedNodeIds.has(node.id)
+    const isExpanded = !collapsedNodeIds.has(node.id)
 
     return (
       <div key={node.id}>
@@ -60,7 +68,7 @@ export default function DopeSheetHierarchy({
         {isExpanded && node.children.length > 0 && (
           <div className="hierarchy-children">
             {node.children.map(childId => {
-              const childNode = nodes.find(n => n.id === childId)
+              const childNode = nodeById.get(childId)
               return childNode ? renderNode(childNode) : null
             })}
           </div>
@@ -69,11 +77,14 @@ export default function DopeSheetHierarchy({
     )
   }
 
+  // Render only from the root (depth 0); children render recursively.
+  const root = nodes.find(n => n.depth === 0) ?? nodes[0]
+
   return (
     <div className="dope-sheet-hierarchy">
       <div className="hierarchy-tree">
-        {nodes.length > 0 ? (
-          nodes.map(node => renderNode(node))
+        {root ? (
+          renderNode(root)
         ) : (
           <div className="hierarchy-empty">No layers or tracks</div>
         )}
