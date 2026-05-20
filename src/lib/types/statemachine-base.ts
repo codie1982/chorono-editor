@@ -20,6 +20,11 @@ export interface BaseSMState {
   entryActions?: SMAction[]
   /** Side effects fired when this state is left. */
   exitActions?: SMAction[]
+  /** Editor-only node position in the graph canvas (centre point). Optional —
+   *  the editor auto-lays-out states that have no stored position. Ignored at
+   *  runtime. */
+  x?: number
+  y?: number
 }
 
 /**

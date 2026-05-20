@@ -3,7 +3,8 @@ import type { ChronoScene, StateMachineDefinition, ChronoSMState, BaseSMTransiti
 import {
   makeCreateSMCmd, makeDeleteSMCmd,
   makeAddSMStateCmd, makeDeleteSMStateCmd, makeUpdateSMStateCmd,
-  makeAddSMTransitionCmd, makeDeleteSMTransitionCmd, makeSetInitialStateCmd,
+  makeAddSMTransitionCmd, makeDeleteSMTransitionCmd, makeUpdateSMTransitionCmd,
+  makeSetInitialStateCmd,
 } from './commands-statemachine'
 
 // Minimal fake scene — only the fields the commands touch
@@ -112,6 +113,25 @@ describe('SM commands — transitions & initial state', () => {
     expect(removed.stateMachines![0].transitions).toHaveLength(0)
     const back = delCmd.undo(removed)
     expect(back.stateMachines![0].transitions).toEqual([t])
+  })
+
+  it('update transition patches fields; undo restores prior (incl. cleared guard)', () => {
+    const t: BaseSMTransition = {
+      id: 't1', from: 's1', to: 's1', trigger: 'loop',
+      guard: { param: 'x', op: '>', value: 1 }, blendMs: 100,
+    }
+    const scene = sceneWith(sm({ transitions: [t] }))
+    const cmd = makeUpdateSMTransitionCmd('sm1', 't1', { trigger: 'tick', guard: undefined, blendMs: 300 })
+    const next = cmd.execute(scene)
+    const after = next.stateMachines![0].transitions[0]
+    expect(after.trigger).toBe('tick')
+    expect(after.guard).toBeUndefined()
+    expect(after.blendMs).toBe(300)
+    const back = cmd.undo(next)
+    const restored = back.stateMachines![0].transitions[0]
+    expect(restored.trigger).toBe('loop')
+    expect(restored.guard).toEqual({ param: 'x', op: '>', value: 1 })
+    expect(restored.blendMs).toBe(100)
   })
 
   it('set initial state; undo restores previous', () => {

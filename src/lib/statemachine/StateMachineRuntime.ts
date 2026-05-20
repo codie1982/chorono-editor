@@ -134,6 +134,23 @@ export class StateMachineRuntime {
     }
   }
 
+  /**
+   * Non-mutating blend snapshot for UI display — unlike getBlend() it never
+   * clears the blend, so the editor can read progress without interfering with
+   * the runtime's own frame ticking.
+   */
+  peekBlend(wallMs: number): ActiveBlend | null {
+    if (!this.blend) return null
+    const elapsed = wallMs - this.blend.startWallMs
+    if (elapsed >= this.blend.durationMs) return null
+    const alpha = this.blend.durationMs > 0 ? elapsed / this.blend.durationMs : 1
+    return {
+      fromTimelineId: this.blend.fromTimelineId,
+      toTimelineId: this.blend.toTimelineId,
+      alpha,
+    }
+  }
+
   /** Reset to the initial state and clear any blend. */
   reset(): void {
     this.currentStateId = this.sm.initialStateId

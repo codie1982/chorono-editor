@@ -72,6 +72,16 @@ export interface InteractiveRuntimeReturn {
   /** Dispatch a state-machine event (BL-09). Drives transitions whose
    *  trigger matches `event`. Broadcast to all machines when `smId` omitted. */
   dispatchSMEvent: (event: string, smId?: string) => void
+  /** Enable/disable SM test mode. While active, a rAF loop forces per-frame
+   *  re-evaluation so dispatched events + blends advance even when the global
+   *  playhead is paused. */
+  setSMTestActive: (active: boolean) => void
+  /** Monotonic counter bumped each frame while SM test mode is active. Add to
+   *  `useMemo` deps to re-run evaluateFrame without polling. 0 when inactive. */
+  smTestTick: number
+  /** Live SM runtime instances keyed by machine id — for the editor's active
+   *  state highlight and blend progress. */
+  smRuntimes: Map<string, import('@/lib/statemachine').StateMachineRuntime>
 
   /** Active segment state (null = normal full-timeline playback). */
   segmentState: SegmentPlaybackState | null
@@ -160,6 +170,26 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
   }, [segmentState])
+
+  // ── SM test mode: per-frame tick (BL-09) ──────────────────────────────────
+  // Same RAF pattern as segments — while test mode is on we force a re-eval
+  // each frame so dispatched events fire and blends animate even when the
+  // global playhead is paused.
+  const [smTestActiveState, setSMTestActiveState] = useState(false)
+  const [smTestTick, setSMTestTick] = useState(0)
+  const setSMTestActive = useCallback((active: boolean) => {
+    setSMTestActiveState(active)
+  }, [])
+  useEffect(() => {
+    if (!smTestActiveState) return
+    let raf = 0
+    const loop = () => {
+      setSMTestTick((t) => (t + 1) | 0)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [smTestActiveState])
 
   // ── Listener registry ──────────────────────────────────────────────────
   const listenersRef = useRef<Set<(event: RuntimeEvent) => void>>(new Set())
@@ -338,6 +368,9 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     resetParams,
     fireEvent,
     dispatchSMEvent: sm.dispatchSMEvent,
+    setSMTestActive,
+    smTestTick,
+    smRuntimes: sm.runtimes,
     segmentState,
     playSegment,
     stopSegment,

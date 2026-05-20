@@ -163,6 +163,41 @@ export function makeDeleteSMTransitionCmd(smId: string, transitionId: string): E
   }
 }
 
+/**
+ * Patch fields on a transition (trigger / guard / blendMs / priority / from /
+ * to). Previous values of the patched keys are captured at execute time so undo
+ * restores exactly what changed. Set a key to `undefined` in the patch to clear
+ * it (e.g. removing a guard) — undo still restores the prior value.
+ */
+export function makeUpdateSMTransitionCmd(
+  smId: string,
+  transitionId: string,
+  patch: Partial<Omit<BaseSMTransition, 'id'>>,
+): EditorCommand {
+  let prev: Partial<BaseSMTransition> = {}
+  return {
+    label: 'Update Transition',
+    execute: (scene) =>
+      mapSM(scene, smId, (sm) => ({
+        ...sm,
+        transitions: sm.transitions.map((t) => {
+          if (t.id !== transitionId) return t
+          const captured: Partial<BaseSMTransition> = {}
+          for (const k of Object.keys(patch) as (keyof BaseSMTransition)[]) {
+            ;(captured as Record<string, unknown>)[k] = t[k]
+          }
+          prev = captured
+          return { ...t, ...patch }
+        }),
+      })),
+    undo: (scene) =>
+      mapSM(scene, smId, (sm) => ({
+        ...sm,
+        transitions: sm.transitions.map((t) => (t.id !== transitionId ? t : { ...t, ...prev })),
+      })),
+  }
+}
+
 // ── Initial state ─────────────────────────────────────────────────────────────
 
 export function makeSetInitialStateCmd(smId: string, stateId: string): EditorCommand {
