@@ -18,6 +18,7 @@ import type { SplinePrimitiveKind } from '@/lib/types/spline'
 import {
   splineParamsFromBox, isBoxDragKind, createPolylineSpline,
   createSplinePrimitive, splineToPathDefinition, translateSplineData, mergeSplineData,
+  computeSplineBounds,
 } from '@/lib/spline'
 import { newSplineLayerFromPrimitive, newSplineLayerFromData } from '@/lib/defaults'
 import { pathToSvgString } from '@/lib/geometry'
@@ -35,6 +36,7 @@ import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
 import PathGuideOverlay from './PathGuideOverlay'
 import PathEditOverlay from './PathEditOverlay'
+import SplineEditOverlay from './SplineEditOverlay'
 import ContextMenu, { useContextMenu } from './ui/ContextMenu'
 import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
 import {
@@ -2218,7 +2220,15 @@ export default function SceneCanvas({
     if (selectedLayer.path.anchors.length < 2) return null
     return bezierPathBounds(selectedLayer.path)
   }, [selectedLayer])
-  const hasFrameGeometry = !!selectedLayer && (!!selectedLayer.size || !!selectedPathBounds)
+  // BL-73 — spline frame bounds from the granular geometry (handles centered-
+  // at-origin primitives; local box may have negative x/y).
+  const selectedSplineBounds = useMemo(() => {
+    if (!selectedLayer || selectedLayer.type !== 'spline' || !selectedLayer.spline) return null
+    const b = computeSplineBounds(selectedLayer.spline)
+    if (b.width === 0 && b.height === 0) return null
+    return b
+  }, [selectedLayer])
+  const hasFrameGeometry = !!selectedLayer && (!!selectedLayer.size || !!selectedPathBounds || !!selectedSplineBounds)
   const showFrame =
     !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.hidden
     && gizmo.frame
@@ -2455,6 +2465,11 @@ export default function SceneCanvas({
             <PathEditOverlay layer={selectedLayer} zoom={zoom} />
           )}
 
+          {/* BL-73 — Control points + bezier handles for the selected spline. */}
+          {selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !previewMode && (
+            <SplineEditOverlay layer={selectedLayer} zoom={zoom} />
+          )}
+
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
               Circle / Paint). zoom multiplier maps composition pixels to
               the displayed canvas size. pointer-events:none so it never
@@ -2545,6 +2560,20 @@ export default function SceneCanvas({
               y={(selDY + selectedPathBounds.y) * zoom}
               w={selectedPathBounds.width  * zoom}
               h={selectedPathBounds.height * zoom}
+              anchorOffsetX={selectedLayer.transform.anchorX * zoom}
+              anchorOffsetY={selectedLayer.transform.anchorY * zoom}
+              rotationDeg={selDR}
+              onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
+            />
+          )}
+
+          {/* BL-73 — Spline selection frame from granular bounds. */}
+          {showFrame && !selectedLayer.size && selectedSplineBounds && (
+            <SelectionFrame
+              x={(selDX + selectedSplineBounds.x) * zoom}
+              y={(selDY + selectedSplineBounds.y) * zoom}
+              w={selectedSplineBounds.width  * zoom}
+              h={selectedSplineBounds.height * zoom}
               anchorOffsetX={selectedLayer.transform.anchorX * zoom}
               anchorOffsetY={selectedLayer.transform.anchorY * zoom}
               rotationDeg={selDR}
