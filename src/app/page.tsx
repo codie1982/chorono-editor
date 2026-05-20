@@ -36,6 +36,7 @@ import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
+import DopeSheetPanel  from '@/components/dope-sheet/DopeSheetPanel'
 import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
@@ -154,7 +155,7 @@ export default function BuilderPage() {
   // AND requires every id here to be present in the tree. Keep in sync
   // with the registry below.
   const dock = useDockLayout([
-    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor',
+    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
     'particles',
@@ -1137,6 +1138,7 @@ export default function BuilderPage() {
       { id: 'properties',     title: 'Properties',     render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
+      { id: 'dopeSheet',      title: 'Dope Sheet',     render: () => null },
       { id: 'curveModifiers', title: 'Modifiers',      render: () => null },
       { id: 'parameters',     title: 'Parameters',     render: () => null },
       { id: 'events',         title: 'Events',         render: () => null },
@@ -1651,6 +1653,25 @@ export default function BuilderPage() {
                     onTimeChange={handleSeek}
                     selectedKfIds={selectedKfIds}
                     onSelectKeyframes={setSelectedKfIds}
+                  />
+                ),
+              },
+              {
+                id: 'dopeSheet', title: 'Dope Sheet',
+                render: () => (
+                  <DopeSheetPanel
+                    scene={scene}
+                    editor={editor}
+                    settings={timelineSettings}
+                    onSettingsChange={setTimelineSettings}
+                    selectedLayerId={selectedLayerId}
+                    selectedTimelineId={selectedTlId}
+                    selectedKfIds={selectedKfIds}
+                    currentTimeMs={currentTimeMs}
+                    isPlaying={isPlaying}
+                    onTimeChange={handleSeek}
+                    onSelectKeyframes={setSelectedKfIds}
+                    onSelectLayer={selectLayer}
                   />
                 ),
               },
