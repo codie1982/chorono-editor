@@ -19,8 +19,11 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.tool.circle-select',    label: 'Circle Select',      contexts: ['canvas'], binding: { type: 'keyboard', key: 'o' } },
   { id: 'canvas.tool.paint-select',     label: 'Paint Select',       contexts: ['canvas'], binding: { type: 'keyboard', key: 'w' } },
 
+  // ── Selection / deletion (works in any context — handler is context-aware) ─
+  { id: 'global.delete',            label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'delete' } },
+  { id: 'global.deleteBackspace',   label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'backspace' } },
+
   // ── Canvas — selection ───────────────────────────────────────────────────
-  { id: 'canvas.select.delete',     label: 'Delete Selected',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'delete' } },
   { id: 'canvas.select.duplicate',  label: 'Duplicate Layer',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true } },
   { id: 'canvas.select.cloneQuick', label: 'Clone Quick',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true, alt: true }, description: 'Clone with animation tracks copied' },
   { id: 'canvas.select.copy',       label: 'Copy',               contexts: ['canvas'], binding: { type: 'keyboard', key: 'c', meta: true } },

@@ -12,6 +12,7 @@ import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
+import type { ShortcutContext } from '@/lib/shortcuts'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
@@ -499,6 +500,14 @@ export default function BuilderPage() {
     document.addEventListener('pointerdown', onDown, true)
     return () => document.removeEventListener('pointerdown', onDown, true)
   }, [])
+
+  // Maps the last-focused panel to a shortcut context so the same key can do
+  // different things in the canvas vs the timeline (e.g. S = Scale tool on the
+  // canvas, Show Scale track in the timeline). Stable identity (reads a ref).
+  const getShortcutContext = useCallback(
+    (): ShortcutContext => (activePanelRef.current === 'timeline' ? 'timeline' : 'canvas'),
+    [],
+  )
 
   // Remove every track of a layer on the selected timeline WITHOUT deleting the
   // layer — the timeline-focused Delete behaviour ("clear animation, keep the
@@ -1124,6 +1133,7 @@ export default function BuilderPage() {
     onCloneQuick:      cloneQuick,
     onOpenArrayModal:  openArrayModal,
     onToolChange:      setToolMode,
+    getContext:        getShortcutContext,
     frameRate,
   })
 
