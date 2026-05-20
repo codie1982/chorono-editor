@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import TimelineGhostControl from './TimelineGhostControl'
@@ -84,16 +84,73 @@ export default function TimelineToolbar(props: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [kfMenuOpen])
 
+  // ── Play-type dropdown (long-press the Play button) ──────────────────────
+  const [playMenuOpen, setPlayMenuOpen] = useState(false)
+  const playRef = useRef<HTMLDivElement>(null)
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressed = useRef(false)
+  useEffect(() => {
+    if (!playMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (playRef.current && !playRef.current.contains(e.target as Node)) setPlayMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [playMenuOpen])
+  const onPlayPointerDown = useCallback(() => {
+    longPressed.current = false
+    pressTimer.current = setTimeout(() => { longPressed.current = true; setPlayMenuOpen(true) }, 400)
+  }, [])
+  const onPlayPointerUp = useCallback(() => {
+    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null }
+    if (!longPressed.current) onPlayToggle()  // short press → play/pause
+  }, [onPlayToggle])
+
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
 
-      <button
-        onClick={onPlayToggle}
-        className="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-mono w-14 text-center"
-        title="Play / Pause (Space)"
-      >
-        {isPlaying ? '⏸ Pause' : '▶ Play'}
-      </button>
+      <div className="relative" ref={playRef}>
+        <button
+          onPointerDown={onPlayPointerDown}
+          onPointerUp={onPlayPointerUp}
+          onPointerLeave={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null } }}
+          className="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-mono w-14 text-center"
+          title="Play / Pause (Space) · long-press for play mode"
+        >
+          {isPlaying ? '⏸ Pause' : '▶ Play'}
+        </button>
+        {playMenuOpen && selectedTimeline && (
+          <div className="absolute left-0 top-full mt-1 z-50 bg-gray-900 border border-gray-700 rounded shadow-xl p-2 flex flex-col gap-1 text-xs text-gray-300 w-44">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide px-1 pb-0.5">Play Mode</div>
+            <label className="flex items-center gap-2 cursor-pointer px-1 py-0.5 hover:bg-gray-800 rounded">
+              <input type="checkbox" checked={selectedTimeline.autoplay}
+                onChange={(e) => onTimelineFieldChange('autoplay', e.target.checked)}
+                className="accent-blue-500" />
+              Autoplay
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer px-1 py-0.5 hover:bg-gray-800 rounded">
+              <input type="checkbox" checked={selectedTimeline.loop}
+                onChange={(e) => onTimelineFieldChange('loop', e.target.checked)}
+                className="accent-blue-500" />
+              Loop
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer px-1 py-0.5 hover:bg-gray-800 rounded"
+                   title="Play forward then backward">
+              <input type="checkbox" checked={!!selectedTimeline.pingPong}
+                onChange={(e) => onTimelineFieldChange('pingPong', e.target.checked)}
+                className="accent-blue-500" />
+              Ping-pong (↔)
+            </label>
+            <label className="flex items-center gap-2 px-1 py-0.5" title="Loop count (0 = infinite)">
+              <span className="text-gray-500 flex-1">Loop count</span>
+              <input type="number" min={0} step={1} value={selectedTimeline.loopCount ?? 0}
+                onChange={(e) => onTimelineFieldChange('loopCount', Number(e.target.value))}
+                className="w-12 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-gray-200
+                           [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+            </label>
+          </div>
+        )}
+      </div>
 
       {/* Jump to previous / next keyframe */}
       <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">
@@ -283,34 +340,8 @@ export default function TimelineToolbar(props: Props) {
                          [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
             /> ms
           </label>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" checked={selectedTimeline.autoplay}
-              onChange={(e) => onTimelineFieldChange('autoplay', e.target.checked)}
-              className="accent-blue-500" />
-            auto
-          </label>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" checked={selectedTimeline.loop}
-              onChange={(e) => onTimelineFieldChange('loop', e.target.checked)}
-              className="accent-blue-500" />
-            loop
-          </label>
-          <label className="flex items-center gap-1 cursor-pointer" title="Ping-pong: play forward then backward">
-            <input type="checkbox" checked={!!selectedTimeline.pingPong}
-              onChange={(e) => onTimelineFieldChange('pingPong', e.target.checked)}
-              className="accent-blue-500" />
-            ↔
-          </label>
-          <label className="flex items-center gap-1" title="Loop count (0 = infinite)">
-            <span className="text-[10px] text-gray-500">×</span>
-            <input
-              type="number" min={0} step={1}
-              value={selectedTimeline.loopCount ?? 0}
-              onChange={(e) => onTimelineFieldChange('loopCount', Number(e.target.value))}
-              className="w-10 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-gray-200
-                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-            />
-          </label>
+          {/* Play mode (autoplay / loop / ping-pong / loop count) now lives in
+              the Play button's long-press dropdown. */}
         </div>
       )}
     </div>
