@@ -1,104 +1,34 @@
 // ── Spline Primitive Factory ──────────────────────────────────────────────────
 //
-// Dispatches to the correct primitive generator and wraps the result in a
-// complete SplinePathData ready to store on a Layer.
+// Dispatches a (kind, params) request to the matching granular generator and
+// returns a complete SplinePathData (one SubShape). Returns null for
+// not-yet-implemented kinds (spiral/helix/egg/textOutline/freehand).
 
 import type {
   SplinePathData, SplinePrimitiveKind, SplineGeneratorParams,
   CircleSplineParams, LineSplineParams, RectSplineParams, EllipseSplineParams,
   ArcSplineParams, DonutSplineParams, NGonSplineParams, StarSplineParams,
 } from '@/lib/types/spline'
-import { createCircleSpline }    from '../primitives/createCircleSpline'
-import { createLineSpline }      from '../primitives/createLineSpline'
-import { createRectangleSpline } from '../primitives/createRectangleSpline'
-import { createEllipseSpline }   from '../primitives/createEllipseSpline'
-import { createArcSpline }       from '../primitives/createArcSpline'
-import { createDonutSpline }     from '../primitives/createDonutSpline'
-import { createNGonSpline }      from '../primitives/createNGonSpline'
-import { createStarSpline }      from '../primitives/createStarSpline'
+import {
+  createCircleSpline, createLineSpline, createRectangleSpline, createEllipseSpline,
+  createArcSpline, createDonutSpline, createNGonSpline, createStarSpline,
+} from '../primitives'
 
-let _idCounter = 0
-function uid(prefix: string): string {
-  return `${prefix}_${++_idCounter}_${Math.random().toString(36).slice(2, 6)}`
-}
-
-export interface CreateSplinePrimitiveOptions {
+export interface CreateSplinePrimitiveInput {
   kind:   SplinePrimitiveKind
   params: SplineGeneratorParams
-  order?: number
 }
 
-export function createSplinePrimitive(opts: CreateSplinePrimitiveOptions): SplinePathData | null {
-  const { kind, params, order = 0 } = opts
-
-  switch (kind) {
-    case 'circle': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Circle', kind, order, contourIds: [cId], combineMode: 'add', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createCircleSpline(params as CircleSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-    case 'line': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Line', kind, order, contourIds: [cId], combineMode: 'none', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createLineSpline(params as LineSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-    case 'rectangle': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Rectangle', kind, order, contourIds: [cId], combineMode: 'add', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createRectangleSpline(params as RectSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-    case 'ellipse': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Ellipse', kind, order, contourIds: [cId], combineMode: 'add', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createEllipseSpline(params as EllipseSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-    case 'arc': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Arc', kind, order, contourIds: [cId], combineMode: 'none', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createArcSpline(params as ArcSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-    case 'donut': {
-      const subId = uid('sub'), outerCId = uid('cnt'), innerCId = uid('cnt')
-      const { outer, inner } = createDonutSpline(params as DonutSplineParams)
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Donut', kind, order, contourIds: [outerCId, innerCId], combineMode: 'add', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [outerCId]: outer, [innerCId]: inner },
-        fillRule:  'evenodd',
-      }
-    }
-    case 'ngon': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'NGon', kind, order, contourIds: [cId], combineMode: 'add', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createNGonSpline(params as NGonSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-    case 'star': {
-      const subId = uid('sub'), cId = uid('cnt')
-      return {
-        subShapes: { [subId]: { id: subId, name: 'Star', kind, order, contourIds: [cId], combineMode: 'add', source: 'generated', generatorParams: params, editable: false } },
-        contours:  { [cId]: createStarSpline(params as StarSplineParams) },
-        fillRule:  'nonzero',
-      }
-    }
-
-    default:
-      return null
+export function createSplinePrimitive(input: CreateSplinePrimitiveInput): SplinePathData | null {
+  switch (input.kind) {
+    case 'circle':    return createCircleSpline(input.params as CircleSplineParams)
+    case 'line':      return createLineSpline(input.params as LineSplineParams)
+    case 'rectangle': return createRectangleSpline(input.params as RectSplineParams)
+    case 'ellipse':   return createEllipseSpline(input.params as EllipseSplineParams)
+    case 'arc':       return createArcSpline(input.params as ArcSplineParams)
+    case 'donut':     return createDonutSpline(input.params as DonutSplineParams)
+    case 'ngon':      return createNGonSpline(input.params as NGonSplineParams)
+    case 'star':      return createStarSpline(input.params as StarSplineParams)
+    default:          return null
   }
 }

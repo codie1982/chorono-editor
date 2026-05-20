@@ -11,6 +11,7 @@
 // Inside is the stricter pick-the-fully-enclosed-objects mode.
 
 import type { ChronoScene, Layer } from '../types'
+import { computeSplineBounds } from '../spline/geometry/computeSplineBounds'
 
 interface Vec2 { x: number; y: number }
 interface AABB { x: number; y: number; w: number; h: number }
@@ -54,6 +55,12 @@ export function getLayerWorldBounds(scene: ChronoScene, layer: Layer): AABB {
     y += parent.transform.y
     cur = parent
   }
+  // Spline layers carry no `size` — derive bounds from actual geometry.
+  if (layer.type === 'spline' && layer.spline) {
+    const b = computeSplineBounds(layer.spline)
+    return { x: x + b.x, y: y + b.y, w: b.width, h: b.height }
+  }
+
   const w = layer.size?.width  ?? 1
   const h = layer.size?.height ?? 1
   return { x, y, w, h }

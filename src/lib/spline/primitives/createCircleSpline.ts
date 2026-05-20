@@ -1,31 +1,24 @@
-// ── Circle Spline Primitive ───────────────────────────────────────────────────
-//
-// Generates a BezierPath that approximates a circle using four cubic bezier
-// curves — the standard "kappa" construction (κ ≈ 0.5523).
-//
-// Anchors at 12, 3, 6, 9 o'clock; handles are tangent to the circle at each.
-// Center is (0, 0) in layer-local coordinates.
+import type { SplinePathData, CircleSplineParams } from '@/lib/types/spline'
+import { buildSplineData } from '../util/buildSplineData'
 
-import type { BezierPath } from '@/lib/types/path'
-import type { CircleSplineParams } from '@/lib/types/spline'
+const KAPPA = 0.5522847498307936
 
-const KAPPA = 0.5523
-
-export function createCircleSpline(params: CircleSplineParams): BezierPath {
+/** Circle centered at (0,0), 4 cubic anchors (kappa approximation). */
+export function createCircleSpline(params: CircleSplineParams): SplinePathData {
   const r = params.radius
   const k = r * KAPPA
-
-  return {
-    closed: true,
-    anchors: [
-      // 12 o'clock (top)
-      { x:  0, y: -r, outX:  k, outY: -r, inX: -k, inY: -r, pointType: 'mirror' },
-      // 3 o'clock (right)
-      { x:  r, y:  0, outX:  r, outY:  k, inX:  r, inY: -k, pointType: 'mirror' },
-      // 6 o'clock (bottom)
-      { x:  0, y:  r, outX: -k, outY:  r, inX:  k, inY:  r, pointType: 'mirror' },
-      // 9 o'clock (left)
-      { x: -r, y:  0, outX: -r, outY: -k, inX: -r, inY:  k, pointType: 'mirror' },
-    ],
-  }
+  return buildSplineData({
+    kind: 'circle',
+    name: 'Circle',
+    params,
+    contours: [{
+      closed: true,
+      anchors: [
+        { x:  0, y: -r, type: 'bezier', out: { x:  k, y: -r }, in: { x: -k, y: -r } },
+        { x:  r, y:  0, type: 'bezier', out: { x:  r, y:  k }, in: { x:  r, y: -k } },
+        { x:  0, y:  r, type: 'bezier', out: { x: -k, y:  r }, in: { x:  k, y:  r } },
+        { x: -r, y:  0, type: 'bezier', out: { x: -r, y: -k }, in: { x: -r, y:  k } },
+      ],
+    }],
+  })
 }

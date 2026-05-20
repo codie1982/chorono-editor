@@ -52,10 +52,11 @@ export type {
 } from './path'
 
 export type {
-  SplinePrimitiveKind, SplineCombineMode,
+  SplinePointType, SplineSegmentType, SplinePrimitiveKind, SplineCombineMode,
+  SplinePoint, SplineHandle, SplineSegment, SplineContour,
   LineSplineParams, RectSplineParams, CircleSplineParams, EllipseSplineParams,
   ArcSplineParams, DonutSplineParams, NGonSplineParams, StarSplineParams,
-  HelixSplineParams, EggSplineParams, SplineGeneratorParams,
+  SpiralSplineParams, HelixSplineParams, EggSplineParams, SplineGeneratorParams,
   SplineSubShape, SplinePathData,
 } from './spline'
 

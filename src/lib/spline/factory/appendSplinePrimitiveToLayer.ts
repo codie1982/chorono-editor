@@ -1,8 +1,8 @@
 // ── Append Spline Primitive ───────────────────────────────────────────────────
 //
 // Merges a newly-generated primitive into an existing SplinePathData, producing
-// a compound spline (multiple SubShapes in one layer). The new SubShape is
-// placed last in combine order.
+// a compound spline (multiple SubShapes / contours in one layer). All ids from
+// the generator are globally unique (uid), so a shallow record merge is safe.
 //
 // Pure: returns a fresh SplinePathData, mutates nothing.
 
@@ -16,16 +16,15 @@ export function appendSplinePrimitiveToSplineData(
   kind:     SplinePrimitiveKind,
   params:   SplineGeneratorParams,
 ): SplinePathData | null {
-  const orders = Object.values(existing.subShapes).map(s => s.order)
-  const nextOrder = orders.length ? Math.max(...orders) + 1 : 0
-
-  const generated = createSplinePrimitive({ kind, params, order: nextOrder })
-  if (!generated) return null
+  const gen = createSplinePrimitive({ kind, params })
+  if (!gen) return null
 
   return {
-    subShapes: { ...existing.subShapes, ...generated.subShapes },
-    contours:  { ...existing.contours,  ...generated.contours },
-    // Donut/text holes need evenodd — promote the layer if any addition wants it
-    fillRule:  generated.fillRule === 'evenodd' ? 'evenodd' : existing.fillRule,
+    subShapes: { ...existing.subShapes, ...gen.subShapes },
+    points:    { ...existing.points,    ...gen.points },
+    handles:   { ...existing.handles,   ...gen.handles },
+    segments:  { ...existing.segments,  ...gen.segments },
+    contours:  { ...existing.contours,  ...gen.contours },
+    fillRule:  gen.fillRule === 'evenodd' ? 'evenodd' : existing.fillRule,
   }
 }

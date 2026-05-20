@@ -1,44 +1,42 @@
-import type { BezierPath }       from '@/lib/types/path'
-import type { PathAnchor }       from '@/lib/types/path'
-import type { NGonSplineParams } from '@/lib/types/spline'
+import type { SplinePathData, NGonSplineParams } from '@/lib/types/spline'
+import type { AnchorSpec } from '../util/buildSplineData'
+import { buildSplineData } from '../util/buildSplineData'
 
-const KAPPA = 0.5523
+const KAPPA = 0.5522847498307936
 
-export function createNGonSpline(params: NGonSplineParams): BezierPath {
+/** Regular N-gon centered at (0,0). 0° = 12 o'clock. Optional corner roundness. */
+export function createNGonSpline(params: NGonSplineParams): SplinePathData {
   const { sides, radius: r, roundness = 0 } = params
-  const anchors: PathAnchor[] = []
   const step = (2 * Math.PI) / sides
+  const anchors: AnchorSpec[] = []
 
   for (let i = 0; i < sides; i++) {
-    // 0° = 12 o'clock
-    const a   = -Math.PI / 2 + i * step
-    const x   = r * Math.cos(a)
-    const y   = r * Math.sin(a)
+    const a = -Math.PI / 2 + i * step
+    const x = r * Math.cos(a)
+    const y = r * Math.sin(a)
 
     if (roundness <= 0) {
-      anchors.push({ x, y, pointType: 'corner' })
+      anchors.push({ x, y, type: 'corner' })
     } else {
-      // Handle length scales with roundness and the edge length (chord)
-      const nextA = a + step
-      const nx    = r * Math.cos(nextA)
-      const ny    = r * Math.sin(nextA)
-      const edgeLen = Math.hypot(nx - x, ny - y)
-      const hLen  = edgeLen * roundness * KAPPA
-
-      // Tangent direction along the polygon edge
-      const tx = (nx - x) / (edgeLen || 1)
-      const ty = (ny - y) / (edgeLen || 1)
-
+      const na = a + step
+      const nx = r * Math.cos(na)
+      const ny = r * Math.sin(na)
+      const edge = Math.hypot(nx - x, ny - y) || 1
+      const hLen = edge * roundness * KAPPA
+      const tx = (nx - x) / edge
+      const ty = (ny - y) / edge
       anchors.push({
-        x, y,
-        outX: x + tx * hLen,
-        outY: y + ty * hLen,
-        inX:  x - tx * hLen,
-        inY:  y - ty * hLen,
-        pointType: 'mirror',
+        x, y, type: 'smooth',
+        out: { x: x + tx * hLen, y: y + ty * hLen },
+        in:  { x: x - tx * hLen, y: y - ty * hLen },
       })
     }
   }
 
-  return { closed: true, anchors }
+  return buildSplineData({
+    kind: 'ngon',
+    name: 'NGon',
+    params,
+    contours: [{ closed: true, anchors }],
+  })
 }

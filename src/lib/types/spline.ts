@@ -1,23 +1,38 @@
-// ── Spline Object System Types ────────────────────────────────────────────────
+// ── Spline Object System Types (granular model) ───────────────────────────────
 //
-// Defines the data model for `type: 'spline'` layers.
+// Data model for `type: 'spline'` layers. Unlike basic shapes, splines are
+// point-based editable paths. The model is fully NORMALIZED — points, handles,
+// segments and contours are stored as id-keyed records so the editor can hold
+// stable selection state and undo individual elements.
 //
-// Architecture:
 //   SplineLayer
 //     └─ SplinePathData
-//           ├─ subShapes  — logical primitives (Rectangle, Circle, Star…)
-//           ├─ contours   — BezierPath per contour (reuses existing anchor format)
-//           └─ fillRule   — nonzero | evenodd (controls hole rendering)
+//           ├─ subShapes  — logical primitives (Rectangle, Circle, glyph…)
+//           ├─ points     — on-curve anchors (id-keyed)
+//           ├─ handles    — bezier control handles (id-keyed, ref a point)
+//           ├─ segments   — connections between points (id-keyed)
+//           ├─ contours   — ordered point/segment loops (id-keyed)
+//           └─ fillRule   — nonzero | evenodd
 //
-// All spline primitives share the same Layer.type === 'spline'.
-// The primitive kind lives inside SplineSubShape.kind.
+// Handles are CANONICAL for cubic curves: a cubic segment A→B uses A's 'out'
+// handle as control1 and B's 'in' handle as control2. Segment.control1/2 are
+// only used for quadratic segments.
 //
-// Design decision: Option B — existing `type: 'shape'` layers are UNCHANGED.
-// Spline layers are a separate family bridged by the "Convert to Spline" command.
+// Option B: existing `type: 'shape'` layers are UNCHANGED. Splines are a
+// separate family bridged by the "Convert to Spline" command.
 
-import type { BezierPath } from './path'
+// ── Enums ─────────────────────────────────────────────────────────────────────
 
-// ── Primitive kind ────────────────────────────────────────────────────────────
+export type SplinePointType =
+  | 'corner'        // no handles — sharp
+  | 'smooth'        // handles collinear, lengths independent
+  | 'bezier'        // handles collinear AND equal length (mirror)
+  | 'bezierCorner'  // handles fully independent
+
+export type SplineSegmentType =
+  | 'line'
+  | 'quadratic'
+  | 'cubic'
 
 export type SplinePrimitiveKind =
   | 'line'
@@ -29,151 +44,97 @@ export type SplinePrimitiveKind =
   | 'donut'
   | 'ngon'
   | 'star'
-  | 'textOutline'   // MVP-2 (BL-62)
-  | 'helix'         // MVP-2
-  | 'egg'           // MVP-2
-  | 'freehand'      // MVP-2 (BL-66)
-  | 'custom'        // drawn or imported path
+  | 'textOutline'
+  | 'spiral'
+  | 'helix'
+  | 'egg'
+  | 'freehand'
+  | 'custom'
 
-// ── Combine mode ─────────────────────────────────────────────────────────────
-
-/** How a SubShape's area combines with previously-rendered subShapes in the layer. */
 export type SplineCombineMode =
-  | 'add'       // union (default)
-  | 'subtract'  // difference — creates holes (best used with evenodd fill rule)
-  | 'intersect' // intersection — Level 2: requires path-boolean library
-  | 'exclude'   // XOR          — Level 2: requires path-boolean library
-  | 'none'      // standalone contour, no combine operation
+  | 'add'
+  | 'subtract'
+  | 'intersect'
+  | 'exclude'
+  | 'none'
 
-// ── Generator param interfaces (one per primitive kind) ───────────────────────
+// ── Granular elements ─────────────────────────────────────────────────────────
 
-export interface LineSplineParams {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
+export interface SplinePoint {
+  id:    string
+  x:     number
+  y:     number
+  type:  SplinePointType
+  locked?: boolean
 }
 
-export interface RectSplineParams {
-  width:        number
-  height:       number
-  cornerRadius?: number
-  /** '4-point' = sharp corners, '8-point' = chamfered, 'cubic-rounded' = smooth curves. Default '4-point'. */
-  cornerMode?:  '4-point' | '8-point' | 'cubic-rounded'
+export interface SplineHandle {
+  id:      string
+  pointId: string
+  kind:    'in' | 'out'
+  x:       number
+  y:       number
+  locked:  boolean
 }
 
-export interface CircleSplineParams {
-  radius: number
+export interface SplineSegment {
+  id:          string
+  fromPointId: string
+  toPointId:   string
+  type:        SplineSegmentType
+  /** Quadratic control point (cubic derives controls from point handles). */
+  control1?:   { x: number; y: number }
+  control2?:   { x: number; y: number }
 }
 
-export interface EllipseSplineParams {
-  radiusX: number
-  radiusY: number
+export interface SplineContour {
+  id:         string
+  closed:     boolean
+  pointIds:   string[]
+  segmentIds: string[]
 }
 
-export interface ArcSplineParams {
-  radius:     number
-  startAngle: number  // degrees, 0 = 12 o'clock
-  endAngle:   number  // degrees
-}
+// ── Generator params (typed per primitive) ────────────────────────────────────
 
-export interface DonutSplineParams {
-  outerRadius: number
-  innerRadius: number
-}
-
-export interface NGonSplineParams {
-  sides:      number  // 3–12
-  radius:     number
-  roundness?: number  // 0–1
-}
-
-export interface StarSplineParams {
-  points:      number  // 3–12
-  outerRadius: number
-  innerRadius: number
-  roundness?:  number  // 0–1
-}
-
-export interface HelixSplineParams {
-  turns:       number
-  startRadius: number
-  endRadius:   number
-  tightness?:  number  // radius interpolation exponent
-}
-
-export interface EggSplineParams {
-  width:  number
-  height: number
-  factor: number  // asymmetry 0–1
-}
+export interface LineSplineParams    { x1: number; y1: number; x2: number; y2: number }
+export interface RectSplineParams     { width: number; height: number; cornerRadius?: number; cornerMode?: 'sharp' | 'chamfered' | 'rounded' }
+export interface CircleSplineParams   { radius: number }
+export interface EllipseSplineParams  { radiusX: number; radiusY: number }
+export interface ArcSplineParams      { radius: number; startAngle: number; endAngle: number }
+export interface DonutSplineParams    { outerRadius: number; innerRadius: number }
+export interface NGonSplineParams     { sides: number; radius: number; roundness?: number }
+export interface StarSplineParams     { points: number; outerRadius: number; innerRadius: number; roundness?: number }
+export interface SpiralSplineParams   { turns: number; startRadius: number; endRadius: number; pointsPerTurn?: number }
+export interface HelixSplineParams    { turns: number; startRadius: number; endRadius: number; pointsPerTurn?: number }
+export interface EggSplineParams      { width: number; height: number; factor: number }
 
 export type SplineGeneratorParams =
-  | LineSplineParams
-  | RectSplineParams
-  | CircleSplineParams
-  | EllipseSplineParams
-  | ArcSplineParams
-  | DonutSplineParams
-  | NGonSplineParams
-  | StarSplineParams
-  | HelixSplineParams
-  | EggSplineParams
+  | LineSplineParams | RectSplineParams | CircleSplineParams | EllipseSplineParams
+  | ArcSplineParams | DonutSplineParams | NGonSplineParams | StarSplineParams
+  | SpiralSplineParams | HelixSplineParams | EggSplineParams
 
 // ── SubShape ──────────────────────────────────────────────────────────────────
 
-/**
- * One logical spline primitive inside a SplineLayer.
- *
- * Examples:
- *   - A rectangle inside a compound spline → kind:'rectangle', contourIds:['c_0']
- *   - A donut → kind:'donut', contourIds:['c_outer','c_inner']  (evenodd fill)
- *   - A text glyph 'O' → kind:'textOutline', contourIds:['c_outer','c_hole']
- *
- * `order` controls combine-mode rendering sequence (lower = drawn first).
- */
 export interface SplineSubShape {
   id:   string
   name: string
-
   kind: SplinePrimitiveKind
-
-  /** Render order for combine operations — lower = drawn first. */
-  order: number
-
-  /** IDs of BezierPath contours in SplinePathData.contours that belong to this sub-shape. */
-  contourIds: string[]
-
-  combineMode: SplineCombineMode
-
-  /** How this sub-shape was created. */
   source: 'generated' | 'drawn' | 'convertedText' | 'imported' | 'edited'
-
-  /**
-   * Original creation parameters.
-   * Set when source === 'generated', frozen when converted to editable.
-   * Kept as metadata after conversion (for inspector display, undo, etc).
-   */
+  contourIds: string[]
+  combineMode: SplineCombineMode
+  /** Original creation params; frozen metadata once the sub-shape is edited. */
   generatorParams?: SplineGeneratorParams
-
-  /**
-   * When false: parametric — generator params drive the contours at re-evaluation.
-   * When true: editable — contours are owned directly; generatorParams are frozen metadata.
-   */
+  /** false = parametric (params drive geometry). true = points are canonical. */
   editable: boolean
 }
 
-// ── SplinePathData ────────────────────────────────────────────────────────────
+// ── Root ──────────────────────────────────────────────────────────────────────
 
-/**
- * Complete spline data stored on a `type: 'spline'` layer.
- *
- * subShapes  — ordered by `SplineSubShape.order`, processed for combine mode
- * contours   — each is a BezierPath (reuses PathAnchor / handle format)
- * fillRule   — 'evenodd' makes inner contours (holes) transparent automatically
- */
 export interface SplinePathData {
   subShapes: Record<string, SplineSubShape>
-  contours:  Record<string, BezierPath>
+  points:    Record<string, SplinePoint>
+  handles:   Record<string, SplineHandle>
+  segments:  Record<string, SplineSegment>
+  contours:  Record<string, SplineContour>
   fillRule:  'nonzero' | 'evenodd'
 }

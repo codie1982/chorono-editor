@@ -12,4 +12,3 @@ export type {
 export { M, L, C, Q, Z, buildPathOnCanvas, pathToSvgString } from './PathCommand'
 export { ShapeToPathConverter } from './ShapeToPathConverter'
 export type { Size } from './ShapeToPathConverter'
-export { bezierPathToPathDefinition } from './bezierPathToPathDefinition'

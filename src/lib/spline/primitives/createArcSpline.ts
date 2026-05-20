@@ -1,50 +1,41 @@
-import type { BezierPath }        from '@/lib/types/path'
-import type { PathAnchor }        from '@/lib/types/path'
-import type { ArcSplineParams }   from '@/lib/types/spline'
+import type { SplinePathData, ArcSplineParams } from '@/lib/types/spline'
+import type { AnchorSpec } from '../util/buildSplineData'
+import { buildSplineData } from '../util/buildSplineData'
 
-// Bezier approximation of a circular arc segment.
-// Splits the arc into ≤90° chunks, each approximated with one cubic bezier.
-const KAPPA = 0.5523
-
-function arcChunkAnchors(
-  r: number,
-  startRad: number,
-  endRad: number,
-): PathAnchor[] {
-  // Split into 90° chunks
-  const totalAngle = endRad - startRad
-  const steps      = Math.ceil(Math.abs(totalAngle) / (Math.PI / 2))
-  const stepAngle  = totalAngle / steps
-  const k          = (4 / 3) * Math.tan(stepAngle / 4)  // handle length for this arc segment
-
-  const anchors: PathAnchor[] = []
-  for (let i = 0; i <= steps; i++) {
-    const a     = startRad + i * stepAngle
-    const cos   = Math.cos(a)
-    const sin   = Math.sin(a)
-    const isLast = i === steps
-
-    // Outgoing handle tangent (for curve to next point)
-    const outX = isLast ? r * cos : r * cos - k * r * sin
-    const outY = isLast ? r * sin : r * sin + k * r * cos
-    // Incoming handle tangent (for curve from previous point)
-    const inX  = i === 0 ? r * cos : r * cos + k * r * sin
-    const inY  = i === 0 ? r * sin : r * sin - k * r * cos
-
-    anchors.push({
-      x: r * cos, y: r * sin,
-      outX, outY,
-      inX, inY,
-      pointType: 'mirror',
-    })
-  }
-  return anchors
-}
-
-export function createArcSpline(params: ArcSplineParams): BezierPath {
-  // Degrees, 0 = 12 o'clock (same convention as ring/arc shapes)
+/**
+ * Open circular arc, split into ≤90° cubic chunks. 0° = 12 o'clock.
+ * Handle length per chunk: k = (4/3)·tan(Δ/4).
+ */
+export function createArcSpline(params: ArcSplineParams): SplinePathData {
+  const { radius: r } = params
   const startRad = (params.startAngle - 90) * (Math.PI / 180)
   const endRad   = (params.endAngle   - 90) * (Math.PI / 180)
-  const anchors  = arcChunkAnchors(params.radius, startRad, endRad)
-  return { closed: false, anchors }
+
+  const total = endRad - startRad
+  const steps = Math.max(1, Math.ceil(Math.abs(total) / (Math.PI / 2)))
+  const step  = total / steps
+  const k     = (4 / 3) * Math.tan(step / 4)
+
+  const anchors: AnchorSpec[] = []
+  for (let i = 0; i <= steps; i++) {
+    const a   = startRad + i * step
+    const cos = Math.cos(a)
+    const sin = Math.sin(a)
+    const x   = r * cos
+    const y   = r * sin
+
+    const spec: AnchorSpec = { x, y, type: 'smooth' }
+    // tangent direction (derivative of circle) scaled by k·r
+    if (i < steps) spec.out = { x: x - k * r * sin, y: y + k * r * cos }
+    if (i > 0)     spec.in  = { x: x + k * r * sin, y: y - k * r * cos }
+    anchors.push(spec)
+  }
+
+  return buildSplineData({
+    kind: 'arc',
+    name: 'Arc',
+    params,
+    combineMode: 'none',
+    contours: [{ closed: false, anchors }],
+  })
 }

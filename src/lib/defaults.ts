@@ -378,12 +378,12 @@ export function newMotionPathLayer(): Layer {
 // ── Spline Layer Factory ──────────────────────────────────────────────────────
 
 /**
- * Creates a new `type: 'spline'` layer containing one SubShape.
- * `kind` + `params` select the primitive generator.
- * Returns null for unimplemented primitive kinds (MVP-2+).
+ * Creates a new `type: 'spline'` layer containing one SubShape from a primitive.
+ * `kind` + `params` select the granular generator.
+ * Returns null for unimplemented primitive kinds (spiral/helix/egg/text/freehand).
  */
-export function newSplineLayer(kind: SplinePrimitiveKind, params: SplineGeneratorParams): Layer | null {
-  const splineData = createSplinePrimitive({ kind, params, order: 0 })
+export function newSplineLayerFromPrimitive(kind: SplinePrimitiveKind, params: SplineGeneratorParams): Layer | null {
+  const splineData = createSplinePrimitive({ kind, params })
   if (!splineData) return null
 
   layerCounter++
@@ -402,6 +402,9 @@ export function newSplineLayer(kind: SplinePrimitiveKind, params: SplineGenerato
     spline: splineData,
   }
 }
+
+/** @deprecated use newSplineLayerFromPrimitive — kept for call-site compatibility. */
+export const newSplineLayer = newSplineLayerFromPrimitive
 
 export function newRoundedRectLayer(): Layer {
   const l = newRectLayer()
