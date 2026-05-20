@@ -1,9 +1,29 @@
 import type { ChronoScene, Timeline, Track, Layer } from '@/lib/types'
 import type { TrackNode } from '@/components/dope-sheet/types'
 
+/** Map a property path to its display group (Transform, Style, etc.) */
+function groupLabel(propPath: string): string {
+  if (propPath === 'opacity' || propPath.startsWith('transform.')) return 'Transform'
+  if (propPath.startsWith('style.')) return 'Style'
+  if (propPath.startsWith('shapeParams.')) return 'Shape'
+  if (propPath.startsWith('text.')) return 'Text'
+  if (propPath.startsWith('modifiers.')) return 'Modifiers'
+  return 'Other'
+}
+
+/** Strip the group prefix so the leaf row shows a short property name. */
+function displayPropName(propPath: string): string {
+  return propPath.replace(/^(transform|style|shapeParams|text|modifiers)\./, '')
+}
+
 /**
- * Build a hierarchical tree of TrackNode from scene + timeline
- * Represents: Layer hierarchy + Property groups (Transform, Style, etc.)
+ * Build a flat list of TrackNode (with parent→child id links) from the
+ * selected timeline. Render walks from the root via children pointers, so
+ * the array order does not matter — only that every node is present and
+ * each layer appears exactly once.
+ *
+ * Property groups are derived from the layer's actual tracks (not a hard-
+ * coded list), so Style / Shape / Text / Modifier tracks all appear.
  */
 export function buildHierarchy(
   scene: ChronoScene,
@@ -16,199 +36,134 @@ export function buildHierarchy(
   if (!timeline) return []
 
   const nodes: TrackNode[] = []
-  const nodeMap = new Map<string, TrackNode>()
-  let nodeCounter = 0
+  const filter = filterText.trim().toLowerCase()
+  const layers = scene.layers ?? []
 
-  // Track which layers have keys
-  const tracksByLayerId = new Map<string, Track[]>()
-  const allLayerIds = new Set<string>()
-
-  if (timeline.tracks) {
-    for (const track of timeline.tracks) {
-      const match = track.target.match(/^layers\.([^.]+)/)
-      if (match) {
-        const layerId = match[1]
-        allLayerIds.add(layerId)
-        if (!tracksByLayerId.has(layerId)) {
-          tracksByLayerId.set(layerId, [])
-        }
-        tracksByLayerId.get(layerId)!.push(track)
-      }
-    }
+  // Group this timeline's tracks by owning layer id.
+  const tracksByLayer = new Map<string, Track[]>()
+  for (const t of timeline.tracks ?? []) {
+    const m = t.target.match(/^layers\.([^.]+)\./)
+    if (!m) continue
+    const arr = tracksByLayer.get(m[1]) ?? []
+    arr.push(t)
+    tracksByLayer.set(m[1], arr)
   }
 
-  // Build layer tree (depth-first)
-  function buildLayerNode(layer: Layer, depth: number): TrackNode | null {
-    const nodeId = `node_${nodeCounter++}`
-    const hasKeys = tracksOfLayer(layer.id).length > 0
+  const root: TrackNode = {
+    id: 'scene', name: 'Scene', type: 'group', depth: 0,
+    children: [], expanded: true, hasKeys: false, isParent: true,
+  }
+  nodes.push(root)
 
-    // Apply filters
-    if (filterAnimatedOnly && !hasKeys) return null
-    if (filterSelectedObjectOnly && selectedLayerId && layer.id !== selectedLayerId) {
-      // Include if selected layer, otherwise skip
-      if (layer.id !== selectedLayerId) return null
+  // Selected-object filter: allow the selected layer plus its descendants.
+  const allowedBySelection: Set<string> | null = (() => {
+    if (!filterSelectedObjectOnly || !selectedLayerId) return null
+    const allowed = new Set<string>()
+    const collect = (id: string) => {
+      allowed.add(id)
+      for (const l of layers) if (l.parentId === id) collect(l.id)
     }
-    if (filterText && !layer.name.toLowerCase().includes(filterText.toLowerCase())) {
-      // Unless it has children matching filter
-      // (we'll check below after building children)
-    }
+    collect(selectedLayerId)
+    return allowed
+  })()
 
-    const node: TrackNode = {
-      id: nodeId,
+  // Build a layer subtree; returns the node id, or null if filtered out.
+  function buildLayer(layer: Layer, depth: number): string | null {
+    if (allowedBySelection && !allowedBySelection.has(layer.id)) return null
+
+    const layerTracks = tracksByLayer.get(layer.id) ?? []
+    const layerHasKeys = layerTracks.some(t => (t.keyframes?.length ?? 0) > 0)
+    const nameMatches = !filter || layer.name.toLowerCase().includes(filter)
+
+    const layerNode: TrackNode = {
+      id: `layer:${layer.id}`,
       name: layer.name,
       type: layer.type === 'group' ? 'group' : 'object',
       depth,
       trackTarget: `layers.${layer.id}`,
       children: [],
       expanded: true,
-      hasKeys,
+      hasKeys: layerHasKeys,
       isParent: true,
     }
 
-    // Add property groups (Transform, Style, Modifiers)
-    const propGroups = buildPropertyGroups(layer, depth + 1)
-    node.children = propGroups.map(n => n.id)
+    // Group tracks by property group.
+    const byGroup = new Map<string, Track[]>()
+    for (const t of layerTracks) {
+      const propPath = t.target.slice(`layers.${layer.id}.`.length)
+      const g = groupLabel(propPath)
+      const arr = byGroup.get(g) ?? []
+      arr.push(t)
+      byGroup.set(g, arr)
+    }
 
-    // Add child layers if group
-    if (layer.type === 'group' && scene.layers) {
-      const childLayers = scene.layers.filter(l => l.parentId === layer.id)
-      for (const child of childLayers) {
-        const childNode = buildLayerNode(child, depth + 1)
-        if (childNode) {
-          node.children.push(childNode.id)
-          nodeMap.set(childNode.id, childNode)
-          nodes.push(childNode)
-        }
+    const groupIds: string[] = []
+    for (const [groupName, gTracks] of Array.from(byGroup.entries())) {
+      const groupNode: TrackNode = {
+        id: `group:${layer.id}:${groupName}`,
+        name: groupName,
+        type: 'group',
+        depth: depth + 1,
+        children: [],
+        expanded: true,
+        hasKeys: false,
+        isParent: true,
       }
-    }
 
-    return node
-  }
+      let groupHasKeys = false
+      for (const t of gTracks) {
+        const propHasKeys = (t.keyframes?.length ?? 0) > 0
+        if (filterAnimatedOnly && !propHasKeys) continue
+        const propPath = t.target.slice(`layers.${layer.id}.`.length)
+        if (filter && !propPath.toLowerCase().includes(filter) && !nameMatches) continue
 
-  // Build property group nodes (Transform, Style, Modifiers, etc.)
-  function buildPropertyGroups(layer: Layer, depth: number): TrackNode[] {
-    const groups: TrackNode[] = []
-
-    // Transform group
-    const transformProps = [
-      `layers.${layer.id}.transform.x`,
-      `layers.${layer.id}.transform.y`,
-      `layers.${layer.id}.transform.scaleX`,
-      `layers.${layer.id}.transform.scaleY`,
-      `layers.${layer.id}.transform.rotationDeg`,
-      `layers.${layer.id}.opacity`,
-    ]
-    const transformHasKeys = transformProps.some(
-      target => timeline!.tracks?.some(t => t.target === target) ?? false
-    )
-    if (!filterAnimatedOnly || transformHasKeys) {
-      const transformGroup = makePropertyGroup(
-        `group_transform_${layer.id}`,
-        'Transform',
-        depth,
-        transformProps,
-        timeline!
-      )
-      groups.push(transformGroup)
-      nodeMap.set(transformGroup.id, transformGroup)
-      nodes.push(transformGroup)
-
-      // Add property children
-      transformProps.forEach(target => {
-        const hasKey = timeline!.tracks?.some(t => t.target === target) ?? false
-        if (!filterAnimatedOnly || hasKey) {
-          const propName = target.split('.').pop() || 'unknown'
-          const propNode = makePropertyNode(
-            `prop_${target}`,
-            propName,
-            depth + 1,
-            target,
-            hasKey
-          )
-          transformGroup.children.push(propNode.id)
-          nodeMap.set(propNode.id, propNode)
-          nodes.push(propNode)
+        const propNode: TrackNode = {
+          id: `prop:${t.target}`,
+          name: displayPropName(propPath),
+          type: 'property',
+          depth: depth + 2,
+          trackTarget: t.target,
+          children: [],
+          expanded: true,
+          hasKeys: propHasKeys,
+          isParent: false,
         }
-      })
-    }
-
-    return groups
-  }
-
-  // Build root + layers
-  const root: TrackNode = {
-    id: 'node_scene',
-    name: 'Scene',
-    type: 'group',
-    depth: 0,
-    children: [],
-    expanded: true,
-    hasKeys: false,
-    isParent: true,
-  }
-  nodeMap.set(root.id, root)
-
-  // Add layer nodes
-  if (scene.layers) {
-    for (const layer of scene.layers) {
-      if (!layer.parentId) {
-        // Root-level layers only
-        const layerNode = buildLayerNode(layer, 1)
-        if (layerNode) {
-          root.children.push(layerNode.id)
-          nodeMap.set(layerNode.id, layerNode)
-          nodes.push(layerNode)
-        }
+        nodes.push(propNode)
+        groupNode.children.push(propNode.id)
+        if (propHasKeys) groupHasKeys = true
       }
+
+      if (groupNode.children.length === 0) continue
+      groupNode.hasKeys = groupHasKeys
+      nodes.push(groupNode)
+      groupIds.push(groupNode.id)
     }
+
+    // Recurse into child layers (group containers or parented layers).
+    const childIds: string[] = []
+    for (const child of layers) {
+      if (child.parentId !== layer.id) continue
+      const id = buildLayer(child, depth + 1)
+      if (id) childIds.push(id)
+    }
+
+    layerNode.children = [...groupIds, ...childIds]
+
+    // Drop a layer that has nothing left to show after filtering.
+    if (filterAnimatedOnly && !layerHasKeys && childIds.length === 0) return null
+    if (filter && !nameMatches && layerNode.children.length === 0) return null
+
+    nodes.push(layerNode)
+    return layerNode.id
   }
 
-  nodes.unshift(root)
+  // Root-level layers (no parent). Children are reached via recursion only,
+  // so each layer is built exactly once.
+  for (const layer of layers) {
+    if (layer.parentId) continue
+    const id = buildLayer(layer, 1)
+    if (id) root.children.push(id)
+  }
+
   return nodes
-}
-
-function makePropertyGroup(
-  id: string,
-  name: string,
-  depth: number,
-  tracks: string[],
-  timeline: Timeline,
-): TrackNode {
-  const hasKeys = tracks.some(t => timeline.tracks?.some(tr => tr.target === t) ?? false)
-  return {
-    id,
-    name,
-    type: 'group',
-    depth,
-    children: [],
-    expanded: true,
-    hasKeys,
-    isParent: true,
-  }
-}
-
-function makePropertyNode(
-  id: string,
-  name: string,
-  depth: number,
-  target: string,
-  hasKeys: boolean,
-): TrackNode {
-  return {
-    id,
-    name,
-    type: 'property',
-    depth,
-    trackTarget: target,
-    children: [],
-    expanded: true,
-    hasKeys,
-    isParent: false,
-  }
-}
-
-// Helper: get all tracks for a layer
-function tracksOfLayer(layerId: string): Track[] {
-  // This would be passed in context, but for now return empty
-  return []
 }
