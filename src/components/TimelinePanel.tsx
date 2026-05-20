@@ -157,6 +157,26 @@ export default function TimelinePanel({
   // ── Viewport (panel height managed by parent dock splitter) ─────────────
   const vp = useTimelineViewport(duration)
 
+  // ── Resizable layer-label column ─────────────────────────────────────────
+  // Width of the left column (layer names / track headers). Dragged via the
+  // divider between the label column and the track area. Clamped to a sane
+  // range; the track viewport measures its own width so it adapts for free.
+  const [labelColWidth, setLabelColWidth] = useState(240)
+  const beginColResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = labelColWidth
+    const onMove = (ev: PointerEvent) => {
+      setLabelColWidth(Math.max(140, Math.min(480, startW + (ev.clientX - startX))))
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [labelColWidth])
+
   // ── Segment modal state (create / edit) ──────────────────────────────────
   const [segmentModal, setSegmentModal] = useState<{
     mode:    'create' | 'edit'
@@ -986,7 +1006,8 @@ export default function TimelinePanel({
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
       <div className="flex border-b border-gray-700 shrink-0">
-        <div className="w-60 shrink-0 border-r border-gray-700 bg-gray-900 flex items-center px-2 gap-1.5">
+        <div className="shrink-0 border-r border-gray-700 bg-gray-900 flex items-center px-2 gap-1.5"
+             style={{ width: labelColWidth }}>
           <span className="text-[10px] text-gray-500 shrink-0">🔍</span>
           <input
             type="text"
@@ -1007,6 +1028,11 @@ export default function TimelinePanel({
             {layerFilter ? `${visibleLayers.length}/${scene.layers.length}` : scene.layers.length}
           </span>
         </div>
+        <div
+          onPointerDown={beginColResize}
+          className="w-1 shrink-0 cursor-col-resize bg-gray-700 hover:bg-blue-500 transition-colors"
+          title="Drag to resize the layer column"
+        />
         <div
           ref={vp.trackAreaRef}
           className="flex-1 relative overflow-hidden"
@@ -1190,6 +1216,7 @@ export default function TimelinePanel({
             durationMs={duration}
             currentTimeMs={currentTimeMs}
             frameRate={scene.composition.frameRate}
+            labelColWidth={labelColWidth}
             pinIndex={pinIndexFor.get(layer.id) ?? -1}
             audioUrl={layer.type === 'audio' && layer.audio
               ? scene.assets?.find((a) => a.id === layer.audio!.assetId)?.url
@@ -1228,14 +1255,14 @@ export default function TimelinePanel({
         {snapIndicatorX != null && (
           <div
             className="absolute top-0 bottom-0 w-px bg-yellow-400 pointer-events-none z-30"
-            style={{ left: `${240 + snapIndicatorX}px` }}
+            style={{ left: `${labelColWidth + 4 +snapIndicatorX}px` }}
           />
         )}
 
         {/* Playhead across all layer rows */}
         <div
           className="absolute top-0 bottom-0 w-0.5 bg-red-500/40 pointer-events-none z-20"
-          style={{ left: `${240 + vp.msToScreenPx(currentTimeMs)}px` }}
+          style={{ left: `${labelColWidth + 4 +vp.msToScreenPx(currentTimeMs)}px` }}
         />
 
         {/* Lasso rectangle (visible while Alt+drag is active) */}

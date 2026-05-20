@@ -66,6 +66,8 @@ interface Props {
   currentTimeMs: number
   /** Composition frame rate — sets the "key at playhead" match tolerance. */
   frameRate: number
+  /** Width (px) of the left label column — resizable from the panel divider. */
+  labelColWidth: number
   /**
    * Fired when the user finishes dragging the layer activity bar.
    * `kind='move'`      → bar body was dragged (shift both start+end)
@@ -102,7 +104,7 @@ export default function LayerTimelineSection({
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
   onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
-  durationMs, currentTimeMs, frameRate, onLayerBarCommit, pinIndex, audioUrl,
+  durationMs, currentTimeMs, frameRate, labelColWidth, onLayerBarCommit, pinIndex, audioUrl,
   parameterWires, onEditWire,
 }: Props) {
 
@@ -141,7 +143,8 @@ export default function LayerTimelineSection({
       >
         {/* Left: label */}
         <div
-          className="w-60 shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer relative"
+          className="shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer relative"
+          style={{ width: labelColWidth }}
           onClick={(e) => onSelectLayer(e.shiftKey)}
           onDoubleClick={(e) => {
             // Double-click the layer header → toggle Solo (isolate in canvas).
@@ -207,7 +210,8 @@ export default function LayerTimelineSection({
           <div key={track.target} className="flex items-stretch border-b border-gray-800/60"
             style={{ height: rowH }}>
             <div
-              className="w-60 shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700 group"
+              className="shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700 group"
+              style={{ width: labelColWidth }}
               onContextMenu={onTrackHeaderContextMenu ? (e) => {
                 // Buttons (+, ⊗) have their own actions — let them handle the click
                 const tgt = e.target as HTMLElement
@@ -341,7 +345,7 @@ export default function LayerTimelineSection({
       {expanded && (
         <div className="flex items-stretch border-b border-gray-800"
           style={{ height: ROW_ADD }}>
-          <div className="w-60 shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700">
+          <div className="shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700" style={{ width: labelColWidth }}>
             <span className="text-[10px] text-gray-500 shrink-0">+</span>
             <select
               defaultValue=""
