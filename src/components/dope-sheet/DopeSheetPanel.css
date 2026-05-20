@@ -233,9 +233,58 @@
 }
 
 .grid-ruler-row {
+  display: flex;
   flex-shrink: 0;
+  height: 24px;
   border-bottom: 1px solid #333;
   background: #1a1a1a;
+}
+
+.ruler-label-spacer {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 10px;
+  color: #666;
+  border-right: 1px solid #2a2a2a;
+  box-sizing: border-box;
+}
+
+.time-ruler {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.time-mark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 3px;
+  font-size: 10px;
+  color: #888;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  border-left: 1px solid #2a2a2a;
+}
+
+.time-mark:hover {
+  color: #ccc;
+}
+
+.ruler-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef4444;
+  pointer-events: none;
 }
 
 .grid-rows-container {
