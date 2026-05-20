@@ -475,6 +475,44 @@ export default function BuilderPage() {
     if (selectedLayerId === id) selectLayer(null)
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
+  // Which panel last received a pointer-down. Lets the global Delete shortcut
+  // act in-context: in the timeline it strips the layer's animation, elsewhere
+  // (canvas / layer list) it deletes the layer itself.
+  const activePanelRef = useRef<'canvas' | 'timeline' | 'layers' | null>(null)
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const inTimeline = !!(e.target as HTMLElement | null)?.closest?.('[data-panel="timeline"]')
+      activePanelRef.current = inTimeline ? 'timeline' : 'canvas'
+    }
+    document.addEventListener('pointerdown', onDown, true)
+    return () => document.removeEventListener('pointerdown', onDown, true)
+  }, [])
+
+  // Remove every track of a layer on the selected timeline WITHOUT deleting the
+  // layer — the timeline-focused Delete behaviour ("clear animation, keep the
+  // object"). Single undo step.
+  const deleteLayerAnimation = useCallback((layerId: string) => {
+    const tl = scene.timelines.find((t) => t.id === selectedTlId)
+    if (!tl) return
+    const removed = tl.tracks.filter((t) => t.target.startsWith(`layers.${layerId}.`))
+    if (removed.length === 0) return
+    const removedTargets = new Set(removed.map((t) => t.target))
+    dispatchCommand({
+      label: 'Delete Layer Animation',
+      execute: (s) => ({
+        ...s,
+        timelines: s.timelines.map((t) =>
+          t.id !== selectedTlId ? t
+            : { ...t, tracks: t.tracks.filter((tr) => !removedTargets.has(tr.target)) }),
+      }),
+      undo: (s) => ({
+        ...s,
+        timelines: s.timelines.map((t) =>
+          t.id !== selectedTlId ? t : { ...t, tracks: [...t.tracks, ...removed] }),
+      }),
+    })
+  }, [scene.timelines, selectedTlId, dispatchCommand])
+
   const toggleLayerFlag = useCallback((id: string, field: 'locked' | 'hidden' | 'solo' | 'pinned') => {
     dispatchCommand(makeToggleLayerCmd(id, field))
   }, [dispatchCommand])
@@ -784,7 +822,7 @@ export default function BuilderPage() {
   // Snapshot any animatable properties that changed between prev → next.
   // Called after a Layer property mutation when auto-key is active.
   const autoKeyChangedProps = useCallback((prev: Layer, next: Layer) => {
-    if (!selectedTlId || !isAutoKeyActive()) return
+    if (!selectedTlId) return
     const candidates: string[] = [
       'opacity',
       'transform.x', 'transform.y',
@@ -796,8 +834,23 @@ export default function BuilderPage() {
       return a !== b && typeof b === 'number'
     })
     if (changed.length === 0) return
-    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, changed))
-  }, [selectedTlId, currentTimeMs, dispatchCommand, isAutoKeyActive])
+
+    // Auto/REC mode keys every changed property. Manual mode keys ONLY the
+    // properties that already have a keyframe: a keyframed value is what the
+    // canvas renders, so without re-keying it the layer snaps back to its
+    // keyframed position on mouse-up. Properties with no track stay a plain
+    // base-value edit — manual mode still never CREATES new keyframes.
+    let toKey = changed
+    if (!isAutoKeyActive()) {
+      const tl = scene.timelines.find((t) => t.id === selectedTlId)
+      if (!tl) return
+      toKey = changed.filter((p) =>
+        tl.tracks.some((t) => t.target === `layers.${next.id}.${p}` && t.keyframes.length > 0),
+      )
+    }
+    if (toKey.length === 0) return
+    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, toKey))
+  }, [selectedTlId, currentTimeMs, dispatchCommand, isAutoKeyActive, scene.timelines])
 
   const updateLayer = useCallback((next: Layer) => {
     const prev = scene.layers.find((l) => l.id === next.id)
@@ -1040,7 +1093,11 @@ export default function BuilderPage() {
     onDeleteSelected: () => {
       // Prefer deleting selected keyframes (timeline focus) over the layer.
       if (deleteSelectedKeyframes()) return
-      if (selectedLayerId) deleteLayer(selectedLayerId)
+      if (!selectedLayerId) return
+      // In the timeline, Delete clears the layer's animation but keeps the
+      // object; in the canvas / layer list it deletes the layer itself.
+      if (activePanelRef.current === 'timeline') deleteLayerAnimation(selectedLayerId)
+      else deleteLayer(selectedLayerId)
     },
     onDuplicateSelected: duplicateSelectedLayer,
     onCopy:  () => clipboard.copySelected(),
@@ -1540,7 +1597,7 @@ export default function BuilderPage() {
               {
                 id: 'timeline', title: 'Timeline',
                 render: () => (
-                  <div className="h-full bg-gray-900 overflow-hidden">
+                  <div className="h-full bg-gray-900 overflow-hidden" data-panel="timeline">
                     <TimelinePanel
                       scene={scene}
                       editor={editor}

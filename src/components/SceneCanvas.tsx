@@ -621,11 +621,22 @@ export default function SceneCanvas({
       const actualDy = pny - primaryOy
 
       let next = sceneRef.current
+      // Drag overrides force the canvas to show the cursor-follow position even
+      // when the layer's transform.x/y is keyframed — without them the renderer
+      // evaluates the timeline track and the layer appears frozen at its
+      // keyframed value while only the snap guides move. (Preview only; the
+      // commit path / auto-key still decides whether a keyframe is written.)
+      const nextDragOverrides = new Map<string, number>()
       for (const { id, originalLayer } of drag.movingLayers) {
-        next = updateLayerProperty(next, id, 'transform.x', originalLayer.transform.x + actualDx)
-        next = updateLayerProperty(next, id, 'transform.y', originalLayer.transform.y + actualDy)
+        const nx = originalLayer.transform.x + actualDx
+        const ny = originalLayer.transform.y + actualDy
+        next = updateLayerProperty(next, id, 'transform.x', nx)
+        next = updateLayerProperty(next, id, 'transform.y', ny)
+        nextDragOverrides.set(`layers.${id}.transform.x`, nx)
+        nextDragOverrides.set(`layers.${id}.transform.y`, ny)
       }
       editorRef.current.previewTransaction(next)
+      setDragOverrides(nextDragOverrides)
       setDragHud({
         x: e.clientX, y: e.clientY,
         label: `X ${Math.round(pnx)}   Y ${Math.round(pny)}`,
@@ -947,6 +958,9 @@ export default function SceneCanvas({
     // Clear alignment guides + drag HUD once the drag is over
     setGuides([])
     setDragHud(null)
+    // Drop the move-drag preview overrides — the committed scene (and auto-key,
+    // if active) now drives what the canvas shows.
+    setDragOverrides((prev) => (prev.size > 0 ? new Map() : prev))
 
     const ed = editorRef.current
     const finalLayer = ed.scene.layers.find((l) => l.id === drag.layerId)
