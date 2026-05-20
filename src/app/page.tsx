@@ -36,6 +36,7 @@ import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
+import DopeSheetPanel  from '@/components/dope-sheet/DopeSheetPanel'
 import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
@@ -1651,6 +1652,25 @@ export default function BuilderPage() {
                     onTimeChange={handleSeek}
                     selectedKfIds={selectedKfIds}
                     onSelectKeyframes={setSelectedKfIds}
+                  />
+                ),
+              },
+              {
+                id: 'dopeSheet', title: 'Dope Sheet',
+                render: () => (
+                  <DopeSheetPanel
+                    scene={scene}
+                    editor={editor}
+                    settings={timelineSettings}
+                    onSettingsChange={setTimelineSettings}
+                    selectedLayerId={selectedLayerId}
+                    selectedTimelineId={selectedTlId}
+                    selectedKfIds={selectedKfIds}
+                    currentTimeMs={currentTimeMs}
+                    isPlaying={isPlaying}
+                    onTimeChange={handleSeek}
+                    onSelectKeyframes={setSelectedKfIds}
+                    onSelectLayer={selectLayer}
                   />
                 ),
               },
