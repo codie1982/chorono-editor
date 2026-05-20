@@ -31,6 +31,7 @@ import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type K
 import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
+import { makeAppendSplinePrimitiveCmd } from '@/lib/editor/commands-spline'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
@@ -142,6 +143,9 @@ export default function BuilderPage() {
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
   const [selectedLayerId,  setSelectedLayer]  = useState<string | null>('card')
+  /** BL-73 — when true, spline primitives append to the selected spline layer
+   *  instead of starting a new one (3ds Max "Start New Shape" off). */
+  const [splineAppendMode, setSplineAppendMode] = useState(false)
   /** Multi-layer selection — primary is selectedLayerId, extras live here. */
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(() => new Set(['card']))
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
@@ -339,6 +343,19 @@ export default function BuilderPage() {
       return
     }
     const l = def.createDefault()
+
+    // BL-73 — Append mode: spline primitive merges into the selected spline
+    // layer as a new SubShape instead of creating a separate layer.
+    if (splineAppendMode && kind.startsWith('spline') && l.type === 'spline') {
+      const target = scene.layers.find(t => t.id === selectedLayerId)
+      const newSub = l.spline ? Object.values(l.spline.subShapes)[0] : undefined
+      if (target?.type === 'spline' && target.spline && newSub?.generatorParams) {
+        dispatchCommand(makeAppendSplinePrimitiveCmd(target.id, newSub.kind, newSub.generatorParams, target.spline))
+        return
+      }
+      // No valid spline target — fall through and create a new layer instead.
+    }
+
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
     // BL-66: paths start empty — auto-switch to Pen tool so the next click
@@ -346,7 +363,7 @@ export default function BuilderPage() {
     if (kind === 'bezierPath' || kind === 'motionPath') {
       setToolMode('pen')
     }
-  }, [dispatchCommand, selectLayer])
+  }, [dispatchCommand, selectLayer, splineAppendMode, scene.layers, selectedLayerId])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -1313,6 +1330,24 @@ export default function BuilderPage() {
             className={`px-2 py-1 text-xs rounded ${smModeActive ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
           >
             ◇ SM
+          </button>
+        </div>
+
+        {/* ── Spline creation mode (BL-73) ───────────────────────────────── */}
+        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Spline: start a new layer, or append the next spline primitive into the selected spline layer">
+          <button
+            onClick={() => setSplineAppendMode(false)}
+            className={`px-2 py-1 text-xs rounded ${!splineAppendMode ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            ↳ New Spline
+          </button>
+          <button
+            onClick={() => setSplineAppendMode(true)}
+            disabled={selectedLayer?.type !== 'spline'}
+            title={selectedLayer?.type !== 'spline' ? 'Select a spline layer to enable append mode' : 'Append next spline primitive into selected layer'}
+            className={`px-2 py-1 text-xs rounded disabled:opacity-40 disabled:cursor-not-allowed ${splineAppendMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            ⊕ Append
           </button>
         </div>
 
