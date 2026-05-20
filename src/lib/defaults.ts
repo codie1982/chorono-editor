@@ -3,6 +3,7 @@ import type {
   SceneParameter, SceneParameterType, SceneParameterValue,
   Trigger, Binding, ParameterWire, TimelineSegment, TimelineMarker,
   PathStrokeData,
+  StateMachineDefinition, ChronoSMState, BaseSMTransition,
 } from './types'
 import type { MotionBlurConfig } from './types/effects'
 
@@ -16,6 +17,9 @@ let wireCounter     = 0
 let segmentCounter  = 0
 let eventCounter    = 0
 let markerCounter   = 0
+let smCounter       = 0
+let smStateCounter  = 0
+let smTransCounter  = 0
 
 /** Generate a lightweight unique ID for keyframes (no crypto dependency). */
 function nextKfId(): string {
@@ -411,6 +415,53 @@ export function newTimeline(): Timeline {
     loop: false,
     tracks: [],
     layerIds: [],
+  }
+}
+
+// ── State Machine factories (BL-09) ─────────────────────────────────────────
+
+/** Generate a unique ID for a state machine. */
+export function nextSMId(): string {
+  return `sm_${Date.now()}_${++smCounter}`
+}
+
+/** Generate a unique ID for an SM state. */
+export function nextSMStateId(): string {
+  return `smstate_${Date.now()}_${++smStateCounter}`
+}
+
+/** Generate a unique ID for an SM transition. */
+export function nextSMTransitionId(): string {
+  return `smtrans_${Date.now()}_${++smTransCounter}`
+}
+
+/** A fresh Chrono SM state bound to the given timeline. */
+export function newSMState(timelineId: string, name = 'idle'): ChronoSMState {
+  return { id: nextSMStateId(), name, timelineId }
+}
+
+/** A fresh transition between two states (event-based by default). */
+export function newSMTransition(
+  from: string,
+  to: string,
+  trigger?: string,
+): BaseSMTransition {
+  return { id: nextSMTransitionId(), from, to, trigger }
+}
+
+/**
+ * A new state machine with a single initial "idle" state bound to `timelineId`.
+ * Callers (the create-SM command) are responsible for creating that timeline.
+ */
+export function newStateMachine(timelineId: string, name?: string): StateMachineDefinition {
+  smCounter++
+  const idle = newSMState(timelineId, 'idle')
+  return {
+    id: `sm_${smCounter}`,
+    name: name ?? `State Machine ${smCounter}`,
+    initialStateId: idle.id,
+    states: [idle],
+    transitions: [],
   }
 }
 

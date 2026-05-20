@@ -58,6 +58,7 @@ import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel               from '@/components/panels/SnapPanel'
+import StateMachinePanel       from '@/components/panels/StateMachinePanel'
 import KeyboardShortcutsPanel  from '@/components/panels/KeyboardShortcutsPanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
@@ -158,7 +159,7 @@ export default function BuilderPage() {
   // AND requires every id here to be present in the tree. Keep in sync
   // with the registry below.
   const dock = useDockLayout([
-    'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
+    'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
     'particles', 'shortcuts',
@@ -1215,6 +1216,7 @@ export default function BuilderPage() {
       { id: 'layers',         title: 'Layers',         render: () => null },
       { id: 'sceneExplorer',  title: 'Scene Explorer', render: () => null },
       { id: 'canvas',         title: 'Canvas',         render: () => null },
+      { id: 'stateMachine',   title: 'State Machine',  render: () => null },
       { id: 'properties',     title: 'Properties',     render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
@@ -1654,6 +1656,12 @@ export default function BuilderPage() {
                       },
                     }}
                   />
+                ),
+              },
+              {
+                id: 'stateMachine', title: 'State Machine',
+                render: () => (
+                  <StateMachinePanel scene={scene} editor={editor} />
                 ),
               },
               {

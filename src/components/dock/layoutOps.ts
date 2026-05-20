@@ -297,7 +297,7 @@ export function defaultLayout(): DockNode {
             kind: 'split', id: 'mid',
             direction: 'h', ratio: 0.72,
             children: [
-              { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas'],     activeIndex: 0 },
+              { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas', 'stateMachine'], activeIndex: 0 },
               {
                 kind: 'leaf', id: 'properties-leaf',
                 panels: ['properties', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'snap', 'shortcuts'],

@@ -8,6 +8,7 @@ import type { LayerEffects, MotionPath, PluginEffect, FollowPath, MotionBlurConf
 import type { BezierPath } from './path'
 import type { MaskDefinition } from './mask'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
+import type { StateMachineDefinition } from './statemachine-chorono'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -694,5 +695,8 @@ export interface ChronoScene {
   /** Expression-based parameter wires (BL-05). Optional for backward compat;
    *  legacy scenes without this field continue to work unchanged. */
   parameterWires?: ParameterWire[]
+  /** Interactive state machines (BL-09). Each state binds to a timeline;
+   *  transitions switch the active playhead. Optional for backward compat. */
+  stateMachines?: StateMachineDefinition[]
   initialState: Record<string, unknown>
 }
