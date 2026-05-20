@@ -9,6 +9,7 @@ import {
   type ParamValueMap,
 } from './runtime/paramResolver'
 import { hitTestSegment as hitTestSegmentLocal } from './path/pathOps'
+import { measureTextLayout } from './text/measureText'
 
 /** Element cache passed in from React (image / video DOM elements keyed by Asset.id). */
 export type AssetElementMap = Map<string, HTMLImageElement | HTMLVideoElement>
@@ -825,8 +826,11 @@ function renderLayer(
     if (layer.type === 'path' && layer.path) {
       drawPathOverlay(ctx, layer.path, (scaleX + scaleY) / 2)
     } else {
-      const w = layer.size?.width  ?? 0
-      const h = layer.size?.height ?? (layer.text?.fontSize ?? 20)
+      // BL-72: text layers carry a measured `size`; legacy ones (old saved
+      // scenes) may not — measure on the fly so the outline still wraps glyphs.
+      const box = layer.size ?? (layer.text ? measureTextLayout(layer.text) : undefined)
+      const w = box?.width  ?? 0
+      const h = box?.height ?? (layer.text?.fontSize ?? 20)
       ctx.setLineDash([4, 3])
       ctx.strokeRect(-2, -2, w + 4, h + 4)
       ctx.setLineDash([])

@@ -92,8 +92,11 @@ function makeDemoScene(): ChronoScene {
   const label: Layer = {
     id: 'label', name: 'Label', type: 'text',
     // Anchor at the visual centre of "Chorono" @22px (rough text bbox)
-    transform: { x: 130, y: 128, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 42, anchorY: 11 },
+    transform: { x: 130, y: 128, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 42, anchorY: 13 },
     opacity: 0,
+    // BL-72: text layers carry a measured `size` so the SelectionFrame renders
+    // and tracks the glyphs. Edits re-measure via PropertiesPanel.updateText.
+    size: { width: 84, height: 26 },
     text: { value: 'Chorono', fontSize: 22, color: '#FFFFFF' },
   }
   s.layers = [card, label]
