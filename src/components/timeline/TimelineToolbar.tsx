@@ -18,6 +18,9 @@ interface Props {
   onAutoKeyModeChange: (mode: AutoKeyMode) => void
   hasSelectedLayer: boolean
   onPlayToggle: () => void
+  /** Jump the playhead to the previous / next keyframe. */
+  onPrevKeyframe: () => void
+  onNextKeyframe: () => void
   onSelectTimeline: (id: string) => void
   onAddTimeline:    () => void
   onDeleteTimeline: (id: string) => void
@@ -60,7 +63,8 @@ export default function TimelineToolbar(props: Props) {
     timelines, selectedTimelineId, selectedTimeline,
     currentTimeMs, duration, isPlaying, zoomFactor, playbackSpeed,
     timelineMode, autoKeyMode, onAutoKeyModeChange, hasSelectedLayer,
-    onPlayToggle, onSelectTimeline, onAddTimeline, onDeleteTimeline,
+    onPlayToggle, onPrevKeyframe, onNextKeyframe,
+    onSelectTimeline, onAddTimeline, onDeleteTimeline,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
     onModeChange, onKeyframeProperties,
     ghostSettings, selectedLayerIds,
@@ -90,6 +94,20 @@ export default function TimelineToolbar(props: Props) {
       >
         {isPlaying ? '⏸ Pause' : '▶ Play'}
       </button>
+
+      {/* Jump to previous / next keyframe */}
+      <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">
+        <button
+          onClick={onPrevKeyframe}
+          className="px-1.5 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white font-mono"
+          title="Previous keyframe (,)"
+        >◀◆</button>
+        <button
+          onClick={onNextKeyframe}
+          className="px-1.5 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white font-mono border-l border-gray-600"
+          title="Next keyframe (.)"
+        >◆▶</button>
+      </div>
 
       <span className="text-xs font-mono text-gray-400 w-24">
         {Math.round(currentTimeMs)} / {duration} ms

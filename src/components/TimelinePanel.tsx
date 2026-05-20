@@ -221,6 +221,22 @@ export default function TimelinePanel({
     if (target) onTimeChange(Math.max(0, Math.min(duration, target.timeMs)))
   }, [timeline, currentTimeMs, duration, onTimeChange])
 
+  // Jump the playhead to the previous/next keyframe. Uses the selected layer's
+  // keyframes when one is selected, otherwise every keyframe on the timeline.
+  const jumpToAdjacentKeyframe = useCallback((direction: 'prev' | 'next') => {
+    if (!timeline) return
+    const tracks = selectedLayerId
+      ? timeline.tracks.filter((t) => t.target.startsWith(`layers.${selectedLayerId}.`))
+      : timeline.tracks
+    const times = Array.from(new Set(tracks.flatMap((t) => t.keyframes.map((k) => k.timeMs))))
+      .sort((a, b) => a - b)
+    if (times.length === 0) return
+    const target = direction === 'prev'
+      ? [...times].reverse().find((t) => t < currentTimeMs - 0.5)
+      : times.find((t) => t > currentTimeMs + 0.5)
+    if (target != null) onTimeChange(Math.max(0, Math.min(duration, target)))
+  }, [timeline, selectedLayerId, currentTimeMs, duration, onTimeChange])
+
   useEffect(() => {
     if (!timelineHovered) return
     const onKey = (e: KeyboardEvent) => {
@@ -237,11 +253,14 @@ export default function TimelinePanel({
       if (!meta && !e.altKey && !e.shiftKey) {
         if (e.key === '[') { e.preventDefault(); jumpToAdjacentMarker('prev'); return }
         if (e.key === ']') { e.preventDefault(); jumpToAdjacentMarker('next'); return }
+        // Keyframe navigation — plain , / .
+        if (e.key === ',') { e.preventDefault(); jumpToAdjacentKeyframe('prev'); return }
+        if (e.key === '.') { e.preventDefault(); jumpToAdjacentKeyframe('next'); return }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker])
+  }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker, jumpToAdjacentKeyframe])
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
     // Step 1: solo mode — if any layer is solo'd, hide everything else.
@@ -933,6 +952,8 @@ export default function TimelinePanel({
         })}
         hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
+        onPrevKeyframe={() => jumpToAdjacentKeyframe('prev')}
+        onNextKeyframe={() => jumpToAdjacentKeyframe('next')}
         onSelectTimeline={onSelectTimeline}
         onAddTimeline={addTimeline}
         onDeleteTimeline={deleteTimeline}
