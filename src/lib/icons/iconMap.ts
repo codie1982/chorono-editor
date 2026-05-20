@@ -221,6 +221,19 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
     ],
   },
   {
+    title: 'Spline Objects',
+    items: [
+      { label: 'Circle',    type: 'splineCircle',    icon: 'circle',    available: true  },
+      { label: 'Line',      type: 'splineLine',      icon: 'line',      available: true  },
+      { label: 'Rectangle', type: 'splineRect',      icon: 'rectangle', available: true  },
+      { label: 'Ellipse',   type: 'splineEllipse',   icon: 'ellipse',   available: true  },
+      { label: 'Arc',       type: 'splineArc',       icon: 'arc',       available: true  },
+      { label: 'Donut',     type: 'splineDonut',     icon: 'ring',      available: true  },
+      { label: 'NGon',      type: 'splineNGon',      icon: 'polygon',   available: true  },
+      { label: 'Star',      type: 'splineStar',      icon: 'star',      available: true  },
+    ],
+  },
+  {
     title: 'Particles',
     items: [
       { label: 'Particle Emitter', type: 'particleEmitter', icon: 'noise', available: true },

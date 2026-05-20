@@ -5,6 +5,8 @@ import type {
   PathStrokeData,
   StateMachineDefinition, ChronoSMState, BaseSMTransition,
 } from './types'
+import type { SplinePrimitiveKind, SplineGeneratorParams } from './types/spline'
+import { createSplinePrimitive } from './spline/factory/createSplinePrimitive'
 import type { MotionBlurConfig } from './types/effects'
 import type { TextStyle } from './types/text'
 import { measureTextLayout } from './text/measureText'
@@ -370,6 +372,34 @@ export function newMotionPathLayer(): Layer {
                 dashArray: [6, 4] },
     },
     path: { closed: false, anchors: [] },
+  }
+}
+
+// ── Spline Layer Factory ──────────────────────────────────────────────────────
+
+/**
+ * Creates a new `type: 'spline'` layer containing one SubShape.
+ * `kind` + `params` select the primitive generator.
+ * Returns null for unimplemented primitive kinds (MVP-2+).
+ */
+export function newSplineLayer(kind: SplinePrimitiveKind, params: SplineGeneratorParams): Layer | null {
+  const splineData = createSplinePrimitive({ kind, params, order: 0 })
+  if (!splineData) return null
+
+  layerCounter++
+  const label = kind.charAt(0).toUpperCase() + kind.slice(1)
+  // Open-path kinds (arc, line) default to stroke-only; closed kinds default to fill
+  const isOpenPath = kind === 'arc' || kind === 'line'
+  return {
+    id:        `spline_${layerCounter}`,
+    name:      `${label} Spline ${layerCounter}`,
+    type:      'spline',
+    transform: { ...DEFAULT_TRANSFORM, x: 80, y: 80 },
+    opacity:   1,
+    style: isOpenPath
+      ? { stroke: { color: '#60A5FA', width: 3, lineCap: 'round', lineJoin: 'round' } }
+      : { fill:   { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } },
+    spline: splineData,
   }
 }
 

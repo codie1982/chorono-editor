@@ -62,7 +62,7 @@ export const fillGroup = (): PropertyGroup => ({
     { id: 'fillColor',   path: 'style.fill.color',   group: 'Fill', label: 'Color',   valueType: 'color',   animatable: true, defaultValue: '#3B82F6' },
     { id: 'fillOpacity', path: 'style.fill.opacity', group: 'Fill', label: 'Opacity', valueType: 'percent', animatable: true, defaultValue: 100, min: 0, max: 100, step: 1 },
   ],
-  showWhen: (l) => l.type === 'shape' && !!l.style?.fill,
+  showWhen: (l) => (l.type === 'shape' || l.type === 'spline' || l.type === 'path') && !!l.style?.fill,
 })
 
 // ── Stroke (shapes) ───────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ export const strokeGroup = (): PropertyGroup => ({
       showWhen: (l) => (l.style?.stroke?.width ?? 0) > 0,
     },
   ],
-  showWhen: (l) => l.type === 'shape',
+  showWhen: (l) => l.type === 'shape' || l.type === 'spline' || l.type === 'path',
 })
 
 // ── Trim Path (shapes with stroke) ────────────────────────────────────────────
@@ -93,7 +93,7 @@ export const trimGroup = (): PropertyGroup => ({
     { id: 'trimEnd',    path: 'style.stroke.trim.end',    group: 'Trim Path', label: 'End',    valueType: 'percent', animatable: true, defaultValue: 1, min: 0, max: 1, step: 0.01 },
     { id: 'trimOffset', path: 'style.stroke.trim.offset', group: 'Trim Path', label: 'Offset', valueType: 'percent', animatable: true, defaultValue: 0, min: -1, max: 1, step: 0.01 },
   ],
-  showWhen: (l) => l.type === 'shape' && (l.style?.stroke?.width ?? 0) > 0,
+  showWhen: (l) => (l.type === 'shape' || l.type === 'spline' || l.type === 'path') && (l.style?.stroke?.width ?? 0) > 0,
 })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

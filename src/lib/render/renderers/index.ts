@@ -14,7 +14,7 @@ import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry'
 import type { RenderContext } from '../RenderContext'
 import {
-  drawShape, drawText, drawImageLayer, drawVideoLayer, drawBezierPath,
+  drawShape, drawText, drawImageLayer, drawVideoLayer, drawBezierPath, drawSplineLayer,
 } from '@/lib/renderer'
 import { drawPathStrokeLayer } from '@/lib/runtime/pathStrokeRenderer'
 
@@ -129,6 +129,16 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
   },
 }
 
+// ── Spline Layer ─────────────────────────────────────────────────────────────
+
+export const splineRendererPlugin: LayerRendererPlugin = {
+  id: 'spline',
+  supports: (layer: Layer) => layer.type === 'spline' && !!layer.spline,
+  render(ctx: RenderContext, layer: Layer): void {
+    drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+  },
+}
+
 // ── Particle Emitter (BL-13) ─────────────────────────────────────────────────
 
 import { particleRendererPlugin } from './ParticleRendererPlugin'
@@ -143,6 +153,7 @@ export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
   videoRendererPlugin,
   pathStrokeRendererPlugin,
   bezierPathRendererPlugin,
+  splineRendererPlugin,
   groupRendererPlugin,
   repeaterRendererPlugin,
   particleRendererPlugin,
