@@ -12,6 +12,7 @@ import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
+import type { TimelineProperty } from './hooks/useKeyboard'
 import type { ShortcutContext } from '@/lib/shortcuts'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
@@ -1104,6 +1105,70 @@ export default function BuilderPage() {
     return true
   }, [selectedKfIds, scene.timelines, dispatchCommand])
 
+  // ── Timeline property shortcuts (After Effects-style P/S/R/T + Alt+key) ───
+  // Each "property" maps to the transform sub-paths it keys together: position
+  // = x+y, scale = scaleX+scaleY, rotation = rotationDeg, opacity = opacity.
+  const TIMELINE_PROP_PATHS: Record<TimelineProperty, string[]> = useMemo(() => ({
+    position: ['transform.x', 'transform.y'],
+    scale:    ['transform.scaleX', 'transform.scaleY'],
+    rotation: ['transform.rotationDeg'],
+    opacity:  ['opacity'],
+  }), [])
+
+  // Alt+P/S/R/T — add a keyframe for the property at the playhead, or remove it
+  // if one already sits there (toggle). Mirrors AE's keyframe-stopwatch click.
+  const toggleTimelineKeyframe = useCallback((prop: TimelineProperty) => {
+    if (!selectedLayerId) return
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    const tl = scene.timelines.find((t) => t.id === selectedTlId)
+    if (!layer || !tl) return
+    const paths = TIMELINE_PROP_PATHS[prop]
+    const TOL = 1 // ms — treat a keyframe within 1ms of the playhead as "here"
+    const existing: KfDeletion[] = []
+    let allKeyed = true
+    for (const path of paths) {
+      const target = `layers.${layer.id}.${path}`
+      const track = tl.tracks.find((t) => t.target === target)
+      const kf = track?.keyframes.find((k) => Math.abs(k.timeMs - currentTimeMs) <= TOL)
+      if (kf) existing.push({ timelineId: tl.id, target, kf })
+      else allKeyed = false
+    }
+    if (allKeyed && existing.length > 0) {
+      dispatchCommand(makeBulkDeleteKfCmd(existing)) // toggle OFF
+    } else {
+      dispatchCommand(makeKeyframeLayerSnapshotCmd(tl.id, layer, currentTimeMs, paths)) // toggle ON
+    }
+  }, [selectedLayerId, scene.layers, scene.timelines, selectedTlId, currentTimeMs, dispatchCommand, TIMELINE_PROP_PATHS])
+
+  // P/S/R/T/U — reveal a property in the timeline (filters track rows to that
+  // property; 'all' shows only animated tracks). The nonce makes each press
+  // distinct so the TimelinePanel effect re-fires (and toggles) every time.
+  const [revealProperty, setRevealProperty] =
+    useState<{ prop: TimelineProperty | 'all'; nonce: number } | null>(null)
+  const revealTimelineProperty = useCallback((prop: TimelineProperty | 'all') => {
+    setRevealProperty((prev) => ({ prop, nonce: (prev?.nonce ?? 0) + 1 }))
+  }, [])
+
+  // J / K — seek to the previous / next keyframe time across the selected
+  // layer's tracks on the active timeline.
+  const seekToKeyframe = useCallback((direction: 'prev' | 'next') => {
+    if (!selectedLayerId) return
+    const tl = scene.timelines.find((t) => t.id === selectedTlId)
+    if (!tl) return
+    const prefix = `layers.${selectedLayerId}.`
+    const times = new Set<number>()
+    for (const track of tl.tracks) {
+      if (!track.target.startsWith(prefix)) continue
+      for (const kf of track.keyframes) times.add(kf.timeMs)
+    }
+    if (times.size === 0) return
+    const sorted = Array.from(times).sort((a, b) => a - b)
+    const next = direction === 'next'
+      ? sorted.find((t) => t > currentTimeMs + 0.5)
+      : [...sorted].reverse().find((t) => t < currentTimeMs - 0.5)
+    if (next !== undefined) handleSeek(next)
+  }, [selectedLayerId, scene.timelines, selectedTlId, currentTimeMs, handleSeek])
+
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
     onUndo: undo,
@@ -1133,6 +1198,10 @@ export default function BuilderPage() {
     onCloneQuick:      cloneQuick,
     onOpenArrayModal:  openArrayModal,
     onToolChange:      setToolMode,
+    onTimelineToggleKeyframe: toggleTimelineKeyframe,
+    onTimelinePrevKeyframe:   () => seekToKeyframe('prev'),
+    onTimelineNextKeyframe:   () => seekToKeyframe('next'),
+    onTimelineShowProperty:   revealTimelineProperty,
     getContext:        getShortcutContext,
     frameRate,
   })
@@ -1649,6 +1718,7 @@ export default function BuilderPage() {
                       onGhostPreset={applyGhostPreset}
                       onEditWire={wireModal.openForEdit}
                       onWireRequest={wireModal.openForTarget}
+                      revealProperty={revealProperty}
                     />
                   </div>
                 ),
