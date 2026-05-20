@@ -92,6 +92,11 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
     const base = txRef.current.baseScene
     txRef.current = null
     setHistory((h) => pushHistory({ ...h, present: base }, cmd.execute(base)))
+    // Clone-drag commits carry per-clone metadata — merge it so instance
+    // tracking ("Select all instances") works for drag-created clones too.
+    if (isCloneArrayCommand(cmd)) {
+      setLayerMetaById((prev) => ({ ...prev, ...cmd.layerMetadata }))
+    }
   }, [dispatchCommand])
 
   const cancelTransaction = useCallback(() => {

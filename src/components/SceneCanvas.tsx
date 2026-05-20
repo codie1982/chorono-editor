@@ -11,6 +11,8 @@ import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
+import { makeCloneCmd, type CloneArrayCommand } from '@/lib/editor/commands-clone'
+import type { CloneMode } from '@/lib/clone/CloneTypes'
 import {
   hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
   moveAnchor, moveInHandle, moveOutHandle,
@@ -176,6 +178,11 @@ interface MoveState {
    *  Distinct from Shift-while-dragging which dynamically picks the
    *  dominant axis — this is a hard lock set by the user clicking an arrow. */
   axisLock?: 'x' | 'y' | null
+  /** Clone-drag (Cmd/Ctrl held at drag start). When set, the move is treated
+   *  as a clone gesture: the original is dragged for live feedback, then on
+   *  release a clone is created at the drop offset and the original snaps back
+   *  to its start position — all in ONE undo step. Undefined = normal move. */
+  cloneMode?: CloneMode
 }
 
 interface ResizeState {
@@ -637,9 +644,12 @@ export default function SceneCanvas({
       }
       editorRef.current.previewTransaction(next)
       setDragOverrides(nextDragOverrides)
+      const cloneTag = drag.cloneMode
+        ? (drag.cloneMode === 'instance' ? '⧉ Instance   ' : '⧉ Copy   ')
+        : ''
       setDragHud({
         x: e.clientX, y: e.clientY,
-        label: `X ${Math.round(pnx)}   Y ${Math.round(pny)}`,
+        label: `${cloneTag}X ${Math.round(pnx)}   Y ${Math.round(pny)}`,
       })
       return
     }
@@ -1055,6 +1065,48 @@ export default function SceneCanvas({
       return
     }
 
+    // Clone-drag commit → for each dragged original, create a clone at the
+    // dragged offset. commitTransaction applies the command to the BASE scene
+    // (originals at their start positions, no clones), so the originals stay
+    // put and the clones land at the drop position. ONE undo step.
+    if (drag.kind === 'move' && drag.cloneMode) {
+      const mode = drag.cloneMode
+      const cloneCmds: CloneArrayCommand[] = []
+      for (const { id, originalLayer } of drag.movingLayers) {
+        const moved = ed.scene.layers.find((l) => l.id === id)
+        if (!moved) continue
+        const offX = moved.transform.x - originalLayer.transform.x
+        const offY = moved.transform.y - originalLayer.transform.y
+        cloneCmds.push(makeCloneCmd({
+          source: originalLayer, count: 1, offsetX: offX, offsetY: offY,
+          timeline: null, allLayers: ed.scene.layers,
+          duplicateAnimation: false, mode,
+        }))
+      }
+      if (cloneCmds.length === 0) { ed.cancelTransaction(); return }
+      const verb = mode === 'instance' ? 'Instance' : 'Clone'
+      const combined: CloneArrayCommand = cloneCmds.length === 1
+        ? cloneCmds[0]
+        : {
+            label: `${verb} ${cloneCmds.length} layers`,
+            execute: (s) => cloneCmds.reduce((sc, c) => c.execute(sc), s),
+            undo:    (s) => cloneCmds.slice().reverse().reduce((sc, c) => c.undo(sc), s),
+            layerMetadata: Object.assign({}, ...cloneCmds.map((c) => c.layerMetadata)),
+            result: {
+              label: `${verb} ${cloneCmds.length} layers`,
+              createdLayerIds: cloneCmds.flatMap((c) => c.result.createdLayerIds),
+              createdTrackTargets: cloneCmds.flatMap((c) => c.result.createdTrackTargets),
+              suggestedSelection: cloneCmds.flatMap((c) => c.result.suggestedSelection),
+            },
+          }
+      ed.commitTransaction(combined)
+      // Select the primary clone so the user keeps working on the new copy.
+      const primaryCloneId = cloneCmds[0].result.suggestedSelection[0]
+        ?? cloneCmds[0].result.createdLayerIds[0]
+      if (primaryCloneId) onSelectLayer(primaryCloneId)
+      return
+    }
+
     // Multi-layer move → batch one undo step
     if (drag.kind === 'move' && drag.movingLayers.length > 1) {
       const moved: { layerId: string; next: Layer; prev: Layer }[] = []
@@ -1098,7 +1150,7 @@ export default function SceneCanvas({
     if (!tChanged && !sChanged) { ed.cancelTransaction(); return }
     ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, orig))
     onAfterLayerCommit?.(orig, finalLayer)
-  }, [handlePointerMove, onAfterLayerCommit])
+  }, [handlePointerMove, onAfterLayerCommit, onSelectLayer])
 
   // ── Canvas pointerdown → select + start move ─────────────────────────────
   // ── Pan (move whole view) ─────────────────────────────────────────────────
@@ -1441,7 +1493,8 @@ export default function SceneCanvas({
     }
     // Shift+click: toggle layer in/out of the multi-selection set and stop —
     // no drag is started, the user can re-click to drag their selection.
-    if (e.shiftKey && !e.altKey) {
+    // Skip when Cmd/Ctrl is held so Cmd+Shift+drag stays free for instance-clone.
+    if (e.shiftKey && !e.altKey && !(e.metaKey || e.ctrlKey)) {
       onSelectLayer(hit, true)
       return
     }
@@ -1470,6 +1523,17 @@ export default function SceneCanvas({
     }
 
     editor.beginTransaction()
+
+    // Cmd/Ctrl + drag → clone-while-dragging (3ds Max-style). We move the
+    // ORIGINAL layer(s) during the drag (smooth, no render-lag), then on
+    // release we leave a clone at the drop position and snap the original back
+    // to its start. Result: original stays put, a copy/instance lands where
+    // the user dropped — all as ONE undo step.
+    //   Cmd        → copy clone
+    //   Cmd+Shift  → instance clone (references the source; edits propagate)
+    const cloneMode: CloneMode | undefined =
+      (e.metaKey || e.ctrlKey) ? (e.shiftKey ? 'instance' : 'copy') : undefined
+
     dragRef.current = {
       kind: 'move',
       layerId: layer.id,
@@ -1479,6 +1543,7 @@ export default function SceneCanvas({
       startClientY: e.clientY,
       width:  layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80),
       height: layer.size?.height ?? (layer.text?.fontSize ?? 24),
+      cloneMode,
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
