@@ -81,6 +81,22 @@ describe('resolveTransition', () => {
     expect(resolveTransition(machine(), 'idle', null, get)).toBeNull()
   })
 
+  it('an unconfigured transition (no trigger, no guard) never auto-fires', () => {
+    const sm: StateMachineDefinition = {
+      id: 's', name: 'm', initialStateId: 'a',
+      states: [
+        { id: 'a', name: 'a', timelineId: 'tl-a' },
+        { id: 'b', name: 'b', timelineId: 'tl-b' },
+      ],
+      // freshly drawn drag-to-connect edge: no trigger, no guard
+      transitions: [{ id: 'e', from: 'a', to: 'b' }],
+    }
+    // guard-only tick must NOT fire it
+    expect(resolveTransition(sm, 'a', null, get)).toBeNull()
+    // and it can't be reached by an event either (no trigger to match)
+    expect(resolveTransition(sm, 'a', 'anything', get)).toBeNull()
+  })
+
   it('guard filters event transitions', () => {
     const sm = machine()
     sm.transitions.push({ id: 'g', from: 'idle', to: 'press', trigger: 'hover', guard: { param: 'armed', op: '==', value: true } })

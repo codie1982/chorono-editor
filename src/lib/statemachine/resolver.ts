@@ -25,8 +25,12 @@ export function resolveTransition(
       // Event-driven: the transition must listen for this exact event.
       if (t.trigger !== event) return false
     } else {
-      // Guard-only tick: skip anything waiting on an event.
+      // Guard-only tick: skip anything waiting on an event AND require a guard.
+      // A transition with neither a trigger nor a guard is "unconfigured" — it
+      // must stay inert rather than auto-firing every frame (otherwise a freshly
+      // drawn drag-to-connect edge would immediately advance the state).
       if (t.trigger) return false
+      if (!t.guard) return false
     }
 
     if (t.guard && !evaluateGuard(t.guard, getParam)) return false
