@@ -1,37 +1,98 @@
 'use client'
-import { useMemo } from 'react'
+import { useMemo, useRef, useCallback } from 'react'
 import type { ChronoScene, Layer, Track } from '@/lib/types'
+import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { evaluateTrack } from '@/lib/evaluator'
+import { updateKfValue } from '@/lib/timeline/keyframeOps'
+import { makeUpdateKfValueCmd } from '@/lib/editor/commands-keyframe'
+import { makeBatchCmd } from '@/lib/editor/commands-batch'
 
 interface Props {
   layer:         Layer
   scene:         ChronoScene
   zoom:          number
   currentTimeMs: number
+  /** Editor handle — lets keyframe nodes be dragged to edit their values. */
+  editor:        EditorStateReturn
+  /** Composition width (px) — used to convert client px deltas to comp px. */
+  compositionWidth: number
 }
 
 /**
- * SVGator-style motion path visualisation.
+ * SVGator-style motion path visualisation + editable keyframe nodes.
  *
  * Finds the position keyframes (transform.x / transform.y) for the selected
- * layer across all timelines, samples the interpolated trajectory, and draws
- * it as an SVG overlay positioned inside the zoomed artboard container.
+ * layer, samples the interpolated trajectory, draws it, and renders a draggable
+ * diamond at each keyframe time. Dragging a diamond edits that keyframe's
+ * transform.x / transform.y values directly on the canvas.
  *
- *   ── trajectory line (solid, blue)
- *   • dotted samples along the path (interpolation feedback)
- *   ◆ diamond nodes at each keyframe time
- *   ● filled dot for the current playhead position
- *
- * The overlay is `pointer-events: none` — interactive bezier handles are a
- * Phase 2 feature that requires moving from independent x/y tracks to a
- * single vec2 position track. This component is read-only for now.
- *
- * Renders nothing when fewer than 2 position keyframes exist (no path to draw).
+ * Renders nothing when fewer than 2 position keyframes exist.
  */
 export default function MotionPathOverlay({
-  layer, scene, zoom, currentTimeMs,
+  layer, scene, zoom, currentTimeMs, editor, compositionWidth,
 }: Props) {
   const data = useMemo(() => buildPathData(layer, scene), [layer, scene])
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const dragRef = useRef<{
+    scale: number
+    startClientX: number; startClientY: number
+    xKfId?: string; yKfId?: string
+    startX: number; startY: number
+  } | null>(null)
+
+  const handleMove = useCallback((e: PointerEvent) => {
+    const d = dragRef.current
+    if (!d || !data) return
+    const dx = (e.clientX - d.startClientX) * d.scale
+    const dy = (e.clientY - d.startClientY) * d.scale
+    let next = editor.scene
+    if (d.xKfId && data.xTrack && data.xTimelineId)
+      next = updateKfValue(next, data.xTimelineId, data.xTrack.target, d.xKfId, d.startX + dx)
+    if (d.yKfId && data.yTrack && data.yTimelineId)
+      next = updateKfValue(next, data.yTimelineId, data.yTrack.target, d.yKfId, d.startY + dy)
+    editor.previewTransaction(next)
+  }, [data, editor])
+
+  const handleUp = useCallback((e: PointerEvent) => {
+    const d = dragRef.current
+    dragRef.current = null
+    window.removeEventListener('pointermove', handleMove)
+    window.removeEventListener('pointerup', handleUp)
+    if (!d || !data) return
+    const dx = (e.clientX - d.startClientX) * d.scale
+    const dy = (e.clientY - d.startClientY) * d.scale
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) { editor.cancelTransaction(); return }
+    const cmds = []
+    if (d.xKfId && data.xTrack && data.xTimelineId)
+      cmds.push(makeUpdateKfValueCmd(data.xTimelineId, data.xTrack.target, d.xKfId, d.startX, d.startX + dx))
+    if (d.yKfId && data.yTrack && data.yTimelineId)
+      cmds.push(makeUpdateKfValueCmd(data.yTimelineId, data.yTrack.target, d.yKfId, d.startY, d.startY + dy))
+    if (cmds.length === 0) { editor.cancelTransaction(); return }
+    editor.commitTransaction(cmds.length === 1 ? cmds[0] : makeBatchCmd('Move Keyframe', cmds))
+  }, [data, editor, handleMove])
+
+  const beginKfDrag = useCallback((t: number) => (e: React.PointerEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const svg = svgRef.current
+    if (!svg || !data) return
+    const rect = svg.getBoundingClientRect()
+    const scale = rect.width > 0 ? compositionWidth / rect.width : 1
+    const xKf = data.xTrack?.keyframes.find((k) => Math.abs(k.timeMs - t) < 0.5)
+    const yKf = data.yTrack?.keyframes.find((k) => Math.abs(k.timeMs - t) < 0.5)
+    if (!xKf && !yKf) return
+    dragRef.current = {
+      scale,
+      startClientX: e.clientX, startClientY: e.clientY,
+      xKfId: xKf?.id, yKfId: yKf?.id,
+      startX: xKf ? (xKf.value as number) : 0,
+      startY: yKf ? (yKf.value as number) : 0,
+    }
+    editor.beginTransaction()
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+  }, [data, editor, compositionWidth, handleMove, handleUp])
+
   if (!data) return null
 
   const { samples, keyframeTimes, xTrack, yTrack, anchorX, anchorY } = data
@@ -45,56 +106,41 @@ export default function MotionPathOverlay({
       samples.slice(1).map((p) => `L ${p.x * zoom} ${p.y * zoom}`).join(' ')
     : ''
 
-  // SVG covers the same area as the artboard — its parent container is
-  // already at canvas-scale (width = composition.width * zoom).
   return (
     <svg
-      className="absolute inset-0 pointer-events-none z-30 overflow-visible"
-      style={{ width: '100%', height: '100%' }}
+      ref={svgRef}
+      className="absolute inset-0 z-30 overflow-visible"
+      style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
     >
       {/* Trajectory line */}
-      <path
-        d={d}
-        fill="none"
-        stroke="#60a5fa"            /* blue-400 */
-        strokeWidth={1.5}
-        strokeDasharray="0"
-        opacity={0.9}
-      />
-      {/* Interpolation sample dots — sparse so they look like a guide,
-          not a noisy texture. Every 4th sample. */}
+      <path d={d} fill="none" stroke="#60a5fa" strokeWidth={1.5} strokeDasharray="0" opacity={0.9} />
+
+      {/* Interpolation sample dots — every 4th sample */}
       {samples.map((p, i) => (i % 4 === 0 ? (
-        <circle
-          key={`s-${i}`}
-          cx={p.x * zoom}
-          cy={p.y * zoom}
-          r={1.5}
-          fill="#60a5fa"
-          opacity={0.55}
-        />
+        <circle key={`s-${i}`} cx={p.x * zoom} cy={p.y * zoom} r={1.5} fill="#60a5fa" opacity={0.55} />
       ) : null))}
 
-      {/* Keyframe nodes — diamonds at each kf time. The anchor offset is
-          added so the diamond sits where the layer's anchor will be when
-          the playhead reaches that frame, matching the selection-frame
-          pivot the user sees. */}
+      {/* Keyframe nodes — draggable diamonds at each kf time. pointerEvents
+          re-enabled here only (the svg itself stays transparent to clicks). */}
       {keyframeTimes.map((t, i) => {
         const pos = evalXY(xTrack, yTrack, t, layer.transform.x, layer.transform.y)
         const cx = (pos.x + anchorX) * zoom
         const cy = (pos.y + anchorY) * zoom
         return (
-          <g key={`k-${i}`} transform={`translate(${cx} ${cy}) rotate(45)`}>
-            <rect
-              x={-4} y={-4} width={8} height={8}
-              fill="#1e293b"
-              stroke="#60a5fa"
-              strokeWidth={1.5}
-            />
+          <g
+            key={`k-${i}`}
+            transform={`translate(${cx} ${cy}) rotate(45)`}
+            style={{ pointerEvents: 'all', cursor: 'grab' }}
+            onPointerDown={beginKfDrag(t)}
+          >
+            {/* invisible larger hit target for easier grabbing */}
+            <rect x={-7} y={-7} width={14} height={14} fill="transparent" />
+            <rect x={-4} y={-4} width={8} height={8} fill="#1e293b" stroke="#60a5fa" strokeWidth={1.5} />
           </g>
         )
       })}
 
-      {/* Current time indicator — small filled dot on the trajectory */}
+      {/* Current time indicator */}
       <circle
         cx={(head.x + anchorX) * zoom}
         cy={(head.y + anchorY) * zoom}
@@ -116,6 +162,8 @@ interface PathData {
   keyframeTimes: number[]
   xTrack:        Track | null
   yTrack:        Track | null
+  xTimelineId:   string | null
+  yTimelineId:   string | null
   anchorX:       number
   anchorY:       number
 }
@@ -125,13 +173,15 @@ interface PathData {
 function buildPathData(layer: Layer, scene: ChronoScene): PathData | null {
   let xTrack: Track | null = null
   let yTrack: Track | null = null
+  let xTimelineId: string | null = null
+  let yTimelineId: string | null = null
   const xTarget = `layers.${layer.id}.transform.x`
   const yTarget = `layers.${layer.id}.transform.y`
 
   for (const tl of scene.timelines ?? []) {
     for (const tr of tl.tracks) {
-      if (tr.target === xTarget) xTrack = tr
-      if (tr.target === yTarget) yTrack = tr
+      if (tr.target === xTarget) { xTrack = tr; xTimelineId = tl.id }
+      if (tr.target === yTarget) { yTrack = tr; yTimelineId = tl.id }
     }
   }
 
@@ -144,8 +194,6 @@ function buildPathData(layer: Layer, scene: ChronoScene): PathData | null {
   // Need at least 2 distinct anchor points to draw a trajectory.
   if (keyframeTimes.length < 2) return null
 
-  // Sample uniformly between first and last keyframe — ~40 samples gives a
-  // smooth curve without being expensive. Endpoints are always included.
   const t0 = keyframeTimes[0]
   const t1 = keyframeTimes[keyframeTimes.length - 1]
   const N = 48
@@ -153,8 +201,6 @@ function buildPathData(layer: Layer, scene: ChronoScene): PathData | null {
   for (let i = 0; i <= N; i++) {
     const t = t0 + ((t1 - t0) * i) / N
     const p = evalXY(xTrack, yTrack, t, layer.transform.x, layer.transform.y)
-    // Apply anchor offset so the curve traces where the anchor (the actual
-    // pivot the user sees) travels, not the top-left corner.
     samples.push({ x: p.x + layer.transform.anchorX, y: p.y + layer.transform.anchorY })
   }
 
@@ -163,6 +209,8 @@ function buildPathData(layer: Layer, scene: ChronoScene): PathData | null {
     keyframeTimes,
     xTrack,
     yTrack,
+    xTimelineId,
+    yTimelineId,
     anchorX: layer.transform.anchorX,
     anchorY: layer.transform.anchorY,
   }

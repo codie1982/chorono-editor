@@ -2133,6 +2133,8 @@ export default function SceneCanvas({
               scene={scene}
               zoom={zoom}
               currentTimeMs={timeMs}
+              editor={editor}
+              compositionWidth={width}
             />
           )}
 
