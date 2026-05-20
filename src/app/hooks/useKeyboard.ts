@@ -1,6 +1,11 @@
 'use client'
 import { useEffect } from 'react'
 import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
+import { shortcutRegistry } from '@/lib/shortcuts'
+import type { ShortcutContext } from '@/lib/shortcuts'
+
+/** Timeline property addressed by the P/S/R/T shortcut family. */
+export type TimelineProperty = 'position' | 'scale' | 'rotation' | 'opacity'
 
 interface Handlers {
   onUndo: () => void
@@ -21,12 +26,43 @@ interface Handlers {
   onOpenArrayModal?: () => void
   /** Single-key tool shortcuts (V/H/P/G/R/S/A). No-op if absent. */
   onToolChange?: (mode: ToolMode) => void
+  /** Timeline context — reveal a property track (P/S/R/T) or all keyed (U). */
+  onTimelineShowProperty?: (prop: TimelineProperty | 'all') => void
+  /** Timeline context — add/remove a keyframe for a property at the playhead. */
+  onTimelineToggleKeyframe?: (prop: TimelineProperty) => void
+  /** Timeline context — jump to previous / next keyframe (J / K). */
+  onTimelinePrevKeyframe?: () => void
+  onTimelineNextKeyframe?: () => void
+  /** Returns the context the pointer is currently in. Drives which binding
+   *  wins when the same key is mapped in multiple contexts (e.g. S = Scale
+   *  tool on the canvas, Show Scale track in the timeline). */
+  getContext?: () => ShortcutContext
   frameRate?: number
 }
 
+// Map registry shortcut ids → tool modes for the canvas tool shortcuts.
+const TOOL_BY_ID: Record<string, ToolMode> = {
+  'canvas.tool.select':         'select',
+  'canvas.tool.pan':            'pan',
+  'canvas.tool.pen':            'pen',
+  'canvas.tool.move':           'move',
+  'canvas.tool.rotate':         'rotate',
+  'canvas.tool.scale':          'scale',
+  'canvas.tool.anchor':         'anchor',
+  'canvas.tool.box-select':     'selection-box',
+  'canvas.tool.lasso-select':   'selection-lasso',
+  'canvas.tool.circle-select':  'selection-circle',
+  'canvas.tool.paint-select':   'selection-paint',
+}
+
 /**
- * Global keyboard shortcuts for the editor.
- * Attach to document once in the root component.
+ * Global keyboard shortcuts for the editor — driven by the central
+ * ShortcutRegistry. On every keydown we resolve the (key + modifiers +
+ * active context) to a shortcut id, then dispatch the matching handler.
+ *
+ * Context-awareness means the same physical key can do different things
+ * depending on where the pointer is: `S` is the Scale tool on the canvas
+ * but "Show Scale track" in the timeline.
  */
 export function useKeyboard(handlers: Handlers) {
   const {
@@ -37,92 +73,66 @@ export function useKeyboard(handlers: Handlers) {
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
     onToolChange,
+    onTimelineShowProperty, onTimelineToggleKeyframe,
+    onTimelinePrevKeyframe, onTimelineNextKeyframe,
+    getContext,
     frameRate: _frameRate = 60,
   } = handlers
 
   useEffect(() => {
+    // Build the id → action map fresh each effect run so it closes over the
+    // latest handlers. Missing handlers leave the slot undefined (no-op).
+    const actions: Record<string, (() => void) | undefined> = {
+      'global.undo': onUndo,
+      'global.redo': onRedo,
+      'global.help': onShowHelp,
+      'global.delete': onDeleteSelected,
+      'global.deleteBackspace': onDeleteSelected,
+      'global.playback.toggle': onPlayToggle,
+      'global.playback.stepBack':      () => onStepBack(1),
+      'global.playback.stepForward':   () => onStepForward(1),
+      'global.playback.stepBack10':    () => onStepBack(10),
+      'global.playback.stepForward10': () => onStepForward(10),
+
+      'canvas.select.duplicate':  onDuplicateSelected,
+      'canvas.select.cloneQuick': onCloneQuick,
+      'canvas.select.copy':       onCopy,
+      'canvas.select.paste':      onPaste,
+      'canvas.select.group':      onGroupSelected,
+      'canvas.select.ungroup':    onUngroupSelected,
+      'canvas.select.array':      onOpenArrayModal,
+
+      'timeline.property.position': () => onTimelineShowProperty?.('position'),
+      'timeline.property.scale':    () => onTimelineShowProperty?.('scale'),
+      'timeline.property.rotation': () => onTimelineShowProperty?.('rotation'),
+      'timeline.property.opacity':  () => onTimelineShowProperty?.('opacity'),
+      'timeline.property.all':      () => onTimelineShowProperty?.('all'),
+      'timeline.keyframe.position': () => onTimelineToggleKeyframe?.('position'),
+      'timeline.keyframe.scale':    () => onTimelineToggleKeyframe?.('scale'),
+      'timeline.keyframe.rotation': () => onTimelineToggleKeyframe?.('rotation'),
+      'timeline.keyframe.opacity':  () => onTimelineToggleKeyframe?.('opacity'),
+      'timeline.nav.prevKeyframe':  () => onTimelinePrevKeyframe?.(),
+      'timeline.nav.nextKeyframe':  () => onTimelineNextKeyframe?.(),
+    }
+    // Canvas tool shortcuts → onToolChange.
+    for (const [id, mode] of Object.entries(TOOL_BY_ID)) {
+      actions[id] = onToolChange ? () => onToolChange(mode) : undefined
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
-      // Skip when user is typing in an input/textarea
+      // Skip when the user is typing in an input/textarea/contenteditable.
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return
       }
 
-      const meta = e.metaKey || e.ctrlKey
-
-      // ── Undo / Redo ────────────────────────────────────────────────────
-      if (meta && e.key === 'z' && !e.shiftKey) { e.preventDefault(); onUndo(); return }
-      if (meta && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); onRedo(); return }
-
-      // ── Playback ───────────────────────────────────────────────────────
-      if (e.key === ' ') { e.preventDefault(); onPlayToggle(); return }
-
-      // ── Frame stepping ─────────────────────────────────────────────────
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        onStepBack(e.shiftKey ? 10 : 1)
-        return
-      }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        onStepForward(e.shiftKey ? 10 : 1)
-        return
-      }
-
-      // ── Layer operations ───────────────────────────────────────────────
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !meta) {
-        e.preventDefault(); onDeleteSelected(); return
-      }
-      // BL-59 — Cmd/Ctrl + Alt + D = "Clone Quick" (richer than Duplicate:
-      // also copies animation tracks, atomic undo). Checked BEFORE the plain
-      // Cmd+D handler below so the altKey-modified variant wins.
-      if (meta && e.altKey && (e.key === 'd' || e.key === 'D' || e.key === '∂') && onCloneQuick) {
-        e.preventDefault(); onCloneQuick(); return
-      }
-      if (meta && e.key === 'd' && !e.altKey) {
-        e.preventDefault(); onDuplicateSelected(); return
-      }
-
-      // BL-59 — Cmd/Ctrl + Shift + A = open Array dialog.
-      // (Single-key A is the "anchor" tool shortcut — handled later in the
-      // tool-shortcut block; we skip it when a modifier is held.)
-      if (meta && e.shiftKey && (e.key === 'a' || e.key === 'A') && onOpenArrayModal) {
-        e.preventDefault(); onOpenArrayModal(); return
-      }
-
-      // ── Copy / Paste keyframes ─────────────────────────────────────────
-      if (meta && e.key === 'c' && onCopy)  { e.preventDefault(); onCopy();  return }
-      if (meta && e.key === 'v' && onPaste) { e.preventDefault(); onPaste(); return }
-
-      // ── Help dialog ─────────────────────────────────────────────────────
-      // Cmd/Ctrl + / — `/` shifts to `?` on US layout so accept both.
-      if (meta && (e.key === '/' || e.key === '?') && onShowHelp) {
-        e.preventDefault(); onShowHelp(); return
-      }
-
-      // ── Group / Ungroup ────────────────────────────────────────────────
-      if (meta && e.key === 'g' && !e.shiftKey && onGroupSelected) {
-        e.preventDefault(); onGroupSelected(); return
-      }
-      if (meta && e.shiftKey && (e.key === 'g' || e.key === 'G') && onUngroupSelected) {
-        e.preventDefault(); onUngroupSelected(); return
-      }
-
-      // ── Tool shortcuts (single key, no modifier) ───────────────────────
-      // V Select, H Pan, P Pen, G Move, R Rotate, S Scale, A Anchor.
-      // BL-60 Faz 3: B Box-select, L Lasso, O Circle, W Paint.
-      // Skip when any modifier is held so Cmd+G (group) keeps working.
-      if (onToolChange && !meta && !e.shiftKey && !e.altKey) {
-        const k = e.key.toLowerCase()
-        const map: Record<string, ToolMode> = {
-          v: 'select', h: 'pan', p: 'pen',
-          g: 'move', r: 'rotate', s: 'scale', a: 'anchor',
-          b: 'selection-box', l: 'selection-lasso',
-          o: 'selection-circle', w: 'selection-paint',
-        }
-        const next = map[k]
-        if (next) { e.preventDefault(); onToolChange(next); return }
-      }
+      const context: ShortcutContext = getContext?.() ?? 'canvas'
+      const id = shortcutRegistry.resolve(e, context)
+      if (!id) return
+      const action = actions[id]
+      if (!action) return
+      e.preventDefault()
+      action()
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -135,5 +145,8 @@ export function useKeyboard(handlers: Handlers) {
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
     onToolChange,
+    onTimelineShowProperty, onTimelineToggleKeyframe,
+    onTimelinePrevKeyframe, onTimelineNextKeyframe,
+    getContext,
   ])
 }

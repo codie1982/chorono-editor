@@ -12,6 +12,8 @@ import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
+import type { TimelineProperty } from './hooks/useKeyboard'
+import type { ShortcutContext } from '@/lib/shortcuts'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
@@ -55,7 +57,8 @@ import WiringListPanel     from '@/components/panels/WiringListPanel'
 import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
-import SnapPanel           from '@/components/panels/SnapPanel'
+import SnapPanel               from '@/components/panels/SnapPanel'
+import KeyboardShortcutsPanel  from '@/components/panels/KeyboardShortcutsPanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
@@ -158,7 +161,7 @@ export default function BuilderPage() {
     'layers', 'sceneExplorer', 'canvas', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
-    'particles',
+    'particles', 'shortcuts',
   ])
   // Fullscreen canvas — hides the dock and renders only the canvas leaf.
   const [fullscreenCanvas, setFullscreenCanvas] = useState(false)
@@ -498,6 +501,14 @@ export default function BuilderPage() {
     document.addEventListener('pointerdown', onDown, true)
     return () => document.removeEventListener('pointerdown', onDown, true)
   }, [])
+
+  // Maps the last-focused panel to a shortcut context so the same key can do
+  // different things in the canvas vs the timeline (e.g. S = Scale tool on the
+  // canvas, Show Scale track in the timeline). Stable identity (reads a ref).
+  const getShortcutContext = useCallback(
+    (): ShortcutContext => (activePanelRef.current === 'timeline' ? 'timeline' : 'canvas'),
+    [],
+  )
 
   // Remove every track of a layer on the selected timeline WITHOUT deleting the
   // layer — the timeline-focused Delete behaviour ("clear animation, keep the
@@ -1094,6 +1105,70 @@ export default function BuilderPage() {
     return true
   }, [selectedKfIds, scene.timelines, dispatchCommand])
 
+  // ── Timeline property shortcuts (After Effects-style P/S/R/T + Alt+key) ───
+  // Each "property" maps to the transform sub-paths it keys together: position
+  // = x+y, scale = scaleX+scaleY, rotation = rotationDeg, opacity = opacity.
+  const TIMELINE_PROP_PATHS: Record<TimelineProperty, string[]> = useMemo(() => ({
+    position: ['transform.x', 'transform.y'],
+    scale:    ['transform.scaleX', 'transform.scaleY'],
+    rotation: ['transform.rotationDeg'],
+    opacity:  ['opacity'],
+  }), [])
+
+  // Alt+P/S/R/T — add a keyframe for the property at the playhead, or remove it
+  // if one already sits there (toggle). Mirrors AE's keyframe-stopwatch click.
+  const toggleTimelineKeyframe = useCallback((prop: TimelineProperty) => {
+    if (!selectedLayerId) return
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    const tl = scene.timelines.find((t) => t.id === selectedTlId)
+    if (!layer || !tl) return
+    const paths = TIMELINE_PROP_PATHS[prop]
+    const TOL = 1 // ms — treat a keyframe within 1ms of the playhead as "here"
+    const existing: KfDeletion[] = []
+    let allKeyed = true
+    for (const path of paths) {
+      const target = `layers.${layer.id}.${path}`
+      const track = tl.tracks.find((t) => t.target === target)
+      const kf = track?.keyframes.find((k) => Math.abs(k.timeMs - currentTimeMs) <= TOL)
+      if (kf) existing.push({ timelineId: tl.id, target, kf })
+      else allKeyed = false
+    }
+    if (allKeyed && existing.length > 0) {
+      dispatchCommand(makeBulkDeleteKfCmd(existing)) // toggle OFF
+    } else {
+      dispatchCommand(makeKeyframeLayerSnapshotCmd(tl.id, layer, currentTimeMs, paths)) // toggle ON
+    }
+  }, [selectedLayerId, scene.layers, scene.timelines, selectedTlId, currentTimeMs, dispatchCommand, TIMELINE_PROP_PATHS])
+
+  // P/S/R/T/U — reveal a property in the timeline (filters track rows to that
+  // property; 'all' shows only animated tracks). The nonce makes each press
+  // distinct so the TimelinePanel effect re-fires (and toggles) every time.
+  const [revealProperty, setRevealProperty] =
+    useState<{ prop: TimelineProperty | 'all'; nonce: number } | null>(null)
+  const revealTimelineProperty = useCallback((prop: TimelineProperty | 'all') => {
+    setRevealProperty((prev) => ({ prop, nonce: (prev?.nonce ?? 0) + 1 }))
+  }, [])
+
+  // J / K — seek to the previous / next keyframe time across the selected
+  // layer's tracks on the active timeline.
+  const seekToKeyframe = useCallback((direction: 'prev' | 'next') => {
+    if (!selectedLayerId) return
+    const tl = scene.timelines.find((t) => t.id === selectedTlId)
+    if (!tl) return
+    const prefix = `layers.${selectedLayerId}.`
+    const times = new Set<number>()
+    for (const track of tl.tracks) {
+      if (!track.target.startsWith(prefix)) continue
+      for (const kf of track.keyframes) times.add(kf.timeMs)
+    }
+    if (times.size === 0) return
+    const sorted = Array.from(times).sort((a, b) => a - b)
+    const next = direction === 'next'
+      ? sorted.find((t) => t > currentTimeMs + 0.5)
+      : [...sorted].reverse().find((t) => t < currentTimeMs - 0.5)
+    if (next !== undefined) handleSeek(next)
+  }, [selectedLayerId, scene.timelines, selectedTlId, currentTimeMs, handleSeek])
+
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
     onUndo: undo,
@@ -1123,6 +1198,11 @@ export default function BuilderPage() {
     onCloneQuick:      cloneQuick,
     onOpenArrayModal:  openArrayModal,
     onToolChange:      setToolMode,
+    onTimelineToggleKeyframe: toggleTimelineKeyframe,
+    onTimelinePrevKeyframe:   () => seekToKeyframe('prev'),
+    onTimelineNextKeyframe:   () => seekToKeyframe('next'),
+    onTimelineShowProperty:   revealTimelineProperty,
+    getContext:        getShortcutContext,
     frameRate,
   })
 
@@ -1149,6 +1229,7 @@ export default function BuilderPage() {
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
       { id: 'particles',      title: 'Particle',       render: () => null },
+      { id: 'shortcuts',      title: 'Shortcuts',      render: () => null },
     ]
     return makeRegistry(defs)
   }, [])
@@ -1637,6 +1718,7 @@ export default function BuilderPage() {
                       onGhostPreset={applyGhostPreset}
                       onEditWire={wireModal.openForEdit}
                       onWireRequest={wireModal.openForTarget}
+                      revealProperty={revealProperty}
                     />
                   </div>
                 ),
@@ -1742,6 +1824,10 @@ export default function BuilderPage() {
               {
                 id: 'snap', title: 'Snap',
                 render: () => <SnapPanel snap={snap} />,
+              },
+              {
+                id: 'shortcuts', title: 'Shortcuts',
+                render: () => <KeyboardShortcutsPanel />,
               },
               {
                 id: 'particles', title: 'Particle',

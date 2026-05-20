@@ -136,6 +136,9 @@ interface Props {
   onEditWire?: (wire: import('@/lib/types').ParameterWire) => void
   /** BL-05 — "Wire This Parameter…" right-click menu → open modal in new mode. */
   onWireRequest?: (target: import('@/lib/types').ParameterRef) => void
+  /** After Effects-style property reveal (P/S/R/T/U). The `nonce` makes each
+   *  keypress distinct so repeated presses re-fire (and toggle the filter). */
+  revealProperty?: { prop: 'position' | 'scale' | 'rotation' | 'opacity' | 'all'; nonce: number } | null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,7 +150,7 @@ export default function TimelinePanel({
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
-  onEditWire, onWireRequest,
+  onEditWire, onWireRequest, revealProperty,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -187,6 +190,32 @@ export default function TimelinePanel({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
   // ── Layer filter (BL-38) — substring match on layer name + tracked properties
   const [layerFilter, setLayerFilter] = useState('')
+
+  // ── Property reveal filter (P/S/R/T/U) — AE-style. When set, each layer's
+  //    track list is filtered to the named transform property (or, for 'all',
+  //    only tracks that carry keyframes). Driven by the revealProperty prop.
+  const [propFilter, setPropFilter] = useState<'position' | 'scale' | 'rotation' | 'opacity' | 'all' | null>(null)
+  const lastRevealNonce = useRef(-1)
+  useEffect(() => {
+    if (!revealProperty || revealProperty.nonce === lastRevealNonce.current) return
+    lastRevealNonce.current = revealProperty.nonce
+    // Press the same property twice → clear (toggle off).
+    setPropFilter((prev) => (prev === revealProperty.prop ? null : revealProperty.prop))
+    // Make sure the selected layer is expanded so its tracks are visible.
+    if (selectedLayerId) {
+      setCollapsedIds((prev) => {
+        if (!prev.has(selectedLayerId)) return prev
+        const n = new Set(prev); n.delete(selectedLayerId); return n
+      })
+    }
+  }, [revealProperty, selectedLayerId])
+
+  const PROP_SUFFIXES: Record<'position' | 'scale' | 'rotation' | 'opacity', string[]> = {
+    position: ['.transform.x', '.transform.y'],
+    scale:    ['.transform.scaleX', '.transform.scaleY'],
+    rotation: ['.transform.rotationDeg'],
+    opacity:  ['.opacity'],
+  }
 
   // ── Drag-to-timeline drop state ───────────────────────────────────────────
   const [isDragOver, setIsDragOver] = useState(false)
@@ -936,8 +965,13 @@ export default function TimelinePanel({
   )
 
   // Helper: tracks belonging to a layer
-  const tracksFor = (layerId: string) =>
-    timeline?.tracks.filter((t) => t.target.startsWith(`layers.${layerId}.`)) ?? []
+  const tracksFor = (layerId: string) => {
+    const base = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${layerId}.`)) ?? []
+    if (!propFilter) return base
+    if (propFilter === 'all') return base.filter((t) => t.keyframes.length > 0)
+    const suffixes = PROP_SUFFIXES[propFilter]
+    return base.filter((t) => suffixes.some((s) => t.target.endsWith(s)))
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1195,6 +1229,19 @@ export default function TimelinePanel({
               onClick={() => setLayerFilter('')}
               className="ml-2 text-blue-400 hover:text-blue-300 underline underline-offset-2"
             >clear filter</button>
+          </div>
+        )}
+
+        {propFilter && (
+          <div className="px-3 py-1.5 text-[11px] text-gray-400 bg-gray-850 border-b border-gray-800 flex items-center gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-300 font-medium capitalize">
+              {propFilter === 'all' ? 'Animated properties' : propFilter}
+            </span>
+            <span className="text-gray-500">only</span>
+            <button
+              onClick={() => setPropFilter(null)}
+              className="ml-auto text-blue-400 hover:text-blue-300 underline underline-offset-2"
+            >clear</button>
           </div>
         )}
 
