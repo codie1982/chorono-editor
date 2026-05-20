@@ -61,6 +61,11 @@ interface Props {
   clientXToMs?: (clientX: number) => number
   /** Total duration of the selected timeline, for clamping drag. */
   durationMs: number
+  /** Playhead time — used to detect whether a track has a key at the playhead
+   *  (so the per-track button toggles between add `+` and remove `−`). */
+  currentTimeMs: number
+  /** Composition frame rate — sets the "key at playhead" match tolerance. */
+  frameRate: number
   /**
    * Fired when the user finishes dragging the layer activity bar.
    * `kind='move'`      → bar body was dragged (shift both start+end)
@@ -97,9 +102,13 @@ export default function LayerTimelineSection({
   onDeleteKf, onSetEasing, onSelectKf, onBeginKfDrag,
   onKfContextMenu, onKfDoubleClick, onLayerBarContextMenu,
   onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
-  durationMs, onLayerBarCommit, pinIndex, audioUrl,
+  durationMs, currentTimeMs, frameRate, onLayerBarCommit, pinIndex, audioUrl,
   parameterWires, onEditWire,
 }: Props) {
+
+  // A track "has a key at the playhead" when one sits within half a frame of
+  // the current time — drives the per-track +/− toggle.
+  const keyMatchEps = Math.max(1, 1000 / (frameRate * 2))
 
   const isPinned = pinIndex != null && pinIndex >= 0
 
@@ -216,14 +225,29 @@ export default function LayerTimelineSection({
                   title={`Procedural: ${track.controller.type} (keyframes ignored)`}
                 >ƒ</span>
               ) : (
-                <button
-                  onClick={() => onAddKeyframeAtPlayhead(track.target)}
-                  className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
-                             text-yellow-400 hover:text-yellow-200 hover:bg-yellow-600/30
-                             border border-transparent hover:border-yellow-700/40 transition-colors
-                             text-[12px] leading-none font-bold"
-                  title="Add keyframe at playhead (◆)"
-                >+</button>
+                (() => {
+                  const keyHere = track.keyframes.find(
+                    (k) => Math.abs(k.timeMs - currentTimeMs) <= keyMatchEps)
+                  return keyHere ? (
+                    <button
+                      onClick={() => onDeleteKf(track.target, keyHere.id)}
+                      className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
+                                 text-red-400 hover:text-red-200 hover:bg-red-600/30
+                                 border border-transparent hover:border-red-700/40 transition-colors
+                                 text-[12px] leading-none font-bold"
+                      title="Remove keyframe at playhead (−)"
+                    >−</button>
+                  ) : (
+                    <button
+                      onClick={() => onAddKeyframeAtPlayhead(track.target)}
+                      className="w-4 h-4 flex items-center justify-center shrink-0 rounded-sm
+                                 text-yellow-400 hover:text-yellow-200 hover:bg-yellow-600/30
+                                 border border-transparent hover:border-yellow-700/40 transition-colors
+                                 text-[12px] leading-none font-bold"
+                      title="Add keyframe at playhead (◆)"
+                    >+</button>
+                  )
+                })()
               )}
               <span className="flex-1 truncate text-[10px] font-mono text-gray-400 cursor-pointer hover:text-gray-200"
                     title={`${track.target}${track.outOfRange ? `  ·  OOR: ${track.outOfRange.before ?? 'constant'} ◀ ▶ ${track.outOfRange.after ?? 'constant'}` : ''}`}

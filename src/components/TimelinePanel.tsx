@@ -306,6 +306,8 @@ export default function TimelinePanel({
       })),
     )),
     onCancel: cancelTransaction,
+    // A click (no drag) routes here; selectKf toggles selection + seeks.
+    onLoneClick: (kfId, shiftHeld) => selectKf(kfId, shiftHeld),
   })
 
   // ── Timeline CRUD ────────────────────────────────────────────────────────
@@ -428,21 +430,36 @@ export default function TimelinePanel({
     dispatchCommand(makeUpdateEasingCmd(selectedTimelineId, trackTarget, kfId, kf.easing, { ...kf.easing, type: easingType }))
   }, [timeline, selectedTimelineId, dispatchCommand])
 
+  // Keep the latest selection in a ref so selectKf (also invoked from the drag
+  // hook's pointer-up closure) always toggles against the current set rather
+  // than a stale captured value.
+  const selectedKfIdsRef = useRef(selectedKfIds)
+  selectedKfIdsRef.current = selectedKfIds
   const selectKf = useCallback((kfId: string, shiftHeld: boolean) => {
-    const next = new Set(shiftHeld ? selectedKfIds : [])
-    if (shiftHeld && selectedKfIds.has(kfId)) next.delete(kfId)
-    else                                       next.add(kfId)
-    onSelectKeyframes(next)
-    // Lone-click (no shift) → seek the playhead to this keyframe's time so
-    // the canvas + inspector show the exact value that was authored here.
-    // Multi-select drags don't seek (would be jumpy).
-    if (!shiftHeld && timeline) {
+    const cur = selectedKfIdsRef.current
+    // Shift-click toggles membership in a multi-selection.
+    if (shiftHeld) {
+      const next = new Set(cur)
+      if (next.has(kfId)) next.delete(kfId)
+      else next.add(kfId)
+      onSelectKeyframes(next)
+      return
+    }
+    // Plain click toggles a lone selection: clicking the only selected key
+    // again clears it. Otherwise it becomes the sole selection and the
+    // playhead seeks to its time so the canvas/inspector show that value.
+    if (cur.size === 1 && cur.has(kfId)) {
+      onSelectKeyframes(new Set())
+      return
+    }
+    onSelectKeyframes(new Set([kfId]))
+    if (timeline) {
       for (const tr of timeline.tracks) {
         const kf = tr.keyframes.find((k) => k.id === kfId)
         if (kf) { onTimeChange(Math.max(0, Math.min(duration, kf.timeMs))); break }
       }
     }
-  }, [selectedKfIds, onSelectKeyframes, timeline, duration, onTimeChange])
+  }, [onSelectKeyframes, timeline, duration, onTimeChange])
 
   /**
    * Curried drag-begin: given a leader snapshot + selection-mode flags, return
@@ -453,7 +470,8 @@ export default function TimelinePanel({
       if (!selectedTimelineId) return
       // Drag must always know which timeline its leader lives in
       const fixedLeader: DragSnapshot = { ...leader, timelineId: selectedTimelineId }
-      if (isLone) onSelectKeyframes(new Set([leader.kfId]))
+      // NOTE: selection is handled on pointer-up (onLoneClick) for clicks and
+      // left intact for drags — so a re-click can toggle the selection off.
 
       const group: DragSnapshot[] = isLone
         ? [fixedLeader]
@@ -1149,6 +1167,8 @@ export default function TimelinePanel({
             selectedKfIds={selectedKfIds}
             previewMs={drag.previewMs}
             durationMs={duration}
+            currentTimeMs={currentTimeMs}
+            frameRate={scene.composition.frameRate}
             pinIndex={pinIndexFor.get(layer.id) ?? -1}
             audioUrl={layer.type === 'audio' && layer.audio
               ? scene.assets?.find((a) => a.id === layer.audio!.assetId)?.url

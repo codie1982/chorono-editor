@@ -20,6 +20,13 @@ interface UsePlaybackOptions {
    * compositions and bounded loopCount runs.
    */
   wrapAtEnd: boolean
+  /**
+   * Optional work area. When both bounds are set, playback is confined to
+   * [workAreaInMs, workAreaOutMs]: it starts from the IN point and either loops
+   * back to it (wrapAtEnd) or pauses at the OUT point.
+   */
+  workAreaInMs?: number
+  workAreaOutMs?: number
 }
 
 /**
@@ -27,7 +34,14 @@ interface UsePlaybackOptions {
  * Uses startRef + offsetRef so seek and speed changes don't jump.
  */
 export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
-  const { maxDuration, wrapAtEnd } = opts
+  const { maxDuration, wrapAtEnd, workAreaInMs, workAreaOutMs } = opts
+
+  // Effective playback window. Falls back to [0, maxDuration] when no valid
+  // work area is set.
+  const hasWorkArea =
+    workAreaInMs != null && workAreaOutMs != null && workAreaOutMs > workAreaInMs
+  const loMs = hasWorkArea ? workAreaInMs! : 0
+  const hiMs = hasWorkArea ? Math.min(workAreaOutMs!, maxDuration) : maxDuration
 
   const [currentTimeMs, setTimeMs]   = useState(0)
   const [isPlaying, setPlaying]      = useState(false)
@@ -47,14 +61,15 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
       return
     }
 
-    if (elapsed >= maxDuration) {
+    if (elapsed >= hiMs) {
       if (wrapAtEnd) {
-        setTimeMs(elapsed % maxDuration)
+        const span = hiMs - loMs
+        setTimeMs(span > 0 ? loMs + ((elapsed - loMs) % span) : loMs)
         rafRef.current = requestAnimationFrame(tick)
       } else {
-        // Auto-pause: clamp at end, stop the loop
-        setTimeMs(maxDuration)
-        offsetRef.current = maxDuration
+        // Auto-pause: clamp at the end of the window, stop the loop
+        setTimeMs(hiMs)
+        offsetRef.current = hiMs
         setPlaying(false)
         return
       }
@@ -62,7 +77,7 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
       setTimeMs(elapsed)
       rafRef.current = requestAnimationFrame(tick)
     }
-  }, [maxDuration, wrapAtEnd])
+  }, [maxDuration, wrapAtEnd, loMs, hiMs])
 
   useEffect(() => {
     if (isPlaying) {
@@ -80,17 +95,18 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
         // Pause: freeze offset at current time
         offsetRef.current = currentTimeMs
       } else {
-        // Resume: if we're sitting at the end of a bounded playback, restart
-        // from 0 so pressing play again replays the animation.
-        if (!wrapAtEnd && currentTimeMs >= maxDuration && maxDuration > 0) {
-          offsetRef.current = 0
-          setTimeMs(0)
+        // Resume: snap into the active window if the playhead is sitting
+        // outside it (or parked at the end of a bounded run) so play always
+        // replays from the IN point.
+        if (maxDuration > 0 && (currentTimeMs < loMs || currentTimeMs >= hiMs)) {
+          offsetRef.current = loMs
+          setTimeMs(loMs)
         }
         startRef.current = performance.now()
       }
       return !playing
     })
-  }, [currentTimeMs, maxDuration, wrapAtEnd])
+  }, [currentTimeMs, maxDuration, wrapAtEnd, loMs, hiMs])
 
   const handleSeek = useCallback((ms: number) => {
     offsetRef.current = ms

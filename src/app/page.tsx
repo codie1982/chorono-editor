@@ -218,11 +218,21 @@ export default function BuilderPage() {
   // ── Asset cache: loads images/videos referenced in scene.assets ──────────
   const assetCache = useAssetCache(scene.assets)
 
+  // Active timeline's work area confines playback to a sub-range when set.
+  const activeWorkArea = useMemo(() => {
+    const tl = scene.timelines.find((t) => t.id === selectedTlId)
+    return { inMs: tl?.workAreaInMs, outMs: tl?.workAreaOutMs }
+  }, [scene.timelines, selectedTlId])
+
   // ── Playback loop ────────────────────────────────────────────────────────
   const {
     currentTimeMs, isPlaying, playbackSpeed,
     handlePlayToggle, handleSeek, setPlaybackSpeed,
-  } = usePlayback({ maxDuration, wrapAtEnd })
+  } = usePlayback({
+    maxDuration, wrapAtEnd,
+    workAreaInMs: activeWorkArea.inMs,
+    workAreaOutMs: activeWorkArea.outMs,
+  })
 
   // ── Autoplay: kick off playback once on first mount if any timeline asks for it.
   // Subsequent scene edits do NOT restart — toggling autoplay later is metadata

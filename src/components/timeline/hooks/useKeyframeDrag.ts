@@ -34,6 +34,9 @@ interface Params {
   /** Called once on pointerUp — host commits a single bulk move command */
   onCommit:  (moves: Array<{ kfId: string; trackTarget: string; timelineId: string; fromMs: number; toMs: number }>) => void
   onCancel: () => void
+  /** Pointer-down then up with no real movement = a click. The host handles
+   *  selection here (toggle), since beginDrag preventDefaults the native click. */
+  onLoneClick?: (kfId: string, shiftHeld: boolean) => void
 }
 
 interface DragReturn {
@@ -118,8 +121,11 @@ export function useKeyframeDrag(params: Params): DragReturn {
     window.removeEventListener('pointerup',   handlePointerUp)
     window.removeEventListener('keydown',     handleKeyDown)
 
-    // If user didn't really move (e.g. a click), don't commit a no-op
+    // If user didn't really move (e.g. a click), don't commit a no-op.
+    // Route it to the host as a click so selection (toggle) still works —
+    // beginDrag preventDefaulted the native click event.
     if (Math.abs(delta) < 0.5) {
+      params.onLoneClick?.(drag.leader.kfId, e.shiftKey)
       params.onCancel()
       return
     }
