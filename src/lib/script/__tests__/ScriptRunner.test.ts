@@ -75,6 +75,25 @@ describe('runScript — authoring script (BL-76)', () => {
     expect(track!.keyframes[1].value).toBe(1)
   })
 
+  it('auto-creates a default timeline when none exists (BL-78 ordering fix)', () => {
+    // Scene with NO timelines — key() must not throw; it auto-creates one.
+    let scene = emptyScene()
+    const noTlHost: ScriptHost = {
+      getScene: () => scene,
+      applyCommand: (cmd: EditorCommand) => { scene = cmd.execute(scene) },
+    }
+    const result = runScript(
+      `const c = scene.add('rect'); c.key('opacity', 0, 0); c.key('opacity', 800, 1)`,
+      noTlHost,
+    )
+    expect(result.ok).toBe(true)
+    expect(scene.timelines).toHaveLength(1)
+    const tl = scene.timelines[0]
+    expect(tl.durationMs).toBeGreaterThanOrEqual(800)
+    const track = tl.tracks.find((t) => t.target.endsWith('.opacity'))
+    expect(track?.keyframes).toHaveLength(2)
+  })
+
   it('reports commandCount (batched into one undo step)', () => {
     const result = runScript(
       `const c = scene.add('rect'); c.pos = [10, 20]; c.opacity = 0.3`,

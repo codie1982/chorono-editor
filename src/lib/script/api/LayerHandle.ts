@@ -119,10 +119,11 @@ export class LayerHandle {
    * Writes to the scene's first timeline.
    */
   key(prop: string, timeMs: number, value: AnimatableValue): this {
-    const timelineId = this.ctx.resolveTimelineId()
-    if (!timelineId) {
-      throw new Error('No timeline exists — cannot add keyframe. Create a timeline first.')
-    }
+    // Fall back to a deterministic 'main' timeline so key() works even when no
+    // timeline was created yet (BL-78 ordering fix: previously this threw and
+    // aborted the whole script — common when the AI orders run_script before
+    // create_timeline). The command below auto-creates the timeline if missing.
+    const timelineId = this.ctx.resolveTimelineId() ?? 'main'
     const target = `layers.${this.id}.${prop}`
     const kf: Keyframe = {
       id: nextKfId(),
@@ -130,22 +131,47 @@ export class LayerHandle {
       value,
       easing: { type: 'linear' },
     }
-    // makeAddKfCmd only writes to an EXISTING track. Authoring scripts target
-    // fresh properties, so we ensure the track exists first (mirrors
-    // autoKeyframe.ts), then upsert. Undo removes the keyframe.
+    // Ensure timeline AND track exist before upsert (mirrors autoKeyframe.ts).
     const cmd: EditorCommand = {
       label: 'Script Keyframe',
       execute: (scene) => {
-        const tl = scene.timelines.find((t) => t.id === timelineId)
-        if (!tl) return scene
-        const hasTrack = tl.tracks.some((t) => t.target === target)
-        const withTrack = hasTrack ? scene : {
-          ...scene,
-          timelines: scene.timelines.map((t) =>
-            t.id !== timelineId ? t : { ...t, tracks: [...t.tracks, { target, keyframes: [] }] },
-          ),
+        let s = scene
+        // 1. Ensure the timeline exists (auto-create a sensible default).
+        if (!s.timelines.some((t) => t.id === timelineId)) {
+          s = {
+            ...s,
+            timelines: [
+              ...s.timelines,
+              {
+                id: timelineId, mode: '2danimation',
+                durationMs: Math.max(1000, Math.ceil(timeMs / 1000) * 1000),
+                autoplay: true, loop: false, tracks: [], layerIds: [],
+              },
+            ],
+          }
+        } else if (timeMs > 0) {
+          // Grow duration to cover late keyframes on the existing default tl.
+          s = {
+            ...s,
+            timelines: s.timelines.map((t) =>
+              t.id === timelineId && timeMs > t.durationMs
+                ? { ...t, durationMs: Math.ceil(timeMs / 1000) * 1000 }
+                : t,
+            ),
+          }
         }
-        return upsertKeyframe(withTrack, timelineId, target, kf)
+        // 2. Ensure the track exists.
+        const tl = s.timelines.find((t) => t.id === timelineId)!
+        if (!tl.tracks.some((t) => t.target === target)) {
+          s = {
+            ...s,
+            timelines: s.timelines.map((t) =>
+              t.id !== timelineId ? t : { ...t, tracks: [...t.tracks, { target, keyframes: [] }] },
+            ),
+          }
+        }
+        // 3. Upsert the keyframe.
+        return upsertKeyframe(s, timelineId, target, kf)
       },
       undo: (scene) => removeKf(scene, timelineId, target, kf.id),
     }
