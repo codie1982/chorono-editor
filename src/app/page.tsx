@@ -71,6 +71,7 @@ import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel               from '@/components/panels/SnapPanel'
 import StateMachinePanel       from '@/components/panels/StateMachinePanel'
 import KeyboardShortcutsPanel  from '@/components/panels/KeyboardShortcutsPanel'
+import ScriptConsolePanel      from '@/components/panels/ScriptConsolePanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
@@ -1320,6 +1321,7 @@ export default function BuilderPage() {
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
       { id: 'particles',      title: 'Particle',       render: () => null },
+      { id: 'scriptConsole',  title: 'Script',         render: () => null },
       { id: 'shortcuts',      title: 'Shortcuts',      render: () => null },
     ]
     return makeRegistry(defs)
@@ -1984,6 +1986,16 @@ export default function BuilderPage() {
                     scene={scene}
                     selectedLayer={selectedLayer}
                     onLayerChange={updateLayer}
+                  />
+                ),
+              },
+              {
+                // BL-76 — Authoring Script REPL (JS host + scene API facade).
+                id: 'scriptConsole', title: 'Script',
+                render: () => (
+                  <ScriptConsolePanel
+                    getScene={() => scene}
+                    dispatchCommand={dispatchCommand}
                   />
                 ),
               },

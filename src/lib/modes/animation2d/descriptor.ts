@@ -48,6 +48,7 @@ const PANEL_IDS_2D = [
   'assets',
   'snap',
   'particles',
+  'scriptConsole',
   'shortcuts',
 ] as const
 
