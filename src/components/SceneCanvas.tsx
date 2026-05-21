@@ -7,8 +7,6 @@ import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { hitTestLayer, hitTestLayersAt, bezierPathBounds, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
-import { canvasRenderer } from '@/lib/render/CanvasRenderer'
-import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
 import { makeUpdateLayerCmd, makeAddLayerCmd } from '@/lib/editor/commands-layer'
 import { makeCloneCmd, type CloneArrayCommand } from '@/lib/editor/commands-clone'
@@ -58,6 +56,7 @@ import { Rulers } from './canvas/overlays/Rulers'
 import { FitMenu } from './canvas/controls/FitMenu'
 import { SnapMenu } from './canvas/controls/SnapMenu'
 import { ViewMenu } from './canvas/controls/ViewMenu'
+import { useCanvasRenderer } from './canvas/hooks/useCanvasRenderer'
 // ── Pure drag math (framework-free, unit-tested in lib/canvas/math) ────────
 import { clamp } from '@/lib/canvas/math/coordinateMath'
 import { applyAxisLock } from '@/lib/canvas/math/moveMath'
@@ -2006,81 +2005,13 @@ export default function SceneCanvas({
     window.addEventListener('pointerup',   handlePointerUp)
   }, [scene.layers, selectedLayerId, selectedLayerIds, editor, handlePointerMove, handlePointerUp])
 
-  // ── Render canvas ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    // Merge timeline/runtime overrides with the temporary drag override so
-    // the dragged layer visibly follows the cursor.
-    let mergedOverrides = overrides
-    if (dragOverrides.size > 0) {
-      const m = new Map<string, number>()
-      overrides?.forEach((v, k) => m.set(k, v))
-      dragOverrides.forEach((v, k) => m.set(k, v))
-      mergedOverrides = m
-    }
-    canvasRenderer.render(
-      ctx, scene, timeMs, selectedLayerId, assets,
-      {
-        // Grid drawn only when both the master snap is on AND the "Snap to
-        // grid" type is enabled — matches the visual / behaviour contract
-        // ("grid açıksa snap olur, kapalıysa olmaz").
-        grid:        (snapEnabled && snapToGridOn) ? { size: gridSize } : undefined,
-        overrides:   mergedOverrides,
-        paramValues,
-        selectedLayerIds,
-      },
-    )
-
-    // ── BL-56 — Ghost / Onion-Skin overlay ───────────────────────────────
-    // Render interpolated layer states at ±N frames around the playhead at
-    // reduced opacity. Drawn ON TOP of the live scene so the main frame
-    // remains the visual anchor; ghosts act as motion-path context.
-    if (ghostSettings?.enabled && selectedTimeline) {
-      const ghostFrames = getMultiLayerGhostFrames(
-        scene.layers,
-        selectedTimeline,
-        timeMs,
-        ghostSettings.beforeFrames,
-        ghostSettings.afterFrames,
-        ghostSettings.scope,
-        ghostSettings.scope === 'selected' ? selectedLayerIds : undefined,
-        ghostSettings.fps ?? 30,
-      )
-
-      const opacityFactor = ghostSettings.opacity / 100
-      for (const gf of ghostFrames) {
-        const layer = scene.layers.find((l) => l.id === gf.layerId)
-        if (!layer) continue
-
-        // Build an override map that pins this layer's transform/opacity to
-        // the interpolated ghost values. Other layers inherit base overrides.
-        const ghostOverrides = new Map<string, number>()
-        mergedOverrides?.forEach((v, k) => ghostOverrides.set(k, v))
-        if (gf.transform) {
-          ghostOverrides.set(`layers.${layer.id}.transform.x`,           gf.transform.x)
-          ghostOverrides.set(`layers.${layer.id}.transform.y`,           gf.transform.y)
-          ghostOverrides.set(`layers.${layer.id}.transform.scaleX`,      gf.transform.scaleX)
-          ghostOverrides.set(`layers.${layer.id}.transform.scaleY`,      gf.transform.scaleY)
-          ghostOverrides.set(`layers.${layer.id}.transform.rotationDeg`, gf.transform.rotationDeg)
-        }
-        if (gf.opacity !== undefined) {
-          ghostOverrides.set(`layers.${layer.id}.opacity`, gf.opacity)
-        }
-
-        ctx.save()
-        ctx.globalAlpha = opacityFactor
-        canvasRenderer.renderSingleLayer(ctx, layer, scene, assets, {
-          overrides:   ghostOverrides,
-          paramValues,
-          timeMs:      gf.timeMs,
-        })
-        ctx.restore()
-      }
-    }
-  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, overrides, paramValues, dragOverrides, ghostSettings, selectedTimeline])
+  // ── Render canvas (scene + ghost / onion-skin overlay) ────────────────────
+  useCanvasRenderer(canvasRef, {
+    scene, timeMs, selectedLayerId, selectedLayerIds, assets,
+    snapEnabled, snapToGridOn, gridSize,
+    overrides, paramValues, dragOverrides,
+    ghostSettings, selectedTimeline,
+  })
 
   // ── Wheel zoom (Cmd/Ctrl held) ────────────────────────────────────────────
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
