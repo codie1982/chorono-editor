@@ -186,6 +186,17 @@ describe('runScript — authoring script (BL-76)', () => {
     expect(box.dragConfig).toMatchObject({ axis: 'x', setsParameter: 'angle' })
   })
 
+  it('adds an editable spline primitive via the scene API', () => {
+    const result = runScript(
+      `scene.addSpline('star', { points: 6, outerRadius: 80, innerRadius: 30 }, { x: 100, y: 100 })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const layer = getScene().layers.find((l) => l.type === 'spline')!
+    expect(layer.spline).toBeDefined()
+    expect(layer.transform.x).toBe(100)
+  })
+
   it('adds a path and makes a layer follow it via the scene API', () => {
     const result = runScript(
       `const track = scene.addPath([[0,0],[300,100]], { role: 'motion' });

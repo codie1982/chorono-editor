@@ -21,7 +21,10 @@ import { makeCloneCmd, makeArrayCmd } from '../../editor/commands-clone'
 import { buildArraySettings, type FlatArrayParams } from '../../array/buildArraySettings'
 import type { CloneMode } from '../../clone/CloneTypes'
 import { pathFromPoints } from '../../types/path'
-import { nextSMId, newBezierPathLayer, newMotionPathLayer } from '../../defaults'
+import type { SplineGeneratorParams, SplinePrimitiveKind } from '../../types'
+import {
+  nextSMId, newBezierPathLayer, newMotionPathLayer, newSplineLayerFromPrimitive,
+} from '../../defaults'
 import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
 
@@ -65,6 +68,8 @@ export interface SceneAPI {
   array(handle: LayerHandle, opts: FlatArrayParams): LayerHandle[]
   /** Add a bezier path layer from [x,y] points. Returns the path handle. */
   addPath(points: [number, number][], opts?: { closed?: boolean; role?: 'visual' | 'motion'; x?: number; y?: number; name?: string }): LayerHandle
+  /** Add an editable spline primitive (circle/rect/ellipse/arc/donut/ngon/star/line). */
+  addSpline(kind: SplinePrimitiveKind, params: SplineGeneratorParams, opts?: { x?: number; y?: number; name?: string }): LayerHandle | null
   /** Add a scene parameter. Returns the parameter id. */
   addParam(id: string, defaultValue?: SceneParameterValue, opts?: { type?: SceneParameterType; name?: string; min?: number; max?: number }): string
   /** Add an event→action trigger. */
@@ -171,6 +176,18 @@ export function createSceneAPI(
         ...(opts?.name ? { name: opts.name } : {}),
         transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
         path: pathFromPoints(points, opts?.closed ?? false),
+      }
+      host.applyCommand(makeAddLayerCmd(layer))
+      return new LayerHandle(layer.id, ctx)
+    },
+
+    addSpline(kind, params, opts): LayerHandle | null {
+      const base = newSplineLayerFromPrimitive(kind, params)
+      if (!base) return null
+      const layer = {
+        ...base,
+        ...(opts?.name ? { name: opts.name } : {}),
+        transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
       }
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)

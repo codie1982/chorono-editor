@@ -138,6 +138,7 @@ export async function bootstrapAIActions(): Promise<void> {
     { registerInteractiveActions },
     { registerCloneActions },
     { registerPathActions },
+    { registerSplineActions },
   ] = await Promise.all([
     import('./actions/scene'),
     import('./actions/composition'),
@@ -151,6 +152,7 @@ export async function bootstrapAIActions(): Promise<void> {
     import('./actions/interactive'),
     import('./actions/clone'),
     import('./actions/path'),
+    import('./actions/spline'),
   ])
   registerSceneActions(actionRegistry)
   registerCompositionActions(actionRegistry)
@@ -164,4 +166,5 @@ export async function bootstrapAIActions(): Promise<void> {
   registerInteractiveActions(actionRegistry)
   registerCloneActions(actionRegistry)
   registerPathActions(actionRegistry)
+  registerSplineActions(actionRegistry)
 }

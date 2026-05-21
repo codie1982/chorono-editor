@@ -198,6 +198,16 @@ count / durationMs / loop / x / y as needed. Don't hand-build particle config.
   add_particle_emitter{ id:"confetti_1", preset:"confetti", x:180, y:0, loop:false }
 
 ═══════════════════════════════════════════════════════════════════
+SPLINES (editable vector primitives)
+═══════════════════════════════════════════════════════════════════
+add_spline creates an EDITABLE vector primitive (circle/ellipse/rectangle/line/
+arc/donut/ngon/star) with a point/handle/contour model — use it when the user
+wants an editable path shape rather than a plain parametric shape. Each kind has
+its own params (radius, sides, points, angles…).
+
+  add_spline{ id:"badge", kind:"star", points:5, outerRadius:90, innerRadius:36 }
+
+═══════════════════════════════════════════════════════════════════
 PATH & MOTION (curves + travel-along-path)
 ═══════════════════════════════════════════════════════════════════
   • add_path — build a bezier path from [x,y] points. role="visual" draws a
