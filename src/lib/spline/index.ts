@@ -12,6 +12,10 @@ export type { SegmentHit, HandleHit } from './geometry/hitTest'
 export { splineParamsFromBox, isBoxDragKind, createPolylineSpline } from './creation'
 export type { DrawBox, BoxSplineSpec } from './creation'
 export {
+  moveSplinePoint, moveSplineHandle, insertPointOnSegment, deleteSplinePoint,
+  setSplinePointType, setSegmentType, setContourClosed, reverseContour,
+} from './edit'
+export {
   createCircleSpline, createLineSpline, createRectangleSpline, createEllipseSpline,
   createArcSpline, createDonutSpline, createNGonSpline, createStarSpline,
 } from './primitives'

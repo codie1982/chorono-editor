@@ -24,13 +24,15 @@ interface SplineEditOverlayProps {
   layer: Layer
   zoom: number
   hover?: SplineHoverTarget
+  selectedPointId?: string | null
 }
 
 const ANCHOR_SIZE  = 7
 const HANDLE_DOT_R = 3.5
 const HOVER_COLOR  = '#F59E0B'
+const SELECT_COLOR = '#2563EB'
 
-export default function SplineEditOverlay({ layer, zoom, hover = null }: SplineEditOverlayProps) {
+export default function SplineEditOverlay({ layer, zoom, hover = null, selectedPointId = null }: SplineEditOverlayProps) {
   if (layer.type !== 'spline' || !layer.spline) return null
   const sp = layer.spline
   const points = Object.values(sp.points)
@@ -86,6 +88,7 @@ export default function SplineEditOverlay({ layer, zoom, hover = null }: SplineE
         const pointHovered  = hover?.kind === 'point'  && hover.id === pt.id
         const inHovered     = hover?.kind === 'handle' && hover.pointId === pt.id && hover.handleKind === 'in'
         const outHovered    = hover?.kind === 'handle' && hover.pointId === pt.id && hover.handleKind === 'out'
+        const pointSelected = selectedPointId === pt.id
         return (
           <g key={pt.id}>
             {inP && (
@@ -105,13 +108,13 @@ export default function SplineEditOverlay({ layer, zoom, hover = null }: SplineE
                 fill={outHovered ? HOVER_COLOR : '#60A5FA'} stroke="#1E3A8A" strokeWidth={1} />
             )}
             <rect
-              x={p.x - (pointHovered ? ANCHOR_SIZE + 2 : ANCHOR_SIZE) / 2}
-              y={p.y - (pointHovered ? ANCHOR_SIZE + 2 : ANCHOR_SIZE) / 2}
-              width={pointHovered ? ANCHOR_SIZE + 2 : ANCHOR_SIZE}
-              height={pointHovered ? ANCHOR_SIZE + 2 : ANCHOR_SIZE}
-              fill={pointHovered ? HOVER_COLOR : pt.type === 'corner' ? '#FFFFFF' : '#DBEAFE'}
-              stroke="#1F2937"
-              strokeWidth={1}
+              x={p.x - (pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE) / 2}
+              y={p.y - (pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE) / 2}
+              width={pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE}
+              height={pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE}
+              fill={pointHovered ? HOVER_COLOR : pointSelected ? SELECT_COLOR : pt.type === 'corner' ? '#FFFFFF' : '#DBEAFE'}
+              stroke={pointSelected ? '#FFFFFF' : '#1F2937'}
+              strokeWidth={pointSelected ? 1.5 : 1}
             />
           </g>
         )
