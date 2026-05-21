@@ -58,6 +58,13 @@ import { Rulers } from './canvas/overlays/Rulers'
 import { FitMenu } from './canvas/controls/FitMenu'
 import { SnapMenu } from './canvas/controls/SnapMenu'
 import { ViewMenu } from './canvas/controls/ViewMenu'
+// ── Pure drag math (framework-free, unit-tested in lib/canvas/math) ────────
+import { clamp } from '@/lib/canvas/math/coordinateMath'
+import { applyAxisLock } from '@/lib/canvas/math/moveMath'
+import { wrapAngle180, angleDegFromPivot, rotatePointAroundPivot } from '@/lib/canvas/math/rotateMath'
+import { scaleFactorFromDelta, clampScale, scaleTransformAroundPivot } from '@/lib/canvas/math/scaleMath'
+import { calculateAnchorMove } from '@/lib/canvas/math/anchorMath'
+import { calculateResize } from '@/lib/canvas/math/resizeMath'
 
 interface Props {
   scene: ChronoScene
@@ -198,15 +205,6 @@ const MIN_ZOOM  = 0.1
 const MAX_ZOOM  = 8
 const ZOOM_STEP = 1.25
 const MIN_SIZE  = 4    // smallest allowed layer dimension (px in composition space)
-
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v))
-}
-
-function snapToGrid(v: number, step: number): number {
-  if (step <= 0) return v
-  return Math.round(v / step) * step
-}
 
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
@@ -548,14 +546,8 @@ export default function SceneCanvas({
       // locks it). Cleaner than separate "Ctrl=horizontal, Ctrl+Shift=
       // vertical" mappings: one key, intuitive, no need to remember which
       // modifier means which axis.
-      let dxLocked = dx, dyLocked = dy
       // Hard axis lock from Move-mode arrows beats Shift's dominant-axis logic.
-      if (drag.axisLock === 'x')      dyLocked = 0
-      else if (drag.axisLock === 'y') dxLocked = 0
-      else if (e.shiftKey) {
-        if (Math.abs(dx) >= Math.abs(dy)) dyLocked = 0
-        else                              dxLocked = 0
-      }
+      const { dx: dxLocked, dy: dyLocked } = applyAxisLock(dx, dy, drag.axisLock, e.shiftKey)
       let pnx = primaryOx + dxLocked
       let pny = primaryOy + dyLocked
 
@@ -699,23 +691,10 @@ export default function SceneCanvas({
     if (drag.kind === 'scaleAxis') {
       // Sensitivity — 100 composition px of drag doubles the scale.
       // Positive drag (right/down) = bigger; negative = smaller. Shift =
-      // uniform regardless of which arrow was grabbed.
-      const SENS = 100
-      const fx = 1 + dx / SENS
-      const fy = 1 + dy / SENS
+      // uniform regardless of which arrow was grabbed. Scale is floored at
+      // MIN_SCALE below so a layer can't flip past zero / vanish.
       const axis = e.shiftKey ? 'both' : drag.axis
-      let factorX = 1, factorY = 1
-      if (axis === 'x')    factorX = fx
-      if (axis === 'y')    factorY = fy
-      if (axis === 'both') {
-        // Uniform: prefer the dominant axis direction so the drag feels
-        // natural whether the user moves diagonally or mostly one way.
-        const f = Math.abs(dx) >= Math.abs(dy) ? fx : fy
-        factorX = f
-        factorY = f
-      }
-      // Clamp to prevent flipping past zero (Min 0.05 keeps tiny shapes
-      // still selectable). Applied to the FINAL scale below.
+      const { factorX, factorY } = scaleFactorFromDelta(dx, dy, axis)
 
       if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0
           && drag.pivotX != null && drag.pivotY != null) {
@@ -724,14 +703,13 @@ export default function SceneCanvas({
         // both grow AND spread out (or shrink and pull in).
         let scene = sceneRef.current
         for (const o of drag.multiLayerOrigins) {
-          const ax = o.originalX + o.originalLayer.transform.anchorX
-          const ay = o.originalY + o.originalLayer.transform.anchorY
-          const ox = (ax - drag.pivotX) * factorX
-          const oy = (ay - drag.pivotY) * factorY
-          const nx = (drag.pivotX + ox) - o.originalLayer.transform.anchorX
-          const ny = (drag.pivotY + oy) - o.originalLayer.transform.anchorY
-          const nsx = Math.max(0.05, o.originalScaleX * factorX)
-          const nsy = Math.max(0.05, o.originalScaleY * factorY)
+          const { x: nx, y: ny } = scaleTransformAroundPivot(
+            o.originalX, o.originalY,
+            o.originalLayer.transform.anchorX, o.originalLayer.transform.anchorY,
+            drag.pivotX, drag.pivotY, factorX, factorY,
+          )
+          const nsx = clampScale(o.originalScaleX, factorX)
+          const nsy = clampScale(o.originalScaleY, factorY)
           scene = updateLayerProperty(scene, o.layerId, 'transform.x',      nx)
           scene = updateLayerProperty(scene, o.layerId, 'transform.y',      ny)
           scene = updateLayerProperty(scene, o.layerId, 'transform.scaleX', nsx)
@@ -744,8 +722,8 @@ export default function SceneCanvas({
         })
       } else {
         const o = drag.originalLayer.transform
-        const nsx = Math.max(0.05, o.scaleX * factorX)
-        const nsy = Math.max(0.05, o.scaleY * factorY)
+        const nsx = clampScale(o.scaleX, factorX)
+        const nsy = clampScale(o.scaleY, factorY)
         let next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.scaleX', nsx)
         next     = updateLayerProperty(next,             drag.layerId, 'transform.scaleY', nsy)
         editorRef.current.previewTransaction(next)
@@ -762,29 +740,20 @@ export default function SceneCanvas({
       const rect = canvasRef.current!.getBoundingClientRect()
       const wx = (e.clientX - rect.left) * (compositionRef.current.width  / rect.width)
       const wy = (e.clientY - rect.top)  * (compositionRef.current.height / rect.height)
-      const dxA = wx - drag.anchorWorldX
-      const dyA = wy - drag.anchorWorldY
-      const curAngle = (Math.atan2(dyA, dxA) * 180) / Math.PI
+      const curAngle = angleDegFromPivot(drag.anchorWorldX, drag.anchorWorldY, wx, wy)
       let delta = curAngle - drag.startAngle
       if (e.shiftKey) delta = Math.round(delta / 15) * 15
 
       if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
         // BL-03: multi-select rotation around common pivot.
-        const rad = (delta * Math.PI) / 180
-        const cos = Math.cos(rad), sin = Math.sin(rad)
         let scene = sceneRef.current
         for (const o of drag.multiLayerOrigins) {
           // Anchor of this layer at drag start (its rotation pivot for translation)
           const ax = o.originalX + o.originalLayer.transform.anchorX
           const ay = o.originalY + o.originalLayer.transform.anchorY
-          const ox = ax - drag.anchorWorldX
-          const oy = ay - drag.anchorWorldY
-          const nx = drag.anchorWorldX + ox * cos - oy * sin
-          const ny = drag.anchorWorldY + ox * sin + oy * cos
+          const { x: nx, y: ny } = rotatePointAroundPivot(ax, ay, drag.anchorWorldX, drag.anchorWorldY, delta)
           // Apply rotated translation + cumulative rotation
-          let rot = o.originalRotation + delta
-          while (rot > 180)  rot -= 360
-          while (rot < -180) rot += 360
+          const rot = wrapAngle180(o.originalRotation + delta)
           scene = updateLayerProperty(scene, o.layerId, 'transform.x', nx - o.originalLayer.transform.anchorX)
           scene = updateLayerProperty(scene, o.layerId, 'transform.y', ny - o.originalLayer.transform.anchorY)
           scene = updateLayerProperty(scene, o.layerId, 'transform.rotationDeg', rot)
@@ -796,9 +765,7 @@ export default function SceneCanvas({
         })
       } else {
         // Single-layer (existing) behavior
-        let nextRot = drag.originalRotation + delta
-        while (nextRot > 180)  nextRot -= 360
-        while (nextRot < -180) nextRot += 360
+        const nextRot = wrapAngle180(drag.originalRotation + delta)
         const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
         editorRef.current.previewTransaction(next)
         setDragHud({
@@ -811,40 +778,17 @@ export default function SceneCanvas({
 
     if (drag.kind === 'anchor') {
       // Anchor lives in layer-local coords. Snap is applied to the layer's
-      // local axis (so the grid you see on canvas still aligns 1:1).
+      // local axis (so the grid you see on canvas still aligns 1:1). The
+      // math also compensates transform.x/y so a rotated/scaled layer stays
+      // visually pinned while its pivot moves.
       const orig = drag.originalLayer.transform
-      const origAX = orig.anchorX
-      const origAY = orig.anchorY
-      let nAX = origAX + dx
-      let nAY = origAY + dy
-      if (snap.grid) {
-        // Snap the WORLD position of the anchor to the grid, then translate
-        // back to local coords. That way the visible anchor handle lands
-        // exactly on a grid line.
-        const wx = orig.x + nAX
-        const wy = orig.y + nAY
-        nAX = snapToGrid(wx, snap.size) - orig.x
-        nAY = snapToGrid(wy, snap.size) - orig.y
-      }
-      if (snap.pixel) {
-        nAX = Math.round(nAX)
-        nAY = Math.round(nAY)
-      }
-
-      // Visual-preserving compensation — when the layer is rotated/scaled,
-      // changing the anchor moves the rendered pivot which shifts every
-      // pixel. Counter that by translating transform.x/y so the layer
-      // stays visually pinned. (Derived from: screenP = T + A + R·S·(P − A);
-      // solving for new T that keeps screenP fixed for any P.)
-      const r  = (orig.rotationDeg * Math.PI) / 180
-      const cR = Math.cos(r), sR = Math.sin(r)
-      const sx = orig.scaleX, sy = orig.scaleY
-      const dAX = nAX - origAX
-      const dAY = nAY - origAY
-      const compX = dAX * (sx * cR - 1) - sy * sR * dAY
-      const compY = sx * sR * dAX + dAY * (sy * cR - 1)
-      const nX = orig.x + compX
-      const nY = orig.y + compY
+      const { anchorX: nAX, anchorY: nAY, x: nX, y: nY } = calculateAnchorMove({
+        x: orig.x, y: orig.y,
+        anchorX: orig.anchorX, anchorY: orig.anchorY,
+        rotationDeg: orig.rotationDeg, scaleX: orig.scaleX, scaleY: orig.scaleY,
+        dx, dy,
+        snapGrid: snap.grid, snapPixel: snap.pixel, gridSize: snap.size,
+      })
 
       const nextScene: ChronoScene = {
         ...sceneRef.current,
@@ -862,63 +806,24 @@ export default function SceneCanvas({
     }
 
     // ── Resize ────────────────────────────────────────────────────────────
+    // calculateResize owns the geometry: per-handle deltas, Cmd/Ctrl aspect
+    // lock, min-size + pixel snap + composition-bounds clamp, and keeping the
+    // anchor's proportional position across the resize.
     const layer = drag.originalLayer
     if (!layer.size) return
     const proportional = e.metaKey || e.ctrlKey  // Cmd/Ctrl → aspect-lock
 
-    const ox = layer.transform.x, oy = layer.transform.y
-    const ow = layer.size.width,   oh = layer.size.height
-    const h  = drag.handle
-
-    let nx = ox, ny = oy, nw = ow, nh = oh
-    // Per-handle raw deltas
-    if (h === 'e' || h === 'ne' || h === 'se') nw = ow + dx
-    if (h === 'w' || h === 'nw' || h === 'sw') { nw = ow - dx; nx = ox + dx }
-    if (h === 's' || h === 'sw' || h === 'se') nh = oh + dy
-    if (h === 'n' || h === 'nw' || h === 'ne') { nh = oh - dy; ny = oy + dy }
-
-    // Aspect-lock when Cmd/Ctrl held — use the dominant fractional change
-    if (proportional && ow > 0 && oh > 0) {
-      const aspect = ow / oh
-      const wRatio = nw / ow
-      const hRatio = nh / oh
-      const useWidth = Math.abs(wRatio - 1) >= Math.abs(hRatio - 1)
-      if (useWidth) nh = Math.max(MIN_SIZE, nw / aspect)
-      else          nw = Math.max(MIN_SIZE, nh * aspect)
-      // Re-anchor x/y on handles that pull from top/left
-      if (h === 'nw' || h === 'sw' || h === 'w') nx = ox + (ow - nw)
-      if (h === 'nw' || h === 'ne' || h === 'n') ny = oy + (oh - nh)
-    }
-
-    // Minimum size + composition-bounds clamp
-    nw = Math.max(MIN_SIZE, nw)
-    nh = Math.max(MIN_SIZE, nh)
-
-    // ── Snap to Pixel during resize → integer position + integer dim ──────
-    // Grid/Object snap is intentionally NOT applied to resize (the moving
-    // EDGE has no canonical "rect" to snap relative to and grid-snapping
-    // each axis independently produces jarring jumps). Pixel is fine.
-    if (snap.pixel) {
-      nx = Math.round(nx); ny = Math.round(ny)
-      nw = Math.round(nw); nh = Math.round(nh)
-    }
-
-    nx = clamp(nx, 0, Math.max(0, cw - nw))
-    ny = clamp(ny, 0, Math.max(0, ch - nh))
-    nw = Math.min(nw, cw - nx)
-    nh = Math.min(nh, ch - ny)
-
-    // ── Preserve anchor's PROPORTIONAL position across resize ──────────
-    // If the user placed the anchor visually (e.g. at the centre at 50/100),
-    // resizing 100→200 should keep it at 50% width (= new 100, not stuck
-    // at the original 50). Without this, scaling shifts the rotation pivot
-    // and breaks the user's mental model.
-    const oax = layer.transform.anchorX
-    const oay = layer.transform.anchorY
-    const fx  = ow > 0 ? oax / ow : 0.5
-    const fy  = oh > 0 ? oay / oh : 0.5
-    const nax = fx * nw
-    const nay = fy * nh
+    const { x: nx, y: ny, width: nw, height: nh, anchorX: nax, anchorY: nay } = calculateResize({
+      x: layer.transform.x, y: layer.transform.y,
+      width: layer.size.width, height: layer.size.height,
+      anchorX: layer.transform.anchorX, anchorY: layer.transform.anchorY,
+      handle: drag.handle,
+      dx, dy,
+      proportional,
+      snapPixel: snap.pixel,
+      minSize: MIN_SIZE,
+      boundsWidth: cw, boundsHeight: ch,
+    })
 
     const nextScene: ChronoScene = {
       ...sceneRef.current,
