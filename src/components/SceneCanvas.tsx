@@ -148,6 +148,8 @@ interface Props {
     distributeVertically?:   () => void
     /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
     convertToSpline?: () => void
+    /** BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines. */
+    convertTextToSpline?: () => void
     /** BL-59 Clone & Array — quick clone (one new layer, default offset). */
     cloneQuick?:    () => void
     /** BL-59 Clone & Array — opens CloneModal. */
@@ -3013,9 +3015,11 @@ export default function SceneCanvas({
           // BL-17 Faz 1 — wired only for shape layers with a size; non-shape
           // selections leave it undefined, which the menu renders disabled.
           convertToPath:
-            menuHandlers?.convertToSpline && target.type === 'shape' && target.size
-              ? menuHandlers.convertToSpline
-              : undefined,
+            target.type === 'text' && menuHandlers?.convertTextToSpline
+              ? menuHandlers.convertTextToSpline
+              : menuHandlers?.convertToSpline && target.type === 'shape' && target.size
+                ? menuHandlers.convertToSpline
+                : undefined,
 
           // BL-59 — Clone & Array entries
           cloneQuick:    menuHandlers?.cloneQuick,

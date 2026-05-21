@@ -32,6 +32,7 @@ export interface BuildSplineInput {
   params?:   SplineGeneratorParams
   fillRule?: 'nonzero' | 'evenodd'
   combineMode?: SplineSubShape['combineMode']
+  source?:   SplineSubShape['source']
 }
 
 /**
@@ -98,7 +99,7 @@ export function buildSplineData(input: BuildSplineInput): SplinePathData {
       id: subId,
       name: input.name,
       kind: input.kind,
-      source: 'generated',
+      source: input.source ?? 'generated',
       contourIds,
       combineMode: input.combineMode ?? 'add',
       generatorParams: input.params,

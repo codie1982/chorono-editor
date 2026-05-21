@@ -45,6 +45,8 @@ import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import SplinePointInspector from '@/components/SplinePointInspector'
+import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
+import { newSplineLayerFromData } from '@/lib/defaults'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
 import DopeSheetPanel  from '@/components/dope-sheet/DopeSheetPanel'
@@ -372,6 +374,27 @@ export default function BuilderPage() {
       setToolMode('pen')
     }
   }, [dispatchCommand, selectLayer])
+
+  // BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines.
+  // Async: lazily fetches + parses the font (opentype.js) before building the
+  // granular spline data, then adds it as a new spline layer at the text's pos.
+  const convertTextToSpline = useCallback(async () => {
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (layer?.type !== 'text' || !layer.text?.value) return
+    try {
+      const data = await textToSplineData(layer.text.value, layer.text.fontSize ?? 48)
+      if (!data) { toast.info('No drawable glyphs to convert'); return }
+      const splineLayer = newSplineLayerFromData(data, {
+        name: `${layer.name} Outlines`,
+        x: layer.transform.x,
+        y: layer.transform.y,
+      })
+      dispatchCommand(makeAddLayerCmd(splineLayer))
+      selectLayer(splineLayer.id)
+    } catch (err) {
+      toast.error('Text → Spline failed: ' + (err as Error).message)
+    }
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -1703,6 +1726,8 @@ export default function BuilderPage() {
                       // Shape'ler parametrik kalmalı; spline dönüşümü gerekirse ileride
                       // sadece bezierPath layer'ı için ayrı bir akış olur.
                       convertToSpline: undefined,
+                      // BL-73 Sprint 6 — Text → editable spline glyph outlines.
+                      convertTextToSpline: selectedLayer?.type === 'text' ? convertTextToSpline : undefined,
                       // BL-59 — Clone & Array context-menu entries
                       cloneQuick:    cloneQuick,
                       cloneSettings: openCloneModal,
