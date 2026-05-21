@@ -5,6 +5,8 @@ import type {
   PathStrokeData,
   StateMachineDefinition, ChronoSMState, BaseSMTransition,
 } from './types'
+import type { SplinePrimitiveKind, SplineGeneratorParams, SplinePathData } from './types/spline'
+import { createSplinePrimitive } from './spline/factory/createSplinePrimitive'
 import type { MotionBlurConfig } from './types/effects'
 import type { TextStyle } from './types/text'
 import { measureTextLayout } from './text/measureText'
@@ -370,6 +372,59 @@ export function newMotionPathLayer(): Layer {
                 dashArray: [6, 4] },
     },
     path: { closed: false, anchors: [] },
+  }
+}
+
+// ── Spline Layer Factory ──────────────────────────────────────────────────────
+
+/**
+ * Creates a new `type: 'spline'` layer containing one SubShape from a primitive.
+ * `kind` + `params` select the granular generator.
+ * Returns null for unimplemented primitive kinds (spiral/helix/egg/text/freehand).
+ */
+export function newSplineLayerFromPrimitive(kind: SplinePrimitiveKind, params: SplineGeneratorParams): Layer | null {
+  const splineData = createSplinePrimitive({ kind, params })
+  if (!splineData) return null
+
+  layerCounter++
+  const label = kind.charAt(0).toUpperCase() + kind.slice(1)
+  // Open-path kinds (arc, line) default to stroke-only; closed kinds default to fill
+  const isOpenPath = kind === 'arc' || kind === 'line'
+  return {
+    id:        `spline_${layerCounter}`,
+    name:      `${label} Spline ${layerCounter}`,
+    type:      'spline',
+    transform: { ...DEFAULT_TRANSFORM, x: 80, y: 80 },
+    opacity:   1,
+    style: isOpenPath
+      ? { stroke: { color: '#60A5FA', width: 3, lineCap: 'round', lineJoin: 'round' } }
+      : { fill:   { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } },
+    spline: splineData,
+  }
+}
+
+/** @deprecated use newSplineLayerFromPrimitive — kept for call-site compatibility. */
+export const newSplineLayer = newSplineLayerFromPrimitive
+
+/**
+ * Creates a spline layer directly from pre-built SplinePathData (drawn polyline,
+ * imported, converted text…). `openPath` selects a stroke-only default style.
+ */
+export function newSplineLayerFromData(
+  spline: SplinePathData,
+  opts?: { name?: string; openPath?: boolean; x?: number; y?: number },
+): Layer {
+  layerCounter++
+  return {
+    id:        `spline_${layerCounter}`,
+    name:      opts?.name ?? `Spline ${layerCounter}`,
+    type:      'spline',
+    transform: { ...DEFAULT_TRANSFORM, x: opts?.x ?? 80, y: opts?.y ?? 80 },
+    opacity:   1,
+    style: opts?.openPath
+      ? { stroke: { color: '#60A5FA', width: 3, lineCap: 'round', lineJoin: 'round' } }
+      : { fill:   { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } },
+    spline,
   }
 }
 

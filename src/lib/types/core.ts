@@ -6,13 +6,14 @@ import type { TextStyle }   from './text'
 import type { ImageData, VideoData, AudioData, Asset } from './media'
 import type { LayerEffects, MotionPath, PluginEffect, FollowPath, MotionBlurConfig } from './effects'
 import type { BezierPath } from './path'
+import type { SplinePathData } from './spline'
 import type { MaskDefinition } from './mask'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 import type { StateMachineDefinition } from './statemachine-chorono'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke' | 'path' | 'group' | 'repeater' | 'particleEmitter'
+export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
@@ -276,6 +277,8 @@ export interface Layer {
   shapeParams?: ShapeParams
   /** Bezier path data — used when type === 'path'. Editable via Pen Tool. */
   path?: BezierPath
+  /** Spline object data — used when type === 'spline'. Holds SubShapes + contours. */
+  spline?: SplinePathData
   /**
    * Visual vs motion guide path. Defaults to 'visual' when type === 'path'.
    * Motion paths are not rendered as visible strokes during playback — they

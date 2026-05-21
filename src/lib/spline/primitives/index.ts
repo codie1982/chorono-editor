@@ -1,0 +1,8 @@
+export { createCircleSpline }    from './createCircleSpline'
+export { createLineSpline }      from './createLineSpline'
+export { createRectangleSpline } from './createRectangleSpline'
+export { createEllipseSpline }   from './createEllipseSpline'
+export { createArcSpline }       from './createArcSpline'
+export { createDonutSpline }     from './createDonutSpline'
+export { createNGonSpline }      from './createNGonSpline'
+export { createStarSpline }      from './createStarSpline'

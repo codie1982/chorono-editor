@@ -1,4 +1,6 @@
 import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor } from './types'
+import { buildPathOnCanvas } from './geometry/PathCommand'
+import { splineToPathDefinition } from './spline/splineToPath'
 import { buildEffectsFilter } from './types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from './evaluator'
 import { evaluateMotionPath } from './motionPath'
@@ -545,6 +547,54 @@ export function drawBezierPath(
     ctx.stroke()
     ctx.setLineDash([])
     ctx.lineDashOffset = 0
+    ctx.restore()
+  }
+}
+
+// ── Spline Layer ─────────────────────────────────────────────────────────────
+
+/**
+ * Renders a `type: 'spline'` layer. Converts all SubShape contours to a single
+ * compound PathDefinition, then applies fill (with fillRule) and stroke.
+ */
+export function drawSplineLayer(
+  ctx:         CanvasRenderingContext2D,
+  layer:       Layer,
+  overrides:   ReturnType<typeof evaluateTimelines>,
+  paramValues?: ParamValueMap,
+) {
+  if (!layer.spline) return
+  const style: ShapeStyle = layer.style ?? {}
+  const pathDef  = splineToPathDefinition(layer.spline)
+  const fillRule = layer.spline.fillRule === 'evenodd' ? 'evenodd' as const : 'nonzero' as const
+
+  buildPathOnCanvas(ctx, pathDef)
+
+  // Only fill closed paths — open paths (arcs, lines) are stroke-only
+  if (style.fill && pathDef.closed) {
+    const fillOpacity = getLayerValue(overrides, layer.id, 'style.fill.opacity', style.fill.opacity ?? 100)
+    const boundFill   = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
+    ctx.save()
+    ctx.globalAlpha *= fillOpacity / 100
+    ctx.fillStyle    = boundFill ?? style.fill.color ?? '#3B82F6'
+    ctx.fill(fillRule)
+    ctx.restore()
+  }
+
+  if (style.stroke && style.stroke.width > 0) {
+    const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
+    const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
+    const { color = '#FFFFFF', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
+    const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
+    ctx.save()
+    ctx.globalAlpha   *= so / 100
+    ctx.strokeStyle    = boundStroke ?? color
+    ctx.lineWidth      = sw
+    ctx.lineCap        = lineCap
+    ctx.lineJoin       = lineJoin
+    ctx.setLineDash(dashArray)
+    ctx.stroke()
+    ctx.setLineDash([])
     ctx.restore()
   }
 }

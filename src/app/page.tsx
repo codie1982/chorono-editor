@@ -31,11 +31,22 @@ import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type K
 import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
+import type { SplinePrimitiveKind } from '@/lib/types/spline'
+
+/** Maps Add-Layer menu kinds → spline primitive kinds for draw mode (BL-73). */
+const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
+  splineCircle: 'circle', splineLine: 'line', splineRect: 'rectangle',
+  splineEllipse: 'ellipse', splineArc: 'arc', splineDonut: 'donut',
+  splineNGon: 'ngon', splineStar: 'star',
+}
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
+import SplinePointInspector from '@/components/SplinePointInspector'
+import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
+import { newSplineLayerFromData } from '@/lib/defaults'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
 import DopeSheetPanel  from '@/components/dope-sheet/DopeSheetPanel'
@@ -142,6 +153,13 @@ export default function BuilderPage() {
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
   const [selectedLayerId,  setSelectedLayer]  = useState<string | null>('card')
+  /** BL-73 — when true, spline primitives append to the selected spline layer
+   *  instead of starting a new one (3ds Max "Start New Shape" off). */
+  const [splineAppendMode, setSplineAppendMode] = useState(false)
+  /** BL-73 — active spline primitive being drawn (null = not drawing). */
+  const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
+  /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
+  const [splinePointId, setSplinePointId] = useState<string | null>(null)
   /** Multi-layer selection — primary is selectedLayerId, extras live here. */
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(() => new Set(['card']))
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
@@ -333,6 +351,15 @@ export default function BuilderPage() {
   // LayerDefinition and calls createDefault(). Adding a new shape no longer
   // requires touching this switch — just register a new LayerDefinition.
   const addLayer = useCallback((kind: string) => {
+    // BL-73 — Spline primitives are mouse-drawn, not instantly placed. Clicking
+    // one enters draw mode; the canvas handles the create/append gesture.
+    const splineKind = SPLINE_MENU_TO_KIND[kind]
+    if (splineKind) {
+      setSplineDrawKind(splineKind)
+      setToolMode('spline-draw')
+      return
+    }
+
     const def = layerRegistry.get(kind)
     if (!def) {
       console.warn(`addLayer: unknown layer kind "${kind}"`)
@@ -347,6 +374,27 @@ export default function BuilderPage() {
       setToolMode('pen')
     }
   }, [dispatchCommand, selectLayer])
+
+  // BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines.
+  // Async: lazily fetches + parses the font (opentype.js) before building the
+  // granular spline data, then adds it as a new spline layer at the text's pos.
+  const convertTextToSpline = useCallback(async () => {
+    const layer = scene.layers.find((l) => l.id === selectedLayerId)
+    if (layer?.type !== 'text' || !layer.text?.value) return
+    try {
+      const data = await textToSplineData(layer.text.value, layer.text.fontSize ?? 48)
+      if (!data) { toast.info('No drawable glyphs to convert'); return }
+      const splineLayer = newSplineLayerFromData(data, {
+        name: `${layer.name} Outlines`,
+        x: layer.transform.x,
+        y: layer.transform.y,
+      })
+      dispatchCommand(makeAddLayerCmd(splineLayer))
+      selectLayer(splineLayer.id)
+    } catch (err) {
+      toast.error('Text → Spline failed: ' + (err as Error).message)
+    }
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -1316,6 +1364,24 @@ export default function BuilderPage() {
           </button>
         </div>
 
+        {/* ── Spline creation mode (BL-73) ───────────────────────────────── */}
+        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Spline: start a new layer, or append the next spline primitive into the selected spline layer">
+          <button
+            onClick={() => setSplineAppendMode(false)}
+            className={`px-2 py-1 text-xs rounded ${!splineAppendMode ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            ↳ New Spline
+          </button>
+          <button
+            onClick={() => setSplineAppendMode(true)}
+            disabled={selectedLayer?.type !== 'spline'}
+            title={selectedLayer?.type !== 'spline' ? 'Select a spline layer to enable append mode' : 'Append next spline primitive into selected layer'}
+            className={`px-2 py-1 text-xs rounded disabled:opacity-40 disabled:cursor-not-allowed ${splineAppendMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            ⊕ Append
+          </button>
+        </div>
+
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
         <span className="text-blue-400 text-base">🎬</span>
@@ -1598,6 +1664,12 @@ export default function BuilderPage() {
                     onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
                     toolMode={toolMode}
                     onToolModeChange={setToolMode}
+                    splineDrawKind={splineDrawKind}
+                    splineAppendTargetId={
+                      splineAppendMode && selectedLayer?.type === 'spline' ? selectedLayerId : null
+                    }
+                    onSplineDrawCommit={() => { setSplineDrawKind(null); setToolMode('select') }}
+                    onSplinePointSelected={setSplinePointId}
                     snap={snap}
                     onSelectByGeometry={(ids, mode) => {
                       // BL-60 Faz 3 — canvas selection tools commit. Plain
@@ -1654,6 +1726,8 @@ export default function BuilderPage() {
                       // Shape'ler parametrik kalmalı; spline dönüşümü gerekirse ileride
                       // sadece bezierPath layer'ı için ayrı bir akış olur.
                       convertToSpline: undefined,
+                      // BL-73 Sprint 6 — Text → editable spline glyph outlines.
+                      convertTextToSpline: selectedLayer?.type === 'text' ? convertTextToSpline : undefined,
                       // BL-59 — Clone & Array context-menu entries
                       cloneQuick:    cloneQuick,
                       cloneSettings: openCloneModal,
@@ -1734,6 +1808,13 @@ export default function BuilderPage() {
                       onEditWire={wireModal.openForEdit}
                       dispatchCommand={dispatchCommand}
                     />
+                    {selectedLayer?.type === 'spline' && splinePointId && (
+                      <SplinePointInspector
+                        layer={selectedLayer}
+                        pointId={splinePointId}
+                        dispatchCommand={dispatchCommand}
+                      />
+                    )}
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
                         scene={scene}

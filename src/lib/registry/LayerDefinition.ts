@@ -18,6 +18,7 @@ import type { PathDefinition } from '@/lib/geometry'
 export type LayerCategory =
   | 'Basic Shapes'
   | 'Path & Vector'
+  | 'Spline Objects'
   | 'Text'
   | 'Media'
   | 'Effects'

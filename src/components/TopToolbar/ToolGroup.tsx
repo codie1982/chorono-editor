@@ -5,6 +5,8 @@ export type ToolMode =
   | 'move' | 'rotate' | 'scale' | 'anchor'
   // BL-60 Faz 3 — Canvas selection tools (drag a shape, select layers inside)
   | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+  // BL-73 — Spline drawing (drag-to-create / multi-click line)
+  | 'spline-draw'
 
 /** True for any of the four canvas-shape selection tools. */
 export function isSelectionTool(m: ToolMode): boolean {

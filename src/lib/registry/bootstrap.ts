@@ -5,6 +5,7 @@
 
 import { layerRegistry, rendererRegistry } from './singletons'
 import { ALL_SHAPE_DEFINITIONS }  from './definitions/shapes'
+import { ALL_SPLINE_DEFINITIONS } from './definitions/spline'
 import { textDefinition }         from './definitions/text/TextDefinition'
 import { ALL_MEDIA_DEFINITIONS }  from './definitions/media/MediaDefinitions'
 import { bezierPathDefinition }   from './definitions/path/BezierPathDefinition'
@@ -28,6 +29,9 @@ export function bootstrapLayerRegistry(): void {
   //
   // Basic Shapes (11 kinds)
   for (const def of ALL_SHAPE_DEFINITIONS) layerRegistry.register(def)
+
+  // Spline Objects (BL-73)
+  for (const def of ALL_SPLINE_DEFINITIONS) layerRegistry.register(def)
 
   // Path & Vector
   layerRegistry.register(pathStrokeDefinition)

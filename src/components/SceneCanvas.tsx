@@ -10,9 +10,21 @@ import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
 import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
 import { updateLayerProperty } from '@/lib/editor/autoKeyframe'
-import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
+import { makeUpdateLayerCmd, makeAddLayerCmd } from '@/lib/editor/commands-layer'
 import { makeCloneCmd, type CloneArrayCommand } from '@/lib/editor/commands-clone'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
+// BL-73 — Spline drawing tools
+import type { SplinePrimitiveKind } from '@/lib/types/spline'
+import {
+  splineParamsFromBox, isBoxDragKind, createPolylineSpline,
+  createSplinePrimitive, splineToPathDefinition, translateSplineData, mergeSplineData,
+  computeSplineBounds,
+  hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour,
+  moveSplinePoint, moveSplineHandle, insertPointOnSegment, deleteSplinePoint,
+  setSplinePointType, setSegmentType, setContourClosed, reverseContour,
+} from '@/lib/spline'
+import { newSplineLayerFromPrimitive, newSplineLayerFromData } from '@/lib/defaults'
+import { pathToSvgString } from '@/lib/geometry'
 import {
   hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
   moveAnchor, moveInHandle, moveOutHandle,
@@ -27,6 +39,7 @@ import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
 import PathGuideOverlay from './PathGuideOverlay'
 import PathEditOverlay from './PathEditOverlay'
+import SplineEditOverlay from './SplineEditOverlay'
 import ContextMenu, { useContextMenu } from './ui/ContextMenu'
 import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
 import {
@@ -78,10 +91,20 @@ interface Props {
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
     | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+    | 'spline-draw'
   /** BL-66 — Push a tool-mode change up to the page (e.g. double-clicking a
    *  path enters pen mode so the user can immediately edit it; cancelling
    *  path pick mode returns to 'select'). */
   onToolModeChange?: (next: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor') => void
+  /** BL-73 — Active spline primitive being drawn (null = not in draw mode). */
+  splineDrawKind?: SplinePrimitiveKind | null
+  /** BL-73 — When set, drawn splines append into this layer instead of a new one. */
+  splineAppendTargetId?: string | null
+  /** BL-73 — Called after a spline draw commits (page resets draw mode). */
+  onSplineDrawCommit?: () => void
+  /** BL-73 Sprint 5 — mirrors the selected spline point id up to the page so
+   *  the properties panel can show a point editor. */
+  onSplinePointSelected?: (pointId: string | null) => void
   /** BL-60 Faz 3 — Replace / add / subtract layers from the current selection
    *  after a canvas selection-tool drag completes. Mode is 'replace' (plain
    *  drag), 'add' (Shift+drag), or 'subtract' (Alt+drag). */
@@ -125,6 +148,8 @@ interface Props {
     distributeVertically?:   () => void
     /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
     convertToSpline?: () => void
+    /** BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines. */
+    convertTextToSpline?: () => void
     /** BL-59 Clone & Array — quick clone (one new layer, default offset). */
     cloneQuick?:    () => void
     /** BL-59 Clone & Array — opens CloneModal. */
@@ -290,7 +315,34 @@ interface ScaleAxisState {
   pivotY?: number
 }
 
-type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | NewAnchorDrawDrag | RotateState | ScaleAxisState
+/** BL-73 Sprint 4 — dragging a spline on-curve point. */
+interface SplinePointDrag {
+  kind: 'splinePoint'
+  layerId: string
+  originalLayer: Layer
+  pointId: string
+  startClientX: number
+  startClientY: number
+  /** Local point position at drag start. */
+  startX: number
+  startY: number
+}
+
+/** BL-73 Sprint 4 — dragging a spline bezier handle. */
+interface SplineHandleDrag {
+  kind: 'splineHandle'
+  layerId: string
+  originalLayer: Layer
+  pointId: string
+  handleKind: 'in' | 'out'
+  startClientX: number
+  startClientY: number
+  /** Local handle position at drag start. */
+  startX: number
+  startY: number
+}
+
+type ActiveDrag = MoveState | ResizeState | AnchorState | PathPointDrag | NewAnchorDrawDrag | RotateState | ScaleAxisState | SplinePointDrag | SplineHandleDrag
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -317,6 +369,7 @@ export default function SceneCanvas({
   menuHandlers, onAfterLayerCommit,
   ghostSettings, selectedTimeline,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
+  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onSplinePointSelected,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -377,6 +430,14 @@ export default function SceneCanvas({
   const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
   // ── Right-click on empty canvas area → fit / zoom shortcuts ──────────────
   const emptyCanvasCtx = useContextMenu()
+  // ── BL-73 Sprint 5 — right-click on a spline point / segment / contour ───
+  const splineCtx = useContextMenu()
+  const splineCtxTargetRef = useRef<
+    | { kind: 'point';   id: string }
+    | { kind: 'segment'; id: string; t: number }
+    | { kind: 'contour'; id: string }
+    | null
+  >(null)
 
   // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
   // Active guides are stored in a ref AND state so changes trigger render
@@ -544,6 +605,35 @@ export default function SceneCanvas({
   >(null)
   const PAINT_BRUSH_RADIUS = 24  // composition px
 
+  // ── BL-73 Spline drawing state ───────────────────────────────────────────
+  // Box-drag (rect/circle/ellipse/star/ngon/donut/arc): start corner held in
+  // a ref; the live preview svg path is mirrored to React state. Line draw:
+  // accumulated click points persist across discrete clicks.
+  const splineBoxRef  = useRef<{ startX: number; startY: number } | null>(null)
+  const splineLineRef = useRef<{ points: Array<{ x: number; y: number }> } | null>(null)
+  /** Preview path in composition coords (scaled by zoom at render). */
+  const [splinePreview, setSplinePreview] = useState<{ d: string; fill: boolean } | null>(null)
+  /** BL-73 Sprint 3 — hovered spline element (point / handle / segment). */
+  const [splineHover, setSplineHover] = useState<
+    | { kind: 'point';   id: string }
+    | { kind: 'handle';  pointId: string; handleKind: 'in' | 'out' }
+    | { kind: 'segment'; id: string }
+    | null
+  >(null)
+  /** BL-73 Sprint 4 — currently selected spline point (Delete / properties). */
+  const [selectedSplinePointId, setSelectedSplinePointId] = useState<string | null>(null)
+  const selectedSplinePointIdRef = useRef<string | null>(null)
+  useEffect(() => { selectedSplinePointIdRef.current = selectedSplinePointId }, [selectedSplinePointId])
+  // Mirror to the page so the properties panel can show a point editor.
+  useEffect(() => { onSplinePointSelected?.(selectedSplinePointId) }, [selectedSplinePointId, onSplinePointSelected])
+  // Mirror props into refs so window-listener closures read fresh values.
+  const splineDrawKindRef = useRef(splineDrawKind)
+  useEffect(() => { splineDrawKindRef.current = splineDrawKind }, [splineDrawKind])
+  const splineAppendTargetIdRef = useRef(splineAppendTargetId)
+  useEffect(() => { splineAppendTargetIdRef.current = splineAppendTargetId }, [splineAppendTargetId])
+  const onSplineDrawCommitRef = useRef(onSplineDrawCommit)
+  useEffect(() => { onSplineDrawCommitRef.current = onSplineDrawCommit }, [onSplineDrawCommit])
+
   // ── Drag-time numeric HUD (position / rotation / size readout) ───────────
   // Mirrors AE / Figma — appears next to the cursor while transforming.
   const [dragHud, setDragHud] = useState<{ x: number; y: number; label: string } | null>(null)
@@ -676,6 +766,23 @@ export default function SceneCanvas({
       const nextScene: ChronoScene = {
         ...sceneRef.current,
         layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : { ...l, path: nextPath }),
+      }
+      editorRef.current.previewTransaction(nextScene)
+      return
+    }
+
+    // BL-73 Sprint 4 — drag a spline point (handles follow) or a bezier handle
+    // (smooth/bezier continuity applied). Always mutate from the drag-start
+    // snapshot so the delta is absolute, not accumulated.
+    if (drag.kind === 'splinePoint' || drag.kind === 'splineHandle') {
+      const orig = drag.originalLayer
+      if (orig.type !== 'spline' || !orig.spline) return
+      const nextSpline = drag.kind === 'splinePoint'
+        ? moveSplinePoint(orig.spline, drag.pointId, drag.startX + dx, drag.startY + dy)
+        : moveSplineHandle(orig.spline, drag.pointId, drag.handleKind, drag.startX + dx, drag.startY + dy)
+      const nextScene: ChronoScene = {
+        ...sceneRef.current,
+        layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : { ...l, spline: nextSpline }),
       }
       editorRef.current.previewTransaction(nextScene)
       return
@@ -985,6 +1092,15 @@ export default function SceneCanvas({
       return
     }
 
+    // BL-73 Sprint 4 — spline point / handle drag commit.
+    if (drag.kind === 'splinePoint' || drag.kind === 'splineHandle') {
+      const changed = JSON.stringify(finalLayer.spline) !== JSON.stringify(drag.originalLayer.spline)
+      if (!changed) { ed.cancelTransaction(); return }
+      ed.commitTransaction(makeUpdateLayerCmd(drag.layerId, finalLayer, drag.originalLayer))
+      onAfterLayerCommit?.(drag.originalLayer, finalLayer)
+      return
+    }
+
     // BL-66 — New anchor placement commit. The preview already holds the
     // final shape (corner or smooth with handles); just commit the diff.
     // Anchor pivot is auto-centred on the path AABB so rotate / scale gizmos
@@ -1277,6 +1393,187 @@ export default function SceneCanvas({
     setSelectionOverlay(null)
   }, [width, height, onSelectByGeometry, handleSelectionDragMove, selectionContainMode])
 
+  // ── BL-73 Spline drawing handlers ────────────────────────────────────────
+  // Composition-pixel coords from a pointer event.
+  const clientToComp = useCallback((e: { clientX: number; clientY: number }) => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const { width: cw, height: ch } = compositionRef.current
+    return {
+      x: (e.clientX - rect.left) * (cw / rect.width),
+      y: (e.clientY - rect.top)  * (ch / rect.height),
+    }
+  }, [])
+
+  /** Tears down any in-progress spline draw and notifies the page. */
+  const cancelSplineDraw = useCallback(() => {
+    splineBoxRef.current  = null
+    splineLineRef.current = null
+    setSplinePreview(null)
+    setDragHud(null)
+    window.removeEventListener('pointermove', handleSplineBoxMove)
+    window.removeEventListener('pointerup',   handleSplineBoxUp)
+    window.removeEventListener('pointermove', handleSplineLineMove)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Commits a freshly-built layer, or appends geometry to the target layer. */
+  const commitDrawnSpline = useCallback((
+    kind: SplinePrimitiveKind,
+    params: import('@/lib/types/spline').SplineGeneratorParams,
+    centerX: number,
+    centerY: number,
+  ) => {
+    const targetId = splineAppendTargetIdRef.current
+    const target = targetId ? sceneRef.current.layers.find(l => l.id === targetId) : null
+
+    if (target?.type === 'spline' && target.spline) {
+      // Append into the selected spline, offset so it lands where drawn.
+      const gen = createSplinePrimitive({ kind, params })
+      if (gen) {
+        const placed = translateSplineData(gen, centerX - target.transform.x, centerY - target.transform.y)
+        const merged = mergeSplineData(target.spline, placed)
+        editorRef.current.dispatchCommand(makeUpdateLayerCmd(target.id, { spline: merged }, target))
+      }
+    } else {
+      const base = newSplineLayerFromPrimitive(kind, params)
+      if (base) {
+        base.transform.x = centerX
+        base.transform.y = centerY
+        editorRef.current.dispatchCommand(makeAddLayerCmd(base))
+        onSelectLayer(base.id)
+      }
+    }
+    onSplineDrawCommitRef.current?.()
+  }, [onSelectLayer])
+
+  const handleSplineBoxMove = useCallback((e: PointerEvent) => {
+    const box = splineBoxRef.current
+    const kind = splineDrawKindRef.current
+    if (!box || !kind) return
+    const p = clientToComp(e)
+    if (!p) return
+    const spec = splineParamsFromBox(kind, { x1: box.startX, y1: box.startY, x2: p.x, y2: p.y })
+    if (!spec) return
+    const gen = createSplinePrimitive({ kind, params: spec.params })
+    if (!gen) return
+    const placed = translateSplineData(gen, spec.centerX, spec.centerY)
+    const d = pathToSvgString(splineToPathDefinition(placed))
+    setSplinePreview({ d, fill: kind !== 'arc' })
+    setDragHud({
+      x: e.clientX, y: e.clientY,
+      label: `${Math.round(Math.abs(p.x - box.startX))} × ${Math.round(Math.abs(p.y - box.startY))}`,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientToComp])
+
+  const handleSplineBoxUp = useCallback((e: PointerEvent) => {
+    const box = splineBoxRef.current
+    const kind = splineDrawKindRef.current
+    window.removeEventListener('pointermove', handleSplineBoxMove)
+    window.removeEventListener('pointerup',   handleSplineBoxUp)
+    splineBoxRef.current = null
+    setSplinePreview(null)
+    setDragHud(null)
+    if (!box || !kind) { onSplineDrawCommitRef.current?.(); return }
+    const p = clientToComp(e)
+    if (!p) { onSplineDrawCommitRef.current?.(); return }
+    let x2 = p.x, y2 = p.y
+    // A click (no real drag) → default-sized shape centered on the click.
+    if (Math.abs(x2 - box.startX) < 3 && Math.abs(y2 - box.startY) < 3) {
+      x2 = box.startX + 120; y2 = box.startY + 80
+    }
+    const spec = splineParamsFromBox(kind, { x1: box.startX, y1: box.startY, x2, y2 })
+    if (!spec) { onSplineDrawCommitRef.current?.(); return }
+    commitDrawnSpline(kind, spec.params, spec.centerX, spec.centerY)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientToComp, commitDrawnSpline, handleSplineBoxMove])
+
+  const handleSplineLineMove = useCallback((e: PointerEvent) => {
+    const line = splineLineRef.current
+    if (!line || line.points.length === 0) return
+    const p = clientToComp(e)
+    if (!p) return
+    const pts = [...line.points, p]
+    const d = 'M ' + pts.map(pt => `${pt.x} ${pt.y}`).join(' L ')
+    setSplinePreview({ d, fill: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientToComp])
+
+  const finishSplineLine = useCallback((closed: boolean) => {
+    const line = splineLineRef.current
+    window.removeEventListener('pointermove', handleSplineLineMove)
+    splineLineRef.current = null
+    setSplinePreview(null)
+    setDragHud(null)
+    if (!line || line.points.length < 2) { onSplineDrawCommitRef.current?.(); return }
+    // Center geometry on the points' bounding box; transform sits at that center.
+    const xs = line.points.map(p => p.x), ys = line.points.map(p => p.y)
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+    const local = line.points.map(p => ({ x: p.x - cx, y: p.y - cy }))
+    const spline = createPolylineSpline(local, closed)
+    const layer = newSplineLayerFromData(spline, { name: 'Line Spline', openPath: !closed, x: cx, y: cy })
+    editorRef.current.dispatchCommand(makeAddLayerCmd(layer))
+    onSelectLayer(layer.id)
+    onSplineDrawCommitRef.current?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleSplineLineMove, onSelectLayer])
+
+  // Keyboard: Enter finishes an open line, Esc cancels, Backspace removes the
+  // last placed point. Active only while in spline-draw mode.
+  useEffect(() => {
+    if (toolMode !== 'spline-draw') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        cancelSplineDraw()
+        onSplineDrawCommitRef.current?.()
+      } else if (e.key === 'Enter') {
+        if (splineLineRef.current) { e.preventDefault(); finishSplineLine(false) }
+      } else if (e.key === 'Backspace') {
+        const line = splineLineRef.current
+        if (line && line.points.length > 0) {
+          e.preventDefault()
+          line.points.pop()
+          if (line.points.length === 0) { cancelSplineDraw(); onSplineDrawCommitRef.current?.() }
+          else setSplinePreview({ d: 'M ' + line.points.map(p => `${p.x} ${p.y}`).join(' L '), fill: false })
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toolMode, cancelSplineDraw, finishSplineLine])
+
+  // Leaving draw mode mid-draw tears everything down.
+  useEffect(() => {
+    if (toolMode !== 'spline-draw') cancelSplineDraw()
+  }, [toolMode, cancelSplineDraw])
+
+  // BL-73 Sprint 4 — clear point selection when the layer selection changes.
+  useEffect(() => { setSelectedSplinePointId(null) }, [selectedLayerId])
+
+  // BL-73 Sprint 4 — Delete / Backspace removes the selected spline point.
+  // Capture phase so it pre-empts the page's layer-delete shortcut.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      const pid = selectedSplinePointIdRef.current
+      if (!pid) return
+      const layer = sceneRef.current.layers.find(l => l.id === selectedLayerId)
+      if (layer?.type !== 'spline' || !layer.spline) return
+      const next = deleteSplinePoint(layer.spline, pid)
+      if (next === layer.spline) return  // no-op (e.g. ≤ 2 points) — let it pass
+      e.preventDefault()
+      e.stopPropagation()
+      editorRef.current.dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))
+      setSelectedSplinePointId(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [selectedLayerId])
+
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     // Middle-mouse OR pan-mode + left button → pan the view, not the layer
     if (e.button === 1 || (panMode && e.button === 0)) {
@@ -1300,6 +1597,36 @@ export default function SceneCanvas({
     const sy = height / rect.height
     const cx = (e.clientX - rect.left) * sx
     const cy = (e.clientY - rect.top)  * sy
+
+    // ── BL-73: Spline drawing ──────────────────────────────────────────────
+    if (toolMode === 'spline-draw' && splineDrawKind) {
+      e.preventDefault()
+      if (splineDrawKind === 'line') {
+        // Multi-click polyline. First click starts; later clicks add points;
+        // clicking near the first point (≥2 pts) closes the path.
+        const line = splineLineRef.current
+        if (!line) {
+          splineLineRef.current = { points: [{ x: cx, y: cy }] }
+          window.addEventListener('pointermove', handleSplineLineMove)
+        } else {
+          const first = line.points[0]
+          if (line.points.length >= 2 && Math.hypot(cx - first.x, cy - first.y) <= 8) {
+            finishSplineLine(true)
+          } else {
+            line.points.push({ x: cx, y: cy })
+          }
+        }
+        return
+      }
+      // Box-drag primitives.
+      if (isBoxDragKind(splineDrawKind)) {
+        canvas.setPointerCapture(e.pointerId)
+        splineBoxRef.current = { startX: cx, startY: cy }
+        window.addEventListener('pointermove', handleSplineBoxMove)
+        window.addEventListener('pointerup',   handleSplineBoxUp)
+      }
+      return
+    }
 
     // ── BL-60 Faz 3: Canvas selection tools (box / lasso / circle / paint) ──
     if ((toolMode === 'selection-box' || toolMode === 'selection-lasso' ||
@@ -1364,6 +1691,59 @@ export default function SceneCanvas({
     // ── Pen Tool: if a path layer is selected, first check anchor/handle hits
     //    BEFORE the normal layer hit-test. Drag the anchor/handle, not the layer.
     const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId)
+
+    // ── BL-73 Sprint 4: edit the selected spline (handle → point → insert) ──
+    if (selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !selectedLayer.locked
+        && (toolMode === 'select' || toolMode === 'pen')) {
+      const lx = cx - selectedLayer.transform.x
+      const ly = cy - selectedLayer.transform.y
+      const tol = 8 / zoom
+
+      const hh = hitTestSplineHandle(selectedLayer.spline, lx, ly, tol)
+      if (hh) {
+        const handle = Object.values(selectedLayer.spline.handles)
+          .find(h => h.pointId === hh.pointId && h.kind === hh.kind)
+        if (handle) {
+          editor.beginTransaction()
+          dragRef.current = {
+            kind: 'splineHandle', layerId: selectedLayer.id, originalLayer: selectedLayer,
+            pointId: hh.pointId, handleKind: hh.kind,
+            startClientX: e.clientX, startClientY: e.clientY, startX: handle.x, startY: handle.y,
+          }
+          window.addEventListener('pointermove', handlePointerMove)
+          window.addEventListener('pointerup',   handlePointerUp)
+          return
+        }
+      }
+
+      const hp = hitTestSplinePoint(selectedLayer.spline, lx, ly, tol)
+      if (hp) {
+        const p = selectedLayer.spline.points[hp]
+        setSelectedSplinePointId(hp)
+        editor.beginTransaction()
+        dragRef.current = {
+          kind: 'splinePoint', layerId: selectedLayer.id, originalLayer: selectedLayer,
+          pointId: hp, startClientX: e.clientX, startClientY: e.clientY, startX: p.x, startY: p.y,
+        }
+        window.addEventListener('pointermove', handlePointerMove)
+        window.addEventListener('pointerup',   handlePointerUp)
+        return
+      }
+
+      // Pen mode: click on a segment inserts a point (De Casteljau split).
+      if (toolMode === 'pen') {
+        const hs = hitTestSplineSegment(selectedLayer.spline, lx, ly, 6 / zoom)
+        if (hs) {
+          const nextSpline = insertPointOnSegment(selectedLayer.spline, hs.segmentId, hs.t)
+          editor.dispatchCommand(makeUpdateLayerCmd(selectedLayer.id, { spline: nextSpline }, selectedLayer))
+          return
+        }
+      }
+      // Clicked elsewhere inside the spline selection → clear point selection,
+      // then fall through to normal layer move/selection.
+      setSelectedSplinePointId(null)
+    }
+
     if (selectedLayer && selectedLayer.type === 'path' && selectedLayer.path && !selectedLayer.locked) {
       const lx = cx - selectedLayer.transform.x
       const ly = cy - selectedLayer.transform.y
@@ -1547,7 +1927,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
-  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, handleSelectionDragMove, handleSelectionDragUp, pathPickMode, onExitPathPickMode])
+  }, [scene, timeMs, width, height, onSelectLayer, editor, handlePointerMove, handlePointerUp, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, handleSelectionDragMove, handleSelectionDragUp, pathPickMode, onExitPathPickMode, splineDrawKind, handleSplineLineMove, finishSplineLine, handleSplineBoxMove, handleSplineBoxUp, zoom])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1998,7 +2378,15 @@ export default function SceneCanvas({
     if (selectedLayer.path.anchors.length < 2) return null
     return bezierPathBounds(selectedLayer.path)
   }, [selectedLayer])
-  const hasFrameGeometry = !!selectedLayer && (!!selectedLayer.size || !!selectedPathBounds)
+  // BL-73 — spline frame bounds from the granular geometry (handles centered-
+  // at-origin primitives; local box may have negative x/y).
+  const selectedSplineBounds = useMemo(() => {
+    if (!selectedLayer || selectedLayer.type !== 'spline' || !selectedLayer.spline) return null
+    const b = computeSplineBounds(selectedLayer.spline)
+    if (b.width === 0 && b.height === 0) return null
+    return b
+  }, [selectedLayer])
+  const hasFrameGeometry = !!selectedLayer && (!!selectedLayer.size || !!selectedPathBounds || !!selectedSplineBounds)
   const showFrame =
     !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.hidden
     && gizmo.frame
@@ -2095,6 +2483,26 @@ export default function SceneCanvas({
               const sy = height / rect.height
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
+
+              // BL-73 — right-click on the selected spline's element opens the
+              // point / segment / contour editing menu.
+              const selSpline = scene.layers.find((l) => l.id === selectedLayerId)
+              if (selSpline?.type === 'spline' && selSpline.spline) {
+                const lx = cx - selSpline.transform.x
+                const ly = cy - selSpline.transform.y
+                const hp = hitTestSplinePoint(selSpline.spline, lx, ly, 8 / zoom)
+                const hs = hp ? null : hitTestSplineSegment(selSpline.spline, lx, ly, 6 / zoom)
+                const hc = (hp || hs) ? null : hitTestSplineContour(selSpline.spline, lx, ly)
+                if (hp || hs || hc) {
+                  e.preventDefault()
+                  if (hp)      { setSelectedSplinePointId(hp); splineCtxTargetRef.current = { kind: 'point', id: hp } }
+                  else if (hs) { splineCtxTargetRef.current = { kind: 'segment', id: hs.segmentId, t: hs.t } }
+                  else         { splineCtxTargetRef.current = { kind: 'contour', id: hc! } }
+                  splineCtx.open(e)
+                  return
+                }
+              }
+
               const hit = hitTestLayer(scene, timeMs, cx, cy)
               if (!hit) {
                 e.preventDefault()
@@ -2125,15 +2533,41 @@ export default function SceneCanvas({
                 const cy = (clientY - rect.top)  * sy
                 const hit = hitTestLayer(scene, timeMs, cx, cy)
                 setHoveredLayerId((cur) => (cur === hit ? cur : hit))
+
+                // BL-73 — hover over the selected spline's points / handles /
+                // segments (priority: handle → point → segment). Local coords;
+                // tolerance scaled by zoom so it stays ~8 screen px.
+                const sel = scene.layers.find((l) => l.id === selectedLayerId)
+                if (sel?.type === 'spline' && sel.spline
+                    && (toolMode === 'select' || toolMode === 'pen')) {
+                  const lx = cx - sel.transform.x
+                  const ly = cy - sel.transform.y
+                  const tol = 8 / zoom
+                  const hh = hitTestSplineHandle(sel.spline, lx, ly, tol)
+                  if (hh) setSplineHover({ kind: 'handle', pointId: hh.pointId, handleKind: hh.kind })
+                  else {
+                    const hp = hitTestSplinePoint(sel.spline, lx, ly, tol)
+                    if (hp) setSplineHover({ kind: 'point', id: hp })
+                    else {
+                      const hs = hitTestSplineSegment(sel.spline, lx, ly, tol)
+                      setSplineHover(hs ? { kind: 'segment', id: hs.segmentId } : null)
+                    }
+                  }
+                } else {
+                  setSplineHover((cur) => (cur ? null : cur))
+                }
               })
             }}
             onPointerLeave={() => {
               if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
               setHoveredLayerId(null)
+              setSplineHover((cur) => (cur ? null : cur))
             }}
             className={`absolute inset-0 block ${
               previewMode ? 'cursor-pointer'
               : pathPickMode ? 'cursor-crosshair'
+              : toolMode === 'spline-draw' ? 'cursor-crosshair'
+              : splineHover ? 'cursor-pointer'
               : toolMode === 'pen' ? 'cursor-crosshair'
               : panMode ? 'cursor-grab'
               : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
@@ -2235,6 +2669,11 @@ export default function SceneCanvas({
             <PathEditOverlay layer={selectedLayer} zoom={zoom} />
           )}
 
+          {/* BL-73 — Control points + bezier handles for the selected spline. */}
+          {selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !previewMode && (
+            <SplineEditOverlay layer={selectedLayer} zoom={zoom} hover={splineHover} selectedPointId={selectedSplinePointId} />
+          )}
+
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
               Circle / Paint). zoom multiplier maps composition pixels to
               the displayed canvas size. pointer-events:none so it never
@@ -2280,6 +2719,28 @@ export default function SceneCanvas({
             </svg>
           )}
 
+          {/* BL-73 — Live spline draw preview (box drag / multi-click line).
+              Path is in composition coords; scaled by zoom to screen px. */}
+          {splinePreview && (
+            <svg
+              className="absolute top-0 left-0 pointer-events-none"
+              width={width * zoom}
+              height={height * zoom}
+              style={{ overflow: 'visible' }}
+            >
+              <g transform={`scale(${zoom})`}>
+                <path
+                  d={splinePreview.d}
+                  fill={splinePreview.fill ? 'rgba(59, 130, 246, 0.15)' : 'none'}
+                  stroke="#60a5fa"
+                  strokeWidth={1 / zoom}
+                  strokeDasharray={`${4 / zoom} ${3 / zoom}`}
+                  strokeLinejoin="round"
+                />
+              </g>
+            </svg>
+          )}
+
           {showFrame && selectedLayer.size && (
             <SelectionFrame
               x={selDX * zoom}
@@ -2303,6 +2764,20 @@ export default function SceneCanvas({
               y={(selDY + selectedPathBounds.y) * zoom}
               w={selectedPathBounds.width  * zoom}
               h={selectedPathBounds.height * zoom}
+              anchorOffsetX={selectedLayer.transform.anchorX * zoom}
+              anchorOffsetY={selectedLayer.transform.anchorY * zoom}
+              rotationDeg={selDR}
+              onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
+            />
+          )}
+
+          {/* BL-73 — Spline selection frame from granular bounds. */}
+          {showFrame && !selectedLayer.size && selectedSplineBounds && (
+            <SelectionFrame
+              x={(selDX + selectedSplineBounds.x) * zoom}
+              y={(selDY + selectedSplineBounds.y) * zoom}
+              w={selectedSplineBounds.width  * zoom}
+              h={selectedSplineBounds.height * zoom}
               anchorOffsetX={selectedLayer.transform.anchorX * zoom}
               anchorOffsetY={selectedLayer.transform.anchorY * zoom}
               rotationDeg={selDR}
@@ -2540,9 +3015,11 @@ export default function SceneCanvas({
           // BL-17 Faz 1 — wired only for shape layers with a size; non-shape
           // selections leave it undefined, which the menu renders disabled.
           convertToPath:
-            menuHandlers?.convertToSpline && target.type === 'shape' && target.size
-              ? menuHandlers.convertToSpline
-              : undefined,
+            target.type === 'text' && menuHandlers?.convertTextToSpline
+              ? menuHandlers.convertTextToSpline
+              : menuHandlers?.convertToSpline && target.type === 'shape' && target.size
+                ? menuHandlers.convertToSpline
+                : undefined,
 
           // BL-59 — Clone & Array entries
           cloneQuick:    menuHandlers?.cloneQuick,
@@ -2634,6 +3111,53 @@ export default function SceneCanvas({
           <ContextMenu
             x={emptyCanvasCtx.state!.x}
             y={emptyCanvasCtx.state!.y}
+            items={items}
+            onClose={close}
+          />
+        )
+      })()}
+
+      {/* ── BL-73 — Spline point / segment / contour editing menu ─────────── */}
+      {splineCtx.isOpen && (() => {
+        const target = splineCtxTargetRef.current
+        const layer = scene.layers.find((l) => l.id === selectedLayerId)
+        if (!target || layer?.type !== 'spline' || !layer.spline) return null
+        const close = () => { splineCtx.close(); splineCtxTargetRef.current = null }
+        const baseSpline = layer.spline
+        const mutate = (fn: (s: import('@/lib/types/spline').SplinePathData) => import('@/lib/types/spline').SplinePathData) => {
+          const next = fn(baseSpline)
+          if (next && next !== baseSpline) {
+            editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))
+          }
+          close()
+        }
+        let items: import('./ui/ContextMenu').MenuItem[]
+        if (target.kind === 'point') {
+          items = [
+            { kind: 'action', label: 'Corner',          onSelect: () => mutate(s => setSplinePointType(s, target.id, 'corner')) },
+            { kind: 'action', label: 'Smooth',          onSelect: () => mutate(s => setSplinePointType(s, target.id, 'smooth')) },
+            { kind: 'action', label: 'Bezier (Mirror)', onSelect: () => mutate(s => setSplinePointType(s, target.id, 'bezier')) },
+            { kind: 'action', label: 'Bezier Corner',   onSelect: () => mutate(s => setSplinePointType(s, target.id, 'bezierCorner')) },
+            { kind: 'separator' },
+            { kind: 'action', label: 'Delete Point',    onSelect: () => mutate(s => deleteSplinePoint(s, target.id)) },
+          ]
+        } else if (target.kind === 'segment') {
+          items = [
+            { kind: 'action', label: 'Insert Point',      onSelect: () => mutate(s => insertPointOnSegment(s, target.id, target.t)) },
+            { kind: 'action', label: 'Convert to Line',   onSelect: () => mutate(s => setSegmentType(s, target.id, 'line')) },
+            { kind: 'action', label: 'Convert to Bezier', onSelect: () => mutate(s => setSegmentType(s, target.id, 'cubic')) },
+          ]
+        } else {
+          const contour = layer.spline.contours[target.id]
+          items = [
+            { kind: 'action', label: contour?.closed ? 'Open Path' : 'Close Path', onSelect: () => mutate(s => setContourClosed(s, target.id, !contour?.closed)) },
+            { kind: 'action', label: 'Reverse Direction', onSelect: () => mutate(s => reverseContour(s, target.id)) },
+          ]
+        }
+        return (
+          <ContextMenu
+            x={splineCtx.state!.x}
+            y={splineCtx.state!.y}
             items={items}
             onClose={close}
           />

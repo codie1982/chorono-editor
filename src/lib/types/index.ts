@@ -51,6 +51,15 @@ export type {
   PathAnchor, BezierPath,
 } from './path'
 
+export type {
+  SplinePointType, SplineSegmentType, SplinePrimitiveKind, SplineCombineMode,
+  SplinePoint, SplineHandle, SplineSegment, SplineContour,
+  LineSplineParams, RectSplineParams, CircleSplineParams, EllipseSplineParams,
+  ArcSplineParams, DonutSplineParams, NGonSplineParams, StarSplineParams,
+  SpiralSplineParams, HelixSplineParams, EggSplineParams, SplineGeneratorParams,
+  SplineSubShape, SplinePathData,
+} from './spline'
+
 export { pathFromPoints, DEFAULT_BEZIER_PATH } from './path'
 
 export type { MaskMode, MaskDefinition } from './mask'
