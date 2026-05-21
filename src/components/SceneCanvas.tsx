@@ -587,16 +587,24 @@ export default function SceneCanvas({
 
     // Build the list of layers to move together. When clicking a member of the
     // multi-selection, every selected (non-locked) layer travels with it.
-    const movingLayers: { id: string; originalLayer: Layer }[] = []
+    // baseX/baseY = each layer's DISPLAYED position at drag start (keyframe /
+    // motionPath / followPath evaluated) so a keyframed layer drags from where
+    // it's shown, not from its static transform value.
+    const ovNow = overrides ?? new Map<string, number>()
+    const movingLayers: { id: string; originalLayer: Layer; baseX: number; baseY: number }[] = []
+    const pushMover = (l: Layer) => {
+      const d = resolveDisplayTransform(l, scene, timeMs, ovNow)
+      movingLayers.push({ id: l.id, originalLayer: l, baseX: d.x, baseY: d.y })
+    }
     if (inMultiSet && selectedLayerIds && selectedLayerIds.size > 1) {
       // Resolve each selected id to a non-locked layer snapshot
       for (const id of Array.from(selectedLayerIds)) {
         const l = scene.layers.find(x => x.id === id)
-        if (l && !l.locked) movingLayers.push({ id: l.id, originalLayer: l })
+        if (l && !l.locked) pushMover(l)
       }
       // Ensure primary is included (already covered if it's in the set)
     } else {
-      movingLayers.push({ id: layer.id, originalLayer: layer })
+      pushMover(layer)
     }
 
     editor.beginTransaction()
@@ -623,7 +631,7 @@ export default function SceneCanvas({
       cloneMode,
     }
     startDrag()
-  }, [scene, timeMs, width, height, onSelectLayer, editor, startDrag, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit, pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom])
+  }, [scene, timeMs, width, height, overrides, onSelectLayer, editor, startDrag, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit, pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -671,12 +679,13 @@ export default function SceneCanvas({
     e.preventDefault()
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
     if (!layer || layer.locked) return
+    const d = resolveDisplayTransform(layer, scene, timeMs, overrides ?? new Map())
     editor.beginTransaction()
     dragRef.current = {
       kind: 'move',
       layerId: layer.id,
       originalLayer: layer,
-      movingLayers: [{ id: layer.id, originalLayer: layer }],
+      movingLayers: [{ id: layer.id, originalLayer: layer, baseX: d.x, baseY: d.y }],
       startClientX: e.clientX,
       startClientY: e.clientY,
       width:  layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80),
@@ -684,7 +693,7 @@ export default function SceneCanvas({
       axisLock: axis,
     }
     startDrag()
-  }, [scene.layers, selectedLayerId, editor, startDrag])
+  }, [scene, timeMs, overrides, selectedLayerId, editor, startDrag])
 
   // ── Scale-mode axis gizmo pointerdown → scaleX/scaleY drag ──────────────
   // X arrow → modifies transform.scaleX. Y → scaleY. Centre → uniform.

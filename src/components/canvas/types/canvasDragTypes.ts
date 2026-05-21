@@ -9,8 +9,11 @@ export interface MoveState {
   /** Primary (the layer actually clicked). Used for snapshot + selection focus. */
   layerId: string
   originalLayer: Layer
-  /** All layers being moved together — primary + multi-selection peers. */
-  movingLayers: { id: string; originalLayer: Layer }[]
+  /** All layers being moved together — primary + multi-selection peers.
+   *  baseX/baseY are the layer's DISPLAYED position at drag start (keyframe /
+   *  motionPath / followPath evaluated), so a keyframed layer drags from where
+   *  it's actually shown instead of jumping to its static transform value. */
+  movingLayers: { id: string; originalLayer: Layer; baseX: number; baseY: number }[]
   startClientX: number
   startClientY: number
   width:  number

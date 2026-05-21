@@ -106,8 +106,11 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
     if (drag.kind === 'move') {
       // Compute delta from the PRIMARY layer's drag — apply that delta to
       // every layer in movingLayers (multi-select preserves relative spacing).
-      const primaryOx = drag.originalLayer.transform.x
-      const primaryOy = drag.originalLayer.transform.y
+      // Use baseX/baseY (the DISPLAYED position at drag start) so a keyframed
+      // layer drags from where it's shown, not its static transform value.
+      const primaryMover = drag.movingLayers.find(m => m.id === drag.layerId)
+      const primaryOx = primaryMover?.baseX ?? drag.originalLayer.transform.x
+      const primaryOy = primaryMover?.baseY ?? drag.originalLayer.transform.y
       // Shift held → constrain to the dominant axis (Figma / Illustrator
       // standard — user just drags in the direction they want and Shift
       // locks it). Cleaner than separate "Ctrl=horizontal, Ctrl+Shift=
@@ -152,9 +155,9 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
       // keyframed value while only the snap guides move. (Preview only; the
       // commit path / auto-key still decides whether a keyframe is written.)
       const nextDragOverrides = new Map<string, number>()
-      for (const { id, originalLayer } of drag.movingLayers) {
-        const nx = originalLayer.transform.x + actualDx
-        const ny = originalLayer.transform.y + actualDy
+      for (const { id, baseX, baseY } of drag.movingLayers) {
+        const nx = baseX + actualDx
+        const ny = baseY + actualDy
         next = updateLayerProperty(next, id, 'transform.x', nx)
         next = updateLayerProperty(next, id, 'transform.y', ny)
         nextDragOverrides.set(`layers.${id}.transform.x`, nx)
