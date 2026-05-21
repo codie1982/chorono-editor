@@ -6,9 +6,39 @@
 // with its own object kinds + handle type (see arch_scripting_event_system memo).
 
 import type { ScriptHost } from '../types'
+import type {
+  StateMachineDefinition, SceneParameter, SceneParameterType, SceneParameterValue,
+  Trigger, TriggerEventType, TriggerActionType, ParameterWire, ParameterValueType,
+} from '../../types'
 import { LayerHandle, type ApiContext } from './LayerHandle'
+import { StateMachineHandle } from './StateMachineHandle'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '../../editor/commands-layer'
+import { makeAddStateMachineCmd } from '../../editor/commands-statemachine'
+import {
+  makeAddParamCmd, makeAddTriggerCmd, makeAddParameterWireCmd,
+} from '../../editor/commands-interactive'
+import { nextSMId } from '../../defaults'
+import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
+
+export interface TriggerScriptOptions {
+  layerId?: string
+  timelineId?: string
+  paramId?: string
+  paramValue?: SceneParameterValue
+  label?: string
+}
+
+export interface WireScriptOptions {
+  sourceLayerId?: string
+  targetLayerId?: string
+  valueType?: ParameterValueType
+  name?: string
+  blendMode?: 'override' | 'add'
+}
+
+let scriptInteractiveSeq = 0
+const scriptUid = (p: string) => `${p}_script_${Date.now()}_${++scriptInteractiveSeq}`
 
 export interface SceneAPI {
   /** Create a layer of the given kind (e.g. 'rect', 'circle', 'text'). */
@@ -21,6 +51,16 @@ export interface SceneAPI {
   readonly layers: LayerHandle[]
   /** Delete a layer. */
   remove(handle: LayerHandle): void
+  /** Create a state machine. Add states/transitions via the returned handle. */
+  addStateMachine(name?: string): StateMachineHandle
+  /** Add a particle emitter from a preset (confetti, fire, snow…). */
+  addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle
+  /** Add a scene parameter. Returns the parameter id. */
+  addParam(id: string, defaultValue?: SceneParameterValue, opts?: { type?: SceneParameterType; name?: string; min?: number; max?: number }): string
+  /** Add an event→action trigger. */
+  addTrigger(eventType: TriggerEventType, actionType: TriggerActionType, opts?: TriggerScriptOptions): void
+  /** Add an expression wire from a source property to a target property. */
+  wire(sourceProperty: string, targetProperty: string, expression: string, opts?: WireScriptOptions): void
   /** Append a line to the script output console. */
   log(...args: unknown[]): void
 }
@@ -69,6 +109,65 @@ export function createSceneAPI(
     remove(handle: LayerHandle): void {
       const layer = host.getScene().layers.find((l) => l.id === handle.id)
       if (layer) host.applyCommand(makeDeleteLayerCmd(layer))
+    },
+
+    addStateMachine(name?: string): StateMachineHandle {
+      const id = nextSMId()
+      const sm: StateMachineDefinition = {
+        id, name: name ?? id, initialStateId: '', states: [], transitions: [],
+      }
+      host.applyCommand(makeAddStateMachineCmd(sm))
+      return new StateMachineHandle(id, ctx)
+    },
+
+    addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle {
+      const layer = buildEmitterLayer({ ...opts, preset })
+      host.applyCommand(makeAddLayerCmd(layer))
+      return new LayerHandle(layer.id, ctx)
+    },
+
+    addParam(id, defaultValue, opts): string {
+      const type: SceneParameterType = opts?.type
+        ?? (typeof defaultValue === 'boolean' ? 'boolean'
+          : typeof defaultValue === 'string' ? 'string' : 'number')
+      const param: SceneParameter = {
+        id, name: opts?.name ?? id, type,
+        defaultValue: defaultValue ?? (type === 'number' ? 0 : type === 'boolean' ? false : ''),
+        ...(type === 'number' && opts?.min != null ? { min: opts.min } : {}),
+        ...(type === 'number' && opts?.max != null ? { max: opts.max } : {}),
+      }
+      host.applyCommand(makeAddParamCmd(param))
+      return id
+    },
+
+    addTrigger(eventType, actionType, opts): void {
+      const trigger: Trigger = {
+        id: scriptUid('trigger'),
+        ...(opts?.label ? { label: opts.label } : {}),
+        event: { type: eventType, ...(opts?.layerId ? { layerId: opts.layerId } : {}), ...(opts?.timelineId ? { timelineId: opts.timelineId } : {}) },
+        actions: [{
+          type: actionType,
+          ...(opts?.timelineId ? { timelineId: opts.timelineId } : {}),
+          ...(opts?.paramId ? { paramId: opts.paramId } : {}),
+          ...(opts?.paramValue != null ? { paramValue: opts.paramValue } : {}),
+        }],
+      }
+      host.applyCommand(makeAddTriggerCmd(trigger))
+    },
+
+    wire(sourceProperty, targetProperty, expression, opts): void {
+      const now = Date.now()
+      const wire: ParameterWire = {
+        id: scriptUid('wire'),
+        ...(opts?.name ? { name: opts.name } : {}),
+        enabled: true,
+        source: { ...(opts?.sourceLayerId ? { layerId: opts.sourceLayerId } : {}), propertyPath: sourceProperty, valueType: opts?.valueType ?? 'number' },
+        target: { ...(opts?.targetLayerId ? { layerId: opts.targetLayerId } : {}), propertyPath: targetProperty, valueType: opts?.valueType ?? 'number' },
+        expression,
+        blendMode: opts?.blendMode ?? 'override',
+        createdAt: now, updatedAt: now,
+      }
+      host.applyCommand(makeAddParameterWireCmd(wire))
     },
 
     log(...args: unknown[]): void {

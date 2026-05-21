@@ -133,6 +133,9 @@ export async function bootstrapAIActions(): Promise<void> {
     { registerKeyframeActions },
     { registerScriptActions },
     { registerIntrospectActions },
+    { registerStateMachineActions },
+    { registerParticleActions },
+    { registerInteractiveActions },
   ] = await Promise.all([
     import('./actions/scene'),
     import('./actions/composition'),
@@ -141,6 +144,9 @@ export async function bootstrapAIActions(): Promise<void> {
     import('./actions/keyframe'),
     import('./actions/script'),
     import('./actions/introspect'),
+    import('./actions/statemachine'),
+    import('./actions/particle'),
+    import('./actions/interactive'),
   ])
   registerSceneActions(actionRegistry)
   registerCompositionActions(actionRegistry)
@@ -149,4 +155,7 @@ export async function bootstrapAIActions(): Promise<void> {
   registerKeyframeActions(actionRegistry)
   registerScriptActions(actionRegistry)
   registerIntrospectActions(actionRegistry)
+  registerStateMachineActions(actionRegistry)
+  registerParticleActions(actionRegistry)
+  registerInteractiveActions(actionRegistry)
 }

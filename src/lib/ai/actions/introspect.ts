@@ -31,6 +31,26 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
     },
   })
 
+  // ── list_assets ───────────────────────────────────────────────────────────────
+  reg.register({
+    id: 'introspect.listAssets',
+    toolName: 'list_assets',
+    description:
+      'List uploaded media assets (image/video/audio) with their ids. Use to find a ' +
+      'valid assetId before add_layer type=image/video/audio. AI cannot upload files.',
+    parameters: { type: 'object', properties: {} },
+    read: (_params, scene: ChronoScene) => {
+      if (scene.assets.length === 0) return 'Scene has no assets. The user must upload media first.'
+      return scene.assets
+        .map((a) => {
+          const dim = a.width && a.height ? ` ${a.width}×${a.height}` : ''
+          const dur = a.durationMs ? ` ${a.durationMs}ms` : ''
+          return `- id="${a.id}" name="${a.name}" type=${a.type}${dim}${dur}`
+        })
+        .join('\n')
+    },
+  })
+
   // ── describe_layer ──────────────────────────────────────────────────────────
   reg.register<LayerIdParam>({
     id: 'introspect.describeLayer',

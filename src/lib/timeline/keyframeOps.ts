@@ -92,6 +92,28 @@ export function updateKfEasing(
 }
 
 /**
+ * Ensure a layer appears in a timeline's explicit layerIds list so its tracks
+ * render in the dope sheet (B4). layerIds semantics:
+ *   undefined → "show all" — left untouched (layer is already visible).
+ *   array     → append layerId if absent (idempotent).
+ */
+export function ensureLayerInTimeline(
+  scene: ChronoScene,
+  timelineId: string,
+  layerId: string,
+): ChronoScene {
+  return {
+    ...scene,
+    timelines: scene.timelines.map((tl) => {
+      if (tl.id !== timelineId) return tl
+      if (!Array.isArray(tl.layerIds)) return tl
+      if (tl.layerIds.includes(layerId)) return tl
+      return { ...tl, layerIds: [...tl.layerIds, layerId] }
+    }),
+  }
+}
+
+/**
  * Insert or replace a keyframe.
  * If a keyframe within 1 ms of kf.timeMs already exists, replace it.
  * Otherwise insert and sort.

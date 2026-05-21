@@ -9,7 +9,7 @@ import type {
   ChronoScene, Keyframe, Track, Timeline,
   AnimatableValue, EasingType,
 } from '@/lib/types'
-import { upsertKeyframe } from '@/lib/timeline/keyframeOps'
+import { upsertKeyframe, ensureLayerInTimeline } from '@/lib/timeline/keyframeOps'
 import type { ActionRegistry } from '../ActionRegistry'
 
 interface KfInput {
@@ -158,11 +158,9 @@ EXAMPLES:
       }
       // Validate layerId in target exists (defensive — silent failure otherwise)
       const layerMatch = p.target.match(/^layers\.([^.]+)\./)
-      if (layerMatch) {
-        const layerId = layerMatch[1]
-        if (!scene.layers.some((l) => l.id === layerId)) {
-          return errorCmd(`layer "${layerId}" not found for target "${p.target}"`)
-        }
+      const layerId = layerMatch?.[1]
+      if (layerId && !scene.layers.some((l) => l.id === layerId)) {
+        return errorCmd(`layer "${layerId}" not found for target "${p.target}"`)
       }
 
       // Build keyframes with coerced values + easings
@@ -186,6 +184,7 @@ EXAMPLES:
         execute: (s) => {
           let next = ensureTimeline(s, p.timelineId, maxTimeMs)
           next     = ensureTrack(next, p.timelineId, p.target)
+          if (layerId) next = ensureLayerInTimeline(next, p.timelineId, layerId)
           for (const kf of kfs) {
             next = upsertKeyframe(next, p.timelineId, p.target, kf)
           }

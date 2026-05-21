@@ -4,7 +4,7 @@
 
 import type { Layer, LayerType, Transform } from '@/lib/types'
 import type { ShapeKind } from '@/lib/types'
-import type { FontWeight, TextAlign } from '@/lib/types'
+import type { FontWeight, TextAlign, ObjectFit } from '@/lib/types'
 import {
   makeAddLayerCmd, makeUpdateLayerCmd, makeDeleteLayerCmd,
 } from '@/lib/editor/commands-layer'
@@ -33,6 +33,19 @@ export interface LayerCommonParams {
   startMs?: number; endMs?: number
   // Tree
   parentId?: string
+  // Repeater (type === 'repeater')
+  sourceLayerId?: string
+  count?: number
+  repeaterMode?: 'linear' | 'polar'
+  stepX?: number; stepY?: number; stepRotation?: number
+  stepScaleX?: number; stepScaleY?: number; stepOpacity?: number
+  polarRadius?: number; polarStartAngle?: number; polarEndAngle?: number
+  // Media (type === 'image' | 'video' | 'audio')
+  assetId?: string
+  objectFit?: ObjectFit
+  volume?: number
+  muted?: boolean
+  loop?: boolean
 }
 
 export interface AddLayerParams extends LayerCommonParams {
@@ -137,8 +150,73 @@ export function buildLayerFromParams(p: AddLayerParams): Layer {
     }
   }
 
-  // group / image / video / audio / path / pathStroke / repeater — only group
-  // is plausibly created by the AI. Others require assets / pen interaction.
+  if (p.type === 'repeater') {
+    const mode = p.repeaterMode ?? 'linear'
+    const step = {
+      ...(p.stepX        != null ? { x:        p.stepX }        : {}),
+      ...(p.stepY        != null ? { y:        p.stepY }        : {}),
+      ...(p.stepRotation != null ? { rotation: p.stepRotation } : {}),
+      ...(p.stepScaleX   != null ? { scaleX:   p.stepScaleX }   : {}),
+      ...(p.stepScaleY   != null ? { scaleY:   p.stepScaleY }   : {}),
+      ...(p.stepOpacity  != null ? { opacity:  p.stepOpacity }  : {}),
+    }
+    return {
+      ...base,
+      repeater: {
+        sourceLayerId: p.sourceLayerId ?? '',
+        count:         p.count ?? 3,
+        mode,
+        ...(Object.keys(step).length ? { transformStep: step } : {}),
+        ...(mode === 'polar'
+          ? {
+              polar: {
+                radius:     p.polarRadius     ?? 100,
+                startAngle: p.polarStartAngle ?? 0,
+                endAngle:   p.polarEndAngle   ?? 360,
+              },
+            }
+          : {}),
+      },
+    }
+  }
+
+  if (p.type === 'image') {
+    return {
+      ...base,
+      size: { width: w, height: h },
+      image: { assetId: p.assetId ?? '', objectFit: p.objectFit ?? 'contain' },
+    }
+  }
+
+  if (p.type === 'video') {
+    return {
+      ...base,
+      size: { width: w || 320, height: h || 180 },
+      video: {
+        assetId: p.assetId ?? '',
+        volume:  p.volume ?? 1,
+        muted:   p.muted ?? false,
+        loop:    p.loop ?? false,
+        startOffsetMs: 0,
+      },
+    }
+  }
+
+  if (p.type === 'audio') {
+    return {
+      ...base,
+      audio: {
+        assetId: p.assetId ?? '',
+        volume:  p.volume ?? 1,
+        muted:   p.muted ?? false,
+        loop:    p.loop ?? false,
+        startOffsetMs: 0,
+      },
+    }
+  }
+
+  // group / path / pathStroke — group is plausibly created by the AI; others
+  // require pen interaction.
   return base
 }
 
@@ -239,13 +317,15 @@ export function applyPatchToLayer(prev: Layer, patch: UpdateLayerParams): Layer 
 
 // ── Action registration ──────────────────────────────────────────────────────
 
-const LAYER_TYPE_ENUM = ['shape', 'text', 'group']
+const LAYER_TYPE_ENUM = ['shape', 'text', 'group', 'repeater', 'image', 'video', 'audio']
+const OBJECT_FIT_ENUM = ['fill', 'contain', 'cover', 'none']
 const SHAPE_KIND_ENUM = [
   'rect', 'ellipse', 'polygon', 'star', 'ring', 'arc', 'line', 'arrow', 'capsule',
   'spiral', 'wave', 'blob',   // BL-24
 ]
 const FONT_WEIGHT_ENUM = ['normal', 'bold', '300', '400', '500', '600', '700', '800']
 const TEXT_ALIGN_ENUM = ['left', 'center', 'right']
+const REPEATER_MODE_ENUM = ['linear', 'polar']
 
 /** Param schema reused by add_layer and update_layer (shape/text/etc. fields). */
 const COMMON_LAYER_PROPS = {
@@ -287,6 +367,25 @@ const COMMON_LAYER_PROPS = {
   startMs:      { type: 'number', description: 'Time (ms) when layer becomes visible' },
   endMs:        { type: 'number', description: 'Time (ms) when layer disappears' },
   parentId:     { type: 'string', description: 'Parent group layer id' },
+  // ── Repeater (type=repeater) ────────────────────────────────────────────────
+  sourceLayerId: { type: 'string', description: 'Repeater: id of the layer to repeat' },
+  count:         { type: 'number', description: 'Repeater: number of copies' },
+  repeaterMode:  { type: 'string', enum: REPEATER_MODE_ENUM, description: 'Repeater layout' },
+  stepX:         { type: 'number', description: 'Repeater linear: x offset per copy (px)' },
+  stepY:         { type: 'number', description: 'Repeater linear: y offset per copy (px)' },
+  stepRotation:  { type: 'number', description: 'Repeater: rotation step per copy (deg)' },
+  stepScaleX:    { type: 'number', description: 'Repeater: scaleX step per copy' },
+  stepScaleY:    { type: 'number', description: 'Repeater: scaleY step per copy' },
+  stepOpacity:   { type: 'number', description: 'Repeater: opacity step per copy' },
+  polarRadius:     { type: 'number', description: 'Repeater polar: ring radius (px)' },
+  polarStartAngle: { type: 'number', description: 'Repeater polar: start angle (deg)' },
+  polarEndAngle:   { type: 'number', description: 'Repeater polar: end angle (deg)' },
+  // ── Media (type=image/video/audio) ──────────────────────────────────────────
+  assetId:   { type: 'string', description: 'Media: id of an existing scene asset (see list_assets)' },
+  objectFit: { type: 'string', enum: OBJECT_FIT_ENUM, description: 'Image fit mode (default contain)' },
+  volume:    { type: 'number', minimum: 0, maximum: 1, description: 'Video/audio volume 0–1' },
+  muted:     { type: 'boolean', description: 'Video/audio muted' },
+  loop:      { type: 'boolean', description: 'Video/audio loop' },
 } as const
 
 export function registerLayerActions(reg: ActionRegistry): void {
@@ -313,6 +412,24 @@ export function registerLayerActions(reg: ActionRegistry): void {
       }
       if (scene.layers.some((l) => l.id === p.id)) {
         return errorCmd(`layer id "${p.id}" already exists — choose a different id`)
+      }
+      if (p.type === 'repeater') {
+        if (!p.sourceLayerId) {
+          return errorCmd('add_layer type=repeater requires sourceLayerId')
+        }
+        if (!scene.layers.some((l) => l.id === p.sourceLayerId)) {
+          return errorCmd(`repeater sourceLayerId "${p.sourceLayerId}" not found`)
+        }
+      }
+      if (p.type === 'image' || p.type === 'video' || p.type === 'audio') {
+        if (!p.assetId) {
+          return errorCmd(`add_layer type=${p.type} requires assetId (AI cannot upload files; use an existing asset — see list_assets)`)
+        }
+        const asset = scene.assets.find((a) => a.id === p.assetId)
+        if (!asset) return errorCmd(`asset "${p.assetId}" not found — see list_assets`)
+        if (asset.type !== p.type) {
+          return errorCmd(`asset "${p.assetId}" is a ${asset.type}, not ${p.type}`)
+        }
       }
       const layer = buildLayerFromParams(p)
       return makeAddLayerCmd(layer)

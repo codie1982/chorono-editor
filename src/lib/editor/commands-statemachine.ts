@@ -49,6 +49,26 @@ export function makeCreateSMCmd(name?: string): EditorCommand {
   }
 }
 
+/**
+ * Add a fully-formed state machine (caller controls id / states / transitions).
+ * Used by the AI tool + script builder, which assign deterministic ids and wire
+ * states to pre-existing timelines — unlike makeCreateSMCmd, this neither
+ * generates an idle state nor a backing timeline.
+ */
+export function makeAddStateMachineCmd(sm: StateMachineDefinition): EditorCommand {
+  return {
+    label: 'Add State Machine',
+    execute: (scene) => ({
+      ...scene,
+      stateMachines: [...(scene.stateMachines ?? []), sm],
+    }),
+    undo: (scene) => ({
+      ...scene,
+      stateMachines: (scene.stateMachines ?? []).filter((s) => s.id !== sm.id),
+    }),
+  }
+}
+
 export function makeDeleteSMCmd(sm: StateMachineDefinition): EditorCommand {
   return {
     label: 'Delete State Machine',
@@ -70,6 +90,31 @@ export function makeAddSMStateCmd(smId: string, state: ChronoSMState): EditorCom
     label: `Add State: ${state.name}`,
     execute: (scene) => mapSM(scene, smId, (sm) => ({ ...sm, states: [...sm.states, state] })),
     undo:    (scene) => mapSM(scene, smId, (sm) => ({ ...sm, states: sm.states.filter((s) => s.id !== state.id) })),
+  }
+}
+
+/**
+ * Add a state and, when the machine has no valid initial state yet, make this
+ * the initial one. Used by the AI tool + script builder so an incrementally
+ * built machine is runnable from the first state without an explicit
+ * set-initial call.
+ */
+export function makeAddSMStateAutoInitCmd(smId: string, state: ChronoSMState): EditorCommand {
+  return {
+    label: `Add State: ${state.name}`,
+    execute: (scene) => mapSM(scene, smId, (sm) => {
+      const hasValidInitial = !!sm.initialStateId && sm.states.some((s) => s.id === sm.initialStateId)
+      return {
+        ...sm,
+        states: [...sm.states, state],
+        initialStateId: hasValidInitial ? sm.initialStateId : state.id,
+      }
+    }),
+    undo: (scene) => mapSM(scene, smId, (sm) => ({
+      ...sm,
+      states: sm.states.filter((s) => s.id !== state.id),
+      initialStateId: sm.initialStateId === state.id ? '' : sm.initialStateId,
+    })),
   }
 }
 
