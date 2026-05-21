@@ -2,13 +2,38 @@
 // Provider-agnostic fetch wrappers. No SDK dependencies — pure fetch.
 // Each provider translates the common AITool format into its own wire format.
 
-import type { AIMessage, AITool, AIResponse, AIProviderConfig } from './types'
+import type { AIMessage, AgentMessage, AITool, AIResponse, AIProviderConfig } from './types'
 
 // ── Anthropic ─────────────────────────────────────────────────────────────────
 
+/** Translate AgentMessage[] → Anthropic content-block messages (tool round-trip). */
+function toAnthropicMessages(messages: AgentMessage[]) {
+  return messages.map((m) => {
+    if (m.toolResults && m.toolResults.length > 0) {
+      return {
+        role: 'user' as const,
+        content: m.toolResults.map((r) => ({
+          type: 'tool_result' as const,
+          tool_use_id: r.toolCallId,
+          content: r.content,
+        })),
+      }
+    }
+    if (m.toolCalls && m.toolCalls.length > 0) {
+      const blocks: Array<Record<string, unknown>> = []
+      if (m.content) blocks.push({ type: 'text', text: m.content })
+      for (const tc of m.toolCalls) {
+        blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input })
+      }
+      return { role: 'assistant' as const, content: blocks }
+    }
+    return { role: m.role, content: m.content }
+  })
+}
+
 export async function callAnthropic(
   config: AIProviderConfig,
-  messages: AIMessage[],
+  messages: AgentMessage[],
   tools: AITool[],
   systemPrompt: string,
 ): Promise<AIResponse> {
@@ -33,8 +58,10 @@ export async function callAnthropic(
       model: config.model,
       max_tokens: 8192,
       system: systemPrompt,
-      messages,
-      tools: anthropicTools,
+      messages: toAnthropicMessages(messages),
+      // Empty tools → omit so the model is forced to answer with text (used for
+      // the agent loop's forced wrap-up turn).
+      ...(anthropicTools.length > 0 ? { tools: anthropicTools } : {}),
     }),
   })
 
@@ -44,7 +71,7 @@ export async function callAnthropic(
   }
 
   const data = await res.json()
-  const content: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }> = data.content ?? []
+  const content: Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }> = data.content ?? []
 
   return {
     message: content
@@ -53,15 +80,45 @@ export async function callAnthropic(
       .join(''),
     toolCalls: content
       .filter((b) => b.type === 'tool_use')
-      .map((b) => ({ name: b.name!, input: b.input ?? {} })),
+      .map((b) => ({ id: b.id, name: b.name!, input: b.input ?? {} })),
   }
 }
 
 // ── OpenAI ────────────────────────────────────────────────────────────────────
 
+/** Translate AgentMessage[] → OpenAI chat messages (tool round-trip). */
+function toOpenAIMessages(systemPrompt: string, messages: AgentMessage[]) {
+  const out: Array<Record<string, unknown>> = [
+    { role: 'system', content: systemPrompt },
+  ]
+  for (const m of messages) {
+    if (m.toolResults && m.toolResults.length > 0) {
+      // One 'tool' message per result.
+      for (const r of m.toolResults) {
+        out.push({ role: 'tool', tool_call_id: r.toolCallId, content: r.content })
+      }
+      continue
+    }
+    if (m.toolCalls && m.toolCalls.length > 0) {
+      out.push({
+        role: 'assistant',
+        content: m.content || null,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.input) },
+        })),
+      })
+      continue
+    }
+    out.push({ role: m.role, content: m.content })
+  }
+  return out
+}
+
 export async function callOpenAI(
   config: AIProviderConfig,
-  messages: AIMessage[],
+  messages: AgentMessage[],
   tools: AITool[],
   systemPrompt: string,
 ): Promise<AIResponse> {
@@ -78,10 +135,7 @@ export async function callOpenAI(
     },
   }))
 
-  const allMessages = [
-    { role: 'system' as const, content: systemPrompt },
-    ...messages,
-  ]
+  const allMessages = toOpenAIMessages(systemPrompt, messages)
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -92,8 +146,8 @@ export async function callOpenAI(
     body: JSON.stringify({
       model: config.model,
       messages: allMessages,
-      tools: openaiTools,
-      tool_choice: 'auto',
+      // Empty tools → omit tools + tool_choice so the model must answer in text.
+      ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: 'auto' } : {}),
       max_tokens: 8192,
     }),
   })
@@ -108,8 +162,10 @@ export async function callOpenAI(
   const msg = choice?.message ?? {}
 
   const toolCalls = (msg.tool_calls ?? []).map((tc: {
+    id?: string
     function: { name: string; arguments: string }
   }) => ({
+    id: tc.id,
     name: tc.function.name,
     input: (() => {
       try { return JSON.parse(tc.function.arguments) }
@@ -128,7 +184,7 @@ export async function callOpenAI(
 
 export async function callCustom(
   config: AIProviderConfig,
-  messages: AIMessage[],
+  messages: AgentMessage[],
   tools: AITool[],
   systemPrompt: string,
 ): Promise<AIResponse> {
@@ -148,10 +204,7 @@ export async function callCustom(
     },
   }))
 
-  const allMessages = [
-    { role: 'system' as const, content: systemPrompt },
-    ...messages,
-  ]
+  const allMessages = toOpenAIMessages(systemPrompt, messages)
 
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`
@@ -162,8 +215,7 @@ export async function callCustom(
     body: JSON.stringify({
       model: config.model,
       messages: allMessages,
-      tools: openaiTools,
-      tool_choice: 'auto',
+      ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: 'auto' } : {}),
     }),
   })
 
@@ -177,8 +229,10 @@ export async function callCustom(
   const msg = choice?.message ?? {}
 
   const toolCalls = (msg.tool_calls ?? []).map((tc: {
+    id?: string
     function: { name: string; arguments: string }
   }) => ({
+    id: tc.id,
     name: tc.function.name,
     input: (() => {
       try { return JSON.parse(tc.function.arguments) }
@@ -196,7 +250,7 @@ export async function callCustom(
 
 export async function callAIProvider(
   config: AIProviderConfig,
-  messages: AIMessage[],
+  messages: AgentMessage[],
   tools: AITool[],
   systemPrompt: string,
 ): Promise<AIResponse> {

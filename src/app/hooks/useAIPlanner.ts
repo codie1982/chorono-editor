@@ -33,6 +33,8 @@ export interface UseAIPlannerReturn {
   isLoading: boolean
   error:     string | null
   send:      (text: string, providerOverride?: AIProviderConfig) => Promise<void>
+  /** Run the read-only Checker agent — reviews the scene, never mutates (BL-77). */
+  check:     (providerOverride?: AIProviderConfig) => Promise<void>
   clear:     () => void
 }
 
@@ -46,28 +48,35 @@ export function useAIPlanner({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError]         = useState<string | null>(null)
 
-  const send = useCallback(async (
+  const run = useCallback(async (
     text: string,
-    providerOverride?: AIProviderConfig,
+    providerOverride: AIProviderConfig | undefined,
+    agentRole: 'planner' | 'checker',
   ) => {
     if (!text.trim()) return
     setError(null); setIsLoading(true)
 
     const userId = `m_${Date.now()}_u`
     const aiId   = `m_${Date.now()}_a`
+    const isCheck = agentRole === 'checker'
 
-    const userMsg: AIUIMessage = { id: userId, role: 'user', content: text }
-    const placeholder: AIUIMessage = { id: aiId, role: 'assistant', content: '', loading: true }
+    // Checker has no user-typed prompt — show a system-style label instead.
+    const userMsg: AIUIMessage = {
+      id: userId, role: 'user',
+      content: isCheck ? '🔍 Sahneyi kontrol et' : text,
+    }
+    const placeholder: AIUIMessage = {
+      id: aiId, role: 'assistant', content: '', loading: true,
+      kind: isCheck ? 'check' : 'plan',
+    }
     setMessages((m) => [...m, userMsg, placeholder])
 
     try {
-      // Ensure action registry is ready (PlannerExecutor needs it for lookups)
       await bootstrapAIActions()
 
       const sceneContext = serializeScene(scene, {
         currentTimeMs, selectedLayerId, selectedTimelineId,
       } satisfies SerializeOptions)
-      // History sent to the LLM excludes the placeholder we just added.
       const history: AIMessage[] = messages.map((m) => ({
         role: m.role, content: m.content,
       }))
@@ -77,30 +86,37 @@ export function useAIPlanner({
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify({
           userMessage: text, sceneContext, history, providerOverride,
+          scene, agentRole,
         }),
       })
-      const data = (await res.json()) as AIResponse & { error?: string }
+      const data = (await res.json()) as AIResponse & {
+        error?: string
+        turns?: { toolNames: string[] }[]
+      }
       if (!res.ok || data.error) {
         throw new Error(data.error ?? `Request failed: ${res.status}`)
       }
 
-      // Build commands and dispatch in order
-      const exec = buildCommandsFromToolCalls(data.toolCalls ?? [], scene)
-      for (const cmd of exec.commands) dispatchCommand(cmd)
+      // Checker is read-only — never dispatch. Planner dispatches mutate calls.
+      const exec = isCheck
+        ? { commands: [], appliedLabels: [] as string[], errors: [] as string[] }
+        : buildCommandsFromToolCalls(data.toolCalls ?? [], scene)
+      if (!isCheck) for (const cmd of exec.commands) dispatchCommand(cmd)
 
       setMessages((m) => {
         const next = [...m]
-        // Replace placeholder (always last entry we just added)
         const idx = next.findIndex((x) => x.id === aiId)
         if (idx >= 0) {
           next[idx] = {
             id: aiId,
             role: 'assistant',
+            kind: isCheck ? 'check' : 'plan',
             content: data.message || (exec.appliedLabels.length > 0
               ? `${exec.appliedLabels.length} işlem uygulandı.`
               : '(no message)'),
             toolCalls: data.toolCalls,
-            appliedLabels: exec.appliedLabels,
+            appliedLabels: isCheck ? undefined : exec.appliedLabels,
+            turns: data.turns,
             error: exec.errors.length > 0 ? exec.errors.join('\n') : undefined,
           }
         }
@@ -113,10 +129,7 @@ export function useAIPlanner({
         const next = [...m]
         const idx = next.findIndex((x) => x.id === aiId)
         if (idx >= 0) {
-          next[idx] = {
-            ...next[idx], loading: false,
-            content: '', error: message,
-          }
+          next[idx] = { ...next[idx], loading: false, content: '', error: message }
         }
         return next
       })
@@ -125,10 +138,22 @@ export function useAIPlanner({
     }
   }, [scene, messages, dispatchCommand, currentTimeMs, selectedLayerId, selectedTimelineId])
 
+  const send = useCallback(
+    (text: string, providerOverride?: AIProviderConfig) =>
+      run(text, providerOverride, 'planner'),
+    [run],
+  )
+
+  const check = useCallback(
+    (providerOverride?: AIProviderConfig) =>
+      run('Review the current scene and report any issues.', providerOverride, 'checker'),
+    [run],
+  )
+
   const clear = useCallback(() => {
     setMessages([])
     setError(null)
   }, [])
 
-  return { messages, isLoading, error, send, clear }
+  return { messages, isLoading, error, send, check, clear }
 }

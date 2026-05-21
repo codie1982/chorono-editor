@@ -468,6 +468,7 @@ export function newTimeline(): Timeline {
   timelineCounter++
   return {
     id: `timeline_${timelineCounter}`,
+    mode: '2danimation',
     durationMs: 1000,
     autoplay: true,
     loop: false,
@@ -538,6 +539,7 @@ export const DEFAULT_COMPOSITION: Composition = {
 export function emptyScene(): ChronoScene {
   return {
     formatVersion: '1.0.0',
+    mode: '2danimation',
     composition: { ...DEFAULT_COMPOSITION },
     assets: [],
     layers: [],

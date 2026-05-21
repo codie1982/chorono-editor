@@ -24,17 +24,26 @@ export interface ActionDef<P = Record<string, unknown>> {
     required?: string[]
   }
   /**
-   * Build an EditorCommand from validated params. The `scene` argument is the
-   * working scene at this step (PlannerExecutor advances it between tool calls
-   * so e.g. create_timeline → add_keyframes ordering works).
+   * MUTATING action. Build an EditorCommand from validated params. The `scene`
+   * argument is the working scene at this step (PlannerExecutor advances it
+   * between tool calls so e.g. create_timeline → add_keyframes ordering works).
    *
    * Return value semantics:
    *   • EditorCommand → dispatched normally
    *   • null         → silently skipped (action chose not to act)
    *   • For validation errors, return a no-op command with label
    *     "AI ERROR: …" — the chat panel surfaces it as an error chip.
+   *
+   * An ActionDef defines exactly ONE of `toCommand` (mutate) or `read`.
    */
-  toCommand(params: P, scene: ChronoScene): EditorCommand | null
+  toCommand?(params: P, scene: ChronoScene): EditorCommand | null
+
+  /**
+   * READ-ONLY action (BL-01 Faz 2 — agent loop). Returns a string result that
+   * is fed back to the LLM as a tool_result so it can query → reason → continue.
+   * Read actions never mutate and are NOT sent to the client for dispatch.
+   */
+  read?(params: P, scene: ChronoScene): string
 }
 
 export class ActionRegistry {
@@ -63,9 +72,19 @@ export class ActionRegistry {
     return Array.from(this.actions.values())
   }
 
-  /** Emit AITool[] for providers.ts (Anthropic / OpenAI / Custom). */
-  toAITools(): AITool[] {
-    return this.getAll().map((a) => ({
+  /** All read-only (introspection) actions — those that define `read`. */
+  getReadOnly(): ActionDef[] {
+    return this.getAll().filter((a) => typeof a.read === 'function')
+  }
+
+  /**
+   * Emit AITool[] for providers.ts (Anthropic / OpenAI / Custom).
+   * `opts.readOnly` restricts to introspection tools — used by the Checker
+   * agent so it can inspect but never mutate the scene.
+   */
+  toAITools(opts?: { readOnly?: boolean }): AITool[] {
+    const defs = opts?.readOnly ? this.getReadOnly() : this.getAll()
+    return defs.map((a) => ({
       name: a.toolName,
       description: a.description,
       parameters: a.parameters,
@@ -112,16 +131,22 @@ export async function bootstrapAIActions(): Promise<void> {
     { registerLayerActions },
     { registerTimelineActions },
     { registerKeyframeActions },
+    { registerScriptActions },
+    { registerIntrospectActions },
   ] = await Promise.all([
     import('./actions/scene'),
     import('./actions/composition'),
     import('./actions/layer'),
     import('./actions/timeline'),
     import('./actions/keyframe'),
+    import('./actions/script'),
+    import('./actions/introspect'),
   ])
   registerSceneActions(actionRegistry)
   registerCompositionActions(actionRegistry)
   registerLayerActions(actionRegistry)
   registerTimelineActions(actionRegistry)
   registerKeyframeActions(actionRegistry)
+  registerScriptActions(actionRegistry)
+  registerIntrospectActions(actionRegistry)
 }

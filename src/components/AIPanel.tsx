@@ -46,6 +46,9 @@ export default function AIPanel({
   const [apiKey, setApiKey]           = useState('')
   const [customUrl, setCustomUrl]     = useState('')
   const [customModel, setCustomModel] = useState('')
+  /** BL-77 — autonomous Checker agent: auto-review after each planner build. */
+  const [autoCheck, setAutoCheck]     = useState(true)
+  const lastCheckedIdRef = useRef<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Reset model when provider changes
@@ -60,6 +63,24 @@ export default function AIPanel({
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [planner.messages])
+
+  // BL-77 — Autonomous Checker: after the planner finishes a build (a 'plan'
+  // message with applied changes), automatically run the read-only reviewer.
+  // Runs once per build; the post-build scene prop is current by this render so
+  // the checker inspects the freshly mutated scene.
+  useEffect(() => {
+    if (!autoCheck || planner.isLoading) return
+    const msgs = planner.messages
+    const last = msgs[msgs.length - 1]
+    if (!last || last.role !== 'assistant' || last.kind !== 'plan') return
+    if (!last.appliedLabels || last.appliedLabels.length === 0) return
+    if (lastCheckedIdRef.current === last.id) return
+    lastCheckedIdRef.current = last.id
+    planner.check(buildOverride())
+    // buildOverride is derived from local state; intentionally not a dep to
+    // avoid re-firing — the ref guard ensures one check per build.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planner.messages, planner.isLoading, autoCheck])
 
   function buildOverride(): AIProviderConfig | undefined {
     // Custom provider always needs override (env may not be set)
@@ -185,6 +206,16 @@ export default function AIPanel({
             title={q.prompt}
           >{q.label}</button>
         ))}
+        {/* BL-77 — autonomous Checker agent: runs automatically after each
+            planner build. This toggle enables/disables it. */}
+        <button
+          onClick={() => setAutoCheck((v) => !v)}
+          className={`text-[10px] px-2 py-1 rounded transition-colors border
+            ${autoCheck
+              ? 'bg-amber-900/50 border-amber-700 text-amber-200'
+              : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-300'}`}
+          title="Planner sahneyi her değiştirdiğinde Kontrolör otomatik inceler (salt-okunur)"
+        >🔍 Oto-Kontrol: {autoCheck ? 'Açık' : 'Kapalı'}</button>
       </div>
 
       {/* ── Messages ───────────────────────────────────────────────── */}
@@ -234,6 +265,56 @@ export default function AIPanel({
 
 function MessageBubble({ msg }: { msg: AIUIMessage }) {
   const isUser = msg.role === 'user'
+  const isCheck = msg.kind === 'check'
+
+  // Checker (BL-77) renders as a "thinking"-style review block: a collapsible
+  // inspection trace + the written verdict.
+  if (isCheck && !isUser) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[92%] w-full rounded-lg px-3 py-2 text-xs
+                        bg-amber-950/30 border border-amber-800/60 text-amber-100">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-amber-300">🔍</span>
+            <span className="font-semibold text-amber-200">Kontrolör</span>
+            {msg.loading && <span className="text-[10px] text-amber-400/70">inceliyor…</span>}
+          </div>
+
+          {msg.loading ? (
+            <div className="flex gap-1 items-center py-0.5">
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+            </div>
+          ) : (
+            <>
+              {msg.turns && msg.turns.length > 0 && (
+                <details className="mb-2 group">
+                  <summary className="cursor-pointer text-[10px] text-amber-400/80 hover:text-amber-300 select-none">
+                    💭 İnceleme süreci · {msg.turns.length} adım
+                  </summary>
+                  <ol className="mt-1 ml-3 space-y-0.5 list-decimal text-[10px] text-amber-200/70 font-mono">
+                    {msg.turns.map((t, i) => (
+                      <li key={i}>{t.toolNames.join(', ') || '(yanıt)'}</li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+              {msg.content && (
+                <div className="whitespace-pre-wrap leading-relaxed text-amber-50">{msg.content}</div>
+              )}
+              {msg.error && (
+                <div className="mt-2 px-2 py-1 bg-red-900/40 border border-red-800 text-red-300 rounded text-[10px] whitespace-pre-wrap">
+                  ⚠ {msg.error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs
