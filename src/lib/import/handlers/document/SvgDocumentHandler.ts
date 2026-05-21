@@ -9,6 +9,7 @@
 
 import { BaseImportHandler }            from '../BaseHandler'
 import { svgImporter, SvgImportError }  from '../../../svg/SvgImporter'
+import { svgSanitizer, SvgSanitizer }   from '../../security/SvgSanitizer'
 import type {
   ImportFormat,
   ImportOptions,
@@ -99,12 +100,23 @@ export class SvgDocumentHandler extends BaseImportHandler {
     const startMs = Date.now()
     this.reportProgress(onProgress, 'reading', 'Reading SVG…', 0.1)
 
-    let text: string
+    let rawText: string
     try {
-      text = await file.text()
+      rawText = await file.text()
     } catch (err) {
       throw new Error(`Cannot read SVG file "${file.name}": ${(err as Error).message}`)
     }
+
+    // ── Security: strip scripts / external refs / XXE before parsing (BL-08) ──
+    const sanitized = svgSanitizer.sanitize(rawText)
+    const text = sanitized.svg
+    const securityWarnings: ImportWarning[] = SvgSanitizer.wasModified(sanitized.report)
+      ? sanitized.warnings.map(message => ({
+          code:     'external_reference_skipped' as const,
+          severity: 'warning' as const,
+          message:  `Security: ${message}`,
+        }))
+      : []
 
     this.reportProgress(onProgress, 'parsing', 'Parsing SVG document…', 0.3)
 
@@ -125,8 +137,10 @@ export class SvgDocumentHandler extends BaseImportHandler {
 
     const { layers, width, height, warnings: svgWarnings } = svgResult
 
-    // Create an SVG asset as reference (stores original file URL)
-    const url     = URL.createObjectURL(file)
+    // Create an SVG asset as reference. Store the SANITIZED text (not the raw
+    // file) so the library preview / blob URL can never carry active content.
+    const sanitizedBlob = new Blob([text], { type: 'image/svg+xml' })
+    const url     = URL.createObjectURL(sanitizedBlob)
     const assetId = this.generateAssetId()
 
     const asset: Asset = {
@@ -146,12 +160,15 @@ export class SvgDocumentHandler extends BaseImportHandler {
       runtime: { objectUrl: url },
     }
 
-    // Convert SvgImportWarnings → ImportWarnings
-    const warnings: ImportWarning[] = svgWarnings.map(w => ({
-      code:     'unsupported_feature' as const,
-      severity: 'warning' as const,
-      message:  w.message,
-    }))
+    // Convert SvgImportWarnings → ImportWarnings, prefixed by any security findings
+    const warnings: ImportWarning[] = [
+      ...securityWarnings,
+      ...svgWarnings.map(w => ({
+        code:     'unsupported_feature' as const,
+        severity: 'warning' as const,
+        message:  w.message,
+      })),
+    ]
 
     if (layers.length === 0) {
       warnings.push({

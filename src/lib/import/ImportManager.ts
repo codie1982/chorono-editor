@@ -11,6 +11,7 @@ import { fileTypeDetector }    from './FileTypeDetector'
 import { AssetImporter }        from './AssetImporter'
 import { DocumentImporter }     from './DocumentImporter'
 import { ImportTransactionBuilder } from './ImportTransactionBuilder'
+import { urlValidator }         from './security/UrlValidator'
 import type { ImportHandler }   from './handlers/BaseHandler'
 import type {
   ImportFormat,
@@ -56,6 +57,12 @@ export class ImportManager {
     onProgress?: (p: ImportProgress) => void,
   ): Promise<ImportResult> {
     onProgress?.({ stage: 'reading', label: 'Fetching file…', progress: 0.05 })
+
+    // Security: only allow https (or http on localhost). Blocks file:/data:/js:.
+    const validation = urlValidator.validate(url)
+    if (!validation.ok) {
+      throw new Error(`Refused to import URL: ${validation.reason}`)
+    }
 
     const response = await fetch(url)
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
