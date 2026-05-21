@@ -112,16 +112,19 @@ export async function bootstrapAIActions(): Promise<void> {
     { registerLayerActions },
     { registerTimelineActions },
     { registerKeyframeActions },
+    { registerScriptActions },
   ] = await Promise.all([
     import('./actions/scene'),
     import('./actions/composition'),
     import('./actions/layer'),
     import('./actions/timeline'),
     import('./actions/keyframe'),
+    import('./actions/script'),
   ])
   registerSceneActions(actionRegistry)
   registerCompositionActions(actionRegistry)
   registerLayerActions(actionRegistry)
   registerTimelineActions(actionRegistry)
   registerKeyframeActions(actionRegistry)
+  registerScriptActions(actionRegistry)
 }

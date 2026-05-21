@@ -25,17 +25,22 @@ export interface RunOptions {
   label?: string
 }
 
-export function runScript(
+/**
+ * Shared core: run the script against a working copy of `initialScene`,
+ * collecting commands WITHOUT committing them. Both runScript (dispatches) and
+ * compileScript (returns a command) build on this.
+ */
+function executeScript(
   code: string,
-  host: ScriptHost,
-  options: RunOptions = {},
-): ScriptResult {
-  const { onEvent, label = 'Script' } = options
+  initialScene: ChronoScene,
+  onEvent?: (event: ScriptEvent) => void,
+): { result: ScriptResult; commands: EditorCommand[] } {
   const logs: string[] = []
   const commands: EditorCommand[] = []
 
-  // Working copy: starts at the real scene, advances as commands are produced.
-  let working: ChronoScene = host.getScene()
+  // Working copy: starts at the given scene, advances as commands are produced
+  // so script reads (e.g. handle.opacity after a set) stay consistent.
+  let working: ChronoScene = initialScene
 
   const innerHost: ScriptHost = {
     getScene: () => working,
@@ -58,14 +63,54 @@ export function runScript(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     onEvent?.({ type: 'scriptError', error: message, commandCount: commands.length })
-    return { ok: false, logs, error: message, commandCount: commands.length }
-  }
-
-  // Commit everything as a single undo step.
-  if (commands.length > 0) {
-    host.applyCommand(makeBatchCmd(label, commands))
+    // On error, discard collected commands — nothing is committed.
+    return {
+      result: { ok: false, logs, error: message, commandCount: commands.length },
+      commands: [],
+    }
   }
 
   onEvent?.({ type: 'scriptComplete', commandCount: commands.length })
-  return { ok: true, logs, commandCount: commands.length }
+  return {
+    result: { ok: true, logs, commandCount: commands.length },
+    commands,
+  }
+}
+
+/**
+ * Run a script and DISPATCH the result as one batched undo step.
+ * Used by the REPL panel (ScriptConsolePanel).
+ */
+export function runScript(
+  code: string,
+  host: ScriptHost,
+  options: RunOptions = {},
+): ScriptResult {
+  const { onEvent, label = 'Script' } = options
+  const { result, commands } = executeScript(code, host.getScene(), onEvent)
+
+  if (result.ok && commands.length > 0) {
+    host.applyCommand(makeBatchCmd(label, commands))
+  }
+  return result
+}
+
+/**
+ * Compile a script into ONE batched EditorCommand WITHOUT dispatching.
+ * Used by the AI run_script ActionDef so the planner executor can dispatch it
+ * through the normal pipeline (shares the same SceneAPI core as the REPL).
+ *
+ * Returns command=null when the script errors or produces no commands.
+ */
+export function compileScript(
+  code: string,
+  scene: ChronoScene,
+  options: RunOptions = {},
+): { result: ScriptResult; command: EditorCommand | null } {
+  const { onEvent, label = 'AI Script' } = options
+  const { result, commands } = executeScript(code, scene, onEvent)
+
+  const command =
+    result.ok && commands.length > 0 ? makeBatchCmd(label, commands) : null
+  return { result, command }
 }

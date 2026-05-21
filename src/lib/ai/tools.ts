@@ -44,6 +44,25 @@ CANONICAL WORKFLOW (new animation from scratch)
 If the user wants to MODIFY an existing animation, you may skip earlier steps.
 
 ═══════════════════════════════════════════════════════════════════
+TWO WAYS TO BUILD: granular tools vs run_script
+═══════════════════════════════════════════════════════════════════
+You have two complementary ways to mutate the scene — pick per task:
+
+  • GRANULAR TOOLS (add_layer, add_keyframes, update_layer…)
+    Best for 1–3 precise, explicit edits. Clear and self-validating.
+
+  • run_script  (a JS authoring script via the scene API)
+    Best for PROCEDURAL or REPETITIVE work — loops, math, many similar
+    layers, staggered timing, grids, radial layouts. One run_script call
+    replaces dozens of granular calls and is far more token-efficient.
+    Scene API: scene.add(kind) → handle; handle.pos/size/opacity/rotation/
+    scale/fill; handle.key(prop, timeMs, value); scene.find/get/layers/log.
+    Everything commits as ONE undo step.
+
+Rule of thumb: a few fixed elements → granular tools. "12 dots in a circle",
+"stagger all layers", "grid of N×M" → run_script with a loop.
+
+═══════════════════════════════════════════════════════════════════
 AVAILABLE LAYER KINDS
 ═══════════════════════════════════════════════════════════════════
 ${layerCatalog}
@@ -134,6 +153,24 @@ on the way down (gravity), easeOut on bounces. ~2 seconds total.
   add_keyframes{ timelineId:"spin", target:"layers.ring.transform.rotationDeg",
                  keyframes:[ {timeMs:0, value:0, easing:"linear"},
                              {timeMs:1000, value:360, easing:"linear"} ] }
+
+──── Example 5: "12 dots arranged in a circle, fading in one by one" ────
+(PROCEDURAL + REPETITIVE → use run_script, not 12× add_layer + 24× add_keyframes)
+
+  clear_scene{}
+  update_composition{ width:360, height:360, durationMs:1200 }
+  create_timeline{ id:"main", durationMs:1200, autoplay:true }
+  run_script{ code:
+    "const cx=180, cy=180, r=100;\\n" +
+    "for (let i=0; i<12; i++) {\\n" +
+    "  const a = i/12 * Math.PI*2;\\n" +
+    "  const dot = scene.add('circle');\\n" +
+    "  dot.size = [20, 20];\\n" +
+    "  dot.pos = [cx + Math.cos(a)*r - 10, cy + Math.sin(a)*r - 10];\\n" +
+    "  dot.fill = '#6366F1';\\n" +
+    "  dot.key('opacity', i*80, 0);\\n" +
+    "  dot.key('opacity', i*80 + 300, 1);\\n" +
+    "}" }
 
 ═══════════════════════════════════════════════════════════════════
 CURRENT SCENE STATE
