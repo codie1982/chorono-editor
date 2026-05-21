@@ -198,6 +198,41 @@ count / durationMs / loop / x / y as needed. Don't hand-build particle config.
   add_particle_emitter{ id:"confetti_1", preset:"confetti", x:180, y:0, loop:false }
 
 ═══════════════════════════════════════════════════════════════════
+SPLINES (editable vector primitives)
+═══════════════════════════════════════════════════════════════════
+add_spline creates an EDITABLE vector primitive (circle/ellipse/rectangle/line/
+arc/donut/ngon/star) with a point/handle/contour model — use it when the user
+wants an editable path shape rather than a plain parametric shape. Each kind has
+its own params (radius, sides, points, angles…).
+
+  add_spline{ id:"badge", kind:"star", points:5, outerRadius:90, innerRadius:36 }
+
+═══════════════════════════════════════════════════════════════════
+PATH & MOTION (curves + travel-along-path)
+═══════════════════════════════════════════════════════════════════
+  • add_path — build a bezier path from [x,y] points. role="visual" draws a
+    stroke; role="motion" is an invisible guide.
+  • assign_motion_path — make a layer travel along a path (followPath). Set
+    animateMs to auto-animate progress 0→1; orientToPath rotates to the tangent.
+  • trim_path — reveal part of a stroke (line-draw effect). Animate the reveal
+    by keyframing layers.<id>.style.stroke.trim.end from 0→1.
+
+  add_path{ id:"route", points:[[0,0],[150,-80],[300,0]], role:"motion" }
+  assign_motion_path{ layerId:"rocket", pathLayerId:"route", animateMs:2000, orientToPath:true }
+
+═══════════════════════════════════════════════════════════════════
+CLONE & ARRAY (duplicate / repeat a layer)
+═══════════════════════════════════════════════════════════════════
+  • clone_layer — duplicate a layer N times (mode "copy" = independent;
+    "instance" = live mirror of the source). Good for a few quick duplicates.
+  • array_layer — lay out copies in a pattern: "linear" (moveX/moveY step),
+    "grid" (columns×rows), "radial" (count around a circle: radius + angles),
+    "path" (distribute along a path layer, needs pathLayerId). count includes
+    the source. Prefer this over many add_layer calls for repeated objects.
+
+  array_layer{ layerId:"petal", pattern:"radial", count:12, radius:120, orientToAngle:true }
+
+═══════════════════════════════════════════════════════════════════
 INTERACTIVITY (parameters, triggers, bindings, wires)
 ═══════════════════════════════════════════════════════════════════
 For interactive / data-driven scenes:

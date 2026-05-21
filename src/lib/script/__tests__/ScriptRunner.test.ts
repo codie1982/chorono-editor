@@ -186,6 +186,45 @@ describe('runScript — authoring script (BL-76)', () => {
     expect(box.dragConfig).toMatchObject({ axis: 'x', setsParameter: 'angle' })
   })
 
+  it('adds an editable spline primitive via the scene API', () => {
+    const result = runScript(
+      `scene.addSpline('star', { points: 6, outerRadius: 80, innerRadius: 30 }, { x: 100, y: 100 })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const layer = getScene().layers.find((l) => l.type === 'spline')!
+    expect(layer.spline).toBeDefined()
+    expect(layer.transform.x).toBe(100)
+  })
+
+  it('adds a path and makes a layer follow it via the scene API', () => {
+    const result = runScript(
+      `const track = scene.addPath([[0,0],[300,100]], { role: 'motion' });
+       const ball = scene.add('circle');
+       ball.followPath(track.id, { orientToPath: true })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const path = getScene().layers.find((l) => l.type === 'path')!
+    expect(path.path?.anchors).toHaveLength(2)
+    const ball = getScene().layers.find((l) => l.type === 'shape')!
+    expect(ball.followPath).toMatchObject({ pathLayerId: path.id, orientToPath: true })
+  })
+
+  it('clones and arrays layers via the scene API', () => {
+    const result = runScript(
+      `const box = scene.add('rect');
+       scene.clone(box, 2);
+       const dots = scene.add('circle');
+       scene.array(dots, { pattern: 'radial', count: 6, radius: 100 })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const shapes = getScene().layers.filter((l) => l.type === 'shape')
+    // box + 2 clones + circle source + 5 radial copies = 9
+    expect(shapes.length).toBe(9)
+  })
+
   it('auto-creates a default timeline when none exists (BL-78 ordering fix)', () => {
     // Scene with NO timelines — key() must not throw; it auto-creates one.
     let scene = emptyScene()

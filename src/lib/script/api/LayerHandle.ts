@@ -237,6 +237,25 @@ export class LayerHandle {
     return this
   }
 
+  // ── Motion path ───────────────────────────────────────────────────────────────
+
+  /** Make this layer follow a path layer: handle.followPath(pathId, { orientToPath: true }). */
+  followPath(pathLayerId: string, opts?: {
+    progress?: number; orientToPath?: boolean
+    rotationOffset?: number; perpendicularOffset?: number
+  }): this {
+    const prev = this._layer()
+    const followPath = {
+      pathLayerId,
+      progress: opts?.progress ?? 0,
+      ...(opts?.orientToPath != null ? { orientToPath: opts.orientToPath } : {}),
+      ...(opts?.rotationOffset != null ? { rotationOffset: opts.rotationOffset } : {}),
+      ...(opts?.perpendicularOffset != null ? { perpendicularOffset: opts.perpendicularOffset } : {}),
+    }
+    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { followPath }, prev))
+    return this
+  }
+
   // ── Particles ─────────────────────────────────────────────────────────────────
 
   /**

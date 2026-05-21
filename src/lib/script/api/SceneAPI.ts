@@ -17,7 +17,14 @@ import { makeAddStateMachineCmd } from '../../editor/commands-statemachine'
 import {
   makeAddParamCmd, makeAddTriggerCmd, makeAddParameterWireCmd,
 } from '../../editor/commands-interactive'
-import { nextSMId } from '../../defaults'
+import { makeCloneCmd, makeArrayCmd } from '../../editor/commands-clone'
+import { buildArraySettings, type FlatArrayParams } from '../../array/buildArraySettings'
+import type { CloneMode } from '../../clone/CloneTypes'
+import { pathFromPoints } from '../../types/path'
+import type { SplineGeneratorParams, SplinePrimitiveKind } from '../../types'
+import {
+  nextSMId, newBezierPathLayer, newMotionPathLayer, newSplineLayerFromPrimitive,
+} from '../../defaults'
 import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
 
@@ -55,6 +62,14 @@ export interface SceneAPI {
   addStateMachine(name?: string): StateMachineHandle
   /** Add a particle emitter from a preset (confetti, fire, snow…). */
   addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle
+  /** Duplicate a layer N times. Returns handles to the new clones. */
+  clone(handle: LayerHandle, count?: number, opts?: { offsetX?: number; offsetY?: number; mode?: CloneMode }): LayerHandle[]
+  /** Lay out copies of a layer in a pattern. Returns handles to the new copies. */
+  array(handle: LayerHandle, opts: FlatArrayParams): LayerHandle[]
+  /** Add a bezier path layer from [x,y] points. Returns the path handle. */
+  addPath(points: [number, number][], opts?: { closed?: boolean; role?: 'visual' | 'motion'; x?: number; y?: number; name?: string }): LayerHandle
+  /** Add an editable spline primitive (circle/rect/ellipse/arc/donut/ngon/star/line). */
+  addSpline(kind: SplinePrimitiveKind, params: SplineGeneratorParams, opts?: { x?: number; y?: number; name?: string }): LayerHandle | null
   /** Add a scene parameter. Returns the parameter id. */
   addParam(id: string, defaultValue?: SceneParameterValue, opts?: { type?: SceneParameterType; name?: string; min?: number; max?: number }): string
   /** Add an event→action trigger. */
@@ -122,6 +137,58 @@ export function createSceneAPI(
 
     addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle {
       const layer = buildEmitterLayer({ ...opts, preset })
+      host.applyCommand(makeAddLayerCmd(layer))
+      return new LayerHandle(layer.id, ctx)
+    },
+
+    clone(handle, count = 1, opts): LayerHandle[] {
+      const source = host.getScene().layers.find((l) => l.id === handle.id)
+      if (!source) return []
+      const cmd = makeCloneCmd({
+        source, count,
+        ...(opts?.offsetX != null ? { offsetX: opts.offsetX } : {}),
+        ...(opts?.offsetY != null ? { offsetY: opts.offsetY } : {}),
+        ...(opts?.mode ? { mode: opts.mode } : {}),
+        timeline: host.getScene().timelines[0] ?? null,
+        allLayers: host.getScene().layers,
+      })
+      host.applyCommand(cmd)
+      return cmd.result.suggestedSelection.map((id) => new LayerHandle(id, ctx))
+    },
+
+    array(handle, opts): LayerHandle[] {
+      const source = host.getScene().layers.find((l) => l.id === handle.id)
+      if (!source) return []
+      const cmd = makeArrayCmd({
+        source,
+        settings: buildArraySettings(opts),
+        timeline: host.getScene().timelines[0] ?? null,
+        allLayers: host.getScene().layers,
+      })
+      host.applyCommand(cmd)
+      return cmd.result.suggestedSelection.map((id) => new LayerHandle(id, ctx))
+    },
+
+    addPath(points, opts): LayerHandle {
+      const base = opts?.role === 'motion' ? newMotionPathLayer() : newBezierPathLayer()
+      const layer = {
+        ...base,
+        ...(opts?.name ? { name: opts.name } : {}),
+        transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
+        path: pathFromPoints(points, opts?.closed ?? false),
+      }
+      host.applyCommand(makeAddLayerCmd(layer))
+      return new LayerHandle(layer.id, ctx)
+    },
+
+    addSpline(kind, params, opts): LayerHandle | null {
+      const base = newSplineLayerFromPrimitive(kind, params)
+      if (!base) return null
+      const layer = {
+        ...base,
+        ...(opts?.name ? { name: opts.name } : {}),
+        transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
+      }
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)
     },
