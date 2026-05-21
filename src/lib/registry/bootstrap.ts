@@ -8,6 +8,7 @@ import { ALL_SHAPE_DEFINITIONS }  from './definitions/shapes'
 import { ALL_SPLINE_DEFINITIONS } from './definitions/spline'
 import { textDefinition }         from './definitions/text/TextDefinition'
 import { ALL_MEDIA_DEFINITIONS }  from './definitions/media/MediaDefinitions'
+import { frameSequenceDefinition } from './definitions/media/FrameSequenceDefinition'
 import { bezierPathDefinition }   from './definitions/path/BezierPathDefinition'
 import { motionPathDefinition }   from './definitions/path/MotionPathDefinition'
 import { pathStrokeDefinition }   from './definitions/path/PathStrokeDefinition'
@@ -43,6 +44,9 @@ export function bootstrapLayerRegistry(): void {
 
   // Media (3 kinds)
   for (const def of ALL_MEDIA_DEFINITIONS) layerRegistry.register(def)
+
+  // Frame Sequence / Sprite Sheet (BL-07)
+  layerRegistry.register(frameSequenceDefinition)
 
   // Groups & Scene Graph
   layerRegistry.register(groupDefinition)

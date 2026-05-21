@@ -34,6 +34,29 @@ export interface AudioData {
   loop?: boolean
 }
 
+// ── Frame Sequence (BL-07) ─────────────────────────────────────────────────────
+// Sprite-sheet / animated-frame playback. The asset is a single image laid out
+// as a grid of frames; the renderer draws one cell per timeline frame.
+
+export interface FrameSequenceData {
+  /** Sprite-sheet image asset id. */
+  assetId: string
+  /** Grid columns / rows in the source sheet. */
+  columns: number
+  rows: number
+  /** Total frames (≤ columns*rows; last row may be partial). */
+  frameCount: number
+  /** Frame cell size in the source sheet (px). */
+  frameWidth: number
+  frameHeight: number
+  /** Playback rate (frames per second). */
+  fps: number
+  /** Loop when the sequence ends. Default true. */
+  loop?: boolean
+  /** How a frame fits the layer size. Default 'contain'. */
+  objectFit?: ObjectFit
+}
+
 // ── Asset Registry ────────────────────────────────────────────────────────────
 // Stored in ChronoScene.assets[]. Runtime JSON references by id.
 

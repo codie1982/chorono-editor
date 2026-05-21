@@ -15,7 +15,7 @@ export class ImageHandler extends BaseImportHandler {
     'image/jpeg',
     'image/webp',
     'image/avif',
-    'image/gif',   // static GIF (animated GIF handled by GifHandler)
+    // image/gif handled by GifHandler (static → image, animated → frameSequence)
   ]
 
   async preflight(file: File): Promise<ImportPreflight> {
