@@ -704,6 +704,10 @@ export interface ChronoScene {
   mode?: EditorMode
   composition: Composition
   assets: Asset[]
+  /** Asset collections (folders) for organizing imported materials.
+   *  Optional for backward compat — legacy scenes without this field
+   *  treat all assets as uncategorized. Added by BL-04 import pipeline. */
+  assetCollections?: import('../asset/types').AssetCollection[]
   layers: Layer[]
   timelines: Timeline[]
   /** Runtime-tunable parameters. Surfaced via setParam() on the host platform. */

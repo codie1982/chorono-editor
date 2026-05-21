@@ -30,9 +30,15 @@ interface Props {
 }
 
 const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> = {
-  image: { bg: 'bg-sky-900/50',     fg: 'text-sky-300',     icon: '🖼' },
-  video: { bg: 'bg-purple-900/50',  fg: 'text-purple-300',  icon: '▶' },
-  audio: { bg: 'bg-emerald-900/50', fg: 'text-emerald-300', icon: '♪' },
+  image:       { bg: 'bg-sky-900/50',     fg: 'text-sky-300',     icon: '🖼' },
+  video:       { bg: 'bg-purple-900/50',  fg: 'text-purple-300',  icon: '▶' },
+  audio:       { bg: 'bg-emerald-900/50', fg: 'text-emerald-300', icon: '♪' },
+  // BL-04: new asset types
+  font:        { bg: 'bg-amber-900/50',   fg: 'text-amber-300',   icon: 'F' },
+  svg:         { bg: 'bg-rose-900/50',    fg: 'text-rose-300',    icon: '✦' },
+  lottie:      { bg: 'bg-indigo-900/50',  fg: 'text-indigo-300',  icon: '◎' },
+  spriteSheet: { bg: 'bg-teal-900/50',    fg: 'text-teal-300',    icon: '⊞' },
+  gif:         { bg: 'bg-pink-900/50',    fg: 'text-pink-300',    icon: '⟳' },
 }
 
 export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
@@ -62,6 +68,10 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
       case 'image': layer = newImageLayer(a.id, a.width ?? 200, a.height ?? 150); break
       case 'video': layer = newVideoLayer(a.id, a.width ?? 320, a.height ?? 180, a.durationMs); break
       case 'audio': layer = newAudioLayer(a.id, a.durationMs); break
+      default: {
+        toast.error(`Cannot add layer for asset type: ${a.type}`)
+        return
+      }
     }
     editor.dispatchCommand(makeAddLayerCmd(layer))
     onSelectLayer?.(layer.id)

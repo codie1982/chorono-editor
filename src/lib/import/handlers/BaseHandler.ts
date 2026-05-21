@@ -1,0 +1,80 @@
+// ── BaseHandler ───────────────────────────────────────────────────────────────
+//
+// Interface and abstract base for all import handlers.
+// Every format implements this contract.
+
+import type { ImportFormat, ImportKind, ImportOptions, ImportResult, ImportPreflight, ImportProgress } from '../types'
+
+// ── Handler Interface ─────────────────────────────────────────────────────────
+
+export interface ImportHandler {
+  /** Formats this handler can process */
+  readonly supportedFormats: ImportFormat[]
+  readonly kind: ImportKind
+
+  /** Returns true if this handler can process the given format */
+  canHandle(format: ImportFormat): boolean
+
+  /**
+   * Run pre-import analysis without committing anything.
+   * Used to show the user a preflight summary and options.
+   */
+  preflight(file: File, options?: ImportOptions): Promise<ImportPreflight>
+
+  /**
+   * Run the full import and return the result.
+   * Must not throw on partial failures — collect warnings instead.
+   */
+  handle(
+    file: File,
+    options?: ImportOptions,
+    onProgress?: (p: ImportProgress) => void,
+  ): Promise<ImportResult>
+}
+
+// ── Abstract Base ─────────────────────────────────────────────────────────────
+
+export abstract class BaseImportHandler implements ImportHandler {
+  abstract readonly supportedFormats: ImportFormat[]
+  abstract readonly kind: ImportKind
+
+  canHandle(format: ImportFormat): boolean {
+    return this.supportedFormats.includes(format)
+  }
+
+  abstract preflight(file: File, options?: ImportOptions): Promise<ImportPreflight>
+  abstract handle(
+    file: File,
+    options?: ImportOptions,
+    onProgress?: (p: ImportProgress) => void,
+  ): Promise<ImportResult>
+
+  // ── Shared Helpers ────────────────────────────────────────────────────────
+
+  protected makeSource(file: File): import('../types').ImportSource {
+    return {
+      kind:      'file',
+      value:     file.name,
+      size:      file.size,
+      mimeType:  file.type,
+      timestamp: Date.now(),
+    }
+  }
+
+  protected generateId(): string {
+    return `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  }
+
+  protected generateAssetId(): string {
+    return `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  }
+
+  protected reportProgress(
+    onProgress: ((p: ImportProgress) => void) | undefined,
+    stage: ImportProgress['stage'],
+    label: string,
+    progress: number,
+  ): void {
+    onProgress?.({ stage, label, progress })
+  }
+}
