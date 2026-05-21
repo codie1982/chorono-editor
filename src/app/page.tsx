@@ -21,8 +21,8 @@ import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
 import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
-import { useAutoSave } from './hooks/useAutoSave'
-import { AutoSaveStatus } from '@/components/AutoSaveStatus'
+import { useFileVersioning } from './hooks/useFileVersioning'
+import { FileVersioningControl } from '@/components/FileVersioningControl'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
@@ -164,17 +164,16 @@ export default function BuilderPage() {
     layerMetaById, getSiblingsInArray,
   } = editor
 
-  // ── Auto-save to MongoDB (scene persistence) ────────────────────────────
-  // TODO: Get projectId and sceneId from URL query params or auth context
-  // For MVP: use dummy values. In production, load from /api/scenes/{sceneId}
-  const projectId = 'default-project'
-  const sceneId = 'default-scene'
-
-  const { state: autoSaveState, saveNow: autoSaveNow } = useAutoSave(scene, {
-    projectId,
-    sceneId,
+  // ── File versioning (browser-based scene persistence) ────────────────────
+  // Writes scene to a user-chosen folder via the File System Access API:
+  //  - {name}.json          → "current" file, overwritten on change (500ms)
+  //  - {name}_TIMESTAMP.json → version snapshots (every 10 min + manual)
+  // No server / MongoDB / Git — pure browser file output.
+  const fileVersioning = useFileVersioning(scene, {
     interval_ms: 500,
     fallback_ms: 10000,
+    snapshot_ms: 600000, // 10 minutes
+    baseName: scene.composition.id || 'scene',
   })
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
@@ -1471,8 +1470,16 @@ export default function BuilderPage() {
           {' · '}{scene.timelines.length} timelines
         </span>
 
-        {/* Auto-save status indicator */}
-        <AutoSaveStatus state={autoSaveState} onRetry={autoSaveNow} />
+        {/* File versioning: choose folder + auto-save + timestamped snapshots */}
+        <FileVersioningControl
+          state={fileVersioning.state}
+          directoryName={fileVersioning.directoryName}
+          lastSavedAt={fileVersioning.lastSavedAt}
+          snapshotCount={fileVersioning.snapshotCount}
+          isSupported={fileVersioning.isSupported}
+          onPickDirectory={fileVersioning.pickDirectory}
+          onSaveSnapshot={fileVersioning.saveSnapshotNow}
+        />
 
         {/* Preview Mode toggle — when ON, draggable/tappable layers respond
             interactively on the canvas (no segment / preview tab needed). */}
