@@ -2,7 +2,7 @@
 //
 // Shared `accept` attribute for <input type="file"> import pickers.
 // Covers every format the Phase-1 universal import pipeline can handle.
-// Used by the toolbar ImportButton and the AssetsPanel import control.
+// Used by the toolbar ImportMenu and the AssetsPanel import control.
 
 export const IMPORT_ACCEPT = [
   // Images

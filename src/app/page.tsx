@@ -57,7 +57,8 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
-import ImportButton    from '@/components/TopToolbar/ImportButton'
+import ImportMenu      from '@/components/TopToolbar/ImportMenu'
+import ImportUrlModal  from '@/components/modals/ImportUrlModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
 import ToolGroup, {
   type ToolMode, type SelectionContainMode,
@@ -378,10 +379,17 @@ export default function BuilderPage() {
   // Routes any File through ImportManager → atomic command → dispatch.
   // SVG, Lottie and Chorono-scene imports flow through here; legacy media
   // handlers below still exist for the existing per-type file inputs.
-  const { importFile: importAnyFile, importFiles: importAnyFiles } = useImport({
+  const {
+    importFile: importAnyFile,
+    importFiles: importAnyFiles,
+    importUrl: importAnyUrl,
+    importFromClipboard: importAnyClipboard,
+  } = useImport({
     dispatchCommand,
     onSelectLayer: (id) => selectLayer(id),
   })
+
+  const [showImportUrl, setShowImportUrl] = useState(false)
 
   // Programmatic file picker for the File menu "Import File…" entry.
   const openImportPicker = useCallback(() => {
@@ -1281,7 +1289,11 @@ export default function BuilderPage() {
           onRestorePanel={dock.dispatchRestorePanel}
         />
 
-        <ImportButton onImportFiles={importAnyFiles} />
+        <ImportMenu
+          onImportFiles={importAnyFiles}
+          onImportUrl={() => setShowImportUrl(true)}
+          onImportClipboard={() => { void importAnyClipboard() }}
+        />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
@@ -1999,6 +2011,14 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── Import from URL (BL-09) ──────────────────────────────────── */}
+      {showImportUrl && (
+        <ImportUrlModal
+          onImport={(url) => { void importAnyUrl(url) }}
+          onClose={() => setShowImportUrl(false)}
+        />
+      )}
 
       {/* ── BL-59 Clone Modal ──────────────────────────────────────── */}
       {cloneModalSource && (
