@@ -102,6 +102,9 @@ interface Props {
   splineAppendTargetId?: string | null
   /** BL-73 — Called after a spline draw commits (page resets draw mode). */
   onSplineDrawCommit?: () => void
+  /** BL-73 Sprint 5 — mirrors the selected spline point id up to the page so
+   *  the properties panel can show a point editor. */
+  onSplinePointSelected?: (pointId: string | null) => void
   /** BL-60 Faz 3 — Replace / add / subtract layers from the current selection
    *  after a canvas selection-tool drag completes. Mode is 'replace' (plain
    *  drag), 'add' (Shift+drag), or 'subtract' (Alt+drag). */
@@ -364,7 +367,7 @@ export default function SceneCanvas({
   menuHandlers, onAfterLayerCommit,
   ghostSettings, selectedTimeline,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
-  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit,
+  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onSplinePointSelected,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -619,6 +622,8 @@ export default function SceneCanvas({
   const [selectedSplinePointId, setSelectedSplinePointId] = useState<string | null>(null)
   const selectedSplinePointIdRef = useRef<string | null>(null)
   useEffect(() => { selectedSplinePointIdRef.current = selectedSplinePointId }, [selectedSplinePointId])
+  // Mirror to the page so the properties panel can show a point editor.
+  useEffect(() => { onSplinePointSelected?.(selectedSplinePointId) }, [selectedSplinePointId, onSplinePointSelected])
   // Mirror props into refs so window-listener closures read fresh values.
   const splineDrawKindRef = useRef(splineDrawKind)
   useEffect(() => { splineDrawKindRef.current = splineDrawKind }, [splineDrawKind])

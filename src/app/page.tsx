@@ -44,6 +44,7 @@ import LayerPanel      from '@/components/LayerPanel'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
+import SplinePointInspector from '@/components/SplinePointInspector'
 import TimelinePanel   from '@/components/TimelinePanel'
 import CurveEditor     from '@/components/timeline/CurveEditor'
 import DopeSheetPanel  from '@/components/dope-sheet/DopeSheetPanel'
@@ -155,6 +156,8 @@ export default function BuilderPage() {
   const [splineAppendMode, setSplineAppendMode] = useState(false)
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
+  /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
+  const [splinePointId, setSplinePointId] = useState<string | null>(null)
   /** Multi-layer selection — primary is selectedLayerId, extras live here. */
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(() => new Set(['card']))
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
@@ -1643,6 +1646,7 @@ export default function BuilderPage() {
                       splineAppendMode && selectedLayer?.type === 'spline' ? selectedLayerId : null
                     }
                     onSplineDrawCommit={() => { setSplineDrawKind(null); setToolMode('select') }}
+                    onSplinePointSelected={setSplinePointId}
                     snap={snap}
                     onSelectByGeometry={(ids, mode) => {
                       // BL-60 Faz 3 — canvas selection tools commit. Plain
@@ -1779,6 +1783,13 @@ export default function BuilderPage() {
                       onEditWire={wireModal.openForEdit}
                       dispatchCommand={dispatchCommand}
                     />
+                    {selectedLayer?.type === 'spline' && splinePointId && (
+                      <SplinePointInspector
+                        layer={selectedLayer}
+                        pointId={splinePointId}
+                        dispatchCommand={dispatchCommand}
+                      />
+                    )}
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
                         scene={scene}
