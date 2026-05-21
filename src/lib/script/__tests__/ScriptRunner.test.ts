@@ -167,6 +167,25 @@ describe('runScript — authoring script (BL-76)', () => {
     expect(layer.particleEmitter?.emitter.loop).toBe(true)
   })
 
+  it('adds parameters, wires and interactivity via the scene API', () => {
+    const result = runScript(
+      `scene.addParam('angle', 0.5, { min: 0, max: 1 });
+       const box = scene.add('rect');
+       box.interactive({ draggable: true, axis: 'x', setsParameter: 'angle' });
+       scene.wire('angle', 'transform.rotationDeg', 'map(source,0,1,0,360)', { targetLayerId: box.id });
+       scene.addTrigger('click', 'play', { layerId: box.id, timelineId: 'tl1' })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const s = getScene()
+    expect(s.parameters[0]).toMatchObject({ id: 'angle', type: 'number', defaultValue: 0.5 })
+    expect(s.parameterWires![0].expression).toBe('map(source,0,1,0,360)')
+    expect(s.triggers[0].event.type).toBe('click')
+    const box = s.layers.find((l) => l.type === 'shape')!
+    expect(box.draggable).toBe(true)
+    expect(box.dragConfig).toMatchObject({ axis: 'x', setsParameter: 'angle' })
+  })
+
   it('auto-creates a default timeline when none exists (BL-78 ordering fix)', () => {
     // Scene with NO timelines — key() must not throw; it auto-creates one.
     let scene = emptyScene()

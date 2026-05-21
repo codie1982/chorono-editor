@@ -195,6 +195,32 @@ count / durationMs / loop / x / y as needed. Don't hand-build particle config.
   add_particle_emitter{ id:"confetti_1", preset:"confetti", x:180, y:0, loop:false }
 
 ═══════════════════════════════════════════════════════════════════
+INTERACTIVITY (parameters, triggers, bindings, wires)
+═══════════════════════════════════════════════════════════════════
+For interactive / data-driven scenes:
+  • add_parameter — a runtime value (number/boolean/color/string) that other
+    rules read/write (e.g. "score", "angle", "isOpen").
+  • set_interactive — make a layer tappable (for click triggers) or draggable
+    (axis/range, followCursor, setsParameter, scrubsTimeline). REQUIRED before
+    a click/drag trigger on that layer will fire.
+  • add_trigger — when an event fires (click/drag/animationComplete…), run an
+    action (play/pause/seek a timeline, setParam, emitEvent). Optional condition.
+  • add_binding — linear remap source→target (inputMin→outputMin … inputMax→
+    outputMax). Good for simple "parameter drives property" links.
+  • add_parameter_wire — expression-driven link; the source binds as 'source'
+    (alias 's') in a whitelist formula: map/clamp/lerp/min/max/abs/round/sin/cos/
+    sqrt/pow/smoothstep, e.g. "map(source,0,1,0,360)". Use over add_binding when
+    you need a formula. Scene params: propertyPath = param id (no layerId);
+    layer props: layerId + dot-path.
+
+Example — "drag a knob to rotate the dial":
+  add_parameter{ id:"angle", type:"number", defaultValue:"0", min:0, max:1 }
+  set_interactive{ layerId:"knob", draggable:true, dragAxis:"x", setsParameter:"angle" }
+  add_parameter_wire{ sourceProperty:"angle", targetLayerId:"dial",
+                      targetProperty:"transform.rotationDeg",
+                      expression:"map(source,0,1,0,360)" }
+
+═══════════════════════════════════════════════════════════════════
 STATE MACHINES (interactive / multi-state animations)
 ═══════════════════════════════════════════════════════════════════
 For state-based or interactive requests ("hover→active", "idle/walk/run",

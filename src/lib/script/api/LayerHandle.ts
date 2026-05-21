@@ -5,7 +5,7 @@
 
 import type {
   Layer, Keyframe, AnimatableValue, EasingType,
-  FontWeight, FontStyle, TextAlign, ShapeParams,
+  FontWeight, FontStyle, TextAlign, ShapeParams, DragConfig, DragAxis,
 } from '../../types'
 import type { ParticleEmitterData } from '../../particles/types'
 import type { ScriptHost } from '../types'
@@ -206,6 +206,34 @@ export class LayerHandle {
     const prev = this._layer()
     const parentId = p == null ? undefined : (typeof p === 'string' ? p : p.id)
     this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { parentId }, prev))
+    return this
+  }
+
+  // ── Interactivity ─────────────────────────────────────────────────────────────
+
+  /**
+   * Make this layer interactive: handle.interactive({ tappable: true }) or
+   * handle.interactive({ draggable: true, axis: 'x', setsParameter: 'angle' }).
+   */
+  interactive(opts: {
+    tappable?: boolean; draggable?: boolean
+    axis?: DragAxis; range?: number; followCursor?: boolean
+    setsParameter?: string; scrubsTimeline?: string
+  }): this {
+    const prev = this._layer()
+    const patch: Partial<Layer> = {}
+    if (opts.tappable  != null) patch.tappable  = opts.tappable
+    if (opts.draggable != null) patch.draggable = opts.draggable
+    const drag: DragConfig = {
+      ...prev.dragConfig,
+      ...(opts.axis          != null ? { axis:           opts.axis }          : {}),
+      ...(opts.range         != null ? { range:          opts.range }         : {}),
+      ...(opts.followCursor  != null ? { followCursor:   opts.followCursor }  : {}),
+      ...(opts.setsParameter != null ? { setsParameter:  opts.setsParameter } : {}),
+      ...(opts.scrubsTimeline!= null ? { scrubsTimeline: opts.scrubsTimeline }: {}),
+    }
+    if (Object.keys(drag).length) patch.dragConfig = drag
+    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, patch, prev))
     return this
   }
 
