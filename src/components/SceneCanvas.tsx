@@ -19,6 +19,7 @@ import {
   splineParamsFromBox, isBoxDragKind, createPolylineSpline,
   createSplinePrimitive, splineToPathDefinition, translateSplineData, mergeSplineData,
   computeSplineBounds,
+  hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment,
 } from '@/lib/spline'
 import { newSplineLayerFromPrimitive, newSplineLayerFromData } from '@/lib/defaults'
 import { pathToSvgString } from '@/lib/geometry'
@@ -570,6 +571,13 @@ export default function SceneCanvas({
   const splineLineRef = useRef<{ points: Array<{ x: number; y: number }> } | null>(null)
   /** Preview path in composition coords (scaled by zoom at render). */
   const [splinePreview, setSplinePreview] = useState<{ d: string; fill: boolean } | null>(null)
+  /** BL-73 Sprint 3 — hovered spline element (point / handle / segment). */
+  const [splineHover, setSplineHover] = useState<
+    | { kind: 'point';   id: string }
+    | { kind: 'handle';  pointId: string; handleKind: 'in' | 'out' }
+    | { kind: 'segment'; id: string }
+    | null
+  >(null)
   // Mirror props into refs so window-listener closures read fresh values.
   const splineDrawKindRef = useRef(splineDrawKind)
   useEffect(() => { splineDrawKindRef.current = splineDrawKind }, [splineDrawKind])
@@ -2355,15 +2363,41 @@ export default function SceneCanvas({
                 const cy = (clientY - rect.top)  * sy
                 const hit = hitTestLayer(scene, timeMs, cx, cy)
                 setHoveredLayerId((cur) => (cur === hit ? cur : hit))
+
+                // BL-73 — hover over the selected spline's points / handles /
+                // segments (priority: handle → point → segment). Local coords;
+                // tolerance scaled by zoom so it stays ~8 screen px.
+                const sel = scene.layers.find((l) => l.id === selectedLayerId)
+                if (sel?.type === 'spline' && sel.spline
+                    && (toolMode === 'select' || toolMode === 'pen')) {
+                  const lx = cx - sel.transform.x
+                  const ly = cy - sel.transform.y
+                  const tol = 8 / zoom
+                  const hh = hitTestSplineHandle(sel.spline, lx, ly, tol)
+                  if (hh) setSplineHover({ kind: 'handle', pointId: hh.pointId, handleKind: hh.kind })
+                  else {
+                    const hp = hitTestSplinePoint(sel.spline, lx, ly, tol)
+                    if (hp) setSplineHover({ kind: 'point', id: hp })
+                    else {
+                      const hs = hitTestSplineSegment(sel.spline, lx, ly, tol)
+                      setSplineHover(hs ? { kind: 'segment', id: hs.segmentId } : null)
+                    }
+                  }
+                } else {
+                  setSplineHover((cur) => (cur ? null : cur))
+                }
               })
             }}
             onPointerLeave={() => {
               if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
               setHoveredLayerId(null)
+              setSplineHover((cur) => (cur ? null : cur))
             }}
             className={`absolute inset-0 block ${
               previewMode ? 'cursor-pointer'
               : pathPickMode ? 'cursor-crosshair'
+              : toolMode === 'spline-draw' ? 'cursor-crosshair'
+              : splineHover ? 'cursor-pointer'
               : toolMode === 'pen' ? 'cursor-crosshair'
               : panMode ? 'cursor-grab'
               : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
@@ -2467,7 +2501,7 @@ export default function SceneCanvas({
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
           {selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !previewMode && (
-            <SplineEditOverlay layer={selectedLayer} zoom={zoom} />
+            <SplineEditOverlay layer={selectedLayer} zoom={zoom} hover={splineHover} />
           )}
 
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
