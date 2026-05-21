@@ -1,6 +1,6 @@
 'use client'
 import {
-  useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo,
+  useRef, useEffect, useCallback, useState, useMemo,
 } from 'react'
 import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -53,6 +53,7 @@ import { useCanvasRenderer } from './canvas/hooks/useCanvasRenderer'
 import { usePreviewDrag } from './canvas/hooks/usePreviewDrag'
 import { useSelectionTools } from './canvas/hooks/useSelectionTools'
 import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
+import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
 // ── Pure drag math (framework-free, unit-tested in lib/canvas/math) ────────
 import { clamp } from '@/lib/canvas/math/coordinateMath'
 import { applyAxisLock } from '@/lib/canvas/math/moveMath'
@@ -196,9 +197,6 @@ interface Props {
 }
 
 const PADDING   = 24
-const MIN_ZOOM  = 0.1
-const MAX_ZOOM  = 8
-const ZOOM_STEP = 1.25
 const MIN_SIZE  = 4    // smallest allowed layer dimension (px in composition space)
 
 export default function SceneCanvas({
@@ -218,9 +216,12 @@ export default function SceneCanvas({
 
   const { width, height } = scene.composition
 
-  // ── Zoom ──────────────────────────────────────────────────────────────────
-  const [zoom, setZoom]       = useState(1)
-  const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
+  // ── Viewport: zoom / pan / fit presets / wheel zoom / pan drag ────────────
+  const {
+    zoom, pan, panDragRef,
+    fitAll, fitWidth, fitHeight, actualSize, zoomTo, fitSelection, centreSelection,
+    zoomIn, zoomOut, beginPan, handleWheel,
+  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene, selectedLayerId })
 
   // ── Snap config — owned upstream by useSnapSettings ─────────────────────
   // Mirror to a ref so pointermove closures see fresh values without being
@@ -299,10 +300,6 @@ export default function SceneCanvas({
     if (onPanModeChange) onPanModeChange(resolved)
     else setInternalPanMode(resolved)
   }
-  const [pan, setPan]         = useState({ x: 0, y: 0 })
-  const panDragRef = useRef<{
-    startClientX: number; startClientY: number; startPan: { x: number; y: number }
-  } | null>(null)
 
   // ── Hover preview (red outline of the layer that would be selected) ─────
   const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null)
@@ -319,81 +316,6 @@ export default function SceneCanvas({
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [fitMenuOpen])
-
-  useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const measure = () => {
-      const r = el.getBoundingClientRect()
-      setMaxSide({ w: r.width - PADDING * 2, h: r.height - PADDING * 2 })
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  const fitZoom = useMemo(() => {
-    if (maxSide.w <= 0 || maxSide.h <= 0) return 1
-    return Math.min(maxSide.w / width, maxSide.h / height, MAX_ZOOM)
-  }, [maxSide, width, height])
-
-  // ── Zoom presets ─────────────────────────────────────────────────────────
-  /** Pan offset (display px) that places (cx, cy) in composition coords at the
-   *  centre of the viewport, given a zoom level. Reverses the flex centring. */
-  const panToCentre = useCallback((cx: number, cy: number, z: number) => ({
-    x: (width  / 2 - cx) * z,
-    y: (height / 2 - cy) * z,
-  }), [width, height])
-
-  const fitAll = useCallback(() => {
-    setZoom(fitZoom); setPan({ x: 0, y: 0 })
-  }, [fitZoom])
-
-  const fitWidth = useCallback(() => {
-    if (maxSide.w <= 0) return
-    const z = clamp(maxSide.w / width, MIN_ZOOM, MAX_ZOOM)
-    setZoom(z); setPan({ x: 0, y: 0 })
-  }, [maxSide.w, width])
-
-  const fitHeight = useCallback(() => {
-    if (maxSide.h <= 0) return
-    const z = clamp(maxSide.h / height, MIN_ZOOM, MAX_ZOOM)
-    setZoom(z); setPan({ x: 0, y: 0 })
-  }, [maxSide.h, height])
-
-  const actualSize = useCallback(() => {
-    setZoom(1); setPan({ x: 0, y: 0 })
-  }, [])
-
-  const zoomTo = useCallback((z: number) => {
-    setZoom(clamp(z, MIN_ZOOM, MAX_ZOOM)); setPan({ x: 0, y: 0 })
-  }, [])
-
-  /** Fit selected layer to viewport (with 40px padding) and centre it. */
-  const fitSelection = useCallback(() => {
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer || !layer.size) return
-    const PAD = 40
-    const z = clamp(
-      Math.min((maxSide.w - PAD * 2) / layer.size.width, (maxSide.h - PAD * 2) / layer.size.height),
-      MIN_ZOOM, MAX_ZOOM,
-    )
-    const cx = layer.transform.x + layer.size.width  / 2
-    const cy = layer.transform.y + layer.size.height / 2
-    setZoom(z); setPan(panToCentre(cx, cy, z))
-  }, [scene.layers, selectedLayerId, maxSide, panToCentre])
-
-  /** Re-centre selected layer in the viewport without changing zoom. */
-  const centreSelection = useCallback(() => {
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer) return
-    const w = layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80)
-    const h = layer.size?.height ?? (layer.text?.fontSize ?? 24)
-    const cx = layer.transform.x + w / 2
-    const cy = layer.transform.y + h / 2
-    setPan(panToCentre(cx, cy, zoom))
-  }, [scene.layers, selectedLayerId, zoom, panToCentre])
 
   // ── Refs for live values inside window-level pointer listeners ───────────
   const sceneRef = useRef(scene)
@@ -1006,31 +928,6 @@ export default function SceneCanvas({
     onAfterLayerCommit?.(orig, finalLayer)
   }, [handlePointerMove, onAfterLayerCommit, onSelectLayer])
 
-  // ── Canvas pointerdown → select + start move ─────────────────────────────
-  // ── Pan (move whole view) ─────────────────────────────────────────────────
-  const handlePanMove = useCallback((e: PointerEvent) => {
-    const p = panDragRef.current
-    if (!p) return
-    setPan({
-      x: p.startPan.x + (e.clientX - p.startClientX),
-      y: p.startPan.y + (e.clientY - p.startClientY),
-    })
-  }, [])
-  const handlePanUp = useCallback(() => {
-    if (!panDragRef.current) return
-    panDragRef.current = null
-    window.removeEventListener('pointermove', handlePanMove)
-    window.removeEventListener('pointerup',   handlePanUp)
-  }, [handlePanMove])
-  const beginPan = useCallback((e: React.PointerEvent) => {
-    panDragRef.current = {
-      startClientX: e.clientX, startClientY: e.clientY,
-      startPan: { ...pan },
-    }
-    window.addEventListener('pointermove', handlePanMove)
-    window.addEventListener('pointerup',   handlePanUp)
-  }, [pan, handlePanMove, handlePanUp])
-
 
 
   // ── BL-73 Spline drawing tools (box-drag primitives + multi-click line) ──
@@ -1578,13 +1475,6 @@ export default function SceneCanvas({
     ghostSettings, selectedTimeline,
   })
 
-  // ── Wheel zoom (Cmd/Ctrl held) ────────────────────────────────────────────
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    if (!(e.metaKey || e.ctrlKey)) return
-    e.preventDefault()
-    const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP
-    setZoom((z) => clamp(z * factor, MIN_ZOOM, MAX_ZOOM))
-  }, [])
 
   // ── Selection frame geometry (uses preview layer state) ──────────────────
   //
@@ -2212,13 +2102,13 @@ export default function SceneCanvas({
             ✋
           </button>
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
-          <button onClick={() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
+          <button onClick={zoomOut}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom out (Cmd+scroll)">−</button>
           <button onClick={actualSize}
             className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100% + recentre">
             {Math.round(zoom * 100)}%
           </button>
-          <button onClick={() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM))}
+          <button onClick={zoomIn}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom in (Cmd+scroll)">+</button>
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
 
