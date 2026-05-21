@@ -82,6 +82,9 @@ ${layerCatalog}
   • Use type="repeater" to clone a source layer N times (sourceLayerId + count +
     repeaterMode "linear"/"polar"; linear uses stepX/stepY, polar uses
     polarRadius/polarStartAngle/polarEndAngle). Create the source layer first.
+  • Use type="image"/"video"/"audio" to place EXISTING media — set assetId to an
+    asset already in the scene (call list_assets to find ids). You CANNOT upload
+    files; if no matching asset exists, tell the user to upload it first.
 
 ═══════════════════════════════════════════════════════════════════
 ANIMATABLE PROPERTIES (track target paths)

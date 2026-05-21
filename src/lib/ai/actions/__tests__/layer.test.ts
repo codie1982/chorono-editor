@@ -1,6 +1,9 @@
-// ── add_layer repeater build tests ────────────────────────────────────────────
-import { describe, it, expect } from 'vitest'
-import { buildLayerFromParams } from '../layer'
+// ── add_layer repeater + media build tests ────────────────────────────────────
+import { describe, it, expect, beforeEach } from 'vitest'
+import { buildLayerFromParams, registerLayerActions } from '../layer'
+import { ActionRegistry } from '../../ActionRegistry'
+import { emptyScene } from '@/lib/defaults'
+import type { ChronoScene, Asset } from '@/lib/types'
 
 describe('buildLayerFromParams — repeater', () => {
   it('builds a linear repeater with a transform step', () => {
@@ -33,5 +36,54 @@ describe('buildLayerFromParams — repeater', () => {
     })
     expect(layer.repeater?.count).toBe(3)
     expect(layer.repeater?.mode).toBe('linear')
+  })
+})
+
+describe('buildLayerFromParams — media', () => {
+  it('builds an image layer with assetId + objectFit', () => {
+    const layer = buildLayerFromParams({
+      id: 'img1', name: 'Hero', type: 'image', assetId: 'a1', objectFit: 'cover',
+    })
+    expect(layer.type).toBe('image')
+    expect(layer.image).toEqual({ assetId: 'a1', objectFit: 'cover' })
+  })
+
+  it('builds a video layer with media props', () => {
+    const layer = buildLayerFromParams({
+      id: 'v1', name: 'Clip', type: 'video', assetId: 'a2', volume: 0.5, loop: true,
+    })
+    expect(layer.video).toMatchObject({ assetId: 'a2', volume: 0.5, loop: true })
+  })
+})
+
+describe('add_layer media validation', () => {
+  let reg: ActionRegistry
+  let scene: ChronoScene
+  beforeEach(() => {
+    reg = new ActionRegistry()
+    registerLayerActions(reg)
+    scene = emptyScene()
+    scene.assets = [{ id: 'a1', name: 'Hero', type: 'image', url: 'blob://x' } as Asset]
+  })
+
+  function add(params: Record<string, unknown>) {
+    return reg.get('add_layer')!.toCommand!(params, scene)!
+  }
+
+  it('errors when media assetId is missing', () => {
+    expect(add({ id: 'x', name: 'X', type: 'image' }).label).toMatch(/requires assetId/)
+  })
+
+  it('errors when asset id does not exist', () => {
+    expect(add({ id: 'x', name: 'X', type: 'image', assetId: 'ghost' }).label).toMatch(/not found/)
+  })
+
+  it('errors when asset type mismatches layer type', () => {
+    expect(add({ id: 'x', name: 'X', type: 'video', assetId: 'a1' }).label).toMatch(/is a image, not video/)
+  })
+
+  it('accepts a valid image asset reference', () => {
+    const next = add({ id: 'x', name: 'X', type: 'image', assetId: 'a1' }).execute(scene)
+    expect(next.layers[0].image?.assetId).toBe('a1')
   })
 })

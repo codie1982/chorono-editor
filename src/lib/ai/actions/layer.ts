@@ -4,7 +4,7 @@
 
 import type { Layer, LayerType, Transform } from '@/lib/types'
 import type { ShapeKind } from '@/lib/types'
-import type { FontWeight, TextAlign } from '@/lib/types'
+import type { FontWeight, TextAlign, ObjectFit } from '@/lib/types'
 import {
   makeAddLayerCmd, makeUpdateLayerCmd, makeDeleteLayerCmd,
 } from '@/lib/editor/commands-layer'
@@ -40,6 +40,12 @@ export interface LayerCommonParams {
   stepX?: number; stepY?: number; stepRotation?: number
   stepScaleX?: number; stepScaleY?: number; stepOpacity?: number
   polarRadius?: number; polarStartAngle?: number; polarEndAngle?: number
+  // Media (type === 'image' | 'video' | 'audio')
+  assetId?: string
+  objectFit?: ObjectFit
+  volume?: number
+  muted?: boolean
+  loop?: boolean
 }
 
 export interface AddLayerParams extends LayerCommonParams {
@@ -174,8 +180,43 @@ export function buildLayerFromParams(p: AddLayerParams): Layer {
     }
   }
 
-  // group / image / video / audio / path / pathStroke — group is plausibly
-  // created by the AI; others require assets / pen interaction.
+  if (p.type === 'image') {
+    return {
+      ...base,
+      size: { width: w, height: h },
+      image: { assetId: p.assetId ?? '', objectFit: p.objectFit ?? 'contain' },
+    }
+  }
+
+  if (p.type === 'video') {
+    return {
+      ...base,
+      size: { width: w || 320, height: h || 180 },
+      video: {
+        assetId: p.assetId ?? '',
+        volume:  p.volume ?? 1,
+        muted:   p.muted ?? false,
+        loop:    p.loop ?? false,
+        startOffsetMs: 0,
+      },
+    }
+  }
+
+  if (p.type === 'audio') {
+    return {
+      ...base,
+      audio: {
+        assetId: p.assetId ?? '',
+        volume:  p.volume ?? 1,
+        muted:   p.muted ?? false,
+        loop:    p.loop ?? false,
+        startOffsetMs: 0,
+      },
+    }
+  }
+
+  // group / path / pathStroke — group is plausibly created by the AI; others
+  // require pen interaction.
   return base
 }
 
@@ -276,7 +317,8 @@ export function applyPatchToLayer(prev: Layer, patch: UpdateLayerParams): Layer 
 
 // ── Action registration ──────────────────────────────────────────────────────
 
-const LAYER_TYPE_ENUM = ['shape', 'text', 'group', 'repeater']
+const LAYER_TYPE_ENUM = ['shape', 'text', 'group', 'repeater', 'image', 'video', 'audio']
+const OBJECT_FIT_ENUM = ['fill', 'contain', 'cover', 'none']
 const SHAPE_KIND_ENUM = [
   'rect', 'ellipse', 'polygon', 'star', 'ring', 'arc', 'line', 'arrow', 'capsule',
   'spiral', 'wave', 'blob',   // BL-24
@@ -338,6 +380,12 @@ const COMMON_LAYER_PROPS = {
   polarRadius:     { type: 'number', description: 'Repeater polar: ring radius (px)' },
   polarStartAngle: { type: 'number', description: 'Repeater polar: start angle (deg)' },
   polarEndAngle:   { type: 'number', description: 'Repeater polar: end angle (deg)' },
+  // ── Media (type=image/video/audio) ──────────────────────────────────────────
+  assetId:   { type: 'string', description: 'Media: id of an existing scene asset (see list_assets)' },
+  objectFit: { type: 'string', enum: OBJECT_FIT_ENUM, description: 'Image fit mode (default contain)' },
+  volume:    { type: 'number', minimum: 0, maximum: 1, description: 'Video/audio volume 0–1' },
+  muted:     { type: 'boolean', description: 'Video/audio muted' },
+  loop:      { type: 'boolean', description: 'Video/audio loop' },
 } as const
 
 export function registerLayerActions(reg: ActionRegistry): void {
@@ -371,6 +419,16 @@ export function registerLayerActions(reg: ActionRegistry): void {
         }
         if (!scene.layers.some((l) => l.id === p.sourceLayerId)) {
           return errorCmd(`repeater sourceLayerId "${p.sourceLayerId}" not found`)
+        }
+      }
+      if (p.type === 'image' || p.type === 'video' || p.type === 'audio') {
+        if (!p.assetId) {
+          return errorCmd(`add_layer type=${p.type} requires assetId (AI cannot upload files; use an existing asset — see list_assets)`)
+        }
+        const asset = scene.assets.find((a) => a.id === p.assetId)
+        if (!asset) return errorCmd(`asset "${p.assetId}" not found — see list_assets`)
+        if (asset.type !== p.type) {
+          return errorCmd(`asset "${p.assetId}" is a ${asset.type}, not ${p.type}`)
         }
       }
       const layer = buildLayerFromParams(p)
