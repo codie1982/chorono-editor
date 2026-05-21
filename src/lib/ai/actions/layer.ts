@@ -33,6 +33,13 @@ export interface LayerCommonParams {
   startMs?: number; endMs?: number
   // Tree
   parentId?: string
+  // Repeater (type === 'repeater')
+  sourceLayerId?: string
+  count?: number
+  repeaterMode?: 'linear' | 'polar'
+  stepX?: number; stepY?: number; stepRotation?: number
+  stepScaleX?: number; stepScaleY?: number; stepOpacity?: number
+  polarRadius?: number; polarStartAngle?: number; polarEndAngle?: number
 }
 
 export interface AddLayerParams extends LayerCommonParams {
@@ -137,8 +144,38 @@ export function buildLayerFromParams(p: AddLayerParams): Layer {
     }
   }
 
-  // group / image / video / audio / path / pathStroke / repeater — only group
-  // is plausibly created by the AI. Others require assets / pen interaction.
+  if (p.type === 'repeater') {
+    const mode = p.repeaterMode ?? 'linear'
+    const step = {
+      ...(p.stepX        != null ? { x:        p.stepX }        : {}),
+      ...(p.stepY        != null ? { y:        p.stepY }        : {}),
+      ...(p.stepRotation != null ? { rotation: p.stepRotation } : {}),
+      ...(p.stepScaleX   != null ? { scaleX:   p.stepScaleX }   : {}),
+      ...(p.stepScaleY   != null ? { scaleY:   p.stepScaleY }   : {}),
+      ...(p.stepOpacity  != null ? { opacity:  p.stepOpacity }  : {}),
+    }
+    return {
+      ...base,
+      repeater: {
+        sourceLayerId: p.sourceLayerId ?? '',
+        count:         p.count ?? 3,
+        mode,
+        ...(Object.keys(step).length ? { transformStep: step } : {}),
+        ...(mode === 'polar'
+          ? {
+              polar: {
+                radius:     p.polarRadius     ?? 100,
+                startAngle: p.polarStartAngle ?? 0,
+                endAngle:   p.polarEndAngle   ?? 360,
+              },
+            }
+          : {}),
+      },
+    }
+  }
+
+  // group / image / video / audio / path / pathStroke — group is plausibly
+  // created by the AI; others require assets / pen interaction.
   return base
 }
 
@@ -239,13 +276,14 @@ export function applyPatchToLayer(prev: Layer, patch: UpdateLayerParams): Layer 
 
 // ── Action registration ──────────────────────────────────────────────────────
 
-const LAYER_TYPE_ENUM = ['shape', 'text', 'group']
+const LAYER_TYPE_ENUM = ['shape', 'text', 'group', 'repeater']
 const SHAPE_KIND_ENUM = [
   'rect', 'ellipse', 'polygon', 'star', 'ring', 'arc', 'line', 'arrow', 'capsule',
   'spiral', 'wave', 'blob',   // BL-24
 ]
 const FONT_WEIGHT_ENUM = ['normal', 'bold', '300', '400', '500', '600', '700', '800']
 const TEXT_ALIGN_ENUM = ['left', 'center', 'right']
+const REPEATER_MODE_ENUM = ['linear', 'polar']
 
 /** Param schema reused by add_layer and update_layer (shape/text/etc. fields). */
 const COMMON_LAYER_PROPS = {
@@ -287,6 +325,19 @@ const COMMON_LAYER_PROPS = {
   startMs:      { type: 'number', description: 'Time (ms) when layer becomes visible' },
   endMs:        { type: 'number', description: 'Time (ms) when layer disappears' },
   parentId:     { type: 'string', description: 'Parent group layer id' },
+  // ── Repeater (type=repeater) ────────────────────────────────────────────────
+  sourceLayerId: { type: 'string', description: 'Repeater: id of the layer to repeat' },
+  count:         { type: 'number', description: 'Repeater: number of copies' },
+  repeaterMode:  { type: 'string', enum: REPEATER_MODE_ENUM, description: 'Repeater layout' },
+  stepX:         { type: 'number', description: 'Repeater linear: x offset per copy (px)' },
+  stepY:         { type: 'number', description: 'Repeater linear: y offset per copy (px)' },
+  stepRotation:  { type: 'number', description: 'Repeater: rotation step per copy (deg)' },
+  stepScaleX:    { type: 'number', description: 'Repeater: scaleX step per copy' },
+  stepScaleY:    { type: 'number', description: 'Repeater: scaleY step per copy' },
+  stepOpacity:   { type: 'number', description: 'Repeater: opacity step per copy' },
+  polarRadius:     { type: 'number', description: 'Repeater polar: ring radius (px)' },
+  polarStartAngle: { type: 'number', description: 'Repeater polar: start angle (deg)' },
+  polarEndAngle:   { type: 'number', description: 'Repeater polar: end angle (deg)' },
 } as const
 
 export function registerLayerActions(reg: ActionRegistry): void {
@@ -313,6 +364,14 @@ export function registerLayerActions(reg: ActionRegistry): void {
       }
       if (scene.layers.some((l) => l.id === p.id)) {
         return errorCmd(`layer id "${p.id}" already exists — choose a different id`)
+      }
+      if (p.type === 'repeater') {
+        if (!p.sourceLayerId) {
+          return errorCmd('add_layer type=repeater requires sourceLayerId')
+        }
+        if (!scene.layers.some((l) => l.id === p.sourceLayerId)) {
+          return errorCmd(`repeater sourceLayerId "${p.sourceLayerId}" not found`)
+        }
       }
       const layer = buildLayerFromParams(p)
       return makeAddLayerCmd(layer)

@@ -6,8 +6,13 @@
 // with its own object kinds + handle type (see arch_scripting_event_system memo).
 
 import type { ScriptHost } from '../types'
+import type { StateMachineDefinition } from '../../types'
 import { LayerHandle, type ApiContext } from './LayerHandle'
+import { StateMachineHandle } from './StateMachineHandle'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '../../editor/commands-layer'
+import { makeAddStateMachineCmd } from '../../editor/commands-statemachine'
+import { nextSMId } from '../../defaults'
+import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
 
 export interface SceneAPI {
@@ -21,6 +26,10 @@ export interface SceneAPI {
   readonly layers: LayerHandle[]
   /** Delete a layer. */
   remove(handle: LayerHandle): void
+  /** Create a state machine. Add states/transitions via the returned handle. */
+  addStateMachine(name?: string): StateMachineHandle
+  /** Add a particle emitter from a preset (confetti, fire, snow…). */
+  addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle
   /** Append a line to the script output console. */
   log(...args: unknown[]): void
 }
@@ -69,6 +78,21 @@ export function createSceneAPI(
     remove(handle: LayerHandle): void {
       const layer = host.getScene().layers.find((l) => l.id === handle.id)
       if (layer) host.applyCommand(makeDeleteLayerCmd(layer))
+    },
+
+    addStateMachine(name?: string): StateMachineHandle {
+      const id = nextSMId()
+      const sm: StateMachineDefinition = {
+        id, name: name ?? id, initialStateId: '', states: [], transitions: [],
+      }
+      host.applyCommand(makeAddStateMachineCmd(sm))
+      return new StateMachineHandle(id, ctx)
+    },
+
+    addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle {
+      const layer = buildEmitterLayer({ ...opts, preset })
+      host.applyCommand(makeAddLayerCmd(layer))
+      return new LayerHandle(layer.id, ctx)
     },
 
     log(...args: unknown[]): void {

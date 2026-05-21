@@ -79,6 +79,9 @@ ${layerCatalog}
   • Use type="shape" + shapeKind=<one of above> for shapes
   • Use type="text" for text layers (set text, fontSize, textColor)
   • Use type="group" for organizing nested layers
+  • Use type="repeater" to clone a source layer N times (sourceLayerId + count +
+    repeaterMode "linear"/"polar"; linear uses stepX/stepY, polar uses
+    polarRadius/polarStartAngle/polarEndAngle). Create the source layer first.
 
 ═══════════════════════════════════════════════════════════════════
 ANIMATABLE PROPERTIES (track target paths)
@@ -180,6 +183,50 @@ on the way down (gravity), easeOut on bounces. ~2 seconds total.
     "  dot.key('opacity', i*80, 0);\\n" +
     "  dot.key('opacity', i*80 + 300, 1);\\n" +
     "}" }
+
+═══════════════════════════════════════════════════════════════════
+PARTICLES
+═══════════════════════════════════════════════════════════════════
+For "confetti", "fireworks", "falling snow", "fire", "smoke", "magic dust",
+"rain", "rocket trail" → use add_particle_emitter with a preset by friendly
+name (confetti, sparkle, magic, smoke, fire, snow, rain, rocket). Override
+count / durationMs / loop / x / y as needed. Don't hand-build particle config.
+
+  add_particle_emitter{ id:"confetti_1", preset:"confetti", x:180, y:0, loop:false }
+
+═══════════════════════════════════════════════════════════════════
+STATE MACHINES (interactive / multi-state animations)
+═══════════════════════════════════════════════════════════════════
+For state-based or interactive requests ("hover→active", "idle/walk/run",
+"4 seasons that cycle", "toggle between two looks"), use a state machine: each
+state plays its own timeline, and transitions switch states on an event.
+
+Build order (each state needs its own timeline FIRST):
+  1. create_timeline   ← one per state (animate the layers for that state)
+  2. create_state_machine{ id:"sm1", name:"..." }
+  3. add_sm_state{ smId:"sm1", id:"<state>", name:"...", timelineId:"<tl>" } ×N
+     (the FIRST state added becomes the initial state automatically)
+  4. add_sm_transition{ smId:"sm1", from:"<a>", to:"<b>", event:"<name>" } ×M
+     (from:"*" applies from any state; add a guard with
+      guardParam+guardOp+guardValue for parameter-driven switches)
+  5. set_initial_state  ← only to override the auto default
+
+──── Example 6: "Four seasons that cycle on each click" ────
+
+  create_timeline{ id:"tl_spring", durationMs:1000, autoplay:true }
+  create_timeline{ id:"tl_summer", durationMs:1000, autoplay:true }
+  create_timeline{ id:"tl_fall",   durationMs:1000, autoplay:true }
+  create_timeline{ id:"tl_winter", durationMs:1000, autoplay:true }
+  (…add_keyframes per timeline to animate each season…)
+  create_state_machine{ id:"seasons", name:"Seasons" }
+  add_sm_state{ smId:"seasons", id:"spring", name:"Spring", timelineId:"tl_spring" }
+  add_sm_state{ smId:"seasons", id:"summer", name:"Summer", timelineId:"tl_summer" }
+  add_sm_state{ smId:"seasons", id:"fall",   name:"Fall",   timelineId:"tl_fall" }
+  add_sm_state{ smId:"seasons", id:"winter", name:"Winter", timelineId:"tl_winter" }
+  add_sm_transition{ smId:"seasons", from:"spring", to:"summer", event:"next" }
+  add_sm_transition{ smId:"seasons", from:"summer", to:"fall",   event:"next" }
+  add_sm_transition{ smId:"seasons", from:"fall",   to:"winter", event:"next" }
+  add_sm_transition{ smId:"seasons", from:"winter", to:"spring", event:"next" }
 
 ═══════════════════════════════════════════════════════════════════
 CURRENT SCENE STATE
