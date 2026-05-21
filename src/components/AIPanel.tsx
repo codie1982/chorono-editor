@@ -84,6 +84,11 @@ export default function AIPanel({
     setText('')
   }
 
+  function handleCheck() {
+    if (planner.isLoading) return
+    planner.check(buildOverride())
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -185,6 +190,14 @@ export default function AIPanel({
             title={q.prompt}
           >{q.label}</button>
         ))}
+        {/* BL-77 — read-only Checker agent */}
+        <button
+          onClick={handleCheck}
+          disabled={planner.isLoading}
+          className="text-[10px] px-2 py-1 bg-amber-900/40 hover:bg-amber-900/60 disabled:opacity-40
+                     rounded transition-colors border border-amber-800 text-amber-200"
+          title="Sahneyi salt-okunur incele ve sorunları raporla (değişiklik yapmaz)"
+        >🔍 Kontrol Et</button>
       </div>
 
       {/* ── Messages ───────────────────────────────────────────────── */}
@@ -234,6 +247,56 @@ export default function AIPanel({
 
 function MessageBubble({ msg }: { msg: AIUIMessage }) {
   const isUser = msg.role === 'user'
+  const isCheck = msg.kind === 'check'
+
+  // Checker (BL-77) renders as a "thinking"-style review block: a collapsible
+  // inspection trace + the written verdict.
+  if (isCheck && !isUser) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[92%] w-full rounded-lg px-3 py-2 text-xs
+                        bg-amber-950/30 border border-amber-800/60 text-amber-100">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-amber-300">🔍</span>
+            <span className="font-semibold text-amber-200">Kontrolör</span>
+            {msg.loading && <span className="text-[10px] text-amber-400/70">inceliyor…</span>}
+          </div>
+
+          {msg.loading ? (
+            <div className="flex gap-1 items-center py-0.5">
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+            </div>
+          ) : (
+            <>
+              {msg.turns && msg.turns.length > 0 && (
+                <details className="mb-2 group">
+                  <summary className="cursor-pointer text-[10px] text-amber-400/80 hover:text-amber-300 select-none">
+                    💭 İnceleme süreci · {msg.turns.length} adım
+                  </summary>
+                  <ol className="mt-1 ml-3 space-y-0.5 list-decimal text-[10px] text-amber-200/70 font-mono">
+                    {msg.turns.map((t, i) => (
+                      <li key={i}>{t.toolNames.join(', ') || '(yanıt)'}</li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+              {msg.content && (
+                <div className="whitespace-pre-wrap leading-relaxed text-amber-50">{msg.content}</div>
+              )}
+              {msg.error && (
+                <div className="mt-2 px-2 py-1 bg-red-900/40 border border-red-800 text-red-300 rounded text-[10px] whitespace-pre-wrap">
+                  ⚠ {msg.error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs

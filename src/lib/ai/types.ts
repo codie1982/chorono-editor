@@ -62,6 +62,10 @@ export interface AIUIMessage {
   appliedLabels?: string[]
   error?: string
   loading?: boolean
+  /** 'plan' = planner build (default), 'check' = read-only reviewer (BL-77). */
+  kind?: 'plan' | 'check'
+  /** Per-turn tool-name breakdown — drives the "thinking" inspection display. */
+  turns?: { toolNames: string[] }[]
 }
 
 // ── Tool definitions (provider-agnostic schema, translated per-provider) ──────

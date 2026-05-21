@@ -6,13 +6,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   actionRegistry, bootstrapAIActions,
 } from '@/lib/ai/ActionRegistry'
-import { buildSystemPrompt } from '@/lib/ai/tools'
+import { buildSystemPrompt, buildCheckerPrompt } from '@/lib/ai/tools'
 import { callAIProvider }    from '@/lib/ai/providers'
 import { runAgentLoop }      from '@/lib/ai/AgentLoop'
 import type { AIProviderConfig, AIProviderName, AIMessage, AgentMessage } from '@/lib/ai/types'
 import type { ChronoScene } from '@/lib/types'
 
 export const runtime = 'nodejs'
+
+/** 'planner' builds/mutates the scene; 'checker' reviews it read-only (BL-77). */
+type AgentRole = 'planner' | 'checker'
 
 interface RequestBody {
   userMessage:       string
@@ -22,6 +25,8 @@ interface RequestBody {
   /** Full scene JSON — server mutates a copy so read tools see post-state
    *  during the multi-turn agent loop (BL-01 Faz 2). */
   scene?:            ChronoScene
+  /** Which agent to run. Default 'planner'. (BL-77 Checker agent) */
+  agentRole?:        AgentRole
 }
 
 function readEnvConfig(forProvider?: AIProviderName): AIProviderConfig {
@@ -53,7 +58,7 @@ function readEnvConfig(forProvider?: AIProviderName): AIProviderConfig {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as RequestBody
-    const { userMessage, sceneContext, history = [], providerOverride, scene } = body
+    const { userMessage, sceneContext, history = [], providerOverride, scene, agentRole = 'planner' } = body
 
     if (!userMessage || typeof userMessage !== 'string') {
       return NextResponse.json(
@@ -87,8 +92,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const tools  = actionRegistry.toAITools()
-    const system = buildSystemPrompt(sceneContext)
+    // Checker agent (BL-77): read-only tools + review prompt. Planner: full set.
+    const isChecker = agentRole === 'checker'
+    const tools  = actionRegistry.toAITools({ readOnly: isChecker })
+    const system = isChecker
+      ? buildCheckerPrompt(sceneContext)
+      : buildSystemPrompt(sceneContext)
     const initialMessages: AgentMessage[] = [
       ...history,
       { role: 'user', content: userMessage },

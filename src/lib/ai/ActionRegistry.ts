@@ -72,9 +72,19 @@ export class ActionRegistry {
     return Array.from(this.actions.values())
   }
 
-  /** Emit AITool[] for providers.ts (Anthropic / OpenAI / Custom). */
-  toAITools(): AITool[] {
-    return this.getAll().map((a) => ({
+  /** All read-only (introspection) actions — those that define `read`. */
+  getReadOnly(): ActionDef[] {
+    return this.getAll().filter((a) => typeof a.read === 'function')
+  }
+
+  /**
+   * Emit AITool[] for providers.ts (Anthropic / OpenAI / Custom).
+   * `opts.readOnly` restricts to introspection tools — used by the Checker
+   * agent so it can inspect but never mutate the scene.
+   */
+  toAITools(opts?: { readOnly?: boolean }): AITool[] {
+    const defs = opts?.readOnly ? this.getReadOnly() : this.getAll()
+    return defs.map((a) => ({
       name: a.toolName,
       description: a.description,
       parameters: a.parameters,
