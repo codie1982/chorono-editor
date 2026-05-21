@@ -17,6 +17,7 @@ import type { ShortcutContext } from '@/lib/shortcuts'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
+import { useImport }           from './hooks/useImport'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
@@ -371,6 +372,15 @@ export default function BuilderPage() {
     setSelectedLayer(id)
   }, [])
 
+  // ── Universal import pipeline (BL-04–06) ─────────────────────────────────
+  // Routes any File through ImportManager → atomic command → dispatch.
+  // SVG, Lottie and Chorono-scene imports flow through here; legacy media
+  // handlers below still exist for the existing per-type file inputs.
+  const { importFile: importAnyFile } = useImport({
+    dispatchCommand,
+    onSelectLayer: (id) => selectLayer(id),
+  })
+
   // ── Layer commands ───────────────────────────────────────────────────────
   // Layer creation is fully registry-driven: every kind looks up its
   // LayerDefinition and calls createDefault(). Adding a new shape no longer
@@ -559,33 +569,13 @@ export default function BuilderPage() {
   const addVideoLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'video'), [probeAndAddMedia])
   const addAudioLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'audio'), [probeAndAddMedia])
 
-  // ── SVG Import — reads file → parses → emits batched undo step ───────────
+  // ── SVG Import — routed through the universal import pipeline (BL-06) ──────
+  // SvgDocumentHandler wraps the same SvgImporter as before, but now also
+  // registers an SVG asset in the library and wraps everything in one atomic
+  // undo step. Reporting + toasts are handled inside useImport.
   const importSvgFile = useCallback(async (file: File) => {
-    try {
-      const text = await file.text()
-      const { svgImporter } = await import('@/lib/svg')
-      const { makeImportSvgCmd } = await import('@/lib/editor/commands-svg')
-      const result = svgImporter.import(text)
-      if (result.layers.length === 0) {
-        toast.warning(`SVG "${file.name}" had no convertible layers`, {
-          detail: `${result.warnings.length} warning(s) — see console for details`,
-        })
-        console.warn('SVG import produced no layers', result.warnings)
-        return
-      }
-      dispatchCommand(makeImportSvgCmd(result.layers, file.name))
-      selectLayer(result.layers[0].id)
-      toast.success(`Imported ${result.layers.length} layer${result.layers.length === 1 ? '' : 's'} from ${file.name}`, {
-        detail: result.warnings.length > 0 ? `${result.warnings.length} warning(s) — see console` : undefined,
-      })
-      if (result.warnings.length > 0) {
-        console.info(`SVG import: ${result.warnings.length} warning(s)`, result.warnings)
-      }
-    } catch (err) {
-      toast.error(`SVG import failed`, { detail: (err as Error).message })
-      console.error('SVG import failed:', err)
-    }
-  }, [dispatchCommand, selectLayer])
+    await importAnyFile(file)
+  }, [importAnyFile])
 
   const deleteLayer = useCallback((id: string) => {
     const layer = scene.layers.find((l) => l.id === id)
