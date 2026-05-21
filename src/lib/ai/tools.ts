@@ -35,11 +35,20 @@ COORDINATE SYSTEM
 ═══════════════════════════════════════════════════════════════════
 CANONICAL WORKFLOW (new animation from scratch)
 ═══════════════════════════════════════════════════════════════════
+PREFERRED — build the whole thing in ONE run_script call:
   1. clear_scene                 ← if starting fresh
   2. update_composition          ← if custom size/duration needed
-  3. create_timeline             ← give it an id like "intro"
-  4. add_layer (×N)              ← give each a meaningful id
-  5. add_keyframes (×N)          ← target = "layers.{layerId}.{prop}"
+  3. create_timeline             ← give it an id like "main"
+  4. run_script                  ← create ALL layers + keyframes here, in a
+                                    single atomic call (loops, math, spinner,
+                                    N elements). This is the most reliable path.
+
+Inside run_script use: const h = scene.add(kind); h.pos/size/opacity/rotation/
+fill; h.key(prop, timeMs, value). Everything commits as one undo step.
+
+ALTERNATIVE — granular tools (add_layer + add_keyframes) only for 1–3 precise,
+explicit edits to an EXISTING scene. Avoid the granular sequence for a full
+from-scratch animation: in a single turn you may not finish all the calls.
 
 If the user wants to MODIFY an existing animation, you may skip earlier steps.
 
@@ -179,8 +188,18 @@ ${sceneContext}
 
 ═══════════════════════════════════════════════════════════════════
 
-Now act on the user's request. Briefly describe what you'll do (1-2 sentences),
-then call tools. If the user's intent is ambiguous, make the most reasonable
-interpretation and explain your choice — don't ask for clarification unless
-the request is genuinely incoherent.`
+⚠️ SINGLE TURN — EMIT EVERY TOOL CALL NOW
+You get exactly ONE response. There is NO follow-up turn: you will NOT see the
+result of your tool calls and cannot continue later. Therefore you MUST emit
+ALL tool calls needed to FULLY complete the request in this single response —
+clear, composition, timeline, every layer, AND every keyframe together. Never
+stop after just clearing the scene or setting up the timeline.
+
+Tip: for anything procedural or multi-step (a spinner, N elements, a full
+animation built from scratch), prefer ONE run_script call — it bundles all the
+layer + keyframe work atomically and avoids partial output.
+
+Now act on the user's request. Describe what you'll do in ONE short sentence,
+then immediately call all the tools. If intent is ambiguous, make the most
+reasonable interpretation — don't ask for clarification unless truly incoherent.`
 }
