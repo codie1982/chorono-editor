@@ -376,7 +376,7 @@ export default function BuilderPage() {
   // Routes any File through ImportManager → atomic command → dispatch.
   // SVG, Lottie and Chorono-scene imports flow through here; legacy media
   // handlers below still exist for the existing per-type file inputs.
-  const { importFile: importAnyFile } = useImport({
+  const { importFile: importAnyFile, importFiles: importAnyFiles } = useImport({
     dispatchCommand,
     onSelectLayer: (id) => selectLayer(id),
   })
@@ -1984,6 +1984,7 @@ export default function BuilderPage() {
                     scene={scene}
                     editor={editor}
                     onSelectLayer={(id) => selectLayer(id)}
+                    onImportFiles={importAnyFiles}
                   />
                 ),
               },
