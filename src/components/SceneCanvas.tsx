@@ -576,6 +576,21 @@ export default function SceneCanvas({
     }
   }, [zoom, width, height])
 
+  /**
+   * Live on-screen → composition scale, read fresh from the canvas rect.
+   * Drag math MUST use this (not the cached `pxScale`) so a layout change
+   * mid-session can't desync the cursor-to-layer mapping. Cache is the
+   * fallback when the canvas element is momentarily unavailable.
+   */
+  const readScale = useCallback(() => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    const { width: cw, height: ch } = compositionRef.current
+    return {
+      sx: rect && rect.width  > 0 ? cw / rect.width  : pxScale.current.sx,
+      sy: rect && rect.height > 0 ? ch / rect.height : pxScale.current.sy,
+    }
+  }, [])
+
   const dragRef = useRef<ActiveDrag | null>(null)
 
   // BL-03: Pen-tool close-path double-click detection. First click on the
@@ -642,10 +657,16 @@ export default function SceneCanvas({
   const handlePointerMove = useCallback((e: PointerEvent) => {
     const drag = dragRef.current
     if (!drag) return
-    const { sx, sy } = pxScale.current
+    const { width: cw, height: ch } = compositionRef.current
+    // Compute the on-screen → composition scale LIVE from the canvas rect.
+    // The cached pxScale only refreshes on zoom/width/height changes, so any
+    // OTHER layout shift (panel toggle, window resize, mid-pan transition)
+    // leaves it stale — dragging then runs at the wrong scale and objects
+    // "escape" the cursor or snap back. Reading the rect each move keeps the
+    // delta exact; the cache is only a fallback if the canvas is unmounted.
+    const { sx, sy } = readScale()
     const dx = (e.clientX - drag.startClientX) * sx
     const dy = (e.clientY - drag.startClientY) * sy
-    const { width: cw, height: ch } = compositionRef.current
 
     const snapState = snapRef.current
     // Each snap type is independently gated on the master Enable Snapping.
@@ -1064,7 +1085,7 @@ export default function SceneCanvas({
       x: e.clientX, y: e.clientY,
       label: `W ${Math.round(nw)}   H ${Math.round(nh)}`,
     })
-  }, [])
+  }, [readScale])
 
   const handlePointerUp = useCallback(() => {
     const drag = dragRef.current
@@ -2070,7 +2091,7 @@ export default function SceneCanvas({
   const handlePreviewDragMove = useCallback((e: PointerEvent) => {
     const d = previewDragRef.current
     if (!d) return
-    const { sx, sy } = pxScale.current
+    const { sx, sy } = readScale()
     const rawDx = (e.clientX - d.startClientX) * sx
     const rawDy = (e.clientY - d.startClientY) * sy
     // Apply axis filter
@@ -2094,7 +2115,7 @@ export default function SceneCanvas({
       const progress = Math.max(0, Math.min(1, dist / Math.max(1, d.range)))
       onLayerDragInPreview(d.layerId, 'move', dx, dy, progress)
     }
-  }, [onLayerDragInPreview])
+  }, [onLayerDragInPreview, readScale])
 
   const handlePreviewDragUp = useCallback((e: PointerEvent) => {
     const d = previewDragRef.current
@@ -2106,7 +2127,7 @@ export default function SceneCanvas({
     // returns to its authored position.
     setDragOverrides(new Map())
     if (onLayerDragInPreview) {
-      const { sx, sy } = pxScale.current
+      const { sx, sy } = readScale()
       const rawDx = (e.clientX - d.startClientX) * sx
       const rawDy = (e.clientY - d.startClientY) * sy
       const dx = d.axis === 'y' ? 0 : rawDx
@@ -2115,7 +2136,7 @@ export default function SceneCanvas({
       const progress = Math.max(0, Math.min(1, dist / Math.max(1, d.range)))
       onLayerDragInPreview(d.layerId, 'end', dx, dy, progress)
     }
-  }, [handlePreviewDragMove, onLayerDragInPreview])
+  }, [handlePreviewDragMove, onLayerDragInPreview, readScale])
 
   const beginPreviewDrag = useCallback((
     layer: Layer, startClientX: number, startClientY: number, _cx: number, _cy: number,
