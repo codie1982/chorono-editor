@@ -15,7 +15,7 @@ export interface AuthContext {
 /**
  * Extract Bearer token from Authorization header
  */
-function extractBearerToken(authHeader?: string): string | null {
+function extractBearerToken(authHeader: string | null | undefined): string | null {
   if (!authHeader?.startsWith("Bearer ")) {
     return null;
   }

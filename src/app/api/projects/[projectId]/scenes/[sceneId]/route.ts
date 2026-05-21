@@ -104,7 +104,7 @@ export async function PATCH(request: NextRequest, context: any) {
       { returnDocument: "after" }
     );
 
-    if (!updateResult.value) {
+    if (!updateResult || !updateResult.value) {
       return createErrorResponse("Failed to update scene", 500);
     }
 
