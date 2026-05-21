@@ -19,8 +19,9 @@ import {
   splineParamsFromBox, isBoxDragKind, createPolylineSpline,
   createSplinePrimitive, splineToPathDefinition, translateSplineData, mergeSplineData,
   computeSplineBounds,
-  hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment,
+  hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour,
   moveSplinePoint, moveSplineHandle, insertPointOnSegment, deleteSplinePoint,
+  setSplinePointType, setSegmentType, setContourClosed, reverseContour,
 } from '@/lib/spline'
 import { newSplineLayerFromPrimitive, newSplineLayerFromData } from '@/lib/defaults'
 import { pathToSvgString } from '@/lib/geometry'
@@ -424,6 +425,14 @@ export default function SceneCanvas({
   const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
   // ── Right-click on empty canvas area → fit / zoom shortcuts ──────────────
   const emptyCanvasCtx = useContextMenu()
+  // ── BL-73 Sprint 5 — right-click on a spline point / segment / contour ───
+  const splineCtx = useContextMenu()
+  const splineCtxTargetRef = useRef<
+    | { kind: 'point';   id: string }
+    | { kind: 'segment'; id: string; t: number }
+    | { kind: 'contour'; id: string }
+    | null
+  >(null)
 
   // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
   // Active guides are stored in a ref AND state so changes trigger render
@@ -2467,6 +2476,26 @@ export default function SceneCanvas({
               const sy = height / rect.height
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
+
+              // BL-73 — right-click on the selected spline's element opens the
+              // point / segment / contour editing menu.
+              const selSpline = scene.layers.find((l) => l.id === selectedLayerId)
+              if (selSpline?.type === 'spline' && selSpline.spline) {
+                const lx = cx - selSpline.transform.x
+                const ly = cy - selSpline.transform.y
+                const hp = hitTestSplinePoint(selSpline.spline, lx, ly, 8 / zoom)
+                const hs = hp ? null : hitTestSplineSegment(selSpline.spline, lx, ly, 6 / zoom)
+                const hc = (hp || hs) ? null : hitTestSplineContour(selSpline.spline, lx, ly)
+                if (hp || hs || hc) {
+                  e.preventDefault()
+                  if (hp)      { setSelectedSplinePointId(hp); splineCtxTargetRef.current = { kind: 'point', id: hp } }
+                  else if (hs) { splineCtxTargetRef.current = { kind: 'segment', id: hs.segmentId, t: hs.t } }
+                  else         { splineCtxTargetRef.current = { kind: 'contour', id: hc! } }
+                  splineCtx.open(e)
+                  return
+                }
+              }
+
               const hit = hitTestLayer(scene, timeMs, cx, cy)
               if (!hit) {
                 e.preventDefault()
@@ -3073,6 +3102,53 @@ export default function SceneCanvas({
           <ContextMenu
             x={emptyCanvasCtx.state!.x}
             y={emptyCanvasCtx.state!.y}
+            items={items}
+            onClose={close}
+          />
+        )
+      })()}
+
+      {/* ── BL-73 — Spline point / segment / contour editing menu ─────────── */}
+      {splineCtx.isOpen && (() => {
+        const target = splineCtxTargetRef.current
+        const layer = scene.layers.find((l) => l.id === selectedLayerId)
+        if (!target || layer?.type !== 'spline' || !layer.spline) return null
+        const close = () => { splineCtx.close(); splineCtxTargetRef.current = null }
+        const baseSpline = layer.spline
+        const mutate = (fn: (s: import('@/lib/types/spline').SplinePathData) => import('@/lib/types/spline').SplinePathData) => {
+          const next = fn(baseSpline)
+          if (next && next !== baseSpline) {
+            editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))
+          }
+          close()
+        }
+        let items: import('./ui/ContextMenu').MenuItem[]
+        if (target.kind === 'point') {
+          items = [
+            { kind: 'action', label: 'Corner',          onSelect: () => mutate(s => setSplinePointType(s, target.id, 'corner')) },
+            { kind: 'action', label: 'Smooth',          onSelect: () => mutate(s => setSplinePointType(s, target.id, 'smooth')) },
+            { kind: 'action', label: 'Bezier (Mirror)', onSelect: () => mutate(s => setSplinePointType(s, target.id, 'bezier')) },
+            { kind: 'action', label: 'Bezier Corner',   onSelect: () => mutate(s => setSplinePointType(s, target.id, 'bezierCorner')) },
+            { kind: 'separator' },
+            { kind: 'action', label: 'Delete Point',    onSelect: () => mutate(s => deleteSplinePoint(s, target.id)) },
+          ]
+        } else if (target.kind === 'segment') {
+          items = [
+            { kind: 'action', label: 'Insert Point',      onSelect: () => mutate(s => insertPointOnSegment(s, target.id, target.t)) },
+            { kind: 'action', label: 'Convert to Line',   onSelect: () => mutate(s => setSegmentType(s, target.id, 'line')) },
+            { kind: 'action', label: 'Convert to Bezier', onSelect: () => mutate(s => setSegmentType(s, target.id, 'cubic')) },
+          ]
+        } else {
+          const contour = layer.spline.contours[target.id]
+          items = [
+            { kind: 'action', label: contour?.closed ? 'Open Path' : 'Close Path', onSelect: () => mutate(s => setContourClosed(s, target.id, !contour?.closed)) },
+            { kind: 'action', label: 'Reverse Direction', onSelect: () => mutate(s => reverseContour(s, target.id)) },
+          ]
+        }
+        return (
+          <ContextMenu
+            x={splineCtx.state!.x}
+            y={splineCtx.state!.y}
             items={items}
             onClose={close}
           />
