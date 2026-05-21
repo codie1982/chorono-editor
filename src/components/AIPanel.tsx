@@ -46,6 +46,9 @@ export default function AIPanel({
   const [apiKey, setApiKey]           = useState('')
   const [customUrl, setCustomUrl]     = useState('')
   const [customModel, setCustomModel] = useState('')
+  /** BL-77 — autonomous Checker agent: auto-review after each planner build. */
+  const [autoCheck, setAutoCheck]     = useState(true)
+  const lastCheckedIdRef = useRef<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Reset model when provider changes
@@ -60,6 +63,24 @@ export default function AIPanel({
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [planner.messages])
+
+  // BL-77 — Autonomous Checker: after the planner finishes a build (a 'plan'
+  // message with applied changes), automatically run the read-only reviewer.
+  // Runs once per build; the post-build scene prop is current by this render so
+  // the checker inspects the freshly mutated scene.
+  useEffect(() => {
+    if (!autoCheck || planner.isLoading) return
+    const msgs = planner.messages
+    const last = msgs[msgs.length - 1]
+    if (!last || last.role !== 'assistant' || last.kind !== 'plan') return
+    if (!last.appliedLabels || last.appliedLabels.length === 0) return
+    if (lastCheckedIdRef.current === last.id) return
+    lastCheckedIdRef.current = last.id
+    planner.check(buildOverride())
+    // buildOverride is derived from local state; intentionally not a dep to
+    // avoid re-firing — the ref guard ensures one check per build.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planner.messages, planner.isLoading, autoCheck])
 
   function buildOverride(): AIProviderConfig | undefined {
     // Custom provider always needs override (env may not be set)
@@ -82,11 +103,6 @@ export default function AIPanel({
     if (!msg.trim() || planner.isLoading) return
     planner.send(msg, buildOverride())
     setText('')
-  }
-
-  function handleCheck() {
-    if (planner.isLoading) return
-    planner.check(buildOverride())
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -190,14 +206,16 @@ export default function AIPanel({
             title={q.prompt}
           >{q.label}</button>
         ))}
-        {/* BL-77 — read-only Checker agent */}
+        {/* BL-77 — autonomous Checker agent: runs automatically after each
+            planner build. This toggle enables/disables it. */}
         <button
-          onClick={handleCheck}
-          disabled={planner.isLoading}
-          className="text-[10px] px-2 py-1 bg-amber-900/40 hover:bg-amber-900/60 disabled:opacity-40
-                     rounded transition-colors border border-amber-800 text-amber-200"
-          title="Sahneyi salt-okunur incele ve sorunları raporla (değişiklik yapmaz)"
-        >🔍 Kontrol Et</button>
+          onClick={() => setAutoCheck((v) => !v)}
+          className={`text-[10px] px-2 py-1 rounded transition-colors border
+            ${autoCheck
+              ? 'bg-amber-900/50 border-amber-700 text-amber-200'
+              : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-300'}`}
+          title="Planner sahneyi her değiştirdiğinde Kontrolör otomatik inceler (salt-okunur)"
+        >🔍 Oto-Kontrol: {autoCheck ? 'Açık' : 'Kapalı'}</button>
       </div>
 
       {/* ── Messages ───────────────────────────────────────────────── */}

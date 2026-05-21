@@ -59,7 +59,9 @@ export async function callAnthropic(
       max_tokens: 8192,
       system: systemPrompt,
       messages: toAnthropicMessages(messages),
-      tools: anthropicTools,
+      // Empty tools → omit so the model is forced to answer with text (used for
+      // the agent loop's forced wrap-up turn).
+      ...(anthropicTools.length > 0 ? { tools: anthropicTools } : {}),
     }),
   })
 
@@ -144,8 +146,8 @@ export async function callOpenAI(
     body: JSON.stringify({
       model: config.model,
       messages: allMessages,
-      tools: openaiTools,
-      tool_choice: 'auto',
+      // Empty tools → omit tools + tool_choice so the model must answer in text.
+      ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: 'auto' } : {}),
       max_tokens: 8192,
     }),
   })
@@ -213,8 +215,7 @@ export async function callCustom(
     body: JSON.stringify({
       model: config.model,
       messages: allMessages,
-      tools: openaiTools,
-      tool_choice: 'auto',
+      ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: 'auto' } : {}),
     }),
   })
 

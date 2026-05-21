@@ -63,13 +63,14 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentLoopRes
   const turns: AgentTurn[] = []
   let totalTools = 0
   let finalMessage = ''
+  let endedNaturally = false
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const result = await callProvider(config, messages, tools, systemPrompt)
     if (result.message) finalMessage = result.message
 
     // Natural end: the model answered without calling any tools.
-    if (!result.toolCalls || result.toolCalls.length === 0) break
+    if (!result.toolCalls || result.toolCalls.length === 0) { endedNaturally = true; break }
 
     // Normalize ids so the assistant message and tool_result ids match exactly
     // (OpenAI/Anthropic require this round-trip pairing).
@@ -131,6 +132,19 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentLoopRes
     messages.push({ role: 'user', content: '', toolResults })
 
     if (budgetHit) break
+  }
+
+  // Budget-bounded exit (ran out of turns / tools while still calling tools):
+  // force ONE final no-tools call so the model must produce a closing summary
+  // instead of leaving an empty message. Critical for the Checker, which can
+  // spend every turn inspecting and never reach its written verdict.
+  if (!endedNaturally) {
+    try {
+      const wrap = await callProvider(config, messages, [], systemPrompt)
+      if (wrap.message) finalMessage = wrap.message
+    } catch {
+      // Keep whatever finalMessage we had; a failed wrap-up shouldn't throw.
+    }
   }
 
   return { message: finalMessage, mutateToolCalls, turns, totalTools }

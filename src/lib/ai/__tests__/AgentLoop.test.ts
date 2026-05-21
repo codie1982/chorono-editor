@@ -110,8 +110,23 @@ describe('runAgentLoop', () => {
       config, tools, systemPrompt: 'sys', initialMessages: [{ role: 'user', content: 'loop' }],
       scene: emptyScene(), callProvider: caller, maxTurns: 3,
     })
-    expect(calls).toBe(3)
+    // 3 loop turns + 1 forced wrap-up call (budget exit isn't a natural end).
+    expect(calls).toBe(4)
     expect(r.turns).toHaveLength(3)
+  })
+
+  it('forces a no-tools wrap-up call when it exits by budget', async () => {
+    const toolsSeen: number[] = []
+    const caller: ProviderCaller = async (_c, _m, t) => {
+      toolsSeen.push(t.length)
+      return { message: 'still going', toolCalls: [{ id: 'x', name: 'list_layers', input: {} }] }
+    }
+    await runAgentLoop({
+      config, tools, systemPrompt: 'sys', initialMessages: [{ role: 'user', content: 'go' }],
+      scene: emptyScene(), callProvider: caller, maxTurns: 2,
+    })
+    // Last call is the wrap-up: it must be made with an empty tools array.
+    expect(toolsSeen[toolsSeen.length - 1]).toBe(0)
   })
 
   it('enforces MAX_TOTAL_TOOLS', async () => {
