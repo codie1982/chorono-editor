@@ -1,6 +1,9 @@
 // ── Core Scene Types ──────────────────────────────────────────────────────────
 // The data model shared between builder, evaluator, renderer, and runtime JSON.
+// All types here belong to the '2danimation' mode. See src/lib/core/ for the
+// abstract interfaces that other modes implement.
 
+import type { EditorMode } from '../core/EditorMode'
 import type { ShapeStyle }  from './style'
 import type { TextStyle }   from './text'
 import type { ImageData, VideoData, AudioData, Asset } from './media'
@@ -216,6 +219,10 @@ export interface TimelineSegment {
 export interface Timeline {
   id: string
   durationMs: number
+  /** Mode discriminant. Always '2danimation' for this type.
+   *  Optional for backward compat — existing scene JSON without this field
+   *  is implicitly '2danimation'. */
+  mode?: '2danimation'
   autoplay: boolean
   loop: boolean
   /** 0 = infinite, N = play N times. Default 0. */
@@ -268,6 +275,10 @@ export interface Layer {
   id: string
   /** Human-friendly display name, e.g. "Logo", "Background" */
   name: string
+  /** Mode discriminant. Always '2danimation' for this type.
+   *  Optional for backward compat — existing scene JSON without this field
+   *  is implicitly '2danimation'. */
+  mode?: '2danimation'
   type: LayerType
   /** Legacy shape discriminator kept for backward compat. Prefer shapeKind for new shapes. */
   shape?: ShapeType
@@ -687,6 +698,10 @@ export interface Composition {
 
 export interface ChronoScene {
   formatVersion: '1.0.0'
+  /** Mode discriminant. Identifies this as a 2D animation scene.
+   *  Optional for backward compat — existing JSON without this field is
+   *  implicitly '2danimation'. Future modes produce their own scene types. */
+  mode?: EditorMode
   composition: Composition
   assets: Asset[]
   layers: Layer[]
@@ -703,3 +718,12 @@ export interface ChronoScene {
   stateMachines?: StateMachineDefinition[]
   initialState: Record<string, unknown>
 }
+
+// ── Backward-compat aliases ───────────────────────────────────────────────────
+// Existing imports of `Layer` and `Timeline` continue to compile unchanged.
+// New code should prefer `Layer2D` and `Timeline2D` to signal mode intent.
+
+/** @deprecated Use Layer2D for new code. */
+export type Layer2D    = Layer
+/** @deprecated alias kept for migration — use Timeline directly or Timeline2D. */
+export type Timeline2D = Timeline

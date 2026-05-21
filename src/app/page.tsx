@@ -87,6 +87,10 @@ import { makeCloneCmd, makeArrayCmd, makeCloneAlignCmd } from '@/lib/editor/comm
 import { makeConvertToRepeaterCmd, makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
+// ── Mode system bootstrap ─────────────────────────────────────────────────────
+import '@/lib/modes/bootstrap'
+import { modeRegistry } from '@/lib/modes'
+import type { EditorMode } from '@/lib/core/EditorMode'
 
 // ── Demo scene shown on first load ────────────────────────────────────────────
 
@@ -144,6 +148,12 @@ function makeDemoScene(): ChronoScene {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function BuilderPage() {
+  // ── Active editor mode ────────────────────────────────────────────────────
+  // Currently always '2danimation'. When a mode selector UI lands, this will
+  // drive descriptor lookup for panels / tools / renderer.
+  const [currentMode] = useState<EditorMode>('2danimation')
+  const modeDescriptor = modeRegistry.get(currentMode)
+
   // ── Central scene state with history + transactions ──────────────────────
   const editor = useEditorState(makeDemoScene())
   const {
