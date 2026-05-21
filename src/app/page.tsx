@@ -4,7 +4,7 @@ import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
   emptyScene,
-  newImageLayer, newVideoLayer, newAudioLayer, newTimeline,
+  newTimeline,
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
 import { layerRegistry } from '@/lib/registry'
@@ -475,99 +475,13 @@ export default function BuilderPage() {
     })
   }, [scene.layers, scene.timelines, dispatchCommand])
 
-  /**
-   * Probe an asset file via a hidden element to get its natural dimensions
-   * and duration, then wrap the asset + layer creation in one undo step.
-   */
-  const probeAndAddMedia = useCallback((
-    file: File,
-    kind: 'image' | 'video' | 'audio',
-  ) => {
-    const assetId = `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-    const url     = URL.createObjectURL(file)
-    const prev    = scene
-
-    const commit = (info: { width?: number; height?: number; durationMs?: number }) => {
-      const layer =
-        kind === 'image' ? newImageLayer(assetId, info.width ?? 200, info.height ?? 150)
-      : kind === 'video' ? newVideoLayer(assetId, info.width ?? 320, info.height ?? 180, info.durationMs)
-      :                    newAudioLayer(assetId, info.durationMs)
-
-      dispatchCommand({
-        label: `Add ${kind}`,
-        execute: (s) => ({
-          ...s,
-          assets: [...s.assets, {
-            id: assetId, name: file.name, type: kind, url,
-            width: info.width, height: info.height, durationMs: info.durationMs,
-          }],
-          layers: [...s.layers, layer],
-        }),
-        // Asset cache hook revokes blob URL automatically when scene.assets shrinks
-        undo: () => prev,
-      })
-      selectLayer(layer.id)
-    }
-
-    if (kind === 'image') {
-      const img = new Image()
-      img.onload  = () => commit({ width: img.naturalWidth, height: img.naturalHeight })
-      img.onerror = () => { URL.revokeObjectURL(url); console.error('image load failed:', file.name) }
-      img.src = url
-      return
-    }
-
-    if (kind === 'video') {
-      const v = document.createElement('video')
-      v.preload  = 'metadata'
-      v.muted    = true
-      v.onloadedmetadata = () => {
-        const rawDur = v.duration
-        const durationMs = Number.isFinite(rawDur) && rawDur * 1000 >= 100
-          ? rawDur * 1000
-          : undefined
-        if (!durationMs) {
-          console.warn('[video] duration probe returned', rawDur, '— bar will span full timeline')
-        }
-        commit({
-          width: v.videoWidth, height: v.videoHeight,
-          durationMs,
-        })
-      }
-      v.onerror = (err) => {
-        URL.revokeObjectURL(url)
-        console.error('[video] load failed:', file.name, err)
-      }
-      v.src = url
-      return
-    }
-
-    // audio
-    const a = document.createElement('audio')
-    a.preload  = 'metadata'
-    a.onloadedmetadata = () => {
-      const rawDur = a.duration
-      // Some encodings report duration in seconds; <100ms is almost always
-      // a metadata parsing failure rather than a genuinely tiny clip. Fall
-      // back to undefined so the bar spans the full timeline (user can trim).
-      const durationMs = Number.isFinite(rawDur) && rawDur * 1000 >= 100
-        ? rawDur * 1000
-        : undefined
-      if (!durationMs) {
-        console.warn('[audio] duration probe returned', rawDur, '— bar will span full timeline')
-      }
-      commit({ durationMs })
-    }
-    a.onerror = (err) => {
-      URL.revokeObjectURL(url)
-      console.error('[audio] load failed:', file.name, err)
-    }
-    a.src = url
-  }, [scene, dispatchCommand, selectLayer])
-
-  const addImageLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'image'), [probeAndAddMedia])
-  const addVideoLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'video'), [probeAndAddMedia])
-  const addAudioLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'audio'), [probeAndAddMedia])
+  // ── Media import — routed through the universal pipeline (BL-05/BL-10) ─────
+  // Image/Video/Audio handlers probe dimensions + duration, create an asset
+  // (with storage/metadata) + a layer, and commit as one atomic undo step.
+  // The asset cache hook revokes blob URLs when assets leave the scene.
+  const addImageLayerFromFile = useCallback((file: File) => { void importAnyFile(file) }, [importAnyFile])
+  const addVideoLayerFromFile = useCallback((file: File) => { void importAnyFile(file) }, [importAnyFile])
+  const addAudioLayerFromFile = useCallback((file: File) => { void importAnyFile(file) }, [importAnyFile])
 
   // ── SVG Import — routed through the universal import pipeline (BL-06) ──────
   // SvgDocumentHandler wraps the same SvgImporter as before, but now also

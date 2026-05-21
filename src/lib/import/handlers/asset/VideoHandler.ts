@@ -132,9 +132,13 @@ export class VideoHandler extends BaseImportHandler {
       }
 
       video.onloadedmetadata = () => {
-        const width      = video.videoWidth  || 0
-        const height     = video.videoHeight || 0
-        const durationMs = isFinite(video.duration) ? Math.round(video.duration * 1000) : 0
+        const width  = video.videoWidth  || 0
+        const height = video.videoHeight || 0
+        // Durations under 100ms are almost always a metadata-parse failure
+        // rather than a genuinely tiny clip — treat as unknown (0) so the
+        // layer bar spans the full timeline and the user can trim.
+        const raw = video.duration
+        const durationMs = Number.isFinite(raw) && raw * 1000 >= 100 ? Math.round(raw * 1000) : 0
         cleanup()
         resolve({ width, height, durationMs })
       }

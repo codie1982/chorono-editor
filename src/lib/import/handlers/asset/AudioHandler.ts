@@ -125,7 +125,10 @@ export class AudioHandler extends BaseImportHandler {
       }
 
       audio.onloadedmetadata = () => {
-        const durationMs = isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0
+        // Durations under 100ms are almost always a metadata-parse failure
+        // rather than a genuinely tiny clip — treat as unknown (0).
+        const raw = audio.duration
+        const durationMs = Number.isFinite(raw) && raw * 1000 >= 100 ? Math.round(raw * 1000) : 0
         cleanup()
         resolve({ durationMs })
       }
