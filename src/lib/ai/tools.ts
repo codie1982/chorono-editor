@@ -198,6 +198,19 @@ count / durationMs / loop / x / y as needed. Don't hand-build particle config.
   add_particle_emitter{ id:"confetti_1", preset:"confetti", x:180, y:0, loop:false }
 
 ═══════════════════════════════════════════════════════════════════
+PATH & MOTION (curves + travel-along-path)
+═══════════════════════════════════════════════════════════════════
+  • add_path — build a bezier path from [x,y] points. role="visual" draws a
+    stroke; role="motion" is an invisible guide.
+  • assign_motion_path — make a layer travel along a path (followPath). Set
+    animateMs to auto-animate progress 0→1; orientToPath rotates to the tangent.
+  • trim_path — reveal part of a stroke (line-draw effect). Animate the reveal
+    by keyframing layers.<id>.style.stroke.trim.end from 0→1.
+
+  add_path{ id:"route", points:[[0,0],[150,-80],[300,0]], role:"motion" }
+  assign_motion_path{ layerId:"rocket", pathLayerId:"route", animateMs:2000, orientToPath:true }
+
+═══════════════════════════════════════════════════════════════════
 CLONE & ARRAY (duplicate / repeat a layer)
 ═══════════════════════════════════════════════════════════════════
   • clone_layer — duplicate a layer N times (mode "copy" = independent;

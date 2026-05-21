@@ -186,6 +186,20 @@ describe('runScript — authoring script (BL-76)', () => {
     expect(box.dragConfig).toMatchObject({ axis: 'x', setsParameter: 'angle' })
   })
 
+  it('adds a path and makes a layer follow it via the scene API', () => {
+    const result = runScript(
+      `const track = scene.addPath([[0,0],[300,100]], { role: 'motion' });
+       const ball = scene.add('circle');
+       ball.followPath(track.id, { orientToPath: true })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const path = getScene().layers.find((l) => l.type === 'path')!
+    expect(path.path?.anchors).toHaveLength(2)
+    const ball = getScene().layers.find((l) => l.type === 'shape')!
+    expect(ball.followPath).toMatchObject({ pathLayerId: path.id, orientToPath: true })
+  })
+
   it('clones and arrays layers via the scene API', () => {
     const result = runScript(
       `const box = scene.add('rect');

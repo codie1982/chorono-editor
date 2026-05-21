@@ -20,7 +20,8 @@ import {
 import { makeCloneCmd, makeArrayCmd } from '../../editor/commands-clone'
 import { buildArraySettings, type FlatArrayParams } from '../../array/buildArraySettings'
 import type { CloneMode } from '../../clone/CloneTypes'
-import { nextSMId } from '../../defaults'
+import { pathFromPoints } from '../../types/path'
+import { nextSMId, newBezierPathLayer, newMotionPathLayer } from '../../defaults'
 import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
 
@@ -62,6 +63,8 @@ export interface SceneAPI {
   clone(handle: LayerHandle, count?: number, opts?: { offsetX?: number; offsetY?: number; mode?: CloneMode }): LayerHandle[]
   /** Lay out copies of a layer in a pattern. Returns handles to the new copies. */
   array(handle: LayerHandle, opts: FlatArrayParams): LayerHandle[]
+  /** Add a bezier path layer from [x,y] points. Returns the path handle. */
+  addPath(points: [number, number][], opts?: { closed?: boolean; role?: 'visual' | 'motion'; x?: number; y?: number; name?: string }): LayerHandle
   /** Add a scene parameter. Returns the parameter id. */
   addParam(id: string, defaultValue?: SceneParameterValue, opts?: { type?: SceneParameterType; name?: string; min?: number; max?: number }): string
   /** Add an event→action trigger. */
@@ -159,6 +162,18 @@ export function createSceneAPI(
       })
       host.applyCommand(cmd)
       return cmd.result.suggestedSelection.map((id) => new LayerHandle(id, ctx))
+    },
+
+    addPath(points, opts): LayerHandle {
+      const base = opts?.role === 'motion' ? newMotionPathLayer() : newBezierPathLayer()
+      const layer = {
+        ...base,
+        ...(opts?.name ? { name: opts.name } : {}),
+        transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
+        path: pathFromPoints(points, opts?.closed ?? false),
+      }
+      host.applyCommand(makeAddLayerCmd(layer))
+      return new LayerHandle(layer.id, ctx)
     },
 
     addParam(id, defaultValue, opts): string {
