@@ -140,6 +140,31 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
     try { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url) } catch { /* no-op */ }
   }
 
+  // ── Discovery: remove all unused (orphan) assets in one undo step ────────
+  const cleanupUnused = () => {
+    const orphans = scene.assets.filter(a => (layersByAsset.get(a.id)?.length ?? 0) === 0)
+    if (orphans.length === 0) return
+    const ok = confirm(
+      `Remove ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}?\n\n` +
+      `These assets aren't referenced by any layer. No layers will be affected.`,
+    )
+    if (!ok) return
+
+    const orphanIds = new Set(orphans.map(a => a.id))
+    editor.dispatchCommand(makeBatchCmd(`Clean up ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}`, [
+      {
+        label: 'Remove unused assets',
+        execute: (s: ChronoScene) => ({ ...s, assets: s.assets.filter(x => !orphanIds.has(x.id)) }),
+        undo:    (s: ChronoScene) => ({ ...s, assets: [...s.assets, ...orphans.filter(o => !s.assets.some(x => x.id === o.id))] }),
+      },
+    ]))
+    toast.info(`Removed ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}`)
+    // Free blob URLs
+    for (const a of orphans) {
+      try { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url) } catch { /* no-op */ }
+    }
+  }
+
   return (
     <div className="flex flex-col h-full text-xs text-gray-300">
       {/* ── Header ── */}
@@ -155,6 +180,15 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
               <> · <span className="text-amber-500" title="Assets no layer references">{inventory.unused} unused</span></>
             )}
           </span>
+          {inventory.unused > 0 && (
+            <button
+              onClick={cleanupUnused}
+              className="text-[10px] px-2 py-0.5 rounded bg-gray-800 hover:bg-amber-700 text-amber-400 hover:text-white transition-colors"
+              title={`Remove ${inventory.unused} asset${inventory.unused === 1 ? '' : 's'} no layer references`}
+            >
+              Clean up ({inventory.unused})
+            </button>
+          )}
           {onImportFiles && (
             <>
               <button
