@@ -186,6 +186,20 @@ describe('runScript — authoring script (BL-76)', () => {
     expect(box.dragConfig).toMatchObject({ axis: 'x', setsParameter: 'angle' })
   })
 
+  it('clones and arrays layers via the scene API', () => {
+    const result = runScript(
+      `const box = scene.add('rect');
+       scene.clone(box, 2);
+       const dots = scene.add('circle');
+       scene.array(dots, { pattern: 'radial', count: 6, radius: 100 })`,
+      host,
+    )
+    expect(result.ok).toBe(true)
+    const shapes = getScene().layers.filter((l) => l.type === 'shape')
+    // box + 2 clones + circle source + 5 radial copies = 9
+    expect(shapes.length).toBe(9)
+  })
+
   it('auto-creates a default timeline when none exists (BL-78 ordering fix)', () => {
     // Scene with NO timelines — key() must not throw; it auto-creates one.
     let scene = emptyScene()

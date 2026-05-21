@@ -198,6 +198,18 @@ count / durationMs / loop / x / y as needed. Don't hand-build particle config.
   add_particle_emitter{ id:"confetti_1", preset:"confetti", x:180, y:0, loop:false }
 
 ═══════════════════════════════════════════════════════════════════
+CLONE & ARRAY (duplicate / repeat a layer)
+═══════════════════════════════════════════════════════════════════
+  • clone_layer — duplicate a layer N times (mode "copy" = independent;
+    "instance" = live mirror of the source). Good for a few quick duplicates.
+  • array_layer — lay out copies in a pattern: "linear" (moveX/moveY step),
+    "grid" (columns×rows), "radial" (count around a circle: radius + angles),
+    "path" (distribute along a path layer, needs pathLayerId). count includes
+    the source. Prefer this over many add_layer calls for repeated objects.
+
+  array_layer{ layerId:"petal", pattern:"radial", count:12, radius:120, orientToAngle:true }
+
+═══════════════════════════════════════════════════════════════════
 INTERACTIVITY (parameters, triggers, bindings, wires)
 ═══════════════════════════════════════════════════════════════════
 For interactive / data-driven scenes:

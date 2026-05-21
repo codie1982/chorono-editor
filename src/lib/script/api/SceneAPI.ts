@@ -17,6 +17,9 @@ import { makeAddStateMachineCmd } from '../../editor/commands-statemachine'
 import {
   makeAddParamCmd, makeAddTriggerCmd, makeAddParameterWireCmd,
 } from '../../editor/commands-interactive'
+import { makeCloneCmd, makeArrayCmd } from '../../editor/commands-clone'
+import { buildArraySettings, type FlatArrayParams } from '../../array/buildArraySettings'
+import type { CloneMode } from '../../clone/CloneTypes'
 import { nextSMId } from '../../defaults'
 import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
@@ -55,6 +58,10 @@ export interface SceneAPI {
   addStateMachine(name?: string): StateMachineHandle
   /** Add a particle emitter from a preset (confetti, fire, snow…). */
   addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle
+  /** Duplicate a layer N times. Returns handles to the new clones. */
+  clone(handle: LayerHandle, count?: number, opts?: { offsetX?: number; offsetY?: number; mode?: CloneMode }): LayerHandle[]
+  /** Lay out copies of a layer in a pattern. Returns handles to the new copies. */
+  array(handle: LayerHandle, opts: FlatArrayParams): LayerHandle[]
   /** Add a scene parameter. Returns the parameter id. */
   addParam(id: string, defaultValue?: SceneParameterValue, opts?: { type?: SceneParameterType; name?: string; min?: number; max?: number }): string
   /** Add an event→action trigger. */
@@ -124,6 +131,34 @@ export function createSceneAPI(
       const layer = buildEmitterLayer({ ...opts, preset })
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)
+    },
+
+    clone(handle, count = 1, opts): LayerHandle[] {
+      const source = host.getScene().layers.find((l) => l.id === handle.id)
+      if (!source) return []
+      const cmd = makeCloneCmd({
+        source, count,
+        ...(opts?.offsetX != null ? { offsetX: opts.offsetX } : {}),
+        ...(opts?.offsetY != null ? { offsetY: opts.offsetY } : {}),
+        ...(opts?.mode ? { mode: opts.mode } : {}),
+        timeline: host.getScene().timelines[0] ?? null,
+        allLayers: host.getScene().layers,
+      })
+      host.applyCommand(cmd)
+      return cmd.result.suggestedSelection.map((id) => new LayerHandle(id, ctx))
+    },
+
+    array(handle, opts): LayerHandle[] {
+      const source = host.getScene().layers.find((l) => l.id === handle.id)
+      if (!source) return []
+      const cmd = makeArrayCmd({
+        source,
+        settings: buildArraySettings(opts),
+        timeline: host.getScene().timelines[0] ?? null,
+        allLayers: host.getScene().layers,
+      })
+      host.applyCommand(cmd)
+      return cmd.result.suggestedSelection.map((id) => new LayerHandle(id, ctx))
     },
 
     addParam(id, defaultValue, opts): string {
