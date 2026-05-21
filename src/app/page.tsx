@@ -21,6 +21,8 @@ import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
 import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
+import { useAutoSave } from './hooks/useAutoSave'
+import { AutoSaveStatus } from '@/components/AutoSaveStatus'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
@@ -161,6 +163,19 @@ export default function BuilderPage() {
     scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo,
     layerMetaById, getSiblingsInArray,
   } = editor
+
+  // ── Auto-save to MongoDB (scene persistence) ────────────────────────────
+  // TODO: Get projectId and sceneId from URL query params or auth context
+  // For MVP: use dummy values. In production, load from /api/scenes/{sceneId}
+  const projectId = 'default-project'
+  const sceneId = 'default-scene'
+
+  const { state: autoSaveState, saveNow: autoSaveNow } = useAutoSave(scene, {
+    projectId,
+    sceneId,
+    interval_ms: 500,
+    fallback_ms: 10000,
+  })
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
   const [selectedLayerId,  setSelectedLayer]  = useState<string | null>('card')
@@ -1455,6 +1470,9 @@ export default function BuilderPage() {
           {' · '}{scene.layers.length} layers
           {' · '}{scene.timelines.length} timelines
         </span>
+
+        {/* Auto-save status indicator */}
+        <AutoSaveStatus state={autoSaveState} onRetry={autoSaveNow} />
 
         {/* Preview Mode toggle — when ON, draggable/tappable layers respond
             interactively on the canvas (no segment / preview tab needed). */}
