@@ -17,9 +17,33 @@ export interface AIMessage {
   content: string
 }
 
+/** Tool result fed back to the model in the next turn (BL-01 Faz 2). */
+export interface AIToolResult {
+  /** Matches the AIToolCall.id this result answers. */
+  toolCallId: string
+  /** String result of the read/mutate tool. */
+  content: string
+}
+
+/**
+ * Richer message for the multi-turn agent loop. Superset of AIMessage:
+ * `content` is always present, so plain AIMessage[] remains compatible.
+ *   • assistant turn that called tools → set `toolCalls`
+ *   • user turn carrying tool outputs  → set `toolResults`
+ */
+export interface AgentMessage {
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: AIToolCall[]
+  toolResults?: AIToolResult[]
+}
+
 export interface AIToolCall {
   name: string
   input: Record<string, unknown>
+  /** Provider tool-call id (Anthropic toolu_*, OpenAI call_*). Needed for the
+   *  multi-turn agent loop to attach tool_result messages (BL-01 Faz 2). */
+  id?: string
 }
 
 export interface AIResponse {

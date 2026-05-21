@@ -77,6 +77,9 @@ export function useAIPlanner({
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify({
           userMessage: text, sceneContext, history, providerOverride,
+          // Full scene so the server agent loop can run read tools against
+          // post-mutation state across turns (BL-01 Faz 2).
+          scene,
         }),
       })
       const data = (await res.json()) as AIResponse & { error?: string }

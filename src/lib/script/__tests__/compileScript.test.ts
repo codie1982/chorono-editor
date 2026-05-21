@@ -71,7 +71,7 @@ describe('AI run_script action', () => {
     await bootstrapAIActions()
     const def = actionRegistry.get('run_script')!
     const scene = sceneWithTimeline()
-    const cmd = def.toCommand(
+    const cmd = def.toCommand!(
       { code: `scene.add('rect'); scene.add('circle')` },
       scene,
     )
@@ -84,7 +84,7 @@ describe('AI run_script action', () => {
     await bootstrapAIActions()
     const def = actionRegistry.get('run_script')!
     const scene = sceneWithTimeline()
-    const cmd = def.toCommand({ code: `scene.add('nope')` }, scene)
+    const cmd = def.toCommand!({ code: `scene.add('nope')` }, scene)
     expect(cmd).not.toBeNull()
     expect(cmd!.label).toContain('AI ERROR')
     // Error command is a no-op.
@@ -95,7 +95,7 @@ describe('AI run_script action', () => {
     await bootstrapAIActions()
     const def = actionRegistry.get('run_script')!
     const scene = sceneWithTimeline()
-    const cmd = def.toCommand({} as { code: string }, scene)
+    const cmd = def.toCommand!({} as { code: string }, scene)
     expect(cmd!.label).toContain('AI ERROR')
   })
 })

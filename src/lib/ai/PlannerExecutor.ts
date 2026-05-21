@@ -32,6 +32,8 @@ export function buildCommandsFromToolCalls(
       errors.push(`Unknown tool: "${call.name}"`)
       continue
     }
+    // Read-only actions (agent loop introspection) carry no command to dispatch.
+    if (!def.toCommand) continue
     try {
       const cmd = def.toCommand(
         call.input as Record<string, unknown>,
