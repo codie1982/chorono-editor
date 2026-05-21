@@ -8,6 +8,8 @@ interface FileMenuProps {
   filename: string
   onRename:        (next: string) => void
   onNewScene:      () => void
+  /** Open a file picker for the universal import pipeline (images, SVG, media, fonts, Lottie). */
+  onImportFile?:   () => void
   onOpenSceneJson: () => void
   onSaveSceneJson: () => void
   onExportRuntime: () => void
@@ -107,6 +109,11 @@ export default function FileMenu(props: FileMenuProps) {
           <button className={item} onClick={() => { setOpen(false); props.onNewScene() }}>
             ＋ New Scene
           </button>
+          {props.onImportFile && (
+            <button className={item} onClick={() => { setOpen(false); props.onImportFile!() }}>
+              ⤓ Import File…
+            </button>
+          )}
           <button className={item} onClick={() => { setOpen(false); props.onOpenSceneJson() }}>
             ⇪ Open Scene JSON…
           </button>

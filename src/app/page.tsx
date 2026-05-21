@@ -57,6 +57,8 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
+import ImportButton    from '@/components/TopToolbar/ImportButton'
+import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
 import ToolGroup, {
   type ToolMode, type SelectionContainMode,
 } from '@/components/TopToolbar/ToolGroup'
@@ -380,6 +382,18 @@ export default function BuilderPage() {
     dispatchCommand,
     onSelectLayer: (id) => selectLayer(id),
   })
+
+  // Programmatic file picker for the File menu "Import File…" entry.
+  const openImportPicker = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.accept = IMPORT_ACCEPT
+    input.onchange = () => {
+      if (input.files && input.files.length > 0) void importAnyFiles(input.files)
+    }
+    input.click()
+  }, [importAnyFiles])
 
   // ── Layer commands ───────────────────────────────────────────────────────
   // Layer creation is fully registry-driven: every kind looks up its
@@ -1255,6 +1269,7 @@ export default function BuilderPage() {
           filename={scene.composition.id}
           onRename={(next) => updateComposition({ ...scene.composition, id: next })}
           onNewScene={newScene}
+          onImportFile={openImportPicker}
           onOpenSceneJson={openSceneJson}
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
@@ -1265,6 +1280,8 @@ export default function BuilderPage() {
           dockLayout={dock.layout}
           onRestorePanel={dock.dispatchRestorePanel}
         />
+
+        <ImportButton onImportFiles={importAnyFiles} />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
 

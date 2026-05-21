@@ -20,6 +20,7 @@ import {
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '@/lib/editor/commands-layer'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { toast } from '@/lib/toast/toast'
+import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 
 interface Props {
@@ -34,16 +35,6 @@ interface Props {
    */
   onImportFiles?: (files: FileList | File[]) => void
 }
-
-/** Accept attribute covering all Phase-1 importable formats. */
-const IMPORT_ACCEPT = [
-  'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif',
-  'image/svg+xml',
-  'video/mp4', 'video/quicktime', 'video/webm',
-  'audio/mpeg', 'audio/wav', 'audio/aac', 'audio/ogg',
-  'font/woff2', 'font/ttf', 'font/otf', '.woff2', '.ttf', '.otf',
-  '.json', '.lottie',
-].join(',')
 
 /** Human-readable byte size. */
 function formatBytes(bytes: number): string {
