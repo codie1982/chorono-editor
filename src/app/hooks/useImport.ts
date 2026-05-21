@@ -13,7 +13,7 @@ import { importManager }       from '@/lib/import/ImportManager'
 import { initImportPipeline }  from '@/lib/import/initImportPipeline'
 import { toast }               from '@/lib/toast/toast'
 import type { EditorCommand }  from '@/lib/editor/commands-keyframe'
-import type { ImportResult, ImportProgress } from '@/lib/import/types'
+import type { ImportResult, ImportProgress, ImportPreflight } from '@/lib/import/types'
 
 export interface UseImportOptions {
   /** Dispatch the atomic import command into the editor (one undo step). */
@@ -31,6 +31,8 @@ export interface UseImportReturn {
   importUrl: (url: string) => Promise<ImportResult | null>
   /** Import an image from the system clipboard. */
   importFromClipboard: () => Promise<ImportResult | null>
+  /** Run preflight analysis (summary + warnings) without committing. */
+  preview: (file: File) => Promise<ImportPreflight | null>
   /** Check whether a file is importable before committing. */
   canImport: (file: File) => Promise<boolean>
   /** True while an import is running. */
@@ -158,10 +160,19 @@ export function useImport({ dispatchCommand, onSelectLayer }: UseImportOptions):
     }
   }, [commitResult])
 
+  const preview = useCallback(async (file: File): Promise<ImportPreflight | null> => {
+    try {
+      return await importManager.preflight(file)
+    } catch (err) {
+      console.error('[import] preflight failed:', file.name, err)
+      return null
+    }
+  }, [])
+
   const canImport = useCallback(async (file: File): Promise<boolean> => {
     const { supported } = await importManager.canImport(file)
     return supported
   }, [])
 
-  return { importFile, importFiles, importUrl, importFromClipboard, canImport, importing, progress }
+  return { importFile, importFiles, importUrl, importFromClipboard, preview, canImport, importing, progress }
 }

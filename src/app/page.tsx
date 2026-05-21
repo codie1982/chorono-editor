@@ -57,9 +57,11 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
-import ImportMenu      from '@/components/TopToolbar/ImportMenu'
-import ImportUrlModal  from '@/components/modals/ImportUrlModal'
+import ImportMenu        from '@/components/TopToolbar/ImportMenu'
+import ImportUrlModal    from '@/components/modals/ImportUrlModal'
+import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
+import type { ImportPreflight } from '@/lib/import/types'
 import ToolGroup, {
   type ToolMode, type SelectionContainMode,
 } from '@/components/TopToolbar/ToolGroup'
@@ -384,12 +386,27 @@ export default function BuilderPage() {
     importFiles: importAnyFiles,
     importUrl: importAnyUrl,
     importFromClipboard: importAnyClipboard,
+    preview: previewImport,
   } = useImport({
     dispatchCommand,
     onSelectLayer: (id) => selectLayer(id),
   })
 
   const [showImportUrl, setShowImportUrl] = useState(false)
+  // Single-file imports show a preflight preview before committing.
+  const [pendingImport, setPendingImport] = useState<{ file: File; preflight: ImportPreflight } | null>(null)
+
+  const handleImportFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files)
+    if (list.length === 1) {
+      const preflight = await previewImport(list[0])
+      if (preflight) { setPendingImport({ file: list[0], preflight }); return }
+      // Preflight failed — fall back to a direct import attempt.
+      void importAnyFile(list[0])
+      return
+    }
+    void importAnyFiles(list)
+  }, [previewImport, importAnyFile, importAnyFiles])
 
   // Programmatic file picker for the File menu "Import File…" entry.
   const openImportPicker = useCallback(() => {
@@ -398,10 +415,10 @@ export default function BuilderPage() {
     input.multiple = true
     input.accept = IMPORT_ACCEPT
     input.onchange = () => {
-      if (input.files && input.files.length > 0) void importAnyFiles(input.files)
+      if (input.files && input.files.length > 0) void handleImportFiles(input.files)
     }
     input.click()
-  }, [importAnyFiles])
+  }, [handleImportFiles])
 
   // ── Layer commands ───────────────────────────────────────────────────────
   // Layer creation is fully registry-driven: every kind looks up its
@@ -1290,7 +1307,7 @@ export default function BuilderPage() {
         />
 
         <ImportMenu
-          onImportFiles={importAnyFiles}
+          onImportFiles={handleImportFiles}
           onImportUrl={() => setShowImportUrl(true)}
           onImportClipboard={() => { void importAnyClipboard() }}
         />
@@ -1927,7 +1944,7 @@ export default function BuilderPage() {
                     scene={scene}
                     editor={editor}
                     onSelectLayer={(id) => selectLayer(id)}
-                    onImportFiles={importAnyFiles}
+                    onImportFiles={handleImportFiles}
                   />
                 ),
               },
@@ -2017,6 +2034,16 @@ export default function BuilderPage() {
         <ImportUrlModal
           onImport={(url) => { void importAnyUrl(url) }}
           onClose={() => setShowImportUrl(false)}
+        />
+      )}
+
+      {/* ── Import preflight preview (BL-09) ──────────────────────────── */}
+      {pendingImport && (
+        <ImportPreviewModal
+          fileName={pendingImport.file.name}
+          preflight={pendingImport.preflight}
+          onConfirm={() => { void importAnyFile(pendingImport.file); setPendingImport(null) }}
+          onCancel={() => setPendingImport(null)}
         />
       )}
 
