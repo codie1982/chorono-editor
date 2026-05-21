@@ -57,7 +57,6 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
-import ImportMenu        from '@/components/TopToolbar/ImportMenu'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
@@ -1295,6 +1294,8 @@ export default function BuilderPage() {
           onRename={(next) => updateComposition({ ...scene.composition, id: next })}
           onNewScene={newScene}
           onImportFile={openImportPicker}
+          onImportUrl={() => setShowImportUrl(true)}
+          onImportClipboard={() => { void importAnyClipboard() }}
           onOpenSceneJson={openSceneJson}
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
@@ -1304,12 +1305,6 @@ export default function BuilderPage() {
           panelRegistry={panelRegistry}
           dockLayout={dock.layout}
           onRestorePanel={dock.dispatchRestorePanel}
-        />
-
-        <ImportMenu
-          onImportFiles={handleImportFiles}
-          onImportUrl={() => setShowImportUrl(true)}
-          onImportClipboard={() => { void importAnyClipboard() }}
         />
 
         <div className="w-px h-6 bg-gray-700 mx-1" />

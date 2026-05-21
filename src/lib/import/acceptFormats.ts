@@ -2,7 +2,7 @@
 //
 // Shared `accept` attribute for <input type="file"> import pickers.
 // Covers every format the Phase-1 universal import pipeline can handle.
-// Used by the toolbar ImportMenu and the AssetsPanel import control.
+// Used by the File menu "From File…" picker and the AssetsPanel import control.
 
 export const IMPORT_ACCEPT = [
   // Images
@@ -17,7 +17,3 @@ export const IMPORT_ACCEPT = [
   // Documents (Lottie JSON, dotLottie, Chorono scene)
   '.json', '.lottie',
 ].join(',')
-
-/** Short human-readable list of supported formats for tooltips/help text. */
-export const IMPORT_FORMATS_LABEL =
-  'Images, SVG, video, audio, fonts, Lottie, Chorono scenes'
