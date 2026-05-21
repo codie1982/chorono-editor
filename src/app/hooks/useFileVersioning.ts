@@ -70,9 +70,12 @@ export function useFileVersioning(
     baseName = "scene",
   } = options;
 
-  const [state, setState] = useState<FileVersioningState>(
-    isFileSystemAccessSupported() ? "no-directory" : "unsupported"
-  );
+  // SSR-safe: start with a neutral state. `mounted` stays false on the server
+  // and during the first client render so server/client HTML match (avoids
+  // React hydration errors). Capability detection happens after mount.
+  const [mounted, setMounted] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
+  const [state, setState] = useState<FileVersioningState>("no-directory");
   const [directoryName, setDirectoryName] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [lastSnapshotAt, setLastSnapshotAt] = useState<Date | null>(null);
@@ -85,6 +88,16 @@ export function useFileVersioning(
   const snapshotTimerRef = useRef<ReturnType<typeof setInterval>>();
   const lastWrittenRef = useRef<ChronoScene | null>(null);
   const sceneRef = useRef<ChronoScene | null>(scene);
+
+  // Detect File System Access API support after mount (client only).
+  useEffect(() => {
+    setMounted(true);
+    const supported = isFileSystemAccessSupported();
+    setIsSupported(supported);
+    if (!supported) {
+      setState("unsupported");
+    }
+  }, []);
 
   // Keep latest scene in a ref for timers
   useEffect(() => {
@@ -236,12 +249,13 @@ export function useFileVersioning(
   }, [state, snapshot_ms, saveSnapshotNow]);
 
   return {
+    mounted,
     state,
     directoryName,
     lastSavedAt,
     lastSnapshotAt,
     snapshotCount,
-    isSupported: isFileSystemAccessSupported(),
+    isSupported,
     pickDirectory,
     saveSnapshotNow,
   };

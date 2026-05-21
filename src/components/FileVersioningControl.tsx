@@ -4,6 +4,8 @@ import React from "react";
 import type { FileVersioningState } from "@/app/hooks/useFileVersioning";
 
 interface FileVersioningControlProps {
+  /** False on server + first client render — prevents hydration mismatch. */
+  mounted: boolean;
   state: FileVersioningState;
   directoryName: string | null;
   lastSavedAt: Date | null;
@@ -29,6 +31,7 @@ function formatTime(d: Date | null): string {
  * - Shows folder name + snapshot count
  */
 export function FileVersioningControl({
+  mounted,
   state,
   directoryName,
   lastSavedAt,
@@ -37,6 +40,12 @@ export function FileVersioningControl({
   onPickDirectory,
   onSaveSnapshot,
 }: FileVersioningControlProps) {
+  // Until mounted (server + first client render), render nothing so the
+  // server and client HTML match — capability detection happens post-mount.
+  if (!mounted) {
+    return null;
+  }
+
   // Unsupported browser → show disabled hint
   if (!isSupported || state === "unsupported") {
     return (

@@ -1472,6 +1472,7 @@ export default function BuilderPage() {
 
         {/* File versioning: choose folder + auto-save + timestamped snapshots */}
         <FileVersioningControl
+          mounted={fileVersioning.mounted}
           state={fileVersioning.state}
           directoryName={fileVersioning.directoryName}
           lastSavedAt={fileVersioning.lastSavedAt}
