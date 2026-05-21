@@ -19,8 +19,8 @@ interface RequestBody {
   providerOverride?: AIProviderConfig
 }
 
-function readEnvConfig(): AIProviderConfig {
-  const provider = (process.env.AI_PROVIDER ?? 'anthropic') as AIProviderName
+function readEnvConfig(forProvider?: AIProviderName): AIProviderConfig {
+  const provider = forProvider ?? ((process.env.AI_PROVIDER ?? 'anthropic') as AIProviderName)
 
   if (provider === 'openai') {
     return {
@@ -58,7 +58,15 @@ export async function POST(req: NextRequest) {
     }
 
     await bootstrapAIActions()
-    const config = providerOverride ?? readEnvConfig()
+    // The UI sends a providerOverride to pick provider/model, but it never
+    // carries the API key (keys stay server-side). When the override omits the
+    // key, borrow it from env for that provider so UI selection + env keys work
+    // together. Explicit keys (e.g. custom/local) are respected as-is.
+    let config = providerOverride ?? readEnvConfig()
+    if (providerOverride && !providerOverride.apiKey) {
+      const envKey = readEnvConfig(providerOverride.provider).apiKey
+      if (envKey) config = { ...providerOverride, apiKey: envKey }
+    }
 
     // Custom provider may legitimately have no API key (e.g. local Ollama)
     if (!config.apiKey && config.provider !== 'custom') {
