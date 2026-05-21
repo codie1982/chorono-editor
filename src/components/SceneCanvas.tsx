@@ -17,9 +17,6 @@ import {
   insertPointOnSegment, deleteSplinePoint,
   setSplinePointType, setSegmentType, setContourClosed, reverseContour,
 } from '@/lib/spline'
-import {
-  hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
-} from '@/lib/path/pathOps'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -52,6 +49,7 @@ import { useSelectionTools } from './canvas/hooks/useSelectionTools'
 import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
 import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
 import { useCanvasDrag } from './canvas/hooks/useCanvasDrag'
+import { usePathEdit } from './canvas/hooks/usePathEdit'
 
 interface Props {
   scene: ChronoScene
@@ -344,10 +342,6 @@ export default function SceneCanvas({
     }
   }, [])
 
-  // BL-03: Pen-tool close-path double-click detection. First click on the
-  // path's first anchor stores the timestamp; a second click within 350ms
-  // on the same anchor triggers togglePathClosed instead of starting a drag.
-  const closePathClickRef = useRef<{ layerId: string; timeMs: number } | null>(null)
 
   // BL-60 Faz 3 — Canvas marquee selection tools (box / lasso / circle / paint).
   const { selectionOverlay, beginSelectionDrag } = useSelectionTools({
@@ -384,6 +378,9 @@ export default function SceneCanvas({
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onSelectLayer,
   })
+
+  // ── Pen tool / path editing (anchors, handles, segment insert, close) ─────
+  const { tryStartPathEdit } = usePathEdit({ editorRef, sceneRef, dragRef, startDrag, toolMode })
 
 
   // ── BL-73 Spline drawing tools (box-drag primitives + multi-click line) ──
@@ -539,99 +536,7 @@ export default function SceneCanvas({
     }
 
     if (selectedLayer && selectedLayer.type === 'path' && selectedLayer.path && !selectedLayer.locked) {
-      const lx = cx - selectedLayer.transform.x
-      const ly = cy - selectedLayer.transform.y
-      const penHit = hitTestPath(selectedLayer.path, lx, ly, 8)
-      if (penHit) {
-        // BL-03: Pen-tool double-click on FIRST anchor of an open path closes it.
-        // We detect "quick second click" via the click-time ref so the first
-        // click still starts a normal anchor drag — the second-within-350ms
-        // upgrades to a close action and bypasses the drag.
-        if (
-          toolMode === 'pen' &&
-          penHit.type === 'anchor' &&
-          penHit.anchorIndex === 0 &&
-          !selectedLayer.path.closed &&
-          selectedLayer.path.anchors.length >= 2
-        ) {
-          const now = performance.now()
-          const last = closePathClickRef.current
-          if (last && last.layerId === selectedLayer.id && now - last.timeMs <= 350) {
-            // Second click → close the path
-            closePathClickRef.current = null
-            const closed = togglePathClosed(selectedLayer.path)
-            editor.dispatchCommand(makeUpdateLayerCmd(
-              selectedLayer.id,
-              { ...selectedLayer, path: closed },
-              selectedLayer,
-            ))
-            return
-          }
-          closePathClickRef.current = { layerId: selectedLayer.id, timeMs: now }
-          // Fall through — start the normal anchor drag for the first click
-        }
-
-        editor.beginTransaction()
-        dragRef.current = {
-          kind: 'pathPoint',
-          layerId: selectedLayer.id,
-          originalLayer: selectedLayer,
-          startClientX: e.clientX,
-          startClientY: e.clientY,
-          anchorIndex: penHit.anchorIndex,
-          part: penHit.type,
-        }
-        startDrag()
-        return
-      }
-
-      // Pen mode + click on a SEGMENT (not an anchor) → insert anchor at the
-      // click point so the curve is unchanged but the user can now grab a
-      // new control point. Standard Figma/Illustrator behavior. (BL-03)
-      if (toolMode === 'pen') {
-        const segHit = hitTestSegment(selectedLayer.path, lx, ly, 6)
-        if (segHit) {
-          const nextPath = insertAnchorOnSegment(selectedLayer.path, segHit.segmentIndex, segHit.t)
-          editor.dispatchCommand(makeUpdateLayerCmd(
-            selectedLayer.id,
-            { ...selectedLayer, path: nextPath },
-            selectedLayer,
-          ))
-          return
-        }
-
-        // BL-66 — Click on empty area: APPEND a provisional corner anchor and
-        // start a `newAnchorDraw` drag. If the user drags > 5px before release,
-        // we upgrade it to a smooth anchor with bezier handles (outHandle at
-        // cursor, inHandle mirrored). Pure-click commits as a corner.
-        const provisional = {
-          ...selectedLayer,
-          path: {
-            ...selectedLayer.path,
-            anchors: [
-              ...selectedLayer.path.anchors,
-              { x: lx, y: ly, pointType: 'corner' as const },
-            ],
-          },
-        }
-        editor.beginTransaction()
-        editor.previewTransaction({
-          ...sceneRef.current,
-          layers: sceneRef.current.layers.map(l => l.id === selectedLayer.id ? provisional : l),
-        })
-        dragRef.current = {
-          kind: 'newAnchorDraw',
-          layerId: selectedLayer.id,
-          originalLayer: selectedLayer,
-          anchorX: lx,
-          anchorY: ly,
-          startClientX: e.clientX,
-          startClientY: e.clientY,
-          anchorIndex: provisional.path.anchors.length - 1,
-        }
-        startDrag()
-        return
-      }
+      if (tryStartPathEdit(selectedLayer, cx, cy, e)) return
     }
 
     // Alt/Option-click cycles through stacked layers under the cursor — useful
@@ -718,7 +623,7 @@ export default function SceneCanvas({
       cloneMode,
     }
     startDrag()
-  }, [scene, timeMs, width, height, onSelectLayer, editor, startDrag, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom])
+  }, [scene, timeMs, width, height, onSelectLayer, editor, startDrag, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit, pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
