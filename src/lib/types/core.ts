@@ -6,7 +6,7 @@
 import type { EditorMode } from '../core/EditorMode'
 import type { ShapeStyle }  from './style'
 import type { TextStyle }   from './text'
-import type { ImageData, VideoData, AudioData, Asset } from './media'
+import type { ImageData, VideoData, AudioData, FrameSequenceData, Asset } from './media'
 import type { LayerEffects, MotionPath, PluginEffect, FollowPath, MotionBlurConfig } from './effects'
 import type { BezierPath } from './path'
 import type { SplinePathData } from './spline'
@@ -16,7 +16,7 @@ import type { StateMachineDefinition } from './statemachine-chorono'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
+export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
@@ -309,6 +309,8 @@ export interface Layer {
   image?:      ImageData
   video?:      VideoData
   audio?:      AudioData
+  /** Sprite-sheet / frame-sequence animation — used when type === 'frameSequence'. */
+  frameSequence?: FrameSequenceData
   effects?:    LayerEffects
   /** Plugin-based effect chain (glow/shadow/etc.) applied AFTER rendering. */
   effectsChain?: PluginEffect[]
@@ -704,6 +706,10 @@ export interface ChronoScene {
   mode?: EditorMode
   composition: Composition
   assets: Asset[]
+  /** Asset collections (folders) for organizing imported materials.
+   *  Optional for backward compat — legacy scenes without this field
+   *  treat all assets as uncategorized. Added by BL-04 import pipeline. */
+  assetCollections?: import('../asset/types').AssetCollection[]
   layers: Layer[]
   timelines: Timeline[]
   /** Runtime-tunable parameters. Surfaced via setParam() on the host platform. */

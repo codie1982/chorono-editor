@@ -20,6 +20,7 @@ import {
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '@/lib/editor/commands-layer'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { toast } from '@/lib/toast/toast'
+import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 
 interface Props {
@@ -27,18 +28,36 @@ interface Props {
   editor: EditorStateReturn
   /** Called with the new layer's id after "Add layer" so it can be selected. */
   onSelectLayer?: (id: string) => void
+  /**
+   * Import files through the universal pipeline (BL-04–06). When provided, the
+   * panel header shows an "Import" button. Accepts images, video, audio, SVG,
+   * fonts, Lottie and Chorono scene files.
+   */
+  onImportFiles?: (files: FileList | File[]) => void
+}
+
+/** Human-readable byte size. */
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
 const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> = {
-  image: { bg: 'bg-sky-900/50',     fg: 'text-sky-300',     icon: '🖼' },
-  video: { bg: 'bg-purple-900/50',  fg: 'text-purple-300',  icon: '▶' },
-  audio: { bg: 'bg-emerald-900/50', fg: 'text-emerald-300', icon: '♪' },
+  image:       { bg: 'bg-sky-900/50',     fg: 'text-sky-300',     icon: '🖼' },
+  video:       { bg: 'bg-purple-900/50',  fg: 'text-purple-300',  icon: '▶' },
+  audio:       { bg: 'bg-emerald-900/50', fg: 'text-emerald-300', icon: '♪' },
+  // BL-04: new asset types
+  font:        { bg: 'bg-amber-900/50',   fg: 'text-amber-300',   icon: 'F' },
+  svg:         { bg: 'bg-rose-900/50',    fg: 'text-rose-300',    icon: '✦' },
+  lottie:      { bg: 'bg-indigo-900/50',  fg: 'text-indigo-300',  icon: '◎' },
+  spriteSheet: { bg: 'bg-teal-900/50',    fg: 'text-teal-300',    icon: '⊞' },
+  gif:         { bg: 'bg-pink-900/50',    fg: 'text-pink-300',    icon: '⟳' },
 }
 
-export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const videoInputRef = useRef<HTMLInputElement>(null)
-  const audioInputRef = useRef<HTMLInputElement>(null)
+export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles }: Props) {
+  const importInputRef = useRef<HTMLInputElement>(null)
   const ctxMenu = useContextMenu()
   const [ctxAssetId, setCtxAssetId] = useState<string | null>(null)
 
@@ -55,6 +74,25 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
     return map
   }, [scene.layers])
 
+  // Inventory summary: total bytes + count of assets no layer references.
+  const inventory = useMemo(() => {
+    let totalBytes = 0
+    let unused = 0
+    for (const a of scene.assets) {
+      totalBytes += a.metadata?.filesize ?? 0
+      if ((layersByAsset.get(a.id)?.length ?? 0) === 0) unused++
+    }
+    return { totalBytes, unused }
+  }, [scene.assets, layersByAsset])
+
+  // ── Import via the universal pipeline ────────────────────────────────────
+  const handleImportClick = () => importInputRef.current?.click()
+  const handleImportPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) onImportFiles?.(files)
+    e.target.value = '' // allow re-picking the same file
+  }
+
   // ── Add layer from an existing asset ────────────────────────────────────
   const addLayerFromAsset = (a: Asset) => {
     let layer
@@ -62,6 +100,10 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
       case 'image': layer = newImageLayer(a.id, a.width ?? 200, a.height ?? 150); break
       case 'video': layer = newVideoLayer(a.id, a.width ?? 320, a.height ?? 180, a.durationMs); break
       case 'audio': layer = newAudioLayer(a.id, a.durationMs); break
+      default: {
+        toast.error(`Cannot add layer for asset type: ${a.type}`)
+        return
+      }
     }
     editor.dispatchCommand(makeAddLayerCmd(layer))
     onSelectLayer?.(layer.id)
@@ -98,35 +140,84 @@ export default function AssetsPanel({ scene, editor, onSelectLayer }: Props) {
     try { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url) } catch { /* no-op */ }
   }
 
-  // ── Upload new asset directly from this panel ─────────────────────────
-  // (We delegate to file input elements; actual asset creation flows
-  //  through the same probeAndAddMedia in page.tsx which also adds a layer.
-  //  For now we expose buttons that just delegate to LayerPanel-style flow
-  //  via the parent's onAddImage / onAddVideo / onAddAudio — those are not
-  //  wired here, so for V1 the panel is READ-ONLY: upload happens via the
-  //  Layer panel's media buttons. A future iteration can lift those handlers
-  //  up to the page level so this panel can also trigger uploads.)
-  // For now, leave inputs as placeholders for future wiring.
-  void imageInputRef; void videoInputRef; void audioInputRef
+  // ── Discovery: remove all unused (orphan) assets in one undo step ────────
+  const cleanupUnused = () => {
+    const orphans = scene.assets.filter(a => (layersByAsset.get(a.id)?.length ?? 0) === 0)
+    if (orphans.length === 0) return
+    const ok = confirm(
+      `Remove ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}?\n\n` +
+      `These assets aren't referenced by any layer. No layers will be affected.`,
+    )
+    if (!ok) return
+
+    const orphanIds = new Set(orphans.map(a => a.id))
+    editor.dispatchCommand(makeBatchCmd(`Clean up ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}`, [
+      {
+        label: 'Remove unused assets',
+        execute: (s: ChronoScene) => ({ ...s, assets: s.assets.filter(x => !orphanIds.has(x.id)) }),
+        undo:    (s: ChronoScene) => ({ ...s, assets: [...s.assets, ...orphans.filter(o => !s.assets.some(x => x.id === o.id))] }),
+      },
+    ]))
+    toast.info(`Removed ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}`)
+    // Free blob URLs
+    for (const a of orphans) {
+      try { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url) } catch { /* no-op */ }
+    }
+  }
 
   return (
     <div className="flex flex-col h-full text-xs text-gray-300">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Assets
         </span>
-        <span className="text-[10px] text-gray-500">
-          {scene.assets.length} item{scene.assets.length === 1 ? '' : 's'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500">
+            {scene.assets.length} item{scene.assets.length === 1 ? '' : 's'}
+            {inventory.totalBytes > 0 && <> · {formatBytes(inventory.totalBytes)}</>}
+            {inventory.unused > 0 && (
+              <> · <span className="text-amber-500" title="Assets no layer references">{inventory.unused} unused</span></>
+            )}
+          </span>
+          {inventory.unused > 0 && (
+            <button
+              onClick={cleanupUnused}
+              className="text-[10px] px-2 py-0.5 rounded bg-gray-800 hover:bg-amber-700 text-amber-400 hover:text-white transition-colors"
+              title={`Remove ${inventory.unused} asset${inventory.unused === 1 ? '' : 's'} no layer references`}
+            >
+              Clean up ({inventory.unused})
+            </button>
+          )}
+          {onImportFiles && (
+            <>
+              <button
+                onClick={handleImportClick}
+                className="text-[10px] px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+                title="Import images, video, audio, SVG, fonts, Lottie or Chorono scenes"
+              >
+                + Import
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                multiple
+                accept={IMPORT_ACCEPT}
+                className="hidden"
+                onChange={handleImportPicked}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Empty state ── */}
       {scene.assets.length === 0 && (
         <div className="flex-1 flex items-center justify-center p-4 text-center text-[11px] text-gray-500 leading-relaxed">
           No assets yet.<br />
-          Upload images, videos or audio via the Layers panel
-          (<span className="text-gray-400">+ Add → Media</span>).
+          {onImportFiles
+            ? <>Click <span className="text-blue-400">+ Import</span> to add images, video, audio, SVG, fonts or Lottie.</>
+            : <>Upload media via the Layers panel (<span className="text-gray-400">+ Add → Media</span>).</>}
         </div>
       )}
 

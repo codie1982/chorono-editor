@@ -144,6 +144,11 @@ export const splineRendererPlugin: LayerRendererPlugin = {
 import { particleRendererPlugin } from './ParticleRendererPlugin'
 export { particleRendererPlugin }
 
+// ── Frame Sequence / Sprite Sheet (BL-07) ────────────────────────────────────
+
+import { frameSequenceRendererPlugin } from './FrameSequenceRendererPlugin'
+export { frameSequenceRendererPlugin }
+
 // ── All built-in renderers (registered by bootstrap) ─────────────────────────
 
 export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
@@ -151,6 +156,7 @@ export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
   textRendererPlugin,
   imageRendererPlugin,
   videoRendererPlugin,
+  frameSequenceRendererPlugin,
   pathStrokeRendererPlugin,
   bezierPathRendererPlugin,
   splineRendererPlugin,

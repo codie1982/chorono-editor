@@ -44,7 +44,9 @@ export function useAssetCache(assets: Asset[]): AssetCache {
     for (const asset of assets) {
       if (next.has(asset.id)) continue
 
-      if (asset.type === 'image') {
+      if (asset.type === 'image' || asset.type === 'spriteSheet') {
+        // Sprite-sheet assets (BL-07) load like images — the FrameSequence
+        // renderer slices frames out of the loaded HTMLImageElement.
         const img = new Image()
         const p = new Promise<void>((resolve) => {
           img.onload  = () => resolve()

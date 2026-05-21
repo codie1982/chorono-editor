@@ -8,6 +8,12 @@ interface FileMenuProps {
   filename: string
   onRename:        (next: string) => void
   onNewScene:      () => void
+  /** Open a file picker for the universal import pipeline (images, SVG, media, fonts, Lottie). */
+  onImportFile?:   () => void
+  /** Open the remote-URL import flow. */
+  onImportUrl?:    () => void
+  /** Import an image from the clipboard. */
+  onImportClipboard?: () => void
   onOpenSceneJson: () => void
   onSaveSceneJson: () => void
   onExportRuntime: () => void
@@ -102,6 +108,29 @@ export default function FileMenu(props: FileMenuProps) {
           </div>
 
           <div className={divider} />
+
+          {/* ── Import (universal pipeline) ── */}
+          {(props.onImportFile || props.onImportUrl || props.onImportClipboard) && (
+            <>
+              <div className={sectionLabel}>Import</div>
+              {props.onImportFile && (
+                <button className={item} onClick={() => { setOpen(false); props.onImportFile!() }}>
+                  ⤓ From File…
+                </button>
+              )}
+              {props.onImportUrl && (
+                <button className={item} onClick={() => { setOpen(false); props.onImportUrl!() }}>
+                  🔗 From URL…
+                </button>
+              )}
+              {props.onImportClipboard && (
+                <button className={item} onClick={() => { setOpen(false); props.onImportClipboard!() }}>
+                  📋 Paste from Clipboard
+                </button>
+              )}
+              <div className={divider} />
+            </>
+          )}
 
           {/* ── File ops ── */}
           <button className={item} onClick={() => { setOpen(false); props.onNewScene() }}>

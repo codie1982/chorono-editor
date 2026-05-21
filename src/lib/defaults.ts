@@ -8,6 +8,7 @@ import type {
 import type { SplinePrimitiveKind, SplineGeneratorParams, SplinePathData } from './types/spline'
 import { createSplinePrimitive } from './spline/factory/createSplinePrimitive'
 import type { MotionBlurConfig } from './types/effects'
+import type { FrameSequenceData } from './types/media'
 import type { TextStyle } from './types/text'
 import { measureTextLayout } from './text/measureText'
 
@@ -136,6 +137,21 @@ export function newAudioLayer(assetId: string, durationMs?: number): Layer {
     // No size — audio has no visual representation on canvas
     audio: { assetId, volume: 1, muted: false, startOffsetMs: 0, loop: false },
     endMs: durationMs,
+  }
+}
+
+export function newFrameSequenceLayer(seq: FrameSequenceData, w = 0, h = 0): Layer {
+  layerCounter++
+  const width  = w || seq.frameWidth
+  const height = h || seq.frameHeight
+  return {
+    id:   `frameSeq_${layerCounter}`,
+    name: `Sprite ${layerCounter}`,
+    type: 'frameSequence',
+    transform: { ...DEFAULT_TRANSFORM, x: 40, y: 40, anchorX: width / 2, anchorY: height / 2 },
+    opacity: 1,
+    size: { width, height },
+    frameSequence: seq,
   }
 }
 

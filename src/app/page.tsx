@@ -4,7 +4,7 @@ import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
   emptyScene,
-  newImageLayer, newVideoLayer, newAudioLayer, newTimeline,
+  newTimeline,
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
 import { layerRegistry } from '@/lib/registry'
@@ -17,6 +17,7 @@ import type { ShortcutContext } from '@/lib/shortcuts'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
+import { useImport }           from './hooks/useImport'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
@@ -56,6 +57,10 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
+import ImportUrlModal    from '@/components/modals/ImportUrlModal'
+import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
+import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
+import type { ImportPreflight } from '@/lib/import/types'
 import ToolGroup, {
   type ToolMode, type SelectionContainMode,
 } from '@/components/TopToolbar/ToolGroup'
@@ -371,6 +376,49 @@ export default function BuilderPage() {
     setSelectedLayer(id)
   }, [])
 
+  // ── Universal import pipeline (BL-04–06) ─────────────────────────────────
+  // Routes any File through ImportManager → atomic command → dispatch.
+  // SVG, Lottie and Chorono-scene imports flow through here; legacy media
+  // handlers below still exist for the existing per-type file inputs.
+  const {
+    importFile: importAnyFile,
+    importFiles: importAnyFiles,
+    importUrl: importAnyUrl,
+    importFromClipboard: importAnyClipboard,
+    preview: previewImport,
+  } = useImport({
+    dispatchCommand,
+    onSelectLayer: (id) => selectLayer(id),
+  })
+
+  const [showImportUrl, setShowImportUrl] = useState(false)
+  // Single-file imports show a preflight preview before committing.
+  const [pendingImport, setPendingImport] = useState<{ file: File; preflight: ImportPreflight } | null>(null)
+
+  const handleImportFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files)
+    if (list.length === 1) {
+      const preflight = await previewImport(list[0])
+      if (preflight) { setPendingImport({ file: list[0], preflight }); return }
+      // Preflight failed — fall back to a direct import attempt.
+      void importAnyFile(list[0])
+      return
+    }
+    void importAnyFiles(list)
+  }, [previewImport, importAnyFile, importAnyFiles])
+
+  // Programmatic file picker for the File menu "Import File…" entry.
+  const openImportPicker = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.accept = IMPORT_ACCEPT
+    input.onchange = () => {
+      if (input.files && input.files.length > 0) void handleImportFiles(input.files)
+    }
+    input.click()
+  }, [handleImportFiles])
+
   // ── Layer commands ───────────────────────────────────────────────────────
   // Layer creation is fully registry-driven: every kind looks up its
   // LayerDefinition and calls createDefault(). Adding a new shape no longer
@@ -465,127 +513,21 @@ export default function BuilderPage() {
     })
   }, [scene.layers, scene.timelines, dispatchCommand])
 
-  /**
-   * Probe an asset file via a hidden element to get its natural dimensions
-   * and duration, then wrap the asset + layer creation in one undo step.
-   */
-  const probeAndAddMedia = useCallback((
-    file: File,
-    kind: 'image' | 'video' | 'audio',
-  ) => {
-    const assetId = `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-    const url     = URL.createObjectURL(file)
-    const prev    = scene
+  // ── Media import — routed through the universal pipeline (BL-05/BL-10) ─────
+  // Image/Video/Audio handlers probe dimensions + duration, create an asset
+  // (with storage/metadata) + a layer, and commit as one atomic undo step.
+  // The asset cache hook revokes blob URLs when assets leave the scene.
+  const addImageLayerFromFile = useCallback((file: File) => { void importAnyFile(file) }, [importAnyFile])
+  const addVideoLayerFromFile = useCallback((file: File) => { void importAnyFile(file) }, [importAnyFile])
+  const addAudioLayerFromFile = useCallback((file: File) => { void importAnyFile(file) }, [importAnyFile])
 
-    const commit = (info: { width?: number; height?: number; durationMs?: number }) => {
-      const layer =
-        kind === 'image' ? newImageLayer(assetId, info.width ?? 200, info.height ?? 150)
-      : kind === 'video' ? newVideoLayer(assetId, info.width ?? 320, info.height ?? 180, info.durationMs)
-      :                    newAudioLayer(assetId, info.durationMs)
-
-      dispatchCommand({
-        label: `Add ${kind}`,
-        execute: (s) => ({
-          ...s,
-          assets: [...s.assets, {
-            id: assetId, name: file.name, type: kind, url,
-            width: info.width, height: info.height, durationMs: info.durationMs,
-          }],
-          layers: [...s.layers, layer],
-        }),
-        // Asset cache hook revokes blob URL automatically when scene.assets shrinks
-        undo: () => prev,
-      })
-      selectLayer(layer.id)
-    }
-
-    if (kind === 'image') {
-      const img = new Image()
-      img.onload  = () => commit({ width: img.naturalWidth, height: img.naturalHeight })
-      img.onerror = () => { URL.revokeObjectURL(url); console.error('image load failed:', file.name) }
-      img.src = url
-      return
-    }
-
-    if (kind === 'video') {
-      const v = document.createElement('video')
-      v.preload  = 'metadata'
-      v.muted    = true
-      v.onloadedmetadata = () => {
-        const rawDur = v.duration
-        const durationMs = Number.isFinite(rawDur) && rawDur * 1000 >= 100
-          ? rawDur * 1000
-          : undefined
-        if (!durationMs) {
-          console.warn('[video] duration probe returned', rawDur, '— bar will span full timeline')
-        }
-        commit({
-          width: v.videoWidth, height: v.videoHeight,
-          durationMs,
-        })
-      }
-      v.onerror = (err) => {
-        URL.revokeObjectURL(url)
-        console.error('[video] load failed:', file.name, err)
-      }
-      v.src = url
-      return
-    }
-
-    // audio
-    const a = document.createElement('audio')
-    a.preload  = 'metadata'
-    a.onloadedmetadata = () => {
-      const rawDur = a.duration
-      // Some encodings report duration in seconds; <100ms is almost always
-      // a metadata parsing failure rather than a genuinely tiny clip. Fall
-      // back to undefined so the bar spans the full timeline (user can trim).
-      const durationMs = Number.isFinite(rawDur) && rawDur * 1000 >= 100
-        ? rawDur * 1000
-        : undefined
-      if (!durationMs) {
-        console.warn('[audio] duration probe returned', rawDur, '— bar will span full timeline')
-      }
-      commit({ durationMs })
-    }
-    a.onerror = (err) => {
-      URL.revokeObjectURL(url)
-      console.error('[audio] load failed:', file.name, err)
-    }
-    a.src = url
-  }, [scene, dispatchCommand, selectLayer])
-
-  const addImageLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'image'), [probeAndAddMedia])
-  const addVideoLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'video'), [probeAndAddMedia])
-  const addAudioLayerFromFile = useCallback((file: File) => probeAndAddMedia(file, 'audio'), [probeAndAddMedia])
-
-  // ── SVG Import — reads file → parses → emits batched undo step ───────────
+  // ── SVG Import — routed through the universal import pipeline (BL-06) ──────
+  // SvgDocumentHandler wraps the same SvgImporter as before, but now also
+  // registers an SVG asset in the library and wraps everything in one atomic
+  // undo step. Reporting + toasts are handled inside useImport.
   const importSvgFile = useCallback(async (file: File) => {
-    try {
-      const text = await file.text()
-      const { svgImporter } = await import('@/lib/svg')
-      const { makeImportSvgCmd } = await import('@/lib/editor/commands-svg')
-      const result = svgImporter.import(text)
-      if (result.layers.length === 0) {
-        toast.warning(`SVG "${file.name}" had no convertible layers`, {
-          detail: `${result.warnings.length} warning(s) — see console for details`,
-        })
-        console.warn('SVG import produced no layers', result.warnings)
-        return
-      }
-      dispatchCommand(makeImportSvgCmd(result.layers, file.name))
-      selectLayer(result.layers[0].id)
-      toast.success(`Imported ${result.layers.length} layer${result.layers.length === 1 ? '' : 's'} from ${file.name}`, {
-        detail: result.warnings.length > 0 ? `${result.warnings.length} warning(s) — see console` : undefined,
-      })
-      if (result.warnings.length > 0) {
-        console.info(`SVG import: ${result.warnings.length} warning(s)`, result.warnings)
-      }
-    } catch (err) {
-      toast.error(`SVG import failed`, { detail: (err as Error).message })
-      console.error('SVG import failed:', err)
-    }
-  }, [dispatchCommand, selectLayer])
+    await importAnyFile(file)
+  }, [importAnyFile])
 
   const deleteLayer = useCallback((id: string) => {
     const layer = scene.layers.find((l) => l.id === id)
@@ -1351,6 +1293,9 @@ export default function BuilderPage() {
           filename={scene.composition.id}
           onRename={(next) => updateComposition({ ...scene.composition, id: next })}
           onNewScene={newScene}
+          onImportFile={openImportPicker}
+          onImportUrl={() => setShowImportUrl(true)}
+          onImportClipboard={() => { void importAnyClipboard() }}
           onOpenSceneJson={openSceneJson}
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
@@ -1994,6 +1939,7 @@ export default function BuilderPage() {
                     scene={scene}
                     editor={editor}
                     onSelectLayer={(id) => selectLayer(id)}
+                    onImportFiles={handleImportFiles}
                   />
                 ),
               },
@@ -2077,6 +2023,24 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── Import from URL (BL-09) ──────────────────────────────────── */}
+      {showImportUrl && (
+        <ImportUrlModal
+          onImport={(url) => { void importAnyUrl(url) }}
+          onClose={() => setShowImportUrl(false)}
+        />
+      )}
+
+      {/* ── Import preflight preview (BL-09) ──────────────────────────── */}
+      {pendingImport && (
+        <ImportPreviewModal
+          fileName={pendingImport.file.name}
+          preflight={pendingImport.preflight}
+          onConfirm={() => { void importAnyFile(pendingImport.file); setPendingImport(null) }}
+          onCancel={() => setPendingImport(null)}
+        />
+      )}
 
       {/* ── BL-59 Clone Modal ──────────────────────────────────────── */}
       {cloneModalSource && (
