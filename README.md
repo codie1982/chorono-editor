@@ -4,7 +4,7 @@
 
 Built with **Next.js** + **Canvas** + **WebGL2**. Deploy anywhere: web, mobile (Android SDK), or embed via Web SDK.
 
-**Status:** Production-ready for core animation, expanding to state machines, interactive runtime, and SDKs.
+**Status:** Production-ready for 2D animation. Game Engine, Video Editor, Drawing, and 3D Modeling modes coming soon.
 
 ## ⚡ Headline Feature: GPU-Accelerated Rendering
 
@@ -271,6 +271,28 @@ player.setPlaybackRate(1.5)
 - **Scene composition** — Merge multiple scenes, layer visibility control
 - **Event forwarding** — Animation events to app logic
 
+### More Platforms (Coming Soon)
+
+| Repository | Platform | Language/Framework |
+|------------|----------|--------------------|
+| [`chorono-ios-sdk`](https://github.com/codie1982/chorono-ios-sdk) | iOS / macOS | Swift |
+| [`chorono-macos`](https://github.com/codie1982/chorono-macos) | macOS native | Swift |
+| [`chorono-flutter`](https://github.com/codie1982/chorono-flutter) | iOS + Android | Flutter/Dart |
+| [`chorono-react-native`](https://github.com/codie1982/chorono-react-native) | iOS + Android | React Native |
+| [`chorono-kmp`](https://github.com/codie1982/chorono-kmp) | iOS + Android | Kotlin Multiplatform |
+| [`chorono-desktop`](https://github.com/codie1982/chorono-desktop) | Windows / Linux / macOS | Electron |
+| [`chorono-qt`](https://github.com/codie1982/chorono-qt) | Embedded / Desktop | Qt / C++ |
+| [`chorono-python`](https://github.com/codie1982/chorono-python) | Server / scripting | Python |
+| [`chorono-node`](https://github.com/codie1982/chorono-node) | Server / CLI | Node.js |
+| [`chorono-embed`](https://github.com/codie1982/chorono-embed) | Lightweight embed | Vanilla JS |
+| [`chorono-wechat`](https://github.com/codie1982/chorono-wechat) | WeChat Mini Program | JS |
+| [`chorono-tizen`](https://github.com/codie1982/chorono-tizen) | Samsung Smart TV | Tizen JS |
+| [`chorono-webos`](https://github.com/codie1982/chorono-webos) | LG Smart TV | webOS JS |
+| [`chorono-harmony`](https://github.com/codie1982/chorono-harmony) | Huawei devices | HarmonyOS |
+| [`chorono-core`](https://github.com/codie1982/chorono-core) | Cross-platform engine | C++ |
+| [`chorono-gpu`](https://github.com/codie1982/chorono-gpu) | GPU rendering module | WGSL / GLSL |
+| [`chorono-runtime`](https://github.com/codie1982/chorono-runtime) | Headless playback | TypeScript |
+
 ### MCP Server (`chorono-mcp`)
 
 **Claude Desktop, Cursor, VS Code Copilot integration:**
@@ -393,15 +415,27 @@ Detailed documentation coming soon. For now, see inline code comments and type d
 | `feat/text-element-typography` | Per-character animation framework | Sprint 3 |
 | `feat/align-distribute-tools` | Advanced composition (smart guides, auto-key) | Sprint 3 |
 
+### 🔜 Editor Modes — Coming Soon
+
+Chorono is built on a multi-mode architecture. The **2D Animation** mode is production-ready today. Additional modes are under active development:
+
+| Mode | Description | Status |
+|------|-------------|--------|
+| 🎨 **Drawing Mode** | Vector illustration tools, brush engine, freehand paths | Coming Soon |
+| 🎮 **Game Engine Mode** | GameObjects, physics, collision, state-machine-first workflow | Coming Soon |
+| 🎬 **Video Editor Mode** | Clip timeline, transitions, color grading, multi-track audio | Coming Soon |
+| 🧊 **3D Modeling Mode** | Three.js-based 3D objects, cameras, lighting, GLTF export | Coming Soon |
+
+Each mode shares the same AI panel, scripting API, state machine system, and SDK export pipeline — only the scene object type, tools, and renderer change.
+
 ### Planned (Next Quarter)
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| **Web SDK** | Embed animations in websites | 2 weeks |
-| **Android SDK** | Native mobile playback | 3 weeks |
-| **MCP Server** | Claude Desktop integration | 1 week |
 | **Particle V2+** | Preset browser, physics fields, GPU trails | 3 weeks |
 | **Runtime Console** | DevTools-style debugging | 2 weeks |
 | **Export formats** | MP4, GIF, Lottie, SVG sequences | 4 weeks |
+| **Drawing Mode** | Brush engine + vector illustration | 6 weeks |
+| **Game Engine Mode** | Physics + collision + GameObject system | 8 weeks |
 
 ## 🤝 Contributing
 
@@ -418,4 +452,4 @@ MIT License
 ---
 
 **Made with ❤️ by the Chorono team**  
-**Empowering animators with AI and GPU acceleration**
+**One platform. Every screen. Every creative tool.**
