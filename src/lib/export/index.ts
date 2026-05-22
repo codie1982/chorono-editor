@@ -16,3 +16,11 @@ export {
   RASTER_SUPPORTS_ALPHA,
 } from './raster/ImageEncoders'
 export type { RasterFormat } from './raster/ImageEncoders'
+
+// ── BL-84 Vector export (SVG) ──────────────────────────────────────────────────
+export { exportSVG } from './vector/SVGExporter'
+export type {
+  SVGExportOptions,
+  SVGExportResult,
+  SVGBackground,
+} from './vector/SVGExporter'

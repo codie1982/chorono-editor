@@ -58,6 +58,7 @@ import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
 import RasterExportDialog from '@/components/export/RasterExportDialog'
+import SVGExportDialog   from '@/components/export/SVGExportDialog'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
@@ -1017,6 +1018,8 @@ export default function BuilderPage() {
   const [manualPreview, setManualPreview] = useState(false)
   // BL-80 — raster image export dialog visibility.
   const [showRasterExport, setShowRasterExport] = useState(false)
+  // BL-84 — SVG (vector) export dialog visibility.
+  const [showSvgExport, setShowSvgExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
   const saveSceneJson = useCallback(() => {
@@ -1303,6 +1306,7 @@ export default function BuilderPage() {
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
           onExportImage={() => setShowRasterExport(true)}
+          onExportSvg={() => setShowSvgExport(true)}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
@@ -2044,6 +2048,23 @@ export default function BuilderPage() {
             }
           }}
           onError={(message) => toast.error('Image export failed', { detail: message })}
+        />
+      )}
+
+      {/* ── BL-84 SVG (vector) export ─────────────────────────────────── */}
+      {showSvgExport && (
+        <SVGExportDialog
+          scene={scene}
+          timeMs={currentTimeMs}
+          onClose={() => setShowSvgExport(false)}
+          onExported={(filename, warnings) => {
+            if (warnings.length > 0) {
+              toast.success(`Exported ${filename}`, { detail: warnings.join(' ') })
+            } else {
+              toast.success(`Exported ${filename}`)
+            }
+          }}
+          onError={(message) => toast.error('SVG export failed', { detail: message })}
         />
       )}
 

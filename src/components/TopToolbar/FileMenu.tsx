@@ -19,6 +19,8 @@ interface FileMenuProps {
   onExportRuntime: () => void
   /** BL-80 — open the raster image export dialog (PNG / WEBP / JPEG). */
   onExportImage?:  () => void
+  /** BL-84 — open the SVG (vector) export dialog. */
+  onExportSvg?:    () => void
   onCopySceneJson: () => void
   onShowShortcuts: () => void
   onResetLayout:   () => void
@@ -152,6 +154,11 @@ export default function FileMenu(props: FileMenuProps) {
           {props.onExportImage && (
             <button className={item} onClick={() => { setOpen(false); props.onExportImage!() }}>
               🖼 Image (PNG / WEBP / JPEG)…
+            </button>
+          )}
+          {props.onExportSvg && (
+            <button className={item} onClick={() => { setOpen(false); props.onExportSvg!() }}>
+              ⬡ SVG (vector)…
             </button>
           )}
           <button className={item} onClick={() => { setOpen(false); props.onExportRuntime() }}>
