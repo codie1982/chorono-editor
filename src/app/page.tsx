@@ -78,6 +78,7 @@ import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
 import WiringListPanel     from '@/components/panels/WiringListPanel'
 import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
+import ChronoPlayerPanel from '@/components/panels/ChronoPlayerPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel               from '@/components/panels/SnapPanel'
 import StateMachinePanel       from '@/components/panels/StateMachinePanel'
@@ -1300,6 +1301,7 @@ export default function BuilderPage() {
       { id: 'wiring',         title: 'Wires',          render: () => null },
       { id: 'selection',      title: 'Select',         render: () => null },
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
+      { id: 'player',         title: 'Player',         render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
       { id: 'particles',      title: 'Particle',       render: () => null },
@@ -1962,6 +1964,10 @@ export default function BuilderPage() {
               {
                 id: 'runtimePreview', title: 'Preview',
                 render: () => <RuntimePreviewPanel scene={scene} runtime={runtime} />,
+              },
+              {
+                id: 'player', title: 'Player',
+                render: () => <ChronoPlayerPanel scene={scene} assets={assetCache} />,
               },
               {
                 id: 'assets', title: 'Assets',
