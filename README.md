@@ -1,4 +1,4 @@
-# Delineatio 🎬
+# Chorono Animator 🎬
 
 **Professional animation studio for the web.** Create stunning motion graphics with AI-powered workflows, GPU-accelerated particles (10K+ @ 60 FPS), visual state machines, parameter wiring, and JavaScript scripting — all without leaving your browser.
 
@@ -197,17 +197,17 @@ At ~50k particles the CPU draw alone (49.5 ms) blows the 16.6 ms/60 FPS budget; 
 
 ## 🌐 SDKs & Integrations
 
-### Web SDK (`@delineatio/web-sdk`)
+### Web SDK (`@chorono/web-sdk`)
 
 **Embed animations in any website:**
 
 ```html
-<script src="https://cdn.delineatio.io/web-sdk/latest.js"></script>
+<script src="https://cdn.chorono.io/web-sdk/latest.js"></script>
 
 <div id="animation-container"></div>
 
 <script>
-  const player = new DelineatioPlayer({
+  const player = new ChronoPlayer({
     container: '#animation-container',
     sceneUrl: 'https://cdn.example.com/my-animation.json',
     autoplay: true,
@@ -234,18 +234,18 @@ player.setProperty('layer.id', { opacity: 0.5 });
 player.on('complete', () => console.log('Done!'));
 ```
 
-### Android SDK (`delineatio-android`)
+### Android SDK (`chorono-android`)
 
 **Native animation playback on Android:**
 
 ```kotlin
 // Gradle
 dependencies {
-    implementation 'io.delineatio:delineatio-android:1.0.0'
+    implementation 'io.chorono:chorono-android:1.0.0'
 }
 
 // Usage
-val player = DelineatioPlayer(context)
+val player = ChronoPlayer(context)
 player.loadScene(uri)  // File, Uri, or Stream
 player.play()
 
