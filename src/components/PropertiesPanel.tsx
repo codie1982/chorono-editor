@@ -1255,6 +1255,35 @@ export default function PropertiesPanel({
                   </ParamBindButton>
                 </Row2>
 
+                <Field label="Fill Type">
+                  <select
+                    value={layer.text.gradient ? 'gradient' : 'solid'}
+                    onChange={(e) => {
+                      if (e.target.value === 'gradient') {
+                        updateText({ gradient: {
+                          type: 'linear', angle: 90,
+                          stops: [
+                            { offset: 0, color: layer.text!.color || '#FFFFFF' },
+                            { offset: 1, color: '#EC4899' },
+                          ],
+                        } })
+                      } else {
+                        updateText({ gradient: undefined })
+                      }
+                    }}
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="gradient">Gradient</option>
+                  </select>
+                </Field>
+                {layer.text.gradient && (
+                  <Field label="Text Gradient">
+                    <GradientInput value={layer.text.gradient}
+                      onChange={(g) => updateText({ gradient: g })} />
+                  </Field>
+                )}
+
                 <Field label="Letter Spacing">
                   <NumInput value={layer.text.letterSpacing ?? 0} step={0.5}
                     onChange={(v) => updateText({ letterSpacing: v })} />

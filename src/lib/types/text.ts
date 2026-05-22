@@ -1,6 +1,8 @@
 // ── Text Style System ─────────────────────────────────────────────────────────
 // Full typography controls: font, spacing, outline, shadow, decorations.
 
+import type { GradientFill } from './style'
+
 export type FontWeight =
   | 'normal' | 'bold'
   | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900'
@@ -33,6 +35,8 @@ export interface TextStyle {
   value: string
   fontSize: number
   color: string
+  /** Optional gradient fill. When set (≥2 stops), it replaces `color`. */
+  gradient?: GradientFill
 
   // ── Font ────────────────────────────────────────────────────────────────────
   fontFamily?: string    // 'Inter', 'Roboto', 'monospace', …

@@ -10,23 +10,26 @@
 import type { GradientFill } from '@/lib/types'
 
 export function buildGradient(
-  ctx:  CanvasRenderingContext2D,
-  grad: GradientFill | undefined,
-  w:    number,
-  h:    number,
+  ctx:     CanvasRenderingContext2D,
+  grad:    GradientFill | undefined,
+  w:       number,
+  h:       number,
+  originX = 0,
+  originY = 0,
 ): CanvasGradient | null {
   if (!grad || !Array.isArray(grad.stops) || grad.stops.length < 2) return null
 
   let g: CanvasGradient
   if (grad.type === 'linear') {
     const angle = ((grad.angle ?? 0) * Math.PI) / 180
-    const cx = w / 2, cy = h / 2
+    const cx = originX + w / 2, cy = originY + h / 2
     g = ctx.createLinearGradient(
-      cx - Math.cos(angle) * cx, cy - Math.sin(angle) * cy,
-      cx + Math.cos(angle) * cx, cy + Math.sin(angle) * cy,
+      cx - Math.cos(angle) * (w / 2), cy - Math.sin(angle) * (h / 2),
+      cx + Math.cos(angle) * (w / 2), cy + Math.sin(angle) * (h / 2),
     )
   } else {
-    g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) / 2)
+    const cx = originX + w / 2, cy = originY + h / 2
+    g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) / 2)
   }
 
   for (const s of [...grad.stops].sort((a, b) => a.offset - b.offset)) {

@@ -468,7 +468,7 @@ export function drawText(
 ) {
   if (!layer.text) return
   const {
-    value, color,
+    value, color, gradient,
     fontFamily = 'sans-serif', fontWeight = 'normal', fontStyle = 'normal',
     textAlign = 'left', letterSpacing = 0, lineHeight: _lh,
     stroke, shadow, uppercase, underline,
@@ -523,7 +523,20 @@ export function drawText(
     drawRun('stroke')
   }
 
-  ctx.fillStyle = resolvedColor
+  // Gradient fill spans the measured text bounds (offset by textAlign so it
+  // tracks where the glyphs actually land). Falls back to the solid colour.
+  let textFill: string | CanvasGradient = resolvedColor
+  if (gradient && gradient.stops?.length >= 2) {
+    const textWidth = letterSpacing === 0
+      ? ctx.measureText(displayText).width
+      : Array.from(displayText).reduce((w, c) => w + ctx.measureText(c).width + letterSpacing, 0)
+    const left = textAlign === 'center' ? -textWidth / 2
+      : textAlign === 'right' ? -textWidth
+      : 0
+    const g = buildGradient(ctx, gradient, textWidth, fontSize, left, 0)
+    if (g) textFill = g
+  }
+  ctx.fillStyle = textFill
   drawRun('fill')
 
   // Reset shadow so it doesn't bleed into the next layer
