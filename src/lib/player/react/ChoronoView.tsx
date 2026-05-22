@@ -14,10 +14,10 @@
 
 import {
   useRef, useEffect, forwardRef, useImperativeHandle,
-  type CSSProperties,
+  type CSSProperties, type MouseEvent as ReactMouseEvent,
 } from 'react'
 import type { ChronoScene, SceneParameterValue } from '@/lib/types'
-import type { AssetElementMap } from '@/lib/renderer'
+import { hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import type { RuntimeEvent } from '@/lib/runtime/triggerEngine'
 import { ChronoPlayer } from '../ChronoPlayer'
 import { CanvasRenderAdapter } from '../RenderAdapter'
@@ -94,6 +94,29 @@ export const ChoronoView = forwardRef<ChoronoViewHandle, ChoronoViewProps>(funct
     }
   }, [scene, assets, autoplay, loop])
 
+  // Canvas click → hit-test → fire a 'click' runtime event on the topmost
+  // tappable layer, so state machines / triggers react (interactive runtime).
+  // Maps pointer coords through object-fit:contain letterboxing to scene space.
+  function handleClick(e: ReactMouseEvent<HTMLCanvasElement>) {
+    const player = playerRef.current
+    const canvas = canvasRef.current
+    if (!player || !canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const cw = scene.composition.width
+    const ch = scene.composition.height
+    const s = Math.min(rect.width / cw, rect.height / ch)
+    if (s <= 0) return
+    const offX = (rect.width - cw * s) / 2
+    const offY = (rect.height - ch * s) / 2
+    const x = (e.clientX - rect.left - offX) / s
+    const y = (e.clientY - rect.top - offY) / s
+    if (x < 0 || y < 0 || x > cw || y > ch) return
+
+    const stack = hitTestLayersAt(scene, player.currentTimeMs, x, y)
+    const hitId = stack.find((id) => scene.layers.find((l) => l.id === id)?.tappable)
+    if (hitId) player.fireEvent({ type: 'click', layerId: hitId })
+  }
+
   return (
     <canvas
       ref={canvasRef}
@@ -101,6 +124,7 @@ export const ChoronoView = forwardRef<ChoronoViewHandle, ChoronoViewProps>(funct
       height={scene.composition.height}
       className={className}
       style={style}
+      onClick={handleClick}
     />
   )
 })
