@@ -63,6 +63,7 @@ import SequenceExportDialog from '@/components/export/SequenceExportDialog'
 import { exportHTML } from '@/lib/export'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
+import SpriteSheetImportModal from '@/components/modals/SpriteSheetImportModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
 import type { ImportPreflight } from '@/lib/import/types'
 import ToolGroup, {
@@ -390,6 +391,7 @@ export default function BuilderPage() {
     importFiles: importAnyFiles,
     importUrl: importAnyUrl,
     importFromClipboard: importAnyClipboard,
+    importSpriteSheet,
     preview: previewImport,
   } = useImport({
     dispatchCommand,
@@ -399,6 +401,19 @@ export default function BuilderPage() {
   const [showImportUrl, setShowImportUrl] = useState(false)
   // Single-file imports show a preflight preview before committing.
   const [pendingImport, setPendingImport] = useState<{ file: File; preflight: ImportPreflight } | null>(null)
+  // Sprite-sheet import: an image awaiting grid configuration.
+  const [pendingSprite, setPendingSprite] = useState<File | null>(null)
+
+  const openSpriteSheetPicker = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/png,image/jpeg,image/webp'
+    input.onchange = () => {
+      const f = input.files?.[0]
+      if (f) setPendingSprite(f)
+    }
+    input.click()
+  }, [])
 
   const handleImportFiles = useCallback(async (files: FileList | File[]) => {
     const list = Array.from(files)
@@ -1324,6 +1339,7 @@ export default function BuilderPage() {
           onImportFile={openImportPicker}
           onImportUrl={() => setShowImportUrl(true)}
           onImportClipboard={() => { void importAnyClipboard() }}
+          onImportSpriteSheet={openSpriteSheetPicker}
           onOpenSceneJson={openSceneJson}
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
@@ -2126,6 +2142,15 @@ export default function BuilderPage() {
           preflight={pendingImport.preflight}
           onConfirm={() => { void importAnyFile(pendingImport.file); setPendingImport(null) }}
           onCancel={() => setPendingImport(null)}
+        />
+      )}
+
+      {/* ── Sprite sheet grid import (BL-07b) ─────────────────────────── */}
+      {pendingSprite && (
+        <SpriteSheetImportModal
+          file={pendingSprite}
+          onImport={(opts) => { void importSpriteSheet(pendingSprite, opts) }}
+          onClose={() => setPendingSprite(null)}
         />
       )}
 

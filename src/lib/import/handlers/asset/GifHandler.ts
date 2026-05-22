@@ -10,6 +10,7 @@
 // Output is a SINGLE asset + SINGLE layer, so this is an 'asset' import.
 
 import { BaseImportHandler } from '../BaseHandler'
+import { GifDecodeWorkerClient, gifDecodeWorkerClient } from '../../workers/GifDecodeWorkerClient'
 import { newImageLayer, newFrameSequenceLayer } from '../../../defaults'
 import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress, ImportWarning } from '../../types'
 import type { Asset } from '../../../asset/types'
@@ -72,6 +73,23 @@ export class GifHandler extends BaseImportHandler {
     const startMs = Date.now()
     this.reportProgress(onProgress, 'reading', 'Reading GIF…', 0.1)
 
+    // 1. Off-thread decode (worker) — large GIFs don't freeze the editor.
+    if (GifDecodeWorkerClient.isSupported()) {
+      try {
+        this.reportProgress(onProgress, 'parsing', 'Decoding frames (worker)…', 0.3)
+        const buffer = await file.arrayBuffer()
+        const sheet  = await gifDecodeWorkerClient.decode(buffer)
+        if (sheet.frameCount > 1) {
+          this.reportProgress(onProgress, 'complete', 'Done', 1)
+          return this.buildSheetResult(file, sheet.blob, sheet, startMs)
+        }
+        return this.staticImport(file, startMs, onProgress)
+      } catch (err) {
+        console.warn('[GifHandler] worker decode failed, falling back to main thread:', err)
+      }
+    }
+
+    // 2. Main-thread decode (fallback when no worker / ImageDecoder).
     let decoded: DecodedGif | null = null
     if (typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder !== 'undefined') {
       try {
@@ -89,52 +107,74 @@ export class GifHandler extends BaseImportHandler {
     }
 
     this.reportProgress(onProgress, 'converting', 'Building sprite sheet…', 0.7)
-    const sheet = this.compositeSpriteSheet(decoded)
+    const composed = this.compositeSpriteSheet(decoded)
     decoded.frames.forEach(f => f.close())
 
     const blob = await new Promise<Blob | null>(resolve =>
-      sheet.canvas.toBlob(resolve, 'image/png'))
-    if (!blob) {
-      return this.staticImport(file, startMs, onProgress)
-    }
+      composed.canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return this.staticImport(file, startMs, onProgress)
 
+    this.reportProgress(onProgress, 'complete', 'Done', 1)
+    return this.buildSheetResult(file, blob, {
+      sheetWidth:  composed.sheetWidth,
+      sheetHeight: composed.sheetHeight,
+      frameWidth:  decoded.width,
+      frameHeight: decoded.height,
+      frameCount:  composed.frameCount,
+      columns:     composed.columns,
+      rows:        composed.rows,
+      avgFrameMs:  decoded.avgFrameMs,
+    }, startMs)
+  }
+
+  // ── Private ────────────────────────────────────────────────────────────────
+
+  /** Build asset + frameSequence layer + ImportResult from a composited sheet. */
+  private buildSheetResult(
+    file: File,
+    blob: Blob,
+    grid: {
+      sheetWidth: number; sheetHeight: number
+      frameWidth: number; frameHeight: number
+      frameCount: number; columns: number; rows: number; avgFrameMs: number
+    },
+    startMs: number,
+  ): ImportResult {
     const url     = URL.createObjectURL(blob)
     const assetId = this.generateAssetId()
-    const fps     = Math.max(1, Math.round(1000 / decoded.avgFrameMs))
+    const fps     = Math.max(1, Math.round(1000 / grid.avgFrameMs))
 
     const asset: Asset = {
-      id:     assetId,
-      name:   file.name,
-      type:   'spriteSheet',
+      id:        assetId,
+      name:      file.name,
+      type:      'spriteSheet',
       url,
-      width:  sheet.sheetWidth,
-      height: sheet.sheetHeight,
+      width:     grid.sheetWidth,
+      height:    grid.sheetHeight,
       frameRate: fps,
-      storage:  { mode: 'external', originalFileName: file.name },
+      storage:   { mode: 'external', originalFileName: file.name },
       metadata: {
         filesize:   file.size,
         importedAt: Date.now(),
         sourceApp:  'GIF',
         tags:       [],
-        notes:      `${sheet.frameCount} frames @ ${fps}fps`,
+        notes:      `${grid.frameCount} frames @ ${fps}fps`,
       },
       runtime: { objectUrl: url },
     }
 
     const seq: FrameSequenceData = {
       assetId,
-      columns:     sheet.columns,
-      rows:        sheet.rows,
-      frameCount:  sheet.frameCount,
-      frameWidth:  decoded.width,
-      frameHeight: decoded.height,
+      columns:     grid.columns,
+      rows:        grid.rows,
+      frameCount:  grid.frameCount,
+      frameWidth:  grid.frameWidth,
+      frameHeight: grid.frameHeight,
       fps,
       loop:        true,
       objectFit:   'contain',
     }
-    const layer = newFrameSequenceLayer(seq, decoded.width, decoded.height)
-
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
+    const layer = newFrameSequenceLayer(seq, grid.frameWidth, grid.frameHeight)
 
     return {
       id:      this.generateId(),
@@ -158,13 +198,11 @@ export class GifHandler extends BaseImportHandler {
         warnings:       [],
         errors:         [],
         unsupportedFeatures: [],
-        suggestions:    [`Imported as a ${sheet.frameCount}-frame sprite sequence @ ${fps}fps — adjust FPS/loop in the layer properties.`],
+        suggestions:    [`Imported as a ${grid.frameCount}-frame sprite sequence @ ${fps}fps — adjust FPS/loop in the layer properties.`],
         durationMs:     Date.now() - startMs,
       },
     }
   }
-
-  // ── Private ────────────────────────────────────────────────────────────────
 
   private async decodeGif(file: File): Promise<DecodedGif> {
     const buffer = await file.arrayBuffer()

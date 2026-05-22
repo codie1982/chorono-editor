@@ -21,6 +21,7 @@ import type {
   ImportPreflight,
   ImportProgress,
   ImportSource,
+  ImportEvent,
 } from './types'
 import { getImportKind } from './types'
 
@@ -30,6 +31,21 @@ export class ImportManager {
   private assetImporter    = new AssetImporter()
   private documentImporter = new DocumentImporter()
   private txBuilder        = new ImportTransactionBuilder()
+  private listeners        = new Set<(e: ImportEvent) => void>()
+
+  /**
+   * Subscribe to import lifecycle events (start / complete / error).
+   * Returns an unsubscribe function. Lets the Console / automation observe
+   * imports without polling.
+   */
+  onImportEvent(fn: (e: ImportEvent) => void): () => void {
+    this.listeners.add(fn)
+    return () => { this.listeners.delete(fn) }
+  }
+
+  private emit(e: ImportEvent): void {
+    this.listeners.forEach(fn => { try { fn(e) } catch { /* listener errors never break import */ } })
+  }
 
   /**
    * Import a File from a file picker or drag-drop.
@@ -46,6 +62,20 @@ export class ImportManager {
     const kind   = getImportKind(format)
 
     return this.runHandler(file, format, kind, options, onProgress)
+  }
+
+  /**
+   * Import a File with an EXPLICIT format, bypassing auto-detection.
+   * Used by flows where the format can't be sniffed from bytes — e.g. a sprite
+   * sheet (a plain PNG that the user declares as a grid of frames).
+   */
+  async importFileAs(
+    file: File,
+    format: ImportFormat,
+    options?: ImportOptions,
+    onProgress?: (p: ImportProgress) => void,
+  ): Promise<ImportResult> {
+    return this.runHandler(file, format, getImportKind(format), options, onProgress)
   }
 
   /**
@@ -133,18 +163,25 @@ export class ImportManager {
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
   ): Promise<ImportResult> {
-    const importer = kind === 'asset' ? this.assetImporter : this.documentImporter
-    const result   = await importer.handle(file, format, options, onProgress)
+    this.emit({ type: 'importStart', format, source: file.name })
+    try {
+      const importer = kind === 'asset' ? this.assetImporter : this.documentImporter
+      const result   = await importer.handle(file, format, options, onProgress)
 
-    onProgress?.({ stage: 'creating', label: 'Building transaction…', progress: 0.95 })
+      onProgress?.({ stage: 'creating', label: 'Building transaction…', progress: 0.95 })
 
-    // Wrap all created items in one atomic undo transaction
-    const command = this.txBuilder.build(result)
-    result.commands = [command]
+      // Wrap all created items in one atomic undo transaction
+      const command = this.txBuilder.build(result)
+      result.commands = [command]
 
-    onProgress?.({ stage: 'complete', label: 'Import complete', progress: 1 })
+      onProgress?.({ stage: 'complete', label: 'Import complete', progress: 1 })
 
-    return result
+      this.emit({ type: 'importComplete', format, source: file.name, result })
+      return result
+    } catch (err) {
+      this.emit({ type: 'importError', format, source: file.name, error: (err as Error).message })
+      throw err
+    }
   }
 }
 

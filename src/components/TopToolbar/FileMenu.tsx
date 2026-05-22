@@ -14,6 +14,8 @@ interface FileMenuProps {
   onImportUrl?:    () => void
   /** Import an image from the clipboard. */
   onImportClipboard?: () => void
+  /** Open the sprite-sheet grid import flow. */
+  onImportSpriteSheet?: () => void
   onOpenSceneJson: () => void
   onSaveSceneJson: () => void
   onExportRuntime: () => void
@@ -134,6 +136,11 @@ export default function FileMenu(props: FileMenuProps) {
               {props.onImportClipboard && (
                 <button className={item} onClick={() => { setOpen(false); props.onImportClipboard!() }}>
                   📋 Paste from Clipboard
+                </button>
+              )}
+              {props.onImportSpriteSheet && (
+                <button className={item} onClick={() => { setOpen(false); props.onImportSpriteSheet!() }}>
+                  ⊞ Sprite Sheet…
                 </button>
               )}
               <div className={divider} />
