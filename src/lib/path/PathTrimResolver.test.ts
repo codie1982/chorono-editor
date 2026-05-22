@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PathTrimResolver } from './PathTrimResolver'
 
-const r = new PathTrimResolver()
+const r = PathTrimResolver
 
 describe('PathTrimResolver', () => {
   describe('static mode', () => {
