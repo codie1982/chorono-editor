@@ -19,7 +19,7 @@ import { buildEffectsFilter } from '@/lib/types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from '@/lib/evaluator'
 import type { AssetElementMap } from '@/lib/renderer'
 import { layerRegistry, rendererRegistry } from '@/lib/registry'
-import type { RenderContext, ParamValueMap } from './RenderContext'
+import type { RenderContext, ParamValueMap, RenderMode } from './RenderContext'
 import { effectRegistry } from '@/lib/effects'
 import { createOffscreen } from './OffscreenCanvasCache'
 import { defaultMaskRenderer } from '@/lib/mask/MaskRenderer'
@@ -36,6 +36,19 @@ export interface CanvasRenderOptions {
   grid?:        { size: number }
   /** Multi-selection set — when present, EVERY id gets a selection outline. */
   selectedLayerIds?: Set<string>
+  /**
+   * BL-66 — 'editor' (default) draws selection outlines + grid; 'preview'
+   * draws content only (used during playback and the export pipeline so
+   * frames are free of editor chrome).
+   */
+  renderMode?: RenderMode
+  /**
+   * BL-80 — background fill control for the raster export pipeline.
+   *   'scene'       → composition.backgroundColor (default, on-screen look)
+   *   'transparent' → skip the fill so exported PNG/WEBP keeps alpha
+   *   { color }     → explicit solid colour override
+   */
+  background?: 'scene' | 'transparent' | { color: string }
 }
 
 export class CanvasRenderer {
@@ -54,13 +67,26 @@ export class CanvasRenderer {
     const { composition, layers } = scene
     const overrides   = options.overrides   ?? evaluateTimelines(scene.timelines, timeMs)
     const paramValues = options.paramValues ?? new Map()
+    // BL-66 — In 'preview' mode (playback + export) we skip all editor chrome
+    // (selection outlines, grid) so the rendered frame is pure content.
+    const renderMode   = options.renderMode ?? 'editor'
+    const editorChrome = renderMode === 'editor'
 
     // ── Clear + background ────────────────────────────────────────────────
+    // BL-80 — resolve the background fill. 'transparent' leaves the cleared
+    // (alpha-0) canvas so exported PNG/WEBP retains transparency.
+    const bg = options.background ?? 'scene'
+    const bgColor =
+      bg === 'transparent' ? null
+      : bg === 'scene'      ? composition.backgroundColor
+      : bg.color
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, composition.width, composition.height)
-    ctx.fillStyle = composition.backgroundColor
-    ctx.fillRect(0, 0, composition.width, composition.height)
+    if (bgColor) {
+      ctx.fillStyle = bgColor
+      ctx.fillRect(0, 0, composition.width, composition.height)
+    }
     ctx.restore()
 
     // ── Solo-layer filter ─────────────────────────────────────────────────
@@ -88,18 +114,19 @@ export class CanvasRenderer {
 
     // ── Scene-graph walk: render ROOT layers (no parentId).
     //    Group renderer recursively walks its children. ─────────────────────
+    // BL-66 — selection outlines suppressed entirely in preview mode.
     const isSelected = (id: string): boolean =>
-      id === selectedLayerId || !!options.selectedLayerIds?.has(id)
+      editorChrome && (id === selectedLayerId || !!options.selectedLayerIds?.has(id))
     const rootLayers = layers.filter(l => !l.parentId)
     for (const layer of rootLayers) {
       if (!isVisible(layer)) continue
       if (usedAsMask.has(layer.id)) continue
       if (isMotionGuide(layer)) continue
-      this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, timeMs, isSelected(layer.id))
+      this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, timeMs, isSelected(layer.id), renderMode)
     }
 
-    // ── Optional grid overlay ─────────────────────────────────────────────
-    if (options.grid) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
+    // ── Optional grid overlay (editor only) ───────────────────────────────
+    if (editorChrome && options.grid) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
   }
 
   /**
@@ -116,6 +143,7 @@ export class CanvasRenderer {
     scene:        ChronoScene,
     timeMs:       number,
     isSelected:   boolean,
+    renderMode:   RenderMode = 'editor',
   ): void {
     // BL-59 Phase 3 — Live instance: pull visual fields from source while
     // keeping the instance's own transform / opacity / id. Animation tracks
@@ -177,6 +205,7 @@ export class CanvasRenderer {
       timeMs,
       isSelected:      (id) => id === layer.id && isSelected,
       displayScale:    (scaleX + scaleY) / 2,
+      renderMode,
       registry:        layerRegistry,
       rendererRegistry,
       // GroupRenderer uses this to render its children inside the group's
@@ -187,7 +216,7 @@ export class CanvasRenderer {
         if (child.hidden) return
         if (timeMs < (child.startMs ?? 0)) return
         if (child.endMs !== undefined && timeMs > child.endMs) return
-        this.renderLayer(ctx, child, overrides, paramValues, assets, scene, timeMs, false)
+        this.renderLayer(ctx, child, overrides, paramValues, assets, scene, timeMs, false, renderMode)
       },
     }
 
@@ -358,7 +387,8 @@ export class CanvasRenderer {
       assets,
       scene,
       options.timeMs,
-      false, // never show selection outline on ghost frames
+      false,       // never show selection outline on ghost frames
+      'preview',   // BL-66 — ghost frames are pure content (no anchors/chrome)
     )
   }
 }

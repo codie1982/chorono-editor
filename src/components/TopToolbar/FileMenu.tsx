@@ -17,6 +17,8 @@ interface FileMenuProps {
   onOpenSceneJson: () => void
   onSaveSceneJson: () => void
   onExportRuntime: () => void
+  /** BL-80 — open the raster image export dialog (PNG / WEBP / JPEG). */
+  onExportImage?:  () => void
   onCopySceneJson: () => void
   onShowShortcuts: () => void
   onResetLayout:   () => void
@@ -147,6 +149,11 @@ export default function FileMenu(props: FileMenuProps) {
 
           {/* ── Export ── */}
           <div className={sectionLabel}>Export</div>
+          {props.onExportImage && (
+            <button className={item} onClick={() => { setOpen(false); props.onExportImage!() }}>
+              🖼 Image (PNG / WEBP / JPEG)…
+            </button>
+          )}
           <button className={item} onClick={() => { setOpen(false); props.onExportRuntime() }}>
             ⤓ Runtime JSON (lean)
           </button>

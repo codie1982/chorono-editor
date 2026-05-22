@@ -57,6 +57,7 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
+import RasterExportDialog from '@/components/export/RasterExportDialog'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
@@ -1014,6 +1015,8 @@ export default function BuilderPage() {
   // ── Manual preview-mode toggle (so user can test draggable / tappable
   //    layers without setting up segments / clicking the Preview tab) ──────
   const [manualPreview, setManualPreview] = useState(false)
+  // BL-80 — raster image export dialog visibility.
+  const [showRasterExport, setShowRasterExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
   const saveSceneJson = useCallback(() => {
@@ -1299,6 +1302,7 @@ export default function BuilderPage() {
           onOpenSceneJson={openSceneJson}
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
+          onExportImage={() => setShowRasterExport(true)}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
@@ -1611,6 +1615,7 @@ export default function BuilderPage() {
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
+                    isPlaying={isPlaying}
                     onLayerClickInPreview={(layerId) =>
                       runtime.fireEvent({ type: 'click', layerId })
                     }
@@ -2023,6 +2028,24 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── BL-80 Raster image export (PNG / WEBP / JPEG) ─────────────── */}
+      {showRasterExport && (
+        <RasterExportDialog
+          scene={scene}
+          assets={assetCache}
+          timeMs={currentTimeMs}
+          onClose={() => setShowRasterExport(false)}
+          onExported={(filename, warnings) => {
+            if (warnings.length > 0) {
+              toast.success(`Exported ${filename}`, { detail: warnings.join(' ') })
+            } else {
+              toast.success(`Exported ${filename}`)
+            }
+          }}
+          onError={(message) => toast.error('Image export failed', { detail: message })}
+        />
+      )}
 
       {/* ── Import from URL (BL-09) ──────────────────────────────────── */}
       {showImportUrl && (

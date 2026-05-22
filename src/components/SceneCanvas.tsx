@@ -70,6 +70,9 @@ interface Props {
    *  'click' event INSTEAD of changing selection. Used by RuntimePreviewPanel
    *  to exercise event bindings without leaving the builder. */
   previewMode?:  boolean
+  /** BL-66 — true while the timeline is actively playing. Hides editor chrome
+   *  (selection, gizmos, grid, motion-path overlay) so playback is clean. */
+  isPlaying?:    boolean
   /** Called with the layer id when a tappable layer is clicked in preview mode. */
   onLayerClickInPreview?: (layerId: string) => void
   /** Preview-mode drag events on draggable layers — fires Trigger events. */
@@ -189,7 +192,7 @@ const PADDING   = 24
 
 export default function SceneCanvas({
   scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
-  overrides, paramValues, previewMode, onLayerClickInPreview, onLayerDragInPreview,
+  overrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
   fullscreen, onToggleFullscreen,
@@ -201,6 +204,11 @@ export default function SceneCanvas({
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // BL-66 — hide all editor chrome (selection, gizmos, grid, overlays) during
+  // playback or preview so the viewport shows clean animation content. This is
+  // the editor-side mirror of CanvasRenderer's renderMode='preview'.
+  const hideEditorUI = !!previewMode || !!isPlaying
 
   const { width, height } = scene.composition
 
@@ -827,7 +835,7 @@ export default function SceneCanvas({
     scene, timeMs, selectedLayerId, selectedLayerIds, assets,
     snapEnabled, snapToGridOn, gridSize,
     overrides, paramValues, dragOverrides,
-    ghostSettings, selectedTimeline,
+    ghostSettings, selectedTimeline, hideEditorUI,
   })
 
 
@@ -876,7 +884,13 @@ export default function SceneCanvas({
   //   axisMove    — red/blue X/Y arrows for constrained move (Move-mode)
   //   axisScale   — red/blue X/Y arrows for scaleX/Y (Scale-mode gizmo)
   //   anchor      — orange crosshair at the pivot
-  const gizmo = {
+  // BL-66 — during playback / preview ALL gizmos are suppressed (editor chrome).
+  // Gating the whole object here means showFrame (depends on gizmo.frame) and
+  // every axis/ring/anchor handle below collapse to false in one place.
+  const gizmo = hideEditorUI ? {
+    frame: false, resize: false, cornerRot: false, ring: false,
+    axisMove: false, axisScale: false, anchor: false,
+  } : {
     frame:     toolMode !== 'anchor' && toolMode !== 'pan' && toolMode !== 'pen',
     resize:    toolMode === 'select' || toolMode === 'scale',
     cornerRot: toolMode === 'select',
@@ -1148,7 +1162,7 @@ export default function SceneCanvas({
           {/* Motion path — trajectory the selected layer follows over time,
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
-          {selectedLayer && (
+          {selectedLayer && !hideEditorUI && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1174,18 +1188,18 @@ export default function SceneCanvas({
                 setHoveredPickPathId(null)
               }
             }}
-            showMotionGuides={!previewMode}
+            showMotionGuides={!hideEditorUI}
           />
 
           {/* BL-66 — Anchor + bezier handle visualization for the selected
               path layer. Shown whenever a path layer is selected (not just
               in pen mode) so users can see the structure they're editing. */}
-          {selectedLayer && selectedLayer.type === 'path' && selectedLayer.path && !previewMode && (
+          {selectedLayer && selectedLayer.type === 'path' && selectedLayer.path && !hideEditorUI && (
             <PathEditOverlay layer={selectedLayer} zoom={zoom} />
           )}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
-          {selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !previewMode && (
+          {selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !hideEditorUI && (
             <SplineEditOverlay layer={selectedLayer} zoom={zoom} hover={splineHover} selectedPointId={selectedSplinePointId} />
           )}
 
