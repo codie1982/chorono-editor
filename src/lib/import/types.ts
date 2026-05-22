@@ -323,3 +323,24 @@ export interface ImportProgress {
   /** 0–1 */
   progress: number
 }
+
+// ── Import Lifecycle Events ─────────────────────────────────────────────────────
+//
+// Editor-time lifecycle events for the import subsystem. Kept SEPARATE from the
+// runtime TriggerEventType (scene playback) on purpose — import is an authoring
+// action, not a scene-runtime behaviour. Surfaced via ImportManager.onImportEvent
+// so the Console / automation / future tooling can observe imports (per the
+// mandatory "every class exposes its events" convention).
+
+export type ImportEventType = 'importStart' | 'importComplete' | 'importError'
+
+export interface ImportEvent {
+  type: ImportEventType
+  format: ImportFormat
+  /** Source name (filename / URL / 'clipboard'). */
+  source: string
+  /** Present on 'importComplete'. */
+  result?: ImportResult
+  /** Present on 'importError'. */
+  error?: string
+}
