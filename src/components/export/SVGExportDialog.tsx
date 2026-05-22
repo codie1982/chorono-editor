@@ -19,6 +19,7 @@ interface Props {
  */
 export default function SVGExportDialog({ scene, timeMs, onClose, onExported, onError }: Props) {
   const [transparent, setTransparent] = useState(true)
+  const [animated, setAnimated] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const handleExport = () => {
@@ -27,6 +28,7 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
       const result = exportSVG(scene, {
         timeMs,
         background: transparent ? 'transparent' : 'scene',
+        animated,
       })
       const blob = new Blob([result.svg], { type: 'image/svg+xml;charset=utf-8' })
       downloadBlob(blob, result.filename)
@@ -55,8 +57,8 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
         </div>
 
-        <div className="mb-4">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1.5">Background</div>
+        <div className="mb-4 space-y-2">
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide">Options</div>
           <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
             <input
               type="checkbox"
@@ -64,13 +66,23 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
               onChange={(e) => setTransparent(e.target.checked)}
               className="accent-blue-500"
             />
-            Transparent
+            Transparent background
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={animated}
+              onChange={(e) => setAnimated(e.target.checked)}
+              className="accent-blue-500"
+            />
+            Animated (SMIL — self-playing, looping)
           </label>
         </div>
 
         <p className="text-[10px] text-gray-500 mb-4 leading-relaxed">
           Vector export covers shapes, paths, text and groups. Images, video,
           particles and effects are skipped (a warning lists them).
+          {animated && ' Animated mode maps transform/opacity tracks to looping SMIL.'}
         </p>
 
         <div className="flex justify-end gap-2">

@@ -20,16 +20,23 @@ import {
   escapeXml,
   num,
 } from './SVGStyleBuilder'
+import { collectLayerAnimations, type LayerAnimations } from './SVGAnimationBuilder'
 
 export type SVGBackground = 'scene' | 'transparent' | { color: string }
 
 export interface SVGExportOptions {
   /** Background fill. Default 'scene' (composition.backgroundColor). */
   background?: SVGBackground
-  /** Frame to capture for animated transforms/opacity (ms). Default 0. */
+  /** Frame to capture for the STATIC export (ms). Default 0. */
   timeMs?: number
   /** Decimal places for numeric output. Default 2. */
   precision?: number
+  /**
+   * BL-84 — when true, emit SMIL <animateTransform>/<animate> so the SVG plays
+   * itself. Transform/opacity tracks become looping animations. Default false
+   * (single-frame static export).
+   */
+  animated?: boolean
 }
 
 export interface SVGExportResult {
@@ -63,7 +70,11 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
     return true
   }
 
-  const ctx: BuildCtx = { scene, overrides, gradients, warnings, precision, isVisible, timeMs }
+  const ctx: BuildCtx = {
+    scene, overrides, gradients, warnings, precision, isVisible, timeMs,
+    animated: opts.animated ?? false,
+    durationMs: composition.durationMs,
+  }
 
   // Root layers in document order; groups recurse into their children.
   const rootLayers = scene.layers.filter((l) => !l.parentId)
@@ -113,6 +124,10 @@ interface BuildCtx {
   precision: number
   isVisible: (l: Layer) => boolean
   timeMs: number
+  /** BL-84 animated mode — emit SMIL instead of a frozen frame. */
+  animated: boolean
+  /** Composition duration used as the SMIL animation period. */
+  durationMs: number
 }
 
 /** Resolve the animated transform at the current time (anchors stay static). */
@@ -153,11 +168,18 @@ function buildLayer(layer: Layer, ctx: BuildCtx): string {
     return ''
   }
 
+  // BL-84 animated — when the layer has animated transform/opacity tracks,
+  // emit a SMIL-wrapped element instead of a frozen frame.
+  if (ctx.animated) {
+    const anims = collectLayerAnimations(layer, ctx.scene.timelines, ctx.durationMs)
+    if (anims) return buildAnimatedLayer(layer, ctx, anims)
+  }
+
   const xform   = transformAttr(resolveTransform(layer, ctx.overrides), ctx.precision)
   const opacity = opacityAttr(layer, ctx.overrides, ctx.precision)
 
   switch (layer.type) {
-    case 'group':  return buildGroup(layer, ctx, xform, opacity)
+    case 'group':  return `<g${xform}${opacity}>\n${buildGroupChildren(layer, ctx)}\n</g>`
     case 'shape':  return buildShape(layer, ctx, xform, opacity)
     case 'path':   return buildPath(layer, ctx, xform, opacity)
     case 'text':   return buildText(layer, ctx, xform, opacity)
@@ -165,13 +187,36 @@ function buildLayer(layer: Layer, ctx: BuildCtx): string {
   }
 }
 
-function buildGroup(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
-  const children = ctx.scene.layers
+function buildGroupChildren(layer: Layer, ctx: BuildCtx): string {
+  return ctx.scene.layers
     .filter((l) => l.parentId === layer.id && ctx.isVisible(l))
     .map((l) => buildLayer(l, ctx))
     .filter(Boolean)
     .join('\n')
-  return `<g${xform}${opacity}>\n${children}\n</g>`
+}
+
+/**
+ * Build a layer as a SMIL-animated <g>. Transform/opacity come from
+ * <animateTransform>/<animate>; the content carries the static anchor offset
+ * (translate(-ax,-ay)) so rotation/scale pivot on the anchor — matching the
+ * canvas pipeline.
+ */
+function buildAnimatedLayer(layer: Layer, ctx: BuildCtx, anims: LayerAnimations): string {
+  const { anchorX: ax, anchorY: ay } = layer.transform
+  const n = (v: number) => num(v, ctx.precision)
+  const contentXform = (ax !== 0 || ay !== 0) ? ` transform="translate(${n(-ax)} ${n(-ay)})"` : ''
+
+  let content: string
+  switch (layer.type) {
+    case 'group':  content = `<g${contentXform}>\n${buildGroupChildren(layer, ctx)}\n</g>`; break
+    case 'shape':  content = buildShape(layer, ctx, contentXform, ''); break
+    case 'path':   content = buildPath(layer, ctx, contentXform, ''); break
+    case 'text':   content = buildText(layer, ctx, contentXform, ''); break
+    default:       content = ''
+  }
+
+  const opacity = anims.opacityAnim ? `\n${anims.opacityAnim}` : ''
+  return `<g>\n${anims.transformAnims}${opacity}\n${content}\n</g>`
 }
 
 function buildShape(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {

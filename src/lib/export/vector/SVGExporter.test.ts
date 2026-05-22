@@ -13,12 +13,23 @@ function layer(partial: Partial<Layer>): Layer {
   } as Layer
 }
 
-function scene(layers: Layer[], bg = '#101010'): ChronoScene {
+function scene(layers: Layer[], bg = '#101010', timelines: unknown[] = []): ChronoScene {
   return {
     formatVersion: '1.0.0',
     composition: { id: 'test', width: 200, height: 100, durationMs: 1000, frameRate: 60, backgroundColor: bg },
-    assets: [], layers, timelines: [], parameters: [], triggers: [], bindings: [], initialState: {},
+    assets: [], layers, timelines, parameters: [], triggers: [], bindings: [], initialState: {},
   } as unknown as ChronoScene
+}
+
+// Minimal timeline/track/keyframe helpers for animated-export tests.
+function kf(timeMs: number, value: number) {
+  return { id: `k${timeMs}`, timeMs, value, easing: { type: 'linear' } }
+}
+function track(target: string, keyframes: ReturnType<typeof kf>[]) {
+  return { target, keyframes }
+}
+function timeline(tracks: ReturnType<typeof track>[], durationMs = 1000) {
+  return { id: 'tl', durationMs, loop: true, tracks }
 }
 
 describe('exportSVG — document structure', () => {
@@ -145,5 +156,61 @@ describe('exportSVG — groups, text, visibility, warnings', () => {
       layer({ type: 'text', text: { value: 'a < b & c', fontSize: 12, color: '#fff' } as Layer['text'] }),
     ]))
     expect(svg).toContain('a &lt; b &amp; c')
+  })
+})
+
+describe('exportSVG — animated (SMIL)', () => {
+  it('emits <animate> for an animated opacity track', () => {
+    const tl = timeline([
+      track('layers.l1.opacity', [kf(0, 1), kf(1000, 0)]),
+    ])
+    const { svg } = exportSVG(
+      scene([layer({ id: 'l1', type: 'shape', shapeKind: 'rect', size: { width: 10, height: 10 } })], '#000', [tl]),
+      { animated: true },
+    )
+    expect(svg).toContain('<animate attributeName="opacity"')
+    expect(svg).toContain('repeatCount="indefinite"')
+    expect(svg).toContain('dur="1s"')
+  })
+
+  it('emits an additive translate <animateTransform> for x/y tracks', () => {
+    const tl = timeline([
+      track('layers.l1.transform.x', [kf(0, 0), kf(1000, 100)]),
+      track('layers.l1.transform.y', [kf(0, 0), kf(1000, 50)]),
+    ])
+    const { svg } = exportSVG(
+      scene([layer({ id: 'l1', type: 'shape', shapeKind: 'rect', size: { width: 10, height: 10 } })], '#000', [tl]),
+      { animated: true },
+    )
+    expect(svg).toContain('<animateTransform attributeName="transform" type="translate" additive="sum"')
+  })
+
+  it('emits a rotate <animateTransform> for a rotation track', () => {
+    const tl = timeline([
+      track('layers.l1.transform.rotationDeg', [kf(0, 0), kf(1000, 360)]),
+    ])
+    const { svg } = exportSVG(
+      scene([layer({ id: 'l1', type: 'shape', shapeKind: 'rect', size: { width: 10, height: 10 } })], '#000', [tl]),
+      { animated: true },
+    )
+    expect(svg).toContain('type="rotate"')
+  })
+
+  it('keeps static elements (no SMIL) for layers without animation in animated mode', () => {
+    const { svg } = exportSVG(
+      scene([layer({ id: 'l1', type: 'shape', shapeKind: 'rect', size: { width: 10, height: 10 } })], '#000', []),
+      { animated: true },
+    )
+    expect(svg).not.toContain('<animateTransform')
+    expect(svg).toContain('<path')
+  })
+
+  it('does not emit SMIL in static mode even when tracks exist', () => {
+    const tl = timeline([track('layers.l1.opacity', [kf(0, 1), kf(1000, 0)])])
+    const { svg } = exportSVG(
+      scene([layer({ id: 'l1', type: 'shape', shapeKind: 'rect', size: { width: 10, height: 10 } })], '#000', [tl]),
+      { animated: false },
+    )
+    expect(svg).not.toContain('<animate')
   })
 })
