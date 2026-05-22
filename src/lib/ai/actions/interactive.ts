@@ -3,6 +3,7 @@
 // planner build interactive scenes: scene parameters, event→action triggers,
 // linear bindings, expression wires, and tappable/draggable layers.
 
+import { errorCmd } from './_shared'
 import type {
   SceneParameter, SceneParameterType, SceneParameterValue,
   Trigger, TriggerEvent, TriggerEventType, TriggerAction, TriggerActionType,
@@ -378,10 +379,3 @@ function coerceLooseValue(raw: number | boolean | string): number | boolean | st
   return Number.isFinite(n) && raw.trim() !== '' ? n : raw
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

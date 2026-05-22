@@ -3,6 +3,7 @@
 // duplicates it (copy / live instance) or lays out N copies in a
 // linear / grid / radial / path pattern.
 
+import { errorCmd } from './_shared'
 import { buildArraySettings } from '@/lib/array/buildArraySettings'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
 import { makeCloneCmd, makeArrayCmd } from '@/lib/editor/commands-clone'
@@ -134,10 +135,3 @@ export function registerCloneActions(reg: ActionRegistry): void {
   })
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

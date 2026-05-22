@@ -3,6 +3,7 @@
 // optionally overrides count / duration / loop / position — far more reliable
 // than asking it to fill the deep nested ParticleEmitterData by hand.
 
+import { errorCmd } from './_shared'
 import { buildEmitterLayer } from '@/lib/particles/buildEmitterLayer'
 import { makeAddLayerCmd } from '@/lib/editor/commands-layer'
 import type { ActionRegistry } from '../ActionRegistry'
@@ -57,10 +58,3 @@ export function registerParticleActions(reg: ActionRegistry): void {
   })
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

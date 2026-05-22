@@ -2,6 +2,7 @@
 // add_layer / update_layer / delete_layer — all built from typed params.
 // Wraps existing makeAddLayerCmd / makeUpdateLayerCmd / makeDeleteLayerCmd.
 
+import { errorCmd } from './_shared'
 import type { Layer, LayerType, Transform } from '@/lib/types'
 import type { ShapeKind } from '@/lib/types'
 import type { FontWeight, TextAlign, ObjectFit } from '@/lib/types'
@@ -482,10 +483,3 @@ export function registerLayerActions(reg: ActionRegistry): void {
 
 // ── Error helper ──────────────────────────────────────────────────────────────
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

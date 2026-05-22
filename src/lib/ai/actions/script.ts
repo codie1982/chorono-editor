@@ -4,19 +4,12 @@
 // stay for simple edits; run_script handles procedural/repetitive animation
 // (loops, math, batch). The planner chooses per task.
 
+import { errorCmd } from './_shared'
 import type { ActionRegistry } from '../ActionRegistry'
 import { compileScript } from '../../script/ScriptRunner'
 
 interface RunScriptParams {
   code: string
-}
-
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
 }
 
 export function registerScriptActions(reg: ActionRegistry): void {
