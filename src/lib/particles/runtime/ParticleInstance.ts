@@ -47,7 +47,12 @@ export class ParticleInstance {
   readonly seedPhase:        number
   readonly positionTarget:   Vec2
 
-  // Current frame state (written by ParticleEvaluator)
+  // Current frame state — PUBLIC MUTABLE BY DESIGN. ParticleEvaluator
+  // reassigns these directly every frame for every live particle (a per-frame
+  // hot loop over potentially thousands of particles). This is the documented
+  // performance-critical exception to the private+getter/setter rule
+  // (coding_standards_oop): getters/setters would add call overhead in the
+  // hottest path and guard no invariant. Treat as a plain data record.
   currentPosition: Vec2       = { x: 0, y: 0 }
   currentScale:    number     = 1
   currentRotation: number     = 0

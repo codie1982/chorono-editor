@@ -8,6 +8,7 @@
 // The first add_sm_state auto-becomes the initial state, so set_initial_state is
 // only needed to override that default.
 
+import { errorCmd } from './_shared'
 import type {
   ChronoSMState, BaseSMTransition, StateMachineDefinition, SMGuard,
 } from '@/lib/types'
@@ -191,10 +192,3 @@ function coerceGuardValue(raw: number | string | boolean): number | string | boo
   return Number.isFinite(n) && raw.trim() !== '' ? n : raw
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

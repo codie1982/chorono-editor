@@ -3,6 +3,7 @@
 // ngon/star/line). Wraps newSplineLayerFromPrimitive. Unlike basic shapes, spline
 // layers carry an editable point/handle/contour model.
 
+import { errorCmd } from './_shared'
 import type { Layer, SplineGeneratorParams, SplinePrimitiveKind } from '@/lib/types'
 import { newSplineLayerFromPrimitive } from '@/lib/defaults'
 import { makeAddLayerCmd } from '@/lib/editor/commands-layer'
@@ -121,10 +122,3 @@ function buildSplineParams(p: AddSplineParams): SplineGeneratorParams | null {
   }
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

@@ -3,6 +3,7 @@
 // layer follow a path (followPath) and optionally animates progress 0→1;
 // trim_path reveals part of a stroke.
 
+import { errorCmd } from './_shared'
 import type { Layer, FollowPath, Keyframe } from '@/lib/types'
 import { pathFromPoints } from '@/lib/types/path'
 import { newBezierPathLayer, newMotionPathLayer } from '@/lib/defaults'
@@ -213,10 +214,3 @@ export function registerPathActions(reg: ActionRegistry): void {
   })
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

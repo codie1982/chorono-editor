@@ -29,15 +29,44 @@ export interface ActiveBlend {
   alpha: number
 }
 
+export type SMRuntimeEventType =
+  | 'stateChanged'      // the active state id changed
+  | 'transitionFired'   // a transition was applied (carries the trigger)
+  | 'blendStarted'      // a cross-fade between two state timelines began
+  | 'definitionSynced'  // an updated definition was adopted
+
+/** Observable lifecycle event — honors the script-event convention so the
+ *  scripting console / host can react instead of polling currentStateId. */
+export interface SMRuntimeEvent {
+  type: SMRuntimeEventType
+  /** stateChanged / transitionFired — previous and new state ids. */
+  from?: string
+  to?: string
+  /** transitionFired — the triggering event, or null for guard-only. */
+  event?: string | null
+  /** blendStarted — the cross-fading timelines + duration. */
+  fromTimelineId?: string
+  toTimelineId?: string
+  durationMs?: number
+  /** definitionSynced — true when the live state was removed and we snapped. */
+  snappedToInitial?: boolean
+}
+
 export class StateMachineRuntime {
-  sm: StateMachineDefinition
-  currentStateId: string
+  private _sm: StateMachineDefinition
+  private _currentStateId: string
   private blend: BlendDescriptor | null = null
 
-  constructor(sm: StateMachineDefinition) {
-    this.sm = sm
-    this.currentStateId = sm.initialStateId
+  constructor(
+    sm: StateMachineDefinition,
+    private onEvent?: (event: SMRuntimeEvent) => void,
+  ) {
+    this._sm = sm
+    this._currentStateId = sm.initialStateId
   }
+
+  get sm(): StateMachineDefinition { return this._sm }
+  get currentStateId(): string { return this._currentStateId }
 
   /**
    * Adopt an updated definition (the editor produces a new object on every
@@ -46,17 +75,21 @@ export class StateMachineRuntime {
    * an in-flight cross-fade survives an unrelated edit.
    */
   sync(def: StateMachineDefinition): void {
-    this.sm = def
-    if (!def.states.some((s) => s.id === this.currentStateId)) {
-      this.currentStateId = def.initialStateId
+    this._sm = def
+    const snapped = !def.states.some((s) => s.id === this._currentStateId)
+    if (snapped) {
+      const from = this._currentStateId
+      this._currentStateId = def.initialStateId
       this.blend = null
+      this.onEvent?.({ type: 'stateChanged', from, to: this._currentStateId })
     }
+    this.onEvent?.({ type: 'definitionSynced', snappedToInitial: snapped })
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
   get currentState(): ChronoSMState | undefined {
-    return this.sm.states.find((s) => s.id === this.currentStateId)
+    return this._sm.states.find((s) => s.id === this._currentStateId)
   }
 
   /** Timeline that should play right now (the current state's timeline). */
@@ -66,7 +99,7 @@ export class StateMachineRuntime {
 
   /** True when `timelineId` backs any state of this machine. */
   ownsTimeline(timelineId: string): boolean {
-    return this.sm.states.some((s) => s.timelineId === timelineId)
+    return this._sm.states.some((s) => s.timelineId === timelineId)
   }
 
   // ── Transitions ─────────────────────────────────────────────────────────────
@@ -77,8 +110,8 @@ export class StateMachineRuntime {
    * or an empty array when nothing fires.
    */
   dispatch(event: string, getParam: ParamLookup, wallMs: number): SMAction[] {
-    const t = resolveTransition(this.sm, this.currentStateId, event, getParam)
-    return t ? this.applyTransition(t, wallMs) : []
+    const t = resolveTransition(this._sm, this._currentStateId, event, getParam)
+    return t ? this.applyTransition(t, wallMs, event) : []
   }
 
   /**
@@ -87,14 +120,14 @@ export class StateMachineRuntime {
    * no explicit event.
    */
   tickGuards(getParam: ParamLookup, wallMs: number): SMAction[] {
-    const t = resolveTransition(this.sm, this.currentStateId, null, getParam)
-    return t ? this.applyTransition(t, wallMs) : []
+    const t = resolveTransition(this._sm, this._currentStateId, null, getParam)
+    return t ? this.applyTransition(t, wallMs, null) : []
   }
 
-  private applyTransition(t: BaseSMTransition, wallMs: number): SMAction[] {
+  private applyTransition(t: BaseSMTransition, wallMs: number, event: string | null): SMAction[] {
     // Self-transition → no-op (prevents wildcard guard-only thrashing).
-    if (t.to === this.currentStateId) return []
-    const toState = this.sm.states.find((s) => s.id === t.to)
+    if (t.to === this._currentStateId) return []
+    const toState = this._sm.states.find((s) => s.id === t.to)
     if (!toState) return []
 
     const fromState = this.currentState
@@ -108,7 +141,19 @@ export class StateMachineRuntime {
       ? { fromTimelineId, toTimelineId: toState.timelineId, startWallMs: wallMs, durationMs: blendMs }
       : null
 
-    this.currentStateId = t.to
+    const from = this._currentStateId
+    this._currentStateId = t.to
+
+    if (this.blend) {
+      this.onEvent?.({
+        type: 'blendStarted',
+        fromTimelineId: this.blend.fromTimelineId,
+        toTimelineId: this.blend.toTimelineId,
+        durationMs: this.blend.durationMs,
+      })
+    }
+    this.onEvent?.({ type: 'transitionFired', from, to: t.to, event })
+    this.onEvent?.({ type: 'stateChanged', from, to: t.to })
     return actions
   }
 
@@ -153,7 +198,11 @@ export class StateMachineRuntime {
 
   /** Reset to the initial state and clear any blend. */
   reset(): void {
-    this.currentStateId = this.sm.initialStateId
+    const from = this._currentStateId
+    this._currentStateId = this._sm.initialStateId
     this.blend = null
+    if (from !== this._currentStateId) {
+      this.onEvent?.({ type: 'stateChanged', from, to: this._currentStateId })
+    }
   }
 }

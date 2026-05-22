@@ -1,8 +1,9 @@
 'use client'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import TimelineGhostControl from './TimelineGhostControl'
+import { useClickOutside } from './hooks/useClickOutside'
 
 interface Props {
   timelines: Timeline[]
@@ -75,28 +76,14 @@ export default function TimelineToolbar(props: Props) {
   // ── Keyframe dropdown ───────────────────────────────────────────────────
   const [kfMenuOpen, setKfMenuOpen] = useState(false)
   const kfRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!kfMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (kfRef.current && !kfRef.current.contains(e.target as Node)) setKfMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [kfMenuOpen])
+  useClickOutside(kfRef, kfMenuOpen, () => setKfMenuOpen(false))
 
   // ── Play-type dropdown (long-press the Play button) ──────────────────────
   const [playMenuOpen, setPlayMenuOpen] = useState(false)
   const playRef = useRef<HTMLDivElement>(null)
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressed = useRef(false)
-  useEffect(() => {
-    if (!playMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (playRef.current && !playRef.current.contains(e.target as Node)) setPlayMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [playMenuOpen])
+  useClickOutside(playRef, playMenuOpen, () => setPlayMenuOpen(false))
   const onPlayPointerDown = useCallback(() => {
     longPressed.current = false
     pressTimer.current = setTimeout(() => { longPressed.current = true; setPlayMenuOpen(true) }, 400)

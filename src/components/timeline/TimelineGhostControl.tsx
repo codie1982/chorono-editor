@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
+import { useClickOutside } from './hooks/useClickOutside'
 
 interface Props {
   ghostSettings: TimelineGhostSettings
@@ -24,18 +25,7 @@ export default function TimelineGhostControl({
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    if (!menuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [menuOpen])
+  useClickOutside(menuRef, menuOpen, () => setMenuOpen(false))
 
   const isGhostVisible = ghostSettings.enabled
   const canShowSelected = selectedLayerIds.size > 0

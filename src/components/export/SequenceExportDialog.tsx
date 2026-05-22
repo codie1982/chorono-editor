@@ -8,6 +8,7 @@ import {
   type RasterFormat,
   type RasterBackground,
 } from '@/lib/export'
+import BaseExportDialog, { Field } from './BaseExportDialog'
 
 interface Props {
   scene: ChronoScene
@@ -65,21 +66,24 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
   const pct = progress ? Math.round((progress.frame / progress.total) * 100) : 0
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={busy ? undefined : onClose}
+    <BaseExportDialog
+      title="Export Image Sequence"
+      onClose={onClose}
+      closeDisabled={busy}
+      maxWidth="max-w-md"
+      footer={
+        <>
+          <button onClick={onClose} disabled={busy}
+            className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={handleExport} disabled={busy}
+            className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
+            {busy ? 'Rendering…' : 'Export'}
+          </button>
+        </>
+      }
     >
-      <div
-        className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl max-w-md w-full mx-4 p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wider">
-            Export Image Sequence
-          </h2>
-          <button onClick={onClose} disabled={busy} className="text-gray-500 hover:text-gray-300 text-lg leading-none disabled:opacity-40">✕</button>
-        </div>
-
         <Field label="Format">
           <div className="grid grid-cols-3 gap-2">
             {FORMATS.map((f) => (
@@ -144,27 +148,6 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
             <div className="text-[10px] text-gray-400 mt-1">{progress.frame} / {progress.total} frames ({pct}%)</div>
           </div>
         )}
-
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} disabled={busy}
-            className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={handleExport} disabled={busy}
-            className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">
-            {busy ? 'Rendering…' : 'Export'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1.5">{label}</div>
-      {children}
-    </div>
+    </BaseExportDialog>
   )
 }

@@ -54,7 +54,7 @@ export interface CanvasRenderOptions {
 export class CanvasRenderer {
   /** Tracks layers currently being rendered as motion blur trails — prevents
    *  recursive trail rendering when renderSingleLayer calls renderLayer. */
-  private _mbRenderingSet = new Set<string>()
+  private readonly _mbRenderingSet = new Set<string>()
 
   render(
     ctx:             CanvasRenderingContext2D,

@@ -5,6 +5,7 @@
 // tracks. We must ensureTimeline + ensureTrack first or keyframes silently
 // disappear.
 
+import { errorCmd } from './_shared'
 import type {
   ChronoScene, Keyframe, Track, Timeline,
   AnimatableValue, EasingType,
@@ -196,10 +197,3 @@ EXAMPLES:
   })
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

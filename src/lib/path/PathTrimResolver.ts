@@ -17,7 +17,7 @@ export class PathTrimResolver {
    * Returns the visible segment list. Usually one entry; two when a
    * 'movingSegment' window wraps around end-of-path.
    */
-  resolve(trim: TrimPathDefinition): TrimSegment[] {
+  static resolve(trim: TrimPathDefinition): TrimSegment[] {
     const mode = trim.mode ?? 'static'
 
     if (mode === 'static') {
@@ -50,5 +50,3 @@ function wrap01(v: number): number {
   // Map any real value into [0, 1) via modulo.
   return ((v % 1) + 1) % 1
 }
-
-export const defaultPathTrimResolver = new PathTrimResolver()

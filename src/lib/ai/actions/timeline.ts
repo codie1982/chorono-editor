@@ -1,5 +1,6 @@
 // ── Timeline Actions ──────────────────────────────────────────────────────────
 
+import { errorCmd } from './_shared'
 import type { Timeline } from '@/lib/types'
 import { makeAddTimelineCmd } from '@/lib/editor/commands-timeline'
 import type { ActionRegistry } from '../ActionRegistry'
@@ -54,10 +55,3 @@ export function registerTimelineActions(reg: ActionRegistry): void {
   })
 }
 
-function errorCmd(message: string) {
-  return {
-    label: `AI ERROR: ${message}`,
-    execute: <S,>(s: S): S => s,
-    undo:    <S,>(s: S): S => s,
-  }
-}

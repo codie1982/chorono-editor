@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import { exportSVG, downloadBlob } from '@/lib/export'
+import BaseExportDialog from './BaseExportDialog'
 
 interface Props {
   scene: ChronoScene
@@ -42,21 +43,29 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
+    <BaseExportDialog
+      title="Export SVG"
+      onClose={onClose}
+      maxWidth="max-w-sm"
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={busy}
+            className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50"
+          >
+            {busy ? 'Exporting…' : 'Export'}
+          </button>
+        </>
+      }
     >
-      <div
-        className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl max-w-sm w-full mx-4 p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wider">
-            Export SVG
-          </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
-        </div>
-
         <div className="mb-4 space-y-2">
           <div className="text-[10px] text-gray-500 uppercase tracking-wide">Options</div>
           <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
@@ -84,24 +93,6 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
           particles and effects are skipped (a warning lists them).
           {animated && ' Animated mode maps transform/opacity tracks to looping SMIL.'}
         </p>
-
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={busy}
-            className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50"
-          >
-            {busy ? 'Exporting…' : 'Export'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </BaseExportDialog>
   )
 }
