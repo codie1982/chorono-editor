@@ -57,6 +57,10 @@ import JsonModal       from '@/components/JsonModal'
 import WireParameterModal  from '@/components/wiring/WireParameterModal'
 import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
+import RasterExportDialog from '@/components/export/RasterExportDialog'
+import SVGExportDialog   from '@/components/export/SVGExportDialog'
+import SequenceExportDialog from '@/components/export/SequenceExportDialog'
+import { exportHTML } from '@/lib/export'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
@@ -74,6 +78,7 @@ import MotionBindingPanel  from '@/components/panels/MotionBindingPanel'
 import WiringListPanel     from '@/components/panels/WiringListPanel'
 import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
+import ChronoPlayerPanel from '@/components/panels/ChronoPlayerPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
 import SnapPanel               from '@/components/panels/SnapPanel'
 import StateMachinePanel       from '@/components/panels/StateMachinePanel'
@@ -1014,6 +1019,12 @@ export default function BuilderPage() {
   // ── Manual preview-mode toggle (so user can test draggable / tappable
   //    layers without setting up segments / clicking the Preview tab) ──────
   const [manualPreview, setManualPreview] = useState(false)
+  // BL-80 — raster image export dialog visibility.
+  const [showRasterExport, setShowRasterExport] = useState(false)
+  // BL-84 — SVG (vector) export dialog visibility.
+  const [showSvgExport, setShowSvgExport] = useState(false)
+  // BL-83 — image sequence (ZIP) export dialog visibility.
+  const [showSequenceExport, setShowSequenceExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
   const saveSceneJson = useCallback(() => {
@@ -1033,6 +1044,22 @@ export default function BuilderPage() {
     } catch (err) {
       toast.error('Clipboard write failed', { detail: (err as Error).message })
       console.warn('Clipboard write failed:', err)
+    }
+  }, [scene])
+
+  const exportSceneHtml = useCallback(() => {
+    try {
+      const { html, filename } = exportHTML(scene)
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${filename}`)
+    } catch (err) {
+      toast.error('HTML export failed', { detail: (err as Error).message })
     }
   }, [scene])
 
@@ -1274,6 +1301,7 @@ export default function BuilderPage() {
       { id: 'wiring',         title: 'Wires',          render: () => null },
       { id: 'selection',      title: 'Select',         render: () => null },
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
+      { id: 'player',         title: 'Player',         render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
       { id: 'snap',           title: 'Snap',           render: () => null },
       { id: 'particles',      title: 'Particle',       render: () => null },
@@ -1299,6 +1327,10 @@ export default function BuilderPage() {
           onOpenSceneJson={openSceneJson}
           onSaveSceneJson={saveSceneJson}
           onExportRuntime={exportRuntimeJson}
+          onExportImage={() => setShowRasterExport(true)}
+          onExportSvg={() => setShowSvgExport(true)}
+          onExportSequence={() => setShowSequenceExport(true)}
+          onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
@@ -1611,6 +1643,7 @@ export default function BuilderPage() {
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
+                    isPlaying={isPlaying}
                     onLayerClickInPreview={(layerId) =>
                       runtime.fireEvent({ type: 'click', layerId })
                     }
@@ -1933,6 +1966,10 @@ export default function BuilderPage() {
                 render: () => <RuntimePreviewPanel scene={scene} runtime={runtime} />,
               },
               {
+                id: 'player', title: 'Player',
+                render: () => <ChronoPlayerPanel scene={scene} assets={assetCache} />,
+              },
+              {
                 id: 'assets', title: 'Assets',
                 render: () => (
                   <AssetsPanel
@@ -2023,6 +2060,56 @@ export default function BuilderPage() {
 
       {/* ── Shortcut Help Modal ────────────────────────────────────── */}
       {showHelp && <ShortcutHelpModal onClose={() => setShowHelp(false)} />}
+
+      {/* ── BL-80 Raster image export (PNG / WEBP / JPEG) ─────────────── */}
+      {showRasterExport && (
+        <RasterExportDialog
+          scene={scene}
+          assets={assetCache}
+          timeMs={currentTimeMs}
+          onClose={() => setShowRasterExport(false)}
+          onExported={(filename, warnings) => {
+            if (warnings.length > 0) {
+              toast.success(`Exported ${filename}`, { detail: warnings.join(' ') })
+            } else {
+              toast.success(`Exported ${filename}`)
+            }
+          }}
+          onError={(message) => toast.error('Image export failed', { detail: message })}
+        />
+      )}
+
+      {/* ── BL-84 SVG (vector) export ─────────────────────────────────── */}
+      {showSvgExport && (
+        <SVGExportDialog
+          scene={scene}
+          timeMs={currentTimeMs}
+          onClose={() => setShowSvgExport(false)}
+          onExported={(filename, warnings) => {
+            if (warnings.length > 0) {
+              toast.success(`Exported ${filename}`, { detail: warnings.join(' ') })
+            } else {
+              toast.success(`Exported ${filename}`)
+            }
+          }}
+          onError={(message) => toast.error('SVG export failed', { detail: message })}
+        />
+      )}
+
+      {/* ── BL-83 Image sequence export (ZIP) ─────────────────────────── */}
+      {showSequenceExport && (
+        <SequenceExportDialog
+          scene={scene}
+          assets={assetCache}
+          onClose={() => setShowSequenceExport(false)}
+          onExported={(filename, frameCount, warnings) => {
+            const base = `Exported ${filename} (${frameCount} frames)`
+            if (warnings.length > 0) toast.success(base, { detail: warnings.join(' ') })
+            else toast.success(base)
+          }}
+          onError={(message) => toast.error('Sequence export failed', { detail: message })}
+        />
+      )}
 
       {/* ── Import from URL (BL-09) ──────────────────────────────────── */}
       {showImportUrl && (

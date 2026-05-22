@@ -22,6 +22,11 @@ export interface CanvasRendererOptions {
   dragOverrides: Map<string, number>
   ghostSettings?: TimelineGhostSettings
   selectedTimeline?: Timeline | null
+  /**
+   * BL-66 — when true (playback or preview mode), the renderer skips editor
+   * chrome (selection outlines, grid) so the frame shows pure content.
+   */
+  hideEditorUI?: boolean
 }
 
 /**
@@ -37,7 +42,7 @@ export function useCanvasRenderer(
     scene, timeMs, selectedLayerId, selectedLayerIds, assets,
     snapEnabled, snapToGridOn, gridSize,
     overrides, paramValues, dragOverrides,
-    ghostSettings, selectedTimeline,
+    ghostSettings, selectedTimeline, hideEditorUI,
   } = opts
 
   useEffect(() => {
@@ -64,6 +69,8 @@ export function useCanvasRenderer(
         overrides:   mergedOverrides,
         paramValues,
         selectedLayerIds,
+        // BL-66 — playback / preview → 'preview' (clean frame); else 'editor'.
+        renderMode:  hideEditorUI ? 'preview' : 'editor',
       },
     )
 
@@ -114,5 +121,5 @@ export function useCanvasRenderer(
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, overrides, paramValues, dragOverrides, ghostSettings, selectedTimeline])
+  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, overrides, paramValues, dragOverrides, ghostSettings, selectedTimeline, hideEditorUI])
 }

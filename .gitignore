@@ -16,6 +16,9 @@
 # production
 /build
 
+# runtime bundle (tsup → copied to chorono-runtime repo for publish)
+/dist
+
 # misc
 .DS_Store
 *.pem
