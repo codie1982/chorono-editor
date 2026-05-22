@@ -23,6 +23,8 @@ interface FileMenuProps {
   onExportSvg?:    () => void
   /** BL-83 — open the image sequence (PNG/JPEG/WEBP → ZIP) export dialog. */
   onExportSequence?: () => void
+  /** Standalone self-playing HTML (CDN runtime + embedded scene). */
+  onExportHtml?:   () => void
   onCopySceneJson: () => void
   onShowShortcuts: () => void
   onResetLayout:   () => void
@@ -166,6 +168,11 @@ export default function FileMenu(props: FileMenuProps) {
           {props.onExportSequence && (
             <button className={item} onClick={() => { setOpen(false); props.onExportSequence!() }}>
               ⛶ Image Sequence (ZIP)…
+            </button>
+          )}
+          {props.onExportHtml && (
+            <button className={item} onClick={() => { setOpen(false); props.onExportHtml!() }}>
+              ◈ Standalone HTML (self-playing)
             </button>
           )}
           <button className={item} onClick={() => { setOpen(false); props.onExportRuntime() }}>

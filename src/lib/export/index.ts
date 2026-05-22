@@ -33,3 +33,7 @@ export type {
   SequenceProgress,
 } from './sequence/SequenceExportEngine'
 export { ZipWriter, crc32 } from './sequence/ZipWriter'
+
+// ── Standalone HTML export (CDN runtime + embedded scene) ──────────────────────
+export { exportHTML } from './html/htmlExport'
+export type { HTMLExportOptions, HTMLExportResult } from './html/htmlExport'

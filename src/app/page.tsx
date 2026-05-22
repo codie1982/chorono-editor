@@ -60,6 +60,7 @@ import FileMenu        from '@/components/TopToolbar/FileMenu'
 import RasterExportDialog from '@/components/export/RasterExportDialog'
 import SVGExportDialog   from '@/components/export/SVGExportDialog'
 import SequenceExportDialog from '@/components/export/SequenceExportDialog'
+import { exportHTML } from '@/lib/export'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
@@ -1045,6 +1046,22 @@ export default function BuilderPage() {
     }
   }, [scene])
 
+  const exportSceneHtml = useCallback(() => {
+    try {
+      const { html, filename } = exportHTML(scene)
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${filename}`)
+    } catch (err) {
+      toast.error('HTML export failed', { detail: (err as Error).message })
+    }
+  }, [scene])
+
   const openSceneJson = useCallback(() => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -1311,6 +1328,7 @@ export default function BuilderPage() {
           onExportImage={() => setShowRasterExport(true)}
           onExportSvg={() => setShowSvgExport(true)}
           onExportSequence={() => setShowSequenceExport(true)}
+          onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
