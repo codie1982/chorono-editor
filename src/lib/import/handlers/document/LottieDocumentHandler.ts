@@ -12,6 +12,7 @@
 // becomes available for Phase 3 without a re-import step.
 
 import { BaseImportHandler } from '../BaseHandler'
+import { zipReader } from '../../zip/ZipReader'
 import type {
   ImportFormat,
   ImportOptions,
@@ -50,6 +51,25 @@ function lottieDurationMs(manifest: LottieManifest): number {
   return Math.round((frames / manifest.fr) * 1000)
 }
 
+/**
+ * Read the animation JSON out of a dotLottie (ZIP) package and parse its
+ * metadata. Returns null if the file isn't a readable dotLottie.
+ */
+async function readDotLottieManifest(file: File): Promise<LottieManifest | null> {
+  try {
+    const buf = await file.arrayBuffer()
+    const entries = zipReader.readEntries(buf)
+    // dotLottie keeps Lottie data under animations/*.json
+    const anim = entries.find(e => /animations\/.*\.json$/i.test(e.name))
+              ?? entries.find(e => e.name.toLowerCase().endsWith('.json') && e.name !== 'manifest.json')
+    if (!anim) return null
+    const bytes = await zipReader.extract(buf, anim)
+    return parseLottieManifest(new TextDecoder().decode(bytes))
+  } catch {
+    return null
+  }
+}
+
 // ── Handler ────────────────────────────────────────────────────────────────────
 
 export class LottieDocumentHandler extends BaseImportHandler {
@@ -69,6 +89,8 @@ export class LottieDocumentHandler extends BaseImportHandler {
         const text = await file.text()
         manifest = parseLottieManifest(text)
       } catch { /* ignore */ }
+    } else {
+      manifest = await readDotLottieManifest(file)
     }
 
     const features: string[] = []
@@ -117,6 +139,9 @@ export class LottieDocumentHandler extends BaseImportHandler {
         const text = await file.text()
         manifest = parseLottieManifest(text)
       } catch { /* ignore */ }
+    } else {
+      this.reportProgress(onProgress, 'parsing', 'Unpacking dotLottie…', 0.4)
+      manifest = await readDotLottieManifest(file)
     }
 
     this.reportProgress(onProgress, 'converting', 'Creating asset…', 0.7)
