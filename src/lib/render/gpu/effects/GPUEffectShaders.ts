@@ -86,10 +86,81 @@ uniform float u_sigma;
 ${BLUR_MAIN}`
 }
 
+// ── Motion-blur accumulation shaders ─────────────────────────────────────────────
+// Two full-screen passes sharing the quad vertex shader:
+//   - accumulate: OUT = sample * weight  (additive-blended into the accum buffer)
+//   - blit:       OUT = sample           (copy the averaged buffer to the GL canvas)
+
+const ACCUMULATE_MAIN = `
+void main() {
+  OUT_COLOR = SAMPLE(u_tex, v_uv) * u_weight;
+}
+`
+
+const BLIT_MAIN = `
+void main() {
+  OUT_COLOR = SAMPLE(u_tex, v_uv);
+}
+`
+
+function accumulateFragment300(): string {
+  return `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_weight;
+out vec4 fragColor;
+#define SAMPLE(t, uv) texture(t, uv)
+#define OUT_COLOR fragColor
+${ACCUMULATE_MAIN}`
+}
+
+function blitFragment300(): string {
+  return `#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+out vec4 fragColor;
+#define SAMPLE(t, uv) texture(t, uv)
+#define OUT_COLOR fragColor
+${BLIT_MAIN}`
+}
+
+function accumulateFragment100(): string {
+  return `precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_weight;
+#define SAMPLE(t, uv) texture2D(t, uv)
+#define OUT_COLOR gl_FragColor
+${ACCUMULATE_MAIN}`
+}
+
+function blitFragment100(): string {
+  return `precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+#define SAMPLE(t, uv) texture2D(t, uv)
+#define OUT_COLOR gl_FragColor
+${BLIT_MAIN}`
+}
+
+export interface MotionBlurShaderSources {
+  vertex:              string
+  accumulateFragment:  string
+  blitFragment:        string
+}
+
 // ── Public ──────────────────────────────────────────────────────────────────────
 
 export function buildBlurShaderSources(isGL2: boolean): EffectShaderSources {
   return isGL2
     ? { vertex: vertex300(), fragment: blurFragment300() }
     : { vertex: vertex100(), fragment: blurFragment100() }
+}
+
+export function buildMotionBlurShaderSources(isGL2: boolean): MotionBlurShaderSources {
+  return isGL2
+    ? { vertex: vertex300(), accumulateFragment: accumulateFragment300(), blitFragment: blitFragment300() }
+    : { vertex: vertex100(), accumulateFragment: accumulateFragment100(), blitFragment: blitFragment100() }
 }

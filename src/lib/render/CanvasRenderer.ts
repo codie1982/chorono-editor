@@ -26,6 +26,7 @@ import { defaultMaskRenderer } from '@/lib/mask/MaskRenderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from './resolveDisplayTransform'
 import { renderMotionBlurTrails } from './renderMotionBlurTrails'
+import { renderMotionBlurAccumulated } from './renderMotionBlurAccumulated'
 
 export interface CanvasRenderOptions {
   /** Optional pre-computed override map (for runtime preview). */
@@ -164,13 +165,24 @@ export class CanvasRenderer {
     if (layer.motionBlur?.enabled && !layer.motionBlur.baked
         && !this._mbRenderingSet.has(layer.id)) {
       this._mbRenderingSet.add(layer.id)
+      let mbHandled = false
       try {
-        renderMotionBlurTrails(
+        // Prefer GPU accumulation (After Effects-quality smooth smear). Falls
+        // back to the CPU opacity-decay trails when GPU is unavailable.
+        mbHandled = renderMotionBlurAccumulated(
           this, ctx, layer, overrides, paramValues, assets, scene, timeMs, this._mbRenderingSet,
         )
+        if (!mbHandled) {
+          renderMotionBlurTrails(
+            this, ctx, layer, overrides, paramValues, assets, scene, timeMs, this._mbRenderingSet,
+          )
+        }
       } finally {
         this._mbRenderingSet.delete(layer.id)
       }
+      // GPU drew the full averaged smear — skip the normal sharp render so we
+      // don't paint a crisp copy on top of the blur.
+      if (mbHandled) return
     }
 
     const opacity = getLayerValue(overrides, layer.id, 'opacity', layer.opacity)
