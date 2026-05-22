@@ -9,6 +9,7 @@
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface InnerGlowEffectDefinition extends EffectDefinition {
   type: 'innerGlow'
@@ -37,12 +38,19 @@ export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
     rctx.drawImage(input, 0, 0)
     rctx.globalCompositeOperation = 'source-over'
 
-    // Blur the ring so it bleeds inward when clipped to the silhouette
+    // Blur the ring so it bleeds inward when clipped to the silhouette.
+    // GPU separable Gaussian when available; CSS-filter fallback otherwise.
+    const r = Math.max(0, radius)
     const blurred = createOffscreen(W, H)
     const bctx    = blurred.getContext('2d')!
-    bctx.filter   = `blur(${Math.max(0, radius)}px)`
-    bctx.drawImage(ring, 0, 0)
-    bctx.filter   = 'none'
+    const gpu = r > 0 ? gpuImageEffects.blur(ring, r) : null
+    if (gpu) {
+      bctx.drawImage(gpu, 0, 0)
+    } else {
+      bctx.filter = `blur(${r}px)`
+      bctx.drawImage(ring, 0, 0)
+      bctx.filter = 'none'
+    }
 
     // Composite original + clipped glow
     const out  = createOffscreen(W, H)

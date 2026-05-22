@@ -15,6 +15,7 @@
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface InnerShadowEffectDefinition extends EffectDefinition {
   type: 'innerShadow'
@@ -48,12 +49,19 @@ export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
     ictx.drawImage(input, offsetX, offsetY)
     ictx.globalCompositeOperation = 'source-over'
 
-    // ── 2. Blur the difference layer (the shadow itself)
+    // ── 2. Blur the difference layer (the shadow itself).
+    //       GPU separable Gaussian when available; CSS-filter fallback otherwise.
+    const r = Math.max(0, blur)
     const blurred = createOffscreen(W, H)
     const bctx    = blurred.getContext('2d')!
-    bctx.filter   = `blur(${Math.max(0, blur)}px)`
-    bctx.drawImage(inv, 0, 0)
-    bctx.filter   = 'none'
+    const gpu = r > 0 ? gpuImageEffects.blur(inv, r) : null
+    if (gpu) {
+      bctx.drawImage(gpu, 0, 0)
+    } else {
+      bctx.filter = `blur(${r}px)`
+      bctx.drawImage(inv, 0, 0)
+      bctx.filter = 'none'
+    }
 
     // ── 3. Clip the shadow to the original shape using source-atop
     const out  = createOffscreen(W, H)
