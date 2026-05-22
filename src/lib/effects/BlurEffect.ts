@@ -1,11 +1,13 @@
 // ── BlurEffect ────────────────────────────────────────────────────────────────
 //
-// Uses Canvas's native `filter = 'blur(Npx)'`. GPU-accelerated in modern
-// browsers; falls back to box blur. For finer control (separable Gaussian
-// kernel, multi-pass) we'd swap this for a manual implementation.
+// Separable Gaussian blur on the GPU (gpuImageEffects.blur) when available,
+// falling back to Canvas's native `filter = 'blur(Npx)'` otherwise. The GPU path
+// gives a true multi-pass Gaussian (halo-free, premultiplied) and offloads the
+// cost; the CSS path is the original behaviour and is also browser-accelerated.
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface BlurEffectDefinition extends EffectDefinition {
   type: 'blur'
@@ -20,6 +22,17 @@ export const blurEffect: EffectPlugin<BlurEffectDefinition> = {
   apply(input, effect) {
     const r = Math.max(0, effect.params.radius ?? 0)
     if (r === 0) return input
+
+    // GPU path: separable Gaussian. Copy the GL result into a fresh 2D canvas so
+    // the singleton's GL canvas is free to be reused by the next effect.
+    const gpu = gpuImageEffects.blur(input, r)
+    if (gpu) {
+      const out = createOffscreen(input.width, input.height)
+      out.getContext('2d')!.drawImage(gpu, 0, 0)
+      return out
+    }
+
+    // CPU fallback: native CSS blur.
     const out = createOffscreen(input.width, input.height)
     const ctx = out.getContext('2d')!
     ctx.filter = `blur(${r}px)`

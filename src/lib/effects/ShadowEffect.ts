@@ -7,6 +7,7 @@
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface ShadowEffectDefinition extends EffectDefinition {
   type: 'shadow'
@@ -35,6 +36,11 @@ export const shadowEffect: EffectPlugin<ShadowEffectDefinition> = {
     tctx.fillRect(0, 0, input.width, input.height)
     tctx.globalCompositeOperation = 'source-over'
 
+    // Pre-blur the tint on the GPU when available (CSS filter fallback applied
+    // inline below). The blur is the expensive step; tint/offset stay on CPU.
+    const blur2 = Math.max(0, blur)
+    const gpuBlurred = blur2 > 0 ? gpuImageEffects.blur(tint, blur2) : null
+
     // Pad output canvas slightly to fit the offset shadow (V1: same size,
     // shadow may clip at edges — V1.5 will use a padded compositor).
     const out  = createOffscreen(input.width, input.height)
@@ -42,9 +48,13 @@ export const shadowEffect: EffectPlugin<ShadowEffectDefinition> = {
 
     // 1. Draw blurred shadow first, offset
     octx.globalAlpha = Math.max(0, Math.min(1, opacity))
-    octx.filter      = `blur(${Math.max(0, blur)}px)`
-    octx.drawImage(tint, offsetX, offsetY)
-    octx.filter      = 'none'
+    if (gpuBlurred) {
+      octx.drawImage(gpuBlurred, offsetX, offsetY)
+    } else {
+      octx.filter = `blur(${blur2}px)`
+      octx.drawImage(tint, offsetX, offsetY)
+      octx.filter = 'none'
+    }
     octx.globalAlpha = 1
 
     // 2. Draw original on top

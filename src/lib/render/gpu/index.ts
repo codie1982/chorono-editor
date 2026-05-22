@@ -15,3 +15,5 @@ export {
 export { ParticleGPUBackend, type GPUParticleDrawParams } from './particles/ParticleGPUBackend'
 export { WebGLInstancedQuadBackend } from './particles/WebGLInstancedQuadBackend'
 export { ParticleBufferPacker, FLOATS_PER_PARTICLE, shapeToId } from './particles/ParticleBufferPacker'
+
+export { gpuImageEffects } from './effects/GPUImageEffects'

@@ -9,6 +9,7 @@
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface GlowEffectDefinition extends EffectDefinition {
   type: 'glow'
@@ -17,6 +18,21 @@ export interface GlowEffectDefinition extends EffectDefinition {
     radius:    number   // blur radius in px
     intensity: number   // 0–1 alpha multiplier
   }
+}
+
+/** Gaussian-blur the tinted glow on the GPU, falling back to CSS filter. */
+function blurGlow(glow: HTMLCanvasElement, radius: number): HTMLCanvasElement {
+  const gpu = gpuImageEffects.blur(glow, radius)
+  const blurred = createOffscreen(glow.width, glow.height)
+  const bctx = blurred.getContext('2d')!
+  if (gpu) {
+    bctx.drawImage(gpu, 0, 0)
+  } else {
+    bctx.filter = `blur(${radius}px)`
+    bctx.drawImage(glow, 0, 0)
+    bctx.filter = 'none'
+  }
+  return blurred
 }
 
 export const glowEffect: EffectPlugin<GlowEffectDefinition> = {
@@ -33,12 +49,8 @@ export const glowEffect: EffectPlugin<GlowEffectDefinition> = {
     gctx.fillRect(0, 0, input.width, input.height)
     gctx.globalCompositeOperation = 'source-over'
 
-    // ── Blur pass on the tinted glow ──
-    const blurred = createOffscreen(input.width, input.height)
-    const bctx    = blurred.getContext('2d')!
-    bctx.filter = `blur(${radius}px)`
-    bctx.drawImage(glow, 0, 0)
-    bctx.filter = 'none'
+    // ── Blur pass on the tinted glow (GPU, CSS fallback) ──
+    const blurred = blurGlow(glow, radius)
 
     // ── Composite: blurred glow under original input ──
     const out  = createOffscreen(input.width, input.height)
