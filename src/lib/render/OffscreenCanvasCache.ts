@@ -138,3 +138,47 @@ export function createOffscreen(width: number, height: number): HTMLCanvasElemen
   c.height = height
   return c
 }
+
+export interface WebGLOffscreen {
+  canvas: HTMLCanvasElement
+  gl:     WebGL2RenderingContext | WebGLRenderingContext
+}
+
+/**
+ * Allocates a detached canvas with a WebGL context, configured for compositing
+ * back onto a 2D canvas: premultiplied alpha + no depth/stencil. Returns null
+ * in SSR or when the requested context cannot be created (caller falls back to
+ * Canvas 2D). Used by the GPU particle backends.
+ */
+export function createWebGLOffscreen(
+  width:     number,
+  height:    number,
+  glVersion: 2 | 1,
+): WebGLOffscreen | null {
+  if (typeof document === 'undefined') return null
+
+  const canvas = document.createElement('canvas')
+  canvas.width  = width
+  canvas.height = height
+
+  const attrs: WebGLContextAttributes = {
+    alpha:                 true,
+    premultipliedAlpha:    true,
+    antialias:             false,
+    depth:                 false,
+    stencil:               false,
+    preserveDrawingBuffer: false,
+  }
+
+  let gl: WebGL2RenderingContext | WebGLRenderingContext | null = null
+  if (glVersion === 2) {
+    gl = canvas.getContext('webgl2', attrs) as WebGL2RenderingContext | null
+  }
+  if (!gl) {
+    gl = (canvas.getContext('webgl', attrs) ??
+      canvas.getContext('experimental-webgl', attrs)) as WebGLRenderingContext | null
+  }
+  if (!gl) return null
+
+  return { canvas, gl }
+}

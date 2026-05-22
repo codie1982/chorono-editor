@@ -11,6 +11,11 @@ import type { ParticleEmitterData } from '@/lib/particles/types'
 import { computeSpawnParams } from '@/lib/particles/runtime/ParticleSpawner'
 import { ParticleEvaluator } from '@/lib/particles/runtime/ParticleEvaluator'
 import { colorToCss } from '@/lib/particles/animation/LifeGradient'
+import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
+import { gpuCapabilities } from '@/lib/render/gpu/GPUCapabilities'
+import { GPUCompositor } from '@/lib/render/gpu/GPUCompositor'
+import { WebGLInstancedQuadBackend } from '@/lib/render/gpu/particles/WebGLInstancedQuadBackend'
+import type { ParticleGPUBackend } from '@/lib/render/gpu/particles/ParticleGPUBackend'
 
 // ── Shape drawing helpers ─────────────────────────────────────────────────────
 // All draw in layer-local coords with origin at particle currentPosition.
@@ -182,6 +187,76 @@ function renderParticles(
 
 // ── Plugin export ─────────────────────────────────────────────────────────────
 
+// ── GPU path ────────────────────────────────────────────────────────────────────
+// Lazy, app-wide backend. Probed once: if WebGL with instancing is available we
+// render particles on the GPU; otherwise this stays null and every emitter uses
+// the CPU renderParticles() path above, unchanged.
+
+let gpuBackend:  ParticleGPUBackend | null = null
+let gpuAttempted = false
+
+function getGPUBackend(): ParticleGPUBackend | null {
+  if (gpuAttempted) return gpuBackend
+  gpuAttempted = true
+
+  const cap = gpuCapabilities.getReport()
+  if (cap.tier === 'none' || !cap.supportsInstancing) return null
+
+  try {
+    gpuBackend = new WebGLInstancedQuadBackend(cap)
+  } catch {
+    gpuBackend = null   // shader / context failure → silent CPU fallback
+  }
+  return gpuBackend
+}
+
+/**
+ * Renders an emitter on the GPU. Returns false (caller falls back to CPU) when
+ * no backend is available, the context is lost, or the draw fails.
+ */
+function renderParticlesGPU(
+  ctx:          RenderContext,
+  layer:        Layer,
+  cfg:          ParticleEmitterData,
+  layerStartMs: number,
+  sourceCtx:    { allLayers: Layer[]; particleLayerX: number; particleLayerY: number },
+): boolean {
+  const backend = getGPUBackend()
+  if (!backend || backend.contextLost) return false
+
+  const relativeTime = Math.max(0, ctx.timeMs - layerStartMs)
+  const instances = computeSpawnParams(cfg, relativeTime, undefined, sourceCtx)
+  if (instances.length === 0) return true   // handled by GPU path (nothing to draw)
+
+  const evaluator = new ParticleEvaluator(cfg)
+  for (const p of instances) {
+    if (p.isAlive(relativeTime)) evaluator.evaluate(p, relativeTime)
+  }
+
+  const dest = ctx.canvas
+  const dt = resolveDisplayTransform(layer, ctx.scene, ctx.timeMs, ctx.overrides)
+
+  const ok = backend.draw({
+    instances,
+    cfg,
+    relativeTime,
+    compositionW:     ctx.scene.composition.width,
+    compositionH:     ctx.scene.composition.height,
+    backingW:         dest.canvas.width,
+    backingH:         dest.canvas.height,
+    layerAlpha:       dest.globalAlpha,
+    displayTransform: dt,
+    anchorX:          layer.transform.anchorX,
+    anchorY:          layer.transform.anchorY,
+  })
+  if (!ok) return false
+
+  GPUCompositor.composite(backend.canvas, dest, cfg.rendering.blendMode)
+  return true
+}
+
+// ── Plugin export ─────────────────────────────────────────────────────────────
+
 export const particleRendererPlugin: LayerRendererPlugin = {
   id: 'particle-emitter-renderer',
 
@@ -206,6 +281,8 @@ export const particleRendererPlugin: LayerRendererPlugin = {
       particleLayerX: layer.transform.x,
       particleLayerY: layer.transform.y,
     }
+
+    if (renderParticlesGPU(ctx, layer, cfg, layerStartMs, sourceCtx)) return
 
     renderParticles(ctx.canvas, cfg, ctx.timeMs, layerStartMs, sourceCtx)
   },
