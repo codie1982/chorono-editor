@@ -49,6 +49,20 @@ export class ImportManager {
   }
 
   /**
+   * Import a File with an EXPLICIT format, bypassing auto-detection.
+   * Used by flows where the format can't be sniffed from bytes — e.g. a sprite
+   * sheet (a plain PNG that the user declares as a grid of frames).
+   */
+  async importFileAs(
+    file: File,
+    format: ImportFormat,
+    options?: ImportOptions,
+    onProgress?: (p: ImportProgress) => void,
+  ): Promise<ImportResult> {
+    return this.runHandler(file, format, getImportKind(format), options, onProgress)
+  }
+
+  /**
    * Import from a URL (fetches the file first, then imports).
    */
   async importUrl(

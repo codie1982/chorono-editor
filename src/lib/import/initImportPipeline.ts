@@ -16,6 +16,7 @@ import { importManager }           from './ImportManager'
 // Asset handlers
 import { ImageHandler }             from './handlers/asset/ImageHandler'
 import { GifHandler }               from './handlers/asset/GifHandler'
+import { SpriteSheetHandler }       from './handlers/asset/SpriteSheetHandler'
 import { VideoHandler }             from './handlers/asset/VideoHandler'
 import { AudioHandler }             from './handlers/asset/AudioHandler'
 import { FontHandler }              from './handlers/asset/FontHandler'
@@ -38,6 +39,7 @@ export function initImportPipeline(): void {
   // ── Asset handlers ──────────────────────────────────────────────────────────
   importManager.registerHandler(new GifHandler())   // before ImageHandler — claims image/gif
   importManager.registerHandler(new ImageHandler())
+  importManager.registerHandler(new SpriteSheetHandler())  // explicit format only (image/spritesheet)
   importManager.registerHandler(new VideoHandler())
   importManager.registerHandler(new AudioHandler())
   importManager.registerHandler(new FontHandler())

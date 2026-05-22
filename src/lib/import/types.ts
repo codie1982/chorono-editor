@@ -51,6 +51,7 @@ export type ImportKind = 'asset' | 'document'
 export function getImportKind(format: ImportFormat): ImportKind {
   const assetFormats: ImportFormat[] = [
     'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif',
+    'image/spritesheet',  // single output (1 sprite asset + 1 frameSequence layer)
     'video/mp4', 'video/mov', 'video/webm',
     'audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg',
     'font/woff2', 'font/ttf', 'font/otf',
@@ -124,6 +125,17 @@ export interface CadImportOptions extends BaseImportOptions {
   importBlocks?: 'preserve' | 'explode' | 'ignore'
 }
 
+/** Sprite-sheet import options (grid layout for frame extraction) */
+export interface SpriteImportOptions extends BaseImportOptions {
+  columns: number
+  rows: number
+  /** Total frames. Defaults to columns*rows; clamp supports a partial last row. */
+  frameCount?: number
+  /** Playback rate (fps). Default 12. */
+  fps?: number
+  loop?: boolean
+}
+
 /** After Effects package import options */
 export interface AeImportOptions extends BaseImportOptions {
   importMode?: 'editable' | 'flattened' | 'hybrid'
@@ -148,6 +160,7 @@ export type ImportOptions =
   | BaseImportOptions
   | SvgImportOptions
   | LottieImportOptions
+  | SpriteImportOptions
   | CadImportOptions
   | AeImportOptions
 
