@@ -614,6 +614,18 @@ export default function PropertiesPanel({
               </Field>
             </Section>
 
+            {/* ── Spline Fill / Stroke / Trim (schema-driven) ──────────────
+                Splines declare these groups (incl. the gradient fill option) via
+                their LayerDefinition. Transform & Appearance are hand-written
+                above, so filter them out here to avoid duplicate sections. */}
+            {layer.type === 'spline' && (
+              <SchemaPanel
+                layer={layer}
+                onLayerChange={onLayerChange}
+                filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance'}
+              />
+            )}
+
             {/* ── Shape özellikleri ──────────────────────────────────── */}
             {layer.type === 'shape' && layer.style && layer.size && (
               <Section title="Shape">
