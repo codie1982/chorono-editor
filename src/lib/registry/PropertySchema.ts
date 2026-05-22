@@ -15,6 +15,7 @@ export type PropValueType =
   | 'select'      // → <select> with options
   | 'angle'       // → number with ° unit
   | 'percent'     // → number with % unit (0–100 or 0–1 depending on min/max)
+  | 'gradient'    // → GradientInput (edits a GradientFill object at the path)
 
 export interface PropertySchema {
   /** Stable id — used as React key + path target for keyframes. */

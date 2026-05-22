@@ -4,7 +4,7 @@
 // abstract interfaces that other modes implement.
 
 import type { EditorMode } from '../core/EditorMode'
-import type { ShapeStyle }  from './style'
+import type { ShapeStyle, GradientFill }  from './style'
 import type { TextStyle }   from './text'
 import type { ImageData, VideoData, AudioData, FrameSequenceData, Asset } from './media'
 import type { LayerEffects, MotionPath, PluginEffect, FollowPath, MotionBlurConfig } from './effects'
@@ -694,6 +694,9 @@ export interface Composition {
   durationMs: number
   frameRate: number
   backgroundColor: string
+  /** Optional gradient background. When set (≥2 stops), it is painted instead of
+   *  backgroundColor. backgroundColor remains the fallback for solid mode. */
+  backgroundGradient?: GradientFill
 }
 
 // ── Root Scene ────────────────────────────────────────────────────────────────

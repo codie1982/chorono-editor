@@ -59,8 +59,17 @@ export const sizeGroup = (): PropertyGroup => ({
 export const fillGroup = (): PropertyGroup => ({
   title: 'Fill',
   schemas: [
-    { id: 'fillColor',   path: 'style.fill.color',   group: 'Fill', label: 'Color',   valueType: 'color',   animatable: true, defaultValue: '#3B82F6' },
-    { id: 'fillOpacity', path: 'style.fill.opacity', group: 'Fill', label: 'Opacity', valueType: 'percent', animatable: true, defaultValue: 100, min: 0, max: 100, step: 1 },
+    { id: 'fillType', path: 'style.fill.type', group: 'Fill', label: 'Type', valueType: 'select', animatable: false, defaultValue: 'solid', fullWidth: true,
+      options: [{ value: 'solid', label: 'Solid' }, { value: 'gradient', label: 'Gradient' }],
+    },
+    // Solid colour stays animatable; hidden once the fill switches to gradient.
+    { id: 'fillColor',    path: 'style.fill.color',    group: 'Fill', label: 'Color', valueType: 'color', animatable: true, defaultValue: '#3B82F6',
+      showWhen: (l) => l.style?.fill?.type !== 'gradient',
+    },
+    { id: 'fillGradient', path: 'style.fill.gradient', group: 'Fill', label: 'Gradient', valueType: 'gradient', animatable: false, defaultValue: '', fullWidth: true,
+      showWhen: (l) => l.style?.fill?.type === 'gradient',
+    },
+    { id: 'fillOpacity',  path: 'style.fill.opacity',  group: 'Fill', label: 'Opacity', valueType: 'percent', animatable: true, defaultValue: 100, min: 0, max: 100, step: 1 },
   ],
   showWhen: (l) => (l.type === 'shape' || l.type === 'spline' || l.type === 'path') && !!l.style?.fill,
 })

@@ -27,6 +27,7 @@ import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from './resolveDisplayTransform'
 import { renderMotionBlurTrails } from './renderMotionBlurTrails'
 import { renderMotionBlurAccumulated } from './renderMotionBlurAccumulated'
+import { buildGradient } from './buildGradient'
 
 export interface CanvasRenderOptions {
   /** Optional pre-computed override map (for runtime preview). */
@@ -84,7 +85,15 @@ export class CanvasRenderer {
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, composition.width, composition.height)
-    if (bgColor) {
+    // Gradient background only applies to the on-screen 'scene' look; explicit
+    // export colours and 'transparent' bypass it.
+    const bgGradient = bg === 'scene'
+      ? buildGradient(ctx, composition.backgroundGradient, composition.width, composition.height)
+      : null
+    if (bgGradient) {
+      ctx.fillStyle = bgGradient
+      ctx.fillRect(0, 0, composition.width, composition.height)
+    } else if (bgColor) {
       ctx.fillStyle = bgColor
       ctx.fillRect(0, 0, composition.width, composition.height)
     }

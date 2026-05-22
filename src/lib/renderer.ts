@@ -13,6 +13,7 @@ import {
 import { hitTestSegment as hitTestSegmentLocal } from './path/pathOps'
 import { measureTextLayout } from './text/measureText'
 import { buildShapePath, computeShapeLength } from './render/shapeRenderer'
+import { buildGradient } from './render/buildGradient'
 
 /** Element cache passed in from React (image / video DOM elements keyed by Asset.id). */
 export type AssetElementMap = Map<string, HTMLImageElement | HTMLVideoElement>
@@ -32,22 +33,7 @@ function buildCanvasGradient(
   fill: ShapeFill,
   w: number, h: number,
 ): CanvasGradient | null {
-  const grad = fill.gradient
-  if (!grad || grad.stops.length < 2) return null
-
-  let g: CanvasGradient
-  if (grad.type === 'linear') {
-    const angle = ((grad.angle ?? 0) * Math.PI) / 180
-    const cx = w / 2, cy = h / 2
-    g = ctx.createLinearGradient(
-      cx - Math.cos(angle) * cx, cy - Math.sin(angle) * cy,
-      cx + Math.cos(angle) * cx, cy + Math.sin(angle) * cy,
-    )
-  } else {
-    g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) / 2)
-  }
-  grad.stops.forEach((s) => g.addColorStop(s.offset, s.color))
-  return g
+  return buildGradient(ctx, fill.gradient, w, h)
 }
 
 // ── Shape renderer ────────────────────────────────────────────────────────────

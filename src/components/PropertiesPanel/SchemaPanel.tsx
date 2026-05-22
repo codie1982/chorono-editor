@@ -16,6 +16,8 @@ import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
 import ScrubInput from '@/components/inputs/ScrubInput'
 import ColorInput from '@/components/inputs/ColorInput'
+import GradientInput from '@/components/inputs/GradientInput'
+import type { GradientFill } from '@/lib/types'
 
 interface Props {
   layer: Layer
@@ -106,6 +108,13 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
         <ColorInput
           value={String(value ?? '#000000')}
           onChange={(v) => onChange(v)}
+        />
+      )}
+
+      {schema.valueType === 'gradient' && (
+        <GradientInput
+          value={(value as GradientFill | undefined)}
+          onChange={(g) => onChange(g)}
         />
       )}
 

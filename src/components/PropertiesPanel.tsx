@@ -14,6 +14,7 @@ import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import ColorInput  from '@/components/inputs/ColorInput'
+import GradientInput from '@/components/inputs/GradientInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 import { makeBakeMotionBlurCmd, makeUnbakeMotionBlurCmd } from '@/lib/editor/commands-motionblur'
 import { DEFAULT_MOTION_BLUR } from '@/lib/defaults'
@@ -435,10 +436,45 @@ export default function PropertiesPanel({
                   onChange={(v) => onCompositionChange({ ...composition, height: v })} />
               </Field>
             </Row2>
-            <Field label="Bg Color">
-              <ColorInput value={composition.backgroundColor}
-                onChange={(v) => onCompositionChange({ ...composition, backgroundColor: v })} />
+            <Field label="Bg Type">
+              <select
+                value={composition.backgroundGradient ? 'gradient' : 'solid'}
+                onChange={(e) => {
+                  if (e.target.value === 'gradient') {
+                    onCompositionChange({
+                      ...composition,
+                      backgroundGradient: {
+                        type: 'linear', angle: 90,
+                        stops: [
+                          { offset: 0, color: composition.backgroundColor || '#1E293B' },
+                          { offset: 1, color: '#000000' },
+                        ],
+                      },
+                    })
+                  } else {
+                    const next = { ...composition }
+                    delete next.backgroundGradient
+                    onCompositionChange(next)
+                  }
+                }}
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+              >
+                <option value="solid">Solid</option>
+                <option value="gradient">Gradient</option>
+              </select>
             </Field>
+            {!composition.backgroundGradient && (
+              <Field label="Bg Color">
+                <ColorInput value={composition.backgroundColor}
+                  onChange={(v) => onCompositionChange({ ...composition, backgroundColor: v })} />
+              </Field>
+            )}
+            {composition.backgroundGradient && (
+              <Field label="Bg Gradient">
+                <GradientInput value={composition.backgroundGradient}
+                  onChange={(g) => onCompositionChange({ ...composition, backgroundGradient: g })} />
+              </Field>
+            )}
             <Field label="Duration (ms)">
               <NumInput value={composition.durationMs} min={100} step={100}
                 onChange={(v) => onCompositionChange({ ...composition, durationMs: v })} />
@@ -591,22 +627,63 @@ export default function PropertiesPanel({
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
-                <ParamBindButton
-                  label="Fill Color"
-                  layer={layer}
-                  propertyPath="style.fill.color"
-                  acceptedTypes={['color']}
-                  parameters={parameters}
-                  onBind={(id) => bindParam('style.fill.color', id)}
-                >
-                  <ColorInput value={layer.style.fill?.color ?? '#000000'}
-                    onChange={(v) => update({
-                      style: {
-                        ...layer.style!,
-                        fill: { type: 'solid', ...layer.style!.fill, color: v },
-                      },
-                    })} />
-                </ParamBindButton>
+                <Field label="Fill Type">
+                  <select
+                    value={layer.style.fill?.type ?? 'solid'}
+                    onChange={(e) => {
+                      const t = e.target.value as 'solid' | 'gradient'
+                      if (t === 'gradient') {
+                        update({ style: { ...layer.style!, fill: {
+                          ...layer.style!.fill,
+                          type: 'gradient',
+                          gradient: layer.style!.fill?.gradient ?? {
+                            type: 'linear', angle: 90,
+                            stops: [
+                              { offset: 0, color: layer.style!.fill?.color ?? '#3B82F6' },
+                              { offset: 1, color: '#EC4899' },
+                            ],
+                          },
+                        } } })
+                      } else {
+                        update({ style: { ...layer.style!, fill: {
+                          ...layer.style!.fill, type: 'solid', color: layer.style!.fill?.color ?? '#3B82F6',
+                        } } })
+                      }
+                    }}
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="gradient">Gradient</option>
+                  </select>
+                </Field>
+                {layer.style.fill?.type !== 'gradient' && (
+                  <ParamBindButton
+                    label="Fill Color"
+                    layer={layer}
+                    propertyPath="style.fill.color"
+                    acceptedTypes={['color']}
+                    parameters={parameters}
+                    onBind={(id) => bindParam('style.fill.color', id)}
+                  >
+                    <ColorInput value={layer.style.fill?.color ?? '#000000'}
+                      onChange={(v) => update({
+                        style: {
+                          ...layer.style!,
+                          fill: { type: 'solid', ...layer.style!.fill, color: v },
+                        },
+                      })} />
+                  </ParamBindButton>
+                )}
+                {layer.style.fill?.type === 'gradient' && (
+                  <Field label="Fill Gradient">
+                    <GradientInput
+                      value={layer.style.fill?.gradient}
+                      onChange={(g) => update({
+                        style: { ...layer.style!, fill: { ...layer.style!.fill!, type: 'gradient', gradient: g } },
+                      })}
+                    />
+                  </Field>
+                )}
                 {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
                   <ParamBindButton
                     label="Corner Radius" layer={layer} propertyPath="style.cornerRadius"
