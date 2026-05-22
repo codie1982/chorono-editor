@@ -24,3 +24,12 @@ export type {
   SVGExportResult,
   SVGBackground,
 } from './vector/SVGExporter'
+
+// ── BL-83 Image sequence export (PNG/JPEG/WEBP → ZIP) ──────────────────────────
+export { exportSequence } from './sequence/SequenceExportEngine'
+export type {
+  SequenceExportOptions,
+  SequenceExportResult,
+  SequenceProgress,
+} from './sequence/SequenceExportEngine'
+export { ZipWriter, crc32 } from './sequence/ZipWriter'

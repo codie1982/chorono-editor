@@ -21,6 +21,8 @@ interface FileMenuProps {
   onExportImage?:  () => void
   /** BL-84 — open the SVG (vector) export dialog. */
   onExportSvg?:    () => void
+  /** BL-83 — open the image sequence (PNG/JPEG/WEBP → ZIP) export dialog. */
+  onExportSequence?: () => void
   onCopySceneJson: () => void
   onShowShortcuts: () => void
   onResetLayout:   () => void
@@ -159,6 +161,11 @@ export default function FileMenu(props: FileMenuProps) {
           {props.onExportSvg && (
             <button className={item} onClick={() => { setOpen(false); props.onExportSvg!() }}>
               ⬡ SVG (vector)…
+            </button>
+          )}
+          {props.onExportSequence && (
+            <button className={item} onClick={() => { setOpen(false); props.onExportSequence!() }}>
+              ⛶ Image Sequence (ZIP)…
             </button>
           )}
           <button className={item} onClick={() => { setOpen(false); props.onExportRuntime() }}>

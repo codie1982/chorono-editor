@@ -59,6 +59,7 @@ import { useWireModal }    from '@/app/hooks/useWireModal'
 import FileMenu        from '@/components/TopToolbar/FileMenu'
 import RasterExportDialog from '@/components/export/RasterExportDialog'
 import SVGExportDialog   from '@/components/export/SVGExportDialog'
+import SequenceExportDialog from '@/components/export/SequenceExportDialog'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
@@ -1020,6 +1021,8 @@ export default function BuilderPage() {
   const [showRasterExport, setShowRasterExport] = useState(false)
   // BL-84 — SVG (vector) export dialog visibility.
   const [showSvgExport, setShowSvgExport] = useState(false)
+  // BL-83 — image sequence (ZIP) export dialog visibility.
+  const [showSequenceExport, setShowSequenceExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
   const saveSceneJson = useCallback(() => {
@@ -1307,6 +1310,7 @@ export default function BuilderPage() {
           onExportRuntime={exportRuntimeJson}
           onExportImage={() => setShowRasterExport(true)}
           onExportSvg={() => setShowSvgExport(true)}
+          onExportSequence={() => setShowSequenceExport(true)}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
           onResetLayout={dock.resetLayout}
@@ -2065,6 +2069,21 @@ export default function BuilderPage() {
             }
           }}
           onError={(message) => toast.error('SVG export failed', { detail: message })}
+        />
+      )}
+
+      {/* ── BL-83 Image sequence export (ZIP) ─────────────────────────── */}
+      {showSequenceExport && (
+        <SequenceExportDialog
+          scene={scene}
+          assets={assetCache}
+          onClose={() => setShowSequenceExport(false)}
+          onExported={(filename, frameCount, warnings) => {
+            const base = `Exported ${filename} (${frameCount} frames)`
+            if (warnings.length > 0) toast.success(base, { detail: warnings.join(' ') })
+            else toast.success(base)
+          }}
+          onError={(message) => toast.error('Sequence export failed', { detail: message })}
         />
       )}
 
