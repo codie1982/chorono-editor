@@ -11,7 +11,7 @@
 import type { ChronoScene } from '@/lib/types'
 
 const DEFAULT_RUNTIME_URL =
-  'https://unpkg.com/@chorono/runtime/dist/chorono-runtime.umd.js'
+  'https://unpkg.com/@chorono/runtime/dist/chorono-runtime.global.js'
 
 export interface HTMLExportOptions {
   /** Document <title>. Default = composition id. */
