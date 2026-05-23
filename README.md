@@ -313,8 +313,8 @@ player.setPlaybackRate(1.5)
 ### Installation
 
 ```bash
-git clone git@github.com:your-username/chorono-nextjs.git
-cd chorono-nextjs
+git clone git@github.com:your-username/chorono-editor.git
+cd chorono-editor
 npm install
 npm run dev
 ```

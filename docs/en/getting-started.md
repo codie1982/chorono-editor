@@ -42,7 +42,7 @@ If you want to run Chorono on your own server or develop locally:
 ```bash
 # Clone and start the development server
 git clone <repo-url>
-cd chorono-nextjs
+cd chorono-editor
 npm install
 npm run dev
 ```
