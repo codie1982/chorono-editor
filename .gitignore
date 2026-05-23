@@ -80,4 +80,7 @@ storybook-static/
 *.generated.js
 
 /desing-mockups
+
+# Markdown files (except README)
 *.md
+!README.md

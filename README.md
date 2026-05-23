@@ -234,6 +234,23 @@ player.setProperty('layer.id', { opacity: 0.5 });
 player.on('complete', () => console.log('Done!'));
 ```
 
+### Runtime (`@chorono/runtime`)
+
+**Headless playback for Node.js and CLI:**
+
+```bash
+npm install @chorono/runtime
+```
+
+See [npm package](https://www.npmjs.com/package/@chorono/runtime) for latest version.
+
+**Features:**
+- **Headless ChronoPlayer** — Standalone animation playback (no UI)
+- **Server-side rendering** — Render frames to PNG/WebP for video generation
+- **CLI tool** — Export scenes to MP4, GIF, or frame sequences
+- **Full Scene API** — Manipulate scenes programmatically
+- **Event system** — Listen to animation events
+
 ### Android SDK (`chorono-android`)
 
 **Native animation playback on Android:**
