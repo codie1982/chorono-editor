@@ -78,3 +78,6 @@ storybook-static/
 # Generated files
 *.generated.ts
 *.generated.js
+
+/desing-mockups
+*.md
