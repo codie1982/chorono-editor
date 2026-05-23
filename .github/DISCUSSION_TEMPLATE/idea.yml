@@ -1,0 +1,30 @@
+title: "💡 [IDEA] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: "What's your idea?"
+      description: "Describe the feature or improvement you'd like to see."
+      placeholder: "Add ability to group animations into folders for easier organization..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: "Why would this be helpful?"
+      description: "What problem does it solve? Who would benefit?"
+      placeholder: "On large projects with 50+ keyframe animations, organizing them by scene or effect type would make navigation easier..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: "How should it work?"
+      description: "Describe the expected behavior or UI flow (if you have ideas)."
+      placeholder: "Right-click on animation in timeline → 'Create Group' → Drag animations into groups..."
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: "Alternatives"
+      description: "Have you thought of other ways to solve this?"
+    validations:
+      required: false

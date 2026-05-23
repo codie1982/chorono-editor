@@ -1,0 +1,30 @@
+title: "📖 [QUESTION] "
+labels: ["question"]
+body:
+  - type: textarea
+    attributes:
+      label: "What are you trying to do?"
+      description: "Describe your use case or what you're trying to accomplish."
+      placeholder: "I'm trying to animate a text layer with fade-in effect..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: "What have you tried?"
+      description: "What steps have you already taken?"
+      placeholder: "1. Created a text layer\n2. Added keyframes at 0s and 2s\n3. Set opacity to 0 and 1..."
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: "What's the problem?"
+      description: "What's not working as expected?"
+      placeholder: "The fade-in animation is too fast / doesn't work / looks jerky..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: "Screenshots / Video"
+      description: "Attach screenshots or a screen recording if helpful."
+    validations:
+      required: false

@@ -1,0 +1,30 @@
+title: "🎨 [SHOWCASE] "
+labels: ["showcase"]
+body:
+  - type: textarea
+    attributes:
+      label: "What did you create?"
+      description: "Show us what you made with Chorono Animator!"
+      placeholder: "I created an animated logo reveal sequence for a client..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: "Video / GIF / Link"
+      description: "Share a link, GIF, or video of your work. You can drag & drop images here."
+      placeholder: "Link to YouTube, Twitter, or uploaded video..."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: "Behind the scenes"
+      description: "How did you make it? What features did you use? Any tips for others?"
+      placeholder: "Used the particle engine with custom emitter shapes, combined with parameter wiring to sync motion..."
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: "Share your .chrono file?"
+      description: "Optional: Would you like to share the project file for others to learn from? (Drop in a link or attachment)"
+    validations:
+      required: false
