@@ -81,9 +81,10 @@ storybook-static/
 
 /desing-mockups
 
-# Markdown files (except README, CLAUDE.md, and docs/)
+# Markdown files (except README, CLAUDE.md, docs/, and BACKLOG.md)
 *.md
 !README.md
 !CLAUDE.md
+!BACKLOG.md
 !/docs/
 !/docs/**/*.md
