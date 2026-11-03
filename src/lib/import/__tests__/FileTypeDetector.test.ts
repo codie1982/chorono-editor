@@ -55,6 +55,11 @@ describe('FileTypeDetector — magic bytes', () => {
   it('detects WOFF2 font', async () => {
     expect(await det.detect(fileFromBytes(WOFF2, 'x.woff2'))).toBe('font/woff2')
   })
+  it('detects WOFF font magic bytes and routes it as an asset', async () => {
+    const format = await det.detect(fileFromBytes([0x77,0x4f,0x46,0x46], 'custom.bin'))
+    expect(format).toBe('font/woff')
+    expect(getImportKind(format)).toBe('asset')
+  })
 
   it('detects PDF', async () => {
     expect(await det.detect(fileFromBytes(PDF, 'x.pdf'))).toBe('application/pdf')

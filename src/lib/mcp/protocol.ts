@@ -1,0 +1,130 @@
+import type { ChronoScene } from '../types'
+
+export const MCP_VERSION = '1.0.0'
+export const LIMITS = { layers: 5000, timelines: 100, keyframes: 50000, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
+export type JsonObject = Record<string, any>
+export interface BridgeJob { id: string; method: string; args: JsonObject }
+export interface Snapshot { scene: ChronoScene; revision: number; selectedTimelineId?: string; currentTimeMs?: number }
+export interface ToolDefinition { name: string; description: string; inputSchema: JsonObject; annotations?: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } }
+
+export function assertJson(value: unknown): void {
+  let nodes = 0
+  function visit(input: unknown, depth: number) {
+    if (++nodes > 600000 || depth > 48) throw new Error('JSON structure limit exceeded')
+    if (typeof input === 'number' && !Number.isFinite(input)) throw new Error('Non-finite numbers are not allowed')
+    if (!input || typeof input !== 'object') return
+    for (const [key, item] of Object.entries(input)) {
+      if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error(`Unsafe property '${key}'`)
+      visit(item, depth + 1)
+    }
+  }
+  visit(value, 0)
+}
+
+export function assertScene(value: unknown): asserts value is ChronoScene {
+  assertJson(value)
+  const scene = value as ChronoScene
+  if (!scene || !scene.composition || !Array.isArray(scene.layers) || !Array.isArray(scene.timelines) || !Array.isArray(scene.assets) || !Array.isArray(scene.parameters) || !Array.isArray(scene.bindings) || !Array.isArray(scene.triggers)) throw new Error('Invalid Chorono scene')
+  if (!String(scene.formatVersion).startsWith('1.')) throw new Error('Unsupported scene version')
+  if (JSON.stringify(scene).length > LIMITS.sceneBytes) throw new Error('Scene size limit exceeded')
+  const comp = scene.composition
+  if (!(comp.width >= 1 && comp.width <= 8192 && comp.height >= 1 && comp.height <= 8192 && comp.frameRate >= 1 && comp.frameRate <= 120 && comp.durationMs >= 0 && comp.durationMs <= 3600000)) throw new Error('Invalid composition dimensions, duration or frame rate')
+  if (scene.layers.length > LIMITS.layers || scene.timelines.length > LIMITS.timelines || scene.assets.length > 500) throw new Error('Scene object limit exceeded')
+  const unique = (items: Array<{ id: string }>) => {
+    const ids = new Set<string>()
+    for (const item of items) {
+      if (typeof item.id !== 'string' || !/^[\w-]{1,128}$/.test(item.id) || ids.has(item.id)) throw new Error(`Invalid or duplicate id '${item.id}'`)
+      ids.add(item.id)
+    }
+    return ids
+  }
+  const ids = unique(scene.layers)
+  const byId = new Map(scene.layers.map(layer => [layer.id, layer]))
+  unique(scene.timelines)
+  unique(scene.assets)
+  for (const layer of scene.layers) {
+    if (!layer.transform || typeof layer.type !== 'string' || typeof layer.opacity !== 'number') throw new Error('Invalid layer structure')
+    for (const field of ['x', 'y', 'scaleX', 'scaleY', 'rotationDeg', 'anchorX', 'anchorY'] as const) if (!Number.isFinite(layer.transform[field])) throw new Error(`Invalid transform ${field}`)
+    const seen = new Set([layer.id])
+    let parent = layer.parentId
+    while (parent) {
+      if (!ids.has(parent) || seen.has(parent) || seen.size > 64) throw new Error('Missing, cyclic or excessively deep parent relationship')
+      seen.add(parent)
+      parent = byId.get(parent)?.parentId
+    }
+    if (layer.particleEmitter && layer.particleEmitter.emitter.maxParticles > 10000) throw new Error('Particle limit exceeded')
+    const repeater = (layer as any).repeater
+    if (repeater && Number(repeater.count ?? repeater.copies ?? 0) > 5000) throw new Error('Repeater limit exceeded')
+  }
+  const children = new Map<string, string[]>()
+  for (const layer of scene.layers) if (layer.parentId) children.set(layer.parentId, [...(children.get(layer.parentId) ?? []), layer.id])
+  const costs = new Map<string, number>()
+  function renderCost(id: string, path = new Set<string>()): number {
+    if (path.has(id) || path.size > 64) throw new Error('Cyclic or excessively deep render dependency')
+    if (costs.has(id)) return costs.get(id)!
+    const layer = byId.get(id)
+    if (!layer) throw new Error(`Missing render source '${id}'`)
+    const nextPath = new Set(path); nextPath.add(id)
+    let cost = 1
+    for (const child of children.get(id) ?? []) cost += renderCost(child, nextPath)
+    if (layer.instanceOf) cost += renderCost(layer.instanceOf, nextPath)
+    if (layer.repeater?.sourceLayerId) cost += Math.max(0, layer.repeater.count) * renderCost(layer.repeater.sourceLayerId, nextPath)
+    for (const mask of layer.masks ?? []) cost += renderCost(mask.maskLayerId, nextPath)
+    if (cost > 100000) throw new Error('Render workload limit exceeded')
+    costs.set(id, cost)
+    return cost
+  }
+  for (const layer of scene.layers) renderCost(layer.id)
+  let count = 0
+  for (const timeline of scene.timelines) {
+    if (!Array.isArray(timeline.tracks) || !(timeline.durationMs >= 0 && timeline.durationMs <= 3600000)) throw new Error('Invalid timeline')
+    for (const track of timeline.tracks) {
+      if (typeof track.target !== 'string' || !Array.isArray(track.keyframes)) throw new Error('Invalid animation track')
+      const layerId = track.target.match(/^layers\.([^.]+)\./)?.[1]
+      if (layerId && !ids.has(layerId)) throw new Error(`Track references missing layer '${layerId}'`)
+      count += track.keyframes.length
+      for (const key of track.keyframes) if (!(key.timeMs >= 0 && key.timeMs <= 3600000)) throw new Error('Invalid keyframe time')
+    }
+  }
+  if (count > LIMITS.keyframes) throw new Error('Keyframe limit exceeded')
+}
+
+export function assertCloneBudget(scene: ChronoScene, sourceId: string, count: number) {
+  if (!Number.isInteger(count) || count < 1 || count > LIMITS.layers) throw new Error('Clone count limit exceeded')
+  const children = new Map<string, string[]>()
+  for (const layer of scene.layers) if (layer.parentId) children.set(layer.parentId, [...(children.get(layer.parentId) ?? []), layer.id])
+  const ids = new Set<string>(), pending = [sourceId]
+  while (pending.length) {
+    const id = pending.pop()!
+    if (ids.has(id)) throw new Error('Cyclic clone hierarchy')
+    ids.add(id)
+    pending.push(...(children.get(id) ?? []))
+  }
+  const tracks = scene.timelines.flatMap(t => t.tracks)
+  const totalKeys = tracks.reduce((n, t) => n + t.keyframes.length, 0)
+  const sourceKeys = tracks.filter(t => ids.has(t.target.match(/^layers\.([^.]+)\./)?.[1] ?? '')).reduce((n, t) => n + t.keyframes.length, 0)
+  if (scene.layers.length + ids.size * count > LIMITS.layers || totalKeys + sourceKeys * count > LIMITS.keyframes) throw new Error('Expanded clone/array workload limit exceeded')
+}
+
+export function assertOperation(value: unknown): void {
+  assertJson(value)
+  function visit(input: any, key = '') {
+    if (typeof input === 'number') {
+      if (Math.abs(input) > 3600000) throw new Error('Numeric input limit exceeded')
+      if (/^(count|rows|columns|cols|points|sides|segments|steps|octaves|turns|resolution|samples|trailCount)$/i.test(key) && (input < 0 || input > 5000)) throw new Error(`Input limit exceeded: ${key}`)
+      if (key === 'maxParticles' && (input < 0 || input > 10000)) throw new Error('Particle limit exceeded')
+      if (key === 'fps' && (input < 1 || input > 120)) throw new Error('FPS must be between 1 and 120')
+    }
+    if (Array.isArray(input) && input.length > LIMITS.keyframes) throw new Error('Array limit exceeded')
+    if (input && typeof input === 'object') {
+      const rows = input.rows ?? 1, cols = input.columns ?? input.cols ?? 1
+      if (rows * cols > LIMITS.layers) throw new Error('Array grid limit exceeded')
+      for (const [name, item] of Object.entries(input)) visit(item, name)
+    }
+  }
+  visit(value)
+}
+
+export function summarize(scene: ChronoScene) {
+  return { composition: scene.composition, layers: scene.layers.map(l => ({ id: l.id, name: l.name, type: l.type })), timelines: scene.timelines.map(t => ({ id: t.id, durationMs: t.durationMs, loop: t.loop, tracks: t.tracks.length, keyframes: t.tracks.reduce((n, tr) => n + tr.keyframes.length, 0) })) }
+}

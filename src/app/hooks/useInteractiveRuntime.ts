@@ -179,6 +179,7 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
   const [smTestTick, setSMTestTick] = useState(0)
   const setSMTestActive = useCallback((active: boolean) => {
     setSMTestActiveState(active)
+    if (active) setSMTestTick(t => (t + 1) | 0)
   }, [])
   useEffect(() => {
     if (!smTestActiveState) return

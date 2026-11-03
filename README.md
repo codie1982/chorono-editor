@@ -6,6 +6,36 @@ Built with **Next.js** + **Canvas** + **WebGL2**. Deploy anywhere: web, mobile (
 
 **Status:** Production-ready for 2D animation. Game Engine, Video Editor, Drawing, and 3D Modeling modes coming soon.
 
+## Set up and control Chorono from an agent
+
+Claude Code or Codex can set up the editor, start it locally, and create editable animations through MCP. From this checkout with Node.js 20+:
+
+```sh
+npm ci
+npm run cli:build
+npm run chorono -- setup
+npm run chorono -- start --background --open
+npm run chorono -- doctor
+```
+
+`setup` reuses an existing checkout or downloads the editor into the selected project's `.chorono/editor`. It installs missing dependencies, builds missing outputs, prepares MCP client settings, and installs the `chorono` / `chorono-setup` skills. Existing checkouts are never pulled or reset automatically. Use `--editor /path/to/chorono-editor` to reuse an editor from another project, `--project /path/to/video-project` to choose the project, or `--agent codex` / `--agent claude-code` to select a client. `all` also configures Claude Desktop's MCP connection; its local skill loading differs from Claude Code.
+
+Open the displayed editor URL and choose **MCP → Connect this editor**. Reload client MCP connections or start a new agent session, then ask:
+
+> Use Chorono to create a scene with circles and text. Add intro, idle and outro animations, inspect preview frames, and save the editable project.
+
+`doctor` distinguishes missing installation/builds, stale client settings, an offline server, and a running server with no connected editor tab. `start` reuses the matching server and refuses to replace another service on the port. `stop` only stops a matching process previously started in the background by this CLI. To rebuild, stop the editor first and run `setup --rebuild`; `--reinstall` also refreshes dependencies. Saved projects go to the selected project's `projects/` directory.
+
+For skill-only distribution, after these changes are pushed to GitHub:
+
+```sh
+npx skills add codie1982/chorono-editor --skill chorono --skill chorono-setup -a claude-code -a codex
+```
+
+Skills teach the agent the setup and authoring workflow; installing a skill alone does not start a server. The canonical sources live in `skills/`; the independently publishable npm CLI is in `packages/cli` (`@codie1982/chorono`). `npm run cli:pack` creates a local tarball without publishing it. Once published, commands can also be run with `npx --package @codie1982/chorono@latest chorono setup` (and `start` / `doctor`). A fresh remote setup requires a GitHub branch/tag containing these MCP/CLI changes; use `--repo URL --ref BRANCH_OR_TAG` when needed. Before publication, use this checkout or a local tarball.
+
+See the [setup and skill/package guide](docs/tr/skills.md) and [MCP reference](docs/tr/mcp.md).
+
 ## ⚡ Headline Feature: GPU-Accelerated Rendering
 
 **WebGL2-accelerated rendering** (`feature/gpu-particle-renderer-v1`):
@@ -312,12 +342,17 @@ player.setPlaybackRate(1.5)
 
 ### MCP Server (`chorono-mcp`)
 
+The local MCP server is implemented in this repository. It connects Claude Desktop, Claude Code and Codex to the actual editor, with isolated QuickJS scripting, multi-timeline control, PNG previews, portable project persistence and the native ActionRegistry tools.
+
+Run `npm run mcp:build`, `npm run mcp:setup`, then `npm run dev:mcp` (or build and `npm run start:mcp`). Open `http://127.0.0.1:2000`, then click **MCP → Connect this editor**. Generated client configurations are in `.chorono/client-configs/`. See the [MCP setup and tool reference](docs/tr/mcp.md) for configuration, all capabilities, security boundaries and smoke tests.
+
 **Claude Desktop, Cursor, VS Code Copilot integration:**
 
-- **Tool definitions** — All 50+ actions (layer manipulation, keyframe insertion, etc.)
-- **Headless scene** — Server maintains ephemeral ChronoScene for multi-turn reasoning
-- **Prompt caching** — Long scene JSON cached across tool calls (cost reduction)
-- **Streaming** — Incremental scene updates to client
+- **Native tools** — Layer, keyframe, path, spline, particle, parameter and state-machine actions
+- **Live scene** — Tools read and mutate a connected browser tab with revision checks and undo/redo
+- **Isolated scripting** — QuickJS memory/time limits, atomic edits and commit-without-replay plans
+- **Multiple animations** — Explicit timelines, modifiers, controllers, preview isolation and runtime controls
+- **Persistence** — Portable scene JSON with embedded local media, runtime JSON, SVG and image sequence exports
 
 ---
 

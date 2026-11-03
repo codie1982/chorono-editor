@@ -22,6 +22,9 @@ export interface EditorStateReturn {
   scene: ChronoScene
   canUndo: boolean
   canRedo: boolean
+  getScene: () => ChronoScene
+  getRevision: () => number
+  isTransactionActive: () => boolean
   dispatchCommand: (cmd: EditorCommand) => void
   beginTransaction: () => void
   previewTransaction: (scene: ChronoScene) => void
@@ -53,6 +56,19 @@ export interface EditorStateReturn {
 export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   const [history, setHistory] = useState<HistoryState>(() => initHistory(initialScene))
   const txRef = useRef<Transaction | null>(null)
+  const historyRef = useRef(history)
+  const revisionRef = useRef(0)
+  const updateHistory = useCallback((update: (prev: HistoryState) => HistoryState) => {
+    const prev = historyRef.current
+    const next = update(prev)
+    if (next === prev) return
+    historyRef.current = next
+    revisionRef.current++
+    setHistory(next)
+  }, [])
+  const getScene = useCallback(() => historyRef.current.present, [])
+  const getRevision = useCallback(() => revisionRef.current, [])
+  const isTransactionActive = useCallback(() => txRef.current !== null, [])
 
   // BL-59 — Editor-level clone/array metadata, kept OUTSIDE scene JSON.
   // useState (not ref) so re-renders pick up new entries; mutation goes
@@ -65,56 +81,56 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
 
   // ── Normal command dispatch ────────────────────────────────────────────────
   const dispatchCommand = useCallback((cmd: EditorCommand) => {
-    setHistory((h) => pushHistory(h, cmd.execute(h.present)))
+    updateHistory((h) => pushHistory(h, cmd.execute(h.present)))
     // BL-59 — Clone/Array commands carry per-clone metadata. Merge it
     // into the editor-state map so "Select all instances" works.
     if (isCloneArrayCommand(cmd)) {
       setLayerMetaById((prev) => ({ ...prev, ...cmd.layerMetadata }))
     }
-  }, [])
+  }, [updateHistory])
 
   // ── Transaction: used by all drag operations ───────────────────────────────
   const beginTransaction = useCallback(() => {
-    setHistory((h) => {
+    updateHistory((h) => {
       txRef.current = { baseScene: h.present }
       return h
     })
-  }, [])
+  }, [updateHistory])
 
   const previewTransaction = useCallback((next: ChronoScene) => {
     if (!txRef.current) return
     // Update present directly WITHOUT pushing to past (no history entry yet)
-    setHistory((h) => ({ ...h, present: next }))
-  }, [])
+    updateHistory((h) => ({ ...h, present: next }))
+  }, [updateHistory])
 
   const commitTransaction = useCallback((cmd: EditorCommand) => {
     if (!txRef.current) { dispatchCommand(cmd); return }
     const base = txRef.current.baseScene
     txRef.current = null
-    setHistory((h) => pushHistory({ ...h, present: base }, cmd.execute(base)))
+    updateHistory((h) => pushHistory({ ...h, present: base }, cmd.execute(base)))
     // Clone-drag commits carry per-clone metadata — merge it so instance
     // tracking ("Select all instances") works for drag-created clones too.
     if (isCloneArrayCommand(cmd)) {
       setLayerMetaById((prev) => ({ ...prev, ...cmd.layerMetadata }))
     }
-  }, [dispatchCommand])
+  }, [dispatchCommand, updateHistory])
 
   const cancelTransaction = useCallback(() => {
     if (!txRef.current) return
     const base = txRef.current.baseScene
     txRef.current = null
-    setHistory((h) => ({ ...h, present: base }))
-  }, [])
+    updateHistory((h) => ({ ...h, present: base }))
+  }, [updateHistory])
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
-  const undo = useCallback(() => setHistory(undoHistory), [])
-  const redo = useCallback(() => setHistory(redoHistory), [])
+  const undo = useCallback(() => updateHistory(undoHistory), [updateHistory])
+  const redo = useCallback(() => updateHistory(redoHistory), [updateHistory])
 
   // ── Hard reset (used by "Clear" — bypasses undo on purpose) ──────────────
   const resetScene = useCallback((next: ChronoScene) => {
-    setHistory(initHistory(next))
+    updateHistory(() => initHistory(next))
     setLayerMetaById({})
-  }, [])
+  }, [updateHistory])
 
   // ── BL-59 helpers ──────────────────────────────────────────────────────────
   const getSiblingsInArray = useCallback((layerId: string): string[] => {
@@ -131,7 +147,7 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   }, [])
 
   return {
-    scene, canUndo, canRedo,
+    scene, canUndo, canRedo, getScene, getRevision, isTransactionActive,
     dispatchCommand,
     beginTransaction, previewTransaction, commitTransaction, cancelTransaction,
     undo, redo, resetScene,

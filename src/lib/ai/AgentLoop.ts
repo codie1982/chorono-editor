@@ -88,6 +88,10 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentLoopRes
     for (const call of calls) {
       totalTools++
       turnNames.push(call.name)
+      if (call.name === 'run_script') {
+        toolResults.push({ toolCallId: call.id!, content: 'Scripts must be executed through the isolated local MCP run_script tool.' })
+        continue
+      }
 
       if (totalTools > maxTotalTools) {
         toolResults.push({

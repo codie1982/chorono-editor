@@ -36,6 +36,7 @@ const MAGIC_SIGNATURES: MagicEntry[] = [
   { bytes: [0xFF, 0xF9],                               format: 'audio/aac'  },
   { bytes: [0x4F, 0x67, 0x67, 0x53],                   format: 'audio/ogg'  }, // OggS
   // Fonts
+  { bytes: [0x77, 0x4F, 0x46, 0x46],                   format: 'font/woff' },
   { bytes: [0x77, 0x4F, 0x46, 0x32],                   format: 'font/woff2' }, // wOF2
   { bytes: [0x00, 0x01, 0x00, 0x00],                   format: 'font/ttf'   }, // TTF/OTF
   { bytes: [0x4F, 0x54, 0x54, 0x4F],                   format: 'font/otf'   }, // OTTO
@@ -67,6 +68,7 @@ const EXTENSION_MAP: Record<string, ImportFormat> = {
   '.aac':   'audio/aac',
   '.ogg':   'audio/ogg',
   // Font
+  '.woff':  'font/woff',
   '.woff2': 'font/woff2',
   '.ttf':   'font/ttf',
   '.otf':   'font/otf',
@@ -96,6 +98,8 @@ const MIME_MAP: Record<string, ImportFormat> = {
   'audio/aac':               'audio/aac',
   'audio/ogg':               'audio/ogg',
   'audio/mp4':               'audio/aac',
+  'font/woff':               'font/woff',
+  'application/font-woff':   'font/woff',
   'font/woff2':              'font/woff2',
   'font/ttf':                'font/ttf',
   'font/otf':                'font/otf',
@@ -240,6 +244,7 @@ export class FileTypeDetector {
       'audio/wav':  'WAV Audio',
       'audio/aac':  'AAC Audio',
       'audio/ogg':  'OGG Audio',
+      'font/woff': 'WOFF Font',
       'font/woff2': 'WOFF2 Font',
       'font/ttf':   'TrueType Font',
       'font/otf':   'OpenType Font',
@@ -266,7 +271,7 @@ export class FileTypeDetector {
       'image/svg+xml',
       'video/mp4', 'video/mov', 'video/webm',
       'audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg',
-      'font/woff2', 'font/ttf', 'font/otf',
+      'font/woff', 'font/woff2', 'font/ttf', 'font/otf',
       'application/lottie+json', 'application/dotlottie',
       'application/chorono+json',
     ]

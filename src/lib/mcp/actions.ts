@@ -1,0 +1,74 @@
+import { actionRegistry, bootstrapAIActions } from '../ai/ActionRegistry'
+import type { ActionDef } from '../ai/ActionRegistry'
+import type { ChronoScene, Layer } from '../types'
+import { createSceneAPI } from '../script/api/SceneAPI'
+import type { SceneAPI } from '../script/api/SceneAPI'
+import { makeBatchCmd } from '../editor/commands-batch'
+import type { EditorCommand } from '../editor/commands-keyframe'
+import { makeGroupCmd, makeUngroupCmd } from '../editor/commands-group'
+import { layerRegistry } from '../registry'
+
+let ready: Promise<void> | undefined
+const str = { type: 'string' }
+const obj = { type: 'object' }
+const num = { type: 'number' }
+
+function scripted(label: string, scene: ChronoScene, run: (api: SceneAPI) => void): EditorCommand {
+  let working = scene
+  const commands: EditorCommand[] = []
+  const api = createSceneAPI({ getScene: () => working, applyCommand: cmd => { commands.push(cmd); working = cmd.execute(working) } }, () => {})
+  run(api)
+  return makeBatchCmd(label, commands)
+}
+
+export function bootstrapMCPActions(): Promise<void> {
+  return ready ??= bootstrapAIActions().then(() => {
+    const register = (name: string, description: string, properties: Record<string, any>, required: string[], run: (p: any, api: SceneAPI, scene: ChronoScene) => void) => {
+      actionRegistry.register({ id: `mcp.${name}`, toolName: name, description, parameters: { type: 'object', properties, required }, toCommand: (p, scene) => scripted(name, scene, api => run(p, api, scene)) })
+    }
+    register('create_object', 'Create ANY registered object kind, including shapes, text, group, media, spline, path, repeater or particle emitter. patch is a Partial<Layer>. Discover kinds and properties with get_capabilities.', { kind: str, patch: obj }, ['kind'], (p, api) => { api.add(p.kind).set(p.patch ?? {}) })
+    register('patch_object', 'Patch any Layer fields: text, typography, transforms, effects, masks, repeater, visibility, stroke, geometry or particle configuration. Nested objects replace their existing value; read describe_layer first.', { layerId: str, patch: obj }, ['layerId', 'patch'], (p, api) => {
+      const layer = api.get(p.layerId)
+      if (!layer) throw new Error('Layer not found')
+      if ('id' in p.patch || 'type' in p.patch) throw new Error('Cannot change object id or type')
+      layer.set(p.patch)
+    })
+    register('update_timeline', 'Set timeline duration, looping, pingPong, autoplay, work area, layer membership, markers, segments or events.', { timelineId: str, patch: obj }, ['timelineId', 'patch'], (p, api) => api.timeline(p.timelineId).set(p.patch))
+    register('clone_timeline', 'Duplicate an animation including keyframes, curves, modifiers, events and segments with a new timeline id.', { timelineId: str, newId: str }, ['timelineId', 'newId'], (p, api) => { api.cloneTimeline(p.timelineId, p.newId) })
+    register('delete_timeline', 'Delete one timeline. Refuses timelines referenced by state machines.', { timelineId: str }, ['timelineId'], (p, api) => api.deleteTimeline(p.timelineId))
+    register('set_keyframes', 'Add or replace keyframes on an explicit timeline and layer property. Supports customBezier with {type:"customBezier",bezier:{cx1,cy1,cx2,cy2}}. Easing belongs to the starting keyframe.', { timelineId: str, layerId: str, property: str, keyframes: { type: 'array', items: { type: 'object', required: ['timeMs', 'value'], properties: { timeMs: num, value: {}, easing: {} } } } }, ['timelineId', 'layerId', 'property', 'keyframes'], (p, api) => {
+      if (!api.get(p.layerId)) throw new Error('Layer not found')
+      const tl = api.timeline(p.timelineId)
+      for (const key of p.keyframes) tl.key(p.layerId, p.property, key.timeMs, key.value, key.easing)
+    })
+    register('update_track', 'Set track fields: keyframes, outOfRange, easeCurve, timeWarp, multiplierCurve, multiplierAmplitude, procedural waveform/noise controller, or complete modifier stack.', { timelineId: str, target: str, patch: obj }, ['timelineId', 'target', 'patch'], (p, api) => { api.timeline(p.timelineId).track(p.target, p.patch) })
+    register('remove_track', 'Remove an animation track from an explicit timeline.', { timelineId: str, target: str }, ['timelineId', 'target'], (p, api) => { api.timeline(p.timelineId).removeTrack(p.target) })
+    register('add_modifier', 'Add a track modifier: sine, pulse, quantize, offset, scale, clamp, wave, noise, fractalNoise, jitter, timeWarp, bounce, elastic, overshoot, decay, spring.', { timelineId: str, target: str, modifier: obj }, ['timelineId', 'target', 'modifier'], (p, api) => { api.timeline(p.timelineId).modifier(p.target, p.modifier) })
+    register('bake_track', 'Bake procedural animation/modifiers into editable linear keyframes.', { timelineId: str, target: str, fps: num, tolerance: num }, ['timelineId', 'target'], (p, api) => { api.timeline(p.timelineId).bake(p.target, p.fps, p.tolerance) })
+    register('configure_particles', 'Update emitter and particle settings, gradients, physics and lifetime properties.', { layerId: str, config: obj }, ['layerId', 'config'], (p, api) => {
+      const handle = api.get(p.layerId)
+      if (!handle || handle.type !== 'particleEmitter') throw new Error('Particle emitter not found')
+      handle.configureParticles(p.config)
+    })
+    register('edit_entity', 'Add/update/remove parameters, triggers, bindings, parameterWires or stateMachines by id. Use for advanced guards, transitions, formula wiring and runtime behavior.', { collection: { type: 'string', enum: ['parameters', 'triggers', 'bindings', 'parameterWires', 'stateMachines'] }, operation: { type: 'string', enum: ['add', 'update', 'remove'] }, id: str, value: obj }, ['collection', 'operation', 'id'], () => {})
+    const entity = actionRegistry.get('edit_entity')!
+    entity.toCommand = (p: any, scene) => {
+      const collection = p.collection as 'parameters'
+      const prev = scene[collection] ?? []
+      const exists = prev.some(item => item.id === p.id)
+      if (p.operation === 'add' ? exists : !exists) throw new Error('Entity must exist for update/remove, and be unique for add')
+      const next = p.operation === 'remove' ? prev.filter(item => item.id !== p.id) : p.operation === 'add' ? [...prev, { ...p.value, id: p.id }] : prev.map(item => item.id === p.id ? { ...item, ...p.value, id: p.id } : item)
+      return { label: `Edit ${collection}`, execute: s => ({ ...s, [collection]: next }), undo: s => ({ ...s, [collection]: prev }) }
+    }
+    actionRegistry.register({ id: 'mcp.listTimelines', toolName: 'list_timelines', description: 'List all animations, their duration, loop settings, tracks, segments and events.', parameters: { type: 'object', properties: {} }, read: (_, scene) => JSON.stringify(scene.timelines) })
+    actionRegistry.register({ id: 'mcp.group', toolName: 'group_layers', description: 'Group selected layer ids in one undoable operation.', parameters: { type: 'object', required: ['layerIds'], properties: { layerIds: { type: 'array', items: str } } }, toCommand: (p: any, scene) => {
+      if (!p.layerIds.length || p.layerIds.some((id: string) => !scene.layers.some(l => l.id === id))) throw new Error('Layer ids must exist')
+      return makeGroupCmd(p.layerIds)
+    } })
+    actionRegistry.register({ id: 'mcp.ungroup', toolName: 'ungroup_layer', description: 'Ungroup a group and preserve children transforms and animation.', parameters: { type: 'object', required: ['layerId'], properties: { layerId: str } }, toCommand: (p: any, scene) => {
+      const group = scene.layers.find(l => l.id === p.layerId)
+      if (group?.type !== 'group') throw new Error('Group not found')
+      return makeUngroupCmd(scene, group.id)
+    } } as ActionDef<any>)
+  })
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chorono"
+  short_description: "Build editable scenes and animations with Chorono MCP"
+  default_prompt: "Use $chorono to create, preview and save an editable animation in the connected editor."

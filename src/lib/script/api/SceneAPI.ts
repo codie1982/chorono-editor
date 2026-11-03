@@ -12,6 +12,9 @@ import type {
 } from '../../types'
 import { LayerHandle, type ApiContext } from './LayerHandle'
 import { StateMachineHandle } from './StateMachineHandle'
+import { TimelineHandle } from './TimelineHandle'
+import { makeAddTimelineCmd, makeDeleteTimelineCmd } from '../../editor/commands-timeline'
+import type { Composition, Timeline } from '../../types'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '../../editor/commands-layer'
 import { makeAddStateMachineCmd } from '../../editor/commands-statemachine'
 import {
@@ -48,6 +51,13 @@ let scriptInteractiveSeq = 0
 const scriptUid = (p: string) => `${p}_script_${Date.now()}_${++scriptInteractiveSeq}`
 
 export interface SceneAPI {
+  composition(patch?: Partial<Composition>): Composition
+  readonly timelines: Timeline[]
+  createTimeline(options: { id: string; durationMs?: number; loop?: boolean; autoplay?: boolean }): TimelineHandle
+  timeline(id: string): TimelineHandle
+  useTimeline(id: string): TimelineHandle
+  deleteTimeline(id: string): void
+  cloneTimeline(id: string, newId: string): TimelineHandle
   /** Create a layer of the given kind (e.g. 'rect', 'circle', 'text'). */
   add(kind: string): LayerHandle
   /** Find the first layer with the given name. */
@@ -89,12 +99,50 @@ export function createSceneAPI(
   host: ScriptHost,
   collectLog: (line: string) => void,
 ): SceneAPI {
+  let activeTimelineId: string | undefined
+  function uniqueLayer<T extends { id: string }>(layer: T): T {
+    while (host.getScene().layers.some(l => l.id === layer.id)) layer = { ...layer, id: scriptUid('layer') }
+    return layer
+  }
   const ctx: ApiContext = {
     host,
-    resolveTimelineId: () => host.getScene().timelines[0]?.id,
+    resolveTimelineId: () => activeTimelineId ?? host.getScene().timelines[0]?.id,
   }
 
   return {
+    composition(patch) {
+      const prev = host.getScene().composition
+      if (patch) host.applyCommand({ label: 'Script composition', execute: scene => ({ ...scene, composition: { ...prev, ...patch } }), undo: scene => ({ ...scene, composition: prev }) })
+      return structuredClone(host.getScene().composition)
+    },
+    get timelines() { return structuredClone(host.getScene().timelines) },
+    createTimeline(options) {
+      if (!options.id || host.getScene().timelines.some(t => t.id === options.id)) throw new Error('Timeline id must be unique')
+      host.applyCommand(makeAddTimelineCmd({ id: options.id, durationMs: options.durationMs ?? host.getScene().composition.durationMs, loop: options.loop ?? false, autoplay: options.autoplay ?? false, tracks: [], layerIds: [] }))
+      return new TimelineHandle(options.id, ctx)
+    },
+    timeline(id) {
+      if (!host.getScene().timelines.some(t => t.id === id)) throw new Error(`Timeline '${id}' not found`)
+      return new TimelineHandle(id, ctx)
+    },
+    useTimeline(id) {
+      if (!host.getScene().timelines.some(t => t.id === id)) throw new Error(`Timeline '${id}' not found`)
+      activeTimelineId = id
+      return new TimelineHandle(id, ctx)
+    },
+    deleteTimeline(id) {
+      const timeline = host.getScene().timelines.find(t => t.id === id)
+      if (!timeline) throw new Error(`Timeline '${id}' not found`)
+      if (host.getScene().stateMachines?.some(sm => sm.states.some(s => s.timelineId === id))) throw new Error('Timeline is referenced by a state machine')
+      host.applyCommand(makeDeleteTimelineCmd(timeline))
+      if (activeTimelineId === id) activeTimelineId = undefined
+    },
+    cloneTimeline(id, newId) {
+      const source = host.getScene().timelines.find(t => t.id === id)
+      if (!source || !newId || host.getScene().timelines.some(t => t.id === newId)) throw new Error('Source must exist and new timeline id must be unique')
+      host.applyCommand(makeAddTimelineCmd({ ...structuredClone(source), id: newId }))
+      return new TimelineHandle(newId, ctx)
+    },
     add(kind: string): LayerHandle {
       const def = layerRegistry.get(kind)
       if (!def) {
@@ -102,7 +150,7 @@ export function createSceneAPI(
           `Unknown layer kind '${kind}'. Try: rect, circle, text, image…`,
         )
       }
-      const layer = def.createDefault()
+      const layer = uniqueLayer(def.createDefault())
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)
     },
@@ -136,7 +184,7 @@ export function createSceneAPI(
     },
 
     addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle {
-      const layer = buildEmitterLayer({ ...opts, preset })
+      const layer = uniqueLayer(buildEmitterLayer({ ...opts, preset }))
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)
     },
@@ -171,12 +219,12 @@ export function createSceneAPI(
 
     addPath(points, opts): LayerHandle {
       const base = opts?.role === 'motion' ? newMotionPathLayer() : newBezierPathLayer()
-      const layer = {
+      const layer = uniqueLayer({
         ...base,
         ...(opts?.name ? { name: opts.name } : {}),
         transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
         path: pathFromPoints(points, opts?.closed ?? false),
-      }
+      })
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)
     },
@@ -184,11 +232,11 @@ export function createSceneAPI(
     addSpline(kind, params, opts): LayerHandle | null {
       const base = newSplineLayerFromPrimitive(kind, params)
       if (!base) return null
-      const layer = {
+      const layer = uniqueLayer({
         ...base,
         ...(opts?.name ? { name: opts.name } : {}),
         transform: { ...base.transform, x: opts?.x ?? base.transform.x, y: opts?.y ?? base.transform.y },
-      }
+      })
       host.applyCommand(makeAddLayerCmd(layer))
       return new LayerHandle(layer.id, ctx)
     },

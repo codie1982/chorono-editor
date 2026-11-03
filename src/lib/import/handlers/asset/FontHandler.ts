@@ -24,6 +24,7 @@ function fontFamilyName(displayName: string): string {
 export class FontHandler extends BaseImportHandler {
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = [
+    'font/woff',
     'font/woff2',
     'font/ttf',
     'font/otf',
@@ -135,11 +136,13 @@ export class FontHandler extends BaseImportHandler {
 
   private getFormat(file: File): ImportFormat {
     const mime = file.type.toLowerCase()
+    if (mime === 'font/woff' || mime === 'application/font-woff') return 'font/woff'
     if (mime === 'font/woff2' || mime === 'application/font-woff2') return 'font/woff2'
     if (mime === 'font/ttf'   || mime === 'application/x-font-ttf') return 'font/ttf'
     if (mime === 'font/otf'   || mime === 'application/x-font-otf') return 'font/otf'
     // Fallback by extension
     const lower = file.name.toLowerCase()
+    if (lower.endsWith('.woff')) return 'font/woff'
     if (lower.endsWith('.woff2')) return 'font/woff2'
     if (lower.endsWith('.otf'))   return 'font/otf'
     return 'font/ttf'

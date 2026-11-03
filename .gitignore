@@ -23,6 +23,9 @@ dist/
 
 # Runtime bundle (tsup → copied to chorono-runtime repo for publish)
 /dist
+/.chorono/
+/.mcp.json
+/projects/
 
 # Misc
 .DS_Store
@@ -85,5 +88,14 @@ storybook-static/
 *.md
 !README.md
 !CLAUDE.md
+!AGENTS.md
 !/docs/
 !/docs/**/*.md
+!/skills/
+!/skills/**/*.md
+
+# The CLI bundles these from the canonical /skills source at build time.
+/packages/cli/skills/
+/packages/cli/LICENSE
+/.agents/skills/
+*.tgz

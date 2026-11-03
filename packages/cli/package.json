@@ -1,0 +1,21 @@
+{
+  "name": "@codie1982/chorono",
+  "version": "0.2.0",
+  "description": "Set up the Chorono editor, MCP connection and animation skills for Claude and Codex",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "chorono": "bin/chorono.mjs" },
+  "files": ["bin/", "lib/", "skills/", "LICENSE", "README.md"],
+  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codie1982/chorono-editor.git",
+    "directory": "packages/cli"
+  },
+  "keywords": ["chorono", "agent-skills", "claude-code", "codex", "animation", "mcp"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "prepack": "node ../../scripts/build-cli.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

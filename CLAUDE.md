@@ -76,6 +76,9 @@ When delegating planning/exploration tasks, see **[[agent_prompt_quality]]** in 
 
 ## 🔗 Key References
 
+- [MCP animation authoring](AGENTS.md) — connected editor workflow for Claude and Codex
+- [MCP setup and capabilities](docs/tr/mcp.md) — isolated scripts, multi-timeline animation, previews and portable projects
+
 - [[arch_multi_mode_system]] — App fundamentals (start here)
 - [[arch_scripting_event_system]] — JS scripting + events (mandatory for new classes)
 - [[coding_standards_oop]] — OOP rules, Singleton, abstract classes

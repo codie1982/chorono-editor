@@ -16,17 +16,26 @@ export function makeAddLayerCmd(layer: Layer): EditorCommand {
 // ── Delete layer ──────────────────────────────────────────────────────────────
 
 export function makeDeleteLayerCmd(layer: Layer): EditorCommand {
+  let snapshot: ChronoScene | undefined
   return {
     label: `Delete ${layer.name}`,
-    execute: (scene) => ({
-      ...scene,
-      layers: scene.layers.filter((l) => l.id !== layer.id),
-      timelines: scene.timelines.map((tl) =>
-        tl.layerIds === undefined ? tl
-          : { ...tl, layerIds: tl.layerIds.filter((id) => id !== layer.id) }
-      ),
-    }),
-    undo: (scene) => ({ ...scene, layers: [...scene.layers, layer] }),
+    execute: (scene) => {
+      snapshot ??= scene
+      const removed = new Set([layer.id])
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const child of scene.layers) if (child.parentId && removed.has(child.parentId) && !removed.has(child.id)) { removed.add(child.id); changed = true }
+      }
+      return { ...scene,
+        layers: scene.layers.filter(l => !removed.has(l.id)),
+        timelines: scene.timelines.map(tl => ({ ...tl,
+          layerIds: tl.layerIds?.filter(id => !removed.has(id)),
+          tracks: tl.tracks.filter(tr => !removed.has(tr.target.match(/^layers\.([^.]+)\./)?.[1] ?? '')),
+        })),
+      }
+    },
+    undo: (scene) => snapshot ?? scene,
   }
 }
 

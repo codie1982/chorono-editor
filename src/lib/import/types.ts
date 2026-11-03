@@ -28,6 +28,7 @@ export type ImportFormat =
   | 'audio/wav'
   | 'audio/aac'
   | 'audio/ogg'
+  | 'font/woff'
   | 'font/woff2'
   | 'font/ttf'
   | 'font/otf'
@@ -54,7 +55,7 @@ export function getImportKind(format: ImportFormat): ImportKind {
     'image/spritesheet',  // single output (1 sprite asset + 1 frameSequence layer)
     'video/mp4', 'video/mov', 'video/webm',
     'audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg',
-    'font/woff2', 'font/ttf', 'font/otf',
+    'font/woff', 'font/woff2', 'font/ttf', 'font/otf',
   ]
   return assetFormats.includes(format) ? 'asset' : 'document'
 }

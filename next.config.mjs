@@ -1,4 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = { experimental: { serverComponentsExternalPackages: ['quickjs-emscripten'] } };
 
 export default nextConfig;
