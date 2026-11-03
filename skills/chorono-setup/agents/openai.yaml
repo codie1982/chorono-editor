@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chorono Setup"
+  short_description: "Install, start and connect the local Chorono editor"
+  default_prompt: "Use $chorono-setup to install and start Chorono, then verify my editor MCP connection."

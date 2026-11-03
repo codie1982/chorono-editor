@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
 
     // Checker agent (BL-77): read-only tools + review prompt. Planner: full set.
     const isChecker = agentRole === 'checker'
-    const tools  = actionRegistry.toAITools({ readOnly: isChecker })
+    const tools  = actionRegistry.toAITools({ readOnly: isChecker }).filter(tool => tool.name !== 'run_script')
     const system = isChecker
       ? buildCheckerPrompt(sceneContext)
       : buildSystemPrompt(sceneContext)

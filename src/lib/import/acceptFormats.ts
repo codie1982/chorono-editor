@@ -13,7 +13,7 @@ export const IMPORT_ACCEPT = [
   // Audio
   'audio/mpeg', 'audio/wav', 'audio/aac', 'audio/ogg',
   // Fonts (MIME + extension fallback — browsers are inconsistent here)
-  'font/woff2', 'font/ttf', 'font/otf', '.woff2', '.ttf', '.otf',
+  'font/woff', 'font/woff2', 'font/ttf', 'font/otf', '.woff', '.woff2', '.ttf', '.otf',
   // Documents (Lottie JSON, dotLottie, Chorono scene)
   '.json', '.lottie',
 ].join(',')

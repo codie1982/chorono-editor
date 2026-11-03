@@ -4,7 +4,7 @@
 // the ScriptHost so they get batched into one undo step.
 
 import type {
-  Layer, Keyframe, AnimatableValue, EasingType,
+  Layer, Keyframe, AnimatableValue, EasingType, EasingDefinition,
   FontWeight, FontStyle, TextAlign, ShapeParams, DragConfig, DragAxis,
 } from '../../types'
 import type { ParticleEmitterData } from '../../particles/types'
@@ -284,8 +284,9 @@ export class LayerHandle {
    * `easing` is optional (default 'linear'); invalid values fall back to 'linear'.
    * Writes to the scene's first timeline.
    */
-  key(prop: string, timeMs: number, value: AnimatableValue, easing: EasingType = 'linear'): this {
-    const easingType: EasingType = VALID_EASINGS.has(easing) ? easing : 'linear'
+  key(prop: string, timeMs: number, value: AnimatableValue, easing: EasingType | EasingDefinition = 'linear'): this {
+    if (!Number.isFinite(timeMs) || timeMs < 0) throw new Error('Keyframe time must be a non-negative finite number')
+    const easingDef: EasingDefinition = typeof easing === 'object' ? structuredClone(easing) : { type: VALID_EASINGS.has(easing) ? easing : 'linear' }
     // Fall back to a deterministic 'main' timeline so key() works even when no
     // timeline was created yet (BL-78 ordering fix: previously this threw and
     // aborted the whole script — common when the AI orders run_script before
@@ -296,7 +297,7 @@ export class LayerHandle {
       id: nextKfId(),
       timeMs,
       value,
-      easing: { type: easingType },
+      easing: easingDef,
     }
     // Ensure timeline AND track exist before upsert (mirrors autoKeyframe.ts).
     const cmd: EditorCommand = {
@@ -340,7 +341,8 @@ export class LayerHandle {
         // 3. Ensure the layer shows in the dope sheet (B4).
         s = ensureLayerInTimeline(s, timelineId, this.id)
         // 4. Upsert the keyframe.
-        return upsertKeyframe(s, timelineId, target, kf)
+        const next = upsertKeyframe(s, timelineId, target, kf)
+        return { ...next, composition: { ...next.composition, durationMs: Math.max(next.composition.durationMs, timeMs) } }
       },
       undo: (scene) => removeKf(scene, timelineId, target, kf.id),
     }

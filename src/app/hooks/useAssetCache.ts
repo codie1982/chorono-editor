@@ -17,11 +17,17 @@ export function useAssetCache(assets: Asset[]): AssetCache {
   const [cache, setCache] = useState<AssetCache>(() => new Map())
   // Track URLs we created so we can revoke them on removal
   const ownedUrlsRef = useRef<Set<string>>(new Set())
+  const fontsRef = useRef(new Map<string, { url: string; face: FontFace }>())
 
   useEffect(() => {
     let cancelled = false
 
     const currentIds = new Set(assets.map((a) => a.id))
+    fontsRef.current.forEach((font, id) => {
+      if (currentIds.has(id)) return
+      document.fonts.delete(font.face)
+      fontsRef.current.delete(id)
+    })
 
     // ── Remove cache entries for assets no longer in scene ─────────────────
     let changed = false
@@ -29,11 +35,7 @@ export function useAssetCache(assets: Asset[]): AssetCache {
     Array.from(next.keys()).forEach((id) => {
       if (currentIds.has(id)) return
       const el = next.get(id)
-      // Revoke blob URLs and stop video playback
-      if (el && 'src' in el && ownedUrlsRef.current.has(el.src)) {
-        URL.revokeObjectURL(el.src)
-        ownedUrlsRef.current.delete(el.src)
-      }
+      // Undo history can still reference removed assets; retain owned URLs until unmount.
       if (el && el instanceof HTMLVideoElement) el.pause()
       next.delete(id)
       changed = true
@@ -42,7 +44,26 @@ export function useAssetCache(assets: Asset[]): AssetCache {
     // ── Load any new assets we don't have yet ──────────────────────────────
     const newLoads: Promise<void>[] = []
     for (const asset of assets) {
-      if (next.has(asset.id)) continue
+      const cached = next.get(asset.id)
+      if (cached?.getAttribute('src') === asset.url) continue
+      if (cached) {
+        if (cached instanceof HTMLVideoElement) cached.pause()
+        next.delete(asset.id)
+        changed = true
+      }
+      if (asset.type === 'font') {
+        const old = fontsRef.current.get(asset.id)
+        if (old?.url === asset.url) continue
+        if (old) document.fonts.delete(old.face)
+        const family = asset.metadata?.notes?.match(/^family: (.+)$/)?.[1]
+        if (!family) continue
+        const face = new FontFace(family, `url(${JSON.stringify(asset.url)})`)
+        fontsRef.current.set(asset.id, { url: asset.url, face })
+        document.fonts.add(face)
+        if (asset.url.startsWith('blob:')) ownedUrlsRef.current.add(asset.url)
+        newLoads.push(face.load().then(() => {}).catch(() => {}))
+        continue
+      }
 
       if (asset.type === 'image' || asset.type === 'spriteSheet') {
         // Sprite-sheet assets (BL-07) load like images — the FrameSequence
@@ -91,9 +112,12 @@ export function useAssetCache(assets: Asset[]): AssetCache {
   // ── Final cleanup on unmount: revoke every blob URL we created ───────────
   useEffect(() => {
     const owned = ownedUrlsRef.current
+    const fonts = fontsRef.current
     return () => {
       owned.forEach((url) => URL.revokeObjectURL(url))
       owned.clear()
+      fonts.forEach(font => document.fonts.delete(font.face))
+      fonts.clear()
     }
   }, [])
 

@@ -23,6 +23,8 @@ import { useAudioEngine }      from './hooks/useAudioEngine'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
 import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
 import { useFileVersioning } from './hooks/useFileVersioning'
+import { useMCPBridge } from './hooks/useMCPBridge'
+import MCPConnection from '@/components/MCPConnection'
 import { FileVersioningControl } from '@/components/FileVersioningControl'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
@@ -346,7 +348,16 @@ export default function BuilderPage() {
   // ── Interactive runtime: parameters / events / segments preview ──────────
   // Ephemeral state — never touches scene tree or undo history. Drives the
   // four "Interactive" panels and the canvas's runtime preview overlay.
-  const runtime = useInteractiveRuntime(scene)
+  const [mcpTimelineIds, setMCPTimelineIds] = useState<string[] | null>(null)
+  const playbackScene = useMemo(() => mcpTimelineIds ? { ...scene, timelines: scene.timelines.filter(t => mcpTimelineIds.includes(t.id)), stateMachines: [] } : scene, [scene, mcpTimelineIds])
+  const runtime = useInteractiveRuntime(playbackScene)
+  const mcp = useMCPBridge({ editor, assets: assetCache, selectedTimelineId: selectedTlId, currentTimeMs, isPlaying,
+    getLiveFrame: () => frame,
+    getRuntimeState: () => ({ parameters: Object.fromEntries(runtime.paramValues), stateMachines: Array.from(runtime.smRuntimes.values(), rt => ({id:rt.sm.id,stateId:rt.currentStateId,stateName:rt.currentState?.name,timelineId:rt.activeTimelineId})) }),
+    setRuntimeTest: runtime.setSMTestActive,
+    selectTimeline: setSelectedTl, isolateTimelines: setMCPTimelineIds, seek: handleSeek, playToggle: handlePlayToggle, setSpeed: setPlaybackSpeed,
+    setParameter: runtime.setParamOverride, dispatchEvent: runtime.dispatchSMEvent,
+  })
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
@@ -1355,6 +1366,7 @@ export default function BuilderPage() {
           onRestorePanel={dock.dispatchRestorePanel}
         />
 
+        <MCPConnection {...mcp} />
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
         <ToolGroup
@@ -1875,7 +1887,7 @@ export default function BuilderPage() {
                       playbackSpeed={playbackSpeed}
                       onTimeChange={handleSeek}
                       onPlayToggle={handlePlayToggle}
-                      onSelectTimeline={setSelectedTl}
+                      onSelectTimeline={id => { setMCPTimelineIds(null); setSelectedTl(id) }}
                       onSelectKeyframes={setSelectedKfIds}
                       onSelectLayer={selectLayer}
                       onToggleLayerFlag={toggleLayerFlag}
