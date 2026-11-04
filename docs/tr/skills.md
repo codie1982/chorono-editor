@@ -1,5 +1,7 @@
 # Chorono ajan kurulumu ve skill dağıtımı
 
+Kullanıcı rehberleri: [Bilgisayara kurulum](installation.md) · [Skill yapısı ve kurulumu](agent-skills.md) · [Sorun giderme](troubleshooting.md) · [Tüm dokümantasyon](../README.md). Bu sayfa CLI yaşam döngüsü ve bakımcı dağıtım ayrıntılarını da içerir.
+
 Chorono'nun editörü, MCP sunucusu, skill kaynakları ve CLI'si aynı repoda yönetilir. Kök Next.js paketi `private:true` kalır; `packages/cli` altındaki `@codie1982/chorono` bağımsız yayımlanır. Güncel yerel paket sürümü `0.2.0`'dır. npm hesabının bu scope üzerindeki yetkisi yayın öncesinde doğrulanmalıdır.
 
 ## Bir ajandan kurulum ve animasyon üretimi
@@ -64,13 +66,13 @@ Kaydedilen taşınabilir projeler seçilen animasyon projesinin `projects/` dizi
 
 Skill kaynakları `skills/`, npm CLI'si `packages/cli` altındadır. Böylece MCP API'si ve onu kullanan skill aynı değişiklikte güncellenebilir. Başka bir Git reposu gerekmez.
 
-GitHub'a bu değişiklikler gönderildikten sonra yalnız skill kurmak için kendi npm paketimizi yayımlamamız gerekmez:
+Yalnızca skill kurmak için Chorono npm paketinin yayımlanması gerekmez. Üçüncü taraf [skills CLI](https://github.com/vercel-labs/skills) güncel sürümünde Node.js 22.20+ ister:
 
 ```sh
-npx skills add codie1982/chorono-editor --skill chorono --skill chorono-setup -a claude-code -a codex
+npx skills add codie1982/chorono-editor --skill chorono --skill chorono-setup -a claude-code -a codex --copy
 ```
 
-Skill içindeki ajan kurulum adımlarını mevcut checkout, yerel CLI tarball'ı veya yayımlanmış npm paketiyle yürütebilir. Paket henüz npm'de yoksa registry komutları kullanılamaz. Taze editör klonunun MCP/CLI değişikliklerini içeren GitHub branch/tag'inden gelmesi gerekir; varsayılan kaynağa bu değişiklikler gönderilene kadar mevcut yerel checkout'u veya uygun `--repo URL --ref BRANCH_OR_TAG` kullanın. Eski MCP'siz checkout açık hata verir.
+Skill içindeki ajan kurulum adımlarını mevcut checkout, yerel CLI tarball'ı veya yayımlanmış npm paketiyle yürütebilir. Paket henüz npm'de yoksa registry komutları kullanılamaz. Taze editör klonunun MCP/CLI değişikliklerini içeren GitHub branch/tag'inden gelmesi gerekir; farklı bir kaynak için `--repo URL --ref BRANCH_OR_TAG` kullanın. Eski MCP'siz checkout açık hata verir. Başka araçla kurulmuş skill kopyaları Chorono CLI tarafından `foreign` olarak korunur; aynı kopyayı ilk kuran araçla yönetmeye devam edin.
 
 npm yayını sonrası:
 
