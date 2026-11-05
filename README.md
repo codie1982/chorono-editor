@@ -10,7 +10,13 @@ Chorono is an open-source, local-first 2D animation and motion graphics editor. 
 
 The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
 
-[Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Documentation](docs/README.md) · [Get help](#support)
+[Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
+
+## Try an editable example
+
+Open the [first-animation example](examples/first-animation/README.md) to inspect a four-second scene with eight named layers and 51 editable keyframes. Change its headline or a circle's color, save the scene, and reopen it to continue editing.
+
+![An editable Chorono scene with a headline and three colored circles](examples/first-animation/preview.png)
 
 ## Set up and control Chorono from an agent
 
@@ -566,6 +572,8 @@ Each mode shares the same AI panel, scripting API, state machine system, and SDK
 - **Install and connect:** Follow the [installation guide](docs/en/installation.md) ([Türkçe](docs/tr/installation.md)).
 - **Resolve setup or MCP problems:** Check [troubleshooting](docs/en/troubleshooting.md) ([Türkçe](docs/tr/troubleshooting.md)).
 - **Ask a question, report a bug or suggest a feature:** [Search existing issues](https://github.com/codie1982/chorono-editor/issues) or [open a new issue](https://github.com/codie1982/chorono-editor/issues/new).
+- **Share your first-run experience:** Use the [first-animation feedback form](https://github.com/codie1982/chorono-editor/issues/new?template=first-animation-feedback.yml).
+- **Share your work or discuss workflows:** Visit [Chorono Discussions](https://github.com/codie1982/chorono-editor/discussions).
 
 For installation or animation problems, include your operating system, Node.js version, agent client, steps to reproduce, and the expected and actual behavior. If relevant, include the output of `npm run chorono -- doctor`. Remove API keys, tokens and other private information before sharing logs or project files.
 

@@ -1,0 +1,11 @@
+CHORONO — EDITABLE DEMO
+
+1. Open Chorono and choose Menu → Open Scene JSON.
+2. Select first-animation.chorono.json.
+3. Select the first-animation timeline and press Play.
+4. Select Editable headline to change the text; select Motion dot 1 to change its fill color.
+5. Save with Menu → Save Scene JSON.
+
+This sample contains 8 editable layers, 13 tracks and 51 keyframes. No external images or API keys are required to open it.
+
+Installation: https://github.com/codie1982/chorono-editor/blob/main/docs/en/installation.md
