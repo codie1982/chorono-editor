@@ -9,3 +9,6 @@ contact_links:
   - name: 💬 Questions, bugs and feature requests
     url: https://github.com/codie1982/chorono-editor/issues
     about: Search existing issues before opening a new report or question.
+  - name: 🎨 Community and showcases
+    url: https://github.com/codie1982/chorono-editor/discussions
+    about: Share what you made and discuss animation workflows with the community.

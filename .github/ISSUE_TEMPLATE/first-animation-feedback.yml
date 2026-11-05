@@ -1,0 +1,66 @@
+name: First animation feedback
+description: Tell us how installation, editing and reopening your first project went.
+title: "[First animation] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Chorono. Successful first runs and blocked attempts are both useful.
+        Remove API keys, tokens and private information before sharing logs or project files.
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Another operating system
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: How did you use Chorono?
+      options:
+        - Codex through MCP
+        - Claude Code through MCP
+        - Claude Desktop through MCP
+        - Visual editor only
+        - Another MCP client
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How far did you get?
+      options:
+        - Saved and reopened my first animation
+        - Created an animation but could not save or reopen it
+        - Installed Chorono but could not create an animation
+        - Installation or MCP connection was blocked
+    validations:
+      required: true
+  - type: dropdown
+    id: elapsed-time
+    attributes:
+      label: Approximate time spent
+      description: Include installation time. An estimate is enough.
+      options:
+        - Under 5 minutes
+        - 5 to 15 minutes
+        - 15 to 30 minutes
+        - More than 30 minutes
+  - type: textarea
+    id: experience
+    attributes:
+      label: What worked or got in your way?
+      description: Describe the step that was useful or confusing. For a problem, include what you expected and what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Optional version and diagnostic details
+      description: Include your Node.js version, agent client version, source commit or tag, and relevant doctor output if useful.
+      render: text
