@@ -1,11 +1,11 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: 💬 Question or Discussion
-    url: https://github.com/yourusername/chorono-editor/discussions
-    about: Ask questions or chat with the community. Use Discussions for how-to questions.
-  - name: 📖 Need Help?
-    url: https://github.com/yourusername/chorono-editor/blob/main/SUPPORT.md
-    about: Check our support guide for common questions and troubleshooting.
-  - name: 🔒 Security Vulnerability
-    url: https://github.com/yourusername/chorono-editor/security/advisories
-    about: Report security issues privately through GitHub Security Advisories.
+  - name: 📖 Installation and MCP setup
+    url: https://github.com/codie1982/chorono-editor/blob/main/docs/en/installation.md
+    about: Install the editor, connect your agent and create your first editable animation.
+  - name: 🔧 Troubleshooting
+    url: https://github.com/codie1982/chorono-editor/blob/main/docs/en/troubleshooting.md
+    about: Resolve installation, startup and MCP connection problems.
+  - name: 💬 Questions, bugs and feature requests
+    url: https://github.com/codie1982/chorono-editor/issues
+    about: Search existing issues before opening a new report or question.

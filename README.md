@@ -1,10 +1,16 @@
-# Chorono Animator 🎬
+# Chorono
 
-**Professional animation studio for the web.** Create stunning motion graphics with AI-powered workflows, GPU-accelerated particles (10K+ @ 60 FPS), visual state machines, parameter wiring, and JavaScript scripting — all without leaving your browser.
+**Create animations with your AI agent. Refine every layer and keyframe visually.**
 
-Built with **Next.js** + **Canvas** + **WebGL2**. Deploy anywhere: web, mobile (Android SDK), or embed via Web SDK.
+Chorono is an open-source, local-first 2D animation and motion graphics editor. Use Claude Code or Codex through MCP to create editable scenes, then adjust layers, keyframes, easing and timing in the browser.
 
-**Status:** Production-ready for 2D animation. Game Engine, Video Editor, Drawing, and 3D Modeling modes coming soon.
+- **Create with an agent or by hand.** Work through MCP or use the visual editor directly.
+- **Keep creative control.** Refine shapes, text, particles and animation timing in the same scene.
+- **Continue where you left off.** Save a portable editable project and reopen it for the next revision.
+
+The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
+
+[Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Documentation](docs/README.md) · [Get help](#support)
 
 ## Set up and control Chorono from an agent
 
@@ -554,6 +560,14 @@ Each mode shares the same AI panel, scripting API, state machine system, and SDK
 | **Export formats** | MP4, GIF, Lottie, SVG sequences | 4 weeks |
 | **Drawing Mode** | Brush engine + vector illustration | 6 weeks |
 | **Game Engine Mode** | Physics + collision + GameObject system | 8 weeks |
+
+## Support
+
+- **Install and connect:** Follow the [installation guide](docs/en/installation.md) ([Türkçe](docs/tr/installation.md)).
+- **Resolve setup or MCP problems:** Check [troubleshooting](docs/en/troubleshooting.md) ([Türkçe](docs/tr/troubleshooting.md)).
+- **Ask a question, report a bug or suggest a feature:** [Search existing issues](https://github.com/codie1982/chorono-editor/issues) or [open a new issue](https://github.com/codie1982/chorono-editor/issues/new).
+
+For installation or animation problems, include your operating system, Node.js version, agent client, steps to reproduce, and the expected and actual behavior. If relevant, include the output of `npm run chorono -- doctor`. Remove API keys, tokens and other private information before sharing logs or project files.
 
 ## 🤝 Contributing
 
