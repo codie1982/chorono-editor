@@ -1,0 +1,42 @@
+name: Feature request
+description: Explain an animation, editing or agent workflow that Chorono could improve.
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you want to solve and how the feature would help. Questions and open-ended ideas can start in [Discussions](https://github.com/codie1982/chorono-editor/discussions).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe a concrete animation, editing, export or agent task that is difficult today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should Chorono do? Explain whether this affects the visual editor, MCP tools, CLI, skills or saved project format.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or current workaround
+      description: How do you handle this today, and what is missing from that approach?
+  - type: textarea
+    id: example
+    attributes:
+      label: Example or reference
+      description: Add a small shareable project, prompt, sketch or reference that explains the desired result. Remove private assets and credentials.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a similar request.
+          required: true
+        - label: I agree to follow the [Code of Conduct](https://github.com/codie1982/chorono-editor/blob/main/CODE_OF_CONDUCT.md).
+          required: true

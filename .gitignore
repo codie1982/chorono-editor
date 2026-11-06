@@ -84,11 +84,15 @@ storybook-static/
 
 /desing-mockups
 
-# Markdown files (except README, CLAUDE.md, and docs/)
+# Markdown files (except project guidance, community files, docs and skills)
 *.md
 !README.md
 !CLAUDE.md
 !AGENTS.md
+!/CONTRIBUTING.md
+!/CODE_OF_CONDUCT.md
+!/SECURITY.md
+!/.github/PULL_REQUEST_TEMPLATE.md
 !/docs/
 !/docs/**/*.md
 !/skills/
