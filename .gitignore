@@ -11,6 +11,8 @@
 # Testing
 /coverage
 *.lcov
+/test-results/
+/playwright-report/
 
 # Next.js
 /.next/
@@ -33,6 +35,7 @@ dist/
 .editorconfig
 
 # Debug & Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -41,6 +44,9 @@ lerna-debug.log*
 
 # Local env files (never commit secrets!)
 .env
+.env.*
+!.env.example
+!.env.*.example
 .env.local
 .env.*.local
 .env.development.local
@@ -82,7 +88,12 @@ storybook-static/
 *.generated.ts
 *.generated.js
 
-/desing-mockups
+# Local renders, recordings, investigation evidence and design exports.
+# Keep source assets in public/ and curated examples in examples/ versioned.
+/artifacts/
+/outputs/
+/design-mockups/
+/desing-mockups/
 
 # Markdown files (except README, CLAUDE.md, and docs/)
 *.md
