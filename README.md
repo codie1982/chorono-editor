@@ -1,40 +1,103 @@
-# Chorono Animator 🎬
+# Chorono
 
-**Professional animation studio for the web.** Create stunning motion graphics with AI-powered workflows, GPU-accelerated particles (10K+ @ 60 FPS), visual state machines, parameter wiring, and JavaScript scripting — all without leaving your browser.
+**Create animations with your AI agent. Refine every layer and keyframe visually.**
 
-Built with **Next.js** + **Canvas** + **WebGL2**. Deploy anywhere: web, mobile (Android SDK), or embed via Web SDK.
+Chorono is an open-source, local-first 2D animation and motion graphics editor. Use Claude Code or Codex through MCP to create editable scenes, then adjust layers, keyframes, easing and timing in the browser.
 
-**Status:** Production-ready for 2D animation. Game Engine, Video Editor, Drawing, and 3D Modeling modes coming soon.
+- **Create with an agent or by hand.** Work through MCP or use the visual editor directly.
+- **Keep creative control.** Refine shapes, text, particles and animation timing in the same scene.
+- **Continue where you left off.** Save a portable editable project and reopen it for the next revision.
+
+The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
+
+[Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
+
+## Try an editable example
+
+Open the [first-animation example](examples/first-animation/README.md) to inspect a four-second scene with eight named layers and 51 editable keyframes. Change its headline or a circle's color, save the scene, and reopen it to continue editing.
+
+![An editable Chorono scene with a headline and three colored circles](examples/first-animation/preview.png)
 
 ## Set up and control Chorono from an agent
 
-Claude Code or Codex can set up the editor, start it locally, and create editable animations through MCP. From this checkout with Node.js 20+:
+Claude Code or Codex can set up the editor, start it on your computer, and create editable animations through MCP. Start with the [installation guide](docs/en/installation.md) ([Türkçe](docs/tr/installation.md)) or the [documentation index](docs/README.md).
+
+### 1. Install on your computer
+
+Install **Node.js 20+**, npm, Git, and a modern browser. In Terminal on macOS/Linux or PowerShell on Windows:
 
 ```sh
+git clone https://github.com/codie1982/chorono-editor.git
+cd chorono-editor
 npm ci
 npm run cli:build
 npm run chorono -- setup
 npm run chorono -- start --background --open
+```
+
+`setup` installs missing editor dependencies, builds missing outputs, prepares MCP client settings, and installs the bundled skills. The default `--agent all` selects Codex, Claude Code and Claude Desktop for MCP; use `--agent codex`, `--agent claude-code` or `--agent claude-desktop` to select one. Filesystem skills are installed for Codex and Claude Code. Claude Desktop has a separate skill import mechanism.
+
+Use `--project /path/to/animation-project` on setup, start and doctor to keep animation projects separate from the editor checkout. Existing checkouts are preserved; setup never pulls or resets them. The [installation guide](docs/en/installation.md) covers paths, client settings, stopping and rebuilding.
+
+### 2. Connect the browser editor
+
+Open the URL printed by `start` and choose **MCP → Connect this editor**. Reload your client's MCP connections or start a new agent session, then check:
+
+```sh
 npm run chorono -- doctor
 ```
 
-`setup` reuses an existing checkout or downloads the editor into the selected project's `.chorono/editor`. It installs missing dependencies, builds missing outputs, prepares MCP client settings, and installs the `chorono` / `chorono-setup` skills. Existing checkouts are never pulled or reset automatically. Use `--editor /path/to/chorono-editor` to reuse an editor from another project, `--project /path/to/video-project` to choose the project, or `--agent codex` / `--agent claude-code` to select a client. `all` also configures Claude Desktop's MCP connection; its local skill loading differs from Claude Code.
-
-Open the displayed editor URL and choose **MCP → Connect this editor**. Reload client MCP connections or start a new agent session, then ask:
+Readiness requires a connected editor tab as well as a running server. Reconnect after a browser reload. Ask your agent:
 
 > Use Chorono to create a scene with circles and text. Add intro, idle and outro animations, inspect preview frames, and save the editable project.
 
-`doctor` distinguishes missing installation/builds, stale client settings, an offline server, and a running server with no connected editor tab. `start` reuses the matching server and refuses to replace another service on the port. `stop` only stops a matching process previously started in the background by this CLI. To rebuild, stop the editor first and run `setup --rebuild`; `--reinstall` also refreshes dependencies. Saved projects go to the selected project's `projects/` directory.
+Portable projects are saved under `<animation-project>/projects/`. This local MCP workflow needs no model-provider API key. See [troubleshooting](docs/en/troubleshooting.md) ([Türkçe](docs/tr/troubleshooting.md)) if doctor reports an incomplete connection.
 
-For skill-only distribution, after these changes are pushed to GitHub:
+### 3. Understand and install the agent skills
 
-```sh
-npx skills add codie1982/chorono-editor --skill chorono --skill chorono-setup -a claude-code -a codex
+| Skill | What it teaches the agent | Source |
+| --- | --- | --- |
+| `chorono-setup` | Install/start the editor, configure MCP clients, diagnose connections and manage skills | [SKILL.md](skills/chorono-setup/SKILL.md) |
+| `chorono` | Create/edit scenes, keyframes and timelines; inspect preview images; validate and save editable projects | [SKILL.md](skills/chorono/SKILL.md) |
+
+The source structure keeps the main instructions short and loads topic references when needed:
+
+```text
+skills/
+├── chorono-setup/
+│   ├── SKILL.md
+│   └── agents/openai.yaml
+└── chorono/
+    ├── SKILL.md
+    ├── agents/openai.yaml
+    └── references/
+        ├── connection.md
+        ├── animation.md
+        ├── interaction.md
+        └── media-and-output.md
 ```
 
-Skills teach the agent the setup and authoring workflow; installing a skill alone does not start a server. The canonical sources live in `skills/`; the independently publishable npm CLI is in `packages/cli` (`@codie1982/chorono`). `npm run cli:pack` creates a local tarball without publishing it. Once published, commands can also be run with `npx --package @codie1982/chorono@latest chorono setup` (and `start` / `doctor`). A fresh remote setup requires a GitHub branch/tag containing these MCP/CLI changes; use `--repo URL --ref BRANCH_OR_TAG` when needed. Before publication, use this checkout or a local tarball.
+Setup already installs these skills for the selected agents. To manage only skills from a checkout after `npm run cli:build`:
 
-See the [setup and skill/package guide](docs/tr/skills.md) and [MCP reference](docs/tr/mcp.md).
+```sh
+npm run skills -- list
+npm run skills -- install --dry-run
+npm run skills -- install
+npm run skills -- check
+npm run skills -- update
+```
+
+Project installs go to `.agents/skills/` for Codex and `.claude/skills/` for Claude Code. Add `--global --agent codex` for a user-wide Codex install, or choose `--agent claude-code`. Modified copies are preserved.
+
+Alternatively, install only the instructions directly from GitHub with the third-party [skills CLI](https://github.com/vercel-labs/skills) (currently requires Node.js 22.20+):
+
+```sh
+npx skills add codie1982/chorono-editor --skill chorono --skill chorono-setup -a claude-code -a codex --copy
+```
+
+Installing skills alone does not install/start the editor or connect MCP. Continue with steps 1–2. See the [agent skills guide](docs/en/agent-skills.md) ([Türkçe](docs/tr/agent-skills.md)) for scope, updates and the difference between installation methods.
+
+The standalone CLI source is [`packages/cli`](packages/cli/README.md) (`@codie1982/chorono`). This quick start works from GitHub without relying on an npm release. For local tarballs and maintainer packaging, see the [distribution guide](docs/tr/skills.md).
 
 ## ⚡ Headline Feature: GPU-Accelerated Rendering
 
@@ -138,19 +201,18 @@ At ~50k particles the CPU draw alone (49.5 ms) blows the 16.6 ms/60 FPS budget; 
 #### JavaScript-Based Scripting (No Custom DSL)
 - **Full undo/redo** — Scripts operate through command system (automatic undo)
 - **Scene API** — Add layers, update properties, delete, group
-- **Timeline API** — Create tracks, add keyframes, evaluate at time
-- **Event system** — Listen to layer events (transform, visibility, etc.)
+- **Timeline API** — Create tracks, keyframes, modifiers and independent animations
+- **Event definitions** — Author triggers, bindings, wires and state-machine transitions
 - **Expression evaluator** — Runtime property calculation with parameter context
 
 #### Authoring Scripts (Editor-Time)
-- **MAXScript/Blender Python style** — `card = scene.add('rect')` syntax
+- **JavaScript handles** — `const card = scene.add('rect')`
 - **Command wrapping** — Every script mutation wrapped in undoable command
 - **Game engine foundation** — Extensible for future engine workflows
 
 #### Interactive Runtime & Console
 - **Headless ChronoPlayer** — Standalone animation playback (no UI)
-- **DevTools-style console** — Live event log, REPL, watch expressions
-- **Macro recording** — Record user actions as scripts
+- **Manual Script Console** — Run trusted local authoring code; agents use isolated MCP scripts
 - **Trigger system** — Time-based, event-based, and manual triggers
 
 ### ✨ Animation Effects & Modifiers
@@ -354,26 +416,33 @@ Run `npm run mcp:build`, `npm run mcp:setup`, then `npm run dev:mcp` (or build a
 - **Multiple animations** — Explicit timelines, modifiers, controllers, preview isolation and runtime controls
 - **Persistence** — Portable scene JSON with embedded local media, runtime JSON, SVG and image sequence exports
 
+For code-driven scene design, scripts can read a complete detached `scene.snapshot()`, inspect `layer.data` / `layer.get(path)`, and preserve nested settings with `layer.patch(...)`. Script-selected timelines also govern clone/array animation copies. Existing state machines, parameters, bindings, triggers and wires can be edited without rebuilding the scene. Native audio clip helpers share the editor's trim/split/gain commands. Animated layer data is applied before rendering, including particles, repeaters, shape geometry, typography, effects and masks. See the [scripting guide](docs/en/scripting.md) ([Türkçe](docs/tr/scripting.md)) for actual APIs, typed values, limits and the dry-run/commit workflow. Three.js/modeling support is separate future work.
+
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+ and npm
+- Git
 - Modern browser with WebGL2 support (Chrome, Firefox, Safari 15+, Edge)
 
 ### Installation
 
 ```bash
-git clone git@github.com:your-username/chorono-editor.git
+git clone https://github.com/codie1982/chorono-editor.git
 cd chorono-editor
-npm install
+npm ci
 npm run dev
 ```
 
 Open [http://localhost:2000](http://localhost:2000) (the dev server runs on port 2000)
 
+This starts the manual editor. For agent control, follow [Set up and control Chorono from an agent](#set-up-and-control-chorono-from-an-agent), which also configures MCP and installs skills. Stop any running Next server before installing dependencies or building.
+
 ### Environment Setup (Optional — AI Features)
+
+Provider keys are for the editor's built-in AI panel. The external Claude/Codex MCP workflow above uses the model client and needs no provider key in the editor.
 
 ```env
 ANTHROPIC_API_KEY=sk-...
@@ -443,7 +512,17 @@ npm start
 
 ## 📚 Documentation
 
-Detailed documentation coming soon. For now, see inline code comments and type definitions.
+Browse the [documentation index](docs/README.md) for the full guide list.
+
+| Guide | English | Türkçe |
+| --- | --- | --- |
+| Computer installation and MCP connection | [Installation](docs/en/installation.md) | [Bilgisayara kurulum](docs/tr/installation.md) |
+| Skill structure, installation and updates | [Agent skills](docs/en/agent-skills.md) | [Ajan skill'leri](docs/tr/agent-skills.md) |
+| Connection and installation problems | [Troubleshooting](docs/en/troubleshooting.md) | [Sorun giderme](docs/tr/troubleshooting.md) |
+| First animation in the editor | [Getting started](docs/en/getting-started.md) | [Başlangıç](docs/tr/getting-started.md) |
+| JavaScript scene authoring | [Scripting](docs/en/scripting.md) | [Betik yazımı](docs/tr/scripting.md) |
+
+Technical references: [MCP tools and limits](docs/tr/mcp.md), [CLI and skill distribution](docs/tr/skills.md), and [CLI package](packages/cli/README.md).
 
 ## 🎯 Active Branches & Roadmap
 
@@ -457,7 +536,7 @@ Detailed documentation coming soon. For now, see inline code comments and type d
 | **Spline Object System** | ✅ Ready | 8 primitives, point editing, text-to-spline conversion |
 | **Smart Selection** | ✅ Ready | Select Similar/Transform, canvas tools, Inside/Touching toggle |
 | **Clone & Array** | ✅ Ready | Live instances, 5 array patterns, instance resolver |
-| **JavaScript Scripting** | ✅ Ready | Full undo/redo, Scene/Timeline/Event APIs |
+| **JavaScript Scripting** | ✅ Ready | Full reads, safe patches, timelines, interaction definitions, native audio helpers |
 
 ### In Progress
 | Branch | Feature | ETA |
@@ -488,6 +567,16 @@ Each mode shares the same AI panel, scripting API, state machine system, and SDK
 | **Export formats** | MP4, GIF, Lottie, SVG sequences | 4 weeks |
 | **Drawing Mode** | Brush engine + vector illustration | 6 weeks |
 | **Game Engine Mode** | Physics + collision + GameObject system | 8 weeks |
+
+## Support
+
+- **Install and connect:** Follow the [installation guide](docs/en/installation.md) ([Türkçe](docs/tr/installation.md)).
+- **Resolve setup or MCP problems:** Check [troubleshooting](docs/en/troubleshooting.md) ([Türkçe](docs/tr/troubleshooting.md)).
+- **Ask a question, report a bug or suggest a feature:** [Search existing issues](https://github.com/codie1982/chorono-editor/issues) or [open a new issue](https://github.com/codie1982/chorono-editor/issues/new).
+- **Share your first-run experience:** Use the [first-animation feedback form](https://github.com/codie1982/chorono-editor/issues/new?template=first-animation-feedback.yml).
+- **Share your work or discuss workflows:** Visit [Chorono Discussions](https://github.com/codie1982/chorono-editor/discussions).
+
+For installation or animation problems, include your operating system, Node.js version, agent client, steps to reproduce, and the expected and actual behavior. If relevant, include the output of `npm run chorono -- doctor`. Remove API keys, tokens and other private information before sharing logs or project files.
 
 ## 🤝 Contributing
 
