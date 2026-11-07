@@ -235,6 +235,7 @@ function renderParticlesGPU(
 
   const dest = ctx.canvas
   const dt = resolveDisplayTransform(layer, ctx.scene, ctx.timeMs, ctx.overrides)
+  const basis = typeof dest.getTransform === 'function' ? dest.getTransform() : undefined
 
   const ok = backend.draw({
     instances,
@@ -245,6 +246,7 @@ function renderParticlesGPU(
     backingW:         dest.canvas.width,
     backingH:         dest.canvas.height,
     layerAlpha:       dest.globalAlpha,
+    localToBacking:   basis && { a:basis.a, b:basis.b, c:basis.c, d:basis.d, e:basis.e, f:basis.f },
     displayTransform: dt,
     anchorX:          layer.transform.anchorX,
     anchorY:          layer.transform.anchorY,
@@ -265,21 +267,23 @@ export const particleRendererPlugin: LayerRendererPlugin = {
   },
 
   render(ctx: RenderContext, layer: Layer): void {
-    const cfg = (layer as any).particleEmitter as ParticleEmitterData
-    if (!cfg) return
+    const authored = layer.particleEmitter
+    if (!authored) return
+    const cfg: ParticleEmitterData = { ...authored, emitter: { ...authored.emitter,
+      maxParticles: Math.max(0, Math.min(10000, Math.floor(authored.emitter.maxParticles))) } }
 
     const layerStartMs = layer.startMs ?? 0
 
-    // Pass source-layer context so 'sourceLayer' emit shape works.
-    // Particle layer coordinates are layer-local (the CanvasRenderer has
-    // already translated to transform.x/y), so we tell the spawner that
-    // the particle layer's WORLD position is the layer's transform.x/y —
-    // the resolver subtracts this from the source's world to get the
-    // relative offset.
+    // Referenced path/source geometry uses the same evaluated scene and
+    // world matrices as the canvas, then maps into emitter-local positions.
     const sourceCtx = {
       allLayers:      ctx.scene.layers,
       particleLayerX: layer.transform.x,
       particleLayerY: layer.transform.y,
+      particleLayerId: layer.id,
+      scene: ctx.scene,
+      timeMs: ctx.timeMs,
+      overrides: ctx.overrides,
     }
 
     if (renderParticlesGPU(ctx, layer, cfg, layerStartMs, sourceCtx)) return

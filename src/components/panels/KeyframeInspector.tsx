@@ -1,14 +1,17 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { ChronoScene, Keyframe, EasingType, EasingDefinition } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   makeMoveKfCmd, makeUpdateKfValueCmd, makeUpdateEasingCmd, makeDeleteKfCmd,
 } from '@/lib/editor/commands-keyframe'
 import BezierEditor from '../timeline/BezierEditor'
+import { resolveSelectedKeyframes } from '@/lib/timeline/keyframeSelection'
+import { makeBatchCmd } from '@/lib/editor/commands-batch'
 
 interface Props {
   scene: ChronoScene
+  selectedTimelineId: string | null
   selectedKfIds: Set<string>
   editor: EditorStateReturn
 }
@@ -30,34 +33,25 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
  *
  * Inspector edits dispatch dedicated commands so each becomes its own undo step.
  */
-export default function KeyframeInspector({ scene, selectedKfIds, editor }: Props) {
+export default function KeyframeInspector({ scene, selectedTimelineId, selectedKfIds, editor }: Props) {
   // ── Locate every selected kf in the scene ────────────────────────────────
   const resolved = useMemo<ResolvedKf[]>(() => {
-    const out: ResolvedKf[] = []
-    for (const tl of scene.timelines) {
-      for (const track of tl.tracks) {
-        for (const kf of track.keyframes) {
-          if (selectedKfIds.has(kf.id)) {
-            out.push({ kf, timelineId: tl.id, trackTarget: track.target })
-          }
-        }
-      }
-    }
-    return out
-  }, [scene.timelines, selectedKfIds])
+    return resolveSelectedKeyframes(scene, selectedTimelineId, selectedKfIds)
+      .map(({ kf, timelineId, target }) => ({ kf, timelineId, trackTarget: target }))
+  }, [scene, selectedTimelineId, selectedKfIds])
 
   if (resolved.length === 0) return null
 
   return (
-    <div className="border-t border-gray-700">
+    <div className="border-t border-gray-700" data-panel="curveEditor">
       <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
           Keyframe ({resolved.length})
         </span>
         <button
-          onClick={() => resolved.forEach((r) =>
-            editor.dispatchCommand(makeDeleteKfCmd(r.timelineId, r.trackTarget, r.kf)),
-          )}
+          onClick={() => editor.dispatchCommand(makeBatchCmd('Delete Selected Keyframes', resolved.map((r) =>
+            makeDeleteKfCmd(r.timelineId, r.trackTarget, r.kf),
+          )))}
           className="text-[10px] text-red-400 hover:text-red-300"
         >
           Delete all
@@ -83,15 +77,18 @@ function SingleKfInspector({ entry, editor }: { entry: ResolvedKf; editor: Edito
     typeof kf.value === 'number' ? String(kf.value) : String(kf.value),
   )
 
-  // Re-seed drafts when the kf identity changes (different keyframe selected)
-  useMemo(() => {
+  // Refresh the inspector after curve drags and undo, including the same key.
+  useEffect(() => {
     setTimeDraft(String(kf.timeMs))
+  }, [kf.id, kf.timeMs])
+  useEffect(() => {
     setValueDraft(typeof kf.value === 'number' ? String(kf.value) : String(kf.value))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kf.id])
+  }, [kf.id, kf.value])
 
   const commitTime = () => {
-    const ms = Number(timeDraft)
+    const raw = Number(timeDraft)
+    const duration = editor.getScene().timelines.find((tl) => tl.id === timelineId)?.durationMs ?? Infinity
+    const ms = Math.max(0, Math.min(duration, raw))
     if (!Number.isFinite(ms) || ms === kf.timeMs) { setTimeDraft(String(kf.timeMs)); return }
     editor.dispatchCommand(makeMoveKfCmd(timelineId, trackTarget, kf.id, kf.timeMs, ms))
   }
@@ -174,12 +171,13 @@ function MultiKfInspector({ entries, editor }: { entries: ResolvedKf[]; editor: 
   const sharedType  = allSameType ? (entries[0].kf.easing?.type ?? 'linear') : ''
 
   const setEasingAll = (type: EasingType) => {
-    entries.forEach((r) => {
+    const commands = entries.map((r) => {
       const next: EasingDefinition = type === 'customBezier'
         ? { type, bezier: r.kf.easing?.bezier ?? DEFAULT_BEZIER }
         : { type }
-      editor.dispatchCommand(makeUpdateEasingCmd(r.timelineId, r.trackTarget, r.kf.id, r.kf.easing, next))
+      return makeUpdateEasingCmd(r.timelineId, r.trackTarget, r.kf.id, r.kf.easing, next)
     })
+    editor.dispatchCommand(makeBatchCmd('Change Selected Keyframe Easing', commands))
   }
 
   return (

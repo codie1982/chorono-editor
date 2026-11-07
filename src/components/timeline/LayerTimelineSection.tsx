@@ -7,6 +7,11 @@ import { findWireForProperty } from '@/lib/wiring/helpers'
 import TimelineKeyframe from './TimelineKeyframe'
 import TrackValueGraph  from './TrackValueGraph'
 import AudioWaveform    from './AudioWaveform'
+import AudioClipTimeline, { type AudioTimelineContext } from '@/components/audio/AudioClipTimeline'
+import AudioClipControls from '@/components/audio/AudioClipControls'
+import { makePatchAudioClipCmd } from '@/lib/editor/commands-audio'
+import { audioGainAtPlayhead, audioGainKeyCommand } from '@/components/audio/audioGainKeyCommand'
+import { activateAudioClipSelection } from '@/components/audio/audioClipSelection'
 import type { DragSnapshot } from './hooks/useKeyframeDrag'
 
 /**
@@ -88,6 +93,8 @@ interface Props {
   /** Resolved asset URL for audio layers — when present the activity bar
    *  renders the audio waveform overlay (BL-37). */
   audioUrl?: string
+  audioContext?: AudioTimelineContext
+  pinTop?: number
 }
 
 const ROW_HEADER  = 32
@@ -106,6 +113,7 @@ export default function LayerTimelineSection({
   onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
   durationMs, currentTimeMs, frameRate, labelColWidth, onLayerBarCommit, pinIndex, audioUrl,
   parameterWires, onEditWire,
+  audioContext, pinTop,
 }: Props) {
 
   // A track "has a key at the playhead" when one sits within half a frame of
@@ -115,6 +123,9 @@ export default function LayerTimelineSection({
   const isPinned = pinIndex != null && pinIndex >= 0
 
   const rowH = graphMode ? ROW_TRACK_G : ROW_TRACK
+  const audioTimelineId = layer.audio?.timelineId ?? audioContext?.timelineId
+  const audioTracks = audioContext?.scene.timelines.find(timeline => timeline.id === audioTimelineId)?.tracks
+    .filter(track => track.target.startsWith(`layers.${layer.id}.`)) ?? tracks
 
   // Properties already animated on this layer (so we don't offer them twice)
   const animatedPaths = new Set(
@@ -133,19 +144,21 @@ export default function LayerTimelineSection({
           ${isPrimary ? 'bg-blue-950/40' : ''} ${layer.hidden ? 'opacity-60' : ''}
           ${isPinned ? 'bg-gray-900 shadow-md shadow-black/40' : ''}`}
         style={{
-          height: ROW_HEADER,
+          height: layer.type === 'audio' ? 64 : ROW_HEADER,
           ...(isPinned ? {
             position: 'sticky',
-            top: pinIndex! * ROW_HEADER,
+            top: pinTop ?? pinIndex! * ROW_HEADER,
             zIndex: 5,
           } : null),
         }}
       >
         {/* Left: label */}
         <div
-          className="shrink-0 flex items-center gap-1.5 px-2 border-r border-gray-700 cursor-pointer relative"
+          className="shrink-0 flex flex-col justify-center gap-1 px-2 border-r border-gray-700 cursor-pointer relative"
           style={{ width: labelColWidth }}
-          onClick={(e) => onSelectLayer(e.shiftKey)}
+          onClick={(e) => layer.type === 'audio'
+            ? activateAudioClipSelection('header', e.shiftKey, onSelectLayer, audioContext?.clearKeySelection)
+            : onSelectLayer(e.shiftKey)}
           onDoubleClick={(e) => {
             // Double-click the layer header → toggle Solo (isolate in canvas).
             // Avoids racing the chevron / flag buttons which stop propagation.
@@ -156,6 +169,7 @@ export default function LayerTimelineSection({
           }}
           title="Click: select · Double-click: solo (isolate)"
         >
+          <div className="flex items-center gap-1.5 w-full min-w-0">
           {/* Color label stripe — left edge of the row */}
           {layer.colorLabel && (
             <div
@@ -178,6 +192,15 @@ export default function LayerTimelineSection({
           <LayerFlag active={!!layer.locked} on="🔒" off="🔓" onClick={(e) => { e.stopPropagation(); onToggleFlag('locked') }} />
           <LayerFlag active={!!layer.solo} on="S" off="s" highlight={layer.solo ? 'text-amber-400 font-bold' : ''}
             onClick={(e) => { e.stopPropagation(); onToggleFlag('solo') }} />
+          </div>
+          {layer.type === 'audio' && audioContext && <AudioClipControls layer={layer}
+            onPatch={patch => audioContext.editor.dispatchCommand(makePatchAudioClipCmd(layer.id, patch, { timelineId: audioContext.timelineId }))}
+            gain={audioGainAtPlayhead(layer, audioTracks, currentTimeMs)}
+            onGainCommit={gain => audioContext.editor.dispatchCommand(audioTimelineId
+              && audioTracks.some(track => track.target === `layers.${layer.id}.audio.volume` && track.keyframes.length)
+              ? audioGainKeyCommand(layer, audioTimelineId, currentTimeMs, gain)
+              : makePatchAudioClipCmd(layer.id, { volume: gain }, { timelineId: audioTimelineId }))}
+            onSolo={() => onToggleFlag('solo')} />}
         </div>
 
         {/* Right: layer activity bar (draggable) */}
@@ -185,7 +208,13 @@ export default function LayerTimelineSection({
           className="flex-1 relative"
           onContextMenu={onLayerBarContextMenu && ((e) => onLayerBarContextMenu(layer.id, e))}
         >
-          <DraggableLayerBar
+          {layer.type === 'audio' && audioContext ? <AudioClipTimeline layer={layer} context={audioContext}
+            audioUrl={audioUrl} durationMs={durationMs} visibleStartMs={visibleStartMs} visibleEndMs={visibleEndMs}
+            msToScreenPx={msToScreenPx} onSelect={onSelectLayer} tracks={audioTracks}
+            selectedKfIds={selectedKfIds} previewMs={previewMs} onSelectKf={onSelectKf}
+            onBeginKfDrag={onBeginKfDrag} onDeleteKf={onDeleteKf} onSetEasing={onSetEasing}
+            onKfDoubleClick={onKfDoubleClick} onKfContextMenu={onKfContextMenu}
+          /> : <DraggableLayerBar
             layer={layer}
             msToScreenPx={msToScreenPx}
             visibleStartMs={visibleStartMs}
@@ -196,7 +225,7 @@ export default function LayerTimelineSection({
             onCommit={(kind, fromStart, fromEnd, toStart, toEnd) =>
               onLayerBarCommit?.(layer.id, kind, fromStart, fromEnd, toStart, toEnd)
             }
-          />
+          />}
         </div>
       </div>
 
@@ -321,9 +350,10 @@ export default function LayerTimelineSection({
                     isSelected={selectedKfIds.has(kf.id)}
                     isDragging={previewMs[kf.id] != null}
                     onSelect={(shiftHeld) => onSelectKf(kf.id, shiftHeld)}
-                    onDelete={() => onDeleteKf(track.target, kf.id)}
-                    onSetEasing={(et) => onSetEasing(track.target, kf.id, et)}
+                    onDelete={() => { if (!layer.locked) onDeleteKf(track.target, kf.id) }}
+                    onSetEasing={(et) => { if (!layer.locked) onSetEasing(track.target, kf.id, et) }}
                     onPointerDown={(e) => {
+                      if (layer.locked) { e.preventDefault(); e.stopPropagation(); return }
                       const isLone = !selectedKfIds.has(kf.id) && !e.shiftKey
                       const handler = onBeginKfDrag(
                         { kfId: kf.id, trackTarget: track.target, timelineId: '', originalMs: kf.timeMs },
@@ -332,7 +362,7 @@ export default function LayerTimelineSection({
                       handler(e)
                     }}
                     onContextMenu={onKfContextMenu && ((e) => onKfContextMenu(track.target, kf.id, e))}
-                    onDoubleClick={onKfDoubleClick && ((e) => onKfDoubleClick(track.target, kf.id, e))}
+                    onDoubleClick={!layer.locked && onKfDoubleClick ? ((e) => onKfDoubleClick(track.target, kf.id, e)) : undefined}
                   />
                 )
               })}

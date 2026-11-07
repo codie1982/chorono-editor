@@ -17,7 +17,10 @@ function handleMap(data: SplinePathData): Map<string, SplineHandle> {
   return m
 }
 
-export function splineToPathDefinition(data: SplinePathData): PathDefinition {
+export function splineToPathDefinition(
+  data: SplinePathData,
+  options: { closedOnly?: boolean } = {},
+): PathDefinition {
   const commands: PathDefinition['commands'] = []
   let hasClosed = false
   const handles = handleMap(data)
@@ -26,6 +29,7 @@ export function splineToPathDefinition(data: SplinePathData): PathDefinition {
     for (const contourId of sub.contourIds) {
       const contour = data.contours[contourId]
       if (!contour || contour.pointIds.length === 0) continue
+      if (options.closedOnly && !contour.closed) continue
 
       const first = data.points[contour.pointIds[0]]
       if (!first) continue

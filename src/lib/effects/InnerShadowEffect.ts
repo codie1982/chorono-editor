@@ -14,7 +14,7 @@
 //      the original silhouette exists (clips to shape edge)
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
-import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { withEffectSurfaces } from './withEffectSurfaces'
 import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface InnerShadowEffectDefinition extends EffectDefinition {
@@ -30,7 +30,7 @@ export interface InnerShadowEffectDefinition extends EffectDefinition {
 
 export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
   type: 'innerShadow',
-  apply(input, effect) {
+  apply: withEffectSurfaces<InnerShadowEffectDefinition>((input, effect, surfaces) => {
     const {
       color = '#000000', blur = 4, offsetX = 2, offsetY = 2, opacity = 0.5,
     } = effect.params
@@ -41,7 +41,7 @@ export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
     // ── 1. Build the "inverse silhouette" canvas:
     //       full colour rect, then knock out an OFFSET copy of the input.
     //       What remains is the difference, blurred = inner shadow.
-    const inv = createOffscreen(W, H)
+    const inv = surfaces.create(W, H)
     const ictx = inv.getContext('2d')!
     ictx.fillStyle = color
     ictx.fillRect(0, 0, W, H)
@@ -52,7 +52,7 @@ export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
     // ── 2. Blur the difference layer (the shadow itself).
     //       GPU separable Gaussian when available; CSS-filter fallback otherwise.
     const r = Math.max(0, blur)
-    const blurred = createOffscreen(W, H)
+    const blurred = surfaces.create(W, H)
     const bctx    = blurred.getContext('2d')!
     const gpu = r > 0 ? gpuImageEffects.blur(inv, r) : null
     if (gpu) {
@@ -63,8 +63,9 @@ export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
       bctx.filter = 'none'
     }
 
+    surfaces.release(inv)
     // ── 3. Clip the shadow to the original shape using source-atop
-    const out  = createOffscreen(W, H)
+    const out  = surfaces.create(W, H)
     const octx = out.getContext('2d')!
     octx.drawImage(input, 0, 0)                            // start with original
     octx.globalAlpha = Math.max(0, Math.min(1, opacity))
@@ -73,5 +74,5 @@ export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
     octx.globalAlpha = 1
     octx.globalCompositeOperation = 'source-over'
     return out
-  },
+  }),
 }

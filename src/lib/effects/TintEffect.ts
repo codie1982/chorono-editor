@@ -11,7 +11,7 @@
 // states, "selected" UI tinting, etc.
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
-import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { withEffectSurfaces } from './withEffectSurfaces'
 
 export interface TintEffectDefinition extends EffectDefinition {
   type: 'tint'
@@ -24,13 +24,13 @@ export interface TintEffectDefinition extends EffectDefinition {
 
 export const tintEffect: EffectPlugin<TintEffectDefinition> = {
   type: 'tint',
-  apply(input, effect) {
+  apply: withEffectSurfaces<TintEffectDefinition>((input, effect, surfaces) => {
     const { color = '#3B82F6', strength = 0.5, blend = 'overlay' } = effect.params
     const W = input.width
     const H = input.height
 
     // Build a tinted clone of the input
-    const tint = createOffscreen(W, H)
+    const tint = surfaces.create(W, H)
     const tctx = tint.getContext('2d')!
     tctx.drawImage(input, 0, 0)
     tctx.globalCompositeOperation = 'source-in'   // keep alpha, replace colour
@@ -39,7 +39,7 @@ export const tintEffect: EffectPlugin<TintEffectDefinition> = {
     tctx.globalCompositeOperation = 'source-over'
 
     // Composite original + tinted with the chosen blend mode + strength
-    const out  = createOffscreen(W, H)
+    const out  = surfaces.create(W, H)
     const octx = out.getContext('2d')!
     octx.drawImage(input, 0, 0)
     octx.globalAlpha = Math.max(0, Math.min(1, strength))
@@ -48,5 +48,5 @@ export const tintEffect: EffectPlugin<TintEffectDefinition> = {
     octx.globalAlpha = 1
     octx.globalCompositeOperation = 'source-over'
     return out
-  },
+  }),
 }

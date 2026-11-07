@@ -5,7 +5,7 @@
 // 'source-atop' so it doesn't leak beyond the silhouette.
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
-import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { withEffectSurfaces } from './withEffectSurfaces'
 
 export interface VignetteEffectDefinition extends EffectDefinition {
   type: 'vignette'
@@ -19,12 +19,12 @@ export interface VignetteEffectDefinition extends EffectDefinition {
 
 export const vignetteEffect: EffectPlugin<VignetteEffectDefinition> = {
   type: 'vignette',
-  apply(input, effect) {
+  apply: withEffectSurfaces<VignetteEffectDefinition>((input, effect, surfaces) => {
     const { color = '#000000', strength = 0.5, innerStop = 0.4 } = effect.params
     const W = input.width
     const H = input.height
 
-    const out  = createOffscreen(W, H)
+    const out  = surfaces.create(W, H)
     const octx = out.getContext('2d')!
     octx.drawImage(input, 0, 0)
 
@@ -39,7 +39,7 @@ export const vignetteEffect: EffectPlugin<VignetteEffectDefinition> = {
     octx.fillRect(0, 0, W, H)
     octx.globalCompositeOperation = 'source-over'
     return out
-  },
+  }),
 }
 
 function hexWithAlpha(hex: string, alpha: number): string {

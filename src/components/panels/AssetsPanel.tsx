@@ -18,9 +18,11 @@ import {
   newImageLayer, newVideoLayer, newAudioLayer,
 } from '@/lib/defaults'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '@/lib/editor/commands-layer'
+import { makeAddAudioClipCmd } from '@/lib/editor/commands-audio'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { toast } from '@/lib/toast/toast'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
+import { formatBytes } from '@/lib/format/formatBytes'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 
 interface Props {
@@ -28,20 +30,14 @@ interface Props {
   editor: EditorStateReturn
   /** Called with the new layer's id after "Add layer" so it can be selected. */
   onSelectLayer?: (id: string) => void
+  selectedTimelineId?: string | null
+  currentTimeMs?: number
   /**
    * Import files through the universal pipeline (BL-04–06). When provided, the
    * panel header shows an "Import" button. Accepts images, video, audio, SVG,
    * fonts, Lottie and Chorono scene files.
    */
   onImportFiles?: (files: FileList | File[]) => void
-}
-
-/** Human-readable byte size. */
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
 const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> = {
@@ -56,7 +52,7 @@ const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> =
   gif:         { bg: 'bg-pink-900/50',    fg: 'text-pink-300',    icon: '⟳' },
 }
 
-export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles }: Props) {
+export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles, selectedTimelineId, currentTimeMs = 0 }: Props) {
   const importInputRef = useRef<HTMLInputElement>(null)
   const ctxMenu = useContextMenu()
   const [ctxAssetId, setCtxAssetId] = useState<string | null>(null)
@@ -105,7 +101,9 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
         return
       }
     }
-    editor.dispatchCommand(makeAddLayerCmd(layer))
+    editor.dispatchCommand(a.type === 'audio'
+      ? makeAddAudioClipCmd(a, { layer, timelineId: selectedTimelineId ?? undefined, startMs: currentTimeMs })
+      : makeAddLayerCmd(layer))
     onSelectLayer?.(layer.id)
     toast.success(`Added ${a.type} layer from ${a.name}`)
   }

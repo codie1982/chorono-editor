@@ -1,8 +1,10 @@
-import type { Timeline, Track, Keyframe } from './types'
+import type { Timeline, Track, Keyframe, AnimatableValue } from './types'
 import { resolveOutOfRange } from './animation/out-of-range/resolvers'
 import { applyModifiers, hashTrackSeed } from './animation/modifiers/pipeline'
 import { sampleBezier } from './animation/timeWarp/sampler'
 import { sampleController } from './animation/controllers/sample'
+import { sampleCubicBezier } from './animation/bezierEasing'
+import { interpolateAnimatableValues, isColorTarget, isVec2, isScalarNumericTrack } from './animation/typedValues'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -15,40 +17,20 @@ const easeInOut = (t: number) =>
 // (cx2,cy2). For a given input x we find t such that bezierX(t) = x, then
 // return bezierY(t).
 
-function cubicBezierComponent(t: number, a: number, b: number): number {
-  const u = 1 - t
-  return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
-}
-
-function cubicBezierDerivative(t: number, a: number, b: number): number {
-  const u = 1 - t
-  return 3 * u * u * a + 6 * u * t * (b - a) + 3 * t * t * (1 - b)
-}
-
 /**
  * Returns a function that maps x ∈ [0,1] to y ∈ [0,1] along the cubic bezier
  * curve defined by control points (cx1, cy1) and (cx2, cy2).
  *
- * Newton-Raphson with 8 iterations converges in <1e-5 for typical animation
- * curves. Falls back gracefully at the endpoints.
+ * Bracketed Newton steps with bisection fallback stay on the monotone X
+ * interval, including flat derivatives. Y controls may overshoot.
  */
 export function bezierEasing(cx1: number, cy1: number, cx2: number, cy2: number): (x: number) => number {
-  return (x: number) => {
-    if (x <= 0) return 0
-    if (x >= 1) return 1
-    let t = x  // good initial guess for monotone curves
-    for (let i = 0; i < 8; i++) {
-      const fx  = cubicBezierComponent(t, cx1, cx2) - x
-      const dfx = cubicBezierDerivative(t, cx1, cx2)
-      if (Math.abs(dfx) < 1e-6) break
-      t -= fx / dfx
-    }
-    return cubicBezierComponent(t, cy1, cy2)
-  }
+  return (x: number) => sampleCubicBezier({ cx1, cy1, cx2, cy2 }, x)
 }
 
 /** Apply the easing function defined on keyframe A to a normalized t [0,1]. */
 function applyEasing(kfA: Keyframe, t: number): number {
+  if (kfA.tangentMode === 'linear') return t
   const type = kfA.easing?.type ?? 'linear'
   switch (type) {
     case 'easeIn':    return easeIn(t)
@@ -63,28 +45,26 @@ function applyEasing(kfA: Keyframe, t: number): number {
   }
 }
 
-/** Interpolate a numeric value between two keyframes at the given timeMs. */
-function interpolateKeyframes(kfA: Keyframe, kfB: Keyframe, timeMs: number): number {
-  if (kfA.easing?.type === 'hold') return kfA.value as number
+/** Interpolate continuous values; text/boolean values hold until the next key. */
+function interpolateKeyframes(kfA: Keyframe, kfB: Keyframe, timeMs: number, target: string): AnimatableValue {
+  if (kfA.easing?.type === 'hold' && kfA.tangentMode !== 'linear') return kfA.value
 
   const range = kfB.timeMs - kfA.timeMs
   const t = range === 0 ? 1 : Math.max(0, Math.min(1, (timeMs - kfA.timeMs) / range))
   const easedT = applyEasing(kfA, t)
 
-  const vA = kfA.value as number
-  const vB = kfB.value as number
-  return vA + (vB - vA) * easedT
+  return interpolateAnimatableValues(kfA.value, kfB.value, easedT, target)
 }
 
 /** Return the evaluated value for a single track at timeMs, or null if no keyframes.
  *  Honors track.outOfRange (BL-45) by remapping timeMs into the keyframe range
  *  according to the track's before/after behavior (cycle/loop/pingPong/etc.). */
-export function evaluateTrack(track: Track, timeMs: number): number | null {
+export function evaluateTrack(track: Track, timeMs: number): AnimatableValue | null {
   // BL-50: procedural controllers bypass the keyframe path entirely. Out-of-
   // range (cycle/loop/pingPong) still pre-warps timeMs so a noise/waveform
   // controller can naturally loop or ping-pong if the user wants. Track
   // modifiers + multiplier curve still wrap the procedural output below.
-  if (track.controller && track.controller.type !== 'keyframe') {
+  if (track.controller && track.controller.type !== 'keyframe' && isScalarNumericTrack(track)) {
     const ctrl = track.controller
     // For procedural controllers we don't have a kf range, so OOR is applied
     // against the timeline-derived range hint when the user explicitly set
@@ -137,9 +117,15 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
 
   // For relativeRepeat, offset is the cycle index — multiply by (lastValue - firstValue)
   // to get the actual value offset per cycle.
-  const cycleValueDelta =
-    offset !== 0 ? (kfs[kfs.length - 1].value as number) - (kfs[0].value as number) : 0
-  const valueOffset = cycleValueDelta * offset
+  const firstValue = kfs[0].value, lastValue = kfs[kfs.length - 1].value
+  const applyRelativeOffset = (value: AnimatableValue): AnimatableValue => {
+    if (!offset || isColorTarget(track.target)) return value
+    if (typeof value === 'number' && typeof firstValue === 'number' && typeof lastValue === 'number') return value + (lastValue - firstValue) * offset
+    if (isVec2(value) && isVec2(firstValue) && isVec2(lastValue)) return {
+      x: value.x + (lastValue.x - firstValue.x) * offset, y: value.y + (lastValue.y - firstValue.y) * offset,
+    }
+    return value // discrete/color values repeat without numeric arithmetic
+  }
 
   // BL-48: ease curve + time warp — re-time the WHOLE track via two
   // cubic-beziers applied to the local-T (track normalised time).
@@ -163,17 +149,17 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
 
   // Resolve the kf bracket so we can compute the base value and
   // pass segment timing into the modifier pipeline below.
-  let baseValue: number
+  let baseValue: AnimatableValue
   let segStartMs: number
   let segEndMs:   number
   let leadingKf:  Keyframe
   if (warpedEvalTime <= rangeStart) {
-    baseValue = (kfs[0].value as number) + valueOffset
+    baseValue = applyRelativeOffset(kfs[0].value)
     leadingKf = kfs[0]
     segStartMs = kfs[0].timeMs
     segEndMs   = kfs[Math.min(1, kfs.length - 1)].timeMs
   } else if (warpedEvalTime >= rangeEnd) {
-    baseValue = (kfs[kfs.length - 1].value as number) + valueOffset
+    baseValue = applyRelativeOffset(kfs[kfs.length - 1].value)
     leadingKf = kfs[Math.max(0, kfs.length - 2)]
     segStartMs = leadingKf.timeMs
     segEndMs   = kfs[kfs.length - 1].timeMs
@@ -186,7 +172,7 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
       else hi = mid
     }
     leadingKf = kfs[lo]
-    baseValue = interpolateKeyframes(kfs[lo], kfs[lo + 1], warpedEvalTime) + valueOffset
+    baseValue = applyRelativeOffset(interpolateKeyframes(kfs[lo], kfs[lo + 1], warpedEvalTime, track.target))
     segStartMs = kfs[lo].timeMs
     segEndMs   = kfs[lo + 1].timeMs
   }
@@ -197,7 +183,10 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
   const hasTrackMods      = track.modifiers && track.modifiers.length > 0
   const hasMultiplier     = !!track.multiplierCurve
   const needsCtx          = hasSegmentMods || hasTrackMods || hasMultiplier
-  if (!needsCtx) return baseValue
+  // Signal modifiers/multipliers are scalar operations. Imported typed tracks
+  // with unsupported stacks retain their typed baseline instead of emitting
+  // NaN or coercing text/booleans/colors into unrelated numeric output.
+  if (!needsCtx || typeof baseValue !== 'number' || isColorTarget(track.target)) return baseValue
 
   const durationMs = Math.max(1, segEndMs - segStartMs)
   const localT = Math.max(0, Math.min(1, (warpedEvalTime - segStartMs) / durationMs))
@@ -226,7 +215,14 @@ export function evaluateTrack(track: Track, timeMs: number): number | null {
 }
 
 /** Evaluate all timelines and return a map of property path → computed value. */
-export type OverrideMap = Map<string, number>
+export type OverrideMap = Map<string, AnimatableValue>
+
+/** Scalar consumers (curve graph, gain, transform helpers) must explicitly
+ * request numeric evaluation rather than casting a typed track's output. */
+export function evaluateNumericTrack(track: Track, timeMs: number): number | null {
+  const value = evaluateTrack(track, timeMs)
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
 
 /**
  * Marker used by the runtime hook to drive a timeline's local time externally
@@ -342,5 +338,11 @@ export function getLayerValue(
   defaultValue: number,
 ): number {
   const key = `layers.${layerId}.${property}`
-  return overrides.has(key) ? (overrides.get(key) as number) : defaultValue
+  const value = overrides.get(key)
+  return typeof value === 'number' && Number.isFinite(value) ? value : defaultValue
+}
+
+/** Typed lookup for renderer properties such as text, colors and booleans. */
+export function getLayerPropertyValue(overrides: OverrideMap, layerId: string, property: string, defaultValue: AnimatableValue): AnimatableValue {
+  return overrides.get(`layers.${layerId}.${property}`) ?? defaultValue
 }

@@ -10,6 +10,8 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "perf:prepare": "node scripts/perf/prepare.mjs",
+    "perf:serve": "node scripts/perf/serve.mjs",
     "build:runtime": "tsup",
     "dev:mcp": "CHORONO_MCP_ENABLED=1 next dev -H 127.0.0.1 -p 2000",
     "start:mcp": "CHORONO_MCP_ENABLED=1 next start -H 127.0.0.1 -p 2000",

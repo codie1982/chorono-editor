@@ -23,10 +23,13 @@ Generated scripts run only through the isolated MCP sandbox. It exposes synchron
 ## Choose the relevant reference
 
 - Read [animation.md](references/animation.md) for keyframes, multiple timelines, modifiers, cloning, paths and procedural scripts.
+- Read [domains.md](references/domains.md) for particle configuration and life channels, spline points/handles/contours, and Scene Explorer hierarchy queries and edits.
 - Read [interaction.md](references/interaction.md) for state machines, runtime events, parameters, bindings and wiring.
 - Read [media-and-output.md](references/media-and-output.md) for asset import, typography, effects, masks, portable projects and exports.
 
-`patch_object` and `Layer.set` replace nested objects. Read existing nested values and preserve fields that the requested edit does not change. Use capability schemas for geometry, typography, effects, masks and repeater structures.
+For code-driven scene design, read the complete scene with `scene.snapshot()`, a complete layer with `layer.data`, or one field with `layer.get(path)`. Collection getters and `Timeline.data` return detached copies; mutating those copies does not edit the scene. Prefer `layer.patch(partial)` to merge nested settings while preserving unspecified fields. `patch_object` and `Layer.set` retain shallow replacement behavior. Use capability schemas for geometry, typography, effects, masks and repeater structures.
+
+Use the domain handles for structured edits: `layer.particles` validates emitter/preset/life/modifier settings, `layer.spline` preserves native topology and locks, and `scene.explorer` queries and edits the actual hierarchy. Use returned element/group ids. Instance domain data is readable; modify its source explicitly. These APIs operate on editable scene data and do not control ephemeral panel selection/collapse state.
 
 ## Preview, refine and deliver
 

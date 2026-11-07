@@ -1,0 +1,33 @@
+{
+  "purpose": "Frozen pre-pool native pixel references; test-only snapshots, never production imports.",
+  "files": [
+    {
+      "file": "BlurEffect.ts.snapshot",
+      "sha256": "f2f615d0dd91aa92f5a8f93fbeb07679582e4059eb3b083dcfcb2e0931128517"
+    },
+    {
+      "file": "GlowEffect.ts.snapshot",
+      "sha256": "dd2331783d5bf5392ca873f60eca569b4d0af415d36062e21404aeb31586104b"
+    },
+    {
+      "file": "ShadowEffect.ts.snapshot",
+      "sha256": "168d459bd4ca3d5c2ea0127462749aa2a63e55f69886e6ea1b982d9a0c03977c"
+    },
+    {
+      "file": "InnerShadowEffect.ts.snapshot",
+      "sha256": "1ed58ce6e6bfa62dae1fd646b54d52968a9ab2dbb51ad04677ebd7195e3af852"
+    },
+    {
+      "file": "InnerGlowEffect.ts.snapshot",
+      "sha256": "d83ee342fe359ad5f6e0a4c638cfe277a2efb15c7aaa0d687a25f5ab7ef35855"
+    },
+    {
+      "file": "TintEffect.ts.snapshot",
+      "sha256": "731a6ec0852ab89030ffce4b430c9247824af12ae730246522183d9033cdc322"
+    },
+    {
+      "file": "VignetteEffect.ts.snapshot",
+      "sha256": "c7deb3089894b8aaa2cc5189846d0329c84dac0f7f8ef48d4da900b91308b7eb"
+    }
+  ]
+}

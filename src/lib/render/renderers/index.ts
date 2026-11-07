@@ -87,10 +87,9 @@ export const groupRendererPlugin: LayerRendererPlugin = {
   id: 'group',
   supports: (layer: Layer) => layer.type === 'group',
   render(ctx: RenderContext, layer: Layer): void {
-    const childIds = ctx.scene.layers
-      .filter(l => l.parentId === layer.id)
-      .map(l => l.id)
-    for (const id of childIds) ctx.renderLayerById(id)
+    const children = ctx.layerIndex ? ctx.layerIndex.childrenOf(layer.id)
+      : ctx.scene.layers.filter(l => l.parentId === layer.id)
+    for (const child of children) ctx.renderLayerById(child.id)
   },
 }
 
@@ -106,12 +105,14 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
   render(ctx: RenderContext, layer: Layer): void {
     const cfg = layer.repeater
     if (!cfg) return
-    const source = ctx.scene.layers.find(l => l.id === cfg.sourceLayerId)
+    const source = ctx.layerIndex ? ctx.layerIndex.get(cfg.sourceLayerId)
+      : ctx.scene.layers.find(l => l.id === cfg.sourceLayerId)
     if (!source) return
 
     const instances = defaultRepeaterResolver.resolve({
       sourceLayerId: cfg.sourceLayerId,
-      count:         cfg.count,
+      // Bound the render snapshot only; imported/authored values remain intact.
+      count:         Math.max(0, Math.min(200, Math.round(cfg.count))),
       mode:          cfg.mode,
       transformStep: cfg.transformStep,
       polar:         cfg.polar,

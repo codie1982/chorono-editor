@@ -61,7 +61,7 @@ function readSource(
       if (!src.layerId || !src.property) return null
       const key = `layers.${src.layerId}.${src.property}`
       const animated = overrides.get(key)
-      if (animated !== undefined) return animated
+      if (animated !== undefined) return typeof animated === 'number' && Number.isFinite(animated) ? animated : null
       // Fall back to the layer's static value when no keyframe override exists.
       const layer = layers.find((l) => l.id === src.layerId)
       if (!layer) return null

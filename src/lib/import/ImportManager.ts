@@ -171,7 +171,7 @@ export class ImportManager {
       onProgress?.({ stage: 'creating', label: 'Building transaction…', progress: 0.95 })
 
       // Wrap all created items in one atomic undo transaction
-      const command = this.txBuilder.build(result)
+      const command = this.txBuilder.build(result, options)
       result.commands = [command]
 
       onProgress?.({ stage: 'complete', label: 'Import complete', progress: 1 })

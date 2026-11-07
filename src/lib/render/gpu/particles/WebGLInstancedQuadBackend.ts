@@ -9,17 +9,20 @@
 //   - WebGL2  → native drawArraysInstanced + VAO
 //   - WebGL1  → ANGLE_instanced_arrays (+ OES_vertex_array_object when present)
 //
-// Coordinate system: particle positions are layer-local. The layer transform
-// (resolveDisplayTransform + anchor) and the ortho projection are combined into
-// u_transform, so the GL canvas renders in composition/world space and is then
-// composited at identity by GPUCompositor.
+// Coordinate system: particle positions are layer-local. The full current
+// canvas transform and backing-pixel projection are combined into u_transform,
+// preserving parents, repeater instances and viewport/DPR transforms. The GL
+// canvas is then composited at identity by GPUCompositor. Legacy callers may
+// still supply a resolved root-layer transform and composition projection.
 
-import { ParticleGPUBackend, type GPUParticleDrawParams } from './ParticleGPUBackend'
+import { ParticleGPUBackend, type GPUParticleDrawParams, type ParticleBackingTransform } from './ParticleGPUBackend'
 import { ParticleBufferPacker, FLOATS_PER_PARTICLE } from './ParticleBufferPacker'
 import { buildParticleShaderSources } from './WebGLParticleShader'
 import { createWebGLOffscreen } from '../../OffscreenCanvasCache'
 import type { DisplayTransform } from '../../resolveDisplayTransform'
 import type { GPUCapabilityReport } from '../GPUCapabilities'
+import { WebGLDrawProbe } from '../WebGLDrawProbe'
+import { gpuWorkRegistry } from '@/lib/resources/performance/GpuWorkRegistry'
 
 const INITIAL_MAX_PARTICLES = 50_000
 const STRIDE_BYTES = FLOATS_PER_PARTICLE * 4
@@ -77,6 +80,26 @@ export function buildParticleTransformMatrix(
   ])
 }
 
+/** Preserve the canvas's complete affine basis when compositing at identity.
+ * Project backing pixels rather than composition units, so DPR/zoom, nested
+ * anchors, parent rotation and shear are applied exactly once. */
+export function buildParticleAffineTransformMatrix(
+  backingW: number,
+  backingH: number,
+  transform: ParticleBackingTransform,
+): Float32Array {
+  if (!(backingW > 0 && backingH > 0)
+    || ![backingW, backingH, transform.a, transform.b, transform.c, transform.d, transform.e, transform.f].every(Number.isFinite)) {
+    throw new Error('Particle backing transform must have finite values and positive dimensions.')
+  }
+  const ox = 2 / backingW, oy = -2 / backingH
+  return new Float32Array([
+    ox * transform.a, oy * transform.b, 0,
+    ox * transform.c, oy * transform.d, 0,
+    ox * transform.e - 1, oy * transform.f + 1, 1,
+  ])
+}
+
 export class WebGLInstancedQuadBackend extends ParticleGPUBackend {
   private cap: GPUCapabilityReport
   private isGL2: boolean
@@ -97,6 +120,8 @@ export class WebGLInstancedQuadBackend extends ParticleGPUBackend {
 
   private gpuCapacity = INITIAL_MAX_PARTICLES
   private packer = new ParticleBufferPacker()
+  private probe: WebGLDrawProbe
+  private unregisterMetrics: () => void
 
   protected get eventSourceId(): string {
     return 'WebGLInstancedQuadBackend'
@@ -111,9 +136,17 @@ export class WebGLInstancedQuadBackend extends ParticleGPUBackend {
     if (!off) throw new Error('[GPUParticle] WebGL context unavailable')
     this.glCanvas = off.canvas
     this.gl = off.gl
+    this.probe = new WebGLDrawProbe(this.isGL2 ? this.gl as WebGL2RenderingContext : null)
 
     this.registerContextHandlers()
     this.initialize()
+    this.unregisterMetrics = gpuWorkRegistry.register({
+      setSampling: enabled => this.probe.setSampling(enabled),
+      getSnapshot: () => ({ ...this.probe.getSnapshot(), backend: this.isGL2 ? 'WebGL2 parçacık' : 'WebGL1 parçacık',
+        contextLost: this._contextLost,
+        bufferBytes: this._contextLost ? 0 : this.gpuCapacity * STRIDE_BYTES + 12 * 4,
+        stagingBytes: this.packer.getBuffer().byteLength }),
+    })
     this.emit('gpu:backend-created', { tier: cap.tier, renderer: cap.renderer })
   }
 
@@ -127,11 +160,13 @@ export class WebGLInstancedQuadBackend extends ParticleGPUBackend {
     this.glCanvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault()
       this._contextLost = true
+      this.probe.invalidate()
       this.emit('gpu:context-lost')
     })
     this.glCanvas.addEventListener('webglcontextrestored', () => {
       try {
         this.initialize()
+        this.probe.restore()
         this._contextLost = false
         this.emit('gpu:context-restored')
       } catch (err) {
@@ -181,6 +216,7 @@ export class WebGLInstancedQuadBackend extends ParticleGPUBackend {
   }
 
   dispose(): void {
+    this.unregisterMetrics()
     const gl = this.gl
     if (this.program) gl.deleteProgram(this.program)
     if (this.quadBuffer) gl.deleteBuffer(this.quadBuffer)
@@ -227,17 +263,19 @@ export class WebGLInstancedQuadBackend extends ParticleGPUBackend {
       else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
       gl.useProgram(this.program)
-      const mat = buildParticleTransformMatrix(
-        params.compositionW, params.compositionH,
-        params.displayTransform, params.anchorX, params.anchorY,
-      )
+      const mat = params.localToBacking
+        ? buildParticleAffineTransformMatrix(params.backingW, params.backingH, params.localToBacking)
+        : buildParticleTransformMatrix(params.compositionW, params.compositionH,
+          params.displayTransform, params.anchorX, params.anchorY)
       gl.uniformMatrix3fv(this.uTransform, false, mat)
       gl.uniform1i(this.uStarPoints, params.cfg.particle.starPoints ?? 5)
 
       if (this.vao) this.bindVAO()
       else this.setupAttribs()
 
-      this.drawInstanced(6, count)
+      const query = this.probe.begin()
+      try { this.drawInstanced(6, count) } finally { this.probe.end(query) }
+      this.probe.recordDraw(count)
 
       if (this.vao) this.unbindVAO()
       gl.flush()

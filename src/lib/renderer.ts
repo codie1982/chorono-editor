@@ -1,6 +1,11 @@
 import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor } from './types'
 import { buildPathOnCanvas } from './geometry/PathCommand'
 import { splineToPathDefinition } from './spline/splineToPath'
+import { computeSplineBounds } from './spline/geometry/computeSplineBounds'
+import { trimSplinePath } from './spline/render/trimSplinePath'
+import { hitTestSplineFill, hitTestSplineSegment } from './spline/geometry/hitTest'
+import { resolveLayerWorldMatrix } from './geometry/resolveLayerWorldMatrix'
+import { createLayerWorldBoundsResolver } from './geometry/resolveLayerWorldBounds'
 import { buildEffectsFilter } from './types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from './evaluator'
 import { evaluateMotionPath } from './motionPath'
@@ -14,6 +19,7 @@ import { hitTestSegment as hitTestSegmentLocal } from './path/pathOps'
 import { measureTextLayout } from './text/measureText'
 import { buildShapePath, computeShapeLength } from './render/shapeRenderer'
 import { buildGradient } from './render/buildGradient'
+import { resolveRenderColor } from './render/materializeOverrides'
 
 /** Element cache passed in from React (image / video DOM elements keyed by Asset.id). */
 export type AssetElementMap = Map<string, HTMLImageElement | HTMLVideoElement>
@@ -87,10 +93,7 @@ export function drawShape(
       if (boundFill) {
         ctx.fillStyle = boundFill
       } else {
-        const color = getLayerValue(overrides, layer.id, 'style.fill.color' as string, 0)
-        ctx.fillStyle = overrides.has(`layers.${layer.id}.style.fill.color`)
-          ? `#${Math.round(color).toString(16).padStart(6, '0')}`
-          : (style.fill.color ?? '#000000')
+        ctx.fillStyle = resolveRenderColor(overrides, layer.id, 'style.fill.color', style.fill.color ?? '#000000')
       }
     }
     ctx.fill()
@@ -113,7 +116,7 @@ export function drawShape(
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
     const { color: staticStrokeColor, alignment = 'center', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
     const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
-    const color = boundStroke ?? staticStrokeColor
+    const color = boundStroke ?? resolveRenderColor(overrides, layer.id, 'style.stroke.color', staticStrokeColor ?? '#FFFFFF')
 
     // ── Trim Path resolution ──────────────────────────────────────────────
     // If stroke.trim is defined (even with defaults), evaluate animated values
@@ -121,10 +124,10 @@ export function drawShape(
     let lineDash: number[] = dashArray
     let lineDashOffset = 0
 
-    if (style.stroke.trim) {
-      const trimStart  = getLayerValue(overrides, layer.id, 'style.stroke.trim.start',  style.stroke.trim.start  ?? 0)
-      const trimEnd    = getLayerValue(overrides, layer.id, 'style.stroke.trim.end',    style.stroke.trim.end    ?? 1)
-      const trimOffset = getLayerValue(overrides, layer.id, 'style.stroke.trim.offset', style.stroke.trim.offset ?? 0)
+    if (style.stroke.trim || ['start', 'end', 'offset'].some(key => overrides.has(`layers.${layer.id}.style.stroke.trim.${key}`))) {
+      const trimStart  = getLayerValue(overrides, layer.id, 'style.stroke.trim.start',  style.stroke.trim?.start  ?? 0)
+      const trimEnd    = getLayerValue(overrides, layer.id, 'style.stroke.trim.end',    style.stroke.trim?.end    ?? 1)
+      const trimOffset = getLayerValue(overrides, layer.id, 'style.stroke.trim.offset', style.stroke.trim?.offset ?? 0)
 
       const totalLen   = computeShapeLength(effectiveShape, w, h, resolvedParams)
       if (totalLen > 0) {
@@ -234,26 +237,28 @@ export function drawBezierPath(
     ctx.save()
     ctx.globalAlpha *= fillOpacity / 100
     const boundFill = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
-    ctx.fillStyle = boundFill ?? style.fill.color ?? '#3B82F6'
+    ctx.fillStyle = buildGradient(ctx, style.fill.gradient, w, h, bb.x, bb.y)
+      ?? boundFill ?? resolveRenderColor(overrides, layer.id, 'style.fill.color', style.fill.color ?? '#3B82F6')
     ctx.fill()
     ctx.restore()
   }
 
   // ── Stroke (with trim support) ──
-  if (style.stroke && style.stroke.width > 0) {
+  if (style.stroke) {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
+    if (sw <= 0) return
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
     const { color: staticStrokeColor, dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
     const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
-    const color = boundStroke ?? staticStrokeColor
+    const color = boundStroke ?? resolveRenderColor(overrides, layer.id, 'style.stroke.color', staticStrokeColor ?? '#FFFFFF')
 
     let lineDash       = dashArray
     let lineDashOffset = 0
 
-    if (style.stroke.trim) {
-      const trimStart  = getLayerValue(overrides, layer.id, 'style.stroke.trim.start',  style.stroke.trim.start  ?? 0)
-      const trimEnd    = getLayerValue(overrides, layer.id, 'style.stroke.trim.end',    style.stroke.trim.end    ?? 1)
-      const trimOffset = getLayerValue(overrides, layer.id, 'style.stroke.trim.offset', style.stroke.trim.offset ?? 0)
+    if (style.stroke.trim || ['start', 'end', 'offset'].some(key => overrides.has(`layers.${layer.id}.style.stroke.trim.${key}`))) {
+      const trimStart  = getLayerValue(overrides, layer.id, 'style.stroke.trim.start',  style.stroke.trim?.start  ?? 0)
+      const trimEnd    = getLayerValue(overrides, layer.id, 'style.stroke.trim.end',    style.stroke.trim?.end    ?? 1)
+      const trimOffset = getLayerValue(overrides, layer.id, 'style.stroke.trim.offset', style.stroke.trim?.offset ?? 0)
       const totalLen   = bezierPathLength(layer.path)
       if (totalLen > 0) {
         const s = Math.max(0, Math.min(1, trimStart))
@@ -302,32 +307,54 @@ export function drawSplineLayer(
   const style: ShapeStyle = layer.style ?? {}
   const pathDef  = splineToPathDefinition(layer.spline)
   const fillRule = layer.spline.fillRule === 'evenodd' ? 'evenodd' as const : 'nonzero' as const
-
-  buildPathOnCanvas(ctx, pathDef)
+  const bounds = computeSplineBounds(layer.spline)
+  const resolveColor = (property: string, fallback: string): string => {
+    const bound = paramValues ? getStringParamBinding(layer, property, paramValues) : undefined
+    if (bound) return bound
+    return resolveRenderColor(overrides, layer.id, property, fallback)
+  }
 
   // Only fill closed paths — open paths (arcs, lines) are stroke-only
   if (style.fill && pathDef.closed) {
+    // A compound spline can contain closed shapes AND open arcs. Canvas fill
+    // implicitly closes open subpaths, so keep them out of the fill pass.
+    buildPathOnCanvas(ctx, splineToPathDefinition(layer.spline, { closedOnly: true }))
     const fillOpacity = getLayerValue(overrides, layer.id, 'style.fill.opacity', style.fill.opacity ?? 100)
-    const boundFill   = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
     ctx.save()
     ctx.globalAlpha *= fillOpacity / 100
-    ctx.fillStyle    = boundFill ?? style.fill.color ?? '#3B82F6'
+    ctx.fillStyle = (style.fill.type === 'gradient'
+      ? buildGradient(ctx, style.fill.gradient, bounds.width, bounds.height, bounds.x, bounds.y)
+      : null) ?? resolveColor('style.fill.color', style.fill.color ?? '#3B82F6')
     ctx.fill(fillRule)
     ctx.restore()
   }
 
-  if (style.stroke && style.stroke.width > 0) {
+  if (style.stroke) {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
+    // A default closed spline has width 0; its width can still be animated.
+    if (sw <= 0) return
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
     const { color = '#FFFFFF', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
-    const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
+    const trim = style.stroke.trim
+    const hasTrim = !!trim || ['start', 'end', 'offset'].some(key =>
+      overrides.has(`layers.${layer.id}.style.stroke.trim.${key}`))
+    const strokePath = hasTrim ? trimSplinePath(
+      pathDef,
+      getLayerValue(overrides, layer.id, 'style.stroke.trim.start', trim?.start ?? 0),
+      getLayerValue(overrides, layer.id, 'style.stroke.trim.end', trim?.end ?? 1),
+      getLayerValue(overrides, layer.id, 'style.stroke.trim.offset', trim?.offset ?? 0),
+    ) : pathDef
+    if (strokePath.commands.length === 0) return
+    buildPathOnCanvas(ctx, strokePath)
     ctx.save()
     ctx.globalAlpha   *= so / 100
-    ctx.strokeStyle    = boundStroke ?? color
+    ctx.strokeStyle = buildGradient(ctx, style.stroke.gradient, bounds.width, bounds.height, bounds.x, bounds.y)
+      ?? resolveColor('style.stroke.color', color)
     ctx.lineWidth      = sw
     ctx.lineCap        = lineCap
     ctx.lineJoin       = lineJoin
     ctx.setLineDash(dashArray)
+    ctx.lineDashOffset = 0
     ctx.stroke()
     ctx.setLineDash([])
     ctx.restore()
@@ -470,25 +497,30 @@ export function drawText(
   const {
     value, color, gradient,
     fontFamily = 'sans-serif', fontWeight = 'normal', fontStyle = 'normal',
-    textAlign = 'left', letterSpacing = 0, lineHeight: _lh,
+    textAlign = 'left', lineHeight: _lh,
     stroke, shadow, uppercase, underline,
   } = layer.text
   // text.fontSize can be driven by a paramBinding or keyframe override.
   const fontSize = overrides
     ? getLayerValue(overrides, layer.id, 'text.fontSize', layer.text.fontSize)
     : layer.text.fontSize
+  const letterSpacing = overrides
+    ? getLayerValue(overrides, layer.id, 'text.letterSpacing', layer.text.letterSpacing ?? 0)
+    : layer.text.letterSpacing ?? 0
 
   // Runtime parameter resolution:
   //   1. paramBindings['text.value'] → entire text replaced by parameter value
   //   2. {paramId} placeholders inside (raw or bound) text → substituted
   const boundText = paramValues ? getStringParamBinding(layer, 'text.value', paramValues) : undefined
-  const rawText = boundText ?? value
+  const animatedText = overrides?.get(`layers.${layer.id}.text.value`)
+  const rawText = boundText ?? (typeof animatedText === 'string' ? animatedText : value)
   const resolvedValue = paramValues ? resolveTextContent(rawText, paramValues) : rawText
   const displayText = uppercase ? resolvedValue.toUpperCase() : resolvedValue
   // Parameter-bound colour override (paramBindings['text.color']).
   const resolvedColor = paramValues
-    ? (getStringParamBinding(layer, 'text.color', paramValues) ?? color)
-    : color
+    ? (getStringParamBinding(layer, 'text.color', paramValues)
+      ?? (overrides ? resolveRenderColor(overrides, layer.id, 'text.color', color) : color))
+    : overrides ? resolveRenderColor(overrides, layer.id, 'text.color', color) : color
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
   ctx.textAlign    = textAlign as CanvasTextAlign
   ctx.textBaseline = 'top'
@@ -746,7 +778,7 @@ export function renderScene(
   ctx.fillRect(0, 0, width, height)
 
   // If any layer is solo'd, only render solo layers.
-  const anySolo = scene.layers.some((l) => l.solo)
+  const anySolo = scene.layers.some((l) => l.type !== 'audio' && l.solo)
 
   for (const layer of scene.layers) {
     if (anySolo && !layer.solo) continue
@@ -822,8 +854,9 @@ export function hitTestLayer(
   timeMs: number,
   canvasX: number,
   canvasY: number,
+  overrides?: OverrideMap,
 ): string | null {
-  return hitTestLayersAt(scene, timeMs, canvasX, canvasY)[0] ?? null
+  return hitTestLayersAt(scene, timeMs, canvasX, canvasY, overrides)[0] ?? null
 }
 
 /**
@@ -836,23 +869,13 @@ export function hitTestLayersAt(
   timeMs: number,
   canvasX: number,
   canvasY: number,
+  frameOverrides?: OverrideMap,
 ): string[] {
-  const overrides = evaluateTimelines(scene.timelines, timeMs)
+  // Hit-test the same frame the canvas displays (timeline isolation, state
+  // machines and parameter bindings may replace the normal timeline values).
+  const overrides = frameOverrides ?? evaluateTimelines(scene.timelines, timeMs)
   const hits: string[] = []
-
-  // Helper: cumulative parent transform offset (ignores rotation/scale for now)
-  const parentOffset = (layer: Layer): { x: number; y: number } => {
-    let ox = 0, oy = 0
-    let cur: Layer | undefined = layer
-    while (cur?.parentId) {
-      const parent = scene.layers.find(p => p.id === cur!.parentId)
-      if (!parent) break
-      ox += getLayerValue(overrides, parent.id, 'transform.x', parent.transform.x)
-      oy += getLayerValue(overrides, parent.id, 'transform.y', parent.transform.y)
-      cur = parent
-    }
-    return { x: ox, y: oy }
-  }
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
 
   for (let i = scene.layers.length - 1; i >= 0; i--) {
     const layer = scene.layers[i]
@@ -861,11 +884,10 @@ export function hitTestLayersAt(
     if (layer.type === 'audio') continue
     if (layer.type === 'group') continue   // groups are tested via children union below
 
-    const x  = getLayerValue(overrides, layer.id, 'transform.x', layer.transform.x)
-    const y  = getLayerValue(overrides, layer.id, 'transform.y', layer.transform.y)
-    const po = parentOffset(layer)
-    const lx = canvasX - x - po.x
-    const ly = canvasY - y - po.y
+    const matrix = resolveLayerWorldMatrix(layer, scene, timeMs, overrides)
+    // A zero scale produces no visible body and cannot be inverted.
+    if (Math.abs(matrix.determinant()) < 1e-9) continue
+    const { x: lx, y: ly } = matrix.invert().applyToPoint({ x: canvasX, y: canvasY })
 
     // BL-59 Phase 3 — Instance layers have no geometry of their own;
     // resolve to the source so hit-test uses the source's shape/size.
@@ -888,60 +910,14 @@ export function hitTestLayersAt(
     const layer = scene.layers[i]
     if (layer.type !== 'group') continue
     if (layer.hidden || layer.locked || layer.frozen) continue
-    const bounds = computeGroupWorldBounds(scene, overrides, layer)
+    const bounds = boundsForFrame(layer)
     if (!bounds) continue
-    if (canvasX >= bounds.x && canvasX <= bounds.x + bounds.w &&
-        canvasY >= bounds.y && canvasY <= bounds.y + bounds.h) {
+    if (canvasX >= bounds.x && canvasX <= bounds.x + bounds.width &&
+        canvasY >= bounds.y && canvasY <= bounds.y + bounds.height) {
       hits.push(layer.id)
     }
   }
   return hits
-}
-
-/** Union of every child's world AABB for a group layer. Returns null when
- *  the group is empty. Used by hitTestLayersAt (BL-03 group bbox hit). */
-function computeGroupWorldBounds(
-  scene: ChronoScene,
-  overrides: OverrideMap,
-  group: Layer,
-): { x: number; y: number; w: number; h: number } | null {
-  let minX =  Infinity, minY =  Infinity
-  let maxX = -Infinity, maxY = -Infinity
-  let count = 0
-
-  function walk(parentLayerId: string) {
-    for (const child of scene.layers) {
-      if (child.parentId !== parentLayerId) continue
-      if (child.hidden) continue
-      if (child.type === 'audio') continue
-      // Recurse into nested groups
-      if (child.type === 'group') { walk(child.id); continue }
-      // World position of this child
-      const cx = getLayerValue(overrides, child.id, 'transform.x', child.transform.x)
-      const cy = getLayerValue(overrides, child.id, 'transform.y', child.transform.y)
-      let acc = { x: 0, y: 0 }
-      let cur: Layer | undefined = child
-      while (cur?.parentId) {
-        const parent = scene.layers.find((p) => p.id === cur!.parentId)
-        if (!parent) break
-        acc.x += getLayerValue(overrides, parent.id, 'transform.x', parent.transform.x)
-        acc.y += getLayerValue(overrides, parent.id, 'transform.y', parent.transform.y)
-        cur = parent
-      }
-      const w = child.size?.width  ?? (child.text?.fontSize ?? 24) * 4
-      const h = child.size?.height ?? (child.text?.fontSize ?? 24)
-      const x = cx + acc.x
-      const y = cy + acc.y
-      if (x < minX) minX = x
-      if (y < minY) minY = y
-      if (x + w > maxX) maxX = x + w
-      if (y + h > maxY) maxY = y + h
-      count++
-    }
-  }
-  walk(group.id)
-  if (count === 0) return null
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
 }
 
 /**
@@ -949,6 +925,14 @@ function computeGroupWorldBounds(
  * Returns true if the local point (lx, ly) is on the layer's body or stroke.
  */
 function hitTestLayerLocal(layer: Layer, lx: number, ly: number): boolean {
+  if (layer.type === 'spline') {
+    if (!layer.spline) return false
+    // Splines are centred around local origin and have no size box. Pick the
+    // actual compound fill/stroke, including holes and negative coordinates.
+    const slop = Math.max(6, (layer.style?.stroke?.width ?? 0) / 2 + 4)
+    return !!hitTestSplineSegment(layer.spline, lx, ly, slop)
+      || (!!layer.style?.fill && hitTestSplineFill(layer.spline, lx, ly))
+  }
   // BL-66 — Bezier path layers carry no `size`. Hit-test by proximity to the
   // path's stroke (so empty space around the curve doesn't grab clicks) plus
   // an interior fill check when the path is closed. Empty paths (< 2 anchors)

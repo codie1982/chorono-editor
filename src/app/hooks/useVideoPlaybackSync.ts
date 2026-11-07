@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetCache } from './useAssetCache'
+import { getLayerValue, getLayerPropertyValue, type OverrideMap } from '@/lib/evaluator'
 
 interface Params {
   scene: ChronoScene
@@ -9,6 +10,7 @@ interface Params {
   currentTimeMs: number
   isPlaying: boolean
   playbackSpeed: number
+  overrides?: OverrideMap
 }
 
 const SEEK_THRESHOLD_S = 0.05  // tolerate ~50ms drift before re-seeking
@@ -25,9 +27,15 @@ const SEEK_THRESHOLD_S = 0.05  // tolerate ~50ms drift before re-seeking
  * playback state on existing elements.
  */
 export function useVideoPlaybackSync({
-  scene, assetCache, currentTimeMs, isPlaying, playbackSpeed,
+  scene, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides,
 }: Params): void {
-  useEffect(() => {
+  useEffect(() => syncVideoPlayback({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides }),
+    [scene.layers, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides])
+}
+
+/** Shared effect body is directly testable with media elements; no playback
+ * render or simulated React lifecycle is needed to verify animated volume. */
+export function syncVideoPlayback({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides }: Params): void {
     for (const layer of scene.layers) {
       if (layer.type !== 'video' || !layer.video) continue
       const el = assetCache.get(layer.video.assetId)
@@ -38,8 +46,10 @@ export function useVideoPlaybackSync({
       const inWindow = currentTimeMs >= startMs && currentTimeMs <= endMs
 
       // Volume + mute
-      el.muted  = !!layer.video.muted || layer.hidden === true
-      el.volume = Math.max(0, Math.min(1, layer.video.volume ?? 1))
+      const muted = overrides ? getLayerPropertyValue(overrides, layer.id, 'video.muted', !!layer.video.muted) : layer.video.muted
+      const volume = overrides ? getLayerValue(overrides, layer.id, 'video.volume', layer.video.volume ?? 1) : layer.video.volume ?? 1
+      el.muted  = muted === true || layer.hidden === true
+      el.volume = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 1))
       el.playbackRate = playbackSpeed
       el.loop = !!layer.video.loop
 
@@ -65,5 +75,4 @@ export function useVideoPlaybackSync({
         el.currentTime = Math.max(0, videoTimeSec)
       }
     }
-  }, [scene.layers, assetCache, currentTimeMs, isPlaying, playbackSpeed])
 }

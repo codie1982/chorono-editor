@@ -154,7 +154,8 @@ export function buildSceneExplorerRows(
   const roots = SceneTraversal.buildTree(layers)
 
   // Pre-compute: any solo'd layer in the scene?
-  const anySolo = layers.some((l) => l.solo)
+  const anySolo = layers.some((l) => l.type !== 'audio' && l.solo)
+  const anyAudioSolo = layers.some(l => l.type === 'audio' && l.solo)
 
   // Pre-compute matches set (faceted query) — we need ancestors of matches.
   let matchIds: Set<string> | null = null
@@ -176,10 +177,10 @@ export function buildSceneExplorerRows(
 
   // Pre-compute solo ancestors set (so a solo'd nested layer is reachable).
   let visibleByFilter: Set<string> | null = null
-  if (anySolo) {
+  if (anySolo || anyAudioSolo) {
     visibleByFilter = new Set<string>()
     for (const layer of layers) {
-      if (layer.solo) {
+      if ((layer.type === 'audio' ? !anyAudioSolo : !anySolo) || layer.solo) {
         visibleByFilter.add(layer.id)
         const ancestors = SceneTraversal.getAncestors(roots, layer.id)
         for (const node of ancestors) visibleByFilter.add(node.layer.id)

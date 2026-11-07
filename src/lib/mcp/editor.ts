@@ -14,6 +14,8 @@ import { exportSequence } from '../export/sequence/SequenceExportEngine'
 import { defaultRuntimeExporter } from '../export'
 import { initImportPipeline, importManager } from '../import/initImportPipeline'
 import { ImportTransactionBuilder } from '../import/ImportTransactionBuilder'
+import { renderAudioMix, normalizedClipGain } from '../audio/audioRender'
+import { makePatchAudioClipCmd } from '../editor/commands-audio'
 
 export interface MCPHost {
   editor: EditorStateReturn
@@ -31,6 +33,7 @@ export interface MCPHost {
   setSpeed: (speed: number) => void
   setParameter: (id: string, value: any) => void
   dispatchEvent: (event: string, machineId?: string) => void
+  getAudioState?: () => unknown
 }
 
 function asBase64(bytes: Uint8Array) {
@@ -132,6 +135,24 @@ export async function executeEditorJob(job: BridgeJob, host: MCPHost, signal?: A
     return { revision, parameters: args.parameters ?? {}, event: args.event }
   }
   if (method === 'get_runtime') return { revision, currentTimeMs: host.currentTimeMs, isPlaying: host.isPlaying, selectedTimelineId: host.selectedTimelineId, ...host.getRuntimeState() }
+  if (method === 'get_audio_state') return { revision, currentTimeMs: host.currentTimeMs, isPlaying: host.isPlaying,
+    audio: host.getAudioState?.() ?? { available: false } }
+  if (method === 'render_audio_preview' || method === 'export_audio') {
+    if (args.expectedRevision !== undefined && args.expectedRevision !== revision) throw new Error(`Scene revision conflict: expected ${args.expectedRevision}, actual ${revision}`)
+    const maxDurationMs = method === 'render_audio_preview' ? 10000 : 120000
+    const startMs = args.startMs ?? 0
+    const rendered = await renderAudioMix(before, { startMs, durationMs: args.durationMs ?? Math.min(maxDurationMs, before.composition.durationMs - startMs),
+      timelineIds: args.timelineIds, sampleRate: args.sampleRate, maxDurationMs })
+    return { revision, extension: '.wav', data: asBase64(rendered.bytes), mimeType: rendered.mimeType,
+      durationMs: rendered.durationMs, startMs, sampleRate: rendered.sampleRate, channels: rendered.channels,
+      frames: rendered.frames, stats: rendered.stats, clips: rendered.clips, warnings: rendered.warnings }
+  }
+  if (method === 'normalize_audio_clip') {
+    ensureWritable()
+    const normalized = await normalizedClipGain(before, args.layerId, args.targetDbFS)
+    const applied = commit(makePatchAudioClipCmd(args.layerId, { volume: normalized.volume }).execute(before), 'Normalize audio clip')
+    return { ...applied, normalization: normalized }
+  }
   if (method === 'render_preview' || method === 'evaluate_frame') {
     if (before.stateMachines?.length && !args.timelineIds && (args.timeMs !== undefined || args.parameters)) throw new Error('For deterministic state-machine previews specify timelineIds; omit timeMs/parameters to capture the current live state')
     const scene = filteredScene(before, args.timelineIds)
@@ -163,7 +184,9 @@ export async function executeEditorJob(job: BridgeJob, host: MCPHost, signal?: A
   if (method === 'export_runtime') {
     const portable = await portableScene(before)
     const runtime = defaultRuntimeExporter.export(portable)
-    return { revision, extension: '.runtime.json', data: asBase64(new TextEncoder().encode(JSON.stringify(runtime, null, 2))), warnings: runtime.warnings }
+    return { revision, extension: '.runtime.json', data: asBase64(new TextEncoder().encode(JSON.stringify(runtime, null, 2))), warnings: [
+      ...runtime.warnings, ...(before.layers.some(layer => layer.type === 'audio') ? [{ code: 'AUDIO_SEPARATE_OUTPUT', message: 'Runtime JSON is not an audio mix. Use export_audio for a WAV soundtrack.' }] : []),
+    ] }
   }
   if (method === 'export_svg') {
     const exported = exportSVG(before, { timeMs: args.timeMs ?? 0 })
@@ -183,7 +206,7 @@ export async function executeEditorJob(job: BridgeJob, host: MCPHost, signal?: A
     initImportPipeline()
     const imported = await importManager.importFile(new File([bytes], args.name, { type: args.mimeType }))
     if (imported.errors.length) throw new Error(imported.errors.map(e => e.message).join('; '))
-    return commit(new ImportTransactionBuilder().build(imported).execute(before), 'MCP import asset')
+    return commit(new ImportTransactionBuilder().build(imported, { timelineId: args.timelineId ?? host.selectedTimelineId, startMs: args.startMs ?? host.currentTimeMs }).execute(before), 'MCP import asset')
   }
   const def = actionRegistry.get(method)
   if (def?.read) return { revision, content: def.read(args, before) }

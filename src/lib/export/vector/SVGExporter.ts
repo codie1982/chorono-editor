@@ -14,6 +14,7 @@ import type { ChronoScene, Layer, Transform } from '@/lib/types'
 import { ShapeToPathConverter, pathToSvgString, type Size } from '@/lib/geometry'
 import { bezierPathToPathDefinition } from '@/lib/path/bezierToPathDefinition'
 import { evaluateTimelines, getLayerValue } from '@/lib/evaluator'
+import { materializeRenderScene } from '@/lib/render/materializeOverrides'
 import {
   GradientRegistry,
   buildStyleAttrs,
@@ -58,10 +59,11 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
   const warnings: string[] = []
   const gradients = new GradientRegistry()
   const overrides = evaluateTimelines(scene.timelines, timeMs)
+  scene = materializeRenderScene(scene, overrides)
 
   // Solo filter mirrors CanvasRenderer: if any layer is soloed, only soloed
   // layers render.
-  const anySolo = scene.layers.some((l) => l.solo)
+  const anySolo = scene.layers.some((l) => l.type !== 'audio' && l.solo)
   const isVisible = (l: Layer): boolean => {
     if (anySolo && !l.solo) return false
     if (l.hidden) return false

@@ -88,9 +88,9 @@ describe('anchorMath.calculateAnchorMove', () => {
       x: 0, y: 0, anchorX: 0, anchorY: 0, rotationDeg: 90, scaleX: 1, scaleY: 1,
       dx: 10, dy: 0, snapGrid: false, snapPixel: false, gridSize: 10,
     })
-    expect(r.anchorX).toBeCloseTo(10)
-    expect(r.anchorY).toBeCloseTo(0)
-    expect(r.x).toBeCloseTo(-10)
+    expect(r.anchorX).toBeCloseTo(0)
+    expect(r.anchorY).toBeCloseTo(-10)
+    expect(r.x).toBeCloseTo(10)
     expect(r.y).toBeCloseTo(10)
   })
   it('snaps the anchor world position to the grid', () => {

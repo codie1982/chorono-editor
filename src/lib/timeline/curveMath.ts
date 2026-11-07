@@ -11,7 +11,7 @@
 // to call from React render without memo overhead.
 
 import type { Track } from '../types'
-import { evaluateTrack } from '../evaluator'
+import { evaluateNumericTrack } from '../evaluator'
 
 // ── Track colour palette ────────────────────────────────────────────────────
 // 3ds Max convention: position X = red, position Y = green, position Z = blue.
@@ -161,7 +161,7 @@ export function buildCurvePath(track: Track, vp: CurveViewport): string {
   let d = ''
   for (let i = 0; i <= steps; i++) {
     const tMs = vp.startMs + (i / steps) * visMs
-    const v = evaluateTrack(track, tMs)
+    const v = evaluateNumericTrack(track, tMs)
     if (v == null) continue
     const x = msToX(vp, tMs)
     const y = valueToY(vp, v)
@@ -222,7 +222,7 @@ export function buildCurvePathSegments(track: Track, vp: CurveViewport): CurvePa
 
   for (let i = 0; i <= steps; i++) {
     const tMs = vp.startMs + (i / steps) * visMs
-    const v = evaluateTrack(track, tMs)
+    const v = evaluateNumericTrack(track, tMs)
     if (v == null) { prevSeg = null; continue }
     const x = msToX(vp, tMs)
     const y = valueToY(vp, v)

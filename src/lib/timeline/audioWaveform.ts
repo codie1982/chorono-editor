@@ -1,98 +1,57 @@
-// ── Audio waveform peak extraction (BL-37) ─────────────────────────────────
-// Pulls an audio URL through Web Audio API's decodeAudioData and reduces it
-// to a fixed-size array of (min, max) peaks for waveform rendering. The
-// reduction is independent of the asset's sample rate so the waveform
-// drawn at the same width always uses the same number of buckets, which
-// keeps the canvas paint cheap.
+import { loadAudioBufferFromUrl } from '../audio/AudioAssetService'
 
 export interface WaveformPeaks {
-  /** Number of buckets (== peaks.length / 2). */
   bucketCount: number
-  /** Flattened [min0, max0, min1, max1, …] in [-1, 1]. */
-  peaks:       Float32Array
-  /** Original sample length / sampleRate (seconds). */
+  /** Union of channel extrema; opposing stereo channels never cancel. */
+  peaks: Float32Array
+  channelPeaks: Float32Array[]
+  channelCount: number
   durationSec: number
 }
-
 const DEFAULT_BUCKETS = 400
-
-// Module-level cache shared across all consumers. Key by URL + bucketCount
-// so different sizes don't collide. AudioBuffer itself is large and held
-// only briefly during downsample, then dropped.
 const cache = new Map<string, WaveformPeaks>()
 const inflight = new Map<string, Promise<WaveformPeaks>>()
+const normalizeBuckets = (count: number) => Math.max(1, Math.min(131072, Math.floor(Number.isFinite(count) ? count : DEFAULT_BUCKETS)))
+const keyFor = (url: string, count: number) => JSON.stringify([url, normalizeBuckets(count)])
 
-let sharedCtx: AudioContext | null = null
-function getCtx(): AudioContext {
-  if (!sharedCtx) {
-    const Ctor = window.AudioContext
-      || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    sharedCtx = new Ctor()
+/** Every sample belongs to a bucket, including the source's final remainder.
+ * Empty buckets are zero (short clips at high zoom), never inverted extrema. */
+export function downsampleAudioBuffer(audio: AudioBuffer, requestedBuckets: number): WaveformPeaks {
+  const bucketCount = normalizeBuckets(requestedBuckets)
+  const channelPeaks: Float32Array[] = []
+  const peaks = new Float32Array(bucketCount * 2)
+  for (let c = 0; c < audio.numberOfChannels; c++) {
+    const data = audio.getChannelData(c), output = new Float32Array(bucketCount * 2)
+    for (let b = 0; b < bucketCount; b++) {
+      const start = Math.floor(b * audio.length / bucketCount)
+      const end = Math.floor((b + 1) * audio.length / bucketCount)
+      let min = Infinity, max = -Infinity
+      for (let i = start; i < end; i++) { min = Math.min(min, data[i]); max = Math.max(max, data[i]) }
+      output[b * 2] = min === Infinity ? 0 : min
+      output[b * 2 + 1] = max === -Infinity ? 0 : max
+      if (c === 0) { peaks[b * 2] = output[b * 2]; peaks[b * 2 + 1] = output[b * 2 + 1] }
+      else { peaks[b * 2] = Math.min(peaks[b * 2], output[b * 2]); peaks[b * 2 + 1] = Math.max(peaks[b * 2 + 1], output[b * 2 + 1]) }
+    }
+    channelPeaks.push(output)
   }
-  return sharedCtx
+  return { bucketCount, peaks, channelPeaks, channelCount: audio.numberOfChannels, durationSec: audio.duration }
 }
 
-/** Decode the asset URL and downsample to (min, max) peaks. Cached per URL. */
-export async function loadWaveformPeaks(
-  url: string,
-  bucketCount = DEFAULT_BUCKETS,
-): Promise<WaveformPeaks> {
-  const key = `${url}#${bucketCount}`
-  const cached = cache.get(key)
-  if (cached) return cached
+export async function loadWaveformPeaks(url: string, bucketCount = DEFAULT_BUCKETS): Promise<WaveformPeaks> {
+  const key = keyFor(url, bucketCount), cached = cache.get(key)
+  if (cached) { cache.delete(key); cache.set(key, cached); return cached }
   const pending = inflight.get(key)
   if (pending) return pending
-
-  const p = (async () => {
-    const res = await fetch(url)
-    const buf = await res.arrayBuffer()
-    const audio = await getCtx().decodeAudioData(buf)
-    const peaks = downsample(audio, bucketCount)
-    const out: WaveformPeaks = {
-      bucketCount,
-      peaks,
-      durationSec: audio.duration,
-    }
-    cache.set(key, out)
-    inflight.delete(key)
-    return out
+  const work = (async () => {
+    const peaks = downsampleAudioBuffer(await loadAudioBufferFromUrl(url), bucketCount)
+    cache.set(key, peaks)
+    // Peak arrays are small but zoom histories must not grow without bound.
+    while (cache.size > 24) cache.delete(cache.keys().next().value!)
+    return peaks
   })()
-  inflight.set(key, p)
-  return p
+  inflight.set(key, work)
+  try { return await work } finally { if (inflight.get(key) === work) inflight.delete(key) }
 }
-
-/** Convert a decoded AudioBuffer to [min0, max0, min1, max1, …]. Mixes
- *  channels to mono by averaging — keeps the peak math simple and reflects
- *  what the user will hear in stereo playback. */
-function downsample(buf: AudioBuffer, bucketCount: number): Float32Array {
-  const length = buf.length
-  const channels = buf.numberOfChannels
-  const blockSize = Math.max(1, Math.floor(length / bucketCount))
-  const out = new Float32Array(bucketCount * 2)
-
-  // Pull channel data once (avoid per-sample function-call overhead).
-  const chData: Float32Array[] = []
-  for (let c = 0; c < channels; c++) chData.push(buf.getChannelData(c))
-
-  for (let b = 0; b < bucketCount; b++) {
-    const start = b * blockSize
-    const end   = Math.min(length, start + blockSize)
-    let min = 1, max = -1
-    for (let i = start; i < end; i++) {
-      let sum = 0
-      for (let c = 0; c < channels; c++) sum += chData[c][i]
-      const s = sum / channels
-      if (s < min) min = s
-      if (s > max) max = s
-    }
-    out[b * 2]     = min
-    out[b * 2 + 1] = max
-  }
-  return out
-}
-
-/** Synchronous cache peek — useful when the component re-renders frequently
- *  and we don't want to kick off a re-fetch each time. */
 export function peekCachedPeaks(url: string, bucketCount = DEFAULT_BUCKETS): WaveformPeaks | null {
-  return cache.get(`${url}#${bucketCount}`) ?? null
+  return cache.get(keyFor(url, bucketCount)) ?? null
 }

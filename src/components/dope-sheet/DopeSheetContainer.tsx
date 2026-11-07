@@ -1,8 +1,9 @@
 'use client'
 import { useMemo } from 'react'
-import type { ChronoScene, Timeline } from '@/lib/types'
+import type { ChronoScene, Timeline, TimelineSettings } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
-import DopeSheetHierarchy from './DopeSheetHierarchy'
+import { buildHierarchy } from '@/lib/dope-sheet/hierarchy-builder'
+import { flattenDopeSheetRows } from '@/lib/dope-sheet/rows'
 import DopeSheetGrid from './DopeSheetGrid'
 import type { DopeSheetUIState } from './types'
 
@@ -10,9 +11,9 @@ interface Props {
   scene: ChronoScene
   selectedTimeline: Timeline
   editor: EditorStateReturn
+  settings: TimelineSettings
   selectedLayerId: string | null
   selectedKfIds: Set<string>
-  collapsedNodeIds: Set<string>
   onToggleExpand: (nodeId: string) => void
   onSelectKeyframes: (kfIds: Set<string>) => void
   onSelectLayer: (id: string | null) => void
@@ -20,54 +21,16 @@ interface Props {
   isPlaying: boolean
   onTimeChange: (ms: number) => void
   uiState: DopeSheetUIState
-  onUpdateUIState: (state: DopeSheetUIState) => void
 }
 
-export default function DopeSheetContainer({
-  scene,
-  selectedTimeline,
-  editor,
-  selectedLayerId,
-  selectedKfIds,
-  collapsedNodeIds,
-  onToggleExpand,
-  onSelectKeyframes,
-  onSelectLayer,
-  currentTimeMs,
-  isPlaying,
-  onTimeChange,
-  uiState,
-  onUpdateUIState,
-}: Props) {
-  return (
-    <div className="dope-sheet-container">
-      <div className="dope-sheet-hierarchy-panel">
-        <DopeSheetHierarchy
-          scene={scene}
-          selectedTimeline={selectedTimeline}
-          selectedLayerId={selectedLayerId}
-          collapsedNodeIds={collapsedNodeIds}
-          onToggleExpand={onToggleExpand}
-          onSelectLayer={onSelectLayer}
-          filterAnimatedOnly={uiState.filterAnimatedOnly}
-          filterSelectedObjectOnly={uiState.filterSelectedObjectOnly}
-          filterText={uiState.filterText}
-        />
-      </div>
+export default function DopeSheetContainer(props: Props) {
+  const { scene, selectedTimeline, uiState, selectedLayerId } = props
+  const rows = useMemo(() => flattenDopeSheetRows(buildHierarchy(
+    scene, selectedTimeline, uiState.filterAnimatedOnly, uiState.filterSelectedObjectOnly,
+    uiState.filterText, selectedLayerId,
+  ), selectedTimeline, uiState.collapsedNodeIds), [scene, selectedTimeline, uiState, selectedLayerId])
 
-      <div className="dope-sheet-grid-panel">
-        <DopeSheetGrid
-          selectedTimeline={selectedTimeline}
-          selectedKfIds={selectedKfIds}
-          onSelectKeyframes={onSelectKeyframes}
-          currentTimeMs={currentTimeMs}
-          isPlaying={isPlaying}
-          onTimeChange={onTimeChange}
-          editor={editor}
-          uiState={uiState}
-          onUpdateUIState={onUpdateUIState}
-        />
-      </div>
-    </div>
-  )
+  return <div className="dope-sheet-container">
+    <DopeSheetGrid {...props} rows={rows} />
+  </div>
 }

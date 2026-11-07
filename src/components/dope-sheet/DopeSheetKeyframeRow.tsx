@@ -1,114 +1,59 @@
 'use client'
-import { useCallback } from 'react'
-import type { Track } from '@/lib/types'
+import type { DopeSheetRow } from './types'
+import { DOPE_SHEET_ROW_HEIGHT } from './types'
+import { groupDopeSheetKeys } from '@/lib/dope-sheet/rows'
 
 interface Props {
-  track: Track
+  row: DopeSheetRow
   selectedKfIds: Set<string>
-  previewMs?: Record<string, number>
-  onSelectKey: (kfId: string, shiftKey: boolean, ctrlKey: boolean) => void
-  onDragStart?: (e: React.PointerEvent, kfId: string) => void
-  msToScreenPx: (timeMs: number) => number
-  screenPxToMs?: (px: number) => number
+  previewMs: Record<string, number>
+  pixelsPerMs: number
   visibleStartMs: number
   visibleEndMs: number
+  currentTimeMs: number
+  snapTarget: number | null
+  gridStepMs: number
+  onKeyPointerDown: (event: React.PointerEvent<HTMLElement>, ids: string[]) => void
+  onKeySelect: (ids: string[], shift: boolean, toggle: boolean) => void
+  onEmptyPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
-const KEY_SYMBOL_SIZE = 10
+export default function DopeSheetKeyframeRow(props: Props) {
+  const { row, previewMs, pixelsPerMs } = props
+  const keys = Array.from(new Map(row.tracks.flatMap(track => track.keyframes.map(key => [key.id, key] as const))).values())
+    .sort((a, b) => (previewMs[a.id] ?? a.timeMs) - (previewMs[b.id] ?? b.timeMs))
+  const timeOf = (key: { id: string; timeMs: number }) => previewMs[key.id] ?? key.timeMs
+  const visible = groupDopeSheetKeys(row, previewMs).filter(group => group.timeMs >= props.visibleStartMs - 10 / pixelsPerMs
+    && group.timeMs <= props.visibleEndMs + 10 / pixelsPerMs)
 
-export default function DopeSheetKeyframeRow({
-  track,
-  selectedKfIds,
-  previewMs = {},
-  onSelectKey,
-  onDragStart,
-  msToScreenPx,
-  screenPxToMs,
-  visibleStartMs,
-  visibleEndMs,
-}: Props) {
-  const handleKeyClick = useCallback(
-    (e: React.PointerEvent, kfId: string) => {
-      e.stopPropagation()
-      if (onDragStart && selectedKfIds.has(kfId)) {
-        onDragStart(e, kfId)
-      } else {
-        onSelectKey(kfId, e.shiftKey, (e.ctrlKey || (e as any).metaKey) as boolean)
-      }
-    },
-    [onSelectKey, onDragStart, selectedKfIds],
-  )
-
-  // Effective time of a keyframe (preview position while dragging, else its time)
-  const timeOf = (kf: { id: string; timeMs: number }) =>
-    previewMs?.[kf.id] !== undefined ? previewMs[kf.id] : kf.timeMs
-
-  // All keyframes sorted by effective time. Segments connect consecutive
-  // keys so the active span of the track is filled (AE / 3ds Max dope sheet).
-  const sortedKeys = [...(track.keyframes || [])].sort((a, b) => timeOf(a) - timeOf(b))
-
-  // Build segment spans between consecutive keys, clipped to the visible range.
-  const segments: { id: string; left: number; width: number }[] = []
-  for (let i = 0; i < sortedKeys.length - 1; i++) {
-    const a = sortedKeys[i]
-    const b = sortedKeys[i + 1]
-    const aMs = timeOf(a)
-    const bMs = timeOf(b)
-    // Skip segments fully outside the visible window
-    if (bMs < visibleStartMs || aMs > visibleEndMs) continue
-    const x1 = msToScreenPx(aMs)
-    const x2 = msToScreenPx(bMs)
-    segments.push({ id: `${a.id}-${b.id}`, left: x1, width: Math.max(0, x2 - x1) })
-  }
-
-  // Keyframe diamonds (only those inside the visible window)
-  const visibleKeys = sortedKeys.filter(kf => {
-    const t = timeOf(kf)
-    return t >= visibleStartMs && t <= visibleEndMs
-  })
-
-  return (
-    <div className="dope-keyframe-row">
-      <div className="track-label">{track.target}</div>
-
-      <div className="key-grid">
-        {/* Segment bars connecting consecutive keys */}
-        {segments.map(seg => (
-          <div
-            key={seg.id}
-            className="keyframe-segment"
-            style={{ left: `${seg.left}px`, width: `${seg.width}px` }}
-          />
-        ))}
-
-        {/* Keyframe diamonds */}
-        {visibleKeys.map(kf => {
-          const isSelected = selectedKfIds.has(kf.id)
-          const previewTime = previewMs?.[kf.id]
-          const displayTime = previewTime !== undefined ? previewTime : kf.timeMs
-          const xPos = msToScreenPx(displayTime)
-          const isPreview = previewTime !== undefined
-
-          return (
-            <div
-              key={kf.id}
-              className={`keyframe-symbol ${isSelected ? 'selected' : ''} ${isPreview ? 'preview' : ''}`}
-              style={{
-                left: `${xPos - KEY_SYMBOL_SIZE / 2}px`,
-              }}
-              onPointerDown={e => handleKeyClick(e as any, kf.id)}
-              title={`${kf.timeMs.toFixed(0)}ms${isPreview ? ` → ${displayTime.toFixed(0)}ms` : ''}`}
-            >
-              {getKeySymbol()}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// Keyframe glyph
-function getKeySymbol() {
-  return '◆'
+  return <div className={`dope-keyframe-row ${row.node.type !== 'property' ? 'summary-row' : ''}`}
+    style={{ height: DOPE_SHEET_ROW_HEIGHT, backgroundSize: `${props.gridStepMs * pixelsPerMs}px 100%` }}
+    onPointerDown={props.onEmptyPointerDown}>
+    {row.node.type === 'property' && keys.slice(0, -1).map((key, i) => {
+      const left = timeOf(key) * pixelsPerMs
+      const right = timeOf(keys[i + 1]) * pixelsPerMs
+      return <div key={`span:${key.id}`} className="keyframe-segment" style={{ left, width: right - left }} />
+    })}
+    <div className="dope-current-time" style={{ left: props.currentTimeMs * pixelsPerMs }} />
+    {props.snapTarget != null && <div className="dope-snap-target" style={{ left: props.snapTarget * pixelsPerMs }} />}
+    {visible.map(group => {
+      const allSelected = group.ids.every(id => props.selectedKfIds.has(id))
+      const someSelected = group.ids.some(id => props.selectedKfIds.has(id))
+      const count = group.ids.length > 1 ? `${group.ids.length} keyframes` : 'keyframe'
+      return <button type="button" key={group.ids[0]} data-key-id={group.ids[0]} data-key-ids={group.ids.join(' ')}
+        className={`keyframe-symbol ${allSelected ? 'selected' : someSelected ? 'partially-selected' : ''}`}
+        style={{ left: group.timeMs * pixelsPerMs }}
+        aria-label={`${row.node.name} ${count} at ${Math.round(group.timeMs)} milliseconds`}
+        aria-pressed={allSelected ? true : someSelected ? 'mixed' : false}
+        onPointerDown={event => props.onKeyPointerDown(event, group.ids)}
+        onKeyDown={event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault(); event.stopPropagation()
+          props.onKeySelect(group.ids, event.shiftKey, event.ctrlKey || event.metaKey)
+        }}
+        title={`${row.node.name}: ${Math.round(group.timeMs)}ms · ${count}`}>
+        ◆
+      </button>
+    })}
+  </div>
 }

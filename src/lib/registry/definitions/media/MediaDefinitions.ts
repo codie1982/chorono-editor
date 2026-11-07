@@ -74,9 +74,13 @@ export const videoDefinition: LayerDefinition = {
 const audioGroup = (): PropertyGroup => ({
   title: 'Audio',
   schemas: [
-    { id: 'volume', path: 'audio.volume', group: 'Audio', label: 'Volume', valueType: 'percent', animatable: true,  defaultValue: 1, min: 0, max: 1, step: 0.01 },
+    { id: 'volume', path: 'audio.volume', group: 'Audio', label: 'Linear Gain', valueType: 'number', animatable: true, defaultValue: 1, min: 0, max: 4, step: 0.01 },
     { id: 'muted',  path: 'audio.muted',  group: 'Audio', label: 'Muted',  valueType: 'boolean', animatable: false, defaultValue: false },
     { id: 'loop',   path: 'audio.loop',   group: 'Audio', label: 'Loop',   valueType: 'boolean', animatable: false, defaultValue: false },
+    { id: 'startOffsetMs', path: 'audio.startOffsetMs', group: 'Audio', label: 'Source In (ms)', valueType: 'number', animatable: false, defaultValue: 0, min: 0, step: 1 },
+    { id: 'fadeInMs', path: 'audio.fadeInMs', group: 'Audio', label: 'Fade In (ms)', valueType: 'number', animatable: false, defaultValue: 0, min: 0, step: 1 },
+    { id: 'fadeOutMs', path: 'audio.fadeOutMs', group: 'Audio', label: 'Fade Out (ms)', valueType: 'number', animatable: false, defaultValue: 0, min: 0, step: 1 },
+    { id: 'pan', path: 'audio.pan', group: 'Audio', label: 'Pan', valueType: 'number', animatable: false, defaultValue: 0, min: -1, max: 1, step: 0.01 },
   ],
   showWhen: (l) => l.type === 'audio',
 })
@@ -87,7 +91,7 @@ export const audioDefinition: LayerDefinition = {
   iconKey: 'audio',
   category: 'Media',
   createDefault: () => placeholderLayer('audio'),
-  getPropertyGroups: () => [transformGroup(), appearanceGroup(), audioGroup()],
+  getPropertyGroups: () => [audioGroup()],
 }
 
 export const ALL_MEDIA_DEFINITIONS = [imageDefinition, videoDefinition, audioDefinition]

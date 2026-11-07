@@ -20,6 +20,8 @@ export interface UseImportOptions {
   dispatchCommand: (cmd: EditorCommand) => void
   /** Called with the first created layer id so the editor can select it. */
   onSelectLayer?: (id: string) => void
+  selectedTimelineId?: string | null
+  currentTimeMs?: number
 }
 
 export interface UseImportReturn {
@@ -43,7 +45,7 @@ export interface UseImportReturn {
   progress: ImportProgress | null
 }
 
-export function useImport({ dispatchCommand, onSelectLayer }: UseImportOptions): UseImportReturn {
+export function useImport({ dispatchCommand, onSelectLayer, selectedTimelineId, currentTimeMs = 0 }: UseImportOptions): UseImportReturn {
   const [importing, setImporting] = useState(false)
   const [progress, setProgress]   = useState<ImportProgress | null>(null)
 
@@ -55,6 +57,8 @@ export function useImport({ dispatchCommand, onSelectLayer }: UseImportOptions):
   const selectRef   = useRef(onSelectLayer)
   dispatchRef.current = dispatchCommand
   selectRef.current   = onSelectLayer
+  const placementRef = useRef({ timelineId: selectedTimelineId ?? undefined, startMs: currentTimeMs })
+  placementRef.current = { timelineId: selectedTimelineId ?? undefined, startMs: currentTimeMs }
 
   // Shared: commit a completed result and report it. `label` names the source.
   const commitResult = useCallback((result: ImportResult, label: string): ImportResult | null => {
@@ -96,7 +100,7 @@ export function useImport({ dispatchCommand, onSelectLayer }: UseImportOptions):
     setImporting(true)
     setProgress(null)
     try {
-      const result = await importManager.importFile(file, undefined, (p) => setProgress(p))
+      const result = await importManager.importFile(file, { ...placementRef.current }, (p) => setProgress(p))
       return commitResult(result, file.name)
     } catch (err) {
       toast.error(`Import failed: ${file.name}`, { detail: (err as Error).message })
@@ -125,7 +129,7 @@ export function useImport({ dispatchCommand, onSelectLayer }: UseImportOptions):
     setImporting(true)
     setProgress(null)
     try {
-      const result = await importManager.importUrl(trimmed, undefined, (p) => setProgress(p))
+      const result = await importManager.importUrl(trimmed, { ...placementRef.current }, (p) => setProgress(p))
       return commitResult(result, label)
     } catch (err) {
       toast.error('Import from URL failed', { detail: (err as Error).message })

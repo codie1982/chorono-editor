@@ -26,8 +26,8 @@ export const defaultBindings: ShortcutDefinition[] = [
   // ── Canvas — selection ───────────────────────────────────────────────────
   { id: 'canvas.select.duplicate',  label: 'Duplicate Layer',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true } },
   { id: 'canvas.select.cloneQuick', label: 'Clone Quick',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true, alt: true }, description: 'Clone with animation tracks copied' },
-  { id: 'canvas.select.copy',       label: 'Copy',               contexts: ['canvas'], binding: { type: 'keyboard', key: 'c', meta: true } },
-  { id: 'canvas.select.paste',      label: 'Paste',              contexts: ['canvas'], binding: { type: 'keyboard', key: 'v', meta: true } },
+  { id: 'canvas.select.copy',       label: 'Copy Keyframes',     contexts: ['canvas', 'timeline'], binding: { type: 'keyboard', key: 'c', meta: true } },
+  { id: 'canvas.select.paste',      label: 'Paste Keyframes',    contexts: ['canvas', 'timeline'], binding: { type: 'keyboard', key: 'v', meta: true } },
   { id: 'canvas.select.group',      label: 'Group',              contexts: ['canvas'], binding: { type: 'keyboard', key: 'g', meta: true } },
   { id: 'canvas.select.ungroup',    label: 'Ungroup',            contexts: ['canvas'], binding: { type: 'keyboard', key: 'g', meta: true, shift: true } },
   { id: 'canvas.select.array',      label: 'Open Array Dialog',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'a', meta: true, shift: true } },

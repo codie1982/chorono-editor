@@ -4,6 +4,8 @@ import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { canvasRenderer } from '@/lib/render/CanvasRenderer'
 import type { AssetElementMap } from '@/lib/renderer'
 import { getMultiLayerGhostFrames } from '@/lib/animation/ghostFrames'
+import type { OverrideMap } from '@/lib/evaluator'
+import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
 
 export interface CanvasRendererOptions {
   scene: ChronoScene
@@ -16,7 +18,7 @@ export interface CanvasRendererOptions {
   snapToGridOn: boolean
   gridSize: number
   /** Timeline / runtime override map (already merged upstream). */
-  overrides?: Map<string, number>
+  overrides?: OverrideMap
   paramValues?: Map<string, string | number | boolean>
   /** Live drag override so the dragged layer follows the cursor even when keyframed. */
   dragOverrides: Map<string, number>
@@ -50,11 +52,13 @@ export function useCanvasRenderer(
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    const workStarted = performance.now()
+    try {
     // Merge timeline/runtime overrides with the temporary drag override so
     // the dragged layer visibly follows the cursor.
     let mergedOverrides = overrides
     if (dragOverrides.size > 0) {
-      const m = new Map<string, number>()
+      const m: OverrideMap = new Map()
       overrides?.forEach((v, k) => m.set(k, v))
       dragOverrides.forEach((v, k) => m.set(k, v))
       mergedOverrides = m
@@ -69,6 +73,8 @@ export function useCanvasRenderer(
         overrides:   mergedOverrides,
         paramValues,
         selectedLayerIds,
+        // SceneCanvas draws the single editable DOM frame for every selection.
+        selectionOutline: false,
         // BL-66 — playback / preview → 'preview' (clean frame); else 'editor'.
         renderMode:  hideEditorUI ? 'preview' : 'editor',
       },
@@ -97,7 +103,7 @@ export function useCanvasRenderer(
 
         // Build an override map that pins this layer's transform/opacity to
         // the interpolated ghost values. Other layers inherit base overrides.
-        const ghostOverrides = new Map<string, number>()
+        const ghostOverrides: OverrideMap = new Map()
         mergedOverrides?.forEach((v, k) => ghostOverrides.set(k, v))
         if (gf.transform) {
           ghostOverrides.set(`layers.${layer.id}.transform.x`,           gf.transform.x)
@@ -119,6 +125,9 @@ export function useCanvasRenderer(
         })
         ctx.restore()
       }
+    }
+    } finally {
+      renderWorkMonitor.record('viewport', performance.now() - workStarted)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, overrides, paramValues, dragOverrides, ghostSettings, selectedTimeline, hideEditorUI])

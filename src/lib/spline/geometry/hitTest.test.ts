@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { createRectangleSpline } from '../primitives/createRectangleSpline'
 import { createCircleSpline } from '../primitives/createCircleSpline'
+import { createDonutSpline } from '../primitives/createDonutSpline'
+import { mergeSplineData } from '../factory/mergeSplineData'
 import {
-  hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour,
+  hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour, hitTestSplineFill,
 } from './hitTest'
 
 describe('spline hit-testing', () => {
@@ -46,5 +48,36 @@ describe('spline hit-testing', () => {
     // Rightmost point of the circle is (80, 0).
     const hit = hitTestSplineSegment(circle, 80, 0, 3)
     expect(hit).not.toBeNull()
+  })
+
+  it('respects compound fill winding and even-odd overlap', () => {
+    const compound = mergeSplineData(createCircleSpline({ radius: 80 }), createCircleSpline({ radius: 40 }))
+    compound.fillRule = 'nonzero'
+    expect(hitTestSplineFill(compound, 0, 0)).toBe(true)
+    compound.fillRule = 'evenodd'
+    expect(hitTestSplineFill(compound, 0, 0)).toBe(false)
+    expect(hitTestSplineFill(compound, 60, 0)).toBe(true)
+    const donut = createDonutSpline({ outerRadius: 80, innerRadius: 40 })
+    expect(hitTestSplineFill(donut, 0, 0)).toBe(false)
+  })
+
+  it('uses the quadratic control for filled contour selection', () => {
+    const data = createRectangleSpline({ width: 100, height: 60 })
+    const segment = data.segments[Object.values(data.contours)[0].segmentIds[0]]
+    segment.type = 'quadratic'
+    segment.control1 = { x: 0, y: -130 }
+    expect(hitTestSplineContour(data, 0, -60)).not.toBeNull()
+    expect(hitTestSplineFill(data, 0, -60)).toBe(true)
+  })
+
+  it('interpolates picking within a curve sample instead of jumping to its end', () => {
+    const data = createRectangleSpline({ width: 100, height: 60 })
+    const segment = data.segments[Object.values(data.contours)[0].segmentIds[0]]
+    segment.type = 'quadratic'
+    segment.control1 = { x: 0, y: -30 }
+    // A collinear quadratic with a central control is exactly a straight line.
+    const hit = hitTestSplineSegment(data, -13, -30, 1)!
+    expect(hit.segmentId).toBe(segment.id)
+    expect(hit.t).toBeCloseTo(0.37, 6)
   })
 })

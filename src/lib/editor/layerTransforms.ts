@@ -8,6 +8,11 @@
 // what every other tool does, so muscle memory carries over.
 
 import type { Layer } from '../types'
+import { reanchorTransform } from '../canvas/math/anchorMath'
+import { computeSplineBounds } from '../spline/geometry/computeSplineBounds'
+import { computePathBounds } from '../geometry/computePathBounds'
+import { bezierPathToPathDefinition } from '../path/bezierToPathDefinition'
+import { measureTextLayout } from '../text/measureText'
 
 /** Rotate 90° clockwise (positive direction in screen coordinates). */
 export function rotate90CW(layer: Layer): Layer {
@@ -35,12 +40,13 @@ export function flipVertical(layer: Layer): Layer {
   return withTransform(layer, (t) => ({ ...t, scaleY: -t.scaleY }))
 }
 
-/** Set anchor to the visual centre of the layer's bounding box.
- *  For shapes/images/videos uses `size`; for text estimates from
- *  fontSize × char count (matches the same heuristic used in defaults.ts). */
+/** Centre the pivot on actual local geometry without moving the artwork.
+ *  Unsupported/empty content keeps its existing pivot rather than guessing a
+ *  box. Editing points never calls this automatically: user pivots persist. */
 export function centerOrigin(layer: Layer): Layer {
-  const { w, h } = guessLayerSize(layer)
-  return withTransform(layer, (t) => ({ ...t, anchorX: w / 2, anchorY: h / 2 }))
+  const center = layerGeometryCenter(layer)
+  if (!center) return layer
+  return withTransform(layer, (transform) => reanchorTransform(transform, center.x, center.y))
 }
 
 // ── Internal ────────────────────────────────────────────────────────────────
@@ -57,12 +63,22 @@ function normalizeAngle(deg: number): number {
   return d
 }
 
-function guessLayerSize(layer: Layer): { w: number; h: number } {
-  if (layer.size) return { w: layer.size.width, h: layer.size.height }
-  if (layer.text) {
-    const fs = layer.text.fontSize ?? 24
-    const len = layer.text.value?.length ?? 4
-    return { w: Math.max(1, len * fs * 0.55), h: fs }
+function layerGeometryCenter(layer: Layer): { x: number; y: number } | null {
+  // Path geometry stays canonical even when a converted layer retains size.
+  if (layer.type === 'spline') {
+    if (!layer.spline || !Object.values(layer.spline.contours).some(contour => contour.pointIds.length > 0)) return null
+    const bounds = computeSplineBounds(layer.spline)
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
   }
-  return { w: 80, h: 80 }
+  if (layer.type === 'path') {
+    if (!layer.path?.anchors.length) return null
+    const bounds = computePathBounds(bezierPathToPathDefinition(layer.path))
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  }
+  if (layer.size) return { x: layer.size.width / 2, y: layer.size.height / 2 }
+  if (layer.text) {
+    const measured = measureTextLayout(layer.text)
+    return { x: measured.width / 2, y: measured.height / 2 }
+  }
+  return null
 }

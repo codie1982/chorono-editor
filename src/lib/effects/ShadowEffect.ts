@@ -6,7 +6,7 @@
 // drawing-state attribute.
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
-import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { withEffectSurfaces } from './withEffectSurfaces'
 import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface ShadowEffectDefinition extends EffectDefinition {
@@ -22,13 +22,13 @@ export interface ShadowEffectDefinition extends EffectDefinition {
 
 export const shadowEffect: EffectPlugin<ShadowEffectDefinition> = {
   type: 'shadow',
-  apply(input, effect) {
+  apply: withEffectSurfaces<ShadowEffectDefinition>((input, effect, surfaces) => {
     const {
       color = '#000000', blur = 4, offsetX = 2, offsetY = 2, opacity = 0.5,
     } = effect.params
 
     // Tint input silhouette to shadow colour
-    const tint = createOffscreen(input.width, input.height)
+    const tint = surfaces.create(input.width, input.height)
     const tctx = tint.getContext('2d')!
     tctx.drawImage(input, 0, 0)
     tctx.globalCompositeOperation = 'source-in'
@@ -43,7 +43,7 @@ export const shadowEffect: EffectPlugin<ShadowEffectDefinition> = {
 
     // Pad output canvas slightly to fit the offset shadow (V1: same size,
     // shadow may clip at edges — V1.5 will use a padded compositor).
-    const out  = createOffscreen(input.width, input.height)
+    const out  = surfaces.create(input.width, input.height)
     const octx = out.getContext('2d')!
 
     // 1. Draw blurred shadow first, offset
@@ -60,5 +60,5 @@ export const shadowEffect: EffectPlugin<ShadowEffectDefinition> = {
     // 2. Draw original on top
     octx.drawImage(input, 0, 0)
     return out
-  },
+  }),
 }

@@ -9,7 +9,8 @@
 
 import type { ChronoScene }   from '../types/core'
 import type { EditorCommand } from '../editor/commands-keyframe'
-import type { ImportResult, ImportTransaction } from './types'
+import type { ImportResult, ImportTransaction, BaseImportOptions } from './types'
+import { makeAddAudioClipCmd } from '../editor/commands-audio'
 import type { Asset }  from '../asset/types'
 import type { Layer }  from '../types/core'
 
@@ -22,23 +23,26 @@ export class ImportTransactionBuilder {
    * The command adds all layers + assets to the scene.
    * Undo removes all of them.
    */
-  build(result: ImportResult): EditorCommand {
+  build(result: ImportResult, options: BaseImportOptions = {}): EditorCommand {
     const { assets, layers, tracks, timelines } = result
     const label = this.buildLabel(result)
 
     // Snapshot IDs for undo
     const layerIds = new Set(layers.map(l => l.id))
     const assetIds = new Set(assets.map(a => a.id))
+    const audioLayers = result.kind === 'asset' ? layers.filter(layer => layer.type === 'audio' && layer.audio) : []
+    let beforeAudioImport: ChronoScene | undefined
 
     const command: EditorCommand = {
       label,
 
       execute(scene: ChronoScene): ChronoScene {
+        beforeAudioImport = scene
         // 1. Add assets
         const newAssets = dedup(scene.assets, assets, a => a.id) as Asset[]
 
         // 2. Add layers (append to end)
-        const newLayers = [...scene.layers, ...layers]
+        const newLayers = [...scene.layers, ...layers.filter(layer => !audioLayers.includes(layer))]
 
         // 3. Merge tracks into existing timelines or add new ones
         let newTimelines = scene.timelines
@@ -59,15 +63,22 @@ export class ImportTransactionBuilder {
           newTimelines = [...newTimelines, ...toAdd]
         }
 
-        return {
+        let next: ChronoScene = {
           ...scene,
           assets:    newAssets,
           layers:    newLayers,
           timelines: newTimelines,
         }
+        for (const layer of audioLayers) {
+          const asset = next.assets.find(item => item.id === layer.audio!.assetId)
+          if (!asset) throw new Error('Imported audio source was not found.')
+          next = makeAddAudioClipCmd(asset, { layer, timelineId: options.timelineId, startMs: options.startMs }).execute(next)
+        }
+        return next
       },
 
       undo(scene: ChronoScene): ChronoScene {
+        if (audioLayers.length && beforeAudioImport) return beforeAudioImport
         return {
           ...scene,
           assets:    scene.assets.filter(a => !assetIds.has(a.id)),

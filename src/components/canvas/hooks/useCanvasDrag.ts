@@ -13,9 +13,10 @@ import { makeCloneCmd, type CloneArrayCommand } from '@/lib/editor/commands-clon
 import { bezierPathBounds } from '@/lib/renderer'
 import { moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
 import { moveSplinePoint, moveSplineHandle } from '@/lib/spline'
-import { clamp } from '@/lib/canvas/math/coordinateMath'
 import { applyAxisLock } from '@/lib/canvas/math/moveMath'
+import { clampMoveToComposition } from '@/lib/canvas/math/moveBounds'
 import { wrapAngle180, angleDegFromPivot, rotatePointAroundPivot } from '@/lib/canvas/math/rotateMath'
+import { rotationFromPointer } from '@/lib/canvas/math/rotationGesture'
 import { scaleFactorFromDelta, clampScale, scaleTransformAroundPivot } from '@/lib/canvas/math/scaleMath'
 import { calculateAnchorMove } from '@/lib/canvas/math/anchorMath'
 import { calculateResize } from '@/lib/canvas/math/resizeMath'
@@ -134,17 +135,20 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
           width: l.size!.width, height: l.size!.height,
         }))
       const snapped = engineRef.current!.snapRect(
-        { x: pnx, y: pny, width: drag.width, height: drag.height },
+        { x: pnx + (drag.boundsOffsetX ?? 0), y: pny + (drag.boundsOffsetY ?? 0), width: drag.width, height: drag.height },
         { canvasWidth: cw, canvasHeight: ch, otherLayers: otherRects },
       )
-      pnx = snapped.point.x
-      pny = snapped.point.y
+      pnx = snapped.point.x - (drag.boundsOffsetX ?? 0)
+      pny = snapped.point.y - (drag.boundsOffsetY ?? 0)
       // Guide overlay — clear if the engine returned none, otherwise show.
       if (snapped.guides.length > 0) setGuides(snapped.guides)
       else if (guidesRef.current.length > 0) setGuides([])
 
-      pnx = clamp(pnx, 0, Math.max(0, cw - drag.width))
-      pny = clamp(pny, 0, Math.max(0, ch - drag.height))
+      const clamped = clampMoveToComposition(
+        pnx, pny, drag.width, drag.height, cw, ch, drag.boundsOffsetX, drag.boundsOffsetY,
+      )
+      pnx = clamped.x
+      pny = clamped.y
       const actualDx = pnx - primaryOx
       const actualDy = pny - primaryOy
 
@@ -208,9 +212,10 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
     if (drag.kind === 'splinePoint' || drag.kind === 'splineHandle') {
       const orig = drag.originalLayer
       if (orig.type !== 'spline' || !orig.spline) return
+      const localDelta = drag.worldToLocal.applyToVector({ x: dx, y: dy })
       const nextSpline = drag.kind === 'splinePoint'
-        ? moveSplinePoint(orig.spline, drag.pointId, drag.startX + dx, drag.startY + dy)
-        : moveSplineHandle(orig.spline, drag.pointId, drag.handleKind, drag.startX + dx, drag.startY + dy)
+        ? moveSplinePoint(orig.spline, drag.pointId, drag.startX + localDelta.x, drag.startY + localDelta.y)
+        : moveSplineHandle(orig.spline, drag.pointId, drag.handleKind, drag.startX + localDelta.x, drag.startY + localDelta.y)
       const nextScene: ChronoScene = {
         ...sceneRef.current,
         layers: sceneRef.current.layers.map((l) => l.id !== drag.layerId ? l : { ...l, spline: nextSpline }),
@@ -310,9 +315,10 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
       const rect = canvasRef.current!.getBoundingClientRect()
       const wx = (e.clientX - rect.left) * (compositionRef.current.width  / rect.width)
       const wy = (e.clientY - rect.top)  * (compositionRef.current.height / rect.height)
+      const single = drag.gesture ? rotationFromPointer(drag.gesture, { x: wx, y: wy }, e.shiftKey) : null
       const curAngle = angleDegFromPivot(drag.anchorWorldX, drag.anchorWorldY, wx, wy)
-      let delta = curAngle - drag.startAngle
-      if (e.shiftKey) delta = Math.round(delta / 15) * 15
+      let delta = single?.delta ?? (curAngle - drag.startAngle)
+      if (!single && e.shiftKey) delta = Math.round(delta / 15) * 15
 
       if (drag.multiLayerOrigins && drag.multiLayerOrigins.length > 0) {
         // BL-03: multi-select rotation around common pivot.
@@ -335,9 +341,10 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         })
       } else {
         // Single-layer (existing) behavior
-        const nextRot = wrapAngle180(drag.originalRotation + delta)
+        const nextRot = single?.rotationDeg ?? wrapAngle180(drag.originalRotation + delta)
         const next = updateLayerProperty(sceneRef.current, drag.layerId, 'transform.rotationDeg', nextRot)
         editorRef.current.previewTransaction(next)
+        setDragOverrides(new Map([[`layers.${drag.layerId}.transform.rotationDeg`, nextRot]]))
         setDragHud({
           x: e.clientX, y: e.clientY,
           label: `${nextRot.toFixed(1)}°`,
@@ -347,16 +354,17 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
     }
 
     if (drag.kind === 'anchor') {
-      // Anchor lives in layer-local coords. Snap is applied to the layer's
-      // local axis (so the grid you see on canvas still aligns 1:1). The
-      // math also compensates transform.x/y so a rotated/scaled layer stays
-      // visually pinned while its pivot moves.
-      const orig = drag.originalLayer.transform
+      // The cursor and snapping use composition coordinates; anchor values
+      // live in geometry-local coordinates. The helper maps through the
+      // displayed parent/rotation/scale and compensates x/y so the artwork
+      // stays pinned while the pivot follows the cursor.
+      const orig = drag.displayTransform
       const { anchorX: nAX, anchorY: nAY, x: nX, y: nY } = calculateAnchorMove({
         x: orig.x, y: orig.y,
         anchorX: orig.anchorX, anchorY: orig.anchorY,
         rotationDeg: orig.rotationDeg, scaleX: orig.scaleX, scaleY: orig.scaleY,
         dx, dy,
+        parentWorld: drag.parentWorld,
         snapGrid: snap.grid, snapPixel: snap.pixel, gridSize: snap.size,
       })
 
@@ -368,6 +376,10 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         }),
       }
       editorRef.current.previewTransaction(nextScene)
+      setDragOverrides(new Map([
+        [`layers.${drag.layerId}.transform.x`, nX],
+        [`layers.${drag.layerId}.transform.y`, nY],
+      ]))
       setDragHud({
         x: e.clientX, y: e.clientY,
         label: `Anchor  ${Math.round(nAX)}, ${Math.round(nAY)}`,

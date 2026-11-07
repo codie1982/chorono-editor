@@ -55,23 +55,35 @@ export function buildHierarchy(
   }
   nodes.push(root)
 
-  // Selected-object filter: allow the selected layer plus its descendants.
+  // Keep ancestors as structural rows so a selected nested object is reachable.
   const allowedBySelection: Set<string> | null = (() => {
-    if (!filterSelectedObjectOnly || !selectedLayerId) return null
+    if (!filterSelectedObjectOnly) return null
     const allowed = new Set<string>()
     const collect = (id: string) => {
+      if (allowed.has(id)) return
       allowed.add(id)
       for (const l of layers) if (l.parentId === id) collect(l.id)
     }
-    collect(selectedLayerId)
+    if (selectedLayerId) collect(selectedLayerId)
     return allowed
   })()
+  const ancestors = new Set<string>()
+  if (allowedBySelection && selectedLayerId) {
+    let parentId = layers.find(layer => layer.id === selectedLayerId)?.parentId
+    while (parentId && !ancestors.has(parentId)) {
+      ancestors.add(parentId)
+      parentId = layers.find(layer => layer.id === parentId)?.parentId
+    }
+  }
+  const visited = new Set<string>()
 
   // Build a layer subtree; returns the node id, or null if filtered out.
   function buildLayer(layer: Layer, depth: number): string | null {
-    if (allowedBySelection && !allowedBySelection.has(layer.id)) return null
+    if (visited.has(layer.id)) return null
+    visited.add(layer.id)
+    if (allowedBySelection && !allowedBySelection.has(layer.id) && !ancestors.has(layer.id)) return null
 
-    const layerTracks = tracksByLayer.get(layer.id) ?? []
+    const layerTracks = allowedBySelection && !allowedBySelection.has(layer.id) ? [] : tracksByLayer.get(layer.id) ?? []
     const layerHasKeys = layerTracks.some(t => (t.keyframes?.length ?? 0) > 0)
     const nameMatches = !filter || layer.name.toLowerCase().includes(filter)
 
@@ -81,6 +93,7 @@ export function buildHierarchy(
       type: layer.type === 'group' ? 'group' : 'object',
       depth,
       trackTarget: `layers.${layer.id}`,
+      layerId: layer.id,
       children: [],
       expanded: true,
       hasKeys: layerHasKeys,
@@ -148,6 +161,7 @@ export function buildHierarchy(
     }
 
     layerNode.children = [...groupIds, ...childIds]
+    layerNode.hasKeys = layerHasKeys || childIds.some(id => nodes.find(node => node.id === id)?.hasKeys)
 
     // Drop a layer that has nothing left to show after filtering.
     if (filterAnimatedOnly && !layerHasKeys && childIds.length === 0) return null
@@ -164,6 +178,8 @@ export function buildHierarchy(
     const id = buildLayer(layer, 1)
     if (id) root.children.push(id)
   }
+
+  root.hasKeys = root.children.some(id => nodes.find(node => node.id === id)?.hasKeys)
 
   return nodes
 }

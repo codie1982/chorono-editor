@@ -4,15 +4,15 @@ import {
 } from 'react'
 import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
-import { hitTestLayer, hitTestLayersAt, bezierPathBounds, type AssetElementMap } from '@/lib/renderer'
+import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
+import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
 // BL-73 — Spline drawing tools
 import type { SplinePrimitiveKind } from '@/lib/types/spline'
 import {
-  computeSplineBounds,
   hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour,
   insertPointOnSegment, deleteSplinePoint,
   setSplinePointType, setSegmentType, setContourClosed, reverseContour,
@@ -50,10 +50,18 @@ import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
 import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
 import { useCanvasDrag } from './canvas/hooks/useCanvasDrag'
 import { usePathEdit } from './canvas/hooks/usePathEdit'
+import { resolveSplineEditGeometry, resolveSplineMoveBounds } from './canvas/splineEditGeometry'
+import { createLayerWorldBoundsResolver } from '@/lib/geometry/resolveLayerWorldBounds'
+import { beginRotationGesture, resolveParentWorldMatrix } from '@/lib/canvas/math/rotationGesture'
+import type { RotationGesture } from '@/lib/canvas/math/rotationGesture'
+import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
+import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
+import type { ShortcutContext } from '@/lib/shortcuts'
 
 interface Props {
   scene: ChronoScene
   editor: EditorStateReturn
+  getShortcutContext?: () => ShortcutContext
   timeMs: number
   selectedLayerId: string | null
   /** Multi-selection set — when set has >1 entries, drag operations move
@@ -63,7 +71,7 @@ interface Props {
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   /** Optional pre-computed override map from the interactive runtime hook
    *  (already merges timeline + param + binding overrides). */
-  overrides?:    Map<string, number>
+  overrides?:    OverrideMap
   /** Runtime parameter values for text placeholder + colour resolution. */
   paramValues?:  Map<string, string | number | boolean>
   /** When true, canvas clicks on layers with tappable:true fire a runtime
@@ -191,7 +199,7 @@ interface Props {
 const PADDING   = 24
 
 export default function SceneCanvas({
-  scene, editor, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
+  scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer,
   overrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
@@ -217,7 +225,7 @@ export default function SceneCanvas({
     zoom, pan, panDragRef,
     fitAll, fitWidth, fitHeight, actualSize, zoomTo, fitSelection, centreSelection,
     zoomIn, zoomOut, beginPan, handleWheel,
-  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene, selectedLayerId })
+  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene, selectedLayerId, timeMs, overrides })
 
   // ── Snap config — owned upstream by useSnapSettings ─────────────────────
   // Mirror to a ref so pointermove closures see fresh values without being
@@ -395,7 +403,7 @@ export default function SceneCanvas({
   const { splinePreview, onSplineDrawPointerDown } = useSplineDrawing({
     canvasRef, compositionRef, sceneRef, editorRef,
     toolMode, splineDrawKind, splineAppendTargetId, onSplineDrawCommit,
-    onSelectLayer, setDragHud,
+    onSelectLayer, setDragHud, timeMs, overrides,
   })
 
   // BL-73 Sprint 4 — clear point selection when the layer selection changes.
@@ -406,20 +414,28 @@ export default function SceneCanvas({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      const target = e.target as HTMLElement | null
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
+          || target?.isContentEditable) return
+      if (previewMode || isPlaying) return
+      if (!canvasOwnsPointDeletion(getShortcutContext?.() ?? 'canvas', editorRef.current.isTransactionActive())) return
       const pid = selectedSplinePointIdRef.current
       if (!pid) return
       const layer = sceneRef.current.layers.find(l => l.id === selectedLayerId)
-      if (layer?.type !== 'spline' || !layer.spline) return
-      const next = deleteSplinePoint(layer.spline, pid)
-      if (next === layer.spline) return  // no-op (e.g. ≤ 2 points) — let it pass
+      if (layer?.type !== 'spline' || !layer.spline || !layer.spline.points[pid]) return
+      // A selected point owns Delete even when the contour cannot lose another
+      // point. Falling through would delete the entire layer instead.
       e.preventDefault()
       e.stopPropagation()
+      if (layer.locked || layer.frozen || layer.hidden) return
+      const next = deleteSplinePoint(layer.spline, pid)
+      if (next === layer.spline) return
       editorRef.current.dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))
       setSelectedSplinePointId(null)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [selectedLayerId])
+  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     // Middle-mouse OR pan-mode + left button → pan the view, not the layer
@@ -471,7 +487,7 @@ export default function SceneCanvas({
     //    instead of changing selection. Lets the author exercise layer-click
     //    rules without leaving the builder.
     if (previewMode) {
-      const stack = hitTestLayersAt(scene, timeMs, cx, cy)
+      const stack = hitTestLayersAt(scene, timeMs, cx, cy, overrides)
       // Prefer draggable layer over tappable when both are set, since drag
       // requires the drag-start handler to capture the pointer immediately.
       for (const id of stack) {
@@ -494,13 +510,14 @@ export default function SceneCanvas({
     const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId)
 
     // ── BL-73 Sprint 4: edit the selected spline (handle → point → insert) ──
-    if (selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !selectedLayer.locked
+    const splineEdit = selectedLayer && !selectedLayer.locked && !selectedLayer.frozen && !selectedLayer.hidden
+      ? resolveSplineEditGeometry(selectedLayer, scene, timeMs, overrides)
+      : null
+    if (selectedLayer?.spline && splineEdit
         && (toolMode === 'select' || toolMode === 'pen')) {
-      const lx = cx - selectedLayer.transform.x
-      const ly = cy - selectedLayer.transform.y
       const tol = 8 / zoom
 
-      const hh = hitTestSplineHandle(selectedLayer.spline, lx, ly, tol)
+      const hh = hitTestSplineHandle(splineEdit.worldSpline, cx, cy, tol)
       if (hh) {
         const handle = Object.values(selectedLayer.spline.handles)
           .find(h => h.pointId === hh.pointId && h.kind === hh.kind)
@@ -510,13 +527,14 @@ export default function SceneCanvas({
             kind: 'splineHandle', layerId: selectedLayer.id, originalLayer: selectedLayer,
             pointId: hh.pointId, handleKind: hh.kind,
             startClientX: e.clientX, startClientY: e.clientY, startX: handle.x, startY: handle.y,
+            worldToLocal: splineEdit.worldToLocal,
           }
           startDrag()
           return
         }
       }
 
-      const hp = hitTestSplinePoint(selectedLayer.spline, lx, ly, tol)
+      const hp = hitTestSplinePoint(splineEdit.worldSpline, cx, cy, tol)
       if (hp) {
         const p = selectedLayer.spline.points[hp]
         setSelectedSplinePointId(hp)
@@ -524,6 +542,7 @@ export default function SceneCanvas({
         dragRef.current = {
           kind: 'splinePoint', layerId: selectedLayer.id, originalLayer: selectedLayer,
           pointId: hp, startClientX: e.clientX, startClientY: e.clientY, startX: p.x, startY: p.y,
+          worldToLocal: splineEdit.worldToLocal,
         }
         startDrag()
         return
@@ -531,7 +550,7 @@ export default function SceneCanvas({
 
       // Pen mode: click on a segment inserts a point (De Casteljau split).
       if (toolMode === 'pen') {
-        const hs = hitTestSplineSegment(selectedLayer.spline, lx, ly, 6 / zoom)
+        const hs = hitTestSplineSegment(splineEdit.worldSpline, cx, cy, 6 / zoom)
         if (hs) {
           const nextSpline = insertPointOnSegment(selectedLayer.spline, hs.segmentId, hs.t)
           editor.dispatchCommand(makeUpdateLayerCmd(selectedLayer.id, { spline: nextSpline }, selectedLayer))
@@ -556,7 +575,7 @@ export default function SceneCanvas({
     // bypasses this and lets you pick the literal child.
     let hit: string | null
     if (e.altKey) {
-      const stack = hitTestLayersAt(scene, timeMs, cx, cy)
+      const stack = hitTestLayersAt(scene, timeMs, cx, cy, overrides)
       if (stack.length === 0) hit = null
       else {
         const cur = selectedLayerId ?? ''
@@ -564,7 +583,7 @@ export default function SceneCanvas({
         hit = idx === -1 ? stack[0] : stack[(idx + 1) % stack.length]
       }
     } else {
-      hit = hitTestLayer(scene, timeMs, cx, cy)
+      hit = hitTestLayer(scene, timeMs, cx, cy, overrides)
       // Bubble up to topmost ancestor group
       if (hit) {
         let cur = scene.layers.find(l => l.id === hit)
@@ -636,6 +655,7 @@ export default function SceneCanvas({
       startClientY: e.clientY,
       width:  layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80),
       height: layer.size?.height ?? (layer.text?.fontSize ?? 24),
+      ...resolveSplineMoveBounds(layer, scene, timeMs, overrides),
       cloneMode,
     }
     startDrag()
@@ -667,6 +687,10 @@ export default function SceneCanvas({
     e.preventDefault()
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
     if (!layer || layer.locked) return
+    const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+    const parentWorld = resolveParentWorldMatrix(layer, scene, timeMs, frame)
+    if (Math.abs(parentWorld.determinant()) < 1e-9) return
+    const displayTransform = { ...layer.transform, ...resolveDisplayTransform(layer, scene, timeMs, frame) }
     editor.beginTransaction()
     dragRef.current = {
       kind: 'anchor',
@@ -674,9 +698,10 @@ export default function SceneCanvas({
       originalLayer: layer,
       startClientX: e.clientX,
       startClientY: e.clientY,
+      parentWorld, displayTransform,
     }
     startDrag()
-  }, [scene.layers, selectedLayerId, editor, startDrag])
+  }, [scene, timeMs, overrides, selectedLayerId, editor, startDrag])
 
   // ── Move-mode axis arrow pointerdown → constrained move drag ─────────────
   // Click X arrow → drag locked to horizontal. Click Y arrow → vertical.
@@ -698,6 +723,7 @@ export default function SceneCanvas({
       startClientY: e.clientY,
       width:  layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80),
       height: layer.size?.height ?? (layer.text?.fontSize ?? 24),
+      ...resolveSplineMoveBounds(layer, scene, timeMs, overrides),
       axisLock: axis,
     }
     startDrag()
@@ -790,6 +816,7 @@ export default function SceneCanvas({
     let anchorWorldX: number
     let anchorWorldY: number
     let multiOrigins: RotateState['multiLayerOrigins']
+    let gesture: RotationGesture | undefined
 
     if (ids && ids.length >= 2) {
       // Centroid of anchor positions
@@ -808,11 +835,14 @@ export default function SceneCanvas({
         originalRotation: l.transform.rotationDeg,
       }))
     } else {
-      anchorWorldX = primary.transform.x + primary.transform.anchorX
-      anchorWorldY = primary.transform.y + primary.transform.anchorY
+      const snapshot = beginRotationGesture(primary, scene, timeMs, { x: wx, y: wy }, overrides)
+      if (!snapshot) return
+      gesture = snapshot
+      anchorWorldX = snapshot.worldPivot.x
+      anchorWorldY = snapshot.worldPivot.y
     }
 
-    const startAngle = (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
+    const startAngle = gesture?.startAngle ?? (Math.atan2(wy - anchorWorldY, wx - anchorWorldX) * 180) / Math.PI
 
     editor.beginTransaction()
     dragRef.current = {
@@ -822,13 +852,14 @@ export default function SceneCanvas({
       startClientX: e.clientX,
       startClientY: e.clientY,
       startAngle,
-      originalRotation: primary.transform.rotationDeg,
+      originalRotation: gesture?.rotationDeg ?? primary.transform.rotationDeg,
       anchorWorldX,
       anchorWorldY,
+      gesture,
       multiLayerOrigins: multiOrigins,
     }
     startDrag()
-  }, [scene.layers, selectedLayerId, selectedLayerIds, editor, startDrag])
+  }, [scene, timeMs, overrides, selectedLayerId, selectedLayerIds, editor, startDrag])
 
   // ── Render canvas (scene + ghost / onion-skin overlay) ────────────────────
   useCanvasRenderer(canvasRef, {
@@ -856,23 +887,32 @@ export default function SceneCanvas({
   // is actually drawing the layer at. Falls back to the static transform
   // when no overrides apply. `dragOverrides` ensures the frame moves
   // smoothly mid-drag (preview transactions don't update overrides).
-  const selectedDisplayTransform = useMemo(() => {
-    if (!selectedLayer) return null
-    let ov: Map<string, number> = overrides ?? new Map()
-    if (dragOverrides.size > 0) {
-      const m = new Map<string, number>()
-      ov.forEach((v, k) => m.set(k, v))
-      dragOverrides.forEach((v, k) => m.set(k, v))
-      ov = m
-    }
-    return resolveDisplayTransform(selectedLayer, scene, timeMs, ov)
-  }, [selectedLayer, scene, timeMs, overrides, dragOverrides])
+  const displayOverrides = useMemo(() => {
+    const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+    if (dragOverrides.size === 0) return frame
+    const merged: OverrideMap = new Map()
+    frame.forEach((v, k) => merged.set(k, v))
+    dragOverrides.forEach((v, k) => merged.set(k, v))
+    return merged
+  }, [overrides, scene.timelines, timeMs, dragOverrides])
+  const selectedDisplayTransform = useMemo(() => selectedLayer
+    ? resolveDisplayTransform(selectedLayer, scene, timeMs, displayOverrides)
+    : null, [selectedLayer, scene, timeMs, displayOverrides])
   // Selection frame anchor: prefer live display transform but keep the
   // static fallback so empty paths / unconfigured followPath layers still
   // get a sensible gizmo origin.
   const selDX = selectedDisplayTransform?.x ?? selectedLayer?.transform.x ?? 0
   const selDY = selectedDisplayTransform?.y ?? selectedLayer?.transform.y ?? 0
   const selDR = selectedDisplayTransform?.rotationDeg ?? selectedLayer?.transform.rotationDeg ?? 0
+  const selectedWorldMatrix = useMemo(() => {
+    if (!selectedLayer) return null
+    return resolveLayerWorldMatrix(selectedLayer, scene, timeMs, displayOverrides)
+  }, [selectedLayer, scene, timeMs, displayOverrides])
+  const boundsForFrame = useMemo(() => createLayerWorldBoundsResolver(scene, timeMs, displayOverrides),
+    [scene, timeMs, displayOverrides])
+  const selectedWorldBounds = useMemo(() => rawSelectedLayer
+    ? boundsForFrame(rawSelectedLayer)
+    : null, [rawSelectedLayer, boundsForFrame])
 
   // ── 3DS Max-style gizmo visibility per toolMode ──────────────────────────
   // Each mode shows only its own handle set so the user always sees the
@@ -897,25 +937,15 @@ export default function SceneCanvas({
     ring:      toolMode === 'rotate',
     axisMove:  toolMode === 'move',
     axisScale: toolMode === 'scale',
-    anchor:    toolMode === 'select' || toolMode === 'anchor',
+    anchor:    toolMode === 'anchor',
   }
-  // BL-66 — Path layers carry geometry in `path.anchors`, not `size`. Derive
-  // an AABB from the anchors so the selection frame (+ resize handles) can
-  // wrap the path the same way it wraps a shape.
-  const selectedPathBounds = useMemo(() => {
-    if (!selectedLayer || selectedLayer.type !== 'path' || !selectedLayer.path) return null
-    if (selectedLayer.path.anchors.length < 2) return null
-    return bezierPathBounds(selectedLayer.path)
-  }, [selectedLayer])
-  // BL-73 — spline frame bounds from the granular geometry (handles centered-
-  // at-origin primitives; local box may have negative x/y).
-  const selectedSplineBounds = useMemo(() => {
-    if (!selectedLayer || selectedLayer.type !== 'spline' || !selectedLayer.spline) return null
-    const b = computeSplineBounds(selectedLayer.spline)
-    if (b.width === 0 && b.height === 0) return null
-    return b
-  }, [selectedLayer])
-  const hasFrameGeometry = !!selectedLayer && (!!selectedLayer.size || !!selectedPathBounds || !!selectedSplineBounds)
+  const selectedWorldPivot = selectedWorldMatrix && selectedLayer
+    ? selectedWorldMatrix.applyToPoint({ x: selectedLayer.transform.anchorX, y: selectedLayer.transform.anchorY })
+    : { x: 0, y: 0 }
+  // Vector geometry wins over retained size metadata; groups use the union
+  // of visible children. Regular sized objects keep their resize frame.
+  const usesWorldFrame = selectedLayer?.type === 'path' || selectedLayer?.type === 'spline' || selectedLayer?.type === 'group'
+  const hasFrameGeometry = !!selectedLayer && (usesWorldFrame ? !!selectedWorldBounds : !!selectedLayer.size)
   const showFrame =
     !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.hidden
     && gizmo.frame
@@ -996,7 +1026,7 @@ export default function SceneCanvas({
               const sy = height / rect.height
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
-              const hitId = hitTestLayer(scene, timeMs, cx, cy)
+              const hitId = hitTestLayer(scene, timeMs, cx, cy, overrides)
               const hitLayer = hitId ? scene.layers.find((l) => l.id === hitId) : null
               if (hitLayer?.type === 'path' && !hitLayer.locked) {
                 onSelectLayer(hitId!)
@@ -1016,12 +1046,13 @@ export default function SceneCanvas({
               // BL-73 — right-click on the selected spline's element opens the
               // point / segment / contour editing menu.
               const selSpline = scene.layers.find((l) => l.id === selectedLayerId)
-              if (selSpline?.type === 'spline' && selSpline.spline) {
-                const lx = cx - selSpline.transform.x
-                const ly = cy - selSpline.transform.y
-                const hp = hitTestSplinePoint(selSpline.spline, lx, ly, 8 / zoom)
-                const hs = hp ? null : hitTestSplineSegment(selSpline.spline, lx, ly, 6 / zoom)
-                const hc = (hp || hs) ? null : hitTestSplineContour(selSpline.spline, lx, ly)
+              const splineEdit = selSpline && !selSpline.locked && !selSpline.frozen && !selSpline.hidden
+                ? resolveSplineEditGeometry(selSpline, scene, timeMs, overrides)
+                : null
+              if (selSpline?.spline && splineEdit) {
+                const hp = hitTestSplinePoint(splineEdit.worldSpline, cx, cy, 8 / zoom)
+                const hs = hp ? null : hitTestSplineSegment(splineEdit.worldSpline, cx, cy, 6 / zoom)
+                const hc = (hp || hs) ? null : hitTestSplineContour(splineEdit.worldSpline, cx, cy)
                 if (hp || hs || hc) {
                   e.preventDefault()
                   if (hp)      { setSelectedSplinePointId(hp); splineCtxTargetRef.current = { kind: 'point', id: hp } }
@@ -1032,7 +1063,7 @@ export default function SceneCanvas({
                 }
               }
 
-              const hit = hitTestLayer(scene, timeMs, cx, cy)
+              const hit = hitTestLayer(scene, timeMs, cx, cy, overrides)
               if (!hit) {
                 e.preventDefault()
                 emptyCanvasCtx.open(e)
@@ -1060,25 +1091,26 @@ export default function SceneCanvas({
                 const sy = height / rect.height
                 const cx = (clientX - rect.left) * sx
                 const cy = (clientY - rect.top)  * sy
-                const hit = hitTestLayer(scene, timeMs, cx, cy)
+                const hit = hitTestLayer(scene, timeMs, cx, cy, overrides)
                 setHoveredLayerId((cur) => (cur === hit ? cur : hit))
 
                 // BL-73 — hover over the selected spline's points / handles /
                 // segments (priority: handle → point → segment). Local coords;
                 // tolerance scaled by zoom so it stays ~8 screen px.
                 const sel = scene.layers.find((l) => l.id === selectedLayerId)
-                if (sel?.type === 'spline' && sel.spline
+                const splineEdit = sel && !sel.locked && !sel.frozen && !sel.hidden
+                  ? resolveSplineEditGeometry(sel, scene, timeMs, overrides)
+                  : null
+                if (splineEdit
                     && (toolMode === 'select' || toolMode === 'pen')) {
-                  const lx = cx - sel.transform.x
-                  const ly = cy - sel.transform.y
                   const tol = 8 / zoom
-                  const hh = hitTestSplineHandle(sel.spline, lx, ly, tol)
+                  const hh = hitTestSplineHandle(splineEdit.worldSpline, cx, cy, tol)
                   if (hh) setSplineHover({ kind: 'handle', pointId: hh.pointId, handleKind: hh.kind })
                   else {
-                    const hp = hitTestSplinePoint(sel.spline, lx, ly, tol)
+                    const hp = hitTestSplinePoint(splineEdit.worldSpline, cx, cy, tol)
                     if (hp) setSplineHover({ kind: 'point', id: hp })
                     else {
-                      const hs = hitTestSplineSegment(sel.spline, lx, ly, tol)
+                      const hs = hitTestSplineSegment(splineEdit.worldSpline, cx, cy, tol)
                       setSplineHover(hs ? { kind: 'segment', id: hs.segmentId } : null)
                     }
                   }
@@ -1122,38 +1154,18 @@ export default function SceneCanvas({
             if (!hoveredLayerId || hoveredLayerId === selectedLayerId) return null
             const hl = scene.layers.find((l) => l.id === hoveredLayerId)
             if (!hl || hl.hidden) return null
-            // BL-66 — Path layers have no `size`; derive the hover rect from
-            // the path AABB so the red outline wraps the actual geometry
-            // (instead of an unrelated 80×24 box stuck at the layer origin).
-            // Empty paths (< 2 anchors) aren't hittable per renderer logic, so
-            // we shouldn't be here — but guard defensively.
-            if (hl.type === 'path') {
-              if (!hl.path || hl.path.anchors.length < 2) return null
-            }
-            let hx = hl.transform.x, hy = hl.transform.y
-            let hw: number, hh: number
-            if (hl.type === 'path' && hl.path && hl.path.anchors.length >= 2) {
-              const bb = bezierPathBounds(hl.path)
-              hx += bb.x
-              hy += bb.y
-              hw = bb.width
-              hh = bb.height
-            } else {
-              hw = hl.size?.width  ?? (hl.text?.fontSize ? 120 : 80)
-              hh = hl.size?.height ?? (hl.text?.fontSize ?? 24)
-            }
+            const bounds = boundsForFrame(hl)
+            if (!bounds) return null
             return (
               <div
                 key={hoveredLayerId}
                 className="absolute pointer-events-none border-2 border-red-500/80 box-border
                            hover-preview-in transition-[border-color,border-width] duration-150"
                 style={{
-                  left: hx * zoom,
-                  top:  hy * zoom,
-                  width:  hw * zoom,
-                  height: hh * zoom,
-                  transform: `rotate(${hl.transform.rotationDeg}deg)`,
-                  transformOrigin: `${hl.transform.anchorX * zoom}px ${hl.transform.anchorY * zoom}px`,
+                  left: bounds.x * zoom,
+                  top: bounds.y * zoom,
+                  width: bounds.width * zoom,
+                  height: bounds.height * zoom,
                 }}
               />
             )
@@ -1199,8 +1211,10 @@ export default function SceneCanvas({
           )}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
-          {selectedLayer && selectedLayer.type === 'spline' && selectedLayer.spline && !hideEditorUI && (
-            <SplineEditOverlay layer={selectedLayer} zoom={zoom} hover={splineHover} selectedPointId={selectedSplinePointId} />
+          {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI
+            && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
+            <SplineEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
+              hover={splineHover} selectedPointId={selectedSplinePointId} />
           )}
 
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
@@ -1270,7 +1284,18 @@ export default function SceneCanvas({
             </svg>
           )}
 
-          {showFrame && selectedLayer.size && (
+          {/* Keep secondary selections visible without adding competing handles. */}
+          {!hideEditorUI && selectedLayerIds && Array.from(selectedLayerIds).map(id => {
+            if (id === selectedLayerId) return null
+            const layer = scene.layers.find(l => l.id === id)
+            if (!layer || layer.hidden) return null
+            const bounds = boundsForFrame(layer)
+            if (!bounds) return null
+            return <div key={id} className="absolute pointer-events-none border border-blue-400/90 box-border"
+              style={{ left: bounds.x * zoom, top: bounds.y * zoom, width: bounds.width * zoom, height: bounds.height * zoom }} />
+          })}
+
+          {showFrame && !usesWorldFrame && selectedLayer.size && (
             <SelectionFrame
               x={selDX * zoom}
               y={selDY * zoom}
@@ -1284,32 +1309,16 @@ export default function SceneCanvas({
             />
           )}
 
-          {/* BL-66 — Path bounding-box frame. Pathlerin size'ı yok; AABB'yi
-              anchors'tan türetiyoruz. Resize handles devre dışı (pathler scale
-              değil pen tool ile düzenlenir), sadece rotate dotları aktif. */}
-          {showFrame && !selectedLayer.size && selectedPathBounds && (
+          {/* One geometry-driven frame for vectors, groups and their instances. */}
+          {showFrame && usesWorldFrame && selectedWorldBounds && (
             <SelectionFrame
-              x={(selDX + selectedPathBounds.x) * zoom}
-              y={(selDY + selectedPathBounds.y) * zoom}
-              w={selectedPathBounds.width  * zoom}
-              h={selectedPathBounds.height * zoom}
-              anchorOffsetX={selectedLayer.transform.anchorX * zoom}
-              anchorOffsetY={selectedLayer.transform.anchorY * zoom}
-              rotationDeg={selDR}
-              onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
-            />
-          )}
-
-          {/* BL-73 — Spline selection frame from granular bounds. */}
-          {showFrame && !selectedLayer.size && selectedSplineBounds && (
-            <SelectionFrame
-              x={(selDX + selectedSplineBounds.x) * zoom}
-              y={(selDY + selectedSplineBounds.y) * zoom}
-              w={selectedSplineBounds.width  * zoom}
-              h={selectedSplineBounds.height * zoom}
-              anchorOffsetX={selectedLayer.transform.anchorX * zoom}
-              anchorOffsetY={selectedLayer.transform.anchorY * zoom}
-              rotationDeg={selDR}
+              x={selectedWorldBounds.x * zoom}
+              y={selectedWorldBounds.y * zoom}
+              w={selectedWorldBounds.width * zoom}
+              h={selectedWorldBounds.height * zoom}
+              anchorOffsetX={(selectedWorldPivot.x - selectedWorldBounds.x) * zoom}
+              anchorOffsetY={(selectedWorldPivot.y - selectedWorldBounds.y) * zoom}
+              rotationDeg={0}
               onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
             />
           )}
@@ -1319,8 +1328,8 @@ export default function SceneCanvas({
               they don't rotate with the layer (matches 3DS Max behaviour). */}
           {gizmo.axisMove && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <MoveAxisGizmo
-              x={(selDX + selectedLayer.transform.anchorX) * zoom}
-              y={(selDY + selectedLayer.transform.anchorY) * zoom}
+              x={selectedWorldPivot.x * zoom}
+              y={selectedWorldPivot.y * zoom}
               onAxisPointerDown={beginAxisMove}
             />
           )}
@@ -1330,8 +1339,8 @@ export default function SceneCanvas({
               from frame resize which mutates width/height (geometry). */}
           {gizmo.axisScale && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <ScaleAxisGizmo
-              x={(selDX + selectedLayer.transform.anchorX) * zoom}
-              y={(selDY + selectedLayer.transform.anchorY) * zoom}
+              x={selectedWorldPivot.x * zoom}
+              y={selectedWorldPivot.y * zoom}
               onAxisPointerDown={beginScaleAxis}
             />
           )}
@@ -1341,25 +1350,27 @@ export default function SceneCanvas({
               stays clearly outside the frame even for big shapes. */}
           {gizmo.ring && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <RotateRing
-              x={(selDX + selectedLayer.transform.anchorX) * zoom}
-              y={(selDY + selectedLayer.transform.anchorY) * zoom}
-              radius={Math.max(
+              x={selectedWorldPivot.x * zoom}
+              y={selectedWorldPivot.y * zoom}
+              radius={selectedWorldBounds ? Math.max(
                 60,
-                ((selectedLayer.size?.width ?? 120) * 0.6) * zoom,
-                ((selectedLayer.size?.height ?? 80) * 0.6) * zoom,
-              )}
+                Math.abs(selectedWorldBounds.x - selectedWorldPivot.x) * zoom + 16,
+                Math.abs(selectedWorldBounds.x + selectedWorldBounds.width - selectedWorldPivot.x) * zoom + 16,
+                Math.abs(selectedWorldBounds.y - selectedWorldPivot.y) * zoom + 16,
+                Math.abs(selectedWorldBounds.y + selectedWorldBounds.height - selectedWorldPivot.y) * zoom + 16,
+              ) : 60}
               isDragging={dragRef.current?.kind === 'rotate'}
               onPointerDown={beginRotate}
             />
           )}
 
-          {/* Anchor handle — visible in Select + Anchor modes */}
-          {gizmo.anchor && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+          {/* Rotate shows the actual center; only Anchor mode can drag it. */}
+          {(gizmo.anchor || gizmo.ring) && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <AnchorHandle
-              x={(selDX + selectedLayer.transform.anchorX) * zoom}
-              y={(selDY + selectedLayer.transform.anchorY) * zoom}
+              x={selectedWorldPivot.x * zoom}
+              y={selectedWorldPivot.y * zoom}
               isDragging={dragRef.current?.kind === 'anchor'}
-              onPointerDown={beginAnchorDrag}
+              onPointerDown={gizmo.anchor ? beginAnchorDrag : undefined}
             />
           )}
 
@@ -1413,11 +1424,7 @@ export default function SceneCanvas({
         </div>
       </div>
 
-      {/* Rulers — top + left edges of the leaf, tick-aligned with the artboard.
-          Pass the selected layer's AABB (in composition px) so the rulers
-          can render the blue band + dashed alignment guides. Rotated layers
-          report their unrotated bbox for now (matches "object's local
-          extents" — most tools' default behaviour). */}
+      {/* Rulers share the displayed geometry bounds used by selection/hover. */}
       {showRulers && containerRef.current && (
         <Rulers
           composition={{ width, height }}
@@ -1426,14 +1433,7 @@ export default function SceneCanvas({
           containerEl={containerRef.current}
           selectedRect={
             selectedLayer && !selectedLayer.hidden
-              ? {
-                  x: selectedLayer.transform.x,
-                  y: selectedLayer.transform.y,
-                  width:  selectedLayer.size?.width
-                          ?? (selectedLayer.text?.fontSize ? 120 : 80),
-                  height: selectedLayer.size?.height
-                          ?? (selectedLayer.text?.fontSize ?? 24),
-                }
+              ? selectedWorldBounds ?? undefined
               : undefined
           }
         />

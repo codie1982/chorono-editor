@@ -9,6 +9,8 @@
 // V1 ships: blur, glow, shadow. Adding a new effect requires only a new
 // plugin file + register() call.
 
+import type { CanvasSurfaceAllocator } from '@/lib/render/resources/CanvasSurfaceScope'
+
 export interface EffectDefinition {
   id:      string
   type:    string
@@ -18,8 +20,13 @@ export interface EffectDefinition {
 
 export interface EffectPlugin<T extends EffectDefinition = EffectDefinition> {
   type:  string
-  /** Applies the effect to `input`. May return `input` itself (mutated) or a new canvas. */
-  apply(input: HTMLCanvasElement, effect: T): HTMLCanvasElement
+  /**
+   * Input is borrowed. Return input unchanged/mutated, or a new caller-owned
+   * output. When an allocator is supplied, all new output/scratch must use it;
+   * cached/borrowed foreign outputs cannot satisfy bounded render ownership.
+   * Two-argument standalone callers retain their ordinary canvas result.
+   */
+  apply(input: HTMLCanvasElement, effect: T, surfaces?: CanvasSurfaceAllocator): HTMLCanvasElement
 }
 
 export class EffectRegistry {
@@ -36,16 +43,36 @@ export class EffectRegistry {
     return this.byType.get(type)
   }
 
-  /** Applies an ordered chain of effects to the input canvas. */
-  applyChain(input: HTMLCanvasElement, effects: EffectDefinition[]): HTMLCanvasElement {
+  /**
+   * Applies ordered effects; borrows input, transfers final output to caller.
+   * Scoped calls return intermediate outputs as soon as the next pass consumes
+   * them. The caller disposes the scope on failure/final composite. A plugin
+   * ignoring the supplied allocator fails explicitly rather than escaping its
+   * admission budget. Legacy calls without an allocator preserve apply behavior.
+   */
+  applyChain(input: HTMLCanvasElement, effects: readonly EffectDefinition[], surfaces?: CanvasSurfaceAllocator): HTMLCanvasElement {
     let current = input
-    for (const eff of effects) {
-      if (!eff.enabled) continue
-      const plugin = this.byType.get(eff.type)
-      if (!plugin) continue
-      current = plugin.apply(current, eff)
+    const releaseIntermediate = (canvas: HTMLCanvasElement) => {
+      if (canvas === input) return
+      if (surfaces) surfaces.release(canvas)
+      else canvas.width = canvas.height = 0
     }
-    return current
+    try {
+      for (const eff of effects) {
+        if (!eff.enabled) continue
+        const plugin = this.byType.get(eff.type)
+        if (!plugin) continue
+        const next = plugin.apply(current, eff, surfaces)
+        if (surfaces && next !== current && !surfaces.owns(next)) {
+          // Plugin contract transfers a new output; dispose it on rejection.
+          next.width = next.height = 0
+          throw new Error(`Effect "${eff.type}" must allocate its output through the supplied surface allocator.`)
+        }
+        if (next !== current) releaseIntermediate(current)
+        current = next
+      }
+      return current
+    } catch (error) { releaseIntermediate(current); throw error }
   }
 
   clear(): void { this.byType.clear() }

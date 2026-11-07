@@ -37,16 +37,26 @@ When timelines affect the same property, inspect the combined result instead of 
 
 - Easing belongs to the **starting** keyframe of a segment. Supported names include `linear`, `hold`, `easeIn`, `easeOut`, `easeInOut`. A custom curve is `{type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}`.
 - For `Timeline.key(layer,property,...)` pass a layer-local property such as `transform.x`. Track-editing methods take full targets such as `layers.<id>.transform.x`.
-- `scene.cloneTimeline(id,newId)` duplicates an animation without cloning the objects. It also duplicates existing tracks; remove or replace tracks that should not be inherited.
+- `scene.cloneTimeline(id,newId)` duplicates an animation without cloning the objects. Its keyframes receive fresh ids so edits stay independent. Read the cloned timeline before referring to individual keys. It also duplicates existing tracks; remove or replace tracks that should not be inherited.
 - Native tools include `set_keyframes`, `update_track`, `remove_track`, `add_modifier`, `clone_timeline`, `update_timeline` and `delete_timeline`. Discover exact input schemas before calling them.
 - Track patches support out-of-range behavior, easing/time-warp/multiplier curves and procedural controllers. Discover their schema rather than guessing nested keys. Use `bake_track` or `timeline.bake(target,fps,tolerance)` when the output needs sampled keyframes.
 
 ## Procedural objects, paths and particles
 
-Use ordinary synchronous loops for repeated objects and staggered keyframe times. `scene.clone` and `scene.array` expose editable cloning and layouts; read the tool schemas for available array patterns and whether copies are instances. Reuse the returned handles instead of guessing generated ids.
+Use ordinary synchronous loops for repeated objects and staggered keyframe times. `scene.clone` and `scene.array` expose editable cloning and layouts. Both use the timeline selected by `scene.useTimeline(id)`, falling back to the first timeline when none is selected. Explicit selection is `scene.clone(handle,count,{timelineId,...options})` or `scene.array(handle,layout,{timelineId})`. Read schemas for layout patterns and instance modes. Reuse returned handles instead of guessing generated ids.
 
 For path motion, create `scene.addPath(points,{role:'motion',name:...})` or an appropriate spline, then `layer.followPath(path.id,{orientToPath:true})` and key `followPath.progress` from 0 to 1. Use capability definitions for spline parameters, trim and repeater properties.
 
 For particles, select a real preset from `get_capabilities`, then use `scene.addEmitter(preset,options)` and `configureParticles`, or the native particle tools. Bound particle counts to the intended scene; inspect frames and avoid increasing counts merely to hide composition problems.
 
+For deeper editing, use `layer.particles` for validated preset/config/life-gradient/motion-modifier operations, `layer.spline` for native point/handle/contour editing, and `scene.explorer` for hierarchy queries, grouping and reparenting. See [domains.md](domains.md) for signatures, returned ids, coordinate spaces and a complete path-emitter example.
+
 For grouping, create a group and parent child handles with `child.parent(group)` or use the native `group_layers` / `ungroup_layer` tools. Check how parenting affects the existing transforms before moving an established hierarchy.
+
+## Read, merge and animate data
+
+`scene.snapshot()` returns the full editable scene as detached JSON. `scene.assets`, `assetCollections`, `parameters`, `triggers`, `bindings`, `parameterWires`, `stateMachines` and `initialState` expose copies. A layer's `data` contains its complete settings, and `get('style.fill.color')` reads one nested value. Modify the scene with handles rather than changing these copies.
+
+Use `layer.patch({style:{stroke:{width:3}}})` to preserve sibling fields. `layer.set({style:...})` replaces the complete style object. Arrays are replaced by `patch`, not merged element by element. Do not change layer identity.
+
+Animation overrides are applied to layer data before drawing, including shape, text, effect, mask, particle and repeater settings. Numbers interpolate with easing; color paths interpolate channels; ordinary strings and booleans switch at key boundaries; Vec2 values interpolate components. Numeric modifiers/controllers/bake operate on numbers. Use exact property paths from capabilities/data and inspect real frames. For geometry motion, key scalar coordinates of existing points/handles while preserving topology; whole-object geometry morphing is not supported.

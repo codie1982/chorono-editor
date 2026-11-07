@@ -80,6 +80,9 @@ export interface ImportSource {
 
 /** Universal options, applicable to all formats */
 export interface BaseImportOptions {
+  /** Audio clip placement captured when the import starts. */
+  timelineId?: string
+  startMs?: number
   /** Target asset collection id */
   collection?: string
   /** Scale factor applied to imported dimensions */

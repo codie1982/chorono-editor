@@ -48,8 +48,23 @@ export default function TimelineKeyframe({
     <div
       className="absolute group z-10"
       data-kf-id={kf.id}
+      tabIndex={0}
+      role="button"
+      aria-label={`Keyframe at ${Math.round(kf.timeMs)} milliseconds`}
+      aria-pressed={!!isSelected}
       style={positionStyle}
-      onClick={(e) => { e.stopPropagation(); onSelect(e.shiftKey) }}
+      onClick={(e) => {
+        e.stopPropagation()
+        // Pointer clicks are selected once by useKeyframeDrag.onLoneClick.
+        // detail=0 preserves assistive/programmatic click activation.
+        if (e.detail === 0) onSelect(e.shiftKey)
+      }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        e.stopPropagation()
+        onSelect(e.shiftKey)
+      }}
       onPointerDown={onPointerDown}
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}

@@ -5,6 +5,7 @@ import type {
   TimelineSegment, TimelineMarker,
 } from '@/lib/types'
 import { evaluateTrack } from '@/lib/evaluator'
+import { isScalarNumericTrack } from '@/lib/animation/typedValues'
 import { newTimeline, nextKfId, newTimelineSegment, newMarker } from '@/lib/defaults'
 import {
   makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/editor/commands-keyframe'
 import {
   makeAddTimelineCmd, makeDeleteTimelineCmd,
+  getTimelineDeletionBlockReason,
   makeAddEventCmd, makeDeleteEventCmd, makeUpdateEventCmd,
   makeAddMarkerCmd, makeDeleteMarkerCmd, makeUpdateMarkerCmd, makeMoveMarkerCmd,
   makeSetWorkAreaCmd,
@@ -59,6 +61,10 @@ import WorkAreaOverlay            from './timeline/WorkAreaOverlay'
 import type { TimelineEvent } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import { nextEventId } from '@/lib/defaults'
+import { makeAddAnimationCmd } from '@/lib/timeline/addAnimationCommand'
+import { toast } from '@/lib/toast/toast'
+import { makeMoveAudioClipCmd, makePatchAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd } from '@/lib/editor/commands-audio'
+import { resolveAudioClipWindow } from '@/lib/audio/audioClip'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
 // the label. Same set is used by the LayerPanel-side picker so a layer
@@ -139,6 +145,7 @@ interface Props {
   /** After Effects-style property reveal (P/S/R/T/U). The `nonce` makes each
    *  keypress distinct so repeated presses re-fire (and toggle the filter). */
   revealProperty?: { prop: 'position' | 'scale' | 'rotation' | 'opacity' | 'all'; nonce: number } | null
+  audioControls?: React.ReactNode
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +158,7 @@ export default function TimelinePanel({
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
   onEditWire, onWireRequest, revealProperty,
+  audioControls,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -313,12 +321,14 @@ export default function TimelinePanel({
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
     // Step 1: solo mode — if any layer is solo'd, hide everything else.
-    const anySolo = scene.layers.some((l) => l.solo)
-    let next = anySolo ? scene.layers.filter((l) => l.solo) : scene.layers
+    const visualSolo = scene.layers.some(layer => layer.type !== 'audio' && layer.solo)
+    const audioSolo = scene.layers.some(layer => layer.type === 'audio' && layer.solo)
+    let next = scene.layers.filter(layer => layer.type === 'audio' ? !audioSolo || layer.solo : !visualSolo || layer.solo)
+    next = next.filter(layer => layer.type !== 'audio' || !layer.audio?.timelineId || layer.audio.timelineId === selectedTimelineId)
     // Step 2: timeline opt-in filter — when layerIds is set, only show those layers.
     if (timeline?.layerIds !== undefined) {
       const idSet = new Set(timeline.layerIds)
-      next = next.filter((l) => idSet.has(l.id))
+      next = next.filter((l) => idSet.has(l.id) || (l.type === 'audio' && !l.audio?.timelineId))
     }
     // Step 3: text filter
     if (q) {
@@ -333,7 +343,7 @@ export default function TimelinePanel({
     const pinned   = next.filter((l) =>  l.pinned)
     const unpinned = next.filter((l) => !l.pinned)
     return [...pinned, ...unpinned]
-  }, [scene.layers, layerFilter, timeline])
+  }, [scene.layers, layerFilter, timeline, selectedTimelineId])
 
   // Map: layerId → pin index (0,1,2…) — only set for pinned layers.
   const pinIndexFor = useMemo(() => {
@@ -341,6 +351,15 @@ export default function TimelinePanel({
     let i = 0
     for (const l of visibleLayers) { if (l.pinned) { m.set(l.id, i); i++ } }
     return m
+  }, [visibleLayers])
+  const pinTopFor = useMemo(() => {
+    const tops = new Map<string, number>()
+    let top = 0
+    for (const layer of visibleLayers) if (layer.pinned) {
+      tops.set(layer.id, top)
+      top += layer.type === 'audio' ? 64 : 32
+    }
+    return tops
   }, [visibleLayers])
   const toggleLayerExpand = useCallback((id: string) => {
     setCollapsedIds((prev) => {
@@ -356,14 +375,12 @@ export default function TimelinePanel({
     clientXToMs: vp.clientXToMs, durationMs: duration,
     onBegin: beginTransaction,
     onPreview: (moves) => {
-      let nextScene = scene
+      let nextScene = editor.getScene()
+      const active = nextScene.timelines.find(t => t.id === selectedTimelineId)
+      if (!active) return
       for (const [kfId, newMs] of Object.entries(moves)) {
-        for (const tl of nextScene.timelines) {
-          const track = tl.tracks.find((t) => t.keyframes.some((k) => k.id === kfId))
-          if (!track) continue
-          nextScene = updateKfTimeMs(nextScene, tl.id, track.target, kfId, newMs)
-          break
-        }
+        const track = active.tracks.find(t => t.keyframes.some(k => k.id === kfId))
+        if (track) nextScene = updateKfTimeMs(nextScene, active.id, track.target, kfId, newMs)
       }
       previewTransaction(nextScene)
     },
@@ -386,32 +403,23 @@ export default function TimelinePanel({
   }
 
   const deleteTimeline = (id: string) => {
-    const tl = scene.timelines.find((t) => t.id === id)
+    const currentScene = editor.getScene()
+    const tl = currentScene.timelines.find((t) => t.id === id)
     if (!tl) return
+    const reason = getTimelineDeletionBlockReason(currentScene, id)
+    if (reason) { toast.warning('Timeline cannot be deleted', { detail: reason }); return }
     dispatchCommand(makeDeleteTimelineCmd(tl))
     if (selectedTimelineId === id) {
-      const remaining = scene.timelines.filter((t) => t.id !== id)
+      const remaining = currentScene.timelines.filter((t) => t.id !== id)
       onSelectTimeline(remaining[0]?.id ?? '')
     }
   }
 
   // ── Track / keyframe ops ─────────────────────────────────────────────────
-  const addTrack = useCallback((layerId: string, propPath: string) => {
+  const addTrack = useCallback((layerId: string, propPath: string, firstKeyMs?: number) => {
     if (!selectedTimelineId) return
-    const target = `layers.${layerId}.${propPath}`
-    const prev = scene
-    dispatchCommand({
-      label: 'Add Animation',
-      execute: (s) => ({
-        ...s,
-        timelines: s.timelines.map((tl) => tl.id !== selectedTimelineId ? tl :
-          tl.tracks.some((t) => t.target === target) ? tl
-            : { ...tl, tracks: [...tl.tracks, { target, keyframes: [] }] }
-        ),
-      }),
-      undo: () => prev,
-    })
-  }, [scene, selectedTimelineId, dispatchCommand])
+    dispatchCommand(makeAddAnimationCmd(selectedTimelineId, layerId, propPath, firstKeyMs))
+  }, [selectedTimelineId, dispatchCommand])
 
   const removeTrack = useCallback((trackTarget: string) => {
     if (!selectedTimelineId || !timeline) return
@@ -1011,6 +1019,7 @@ export default function TimelinePanel({
         onSelectTimeline={onSelectTimeline}
         onAddTimeline={addTimeline}
         onDeleteTimeline={deleteTimeline}
+        getTimelineDeleteReason={id => getTimelineDeletionBlockReason(scene, id)}
         onZoomChange={vp.setZoomFactor}
         onFit={() => { vp.setZoomFactor(1); vp.setScrollLeftPx(0) }}
         onTimelineFieldChange={updateTlField}
@@ -1026,6 +1035,7 @@ export default function TimelinePanel({
         workAreaActive={timeline?.workAreaInMs != null && timeline?.workAreaOutMs != null}
       />
 
+      {audioControls}
       <TrackToolBar
         hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
         selectedCount={selectedKfIds.size}
@@ -1265,6 +1275,9 @@ export default function TimelinePanel({
             frameRate={scene.composition.frameRate}
             labelColWidth={labelColWidth}
             pinIndex={pinIndexFor.get(layer.id) ?? -1}
+            pinTop={pinTopFor.get(layer.id)}
+            audioContext={layer.type === 'audio' ? { scene, editor, settings, timelineId: selectedTimelineId ?? undefined, isPlaying,
+              clearKeySelection: () => onSelectKeyframes(new Set<string>()) } : undefined}
             audioUrl={layer.type === 'audio' && layer.audio
               ? scene.assets?.find((a) => a.id === layer.audio!.assetId)?.url
               : undefined}
@@ -1287,7 +1300,14 @@ export default function TimelinePanel({
             clientXToMs={vp.clientXToMs}
             parameterWires={scene.parameterWires}
             onEditWire={onEditWire}
-            onLayerBarCommit={(layerId, _kind, fromStart, fromEnd, toStart, toEnd) => {
+            onLayerBarCommit={(layerId, kind, fromStart, fromEnd, toStart, toEnd) => {
+              const target = scene.layers.find(layer => layer.id === layerId)
+              if (target?.type === 'audio') {
+                const options = { timelineId: selectedTimelineId ?? undefined }
+                dispatchCommand(kind === 'move' ? makeMoveAudioClipCmd(layerId, toStart, options)
+                  : makeTrimAudioClipCmd(layerId, kind === 'trimStart' ? { startMs: toStart } : { endMs: toEnd }, options))
+                return
+              }
               // Single command handles move + trim — linearly remaps every
               // keyframe on this layer so the inner animation scales/shifts
               // along with the bar.
@@ -1490,6 +1510,9 @@ export default function TimelinePanel({
         const layer = scene.layers.find((l) => l.id === ctxLayerBar.layerId)
         if (!layer) { ctxMenu.close(); return null }
         const splitMs = currentTimeMs
+        const audioRange = layer.type === 'audio' ? resolveAudioClipWindow(layer,
+          scene.assets.find(asset => asset.id === layer.audio?.assetId)?.durationMs, duration) : null
+        const audioOptions = { timelineId: layer.audio?.timelineId ?? selectedTimelineId ?? undefined }
         // Already-animated property paths so we don't list them twice in
         // the "Add Animation" submenu.
         const animatedOnLayer = new Set(
@@ -1528,19 +1551,17 @@ export default function TimelinePanel({
                 shortcut: undefined,
                 disabled: false,
                 onSelect: () => {
-                  addTrack(layer.id, p.path)
-                  // Immediately drop a keyframe at the playhead so the new
-                  // track isn't empty — common workflow.
-                  setTimeout(() => addKeyframeAtTime(`layers.${layer.id}.${p.path}`, currentTimeMs), 0)
+                  addTrack(layer.id, p.path, currentTimeMs)
                 },
               })),
             ]),
           },
           { kind: 'separator' as const },
           {
-            kind: 'action' as const, label: 'Split Layer at Playhead',
-            shortcut: undefined, disabled: false,
+            kind: 'action' as const, label: audioRange ? 'Split Audio at Playhead' : 'Split Layer at Playhead',
+            shortcut: undefined, disabled: !!layer.locked || !!(audioRange && (splitMs <= audioRange.startMs || splitMs >= audioRange.endMs)),
             onSelect: () => {
+              if (audioRange) { dispatchCommand(makeSplitAudioClipCmd(layer.id, splitMs, audioOptions)); return }
               const cmd = makeSplitLayerCmd(
                 layer.id,
                 splitMs,
@@ -1554,19 +1575,28 @@ export default function TimelinePanel({
           {
             kind: 'action' as const, label: 'Trim Start to Playhead',
             shortcut: undefined,
-            disabled: splitMs <= (layer.startMs ?? 0),
-            onSelect: () => dispatchCommand(
-              makeTrimLayerCmd(layer.id, 'start', layer.startMs ?? 0, splitMs)
-            ),
+            disabled: !!layer.locked || splitMs <= (layer.startMs ?? 0) || !!(audioRange && splitMs >= audioRange.endMs),
+            onSelect: () => dispatchCommand(audioRange
+              ? makeTrimAudioClipCmd(layer.id, { startMs: splitMs }, audioOptions)
+              : makeTrimLayerCmd(layer.id, 'start', layer.startMs ?? 0, splitMs)),
           },
           {
             kind: 'action' as const, label: 'Trim End to Playhead',
             shortcut: undefined,
-            disabled: splitMs >= (layer.endMs ?? scene.composition.durationMs),
-            onSelect: () => dispatchCommand(
-              makeTrimLayerCmd(layer.id, 'end', layer.endMs ?? scene.composition.durationMs, splitMs)
-            ),
+            disabled: !!layer.locked || splitMs >= (layer.endMs ?? scene.composition.durationMs) || !!(audioRange && splitMs <= audioRange.startMs),
+            onSelect: () => dispatchCommand(audioRange
+              ? makeTrimAudioClipCmd(layer.id, { endMs: splitMs }, audioOptions)
+              : makeTrimLayerCmd(layer.id, 'end', layer.endMs ?? scene.composition.durationMs, splitMs)),
           },
+          ...(audioRange ? [
+            { kind: 'separator' as const },
+            { kind: 'action' as const, label: layer.audio?.muted ? 'Unmute Audio' : 'Mute Audio', disabled: !!layer.locked,
+              onSelect: () => dispatchCommand(makePatchAudioClipCmd(layer.id, { muted: !layer.audio?.muted }, audioOptions)) },
+            { kind: 'action' as const, label: 'Reset Gain to 0 dB', disabled: !!layer.locked,
+              onSelect: () => dispatchCommand(makePatchAudioClipCmd(layer.id, { volume: 1 }, audioOptions)) },
+            { kind: 'action' as const, label: 'Clear Audio Fades', disabled: !!layer.locked,
+              onSelect: () => dispatchCommand(makePatchAudioClipCmd(layer.id, { fadeInMs: 0, fadeOutMs: 0 }, audioOptions)) },
+          ] : []),
           { kind: 'separator' as const },
           {
             kind: 'action' as const,
@@ -1710,6 +1740,10 @@ export default function TimelinePanel({
         const layerMatch = /^layers\.([^.]+)\.(.+)$/.exec(track.target)
         const layerIdOnTrack  = layerMatch?.[1]
         const propertyPath    = layerMatch?.[2]
+        let staticValue: unknown = scene.layers.find(layer => layer.id === layerIdOnTrack)
+        for (const part of propertyPath?.split('.') ?? []) staticValue = staticValue && typeof staticValue === 'object'
+          ? (staticValue as Record<string, unknown>)[part] : undefined
+        const supportsScalar = isScalarNumericTrack(track, staticValue)
         const wireOnProp = (layerIdOnTrack && propertyPath)
           ? (scene.parameterWires ?? []).find(
               (w) => w.enabled && w.target.layerId === layerIdOnTrack && w.target.propertyPath === propertyPath
@@ -1738,7 +1772,7 @@ export default function TimelinePanel({
               {
                 kind: 'action' as const,
                 label: (track.controller?.type === 'waveform' ? '● ' : '  ') + 'Waveform (sine / square / saw)',
-                shortcut: undefined, disabled: false,
+                shortcut: undefined, disabled: !supportsScalar,
                 onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
                   selectedTimelineId, track.target, track.controller,
                   { type: 'waveform', waveform: { ...DEFAULT_WAVEFORM_PARAMS } },
@@ -1747,7 +1781,7 @@ export default function TimelinePanel({
               {
                 kind: 'action' as const,
                 label: (track.controller?.type === 'noise' ? '● ' : '  ') + 'Noise (deterministic fbm)',
-                shortcut: undefined, disabled: false,
+                shortcut: undefined, disabled: !supportsScalar,
                 onSelect: () => dispatchCommand(makeSetTrackControllerCmd(
                   selectedTimelineId, track.target, track.controller,
                   { type: 'noise', noise: { ...DEFAULT_NOISE_PARAMS } },
@@ -1757,12 +1791,12 @@ export default function TimelinePanel({
           },
           // BL-46 — Add Modifier ▸ (track-scope)
           {
-            kind: 'submenu', label: '+ Add Modifier', disabled: false,
+            kind: 'submenu', label: '+ Add Modifier', disabled: !supportsScalar,
             items: BL46_MODIFIER_TYPES.map((type) => ({
               kind: 'action' as const,
               label: BL46_MODIFIER_LABEL[type] ?? type,
               shortcut: undefined,
-              disabled: false,
+              disabled: !supportsScalar,
               onSelect: () => {
                 const m: CurveModifier = {
                   id: nextModifierId(),
@@ -1790,7 +1824,7 @@ export default function TimelinePanel({
           items.push({ kind: 'separator' })
           items.push({
             kind: 'action', label: 'Bake Track to Keyframes',
-            shortcut: undefined, disabled: false,
+            shortcut: undefined, disabled: !supportsScalar,
             onSelect: () => {
               dispatchCommand(makeBakeTrackToKeyframesCmd(
                 selectedTimelineId, track.target, track,

@@ -19,6 +19,8 @@ import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
 import { makeBakeMotionBlurCmd, makeUnbakeMotionBlurCmd } from '@/lib/editor/commands-motionblur'
 import { DEFAULT_MOTION_BLUR } from '@/lib/defaults'
 import { syncTextLayerSize } from '@/lib/text/measureText'
+import { centerOrigin } from '@/lib/editor/layerTransforms'
+import AudioInspector from '@/components/audio/AudioInspector'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
@@ -74,6 +76,9 @@ interface Props {
   onRequestNewWire?: (target: ParameterRef) => void
   /** BL-05 — Open WireParameterModal in edit mode for an existing wire. */
   onEditWire?: (wire: ParameterWire) => void
+  currentTimeMs?: number
+  selectedTimelineId?: string | null
+  onNormalizeAudio?: (layerId: string) => void | Promise<void>
 }
 
 // ── BL-05 + BL-69: Wireable + paramBindable field wrapper ─────────────────
@@ -356,6 +361,7 @@ export default function PropertiesPanel({
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
   dispatchCommand,
+  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
   // every WireableField call. `parameters` is shared too; `acceptedTypes`
@@ -391,6 +397,13 @@ export default function PropertiesPanel({
 
   // Active section tab. Resets to first tab when selection changes layer kind.
   const [activeTab, setActiveTab] = useState<PropTab>('properties')
+
+  if (layer?.type === 'audio' && layer.audio && scene && dispatchCommand) {
+    return <aside className="flex-1 min-h-0 overflow-y-auto bg-gray-900 p-3">
+      <AudioInspector key={layer.id} layer={layer} scene={scene} dispatchCommand={dispatchCommand}
+        currentTimeMs={currentTimeMs} selectedTimelineId={selectedTimelineId} onNormalizeAudio={onNormalizeAudio} />
+    </aside>
+  }
 
   return (
     <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
@@ -562,20 +575,8 @@ export default function PropertiesPanel({
                 </ParamBindButton>
               </Row2>
               <button
-                onClick={() => {
-                  // Layer-local centre: half of size for shapes/images/videos.
-                  // For text we approximate from value length × fontSize × 0.55.
-                  let cx = 0, cy = 0
-                  if (layer.size) {
-                    cx = layer.size.width  / 2
-                    cy = layer.size.height / 2
-                  } else if (layer.text) {
-                    cx = (layer.text.value.length * layer.text.fontSize * 0.55) / 2
-                    cy = layer.text.fontSize / 2
-                  }
-                  update({ transform: { ...layer.transform, anchorX: cx, anchorY: cy } })
-                }}
-                title="Move the anchor to the layer's visual centre (top-left = 0,0)"
+                onClick={() => onLayerChange(centerOrigin(layer))}
+                title="Centre the pivot on the layer's geometry while keeping the artwork in place"
                 className="w-full text-[11px] py-1 rounded bg-gray-800 hover:bg-gray-700
                            border border-gray-700 text-gray-300"
               >

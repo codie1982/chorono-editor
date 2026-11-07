@@ -4,7 +4,7 @@
 // graph editor mode).
 
 import type { Track } from '../types'
-import { evaluateTrack } from '../evaluator'
+import { evaluateNumericTrack } from '../evaluator'
 
 export interface ValueRange { min: number; max: number }
 
@@ -63,7 +63,7 @@ export function buildValueGraphPath(p: BuildParams): string {
   let d = ''
   for (let i = 0; i <= steps; i++) {
     const tMs = p.startMs + (i / steps) * visMs
-    const v   = evaluateTrack(p.track, tMs)
+    const v   = evaluateNumericTrack(p.track, tMs)
     if (v == null) continue
     const x = p.msToScreenPx(tMs)
     // Y axis is inverted in SVG: high values go to the top of the row

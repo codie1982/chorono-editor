@@ -60,7 +60,7 @@ export function cloneSingleLayer<L extends Layer>(
     // every render frame (so source edits propagate live).
     const stripKeys: Array<keyof Layer> = [
       'shape', 'shapeKind', 'shapeParams',
-      'path', 'style', 'size',
+      'path', 'spline', 'style', 'size',
       'text', 'image', 'video', 'audio',
       'pathStroke', 'motionPath', 'followPath',
       'masks', 'internalGrid', 'repeater',

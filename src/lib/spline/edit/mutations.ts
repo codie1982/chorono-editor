@@ -62,6 +62,7 @@ export function moveSplineHandle(
 // ── Insert a point on a segment (De Casteljau split preserves the curve) ──────
 
 export function insertPointOnSegment(data: SplinePathData, segmentId: string, t: number): SplinePathData {
+  if (!Number.isFinite(t) || t <= 0 || t >= 1) return data
   const seg = data.segments[segmentId]
   if (!seg) return data
   const from = data.points[seg.fromPointId]
@@ -102,6 +103,14 @@ export function insertPointOnSegment(data: SplinePathData, segmentId: string, t:
     handles[nIn.id] = nIn; handles[nOut.id] = nOut
     seg1 = { id: uid('seg'), fromPointId: from.id, toPointId: newPtId, type: 'cubic' }
     seg2 = { id: uid('seg'), fromPointId: newPtId, toPointId: to.id,   type: 'cubic' }
+  } else if (seg.type === 'quadratic') {
+    const control = seg.control1 ?? from
+    const p01 = lerpPt(from, control, t)
+    const p12 = lerpPt(control, to, t)
+    const mid = lerpPt(p01, p12, t)
+    newPt = { id: newPtId, x: mid.x, y: mid.y, type: 'smooth' }
+    seg1 = { id: uid('seg'), fromPointId: from.id, toPointId: newPtId, type: 'quadratic', control1: p01 }
+    seg2 = { id: uid('seg'), fromPointId: newPtId, toPointId: to.id, type: 'quadratic', control1: p12 }
   } else {
     const mid = lerpPt(from, to, t)
     newPt = { id: newPtId, x: mid.x, y: mid.y, type: 'corner' }
@@ -236,10 +245,13 @@ export function reverseContour(data: SplinePathData, contourId: string): SplineP
   const contour = data.contours[contourId]
   if (!contour) return data
   const segments = { ...data.segments }
+  // Start from the new first anchor. A closed contour's old closing segment
+  // becomes the new closing segment, rather than the first edge.
   const segmentIds = [...contour.segmentIds].reverse()
+  if (contour.closed && segmentIds.length > 0) segmentIds.push(segmentIds.shift()!)
   for (const sid of segmentIds) {
     const s = segments[sid]
-    if (s) segments[sid] = { ...s, fromPointId: s.toPointId, toPointId: s.fromPointId, control1: s.control2, control2: s.control1 }
+    if (s) segments[sid] = { ...s, fromPointId: s.toPointId, toPointId: s.fromPointId }
   }
   const handles = { ...data.handles }
   for (const h of Object.values(data.handles)) {

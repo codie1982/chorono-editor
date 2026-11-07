@@ -13,6 +13,11 @@ import type { DisplayTransform } from '../../resolveDisplayTransform'
 import type { ParticleInstance } from '@/lib/particles/runtime/ParticleInstance'
 import type { ParticleEmitterData } from '@/lib/particles/types'
 
+/** Canvas-compatible layer-local → backing-pixel affine transform. */
+export interface ParticleBackingTransform {
+  a: number; b: number; c: number; d: number; e: number; f: number
+}
+
 export interface GPUParticleDrawParams {
   /** Alive, already-evaluated particles for this frame. */
   instances:        ParticleInstance[]
@@ -27,6 +32,9 @@ export interface GPUParticleDrawParams {
   backingH:         number
   /** Accumulated layer alpha at the call site (baked into per-particle opacity). */
   layerAlpha:       number
+  /** Complete canvas basis, including parent/repeater transforms, zoom and
+   * device pixel ratio. Preferred over the legacy composition transform. */
+  localToBacking?: ParticleBackingTransform
   /** Resolved layer transform (keyframes + motion path already applied). */
   displayTransform: DisplayTransform
   anchorX:          number

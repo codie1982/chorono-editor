@@ -28,10 +28,20 @@ export interface VideoData {
 
 export interface AudioData {
   assetId: string
+  /** Linear gain. 1 = 0 dB; 0 = silence. Supports gain up to 4. */
   volume?: number
   muted?: boolean
+  /** Offset into the source file, independent of the clip's timeline start. */
   startOffsetMs?: number
   loop?: boolean
+  fadeInMs?: number
+  fadeOutMs?: number
+  /** Shared fade envelope after a lossless split, in timeline milliseconds. */
+  fadeRange?: { startMs: number; endMs: number }
+  /** Stereo pan: -1 = left, 0 = centre, 1 = right. */
+  pan?: number
+  /** Owning timeline. Omitted for legacy clips that play globally. */
+  timelineId?: string
 }
 
 // ── Frame Sequence (BL-07) ─────────────────────────────────────────────────────

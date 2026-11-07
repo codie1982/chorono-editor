@@ -13,6 +13,13 @@ import type { EditorCommand } from '../../editor/commands-keyframe'
 import { makeUpdateLayerCmd } from '../../editor/commands-layer'
 import { upsertKeyframe, removeKf, ensureLayerInTimeline } from '../../timeline/keyframeOps'
 import { nextKfId } from '../../defaults'
+import { copyScriptData, mergeScriptData, readScriptPath, type DeepPartial } from './scriptData'
+import { dbToGain } from '../../audio/audioClip'
+import { makePatchAudioClipCmd, makeMoveAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd, makeSetAudioGainKeyCmd, type AudioClipCommandOptions } from '../../editor/commands-audio'
+import { ParticleHandle } from './ParticleHandle'
+import { SplineHandle } from './SplineHandle'
+
+let splitSequence = 0
 
 const VALID_EASINGS: ReadonlySet<EasingType> = new Set<EasingType>([
   'linear', 'hold', 'easeIn', 'easeOut', 'easeInOut',
@@ -41,6 +48,10 @@ export class LayerHandle {
 
   get name(): string { return this._layer().name }
   get type(): string { return this._layer().type }
+  get data(): Layer { return copyScriptData(this._layer()) }
+  get(path: string): unknown { return readScriptPath(this._layer(), path) }
+  get particles(): ParticleHandle { return new ParticleHandle(this.id, this.ctx) }
+  get spline(): SplineHandle { return new SplineHandle(this.id, this.ctx) }
 
   // ── Generic patch ─────────────────────────────────────────────────────────────
 
@@ -49,6 +60,52 @@ export class LayerHandle {
     const prev = this._layer()
     this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, patch, prev))
     return this
+  }
+
+  /** Recursive object merge; arrays replace. Use set() for explicit shallow replacement. */
+  patch(patch: DeepPartial<Omit<Layer, 'id' | 'type'>>): this {
+    if ('id' in patch || 'type' in patch) throw new Error('Cannot change layer id or type.')
+    const prev = this._layer()
+    const next = mergeScriptData<Layer>(prev, patch as DeepPartial<Layer>)
+    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, next, prev))
+    return this
+  }
+
+  private _audioTimeline(options: AudioClipCommandOptions): AudioClipCommandOptions {
+    return { timelineId: options.timelineId ?? this._layer().audio?.timelineId ?? this.ctx.resolveTimelineId() }
+  }
+
+  audioGain(gainDb: number, options: AudioClipCommandOptions & { timeMs?: number } = {}): this {
+    const scene = this.ctx.host.getScene()
+    const target = `layers.${this.id}.audio.volume`
+    const value = dbToGain(gainDb)
+    if (options.timeMs === undefined && scene.timelines.some(timeline => timeline.tracks.some(track => track.target === target))) throw new Error('Animated gain requires a timeMs; key its value instead of changing the static base gain.')
+    this.ctx.host.applyCommand(options.timeMs === undefined
+      ? makePatchAudioClipCmd(this.id, { volume: value }, this._audioTimeline(options))
+      : makeSetAudioGainKeyCmd(this.id, options.timeMs, value, this._audioTimeline(options)))
+    return this
+  }
+
+  audioFades(config: { fadeInMs?: number; fadeOutMs?: number }): this {
+    if (config.fadeInMs === undefined && config.fadeOutMs === undefined) throw new Error('Supply a fade duration.')
+    this.ctx.host.applyCommand(makePatchAudioClipCmd(this.id, config))
+    return this
+  }
+
+  moveAudio(startMs: number, options: AudioClipCommandOptions = {}): this {
+    this.ctx.host.applyCommand(makeMoveAudioClipCmd(this.id, startMs, this._audioTimeline(options)))
+    return this
+  }
+
+  trimAudio(bounds: { startMs?: number; endMs?: number }, options: AudioClipCommandOptions = {}): this {
+    this.ctx.host.applyCommand(makeTrimAudioClipCmd(this.id, bounds, this._audioTimeline(options)))
+    return this
+  }
+
+  splitAudio(timeMs: number, options: AudioClipCommandOptions & { rightLayerId?: string } = {}): LayerHandle {
+    const rightLayerId = options.rightLayerId ?? `audio_split_${Date.now()}_${++splitSequence}`
+    this.ctx.host.applyCommand(makeSplitAudioClipCmd(this.id, timeMs, { ...this._audioTimeline(options), rightLayerId }))
+    return new LayerHandle(rightLayerId, this.ctx)
   }
 
   private _patchTransform(delta: Partial<Layer['transform']>): void {
@@ -260,19 +317,11 @@ export class LayerHandle {
 
   /**
    * Patch the particle emitter config (only valid on a particleEmitter layer).
-   * Merges shallowly at the emitter / particle sub-object level:
+   * Recursively merges validated native particle configuration:
    *   handle.configureParticles({ emitter: { maxParticles: 200, loop: true } }).
    */
-  configureParticles(config: Partial<ParticleEmitterData>): this {
-    const prev = this._layer()
-    const base = prev.particleEmitter
-    if (!base) return this
-    const merged: ParticleEmitterData = {
-      ...base, ...config,
-      emitter:  { ...base.emitter,  ...config.emitter },
-      particle: { ...base.particle, ...config.particle },
-    }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { particleEmitter: merged }, prev))
+  configureParticles(config: DeepPartial<ParticleEmitterData>): this {
+    this.particles.patch(config)
     return this
   }
 

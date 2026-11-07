@@ -19,6 +19,8 @@
 // is used here for broad compatibility; switch to OffscreenCanvas later if
 // renderer moves to a worker.
 
+import { canvasMemoryTracker } from '@/lib/resources/memory/CanvasMemoryTracker'
+
 interface CacheEntry {
   canvas:   HTMLCanvasElement
   version:  number
@@ -136,6 +138,7 @@ export function createOffscreen(width: number, height: number): HTMLCanvasElemen
     : ({ width: 0, height: 0 } as unknown as HTMLCanvasElement)
   c.width  = width
   c.height = height
+  canvasMemoryTracker.track(c)
   return c
 }
 
@@ -179,6 +182,8 @@ export function createWebGLOffscreen(
       canvas.getContext('experimental-webgl', attrs)) as WebGLRenderingContext | null
   }
   if (!gl) return null
+
+  canvasMemoryTracker.track(canvas, 'webgl')
 
   return { canvas, gl }
 }

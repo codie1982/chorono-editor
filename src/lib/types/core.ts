@@ -192,13 +192,9 @@ export interface Track {
   //   "Convert Controller" submenu.
 }
 
-// TODO(big-feature): Vec2 / multi-channel tracks.
-//   Currently `transform.x` and `transform.y` are TWO separate tracks; a
-//   single position keyframe requires editing both in sync. A v2 model
-//   could introduce vec2 / color-valued keyframes (value: Vec2 | ColorValue)
-//   with the Curve Editor splitting them into per-channel curves visually
-//   while the data stays unified. Migration is non-trivial (every reader of
-//   `evaluateTrack` returns number today) so this is a dedicated sprint.
+// Typed track values support channel-wise color/Vec2 interpolation. Transform
+// controls continue to author scalar transform.x / transform.y tracks; a
+// compound, per-channel Curve Editor UI remains future work.
 
 export interface TimelineMarker {
   id: string
@@ -694,6 +690,9 @@ export interface Composition {
   durationMs: number
   frameRate: number
   backgroundColor: string
+  /** Saved master audio gain, linear 0..4 (1 = 0 dB). */
+  audioVolume?: number
+  audioMuted?: boolean
   /** Optional gradient background. When set (≥2 stops), it is painted instead of
    *  backgroundColor. backgroundColor remains the fallback for solid mode. */
   backgroundGradient?: GradientFill

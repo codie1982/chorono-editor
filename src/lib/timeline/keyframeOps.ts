@@ -87,7 +87,9 @@ export function updateKfEasing(
   easing: EasingDefinition,
 ): ChronoScene {
   return mapTimeline(scene, timelineId, target, (kfs) =>
-    kfs.map((k) => k.id === kfId ? { ...k, easing } : k)
+    kfs.map((k) => k.id === kfId ? { ...k, easing,
+      ...(k.tangentMode === 'linear' && easing.type !== 'linear' ? { tangentMode: 'broken' as const } : {}),
+    } : k)
   )
 }
 

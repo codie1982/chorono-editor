@@ -29,6 +29,10 @@ interface FileMenuProps {
   onExportHtml?:   () => void
   onCopySceneJson: () => void
   onShowShortcuts: () => void
+  /** Reopens the welcome screen while preserving the current scene. */
+  onShowWelcome?: () => void
+  /** Focuses or restores the existing resource monitor dock panel. */
+  onShowResources?: () => void
   onResetLayout:   () => void
   panelRegistry?:  PanelRegistry
   dockLayout?:     DockNode
@@ -195,11 +199,16 @@ export default function FileMenu(props: FileMenuProps) {
           {panelRegistry && dockLayout && (
             <>
               <div className={sectionLabel}>View</div>
+              {props.onShowResources && (
+                <button className={item} onClick={() => { setOpen(false); props.onShowResources!() }}>
+                  Kaynak ve Performans
+                </button>
+              )}
               {(() => {
                 const visible = getVisiblePanelIds()
                 const hiddenPanels: Array<{ id: string; title: string }> = []
                 panelRegistry.forEach((def) => {
-                  if (!visible.has(def.id)) {
+                  if (!visible.has(def.id) && !(def.id === 'resourceMonitor' && props.onShowResources)) {
                     hiddenPanels.push({ id: def.id, title: def.title })
                   }
                 })
@@ -251,6 +260,9 @@ export default function FileMenu(props: FileMenuProps) {
 
           {/* ── Help ── */}
           <div className={sectionLabel}>Help</div>
+          {props.onShowWelcome && <button className={item + ' min-h-[44px]'} onClick={() => { setOpen(false); props.onShowWelcome!() }}>
+            Başlangıç ekranı
+          </button>}
           <button className={item} onClick={() => { setOpen(false); props.onShowShortcuts() }}>
             ⌨ Show Shortcuts (Cmd+/)
           </button>

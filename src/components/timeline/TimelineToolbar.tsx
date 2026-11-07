@@ -25,6 +25,7 @@ interface Props {
   onSelectTimeline: (id: string) => void
   onAddTimeline:    () => void
   onDeleteTimeline: (id: string) => void
+  getTimelineDeleteReason?: (id: string) => string | null
   onZoomChange:     (z: number) => void
   onFit:            () => void
   onTimelineFieldChange: <K extends keyof Timeline>(key: K, val: Timeline[K]) => void
@@ -66,6 +67,7 @@ export default function TimelineToolbar(props: Props) {
     timelineMode, autoKeyMode, onAutoKeyModeChange, hasSelectedLayer,
     onPlayToggle, onPrevKeyframe, onNextKeyframe,
     onSelectTimeline, onAddTimeline, onDeleteTimeline,
+    getTimelineDeleteReason,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
     onModeChange, onKeyframeProperties,
     ghostSettings, selectedLayerIds,
@@ -306,8 +308,9 @@ export default function TimelineToolbar(props: Props) {
             </button>
             <button
               onClick={() => onDeleteTimeline(tl.id)}
-              className="text-xs px-1.5 py-0.5 rounded-r bg-gray-700 hover:bg-red-800 text-gray-500"
-              title="Delete timeline"
+              disabled={!!getTimelineDeleteReason?.(tl.id)}
+              className="text-xs px-1.5 py-0.5 rounded-r bg-gray-700 hover:bg-red-800 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              title={getTimelineDeleteReason?.(tl.id) ?? 'Delete timeline'}
             >✕</button>
           </div>
         ))}

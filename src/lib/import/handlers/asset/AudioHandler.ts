@@ -5,7 +5,7 @@
 
 import { BaseImportHandler } from '../BaseHandler'
 import { newAudioLayer }     from '../../../defaults'
-import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress } from '../../types'
+import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress, ImportWarning } from '../../types'
 import type { Asset } from '../../../asset/types'
 
 export class AudioHandler extends BaseImportHandler {
@@ -44,7 +44,7 @@ export class AudioHandler extends BaseImportHandler {
         collection: true,
       },
       defaultOptions:  {},
-      warnings:        [],
+      warnings: durationMs > 0 ? [] : ['Audio duration could not be read. A temporary clip duration will be used; check the imported source.'],
     }
   }
 
@@ -79,6 +79,8 @@ export class AudioHandler extends BaseImportHandler {
     }
 
     const layer = newAudioLayer(assetId, durationMs > 0 ? durationMs : undefined)
+    layer.name = file.name
+    const warnings: ImportWarning[] = durationMs > 0 ? [] : [{ code: 'parse_error', severity: 'warning', message: 'Audio duration could not be read. A temporary clip duration was used; check the imported source.', affectedIds: [layer.id] }]
 
     this.reportProgress(onProgress, 'complete', 'Done', 1)
 
@@ -93,7 +95,7 @@ export class AudioHandler extends BaseImportHandler {
       tracks:  [],
       timelines: [],
       commands: [],
-      warnings: [],
+      warnings,
       errors:             [],
       unsupportedFeatures: [],
       report: {
@@ -101,7 +103,7 @@ export class AudioHandler extends BaseImportHandler {
         sourceFileName: file.name,
         format,
         created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
-        warnings:       [],
+        warnings,
         errors:         [],
         unsupportedFeatures: [],
         suggestions:    [],
@@ -117,26 +119,33 @@ export class AudioHandler extends BaseImportHandler {
       const url   = URL.createObjectURL(file)
       const audio = document.createElement('audio')
       audio.preload = 'metadata'
+      let settled = false
+      let timeout: ReturnType<typeof setTimeout>
 
       const cleanup = () => {
+        clearTimeout(timeout)
+        audio.onloadedmetadata = null
+        audio.onerror = null
         URL.revokeObjectURL(url)
         audio.removeAttribute('src')
         audio.load()
       }
-
-      audio.onloadedmetadata = () => {
-        // Durations under 100ms are almost always a metadata-parse failure
-        // rather than a genuinely tiny clip — treat as unknown (0).
-        const raw = audio.duration
-        const durationMs = Number.isFinite(raw) && raw * 1000 >= 100 ? Math.round(raw * 1000) : 0
+      const finish = (durationMs: number) => {
+        if (settled) return
+        settled = true
         cleanup()
         resolve({ durationMs })
       }
+
+      audio.onloadedmetadata = () => {
+        const raw = audio.duration
+        finish(Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.round(raw * 1000)) : 0)
+      }
       // If probe fails, resolve with 0 — audio can still be imported without duration
       audio.onerror = () => {
-        cleanup()
-        resolve({ durationMs: 0 })
+        finish(0)
       }
+      timeout = setTimeout(() => finish(0), 10000)
       audio.src = url
     })
   }
@@ -152,6 +161,7 @@ export class AudioHandler extends BaseImportHandler {
     const lower = file.name.toLowerCase()
     if (lower.endsWith('.wav'))  return 'audio/wav'
     if (lower.endsWith('.aac'))  return 'audio/aac'
+    if (lower.endsWith('.m4a'))  return 'audio/aac'
     if (lower.endsWith('.ogg'))  return 'audio/ogg'
     return 'audio/mp3'
   }
