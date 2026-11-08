@@ -14,13 +14,19 @@ position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
 2.5D; 2D çalışma alanında kutulu 3D ve derinlikli kumaş anlamındadır;
 bağımsız tam 3D Modeling veya Game Engine modunu etkinleştirmez.
 
+**8 Kasım ek kullanıcı önceliği:** V5 tamamlandı; sırada [komşu mesafesi düzenleme,
+seçim ve ruler/guide araçları](plans/viewport-layout-measurement-plan.md) uygulanır.
+İlk sürüklemenin geri sıçraması ve modifier basılı mouse-up hataları V5
+kapanışında ele alındı (§12.43); yeni ölçü araçları henüz uygulanmış değildir.
+
 ## 1. Kapsam ve öncelikler
 
 | Sıra | İş | Durum / ilk teslim |
 | --- | --- | --- |
 | Tamamlandı | İlk genel optimizasyon; viewport V1/V2/V3 | Mevcut kazanımlar ve regresyon fixture'ları korunur. |
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
-| Şimdi 2 | V5 — çoklu Array | V4 üzerine Linear/Grid/Radial/Path; sınırlı preview, açık space/pivot/timing, Apply/Cancel. |
+| Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
+| Sıradaki | Komşu mesafesi ve ruler/guide araçları | [Kullanıcı önceliği](plans/viewport-layout-measurement-plan.md); ölçü düzenlerken seçimi koruma, yakın yatay/dikey komşular ve cetvelden guide. |
 | Şimdi 3 | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
@@ -51,7 +57,8 @@ kullanıcının isteğine göre en son tartışılacak ayrı konudur. Önceden y
 ```mermaid
 flowchart TD
     V4[Subtree duplicate / drag-copy] --> V5[Çoklu Array]
-    V5 --> H[Kalan ortak düzenleme ve araç kabulü]
+    V5 --> LAYOUT[Komşu mesafesi / cetvel / guide]
+    LAYOUT --> H[Kalan ortak düzenleme ve araç kabulü]
     H --> I[Dar source / time / resource sözleşmeleri]
     I --> B[Kutulu 3D ilk sürüm]
     B --> G[Poly 2D]
@@ -99,7 +106,7 @@ Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; 
 
 [Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. Önce V4/V5 ve kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
+Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5 tamamlandı; önce komşu mesafesi/cetvel/guide ve kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
@@ -1786,3 +1793,26 @@ doğrulandı. Yeni genel Four Seasons kaynak kabulü değildir. Çalışma ayrı
 `codex/viewport-v4-duplicate-drag-copy` dalındadır; main'e gönderilmedi.
 Sıradaki iş V5 çoklu Array'dir; provenance/Set Key/procedural ve birleşik kabul
 ayrı işlerdir. Onaylanan 3D/Poly sırası ve export/son optimizasyon ertelemesi korunur.
+
+### 12.43. V5 çoklu Array ve sürükleme regresyonları — 8 Kasım 2026
+
+[Gerçek uygulama ve bakım devri](viewport-array-editing.md). Çoklu seçilmiş
+parent+child kökleri normalleştirilir; occurrence'lar forest düzenini, iç referansları
+ve bütün ilgili timeline key'lerini korur. Mevcut dört solver gerçek world/parent/
+local frame adapter'ıyla kullanılır; Path dönüşümü full parent matrix'i içerir.
+Bounded wireframe preview source/history'yi değiştirmez; Apply aynı planın cached
+V4 komutunu tek undo ile uygular. Stale kaynak/clock/selection, kapasite, shear ve
+kayıplı zaman ofseti diagnostic ile durur. Instance desteği preflight edilir;
+Repeater bu fiziksel forest arayüzünde açıkça kapalı, eski domain/MCP yolu korunur.
+
+Kullanıcının ek raporuyla Alt Copy alias'ı ve modifier basılı mouse-up kabulü
+eklendi. Seçili child'ı üst gruba yükselten body-pick/hover davranışı düzeltildi,
+browser default drag engellendi. İlk statik/key'li body drag ve ayrı timeline'da
+animated parent gerçek adapter/render ile test edildi. Kullanıcının canlı sahnesi
+değiştirilmedi; görüntüdeki özgün proje üzerinde birebir kök neden kanıtı iddia edilmez.
+
+289 dosya/2281 test, TypeScript, MCP ve Next build geçti. Chrome Array15/15,
+clone+ilk-drag14/14, eski viewport13/13; gerçek handle sürükleme/Apply/Undo/Redo
+ve source/bundle hash kabulü geçti. Aynı codex geliştirme dalında kalındı.
+Bu teslim genel son optimizasyon veya tam V6 değildir. **Sıradaki kullanıcı
+önceliği: komşu mesafesi düzenleme ve ruler/guide araçları**; yeni plan §1'dedir.

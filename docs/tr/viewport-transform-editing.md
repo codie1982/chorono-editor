@@ -152,3 +152,8 @@ kapanınca source referansları, capture/listener ve transient previews bırakı
   altında `acceptance.json`, `acceptance.ax.txt`, `acceptance.png`,
   `native-drag.ax.txt`, `native-drag.png` ve build manifest'idir; script ile
   yeniden üretilebilir. Kullanıcının bağlı projesi bu testlere yüklenmedi.
+
+8 Kasım V5 ek düzeltmesi: seçilmiş subtree üzerinde body drag/hover, seçili
+child yerine üst grubu hedeflemez. Body drag browser default davranışını önler.
+Alt/Cmd modifier mouse-up'ta basılı kalabilir; [V5 kabulü](viewport-array-editing.md)
+ilk statik/key'li body drag ve farklı timeline'da animated parent regresyonlarını içerir.

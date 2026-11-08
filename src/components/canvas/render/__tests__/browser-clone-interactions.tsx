@@ -11,6 +11,7 @@ import type { ChronoScene, Layer } from '@/lib/types'
 import { evaluateTimelines } from '@/lib/evaluator'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { makeCloneForestCmd } from '@/lib/editor/commands-clone-forest'
+import { buildViewportKeyframeCommands } from '@/lib/editor/viewportKeyframes'
 import { createLayerSelection, toggleLayerSelection, type LayerSelection } from '@/lib/selection/layerSelection'
 import { acquirePortableScene } from '@/lib/export/portable/PortableSceneOutput'
 import { OutputResources } from '@/lib/export/resources'
@@ -51,7 +52,10 @@ function Subject({ fixture }: { fixture: Fixture }) {
         : shift ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))}
       onSelectByGeometry={next => setSelection(createLayerSelection(next, Array.from(next)[0] ?? null))}
       onSelectLayers={next => setSelection(createLayerSelection(next, next[0] ?? null))}
-      selectedTimeline={editor.scene.timelines[0] ?? null} />
+      selectedTimeline={editor.scene.timelines[0] ?? null}
+      buildLayerCommitCommands={changes => buildViewportKeyframeCommands(editor.getScene(), changes, {
+        timelineId: editor.scene.timelines[0]?.id ?? '', timeMs, autoKeyframe: false,
+      })} />
   </section><pre data-testid="clone-scene-debug">{JSON.stringify({ selected: Array.from(selection.selectedIds), layers: editor.scene.layers.map(layer => ({ id: layer.id, name: layer.name, parentId: layer.parentId ?? null })) }, null, 2)}</pre></>
 }
 
@@ -108,10 +112,10 @@ function center(el: Element): Point { const r = el.getBoundingClientRect(); retu
 function endPoint(start: Point, delta: Point): Point { const r = canvas().getBoundingClientRect(); return { x: start.x + delta.x * r.width / 900, y: start.y + delta.y * r.height / 550 } }
 /** Ctrl/Cmd drag uses actual React/native window handlers. Pointer ID matches
  * the Run button's mouse interaction; capture is never replaced by a stub. */
-function pointer(target: EventTarget, type: string, point: Point, copy = true, pointerId = 1) {
+function pointer(target: EventTarget, type: string, point: Point, copy = true, pointerId = 1, held?: 'altKey' | 'metaKey') {
   flushSync(() => target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId,
     pointerType: 'mouse', isPrimary: pointerId === 1, button: 0, buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
-    clientX: point.x, clientY: point.y, ctrlKey: copy })))
+    clientX: point.x, clientY: point.y, ctrlKey: held ? false : copy, ...(held ? { [held]: true } : {}) })))
 }
 /** Canonical evaluated anchor is the visual result independently of clone math. */
 function anchor(scene: ChronoScene, id: string, ms: number): Point {
@@ -174,6 +178,79 @@ async function keyedDrag(mount: (fixture: Fixture) => Promise<void>) {
   record('portable save/load preserves copied hierarchy and animation', { layerIds: after.layers.map(item => item.id) })
 }
 
+/** Begin with no selection and use the actual painted canvas body, not an
+ * existing gizmo. First mousedown must select AND drag; an ordinary keyed pose
+ * is committed through the same source+key builder used by the production page.
+ * Check canonical values and canvas pixels after another render to catch a
+ * release-only preview that snaps back or a selection update that cancels drag. */
+async function firstBodyDrags(mount: (fixture: Fixture) => Promise<void>) {
+  for (const keyed of [false, true]) {
+    const hero = rectangle('first-drag', 140, 150), scene = emptyScene()
+    scene.layers = [hero]; scene.composition = { ...scene.composition, width: 900, height: 550, durationMs: 1000 }
+    const timeline = { ...newTimeline(), id: 'first-drag-timeline', durationMs: 1000, loop: false, layerIds: [hero.id], tracks: keyed ? [
+      { target: `layers.${hero.id}.transform.x`, keyframes: [
+        { id: 'first-x0', timeMs: 0, value: 140, easing: { type: 'linear' as const } },
+        { id: 'first-x1', timeMs: 1000, value: 260, easing: { type: 'linear' as const } }] },
+      { target: `layers.${hero.id}.transform.y`, keyframes: [
+        { id: 'first-y0', timeMs: 0, value: 150, easing: { type: 'linear' as const } },
+        { id: 'first-y1', timeMs: 1000, value: 190, easing: { type: 'linear' as const } }] },
+    ] : [] }
+    scene.timelines = [timeline]
+    await mount({ scene, selected: [], primary: '', timeMs: 500 })
+    assert(live().selection.selectedIds.size === 0, 'First-drag fixture was already selected.')
+    const before = structuredClone(live().editor.getScene()), beforePivot = anchor(before, hero.id, 500)
+    const body = resolveLayerWorldMatrix(hero, before, 500).applyToPoint({ x: 35, y: 22 }), rect = canvas().getBoundingClientRect()
+    const start = { x: rect.left + body.x * rect.width / 900, y: rect.top + body.y * rect.height / 550 }
+    const delta = { x: 31, y: -17 }, end = endPoint(start, delta)
+    pointer(canvas(), 'pointerdown', start, false)
+    assert(live().selection.primaryId === hero.id && live().selection.selectedIds.has(hero.id), 'Initial body pointerdown did not select the layer.')
+    await frames(); assert(live().editor.isTransactionActive(), 'Selection render canceled the first body drag before moving.')
+    pointer(window, 'pointermove', end, false); await frames()
+    assert(live().editor.isTransactionActive(), 'Initial selection update canceled the first body drag.')
+    pointer(window, 'pointerup', end, false); await frames(4)
+    const after = live().editor.getScene(), afterPivot = anchor(after, hero.id, 500)
+    assert(!live().editor.isTransactionActive(), 'First body release left transaction active.')
+    close(afterPivot.x - beforePivot.x, delta.x, 'First-drag committed X'); close(afterPivot.y - beforePivot.y, delta.y, 'First-drag committed Y')
+    assert(live().selection.primaryId === hero.id && live().selection.selectedIds.has(hero.id), 'First drag lost selection at release.')
+    const painted = resolveLayerWorldMatrix(after.layers[0], after, 500).applyToPoint({ x: 35, y: 22 })
+    const rgba = canvas().getContext('2d')!.getImageData(Math.round(painted.x), Math.round(painted.y), 1, 1).data
+    assert(rgba[1] > 150 && rgba[0] < 100 && rgba[2] < 140 && rgba[3] === 255, `First drag canvas snapped back after release: ${Array.from(rgba)}`)
+    if (keyed) for (const track of timeline.tracks) {
+      const current = after.timelines[0].tracks.find(item => item.target === track.target)!
+      assert(current.keyframes.some(key => key.timeMs === 500), 'Keyed body drag did not persist a playhead key.')
+      for (const original of track.keyframes) equal(current.keyframes.find(key => key.id === original.id), original, 'First drag changed another source key.')
+    }
+    flushSync(() => live().editor.undo()); equal(live().editor.getScene(), before, 'First body drag was not one complete undo.')
+    assert(!live().editor.canUndo, 'First body drag created multiple history entries.')
+    flushSync(() => live().editor.redo()); equal(live().editor.getScene(), after, 'First body drag redo changed result.')
+    record(`${keyed ? 'Keyed' : 'Static'} first body drag from empty selection commits and stays selected`, { delta, rgba: Array.from(rgba), oneUndo: true })
+  }
+}
+
+/** A selected child remains the editable body target under a parent whose
+ * transform belongs to another timeline. Promoting the hit to that parent would
+ * either edit the wrong layer or make the source/key adapter reject and revert. */
+async function selectedChildBody(mount: (fixture: Fixture) => Promise<void>) {
+  const fixture = animatedFixture(), parentTrack = fixture.scene.timelines[0].tracks.find(track => track.target === 'layers.parent.transform.x')!
+  fixture.scene.timelines[0].tracks = fixture.scene.timelines[0].tracks.filter(track => track !== parentTrack)
+  fixture.scene.timelines[1].tracks.push(parentTrack)
+  await mount(fixture); const before = structuredClone(live().editor.getScene()), child = before.layers.find(layer => layer.id === 'child')!
+  const world = resolveLayerWorldMatrix(child, before, 500).applyToPoint({ x: 35, y: 22 }), rect = canvas().getBoundingClientRect()
+  const start = { x: rect.left + world.x * rect.width / 900, y: rect.top + world.y * rect.height / 550 }, delta = { x: 24, y: -13 }, end = endPoint(start, delta)
+  pointer(canvas(), 'pointerdown', start, false); await frames()
+  assert(live().selection.primaryId === child.id && live().selection.selectedIds.has(child.id), 'Body hit promoted selected child to animated outer parent.')
+  pointer(window, 'pointermove', end, false); await frames(); assert(live().editor.isTransactionActive(), 'Selected child body drag canceled on render.')
+  pointer(window, 'pointerup', end, false); await frames(4)
+  const after = live().editor.getScene(), from = anchor(before, child.id, 500), to = anchor(after, child.id, 500)
+  close(to.x - from.x, delta.x, 'Selected child body X'); close(to.y - from.y, delta.y, 'Selected child body Y')
+  equal(after.layers.find(layer => layer.id === 'parent'), before.layers.find(layer => layer.id === 'parent'), 'Child drag changed parent source.')
+  equal(after.timelines[1], before.timelines[1], 'Child drag changed inactive parent timeline.')
+  assert(live().selection.primaryId === child.id && live().selection.selectedIds.has(child.id), 'Child body release lost selection.')
+  flushSync(() => live().editor.undo()); equal(live().editor.getScene(), before, 'Selected child body drag did not undo exactly.')
+  assert(!live().editor.canUndo, 'Selected child body drag created multiple history entries.')
+  record('Selected child body drag preserves selection and another timeline’s animated parent', { delta, parentTimelinePreserved: true, oneUndo: true })
+}
+
 /** Duplicate forest normalization includes descendants once and remaps internal
  * cross-root references; external source links intentionally remain external. */
 async function forestDuplicate(mount: (fixture: Fixture) => Promise<void>) {
@@ -210,6 +287,28 @@ async function keyboardDuplicates(mount: (fixture: Fixture) => Promise<void>) {
   }
 }
 
+/** Alt/Cmd remain down for the entire gesture, including mouse-up. No key-up
+ * event is sent: releasing a modifier must never be a prerequisite to commit. */
+async function heldModifierCopies(mount: (fixture: Fixture) => Promise<void>) {
+  for (const held of ['altKey', 'metaKey'] as const) {
+    await mount(animatedFixture()); const before = structuredClone(live().editor.getScene())
+    const world = resolveLayerWorldMatrix(before.layers.find(layer => layer.id === 'child')!, before, 500)
+      .applyToPoint({ x: 35, y: 22 })
+    const rect = canvas().getBoundingClientRect()
+    const start = { x: rect.left + world.x * rect.width / 900, y: rect.top + world.y * rect.height / 550 }
+    const end = endPoint(start, { x: 32, y: -19 })
+    pointer(canvas(), 'pointerdown', start, true, 1, held)
+    pointer(window, 'pointermove', end, true, 1, held); await frames()
+    pointer(window, 'pointerup', end, true, 1, held); await frames()
+    assert(!live().editor.isTransactionActive(), 'Mouse-up left a copy waiting for modifier release.')
+    const after = live().editor.getScene(), child = copyOf(after, before, 'child')
+    originalsIntact(after, before); copiedTracks(after, before, 'child', child.id)
+    assert(child.parentId === 'parent', 'Held modifier changed the clone parent.')
+    flushSync(() => live().editor.undo()); equal(live().editor.getScene(), before, 'Held-modifier copy was not one undo.')
+    record(`${held === 'altKey' ? 'Alt' : 'Cmd'} held through mouse-up commits copy without key release`, { modifierHeld: true, tracksPreserved: true, parent: child.parentId })
+  }
+}
+
 /** Click/tiny drag and native cancel paths must leave source/history untouched. */
 async function canceledDrags(mount: (fixture: Fixture) => Promise<void>) {
   for (const kind of ['click', 'tiny', 'escape', 'pointercancel'] as const) {
@@ -237,7 +336,7 @@ async function main() {
     const status = document.getElementById('status')!, start = performance.now(); let manifest: unknown
     try { status.textContent = 'Running actual duplicate and pointer controls…'
       const metadata = await (await fetch('clone-interactions-sources.json')).json(); manifest = { sourceManifest: 'clone-interactions-sources.json', bundleSha256: metadata.bundleSha256, sourceFiles: metadata.sources.length }
-      await keyedDrag(mount); await forestDuplicate(mount); await keyboardDuplicates(mount); await canceledDrags(mount)
+      await keyedDrag(mount); await firstBodyDrags(mount); await selectedChildBody(mount); await forestDuplicate(mount); await keyboardDuplicates(mount); await heldModifierCopies(mount); await canceledDrags(mount)
       status.textContent = `PASS · ${checks.length} checks`; document.getElementById('report')!.textContent = JSON.stringify({ passed: true, checks, manifest, elapsedMs: performance.now() - start, dpr: devicePixelRatio, userAgent: navigator.userAgent, scope: 'Native pointer events through real SceneCanvas; duplicate via public forest command and actual useKeyboard. No user document.' }, null, 2)
     } catch (error) { status.textContent = 'FAIL'; document.getElementById('report')!.textContent = JSON.stringify({ passed: false, error: String(error), checks, manifest }, null, 2) }
     finally { run.disabled = inspect.disabled = false }

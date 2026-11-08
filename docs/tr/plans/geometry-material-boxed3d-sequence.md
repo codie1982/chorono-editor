@@ -4,6 +4,10 @@
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
 
+**Ek öncelik:** V5 sonrası [komşu mesafeleri ve cetvel/guide araçları](viewport-layout-measurement-plan.md)
+gelir; kullanıcının açık tercihidir. Genel 3D/Poly sırasını başlatmadan önce
+viewport kullanımındaki bu eksikler kapatılır.
+
 ## Erteleme sınırı
 
 Önceki optimizasyon kabulü korunur. Yeni özelliklerden sonra bütün alanları
@@ -24,7 +28,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Sıra | İş | Tamamlanma sınırı |
 | --- | --- | --- |
 | Tamamlandı | V4 subtree duplicate / drag-copy | [Uygulama ve kabul](../viewport-clone-editing.md); native Copy/Instance destek sınırları açık. |
-| Önce 2 | V5 çoklu Array | V4 üzerine solver/preview/Apply ve çoklu seçim kabulü. |
+| Tamamlandı | V5 çoklu Array | [Gerçek uygulama ve kabul](../viewport-array-editing.md): V4 forest üzerinden dört pattern, bounded preview ve tek undo. |
 | Önce 3 | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
@@ -40,8 +44,9 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | 12 | Çoklu format ve üretim otomasyonu | Gerçek destek/capability üzerinden çıktı profilleri ve işler. |
 | 13 | Bütün ürün için ikinci optimizasyon ve birleşik kabul | Four Seasons + dokulu Poly + 3D/rig + cloth/Blob/fluid + export fixture'ları; CPU/heap/RSS/GPU/asset/job plateau, görüntü eşliği ve sınır bütçeleri. |
 
-V3 viewport position key authoring ve V4 native clone tamamlandı. Sırada V5 çoklu
-Array vardır; yeni 3D/Poly bloğundan önce kalan ortak düzenleme/araç kabulü tamamlanır. Soft selection/connected-loop konuşması
+V3 viewport position key authoring, V4 native clone ve V5 forest Array tamamlandı.
+Sırada komşu mesafesi/ruler-guide araçları; yeni 3D/Poly bloğundan önce kalan ortak
+düzenleme/araç kabulü de tamamlanır. Soft selection/connected-loop konuşması
 kullanıcının önceki isteğine göre en son tartışılacak ayrı başlıktır.
 
 ## Poly, UV ve basit materyal

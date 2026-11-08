@@ -6,11 +6,11 @@ import { resolveCloneDragMode } from './cloneDragGesture'
 const plain = { metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
 
 describe('registered clone drag gestures', () => {
-  it('uses accelerator copy and accelerator Shift instance without stealing plain Shift or Alt', () => {
+  it('uses accelerator or Alt copy and accelerator Shift instance, preserving plain Shift', () => {
     const registry = new ShortcutRegistry(); registry.registerAll(defaultBindings)
     expect(resolveCloneDragMode(plain, registry)).toBeUndefined()
     expect(resolveCloneDragMode({ ...plain, shiftKey: true }, registry)).toBeUndefined()
-    expect(resolveCloneDragMode({ ...plain, altKey: true }, registry)).toBeUndefined()
+    expect(resolveCloneDragMode({ ...plain, altKey: true }, registry)).toBe('copy')
     expect(resolveCloneDragMode({ ...plain, ctrlKey: true }, registry)).toBe('copy')
     expect(resolveCloneDragMode({ ...plain, metaKey: true }, registry)).toBe('copy')
     expect(resolveCloneDragMode({ ...plain, ctrlKey: true, shiftKey: true }, registry)).toBe('instance')

@@ -8,6 +8,9 @@ export const CLONE_WORKLOAD_LIMITS = { layers: 5000, keyframes: 50000 } as const
 export interface CloneWorkloadOptions {
   /** Additional placement wrappers per NEW occurrence. */
   extraLayersPerOccurrence?: number
+  /** Exact total wrapper count for nonuniform per-occurrence placements.
+   * Takes precedence over extraLayersPerOccurrence when supplied. */
+  extraLayersTotal?: number
   /** Omit for all relevant timelines; an empty set copies no tracks. */
   timelineIds?: ReadonlySet<string>
 }
@@ -21,8 +24,10 @@ export interface CloneWorkloadOptions {
 export function assertCloneForestBudget(scene: ChronoScene, sourceIds: ReadonlySet<string>,
   count: number, options: CloneWorkloadOptions = {}): void {
   const extra = options.extraLayersPerOccurrence ?? 0
+  const extraTotal = options.extraLayersTotal ?? extra * count
   if (!Number.isSafeInteger(count) || count < 1 || count > CLONE_WORKLOAD_LIMITS.layers
-      || !Number.isSafeInteger(extra) || extra < 0) throw new Error('Clone count limit exceeded')
+      || !Number.isSafeInteger(extra) || extra < 0
+      || !Number.isSafeInteger(extraTotal) || extraTotal < 0) throw new Error('Clone count limit exceeded')
   const existing = new Set(scene.layers.map(layer => layer.id))
   if (!sourceIds.size || Array.from(sourceIds).some(id => !existing.has(id))) throw new Error('Clone source no longer exists')
   let totalKeys = 0, copiedKeys = 0
@@ -32,7 +37,7 @@ export function assertCloneForestBudget(scene: ChronoScene, sourceIds: ReadonlyS
     if ((!options.timelineIds || options.timelineIds.has(timeline.id))
         && target?.entityType === 'layer' && sourceIds.has(target.entityId)) copiedKeys += track.keyframes.length
   }
-  if (scene.layers.length + (sourceIds.size + extra) * count > CLONE_WORKLOAD_LIMITS.layers
+  if (scene.layers.length + sourceIds.size * count + extraTotal > CLONE_WORKLOAD_LIMITS.layers
       || totalKeys + copiedKeys * count > CLONE_WORKLOAD_LIMITS.keyframes) {
     throw new Error('Expanded clone/array workload limit exceeded')
   }

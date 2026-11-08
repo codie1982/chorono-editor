@@ -54,6 +54,7 @@ export const defaultBindings: ShortcutDefinition[] = [
 
   // ── Canvas — gestures ────────────────────────────────────────────────────
   { id: 'canvas.gesture.cloneDrag',    label: 'Clone while dragging',          contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta'] }, description: 'Cmd/Ctrl + drag copies the complete selected subtree and animation' },
+  { id: 'canvas.gesture.cloneDragAlt', label: 'Copy while dragging (Alt)', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['alt'] }, description: 'Hold Alt before mouse-down, drag, then release the mouse to copy; Alt may remain held' },
   { id: 'canvas.gesture.instanceDrag', label: 'Instance clone while dragging', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta', 'shift'] }, description: 'Cmd/Ctrl + Shift + drag creates linked appearance with independent animation' },
 
   // ── Playback ─────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { remapCloneLayerReferences } from './CloneReferenceRemapper'
 import { parseTrackTarget, remapTrackTarget } from '../timeline/TrackTargetParser'
 import type { CloneForestOptions } from './CloneForestTypes'
 import type { CloneMetadata } from './CloneTypes'
+import { assertCloneModeCapability } from './CloneCapabilities'
 
 export interface CloneForestOccurrence {
   layers: Layer[]
@@ -23,6 +24,7 @@ export interface CloneForestOccurrence {
  * references cannot be retargeted through that link and therefore reject. */
 export function prepareCloneOccurrences(scene: ChronoScene, sources: readonly Layer[], roots: readonly Layer[],
   options: CloneForestOptions, timelineIds: ReadonlySet<string>): CloneForestOccurrence[] {
+  assertCloneModeCapability(scene, sources, options.mode)
   const layerIds = new Set(scene.layers.map(layer => layer.id))
   const keyIds = new Set(scene.timelines.flatMap(timeline => timeline.tracks.flatMap(track => track.keyframes.map(key => key.id))))
   const nextKey = () => { let id = nextKfId(); while (keyIds.has(id)) id = nextKfId(); keyIds.add(id); return id }
@@ -39,13 +41,6 @@ export function prepareCloneOccurrences(scene: ChronoScene, sources: readonly La
       metadata[item.clonedLayer.id] = item.metadata
       return item.clonedLayer
     })
-    if (options.mode === 'instance') for (const source of sources) {
-      const resolved = resolveInstanceLayer(source, scene.layers)!
-      const withoutParent = { ...resolved, parentId: undefined }
-      if (JSON.stringify(remapCloneLayerReferences(withoutParent, idMap)) !== JSON.stringify(withoutParent)) {
-        throw new Error('Linked instances cannot remap internal mask/path/repeater/particle sources. Use independent Copy for this forest.')
-      }
-    }
     layers = layers.map(layer => remapCloneLayerReferences(layer, idMap))
     const tracks = new Map<string, Track[]>()
     for (const timeline of scene.timelines) if (timelineIds.has(timeline.id)) {

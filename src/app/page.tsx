@@ -113,10 +113,11 @@ import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 import CloneModal             from '@/components/modals/CloneModal'
 import ArrayModal             from '@/components/modals/ArrayModal'
-import { makeArrayCmd, makeCloneAlignCmd } from '@/lib/editor/commands-clone'
+import { useArrayAuthoring } from '@/components/array/useArrayAuthoring'
+import { makeCloneAlignCmd } from '@/lib/editor/commands-clone'
 import { prepareCloneForest } from '@/lib/editor/commands-clone-forest'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
-import { makeConvertToRepeaterCmd, makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
+import { makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 // ── Mode system bootstrap ─────────────────────────────────────────────────────
@@ -226,12 +227,11 @@ export default function BuilderPage() {
   const wireModal = useWireModal()
   const [showHelp,        setShowHelp]      = useState(false)
 
-  // BL-59 — Clone & Array modals. Source layer is captured at open time
-  // so re-selection during the modal session doesn't change the target.
+  // Clone modal source is captured at open time. The Array authoring adapter
+  // below owns its independent multi-root source/time/document session.
   const [cloneModalSource, setCloneModalSource] = useState<Layer | null>(null)
   const [cloneModalIds, setCloneModalIds] = useState<string[]>([])
   const [cloneModalScene, setCloneModalScene] = useState<ChronoScene | null>(null)
-  const [arrayModalSource, setArrayModalSource] = useState<Layer | null>(null)
 
   // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
   // The id list must enumerate EVERY panel the registry exposes — the
@@ -438,6 +438,10 @@ export default function BuilderPage() {
     setLayerSelection(previous => createLayerSelection(selected,
       primaryId === undefined ? previous.primaryId : primaryId))
   }, [])
+
+  const selectArrayRoots = useCallback((ids: readonly string[]) => replaceLayerSelection(ids, ids[0] ?? null), [replaceLayerSelection])
+  const arrayAuthoring = useArrayAuthoring({ editor, scene, timeMs: currentTimeMs,
+    selectedLayerIds, selectedLayerId, onSelectLayers: selectArrayRoots })
 
   /** Click replaces selection; Shift-click toggles. Primary and membership
    * change atomically, including when the primary or final member is removed. */
@@ -785,8 +789,8 @@ export default function BuilderPage() {
   //   • openCloneModal — opens CloneModal for count + offset + anim toggle.
   //   • openArrayModal — opens ArrayModal (Linear/Grid/Radial).
   //
-  // Duplicate/Clone resolve all source timelines; Array retains its legacy
-  // selected-timeline policy until the separate V5 migration.
+  // Duplicate/Clone and Array preserve all relevant source timelines. The
+  // active-timeline helper remains for the separate Clone & Align workflow.
 
   const getActiveTimeline = useCallback(() => {
     return scene.timelines.find((tl) => tl.id === selectedTlId) ?? null
@@ -810,12 +814,8 @@ export default function BuilderPage() {
     setCloneModalScene(editor.getScene())
   }, [selectedLayerId, scene.layers, selectedCloneIds, editor])
 
-  const openArrayModal = useCallback(() => {
-    if (!selectedLayerId) return
-    const source = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!source) return
-    setArrayModalSource(source)
-  }, [selectedLayerId, scene.layers])
+  /** All Array entry points open the same pinned multi-root editing session. */
+  const openArrayModal = useCallback(() => { arrayAuthoring.open() }, [arrayAuthoring.open])
 
   const handleCloneApply = useCallback((params: {
     count: number
@@ -832,44 +832,6 @@ export default function BuilderPage() {
     }
     return cloneSourceIds(cloneModalIds, params)
   }, [cloneModalSource, cloneModalIds, cloneModalScene, editor, cloneSourceIds])
-
-  const handleArrayApply = useCallback((
-    settings: import('@/lib/array/ArrayTypes').ArraySettings,
-    asRepeater: boolean,
-  ) => {
-    if (!arrayModalSource) return
-
-    // BL-59 Phase 2 — Non-destructive Repeater Modifier path.
-    if (asRepeater) {
-      const cmd = makeConvertToRepeaterCmd({
-        source: arrayModalSource,
-        settings,
-      })
-      if (cmd) {
-        dispatchCommand(cmd)
-        toast.success(
-          `Converted "${arrayModalSource.name}" to a Repeater Modifier (non-destructive)`,
-        )
-        return
-      }
-      toast.warning('Repeater rendering not supported for this pattern — falling back to Array.')
-    }
-
-    const cmd = makeArrayCmd({
-      source: arrayModalSource,
-      settings,
-      timeline: getActiveTimeline(),
-      allLayers: scene.layers,
-    })
-    dispatchCommand(cmd)
-    const firstNewId = cmd.result.suggestedSelection[0]
-    if (firstNewId) selectLayer(firstNewId)
-    toast.success(
-      `Array "${arrayModalSource.name}" — ${cmd.result.createdLayerIds.length} new layer${
-        cmd.result.createdLayerIds.length === 1 ? '' : 's'
-      }`,
-    )
-  }, [arrayModalSource, getActiveTimeline, scene.layers, dispatchCommand, selectLayer])
 
   // ── In-memory layer clipboard (cut / copy / paste from right-click menu) ──
   // Held in a ref because the clipboard is editor-state, not view-state — no
@@ -1640,6 +1602,7 @@ export default function BuilderPage() {
                 id: 'canvas', title: 'Canvas',
                 render: () => (
                   <SceneCanvas
+                    arrayAuthoring={arrayAuthoring}
                     scene={scene}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
@@ -2180,16 +2143,8 @@ export default function BuilderPage() {
         />
       )}
 
-      {/* ── BL-59 Array Modal ──────────────────────────────────────── */}
-      {arrayModalSource && (
-        <ArrayModal
-          source={arrayModalSource}
-          hasAnimationOnSource={sourceHasAnimation(arrayModalSource)}
-          allLayers={scene.layers}
-          onApply={handleArrayApply}
-          onClose={() => setArrayModalSource(null)}
-        />
-      )}
+      {/* Array controls and viewport share one pinned source/solution. */}
+      {arrayAuthoring.active && <ArrayModal authoring={arrayAuthoring} />}
 
       {/* ── BL-05: Wire Parameter modal (formula-driven parameter wiring) ── */}
       {wireModal.isOpen && (

@@ -10,10 +10,10 @@ sözleşmesidir. Çoklu Array V5, clipboard paste ve authoring provenance ayrı 
   bir layer'ın çocukları da dahil edilir. Yeni kökler birlikte seçilir.
 - Duplicate varsayılanı parent-local `(20,20)` yerleşim farkıdır. Önceki gizli
   `+100ms` zaman kaydırması kaldırıldı; key/range zamanları aynen kalır.
-- **Cmd/Ctrl+drag** Copy, **Cmd/Ctrl+Shift+drag** Instance'dır. Runtime ve yardım
-  aynı gesture registry'sini kullanır. Shift tek başına eksen kilidi, Alt tek
-  başına deep-pick'tir. Copy/Instance kararı pointer-down'da sabitlenir;
-  sürüklerken Shift bırakılması Instance kararını değiştirmez.
+- **Alt veya Cmd/Ctrl+drag** Copy, **Cmd/Ctrl+Shift+drag** Instance'dır. Runtime ve yardım
+  aynı gesture registry'sini kullanır. Shift tek başına eksen kilididir; Alt artık kayıtlı Copy alias'ıdır. Copy/Instance kararı pointer-down'da sabitlenir;
+  sürüklerken Shift bırakılması Instance kararını değiştirmez. Alt/Cmd basılı
+  kalırken mouse-up kopyayı commit eder; önce modifier bırakılması gerekmez.
 - Üç CSS pikselden küçük hareket veya tıklama kopya/history oluşturmaz. Hareket
   eşiğinden sonra kaynak yerinde kalır, gerçek yeni subtree önizlemede çizilir.
   Bırakıldığında aynı ID'li önizleme komutu tek undo olarak uygulanır.

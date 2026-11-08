@@ -4,6 +4,15 @@ import type { CloneArrayCommand } from '../editor/commands-clone'
 /** A translation in each selected root's existing parent coordinate space. */
 export type CloneForestOffsets = Readonly<Record<string, { x: number; y: number }>>
 
+/** Pre-multiplied transform in a root's EXISTING parent space. Rotation/scale
+ * use an explicit placement parent, preserving animated source channels. */
+export interface CloneRootPlacement { x: number; y: number; rotationDeg?: number; scaleX?: number; scaleY?: number }
+/** One occurrence; time is an additive source-key/clip offset in milliseconds. */
+export interface CloneOccurrencePlacement {
+  roots: Readonly<Record<string, CloneRootPlacement>>
+  timeOffsetMs?: number
+}
+
 /** New forest contract; unlike legacy makeCloneCmd, omitted timelineIds means
  * all timelines. Source/asset/parameter data is never consumed or mutated. */
 export interface CloneForestOptions {
@@ -28,4 +37,6 @@ export interface CloneForestCommand extends CloneArrayCommand {
 export interface PreparedCloneForest {
   readonly sourceRootIds: readonly string[]
   atOffsets(offsets: CloneForestOffsets): CloneForestCommand
+  /** Explicit per-occurrence placements; never multiplies by occurrence index. */
+  atPlacements(placements: readonly CloneOccurrencePlacement[]): CloneForestCommand
 }

@@ -5,6 +5,10 @@ import { createTrajectoryKeyIdAllocator, moveTrajectoryNodes } from '@/lib/timel
 import { applyAxisLock } from '@/lib/canvas/math/moveMath'
 import { trajectoryNodeRef } from './types'
 import { MotionKeyDragSession } from './MotionKeyDragSession'
+import { canvasPointerWorld } from '../interactions/canvasCoordinates'
+
+/** Backward-compatible public alias; all editor tools share one conversion. */
+export const motionPointerWorld = canvasPointerWorld
 
 interface Options {
   editor: EditorStateReturn
@@ -16,14 +20,6 @@ interface Options {
   onSelect: (ids: Set<string>) => void
   onWarning: (message: string) => void
   snapWorldPoint?: (point: { x: number; y: number }) => { x: number; y: number }
-}
-
-/** Convert a native client pointer to the current canvas composition pixels.
- * The canvas rect already includes pan/zoom/layout; DPR is never multiplied. */
-export function motionPointerWorld(canvas: HTMLCanvasElement, clientX: number, clientY: number): { x: number; y: number } {
-  const rect = canvas.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) throw new Error('The canvas has no visible editing area.')
-  return { x: (clientX - rect.left) * canvas.width / rect.width, y: (clientY - rect.top) * canvas.height / rect.height }
 }
 
 /** React adapter for paired/sparse native key dragging. Commands sample the

@@ -1,6 +1,7 @@
 # E−1 — İnsan–ajan ortak düzenleme, Timeline ve Viewport kullanılabilirliği
 
-**8 Kasım sıra güncellemesi:** V4 native clone tamamlandı; sırada V5 viewport işi, ardından
+**8 Kasım sıra güncellemesi:** V4 native clone ve V5 forest Array tamamlandı; sırada kullanıcı önceliğiyle
+komşu mesafesi/ruler-guide araçları, ardından
 kalan ortak düzenleme ve birleşik araç kabulü tamamlanır. Sonraki ürün sırası
 [onaylanan 3D/Poly planındadır](geometry-material-boxed3d-sequence.md).
 Tam export ve ikinci genel optimizasyon sonraya taşındı; mevcut teknik kabul
@@ -72,7 +73,7 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | E−1.3 | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
 | E−1.4 | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
 | E−1.5 | Prosedürel eğri ve expression güvenilirliği | Parser/UI hataları düzelir; controller eğrisi görünür; örnekleme ve bake açık doğruluk toleransıyla çalışır. |
-| E−1.6 — sürüyor | Viewport araçları ve doğrudan authoring | İlk pivot/seçim/drag ve ortak multi-transform dilimi uygulandı; [gerçek sözleşme](../viewport-transform-editing.md). V3 key çizimi, V4/V5 clone/array genişletmesi ve tam V6 bekler. [V0–V6](viewport-authoring-2d-plan.md). |
+| E−1.6 — sürüyor | Viewport araçları ve doğrudan authoring | Pivot/seçim/drag, ortak multi-transform, V3 key çizimi ve V4/V5 clone/array uygulandı; [transform sözleşmesi](../viewport-transform-editing.md), [Array kabulü](../viewport-array-editing.md). Sırada komşu mesafesi/cetvel/guide araçları; tam V6 bekler. [V0–V6](viewport-authoring-2d-plan.md). |
 | E−1.7 | Birleşik kullanıcı akışı kabulü | Aşağıdaki insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından Export E0 başlar. |
 
 ### E−1.1 — Önce oku, mevcut yapı üzerinde değiştir

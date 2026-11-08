@@ -25,6 +25,8 @@ import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import type { ViewportLayerChange } from '@/lib/editor/viewportKeyframes'
 import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
+import { ArrayViewportOverlay } from './array/ArrayViewportOverlay'
+import type { ArrayAuthoringController } from './array/useArrayAuthoring'
 import { evaluateTrajectoryFrame, prepareTrajectoryContext } from '@/lib/timeline/trajectory'
 import ViewportPerformanceOverlay from './resources/ViewportPerformanceOverlay'
 import PathGuideOverlay from './PathGuideOverlay'
@@ -61,7 +63,7 @@ import { resolveSplineEditGeometry } from './canvas/splineEditGeometry'
 import { createLayerWorldBoundsResolver } from '@/lib/geometry/resolveLayerWorldBounds'
 import { beginRotationGesture, resolveParentWorldMatrix } from '@/lib/canvas/math/rotationGesture'
 import { prepareTransformTargets } from '@/lib/canvas/math/preparedTransforms'
-import { canvasPickTarget } from '@/lib/selection/pickTarget'
+import { canvasSelectionPickTarget } from '@/lib/selection/pickTarget'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import { unionBounds } from '@/lib/geometry/boundsMath'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
@@ -216,6 +218,8 @@ interface Props {
   onSeekKeyframe?: (localTimeMs: number) => void
   onMotionEditingChange?: (editing: boolean) => void
   onEditMotionTiming?: (layerId: string) => void
+  /** Transient bounded Array plan; source/history stays owned by the editor. */
+  arrayAuthoring?: ArrayAuthoringController
 }
 
 const PADDING   = 24
@@ -230,6 +234,7 @@ export default function SceneCanvas({
   menuHandlers, onAfterLayerCommit, buildLayerCommitCommands,
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming,
+  arrayAuthoring,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
   splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onSplinePointSelected,
 }: Props) {
@@ -245,6 +250,7 @@ export default function SceneCanvas({
   const [pivotMode, setPivotMode] = useState<'selectionCenter' | 'active'>('selectionCenter')
   const [motionMode, setMotionMode] = useState<'off' | 'select' | 'add' | 'draw'>('off')
   const motionEditing = motionMode !== 'off'
+  const arrayEditing = !!arrayAuthoring?.active
   const motionTime = selectedTimeline ? Math.max(0, Math.min(selectedTimeline.durationMs, timeMs)) : timeMs
   const motionContext = useMemo(() => motionEditing && selectedTimeline && selectedLayerId
     ? prepareTrajectoryContext(scene, selectedTimeline.id, selectedLayerId) : null,
@@ -264,6 +270,7 @@ export default function SceneCanvas({
   useEffect(() => { setMotionMode(previous => previous === 'off' ? 'off' : 'select') },
     [selectedLayerId, selectedTimeline?.id])
   useEffect(() => { setMotionMode('off') }, [hideEditorUI, motionDocumentSignal])
+  useEffect(() => { if (arrayEditing) setMotionMode('off') }, [arrayEditing])
   useEffect(() => { onMotionEditingChange?.(motionEditing); return () => onMotionEditingChange?.(false) },
     [motionEditing, onMotionEditingChange])
 
@@ -450,7 +457,7 @@ export default function SceneCanvas({
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
-    timeMs, overrides, contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}`,
+    timeMs, overrides, contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}`,
     onWarning: setTransformWarning,
   })
 
@@ -467,7 +474,7 @@ export default function SceneCanvas({
   })
 
   // BL-73 Sprint 4 — clear point selection when the layer selection changes.
-  useEffect(() => { setSelectedSplinePointId(null) }, [selectedLayerId, motionEditing])
+  useEffect(() => { setSelectedSplinePointId(null) }, [selectedLayerId, motionEditing, arrayEditing])
 
   // BL-73 Sprint 4 — Delete / Backspace removes the selected spline point.
   // Capture phase so it pre-empts the page's layer-delete shortcut.
@@ -477,7 +484,7 @@ export default function SceneCanvas({
       const target = e.target as HTMLElement | null
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
           || target?.isContentEditable) return
-      if (previewMode || isPlaying || motionEditing) return
+      if (previewMode || isPlaying || motionEditing || arrayEditing) return
       if (!canvasOwnsPointDeletion(getShortcutContext?.() ?? 'canvas', editorRef.current.isTransactionActive())) return
       const pid = selectedSplinePointIdRef.current
       if (!pid) return
@@ -495,17 +502,18 @@ export default function SceneCanvas({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext, motionEditing])
+  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext, motionEditing, arrayEditing])
 
   /** Prepare independent selected roots once. Body and axis dragging share
    * the same evaluated baseline and parent-space conversion contract. */
   const beginMoveForSelection = useCallback((ids: readonly string[], activeId: string,
     event: React.PointerEvent, axisLock: 'x' | 'y' | null = null, cloneMode?: CloneMode) => {
-    if (dragRef.current || editor.isTransactionActive() || motionEditing) return
+    if (dragRef.current || editor.isTransactionActive() || motionEditing || arrayEditing) return
     const prepared = prepareTransformTargets(scene, ids, timeMs, overrides, { activeId, pivotMode })
     if (!prepared.ok) { setTransformWarning(prepared.reason); return }
     const primary = prepared.targets.find(target => target.id === activeId) ?? prepared.targets[0]
     if (!primary) return
+    event.preventDefault()
     setTransformWarning(null)
     editor.beginTransaction()
     dragRef.current = {
@@ -519,7 +527,7 @@ export default function SceneCanvas({
       axisLock, cloneMode: cloneMode ?? resolveCloneDragMode(event),
     }
     startDrag(event)
-  }, [scene, timeMs, overrides, editor, dragRef, startDrag, pivotMode, motionEditing])
+  }, [scene, timeMs, overrides, editor, dragRef, startDrag, pivotMode, motionEditing, arrayEditing])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current || editor.isTransactionActive() || motionEditing) return
@@ -529,6 +537,7 @@ export default function SceneCanvas({
       beginPan(e)
       return
     }
+    if (arrayEditing) { if (e.button === 0) arrayAuthoring?.close(); return }
     if (e.button !== 0) return
 
     // BL-67 — While pick mode is active, clicks on the canvas itself (not on
@@ -670,7 +679,8 @@ export default function SceneCanvas({
       }
     } else {
       hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
-      hit = canvasPickTarget(hit, layerIndex)
+      hit = canvasSelectionPickTarget(hit, layerIndex,
+        selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), !!requestedCloneMode && e.altKey)
     }
     // Shift+click: toggle layer in/out of the multi-selection set and stop —
     // no drag is started, the user can re-click to drag their selection.
@@ -696,7 +706,7 @@ export default function SceneCanvas({
     editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode,
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
-    beginMoveForSelection, layerIndex, motionEditing])
+    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -939,7 +949,7 @@ export default function SceneCanvas({
   // BL-66 — during playback / preview ALL gizmos are suppressed (editor chrome).
   // Gating the whole object here means showFrame (depends on gizmo.frame) and
   // every axis/ring/anchor handle below collapse to false in one place.
-  const gizmo = hideEditorUI || motionEditing ? {
+  const gizmo = hideEditorUI || motionEditing || arrayEditing ? {
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
@@ -1043,7 +1053,7 @@ export default function SceneCanvas({
               // BL-66 — Çift tık path layer'a girer ve pen tool'u açar.
               // Bu sayede kullanıcı menü/araç çubuğuna gitmeden ek anchor
               // ekleyip mevcut anchorları sürükleyebilir.
-              if (motionEditing || previewMode) return
+              if (motionEditing || arrayEditing || previewMode) return
               const cv = canvasRef.current
               if (!cv) return
               const rect = cv.getBoundingClientRect()
@@ -1059,7 +1069,7 @@ export default function SceneCanvas({
               }
             }}
             onContextMenu={(e) => {
-              if (motionEditing || previewMode) return // Motion keys own canvas editing while active.
+              if (motionEditing || arrayEditing || previewMode) return // Motion keys own canvas editing while active.
               const cv = canvasRef.current
               if (!cv) return
               const rect = cv.getBoundingClientRect()
@@ -1105,7 +1115,7 @@ export default function SceneCanvas({
               // Hover preview — rAF-throttled hit test. Skip while any drag
               // is active (avoids competing for state with move/resize/rotate
               // handlers).
-              if (motionEditing || panMode || previewMode || dragRef.current || panDragRef.current) return
+              if (motionEditing || arrayEditing || panMode || previewMode || dragRef.current || panDragRef.current) return
               if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
               const clientX = e.clientX, clientY = e.clientY, deepPick = e.altKey
               hoverRafRef.current = requestAnimationFrame(() => {
@@ -1117,7 +1127,8 @@ export default function SceneCanvas({
                 const cx = (clientX - rect.left) * sx
                 const cy = (clientY - rect.top)  * sy
                 const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
-                const target = canvasPickTarget(hit, layerIndex, deepPick)
+                const target = canvasSelectionPickTarget(hit, layerIndex,
+                  selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), deepPick)
                 setHoveredLayerId((cur) => (cur === target ? cur : target))
 
                 // BL-73 — hover over the selected spline's points / handles /
@@ -1200,7 +1211,7 @@ export default function SceneCanvas({
           {/* Motion path — trajectory the selected layer follows over time,
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
-          {selectedLayer && !hideEditorUI && (
+          {selectedLayer && !hideEditorUI && !arrayEditing && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1224,6 +1235,8 @@ export default function SceneCanvas({
             />
           )}
 
+          {arrayAuthoring?.active && !hideEditorUI && <ArrayViewportOverlay authoring={arrayAuthoring} canvasRef={canvasRef} zoom={zoom} />}
+
           {/* BL-66 / BL-67 — Dashed editor overlay for motion-role path layers
               (hidden in CanvasRenderer) + clickable pick targets when the user
               triggered "Assign motion path" from the right-click menu. */}
@@ -1245,12 +1258,12 @@ export default function SceneCanvas({
           {/* BL-66 — Anchor + bezier handle visualization for the selected
               path layer. Shown whenever a path layer is selected (not just
               in pen mode) so users can see the structure they're editing. */}
-          {selectedLayer && selectedWorldMatrix && selectedLayer.type === 'path' && selectedLayer.path && !hideEditorUI && !motionEditing && (
+          {selectedLayer && selectedWorldMatrix && selectedLayer.type === 'path' && selectedLayer.path && !hideEditorUI && !motionEditing && !arrayEditing && (
             <PathEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix} />
           )}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
-          {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing
+          {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing
             && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
             <SplineEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
               hover={splineHover} selectedPointId={selectedSplinePointId} />
