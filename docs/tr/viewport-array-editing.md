@@ -166,3 +166,8 @@ Yerel kanıt dizini `artifacts/performance/array-interactions-20261108/` altınd
 `viewport-acceptance.json`, ham AX raporları, `real-handle/apply/undo/redo.ax.txt`,
 `preview.png`, `acceptance.png` ve `build/` source manifest'leridir. Bu dosyalar
 üretilen yerel kanıttır ve git tarafından ignore edilir.
+
+Sonraki ölçü/guide diliminde ortak selection/snap entegrasyonu değiştikten sonra
+Array kabulü son kaynaklarla tekrar **15/15** geçti. Bu regresyonun güncel
+manifest/raporu `artifacts/performance/layout-interactions-20261108/` altında
+saklanır; [ölçü/guide doğrulamasına](viewport-layout-editing.md) bakın.

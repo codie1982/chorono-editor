@@ -22,7 +22,7 @@ export interface Guide {
   /** Position in composition (world) coordinates. */
   position: number
   /** Where this guide came from (debug + filtering). */
-  source: 'canvas-edge' | 'canvas-center' | 'layer-edge' | 'layer-center'
+  source: 'canvas-edge' | 'canvas-center' | 'layer-edge' | 'layer-center' | 'custom-guide'
 }
 
 export interface SnapResult {

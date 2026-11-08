@@ -724,6 +724,9 @@ export interface ChronoScene {
   /** Interactive state machines (BL-09). Each state binds to a timeline;
    *  transitions switch the active playhead. Optional for backward compat. */
   stateMachines?: StateMachineDefinition[]
+  /** Editor-only reference lines. Legacy scenes omit this payload; portable
+   * source saves retain it while runtime/raster/vector outputs omit guides. */
+  editorGuides?: import('../geometry/guides/SceneGuide').SceneGuideData
   initialState: Record<string, unknown>
 }
 

@@ -4,6 +4,7 @@ import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
+import { resolveSelectionRoots } from '@/lib/selection/selectionRoots'
 import { wrapAngle180, type Point } from './rotateMath'
 
 export interface PreparedTransformTarget {
@@ -86,23 +87,9 @@ export function prepareTransformTargets(
   if (!Number.isFinite(timeMs) || timeMs < 0) return failure('Transform time must be a non-negative finite number.')
   const selected = new Set(selectedIds), index = new LayerIndex(scene.layers)
   if (!selected.size) return failure('Select one or more layers to transform.')
-  const ancestors = new Map<string, Layer[]>()
-  for (const id of Array.from(selected)) {
-    const layer = index.get(id)
-    if (!layer) return failure('Selected layer no longer exists.', id)
-    const chain: Layer[] = [], visited = new Set([id])
-    let parentId = layer.parentId
-    while (parentId) {
-      if (visited.has(parentId) || chain.length >= 64) return failure('Cyclic or excessively deep parent hierarchy.', id)
-      visited.add(parentId)
-      const parent = index.get(parentId)
-      if (!parent) return failure('Selected layer references a missing parent.', id)
-      chain.push(parent); parentId = parent.parentId
-    }
-    ancestors.set(id, chain)
-  }
-  const roots = scene.layers.filter(layer => selected.has(layer.id)
-    && !ancestors.get(layer.id)!.some(parent => selected.has(parent.id)))
+  const selection = resolveSelectionRoots(scene.layers, selected, index)
+  if (!selection.ok) return selection
+  const { roots, ancestors } = selection
   const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
   const worldFor = createLayerWorldMatrixResolver(scene, timeMs, frame, index)
   const targets: PreparedTransformTarget[] = []

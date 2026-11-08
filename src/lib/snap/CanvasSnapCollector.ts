@@ -13,12 +13,18 @@ import {
   type Rect, type SnapTarget,
 } from './AlignmentGuides'
 import type { SnapResult, SnapRect } from './SnapCandidate'
+import type { SceneGuide } from '../geometry/guides/SceneGuide'
 
 export interface CanvasSnapContext {
   canvasWidth:  number
   canvasHeight: number
   /** Other layers on the canvas — the moving one(s) excluded by the caller. */
   otherLayers: Array<Rect & { id: string }>
+  /** Optional persisted editor reference lines. Hidden guides are excluded;
+   * locked guides remain snap targets. Values use composition pixels. */
+  customGuides?: readonly SceneGuide[]
+  /** Engine-supplied policy; defaults preserve existing direct callers. */
+  includeObjects?: boolean
 }
 
 /** Pluggable collector contract — every future collector implements this. */
@@ -28,7 +34,9 @@ export interface SnapCollector<TInput, TOutput> {
 
 export class CanvasSnapCollector implements SnapCollector<CanvasSnapContext, SnapTarget[]> {
   collect(ctx: CanvasSnapContext): SnapTarget[] {
-    return buildSnapTargets(ctx.canvasWidth, ctx.canvasHeight, ctx.otherLayers)
+    return [...(ctx.includeObjects === false ? [] : buildSnapTargets(ctx.canvasWidth, ctx.canvasHeight, ctx.otherLayers)),
+      ...(ctx.customGuides ?? []).filter(guide => !guide.hidden && Number.isFinite(guide.position))
+        .map(guide => ({ axis: guide.axis, position: guide.position, source: 'custom-guide' as const }))]
   }
 
   /** Apply object-snap (canvas + layer edges/centres) to a rectangle. */

@@ -3,7 +3,7 @@
 **Güncel kuyruk, 8 Kasım:** V3 ve V4 native duplicate/drag-copy tamamlandı;
 [V4 gerçek destek ve sınırları](../viewport-clone-editing.md).
 V5 çoklu Array de uygulandı; [gerçek sözleşme ve kabul](../viewport-array-editing.md).
-Sırada kullanıcı önceliğiyle komşu mesafesi/ruler-guide araçları, ardından kalan ortak düzenleme/araç kabulü var.
+Kullanıcı önceliğiyle [komşu mesafesi/ruler-guide araçları](../viewport-layout-editing.md) da tamamlandı. Sırada kalan ortak düzenleme/araç kabulü var.
 Sonra [onaylanan yeni 3D/Poly sırası](geometry-material-boxed3d-sequence.md)
 uygulanır; tam export ve bütün alanları kapsayan ikinci optimizasyon sona taşındı.
 Aşağıdaki V5 gereksinimleri korunur; gerçek teslimdeki destek sınırları V5 sözleşmesindedir.

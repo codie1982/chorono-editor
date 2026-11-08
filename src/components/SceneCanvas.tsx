@@ -27,6 +27,8 @@ import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
 import { ArrayViewportOverlay } from './array/ArrayViewportOverlay'
 import type { ArrayAuthoringController } from './array/useArrayAuthoring'
+import { useSelectionMeasurements } from './canvas/layout/useSelectionMeasurements'
+import { SelectionMeasurementsOverlay, SelectionGapControls } from './canvas/layout/SelectionMeasurementsOverlay'
 import { evaluateTrajectoryFrame, prepareTrajectoryContext } from '@/lib/timeline/trajectory'
 import ViewportPerformanceOverlay from './resources/ViewportPerformanceOverlay'
 import PathGuideOverlay from './PathGuideOverlay'
@@ -47,7 +49,7 @@ import { AnchorHandle } from './canvas/overlays/AnchorHandle'
 import { MoveAxisGizmo, ScaleAxisGizmo } from './canvas/overlays/AxisGizmos'
 import { RotateRing } from './canvas/overlays/RotateRing'
 import { TransformHUD } from './canvas/overlays/TransformHUD'
-import { Rulers } from './canvas/overlays/Rulers'
+import { CanvasGuideWorkspace } from './canvas/guides/CanvasGuideWorkspace'
 import { FitMenu } from './canvas/controls/FitMenu'
 import { SnapMenu } from './canvas/controls/SnapMenu'
 import { ViewMenu } from './canvas/controls/ViewMenu'
@@ -330,6 +332,7 @@ export default function SceneCanvas({
   const [showRulers,  setShowRulers]  = useState(true)
   const [gridInFront, setGridInFront] = useState(false)
   const [showGuides,  setShowGuides]  = useState(true)
+  const [showMeasurements, setShowMeasurements] = useState(true)
 
   // ── Right-click context menu — opens at cursor on a layer hit ────────────
   // Targets the right-clicked layer (not necessarily the selected one) so
@@ -929,6 +932,15 @@ export default function SceneCanvas({
     ? boundsForFrame(rawSelectedLayer)
     : null, [rawSelectedLayer, boundsForFrame, hideEditorUI, showRulers])
 
+  const measurementSelection = useMemo(() => selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []),
+    [selectedLayerIds, selectedLayerId])
+  const measurementNames = useMemo(() => new Map(scene.layers.map(layer => [layer.id, layer.name])), [scene.layers])
+  const measurements = useSelectionMeasurements({ scene, editor, timeMs, selectedIds: measurementSelection,
+    primaryId: selectedLayerId, overrides: displayOverrides, boundsFor: boundsForFrame,
+    enabled: showMeasurements && !hideEditorUI && !motionEditing && !arrayEditing && !dragRef.current
+      && toolMode !== 'pen' && toolMode !== 'spline-draw',
+    buildLayerCommitCommands, onAfterLayerCommit })
+
   const multiSelectionBounds = useMemo(() => !hideEditorUI && selectedLayerIds && selectedLayerIds.size > 1
     ? Array.from(selectedLayerIds).reduce<PathBounds | null>((value, id) => {
       const layer = scene.layers.find(item => item.id === id)
@@ -1009,7 +1021,9 @@ export default function SceneCanvas({
         style={{
           padding: PADDING,
           transform: `translate(${pan.x}px, ${pan.y}px)`,
-          transition: panDragRef.current ? 'none' : 'transform 120ms ease-out',
+          // Rulers, guides and handles share the exact current canvas rect;
+          // interpolating the view after a fit/pan would desynchronize chrome.
+          transition: 'none',
         }}
       >
         <div
@@ -1347,6 +1361,8 @@ export default function SceneCanvas({
               style={{ left: bounds.x * zoom, top: bounds.y * zoom, width: bounds.width * zoom, height: bounds.height * zoom }} />
           })}
 
+          <SelectionMeasurementsOverlay measurements={measurements} zoom={zoom} names={measurementNames} />
+
           {showFrame && !usesWorldFrame && selectedLayer.size && selectedWorldMatrix && (
             <AffineSelectionFrame
               width={selectedLayer.size.width}
@@ -1498,13 +1514,18 @@ export default function SceneCanvas({
         </div>
       </div>
 
-      {/* Rulers share the displayed geometry bounds used by selection/hover. */}
-      {showRulers && containerRef.current && (
-        <Rulers
+      {/* Editor guides share the displayed geometry bounds; source metadata
+          persists independently of the ruler/guide visibility preferences. */}
+      {containerRef.current && (
+        <CanvasGuideWorkspace
+          scene={scene} editor={editor} canvasRef={canvasRef}
           composition={{ width, height }}
           zoom={zoom}
           pan={pan}
           containerEl={containerRef.current}
+          showRulers={showRulers} showGuides={showGuides}
+          enabled={!hideEditorUI && !arrayEditing && !motionEditing}
+          onWarning={setTransformWarning}
           selectedRect={
             selectedLayer && !selectedLayer.hidden
               ? selectedWorldBounds ?? undefined
@@ -1519,6 +1540,7 @@ export default function SceneCanvas({
           showRulers={showRulers}     onToggleRulers={() => setShowRulers((v) => !v)}
           gridInFront={gridInFront}   onToggleGridFront={() => setGridInFront((v) => !v)}
           showGuides={showGuides}     onToggleGuides={() => setShowGuides((v) => !v)}
+          showMeasurements={showMeasurements} onToggleMeasurements={() => setShowMeasurements(value => !value)}
         />
         <SnapMenu
           enabled={snapEnabled}     onToggleEnabled={() => snap.setEnabled(!snapEnabled)}
@@ -1530,6 +1552,12 @@ export default function SceneCanvas({
           gridSize={gridSize}       onGridSizeChange={snap.setGridSize}
         />
       </div>
+
+      <SelectionGapControls measurements={measurements} names={measurementNames} />
+      {(measurements.diagnostic || (measurements.plan && (measurements.plan.truncated || measurements.plan.diagnostics.length > 0))) && <div
+        role="status" data-measurement-diagnostics className="absolute bottom-14 left-3 z-30 max-w-sm rounded border border-pink-500/50 bg-slate-950/95 px-2 py-1 text-xs text-pink-100">
+        {measurements.diagnostic || measurements.plan?.diagnostics.join(' ')}{measurements.plan?.truncated && ' Some measurement labels are omitted. Select fewer roots to show all gaps.'}
+      </div>}
 
       <ViewportPerformanceOverlay />
 

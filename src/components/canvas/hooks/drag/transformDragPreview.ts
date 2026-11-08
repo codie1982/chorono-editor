@@ -12,6 +12,7 @@ import { sourceTransformChange } from '@/lib/canvas/math/sourceTransformChange'
 import type { SnapEngine } from '@/lib/snap/SnapEngine'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
+import { readSceneGuides } from '@/lib/geometry/guides/sceneGuideData'
 
 export interface DragWorldBounds {
   moving: PathBounds | null
@@ -65,7 +66,8 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     let dx = locked.dx, dy = locked.dy
     if (bounds.moving && (dx !== 0 || dy !== 0)) {
       const rect = { ...bounds.moving, x: bounds.moving.x + dx, y: bounds.moving.y + dy }
-      const snap = engine?.snapRect(rect, { canvasWidth: dimensions.width, canvasHeight: dimensions.height, otherLayers: bounds.others })
+      const snap = engine?.snapRect(rect, { canvasWidth: dimensions.width, canvasHeight: dimensions.height,
+        otherLayers: bounds.others, customGuides: readSceneGuides(base).guides })
       if (snap) { dx = snap.point.x - bounds.moving.x; dy = snap.point.y - bounds.moving.y; guides = snap.guides }
       // Axis constraints survive object/grid snap as well as the raw pointer.
       if (drag.axisLock === 'x' || (event.shiftKey && locked.dy === 0)) dy = 0

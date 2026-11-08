@@ -4,9 +4,8 @@
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
 
-**Ek öncelik:** V5 sonrası [komşu mesafeleri ve cetvel/guide araçları](viewport-layout-measurement-plan.md)
-gelir; kullanıcının açık tercihidir. Genel 3D/Poly sırasını başlatmadan önce
-viewport kullanımındaki bu eksikler kapatılır.
+**Ek öncelik tamamlandı:** V5 sonrası [komşu mesafeleri ve cetvel/guide araçları](../viewport-layout-editing.md)
+uygulandı. Genel 3D/Poly sırasından önce kalan ortak düzenleme/araç kabulü tamamlanır.
 
 ## Erteleme sınırı
 
@@ -29,7 +28,8 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | --- | --- | --- |
 | Tamamlandı | V4 subtree duplicate / drag-copy | [Uygulama ve kabul](../viewport-clone-editing.md); native Copy/Instance destek sınırları açık. |
 | Tamamlandı | V5 çoklu Array | [Gerçek uygulama ve kabul](../viewport-array-editing.md): V4 forest üzerinden dört pattern, bounded preview ve tek undo. |
-| Önce 3 | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
+| Tamamlandı | Komşu mesafeleri, cetvel ve guide | [Gerçek uygulama ve kabul](../viewport-layout-editing.md); seçim, keyframe ve tek undo korunur. |
+| Sıradaki | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
@@ -45,7 +45,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | 13 | Bütün ürün için ikinci optimizasyon ve birleşik kabul | Four Seasons + dokulu Poly + 3D/rig + cloth/Blob/fluid + export fixture'ları; CPU/heap/RSS/GPU/asset/job plateau, görüntü eşliği ve sınır bütçeleri. |
 
 V3 viewport position key authoring, V4 native clone ve V5 forest Array tamamlandı.
-Sırada komşu mesafesi/ruler-guide araçları; yeni 3D/Poly bloğundan önce kalan ortak
+Komşu mesafesi/ruler-guide araçları da tamamlandı; yeni 3D/Poly bloğundan önce kalan ortak
 düzenleme/araç kabulü de tamamlanır. Soft selection/connected-loop konuşması
 kullanıcının önceki isteğine göre en son tartışılacak ayrı başlıktır.
 

@@ -14,10 +14,10 @@ position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
 2.5D; 2D çalışma alanında kutulu 3D ve derinlikli kumaş anlamındadır;
 bağımsız tam 3D Modeling veya Game Engine modunu etkinleştirmez.
 
-**8 Kasım ek kullanıcı önceliği:** V5 tamamlandı; sırada [komşu mesafesi düzenleme,
-seçim ve ruler/guide araçları](plans/viewport-layout-measurement-plan.md) uygulanır.
+**8 Kasım ek kullanıcı önceliği tamamlandı:** V5 sonrası [komşu mesafesi düzenleme,
+seçim ve ruler/guide araçları](viewport-layout-editing.md) uygulandı.
 İlk sürüklemenin geri sıçraması ve modifier basılı mouse-up hataları V5
-kapanışında ele alındı (§12.43); yeni ölçü araçları henüz uygulanmış değildir.
+kapanışında ele alındı (§12.43); ölçü/guide kabulü §12.44'tedir.
 
 ## 1. Kapsam ve öncelikler
 
@@ -26,8 +26,8 @@ kapanışında ele alındı (§12.43); yeni ölçü araçları henüz uygulanmı
 | Tamamlandı | İlk genel optimizasyon; viewport V1/V2/V3 | Mevcut kazanımlar ve regresyon fixture'ları korunur. |
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
-| Sıradaki | Komşu mesafesi ve ruler/guide araçları | [Kullanıcı önceliği](plans/viewport-layout-measurement-plan.md); ölçü düzenlerken seçimi koruma, yakın yatay/dikey komşular ve cetvelden guide. |
-| Şimdi 3 | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
+| Sıradaki | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -106,7 +106,7 @@ Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; 
 
 [Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5 tamamlandı; önce komşu mesafesi/cetvel/guide ve kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
+Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5 ve komşu mesafesi/cetvel/guide tamamlandı; önce kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
@@ -1816,3 +1816,28 @@ clone+ilk-drag14/14, eski viewport13/13; gerçek handle sürükleme/Apply/Undo/R
 ve source/bundle hash kabulü geçti. Aynı codex geliştirme dalında kalındı.
 Bu teslim genel son optimizasyon veya tam V6 değildir. **Sıradaki kullanıcı
 önceliği: komşu mesafesi düzenleme ve ruler/guide araçları**; yeni plan §1'dedir.
+
+
+### 12.44. Komşu mesafeleri ve kalıcı cetvel/guide araçları — 8 Kasım 2026
+
+[V5 sonrası kullanıcı önceliği](plans/viewport-layout-measurement-plan.md)
+uygulandı; [gerçek sözleşme ve bakım devri](viewport-layout-editing.md).
+Yakın yatay/dikey çiftlerin geometri kenar boşlukları, label üzerinden sayısal
+düzenleme, aktif kökü sabitleme ve tek layer/key undo uygulandı. Parent+child
+kök normalizasyonu transform araçlarıyla paylaşılır; diagonal çift çizilmez.
+Kaynak/document/time/selection değişirse eski input planı Apply yapamaz.
+
+Cetvel cursor/crosshair, x cetvelinden dikey/y cetvelinden yatay guide, konum,
+kilit/gizleme/silme ve guide snap eklendi. Optional versioned editorGuides
+portable source'ta korunur, final renderer/runtime'a çizilmez. Guide pointer
+lifecycle ortak EditorPointerSession üzerindedir; stale DOM başlangıcı ve grab
+ofseti korunur. Pan interpolasyonu kaldırıldı; committed canvas rect ve resize
+gözlemi cetvel/guide/handle eşliğini sağlar. Idle render döngüsü yoktur.
+
+293 dosya/2301 test, TypeScript, MCP ve production build geçti. Ölçü/guide
+native kabulü 14/14; son kaynaklarla Array 15/15, clone 14/14, viewport 13/13
+regresyonları geçti. Gerçek UI mesafe 170→240 px, seçim ve undo/redo; cetvelden
+iki eksen guide ve konum/kilit doğrulandı. Kaynak/bundle kanıtı yerel artifacts
+altındadır. Bu dilim tam V6/E−1 birleşik kabulü veya son genel optimizasyon
+değildir. Sırada kalan MCP/provenance/organizasyon ve Timeline Set Key/transport/
+prosedürel eğri işleri ile birleşik araç kabulü var.
