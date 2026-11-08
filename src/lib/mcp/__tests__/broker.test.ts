@@ -27,6 +27,33 @@ function fakeEditor() {
 }
 
 describe('live editor broker', () => {
+  it('keeps empty history unchanged and clears redo after a new scene edit', async () => {
+    const editor = fakeEditor()
+    try {
+      expect((await editor.call('undo')).revision).toBe(0)
+      expect((await editor.call('redo')).revision).toBe(0)
+      const created = await editor.call('create_object', { kind: 'rect' })
+      const layerId = created.addedLayerIds[0]
+      await editor.call('undo')
+      const redone = await editor.call('redo')
+      expect(redone.layers.map((layer: any) => layer.id)).toEqual([layerId])
+      await editor.call('undo')
+      const replacement = await editor.call('create_object', { kind: 'circle' })
+      const noRedo = await editor.call('redo')
+      expect(noRedo.revision).toBe(replacement.revision)
+      expect(noRedo.layers).toEqual(replacement.layers)
+    } finally { await editor.close() }
+  })
+  it('reuses a completed retry token and rejects changed arguments in the same session', async () => {
+    const editor = fakeEditor()
+    try {
+      const args = { kind: 'rect', requestId: 'create-hero', expectedRevision: 0 }
+      const first = await editor.call('create_object', args)
+      expect(await editor.call('create_object', args)).toEqual(first)
+      await expect(editor.call('create_object', { ...args, kind: 'circle' })).rejects.toThrow('different arguments')
+      expect(editor.host.editor.getScene().layers).toHaveLength(1)
+    } finally { await editor.close() }
+  })
   it('applies scripts exactly once and preserves ids used by subsequent tools', async () => {
     const editor = fakeEditor()
     try {

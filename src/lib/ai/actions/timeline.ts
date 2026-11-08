@@ -14,14 +14,15 @@ interface CreateTimelineParams {
   pingPong?: boolean
 }
 
+/** Register timeline creation with explicit ids and default playback settings. */
 export function registerTimelineActions(reg: ActionRegistry): void {
   reg.register<CreateTimelineParams>({
     id: 'timeline.create',
     toolName: 'create_timeline',
     description:
-      'Create an animation timeline. You MUST create a timeline before calling ' +
-      'add_keyframes. Set a meaningful id (e.g. "intro", "loop_anim") — you will ' +
-      'reference it in add_keyframes.',
+      'Create an empty animation timeline with an explicit unique id and duration. ' +
+      'Existing ids fail. Use update_timeline to change settings or clone_timeline ' +
+      'to copy animation. Unlike add_keyframes, set_keyframes requires an existing timeline.',
     parameters: {
       type: 'object',
       required: ['id', 'durationMs'],

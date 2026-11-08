@@ -54,6 +54,8 @@ Ek araçlar:
 
 `get_capabilities`, gerçek katman türlerini, özellik şemalarını, parçacık presetlerini, araç giriş şemalarını ve script API'sini döndürür. `chorono://scripting`, `chorono://capabilities`, `chorono://sessions` MCP kaynakları ve `animate_scene` istemi de vardır.
 
+Araç açıklamalarının sahipliği, gerçek yanıt biçimleri, yeniden deneme sınırları ve Glama yeniden değerlendirme süreci [MCP araç sözleşmeleri](../en/mcp-tool-contracts.md) belgesinde açıklanır. `describe_layer` tam Layer kaydı değil, okunabilir bir özettir; iç içe alanları değiştirmeden önce `get_scene` kullanın. `add_keyframes` eski sayısal giriş şemasını korur; model tipindeki değerler ve customBezier için `set_keyframes` kullanın.
+
 `patch_object` ile Layer modelinin effects, masks, typography, geometry, repeater ve diğer alanlarına erişilir. İç içe nesneler değiştirilir; kısmi iç içe güncellemelerde mevcut alanları koruyun. `update_track` easing/timeWarp/multiplier eğrilerini, outOfRange davranışını, modifier listesini ve waveform/noise controller'ı yönetir.
 
 ## Güvenli ve tutarlı düzenleme
@@ -64,6 +66,8 @@ Ek araçlar:
 - Mutasyonlar bir geri alma adımıdır. `batch_actions` içindeki hata tüm grubu iptal eder. Batch içine script veya dosya/köprü araçları konulamaz.
 - İstemciler aynı sekmedeki kuyruğu paylaşır. `get_scene` sonucundaki `revision` değerini sonraki çağrıya `expectedRevision` olarak verin. Elle düzenleme veya başka istemciyle çakışma sessizce üzerine yazılmaz. Yeniden denenecek mutasyonlar için sabit `requestId` kullanın; farklı içerikle aynı id reddedilir.
 - Birden fazla sekme açıksa `list_sessions` ile `sessionId` seçilir. Sürükleme işlemi devam ederken MCP mutasyonları reddedilir.
+
+`expectedRevision` okuma, canlı playback/runtime kontrolü ve dışa aktarmalarda uygulanmaz; bu çağrıların döndürdüğü revision gözlenen sahneyi tanımlar. `requestId` bir arka plan iş kimliği değildir: aynı oturumun son 64 kimlikli çağrısının sonuçları bellekte tutulur; hata sonucu da önbelleğe alınır. Bağlantı kapanırsa, süreç yeniden başlarsa veya kayıt önbellekten çıkarsa yeniden deneme garantisi kalmaz. Canlı runtime parametreleri sırayla uygulanır; geç bir hata önceki canlı değeri geri almaz. `get_runtime` ile kontrol edin.
 
 ## Çoklu timeline script örneği
 
@@ -96,6 +100,8 @@ State machine içeren sahnelerde `render_preview` zaman/parametre argümanı ver
 Projeler varsayılan `projects/` altında `.chorono.json` olarak atomik kaydedilir. Yerel blob medyası gömülür; bir dosya 16 MB, sahne yaklaşık 32 MB ile sınırlıdır. Mevcut proje üzerine yazmak için `overwrite:true` gerekir. `CHORONO_MCP_PROJECT_DIR` ile proje kökü değiştirilebilir. Keyfi dosya yolları, traversal ve proje dosyası symlink'leri kabul edilmez.
 
 Çıktılar `projects/exports/` içine yazılır. Önizleme temiz PNG'dir. SVG mevcut vektör dışa aktarıcının uyarılarını döndürür. Kare dizisi ZIP çağrı başına en fazla 300 kare / 4 MP / 24 MB'dır ve ses içermez. MP4/GIF/WebM kodlayıcıları bu MCP sürümünün kapsamında değildir.
+
+SVG'nin varsayılan zamanı editörün oynatma imlecinden bağımsız olarak 0 ms'dir. Dışa aktarmalar mevcut dosyayı değiştirmez; yeni bir ad kullanın. `overwrite:true` yalnızca `save_project` aracındadır. `undo`/`redo` sahne geçmişini değiştirir, diskteki kayıtları/çıktıları geri almaz; boş geçmişte sahne ve revision değişmez.
 
 Bu yerel servis internet yayını veya çok makineli dağıtım için yapılandırılmamıştır. Token `.chorono/mcp-token`, denetim metadatası `.chorono/audit.jsonl` içinde tutulur; bu klasör Git'e eklenmez. Denetim kaydı script veya medya içeriğini yazmaz.
 

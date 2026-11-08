@@ -19,7 +19,7 @@ For fonts, import the actual supported font file, read the registered family fro
 | Vector still | `export_svg`; report unsupported-feature/export warnings |
 | Frame sequence | `export_sequence`; ZIP of images, bounded workload, no audio |
 
-Use the returned absolute path instead of inventing an output location. Existing files require explicit overwrite; choose a fresh name when the user has not requested replacement. Saved projects live under the configured project directory, with exports in its `exports/` subdirectory.
+Use the returned absolute path instead of inventing an output location. Only `save_project` accepts `overwrite:true`; exports never replace existing files, so use a fresh basename. Saved projects live under the configured project directory, with exports in its `exports/` subdirectory. Undo/redo affects scene history, not files. SVG defaults to time zero regardless of the live playhead; supply `timeMs` for a different vector frame and inspect all warnings.
 
 At this implementation version, a sequence call is bounded to 300 frames, 4 MP per frame and 24 MB ZIP output. A 10-second sequence at 30 FPS reaches 300 frames. Query the connected capabilities before planning a large output. The MCP exporter does not currently encode MP4, GIF or WebM or mix audio; do not promise those formats. If the user requires them, explain the additional encoder step and use a separately available, authorized workflow.
 
