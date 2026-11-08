@@ -43,6 +43,7 @@ export function SelectionFrame({
 
   return (
     <div
+      data-testid="selection-frame"
       className="absolute pointer-events-none"
       style={{
         left: x, top: y, width: w, height: h,

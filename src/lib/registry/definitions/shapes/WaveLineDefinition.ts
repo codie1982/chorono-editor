@@ -42,6 +42,7 @@ export const waveLineDefinition: LayerDefinition = {
   iconKey: 'wave',
   category: 'Basic Shapes',
   createDefault: () => newWaveLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(waveGeometry())]),
   toPath,
 }

@@ -129,13 +129,13 @@ export function newVideoLayer(assetId: string, w = 320, h = 180, durationMs?: nu
 export function newAudioLayer(assetId: string, durationMs?: number): Layer {
   layerCounter++
   return {
-    id:   `audio_${layerCounter}`,
+    id:   `audio_${Date.now()}_${layerCounter}`,
     name: `Audio ${layerCounter}`,
     type: 'audio',
     transform: { ...DEFAULT_TRANSFORM, x: 0, y: 0 },
     opacity: 1,
     // No size — audio has no visual representation on canvas
-    audio: { assetId, volume: 1, muted: false, startOffsetMs: 0, loop: false },
+    audio: { assetId, volume: 1, muted: false, startOffsetMs: 0, loop: false, fadeInMs: 0, fadeOutMs: 0, pan: 0 },
     endMs: durationMs,
   }
 }

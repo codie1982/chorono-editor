@@ -19,9 +19,21 @@ export function makeAddTimelineCmd(tl: Timeline = newTimeline()): EditorCommand 
 export function makeDeleteTimelineCmd(tl: Timeline): EditorCommand {
   return {
     label: 'Delete Timeline',
-    execute: (scene) => ({ ...scene, timelines: scene.timelines.filter((t) => t.id !== tl.id) }),
+    execute: (scene) => {
+      const reason = getTimelineDeletionBlockReason(scene, tl.id)
+      if (reason) throw new Error(reason)
+      return { ...scene, timelines: scene.timelines.filter((t) => t.id !== tl.id) }
+    },
     undo:    (scene) => ({ ...scene, timelines: [...scene.timelines, tl] }),
   }
+}
+
+/** Shared by the UI and script commands so state-machine references stay valid. */
+export function getTimelineDeletionBlockReason(scene: ChronoScene, timelineId: string): string | null {
+  const machine = scene.stateMachines?.find((sm) => sm.states.some((state) => state.timelineId === timelineId))
+  if (machine) return `Timeline is used by state machine "${machine.name || machine.id}". Reassign its states before deleting it.`
+  const audio = scene.layers.find(layer => layer.type === 'audio' && layer.audio?.timelineId === timelineId)
+  return audio ? `Timeline owns audio clip "${audio.name || audio.id}". Move the clip to another timeline or project audio before deleting it.` : null
 }
 
 // ── Timeline layer membership ─────────────────────────────────────────────────

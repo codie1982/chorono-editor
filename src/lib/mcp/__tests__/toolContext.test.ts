@@ -52,6 +52,8 @@ describe('MCP tool contracts', () => {
     expect(description('list_projects', 'sessionId')).toMatch(/unused/i)
     expect(description('get_scene', 'expectedRevision')).toMatch(/not checked/i)
     expect(description('export_svg', 'expectedRevision')).toMatch(/not checked/i)
+    expect(description('render_audio_preview', 'expectedRevision')).toMatch(/rejects a stale/i)
+    expect(description('export_audio', 'expectedRevision')).toMatch(/rejects a stale/i)
     expect(description('save_project', 'expectedRevision')).toMatch(/rejects a stale/i)
     expect(description('redo', 'expectedRevision')).toMatch(/rejects a stale/i)
     expect(description('redo', 'requestId')).toMatch(/last 64/)

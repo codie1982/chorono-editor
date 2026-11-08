@@ -6,12 +6,12 @@ const unguardedTools = new Set(['control_playback', 'control_runtime', 'export_r
 /**
  * Add the broker's common parameter documentation without mutating the source
  * schema. Existing validation keywords and parameter types remain unchanged.
- * Discovery ignores these optional fields; reads, playback and exports do not
+ * Discovery ignores these optional fields; most reads, playback and visual exports do not
  * enforce expectedRevision. Retry results are session-local, bounded and volatile.
  */
 export function withBridgeParameters(tool: ToolDefinition): ToolDefinition {
   const discovery = discoveryTools.has(tool.name)
-  const guarded = !discovery && !tool.annotations?.readOnlyHint && !unguardedTools.has(tool.name)
+  const guarded = ['render_audio_preview', 'export_audio'].includes(tool.name) || (!discovery && !tool.annotations?.readOnlyHint && !unguardedTools.has(tool.name))
   const unused = 'Unused by this discovery tool; omit.'
   const properties: JsonObject = {
     ...tool.inputSchema.properties,

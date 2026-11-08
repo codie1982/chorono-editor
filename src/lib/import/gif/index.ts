@@ -1,0 +1,5 @@
+export { GifImportService } from './GifImportService'
+export type { GifImportServiceOptions, GifImportProvider } from './GifImportService'
+export { PreparedGif } from './PreparedGif'
+export { GifBackendUnavailable, resolveGifLimits } from './types'
+export type { GifLimits, GifMetadata, GifSheetPlan, GifSheetComposer, DecodedGifSheet } from './types'

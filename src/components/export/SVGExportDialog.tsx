@@ -1,7 +1,9 @@
 'use client'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
-import { exportSVG, downloadBlob } from '@/lib/export'
+import {downloadOutput} from '@/lib/export/resources'
+import {acquireTextDownload} from '@/lib/export/text'
+import {useOutputOperation} from './hooks/useOutputOperation'
 import BaseExportDialog from './BaseExportDialog'
 
 interface Props {
@@ -11,6 +13,7 @@ interface Props {
   onClose: () => void
   onExported?: (filename: string, warnings: string[]) => void
   onError?: (message: string) => void
+  documentSignal?:AbortSignal
 }
 
 /**
@@ -18,29 +21,21 @@ interface Props {
  * document (shapes/paths/text/groups) and downloads it. Background can be the
  * composition colour or transparent (common for logos / icons).
  */
-export default function SVGExportDialog({ scene, timeMs, onClose, onExported, onError }: Props) {
+export default function SVGExportDialog({ scene, timeMs, onClose, onExported, onError,documentSignal }: Props) {
   const [transparent, setTransparent] = useState(true)
   const [animated, setAnimated] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const operation=useOutputOperation(documentSignal),{busy,cancelling}=operation
 
-  const handleExport = () => {
-    setBusy(true)
-    try {
-      const result = exportSVG(scene, {
+  const handleExport = ()=>operation.run(signal=>acquireTextDownload(scene,'svg',{svg:{
         timeMs,
         background: transparent ? 'transparent' : 'scene',
         animated,
-      })
-      const blob = new Blob([result.svg], { type: 'image/svg+xml;charset=utf-8' })
-      downloadBlob(blob, result.filename)
-      onExported?.(result.filename, result.warnings)
+      }},{signal}),lease=>{
+      const result=lease.value
+      downloadOutput(lease,value=>value.blob,result.filename)
+      onExported?.(result.filename, Array.from(result.warnings))
       onClose()
-    } catch (err) {
-      onError?.((err as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
+    },onError)
 
   return (
     <BaseExportDialog
@@ -50,11 +45,11 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
       footer={
         <>
           <button
-            onClick={onClose}
-            disabled={busy}
+            onClick={busy?operation.cancel:onClose}
+            disabled={cancelling}
             className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50"
           >
-            Cancel
+            {cancelling?'Cancelling…':'Cancel'}
           </button>
           <button
             onClick={handleExport}
@@ -72,6 +67,7 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
             <input
               type="checkbox"
               checked={transparent}
+              disabled={busy}
               onChange={(e) => setTransparent(e.target.checked)}
               className="accent-blue-500"
             />
@@ -81,6 +77,7 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
             <input
               type="checkbox"
               checked={animated}
+              disabled={busy}
               onChange={(e) => setAnimated(e.target.checked)}
               className="accent-blue-500"
             />

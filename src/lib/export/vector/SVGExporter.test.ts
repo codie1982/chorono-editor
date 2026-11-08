@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { exportSVG } from './SVGExporter'
-import type { ChronoScene, Layer } from '@/lib/types'
+import type { AnimatableValue, ChronoScene, Layer } from '@/lib/types'
 
 function layer(partial: Partial<Layer>): Layer {
   return {
@@ -53,6 +53,30 @@ describe('exportSVG — document structure', () => {
   it('omits the background rect when transparent', () => {
     const { svg } = exportSVG(scene([]), { background: 'transparent' })
     expect(svg).not.toContain('<rect width="200" height="100"')
+  })
+})
+
+describe('exportSVG — evaluated layer data', () => {
+  it('exports typed color, typography and discrete text at the requested frame without changing the project', () => {
+    const label = layer({ type:'text', text:{ value:'Before',fontSize:20,color:'#ff0000',letterSpacing:0 } })
+    const animated = (property: string, from: AnimatableValue, to: AnimatableValue) => ({
+      target:`layers.l1.${property}`,keyframes:[
+        {id:`${property}-a`,timeMs:0,value:from,easing:{type:'linear'}},
+        {id:`${property}-b`,timeMs:1000,value:to,easing:{type:'linear'}},
+      ],
+    })
+    const project=scene([label],'#000',[{id:'typed',durationMs:1000,loop:false,tracks:[
+      animated('text.color','#ff0000','#0000ff'),animated('text.fontSize',20,40),
+      animated('text.letterSpacing',0,8),animated('text.value','Before','After'),
+    ]}])
+    const before=JSON.stringify(project)
+    const halfway=exportSVG(project,{timeMs:500}).svg
+    expect(halfway).toContain('fill="rgba(128,0,128,1)"')
+    expect(halfway).toContain('font-size="30"')
+    expect(halfway).toContain('letter-spacing="4"')
+    expect(halfway).toContain('>Before</text>')
+    expect(exportSVG(project,{timeMs:1000}).svg).toContain('>After</text>')
+    expect(JSON.stringify(project)).toBe(before)
   })
 })
 

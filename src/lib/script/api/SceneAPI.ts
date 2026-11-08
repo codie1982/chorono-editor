@@ -9,11 +9,13 @@ import type { ScriptHost } from '../types'
 import type {
   StateMachineDefinition, SceneParameter, SceneParameterType, SceneParameterValue,
   Trigger, TriggerEventType, TriggerActionType, ParameterWire, ParameterValueType,
+  ChronoScene, Layer, Binding, Asset,
 } from '../../types'
 import { LayerHandle, type ApiContext } from './LayerHandle'
 import { StateMachineHandle } from './StateMachineHandle'
 import { TimelineHandle } from './TimelineHandle'
 import { makeAddTimelineCmd, makeDeleteTimelineCmd } from '../../editor/commands-timeline'
+import { cloneTimeline } from '../../timeline/cloneTimeline'
 import type { Composition, Timeline } from '../../types'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '../../editor/commands-layer'
 import { makeAddStateMachineCmd } from '../../editor/commands-statemachine'
@@ -26,10 +28,15 @@ import type { CloneMode } from '../../clone/CloneTypes'
 import { pathFromPoints } from '../../types/path'
 import type { SplineGeneratorParams, SplinePrimitiveKind } from '../../types'
 import {
-  nextSMId, newBezierPathLayer, newMotionPathLayer, newSplineLayerFromPrimitive,
+  nextSMId, newBezierPathLayer, newMotionPathLayer, newSplineLayerFromPrimitive, newAudioLayer,
 } from '../../defaults'
 import { buildEmitterLayer, type EmitterLayerOptions } from '../../particles/buildEmitterLayer'
 import { layerRegistry } from '../../registry'
+import { copyScriptData } from './scriptData'
+import { makeScriptEntityEditCmd, type ScriptEntityCollection, type ScriptEntityOperation } from './entityCommands'
+import { makeAddAudioClipCmd, type AddAudioClipOptions } from '../../editor/commands-audio'
+import { ExplorerAPI } from './ExplorerAPI'
+import { listScriptParticlePresets } from './ParticleHandle'
 
 export interface TriggerScriptOptions {
   layerId?: string
@@ -51,6 +58,19 @@ let scriptInteractiveSeq = 0
 const scriptUid = (p: string) => `${p}_script_${Date.now()}_${++scriptInteractiveSeq}`
 
 export interface SceneAPI {
+  snapshot(): ChronoScene
+  readonly explorer: ExplorerAPI
+  readonly particlePresets: ReturnType<typeof listScriptParticlePresets>
+  readonly assets: Asset[]
+  readonly assetCollections: NonNullable<ChronoScene['assetCollections']>
+  readonly parameters: SceneParameter[]
+  readonly triggers: Trigger[]
+  readonly bindings: Binding[]
+  readonly parameterWires: ParameterWire[]
+  readonly stateMachines: StateMachineDefinition[]
+  readonly initialState: ChronoScene['initialState']
+  setInitialState(value: ChronoScene['initialState']): void
+  editEntity(collection: ScriptEntityCollection, operation: ScriptEntityOperation, id: string, value?: Record<string, unknown>): void
   composition(patch?: Partial<Composition>): Composition
   readonly timelines: Timeline[]
   createTimeline(options: { id: string; durationMs?: number; loop?: boolean; autoplay?: boolean }): TimelineHandle
@@ -70,12 +90,15 @@ export interface SceneAPI {
   remove(handle: LayerHandle): void
   /** Create a state machine. Add states/transitions via the returned handle. */
   addStateMachine(name?: string): StateMachineHandle
+  stateMachine(id: string): StateMachineHandle
+  removeStateMachine(id: string): void
+  audioClip(assetId: string, options?: Omit<AddAudioClipOptions, 'layer' | 'preserveDuration'>): LayerHandle
   /** Add a particle emitter from a preset (confetti, fire, snow…). */
   addEmitter(preset?: string, opts?: Omit<EmitterLayerOptions, 'preset'>): LayerHandle
   /** Duplicate a layer N times. Returns handles to the new clones. */
-  clone(handle: LayerHandle, count?: number, opts?: { offsetX?: number; offsetY?: number; mode?: CloneMode }): LayerHandle[]
+  clone(handle: LayerHandle, count?: number, opts?: { offsetX?: number; offsetY?: number; mode?: CloneMode; timelineId?: string }): LayerHandle[]
   /** Lay out copies of a layer in a pattern. Returns handles to the new copies. */
-  array(handle: LayerHandle, opts: FlatArrayParams): LayerHandle[]
+  array(handle: LayerHandle, opts: FlatArrayParams, options?: { timelineId?: string }): LayerHandle[]
   /** Add a bezier path layer from [x,y] points. Returns the path handle. */
   addPath(points: [number, number][], opts?: { closed?: boolean; role?: 'visual' | 'motion'; x?: number; y?: number; name?: string }): LayerHandle
   /** Add an editable spline primitive (circle/rect/ellipse/arc/donut/ngon/star/line). */
@@ -83,9 +106,18 @@ export interface SceneAPI {
   /** Add a scene parameter. Returns the parameter id. */
   addParam(id: string, defaultValue?: SceneParameterValue, opts?: { type?: SceneParameterType; name?: string; min?: number; max?: number }): string
   /** Add an event→action trigger. */
-  addTrigger(eventType: TriggerEventType, actionType: TriggerActionType, opts?: TriggerScriptOptions): void
+  addTrigger(eventType: TriggerEventType, actionType: TriggerActionType, opts?: TriggerScriptOptions): string
   /** Add an expression wire from a source property to a target property. */
-  wire(sourceProperty: string, targetProperty: string, expression: string, opts?: WireScriptOptions): void
+  wire(sourceProperty: string, targetProperty: string, expression: string, opts?: WireScriptOptions): string
+  updateParam(id: string, patch: Partial<Omit<SceneParameter, 'id'>>): void
+  removeParam(id: string): void
+  updateTrigger(id: string, patch: Partial<Omit<Trigger, 'id'>>): void
+  removeTrigger(id: string): void
+  updateWire(id: string, patch: Partial<Omit<ParameterWire, 'id'>>): void
+  removeWire(id: string): void
+  addBinding(binding: Binding): string
+  updateBinding(id: string, patch: Partial<Omit<Binding, 'id'>>): void
+  removeBinding(id: string): void
   /** Append a line to the script output console. */
   log(...args: unknown[]): void
 }
@@ -108,14 +140,60 @@ export function createSceneAPI(
     host,
     resolveTimelineId: () => activeTimelineId ?? host.getScene().timelines[0]?.id,
   }
+  const explorer = new ExplorerAPI(ctx)
+  const editEntity: SceneAPI['editEntity'] = (collection, operation, id, value) => host.applyCommand(makeScriptEntityEditCmd(collection, operation, id, value))
+  const resolveTimeline = (id?: string) => {
+    const resolved = id ?? ctx.resolveTimelineId()
+    const timeline = host.getScene().timelines.find(item => item.id === resolved)
+    if (id !== undefined && !timeline) throw new Error(`Timeline '${id}' not found`)
+    return timeline ?? null
+  }
 
   return {
+    snapshot: () => copyScriptData(host.getScene()),
+    get explorer() { return explorer },
+    get particlePresets() { return listScriptParticlePresets() },
+    get assets() { return copyScriptData(host.getScene().assets) },
+    get assetCollections() { return copyScriptData(host.getScene().assetCollections ?? []) },
+    get parameters() { return copyScriptData(host.getScene().parameters) },
+    get triggers() { return copyScriptData(host.getScene().triggers) },
+    get bindings() { return copyScriptData(host.getScene().bindings) },
+    get parameterWires() { return copyScriptData(host.getScene().parameterWires ?? []) },
+    get stateMachines() { return copyScriptData(host.getScene().stateMachines ?? []) },
+    get initialState() { return copyScriptData(host.getScene().initialState) },
+    setInitialState(value) {
+      const previous = host.getScene().initialState
+      const next = copyScriptData(value)
+      host.applyCommand({ label: 'Script initial state', execute: scene => ({ ...scene, initialState: next }), undo: scene => ({ ...scene, initialState: previous }) })
+    },
+    editEntity,
+    updateParam: (id, patch) => editEntity('parameters', 'update', id, patch),
+    removeParam: id => editEntity('parameters', 'remove', id),
+    updateTrigger: (id, patch) => editEntity('triggers', 'update', id, patch),
+    removeTrigger: id => editEntity('triggers', 'remove', id),
+    updateWire: (id, patch) => editEntity('parameterWires', 'update', id, patch),
+    removeWire: id => editEntity('parameterWires', 'remove', id),
+    addBinding(binding) { editEntity('bindings', 'add', binding.id, binding as unknown as Record<string, unknown>); return binding.id },
+    updateBinding: (id, patch) => editEntity('bindings', 'update', id, patch),
+    removeBinding: id => editEntity('bindings', 'remove', id),
+    stateMachine(id) {
+      if (!host.getScene().stateMachines?.some(machine => machine.id === id)) throw new Error(`State machine '${id}' not found`)
+      return new StateMachineHandle(id, ctx)
+    },
+    removeStateMachine: id => editEntity('stateMachines', 'remove', id),
+    audioClip(assetId, options = {}) {
+      const asset = host.getScene().assets.find(item => item.id === assetId && item.type === 'audio')
+      if (!asset) throw new Error('Audio source was not found.')
+      const layer = newAudioLayer(asset.id, asset.durationMs)
+      host.applyCommand(makeAddAudioClipCmd(asset, { ...options, layer, timelineId: options.timelineId ?? ctx.resolveTimelineId() }))
+      return new LayerHandle(options.layerId ?? layer.id, ctx)
+    },
     composition(patch) {
       const prev = host.getScene().composition
       if (patch) host.applyCommand({ label: 'Script composition', execute: scene => ({ ...scene, composition: { ...prev, ...patch } }), undo: scene => ({ ...scene, composition: prev }) })
-      return structuredClone(host.getScene().composition)
+      return copyScriptData(host.getScene().composition)
     },
-    get timelines() { return structuredClone(host.getScene().timelines) },
+    get timelines() { return copyScriptData(host.getScene().timelines) },
     createTimeline(options) {
       if (!options.id || host.getScene().timelines.some(t => t.id === options.id)) throw new Error('Timeline id must be unique')
       host.applyCommand(makeAddTimelineCmd({ id: options.id, durationMs: options.durationMs ?? host.getScene().composition.durationMs, loop: options.loop ?? false, autoplay: options.autoplay ?? false, tracks: [], layerIds: [] }))
@@ -138,9 +216,7 @@ export function createSceneAPI(
       if (activeTimelineId === id) activeTimelineId = undefined
     },
     cloneTimeline(id, newId) {
-      const source = host.getScene().timelines.find(t => t.id === id)
-      if (!source || !newId || host.getScene().timelines.some(t => t.id === newId)) throw new Error('Source must exist and new timeline id must be unique')
-      host.applyCommand(makeAddTimelineCmd({ ...structuredClone(source), id: newId }))
+      host.applyCommand(makeAddTimelineCmd(cloneTimeline(host.getScene(), id, newId)))
       return new TimelineHandle(newId, ctx)
     },
     add(kind: string): LayerHandle {
@@ -197,20 +273,20 @@ export function createSceneAPI(
         ...(opts?.offsetX != null ? { offsetX: opts.offsetX } : {}),
         ...(opts?.offsetY != null ? { offsetY: opts.offsetY } : {}),
         ...(opts?.mode ? { mode: opts.mode } : {}),
-        timeline: host.getScene().timelines[0] ?? null,
+        timeline: resolveTimeline(opts?.timelineId),
         allLayers: host.getScene().layers,
       })
       host.applyCommand(cmd)
       return cmd.result.suggestedSelection.map((id) => new LayerHandle(id, ctx))
     },
 
-    array(handle, opts): LayerHandle[] {
+    array(handle, opts, options): LayerHandle[] {
       const source = host.getScene().layers.find((l) => l.id === handle.id)
       if (!source) return []
       const cmd = makeArrayCmd({
         source,
         settings: buildArraySettings(opts),
-        timeline: host.getScene().timelines[0] ?? null,
+        timeline: resolveTimeline(options?.timelineId),
         allLayers: host.getScene().layers,
       })
       host.applyCommand(cmd)
@@ -251,11 +327,11 @@ export function createSceneAPI(
         ...(type === 'number' && opts?.min != null ? { min: opts.min } : {}),
         ...(type === 'number' && opts?.max != null ? { max: opts.max } : {}),
       }
-      host.applyCommand(makeAddParamCmd(param))
+      editEntity('parameters', 'add', id, param as unknown as Record<string, unknown>)
       return id
     },
 
-    addTrigger(eventType, actionType, opts): void {
+    addTrigger(eventType, actionType, opts): string {
       const trigger: Trigger = {
         id: scriptUid('trigger'),
         ...(opts?.label ? { label: opts.label } : {}),
@@ -268,9 +344,10 @@ export function createSceneAPI(
         }],
       }
       host.applyCommand(makeAddTriggerCmd(trigger))
+      return trigger.id
     },
 
-    wire(sourceProperty, targetProperty, expression, opts): void {
+    wire(sourceProperty, targetProperty, expression, opts): string {
       const now = Date.now()
       const wire: ParameterWire = {
         id: scriptUid('wire'),
@@ -283,6 +360,7 @@ export function createSceneAPI(
         createdAt: now, updatedAt: now,
       }
       host.applyCommand(makeAddParameterWireCmd(wire))
+      return wire.id
     },
 
     log(...args: unknown[]): void {

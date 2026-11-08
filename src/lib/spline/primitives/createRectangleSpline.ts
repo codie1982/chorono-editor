@@ -36,14 +36,14 @@ export function createRectangleSpline(params: RectSplineParams): SplinePathData 
     const cr = Math.min(cornerRadius, hw, hh)
     const k  = cr * KAPPA
     anchors = [
-      { x: -hw + cr, y: -hh, type: 'corner', out: { x: -hw + cr + 0, y: -hh } },
+      { x: -hw + cr, y: -hh, type: 'smooth', in: { x: -hw + cr - k, y: -hh } },
       { x:  hw - cr, y: -hh, type: 'smooth', out: { x:  hw - cr + k, y: -hh } },
-      { x:  hw, y: -hh + cr, type: 'smooth', in: { x: hw, y: -hh + cr - k }, out: { x: hw, y: -hh + cr + k } },
-      { x:  hw, y:  hh - cr, type: 'smooth', in: { x: hw, y:  hh - cr - k }, out: { x: hw, y:  hh - cr + k } },
+      { x:  hw, y: -hh + cr, type: 'smooth', in: { x: hw, y: -hh + cr - k } },
+      { x:  hw, y:  hh - cr, type: 'smooth', out: { x: hw, y:  hh - cr + k } },
       { x:  hw - cr, y:  hh, type: 'smooth', in: { x: hw - cr + k, y: hh } },
       { x: -hw + cr, y:  hh, type: 'smooth', out: { x: -hw + cr - k, y: hh } },
-      { x: -hw, y:  hh - cr, type: 'smooth', in: { x: -hw, y: hh - cr + k }, out: { x: -hw, y: hh - cr - k } },
-      { x: -hw, y: -hh + cr, type: 'smooth', in: { x: -hw, y: -hh + cr + k }, out: { x: -hw, y: -hh + cr - k } },
+      { x: -hw, y:  hh - cr, type: 'smooth', in: { x: -hw, y: hh - cr + k } },
+      { x: -hw, y: -hh + cr, type: 'smooth', out: { x: -hw, y: -hh + cr - k } },
     ]
   }
 

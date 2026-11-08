@@ -25,9 +25,9 @@ interface DockLayoutReturn {
  * mutators for drag-drop, tab switching, and splitter resize.
  *
  * `expectedPanelIds` is the set of panels the registry exposes — used to
- * validate the persisted tree. If a saved tree is missing one or carries
- * a duplicate (e.g. left over from an older bug) we fall back to the
- * default layout silently instead of crashing or rendering a broken UI.
+ * validate the persisted tree. Closed/new panels may be absent, preserving the
+ * user's arrangement across added features. Invalid structure, duplicate or
+ * unknown panels fall back to the default layout instead of a broken UI.
  */
 export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn {
   // Initial render MUST match the server (no localStorage there) — start with

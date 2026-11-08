@@ -50,6 +50,7 @@ const PANEL_IDS_2D = [
   'particles',
   'scriptConsole',
   'shortcuts',
+  'resourceMonitor',
 ] as const
 
 // ── Tool groups ───────────────────────────────────────────────────────────────

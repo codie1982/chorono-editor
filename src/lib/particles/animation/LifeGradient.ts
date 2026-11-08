@@ -25,7 +25,7 @@ export function evaluateLifeGradient<T>(
   for (let i = 0; i < stops.length - 1; i++) {
     const cur = stops[i]
     const nxt = stops[i + 1]
-    if (progress >= cur.t && progress <= nxt.t) {
+    if (progress >= cur.t && progress < nxt.t) {
       const span   = nxt.t - cur.t
       const localT = span === 0 ? 1 : (progress - cur.t) / span
       const eased  = getEasing(nxt.easing)(localT)

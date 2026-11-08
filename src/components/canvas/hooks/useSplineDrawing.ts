@@ -3,13 +3,15 @@ import {
   type RefObject, type Dispatch, type SetStateAction,
 } from 'react'
 import type { ChronoScene } from '@/lib/types'
-import type { SplinePrimitiveKind, SplineGeneratorParams } from '@/lib/types/spline'
+import type { SplinePathData, SplinePrimitiveKind, SplineGeneratorParams } from '@/lib/types/spline'
+import type { OverrideMap } from '@/lib/evaluator'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   splineParamsFromBox, isBoxDragKind, createPolylineSpline,
   createSplinePrimitive, splineToPathDefinition, translateSplineData, mergeSplineData,
+  placeSplineInLayer,
 } from '@/lib/spline'
-import { newSplineLayerFromPrimitive, newSplineLayerFromData } from '@/lib/defaults'
+import { newSplineLayerFromData } from '@/lib/defaults'
 import { pathToSvgString } from '@/lib/geometry'
 import { makeUpdateLayerCmd, makeAddLayerCmd } from '@/lib/editor/commands-layer'
 
@@ -23,6 +25,8 @@ export interface UseSplineDrawingOptions {
   toolMode?: string
   splineDrawKind?: SplinePrimitiveKind | null
   splineAppendTargetId?: string | null
+  timeMs?: number
+  overrides?: OverrideMap
   onSplineDrawCommit?: () => void
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   setDragHud: Dispatch<SetStateAction<HudState>>
@@ -44,14 +48,14 @@ export interface UseSplineDrawingReturn {
 export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawingReturn {
   const {
     canvasRef, compositionRef, sceneRef, editorRef,
-    toolMode, splineDrawKind, splineAppendTargetId, onSplineDrawCommit,
+    toolMode, splineDrawKind, splineAppendTargetId, onSplineDrawCommit, timeMs = 0, overrides,
     onSelectLayer, setDragHud,
   } = opts
 
   // In-progress draw lives in refs (mutated without re-render); the live
   // preview svg path is mirrored to React state. Line draw: accumulated click
   // points persist across discrete clicks.
-  const splineBoxRef  = useRef<{ startX: number; startY: number } | null>(null)
+  const splineBoxRef  = useRef<{ startX: number; startY: number; pointerId: number } | null>(null)
   const splineLineRef = useRef<{ points: Array<{ x: number; y: number }> } | null>(null)
   const [splinePreview, setSplinePreview] = useState<{ d: string; fill: boolean } | null>(null)
 
@@ -62,6 +66,10 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
   useEffect(() => { splineAppendTargetIdRef.current = splineAppendTargetId }, [splineAppendTargetId])
   const onSplineDrawCommitRef = useRef(onSplineDrawCommit)
   useEffect(() => { onSplineDrawCommitRef.current = onSplineDrawCommit }, [onSplineDrawCommit])
+  const onSelectLayerRef = useRef(onSelectLayer)
+  useEffect(() => { onSelectLayerRef.current = onSelectLayer }, [onSelectLayer])
+  const frameRef = useRef({ timeMs, overrides })
+  frameRef.current = { timeMs, overrides }
 
   // Composition-pixel coords from a pointer event.
   const clientToComp = useCallback((e: { clientX: number; clientY: number }) => {
@@ -76,39 +84,46 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
   }, [canvasRef, compositionRef])
 
   /** Commits a freshly-built layer, or appends geometry to the target layer. */
-  const commitDrawnSpline = useCallback((
-    kind: SplinePrimitiveKind,
-    params: SplineGeneratorParams,
+  const commitDrawnData = useCallback((
+    data: SplinePathData,
     centerX: number,
     centerY: number,
+    openPath: boolean,
+    name: string,
   ) => {
     const targetId = splineAppendTargetIdRef.current
     const target = targetId ? sceneRef.current!.layers.find(l => l.id === targetId) : null
 
     if (target?.type === 'spline' && target.spline) {
-      // Append into the selected spline, offset so it lands where drawn.
-      const gen = createSplinePrimitive({ kind, params })
-      if (gen) {
-        const placed = translateSplineData(gen, centerX - target.transform.x, centerY - target.transform.y)
+      // Compensate for the complete displayed transform, including groups,
+      // rotation, scale and anchor, so appended geometry lands where drawn.
+      const frame = frameRef.current
+      const placed = placeSplineInLayer(data, centerX, centerY, target, sceneRef.current!, frame.timeMs, frame.overrides)
+      if (placed) {
         const merged = mergeSplineData(target.spline, placed)
         editorRef.current!.dispatchCommand(makeUpdateLayerCmd(target.id, { spline: merged }, target))
       }
     } else {
-      const base = newSplineLayerFromPrimitive(kind, params)
-      if (base) {
-        base.transform.x = centerX
-        base.transform.y = centerY
-        editorRef.current!.dispatchCommand(makeAddLayerCmd(base))
-        onSelectLayer(base.id)
-      }
+      const base = newSplineLayerFromData(data, { name, openPath, x: centerX, y: centerY })
+      editorRef.current!.dispatchCommand(makeAddLayerCmd(base))
+      onSelectLayerRef.current(base.id)
     }
     onSplineDrawCommitRef.current?.()
-  }, [sceneRef, editorRef, onSelectLayer])
+  }, [sceneRef, editorRef])
+
+  const commitDrawnSpline = useCallback((
+    kind: SplinePrimitiveKind, params: SplineGeneratorParams, centerX: number, centerY: number,
+  ) => {
+    const data = createSplinePrimitive({ kind, params })
+    if (!data) { onSplineDrawCommitRef.current?.(); return }
+    const label = kind.charAt(0).toUpperCase() + kind.slice(1)
+    commitDrawnData(data, centerX, centerY, kind === 'arc' || kind === 'line', `${label} Spline`)
+  }, [commitDrawnData])
 
   const handleSplineBoxMove = useCallback((e: PointerEvent) => {
     const box = splineBoxRef.current
     const kind = splineDrawKindRef.current
-    if (!box || !kind) return
+    if (!box || !kind || e.pointerId !== box.pointerId) return
     const p = clientToComp(e)
     if (!p) return
     const spec = splineParamsFromBox(kind, { x1: box.startX, y1: box.startY, x2: p.x, y2: p.y })
@@ -127,20 +142,23 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
   const handleSplineBoxUp = useCallback((e: PointerEvent) => {
     const box = splineBoxRef.current
     const kind = splineDrawKindRef.current
+    if (box && e.pointerId !== box.pointerId) return
     window.removeEventListener('pointermove', handleSplineBoxMove)
     window.removeEventListener('pointerup',   handleSplineBoxUp)
+    window.removeEventListener('pointercancel', handleSplineBoxUp)
     splineBoxRef.current = null
     setSplinePreview(null)
     setDragHud(null)
-    if (!box || !kind) { onSplineDrawCommitRef.current?.(); return }
+    if (!box || !kind || e.type === 'pointercancel') { onSplineDrawCommitRef.current?.(); return }
     const p = clientToComp(e)
     if (!p) { onSplineDrawCommitRef.current?.(); return }
-    let x2 = p.x, y2 = p.y
+    let x1 = box.startX, y1 = box.startY, x2 = p.x, y2 = p.y
     // A click (no real drag) → default-sized shape centered on the click.
     if (Math.abs(x2 - box.startX) < 3 && Math.abs(y2 - box.startY) < 3) {
-      x2 = box.startX + 120; y2 = box.startY + 80
+      x1 = box.startX - 60; y1 = box.startY - 40
+      x2 = box.startX + 60; y2 = box.startY + 40
     }
-    const spec = splineParamsFromBox(kind, { x1: box.startX, y1: box.startY, x2, y2 })
+    const spec = splineParamsFromBox(kind, { x1, y1, x2, y2 })
     if (!spec) { onSplineDrawCommitRef.current?.(); return }
     commitDrawnSpline(kind, spec.params, spec.centerX, spec.centerY)
   }, [clientToComp, commitDrawnSpline, handleSplineBoxMove, setDragHud])
@@ -168,13 +186,10 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2
     const local = line.points.map(p => ({ x: p.x - cx, y: p.y - cy }))
     const spline = createPolylineSpline(local, closed)
-    const layer = newSplineLayerFromData(spline, { name: 'Line Spline', openPath: !closed, x: cx, y: cy })
-    editorRef.current!.dispatchCommand(makeAddLayerCmd(layer))
-    onSelectLayer(layer.id)
-    onSplineDrawCommitRef.current?.()
-  }, [handleSplineLineMove, editorRef, onSelectLayer, setDragHud])
+    commitDrawnData(spline, cx, cy, !closed, 'Line Spline')
+  }, [handleSplineLineMove, commitDrawnData, setDragHud])
 
-  /** Tears down any in-progress spline draw and notifies the page. */
+  /** Tears down any in-progress spline draw and its pointer listeners. */
   const cancelSplineDraw = useCallback(() => {
     splineBoxRef.current  = null
     splineLineRef.current = null
@@ -182,8 +197,11 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     setDragHud(null)
     window.removeEventListener('pointermove', handleSplineBoxMove)
     window.removeEventListener('pointerup',   handleSplineBoxUp)
+    window.removeEventListener('pointercancel', handleSplineBoxUp)
     window.removeEventListener('pointermove', handleSplineLineMove)
   }, [handleSplineBoxMove, handleSplineBoxUp, handleSplineLineMove, setDragHud])
+
+  useEffect(() => () => cancelSplineDraw(), [cancelSplineDraw])
 
   // Keyboard: Enter finishes an open line, Esc cancels, Backspace removes the
   // last placed point. Active only while in spline-draw mode.
@@ -238,9 +256,10 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     // Box-drag primitives.
     if (isBoxDragKind(kind)) {
       canvasRef.current?.setPointerCapture(pointerId)
-      splineBoxRef.current = { startX: cx, startY: cy }
+      splineBoxRef.current = { startX: cx, startY: cy, pointerId }
       window.addEventListener('pointermove', handleSplineBoxMove)
       window.addEventListener('pointerup',   handleSplineBoxUp)
+      window.addEventListener('pointercancel', handleSplineBoxUp)
     }
   }, [canvasRef, handleSplineLineMove, finishSplineLine, handleSplineBoxMove, handleSplineBoxUp])
 

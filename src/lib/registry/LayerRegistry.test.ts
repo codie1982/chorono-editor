@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { LayerRegistry } from './LayerRegistry'
 import type { LayerDefinition } from './LayerDefinition'
 import type { Layer } from '@/lib/types'
+import { ALL_SPLINE_DEFINITIONS } from './definitions/spline'
+import { newSplineLayerFromPrimitive } from '@/lib/defaults'
 
 const mockDef = (kind: string, category: any = 'Basic Shapes'): LayerDefinition => ({
   kind,
@@ -74,6 +76,25 @@ describe('LayerRegistry', () => {
     it('returns undefined when no match', () => {
       const layer = { id: 'l', name: 'L', type: 'shape', shapeKind: 'unknown' } as unknown as Layer
       expect(registry.findForLayer(layer)).toBeUndefined()
+    })
+
+    it('resolves every spline primitive to editable appearance schemas and geometry', () => {
+      ALL_SPLINE_DEFINITIONS.forEach(def => registry.register(def))
+      for (const def of ALL_SPLINE_DEFINITIONS) {
+        const layer = def.createDefault()
+        const resolved = registry.findForLayer(layer)
+        expect(resolved).toBe(def)
+        expect(resolved!.getPropertyGroups(layer).map(group => group.title))
+          .toEqual(['Transform', 'Appearance', 'Fill', 'Stroke', 'Trim Path'])
+        expect(resolved!.toPath!(layer).commands.length).toBeGreaterThan(0)
+      }
+    })
+
+    it('keeps drawn/custom splines editable via the common spline definition', () => {
+      ALL_SPLINE_DEFINITIONS.forEach(def => registry.register(def))
+      const layer = newSplineLayerFromPrimitive('circle', { radius: 20 })!
+      Object.values(layer.spline!.subShapes)[0].kind = 'custom'
+      expect(registry.findForLayer(layer)?.toPath?.(layer).commands.length).toBeGreaterThan(0)
     })
   })
 

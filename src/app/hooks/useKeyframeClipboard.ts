@@ -4,6 +4,7 @@ import type { ChronoScene, Keyframe } from '@/lib/types'
 import { nextKfId } from '@/lib/defaults'
 import { makePasteKfCmd, type KfInsertion } from '@/lib/editor/commands-keyframe'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
+import { collectKeyframeClipboard } from '@/lib/timeline/keyframeClipboard'
 
 interface ClipboardEntry {
   timelineId: string
@@ -41,25 +42,10 @@ export function useKeyframeClipboard(params: Params): ClipboardReturn {
   useEffect(() => { paramsRef.current = params })
 
   const copySelected = useCallback(() => {
-    const { selectedKfIds, scene } = paramsRef.current
+    const { selectedKfIds, selectedTimelineId, scene } = paramsRef.current
     if (selectedKfIds.size === 0) return
-
-    const collected: ClipboardEntry[] = []
-    let minTime = Infinity
-
-    for (const tl of scene.timelines) {
-      for (const track of tl.tracks) {
-        for (const kf of track.keyframes) {
-          if (selectedKfIds.has(kf.id)) {
-            collected.push({ timelineId: tl.id, target: track.target, kf, relativeMs: 0 })
-            if (kf.timeMs < minTime) minTime = kf.timeMs
-          }
-        }
-      }
-    }
+    const collected = collectKeyframeClipboard(scene, selectedTimelineId, selectedKfIds)
     if (collected.length === 0) return
-
-    for (const entry of collected) entry.relativeMs = entry.kf.timeMs - minTime
     clipboardRef.current = collected
   }, [])
 

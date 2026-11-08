@@ -4,7 +4,8 @@ export { RuntimeOptimizer, defaultRuntimeOptimizer } from './RuntimeOptimizer'
 export type { ValidatorOptions } from './RuntimeValidator'
 
 // ── BL-80 Raster image export (PNG / WEBP / JPEG) ──────────────────────────────
-export { exportRasterImage, downloadBlob } from './raster/RasterExportEngine'
+export { exportRasterImage, acquireRasterImage, downloadBlob } from './raster/RasterExportEngine'
+export {downloadOutput} from './resources/downloadOutput'
 export type {
   RasterExportOptions,
   RasterExportResult,
@@ -26,7 +27,7 @@ export type {
 } from './vector/SVGExporter'
 
 // ── BL-83 Image sequence export (PNG/JPEG/WEBP → ZIP) ──────────────────────────
-export { exportSequence } from './sequence/SequenceExportEngine'
+export { exportSequence,acquireSequence,renderSequenceOutput } from './sequence/SequenceExportEngine'
 export type {
   SequenceExportOptions,
   SequenceExportResult,

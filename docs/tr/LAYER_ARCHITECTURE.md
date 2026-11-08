@@ -1,5 +1,7 @@
 # Katman Mimarisi Dokümantasyonu
 
+Kodlama ve devir standardı: [AGENTS.md — Software engineering standards](../../AGENTS.md#software-engineering-standards). SOLID, modül sahipliği, ortak kodu yeniden kullanma, 300 satırlık sınıf hedefi ve ayrıntılı sınıf/fonksiyon açıklamaları bütün yeni katmanlara uygulanır.
+
 ## İçindekiler
 1. [Giriş](#giriş)
 2. [Temel Konseptler](#temel-konseptler)
@@ -34,7 +36,7 @@ Katman mimarisi **genişletilebilir ve plugin tabanlıdır**:
 - **PropertySchema:** Her özelliği tip-güvenli şekilde tanımlar (animatablilk, min/max, vb.)
 - **LayerRendererRegistry:** Render işlemini dispatch eder (ilk eşleşen plugin kazanır)
 
-Bu tasarım sayesinde, yeni bir katman türü eklemek için diğer kodlara dokunmanıza gerek olmaz—sadece bir `LayerDefinition` ve `LayerRendererPlugin` eklersiniz.
+Registry, yeni bir katmanın factory/property schema ve çizim davranışı için genişletme noktası sağlar. Tam bir katman teslimi ayrıca veri tipi/şema, native komutlar, clone/instance, seçim/bounds, kayıt/yükleme ve runtime/export desteğini kapsar. Yalnız `LayerDefinition` ve `LayerRendererPlugin` eklemek bütün bu yolların hazır olduğunu göstermez.
 
 ### Temel Özellikler (BL-38)
 

@@ -5,6 +5,8 @@ export { mergeSplineData }          from './factory/mergeSplineData'
 export { computeSplineBounds }     from './geometry/computeSplineBounds'
 export type { SplineBounds }       from './geometry/computeSplineBounds'
 export { translateSplineData }     from './geometry/translateSplineData'
+export { transformSplineData }     from './geometry/transformSplineData'
+export { placeSplineInLayer }      from './creation/placeSplineInLayer'
 export {
   hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour,
 } from './geometry/hitTest'

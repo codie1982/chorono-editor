@@ -37,6 +37,8 @@ interface Handlers {
    *  wins when the same key is mapped in multiple contexts (e.g. S = Scale
    *  tool on the canvas, Show Scale track in the timeline). */
   getContext?: () => ShortcutContext
+  /** Drag previews must finish or cancel before another command changes history. */
+  isTransactionActive?: () => boolean
   frameRate?: number
 }
 
@@ -76,6 +78,7 @@ export function useKeyboard(handlers: Handlers) {
     onTimelineShowProperty, onTimelineToggleKeyframe,
     onTimelinePrevKeyframe, onTimelineNextKeyframe,
     getContext,
+    isTransactionActive,
     frameRate: _frameRate = 60,
   } = handlers
 
@@ -132,6 +135,7 @@ export function useKeyboard(handlers: Handlers) {
       const action = actions[id]
       if (!action) return
       e.preventDefault()
+      if (isTransactionActive?.()) return
       action()
     }
 
@@ -148,5 +152,6 @@ export function useKeyboard(handlers: Handlers) {
     onTimelineShowProperty, onTimelineToggleKeyframe,
     onTimelinePrevKeyframe, onTimelineNextKeyframe,
     getContext,
+    isTransactionActive,
   ])
 }

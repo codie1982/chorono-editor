@@ -9,66 +9,22 @@ interface Props {
   selectedLayerId: string | null
 }
 
-export default function TrackNodeRow({
-  node,
-  isExpanded,
-  onToggleExpand,
-  onSelectLayer,
-  selectedLayerId,
-}: Props) {
-  const handleToggleExpand = () => {
-    onToggleExpand(node.id)
-  }
-
-  const handleSelectLayer = () => {
-    if (node.type === 'object' || node.type === 'group') {
-      const layerId = node.trackTarget?.match(/layers\.([^.]+)/)?.[1] || null
-      onSelectLayer(layerId)
-    }
-  }
-
-  const isSelected =
-    node.type === 'object' || (node.type === 'group' && node.trackTarget?.includes(selectedLayerId || ''))
-
-  const paddingLeft = node.depth * 12
-
-  // Icons
-  const getIcon = () => {
-    if (node.type === 'group' || node.isParent) {
-      return isExpanded ? '▼' : '▶'
-    }
-    return null
-  }
-
-  const getTypeIcon = () => {
-    if (node.type === 'property') return '●'
-    if (node.type === 'group') return '📁'
-    return '◻'
-  }
-
-  return (
-    <div className={`track-node-row ${isSelected ? 'selected' : ''}`} style={{ paddingLeft }}>
-      <div className="row-content">
-        {/* Expand toggle */}
-        {(node.isParent || node.children.length > 0) && (
-          <button className="expand-toggle" onClick={handleToggleExpand}>
-            {getIcon()}
-          </button>
-        )}
-
-        {/* Type icon + name */}
-        <span className="node-icon">{getTypeIcon()}</span>
-        <span
-          className={`node-name ${node.hasKeys ? 'has-keys' : ''}`}
-          onClick={handleSelectLayer}
-          title={node.trackTarget || node.name}
-        >
+export default function TrackNodeRow({ node, isExpanded, onToggleExpand, onSelectLayer, selectedLayerId }: Props) {
+  const isSelected = !!node.layerId && node.layerId === selectedLayerId
+  const hasChildren = node.children.length > 0
+  return <div className={`track-node-row ${isSelected ? 'selected' : ''}`} style={{ paddingLeft: 6 + node.depth * 12 }}>
+    {hasChildren
+      ? <button type="button" className="expand-toggle" onClick={() => onToggleExpand(node.id)}
+          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.name}`} aria-expanded={isExpanded}>
+          {isExpanded ? '▾' : '▸'}
+        </button>
+      : <span className="expand-spacer" />}
+    <span className="node-icon" aria-hidden="true">{node.type === 'property' ? '·' : '◇'}</span>
+    {node.layerId
+      ? <button type="button" className={`node-name ${node.hasKeys ? 'has-keys' : ''}`}
+          onClick={() => onSelectLayer(node.layerId!)} title={node.trackTarget || node.name} aria-pressed={isSelected}>
           {node.name}
-        </span>
-
-        {/* Summary indicator (parent with keys) */}
-        {node.isParent && node.hasKeys && <span className="summary-indicator">◆</span>}
-      </div>
-    </div>
-  )
+        </button>
+      : <span className={`node-name ${node.hasKeys ? 'has-keys' : ''}`} title={node.trackTarget || node.name}>{node.name}</span>}
+  </div>
 }

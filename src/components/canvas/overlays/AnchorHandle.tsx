@@ -5,7 +5,7 @@ import React from 'react'
 interface AnchorProps {
   x: number; y: number
   isDragging?: boolean
-  onPointerDown: (e: React.PointerEvent) => void
+  onPointerDown?: (e: React.PointerEvent) => void
 }
 
 /**
@@ -18,8 +18,8 @@ export function AnchorHandle({ x, y, isDragging, onPointerDown }: AnchorProps) {
   return (
     <div
       onPointerDown={onPointerDown}
-      title="Anchor point (rotation / scale pivot) — drag to reposition"
-      className="absolute z-50 pointer-events-auto cursor-move select-none"
+      title={onPointerDown ? 'Anchor point (rotation / scale pivot) — drag to reposition' : 'Rotation pivot'}
+      className={`absolute z-50 select-none ${onPointerDown ? 'pointer-events-auto cursor-move' : 'pointer-events-none'}`}
       style={{ left: `${x}px`, top: `${y}px`, transform: 'translate(-50%, -50%)' }}
     >
       <div className={`relative w-4 h-4 rounded-full border-2 transition-transform

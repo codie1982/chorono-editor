@@ -11,37 +11,37 @@
 // The asset registry is `scene.assets`. Each upload via LayerPanel populates
 // an Asset entry; this panel surfaces them in one place.
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChronoScene, Asset, AssetType } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   newImageLayer, newVideoLayer, newAudioLayer,
 } from '@/lib/defaults'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '@/lib/editor/commands-layer'
+import { makeAddAudioClipCmd } from '@/lib/editor/commands-audio'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { toast } from '@/lib/toast/toast'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
+import { formatBytes } from '@/lib/format/formatBytes'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
+import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+import { useRowWindow } from '@/components/virtualization/useRowWindow'
+import { WindowedRows } from '@/components/virtualization/WindowedRows'
+import AssetThumbnail from './assets/AssetThumbnail'
 
 interface Props {
   scene:  ChronoScene
   editor: EditorStateReturn
   /** Called with the new layer's id after "Add layer" so it can be selected. */
   onSelectLayer?: (id: string) => void
+  selectedTimelineId?: string | null
+  currentTimeMs?: number
   /**
    * Import files through the universal pipeline (BL-04–06). When provided, the
    * panel header shows an "Import" button. Accepts images, video, audio, SVG,
    * fonts, Lottie and Chorono scene files.
    */
   onImportFiles?: (files: FileList | File[]) => void
-}
-
-/** Human-readable byte size. */
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
 const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> = {
@@ -56,10 +56,21 @@ const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> =
   gif:         { bg: 'bg-pink-900/50',    fg: 'text-pink-300',    icon: '⟳' },
 }
 
-export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles }: Props) {
+export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles, selectedTimelineId, currentTimeMs = 0 }: Props) {
   const importInputRef = useRef<HTMLInputElement>(null)
   const ctxMenu = useContextMenu()
   const [ctxAssetId, setCtxAssetId] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  // Fixed two-column rows retain the existing square thumbnail grid. Resize
+  // changes the CSS-pixel row layout, never the original media resolution.
+  const [gridWidth, setGridWidth] = useState(280)
+  const rowHeight = Math.max(1, (gridWidth - 24) / 2) + 84
+  const layout = useMemo(() => RowLayout.fixed(Math.ceil(scene.assets.length / 2), rowHeight), [scene.assets.length, rowHeight])
+  const rowKeys = useMemo(() => scene.assets.filter((_, index) => index % 2 === 0).map(asset => asset.id), [scene.assets])
+  const windowed = useRowWindow(layout, rowKeys, scrollRef, contentRef)
+  // Width comes from the shared ResizeObserver; it does not follow playback.
+  useEffect(() => { setGridWidth(windowed.viewport.width) }, [windowed.viewport.width])
 
   // Track which layers reference each asset (so we know what gets deleted)
   const layersByAsset = useMemo(() => {
@@ -105,7 +116,9 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
         return
       }
     }
-    editor.dispatchCommand(makeAddLayerCmd(layer))
+    editor.dispatchCommand(a.type === 'audio'
+      ? makeAddAudioClipCmd(a, { layer, timelineId: selectedTimelineId ?? undefined, startMs: currentTimeMs })
+      : makeAddLayerCmd(layer))
     onSelectLayer?.(layer.id)
     toast.success(`Added ${a.type} layer from ${a.name}`)
   }
@@ -136,8 +149,8 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
     toast.info(`Deleted asset "${a.name}"`, {
       detail: layerCount > 0 ? `${layerCount} layer(s) also removed` : undefined,
     })
-    // Revoke blob URL to free memory (a.url may be a blob: URL from upload)
-    try { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url) } catch { /* no-op */ }
+    // Source URLs remain owned by the editor resource lifecycle: undo can still
+    // restore this asset. Removing a thumbnail must not revoke shared sources.
   }
 
   // ── Discovery: remove all unused (orphan) assets in one undo step ────────
@@ -159,10 +172,6 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
       },
     ]))
     toast.info(`Removed ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}`)
-    // Free blob URLs
-    for (const a of orphans) {
-      try { if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url) } catch { /* no-op */ }
-    }
   }
 
   return (
@@ -222,13 +231,18 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
       )}
 
       {/* ── Asset grid ── */}
-      <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-2 content-start">
-        {scene.assets.map(a => {
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-2" aria-label="Assets">
+        <div ref={contentRef}>
+        <WindowedRows layout={layout} indices={windowed.indices} rowKey={index => rowKeys[index]}
+          renderRow={(index, attributes) => <div {...attributes} className="grid grid-cols-2 gap-2 items-start"
+            style={{ height: rowHeight, paddingBottom: 8 }}>
+        {scene.assets.slice(index * 2, index * 2 + 2).map(a => {
           const refCount = layersByAsset.get(a.id)?.length ?? 0
           const badge    = TYPE_BADGES[a.type]
           return (
             <div
               key={a.id}
+              data-asset-id={a.id}
               className="border border-gray-700 rounded overflow-hidden bg-gray-900/50 group hover:border-blue-500/60 transition-colors"
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -238,22 +252,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
             >
               {/* Thumbnail */}
               <div className="relative aspect-square bg-gray-950 flex items-center justify-center overflow-hidden">
-                {a.type === 'image' && (
-                  <img
-                    src={a.url}
-                    alt={a.name}
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                  />
-                )}
-                {a.type === 'video' && (
-                  <video
-                    src={a.url}
-                    muted
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => { (e.currentTarget as HTMLVideoElement).style.display = 'none' }}
-                  />
-                )}
+                <AssetThumbnail asset={a} />
                 {a.type === 'audio' && (
                   <div className="flex flex-col items-center text-gray-500">
                     <span className="text-3xl">♪</span>
@@ -273,7 +272,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
               </div>
 
               {/* Info + actions */}
-              <div className="p-1.5 space-y-1">
+              <div className="p-1.5 space-y-1" style={{ height: 76 }}>
                 <div className="truncate text-[11px] font-medium text-gray-200" title={a.name}>
                   {a.name}
                 </div>
@@ -310,6 +309,8 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
             </div>
           )
         })}
+        </div>} />
+        </div>
       </div>
 
       {/* ── Asset right-click context menu ─────────────────────────────────── */}

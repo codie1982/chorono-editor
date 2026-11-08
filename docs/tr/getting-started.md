@@ -59,7 +59,11 @@ Basit bir zıplayan daire animasyonu oluşturmak için şu adımları izleyin.
 
 ### Adım 1 — Editörü Açın
 
-Chorono URL'sine tarayıcınızda gidin. Editör boş bir sahneyle yüklenir.
+Chorono URL'sine tarayıcınızda gidin. Karşılama ekranında proje adını, yatay/kare/dikey tuval boyutunu ve kare hızını seçip **Animasyon oluştur** düğmesine basın. Yeni proje boş katmanlarla ve kullanılabilir bir timeline ile açılır.
+
+Var olan bir `.json` / `.chorono.json` dosyası için **Proje dosyası aç**; mevcut sahneyi koruyarak editöre dönmek için **Editörü aç** veya **Çalışma alanına dön** kullanılır. **Başlangıçta bu ekranı göster** tercihi tarayıcıda yalnızca bir boolean olarak saklanır; proje içeriği kaydedilmez. Ekrana menüdeki **Help → Başlangıç ekranı** ile yeniden erişilir. Escape de mevcut çalışma alanına döner.
+
+Geliştirici girişleri: `components/welcome/WelcomeScreen.tsx` native dialog/focus ve formu; `useWelcomeScreen.ts` görünürlük/tercihi; `lib/editor/welcomeProject.ts` mevcut composition preset'lerini kullanan boş proje factory'sini yönetir. Oluşturma/açma mevcut editör reset ve dosya açma akışlarına bağlıdır. Yeni proje, mevcut oturumda değişiklik yapıldıysa onay ister. Kayıtlı son dosya listesi veya otomatik proje kurtarma bu ekranla eklenmez.
 
 ### Adım 2 — Şekil Katmanı Ekleyin
 

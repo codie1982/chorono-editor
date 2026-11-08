@@ -23,6 +23,8 @@ describe('isolated authoring', () => {
     expect(result.scene.timelines[0].tracks).toHaveLength(1)
     expect(result.scene.timelines[1].tracks).toHaveLength(2)
     expect(result.scene.timelines[0].tracks[0].keyframes[0].easing.type).toBe('customBezier')
+    const sourceIds = new Set(result.scene.timelines[0].tracks.flatMap(track => track.keyframes.map(key => key.id)))
+    expect(result.scene.timelines[1].tracks.every(track => track.keyframes.every(key => !sourceIds.has(key.id)))).toBe(true)
     expect(result.scene.timelines[1].tracks[0].modifiers![0].type).toBe('sine')
     expect(result.scene.stateMachines![0].states).toHaveLength(2)
     expect(result.logs).toHaveLength(1)
@@ -31,6 +33,15 @@ describe('isolated authoring', () => {
   it('does not expose process, require, network, DOM or host constructors', async () => {
     const result = await runSafeScript(`scene.log(typeof process,typeof require,typeof fetch,typeof document,scene.constructor.constructor('return typeof process')());`, emptyScene())
     expect(result.logs[0]).toBe('undefined undefined undefined undefined undefined')
+  })
+  it('keeps a timeline referenced by a state machine when deletion is requested', async () => {
+    const created = await runSafeScript(`
+      scene.createTimeline({id:'idle',durationMs:1000});
+      const sm=scene.addStateMachine('Playback states');
+      sm.addState('Idle','idle');
+    `, emptyScene())
+    await expect(runSafeScript(`scene.deleteTimeline('idle')`, created.scene)).rejects.toThrow(/state machine/)
+    expect(created.scene.timelines.map(t => t.id)).toEqual(['idle'])
   })
   it('discards scene mutations when a script fails', async () => {
     const scene = emptyScene()

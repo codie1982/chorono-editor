@@ -32,9 +32,9 @@ explicitly connected with **MCP → Connect this editor**. With multiple tabs,
 choose `sessionId` from `list_sessions`; one connected tab can be selected implicitly.
 
 `expectedRevision` is a scene guard for authored mutations, scripts/plans,
-undo/redo, project load and project save. It is not enforced for read-only tools,
-playback/runtime controls or exports. Export `revision` identifies the captured
-scene; specifying `expectedRevision` does not turn an export into a guarded write.
+undo/redo, project load/save and audio rendering (`render_audio_preview` and
+`export_audio`). It is not enforced for other read-only tools, playback/runtime
+controls or visual/runtime exports. Export `revision` identifies the captured scene.
 On a conflict, read the scene again and prepare new arguments for a fresh edit.
 
 `requestId` is a retry token, not an asynchronous job identifier. In one connected

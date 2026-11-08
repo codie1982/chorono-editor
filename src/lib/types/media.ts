@@ -28,10 +28,20 @@ export interface VideoData {
 
 export interface AudioData {
   assetId: string
+  /** Linear gain. 1 = 0 dB; 0 = silence. Supports gain up to 4. */
   volume?: number
   muted?: boolean
+  /** Offset into the source file, independent of the clip's timeline start. */
   startOffsetMs?: number
   loop?: boolean
+  fadeInMs?: number
+  fadeOutMs?: number
+  /** Shared fade envelope after a lossless split, in timeline milliseconds. */
+  fadeRange?: { startMs: number; endMs: number }
+  /** Stereo pan: -1 = left, 0 = centre, 1 = right. */
+  pan?: number
+  /** Owning timeline. Omitted for legacy clips that play globally. */
+  timelineId?: string
 }
 
 // ── Frame Sequence (BL-07) ─────────────────────────────────────────────────────
@@ -113,7 +123,9 @@ export interface AssetMetadata {
 export interface AssetRuntime {
   /**
    * Blob URL for in-browser display.
-   * Created by URL.createObjectURL(), must be revoked when asset is removed.
+   * Application-owned source URL created by URL.createObjectURL(). Source
+   * ownership is released only after document/history/job consumers leave;
+   * removing a decoded cache entry or current asset is not enough to revoke it.
    * IMPORTANT: NOT stored in scene JSON — stripped by AssetRegistry.serializeAssets().
    */
   objectUrl?: string

@@ -64,6 +64,18 @@ export class LayerRegistry {
     }
     // Other layer types map directly to their kind
     if (layer.type === 'path')       return this.byKind.get('bezierPath')
+    if (layer.type === 'spline') {
+      const primitive = Object.values(layer.spline?.subShapes ?? {})[0]?.kind
+      const kinds: Record<string, string> = {
+        circle: 'splineCircle', ellipse: 'splineEllipse', line: 'splineLine',
+        rectangle: 'splineRect', roundedRectangle: 'splineRect', arc: 'splineArc',
+        donut: 'splineDonut', ngon: 'splineNGon', star: 'splineStar',
+      }
+      // Drawn, imported and compound splines share the same point-based
+      // appearance schemas and toPath adapter as the generated primitives.
+      return this.byKind.get(kinds[primitive ?? ''] ?? 'splineRect')
+        ?? this.getByCategory('Spline Objects')[0]
+    }
     if (layer.type === 'pathStroke') return this.byKind.get('pathStroke')
     if (layer.type === 'text')       return this.byKind.get('text')
     if (layer.type === 'image')      return this.byKind.get('image')

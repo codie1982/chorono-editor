@@ -138,7 +138,7 @@ function normaliseTimeline(tl: Timeline, opts: NormaliseTimelineOpts): Timeline 
 
 /** True if the track uses any BL-45..BL-50 feature that the basic runtime
  *  interpolator can't replay — these tracks must be baked before export. */
-function usesSignalSystem(track: Track): boolean {
+export function usesSignalSystem(track: Track): boolean {
   if (track.modifiers && track.modifiers.length > 0) return true
   if (track.controller && track.controller.type !== 'keyframe') return true
   if (track.outOfRange && (track.outOfRange.before !== 'constant' || track.outOfRange.after !== 'constant')) return true

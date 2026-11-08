@@ -2,6 +2,8 @@
 
 import type { ChronoScene, Layer } from '../types'
 import type { EditorCommand } from './commands-keyframe'
+import { makeAddAudioClipCmd } from './commands-audio'
+import { nextKfId } from '../defaults'
 
 // ── Add layer ─────────────────────────────────────────────────────────────────
 
@@ -341,10 +343,33 @@ export function makeDuplicateLayerCmd(
   original: Layer,
   newLayer: Layer,
 ): EditorCommand {
+  let audioCommand: EditorCommand | undefined
+  const keyIds = new Map<string, string>()
   return {
     label: `Duplicate ${original.name}`,
-    execute: (scene) => ({ ...scene, layers: [...scene.layers, newLayer] }),
-    undo:    (scene) => ({ ...scene, layers: scene.layers.filter((l) => l.id !== newLayer.id) }),
+    execute: (scene) => {
+      if (original.type !== 'audio' || !newLayer.audio) return { ...scene, layers: [...scene.layers, newLayer] }
+      const asset = scene.assets.find(item => item.id === newLayer.audio!.assetId)
+      if (!asset) throw new Error('Audio source was not found.')
+      const delta = (newLayer.startMs ?? 0) - (original.startMs ?? 0)
+      const audio = { ...newLayer.audio, ...(newLayer.audio.fadeRange ? { fadeRange: {
+        startMs: newLayer.audio.fadeRange.startMs + delta, endMs: newLayer.audio.fadeRange.endMs + delta } } : {}) }
+      audioCommand ??= makeAddAudioClipCmd(asset, { layer: { ...newLayer, audio }, preserveDuration: true,
+        timelineId: audio.timelineId, startMs: newLayer.startMs, name: newLayer.name })
+      const added = audioCommand.execute(scene)
+      const oldTarget = `layers.${original.id}.audio.volume`
+      return { ...added, timelines: added.timelines.map(timeline => {
+        if (timeline.id !== audio.timelineId) return timeline
+        const track = timeline.tracks.find(item => item.target === oldTarget)
+        if (!track) return timeline
+        return { ...timeline, tracks: [...timeline.tracks, { ...track, target: `layers.${newLayer.id}.audio.volume`, keyframes: track.keyframes.map(key => {
+          let id = keyIds.get(key.id)
+          if (!id) { id = nextKfId(); keyIds.set(key.id, id) }
+          return { ...key, id, timeMs: key.timeMs + delta }
+        }) }] }
+      }) }
+    },
+    undo: (scene) => audioCommand ? audioCommand.undo(scene) : { ...scene, layers: scene.layers.filter((l) => l.id !== newLayer.id) },
   }
 }
 

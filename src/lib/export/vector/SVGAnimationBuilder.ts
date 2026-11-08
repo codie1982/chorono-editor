@@ -15,7 +15,7 @@
 // and per-segment easing curves are deferred.
 
 import type { Timeline, Track, Layer } from '@/lib/types'
-import { evaluateTrack } from '@/lib/evaluator'
+import { evaluateNumericTrack } from '@/lib/evaluator'
 import { num } from './SVGStyleBuilder'
 
 export interface LayerAnimations {
@@ -49,7 +49,7 @@ function sampleTimes(tracks: Track[], durationMs: number): number[] {
 
 function sampleAt(track: Track | null, timeMs: number, base: number): number {
   if (!track) return base
-  const v = evaluateTrack(track, timeMs)
+  const v = evaluateNumericTrack(track, timeMs)
   return v ?? base
 }
 

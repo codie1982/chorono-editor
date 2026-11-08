@@ -12,7 +12,7 @@
 // render to get the final OverrideMap (timeline + param + binding) PLUS
 // fires any lifecycle / trigger callbacks for the elapsed frame.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ChronoScene, SceneParameterValue, TimelineSegment,
 } from '@/lib/types'
@@ -21,9 +21,11 @@ import {
   type OverrideMap, type ExternalTimelineTime,
 } from '@/lib/evaluator'
 import { useSMRuntime } from './useSMRuntime'
+import { useRuntimeFrameSignal } from './runtime/useRuntimeFrameSignal'
+import { useRuntimeParameters } from './runtime/useRuntimeParameters'
 import type { ParamLookup } from '@/lib/statemachine'
 import {
-  buildParamValues, applyParamBindingsToOverrides,
+  applyParamBindingsToOverrides,
   type ParamValueMap,
 } from '@/lib/runtime/paramResolver'
 import { evaluateBindings } from '@/lib/runtime/bindingEvaluator'
@@ -66,7 +68,8 @@ export interface InteractiveRuntimeReturn {
   /** Restore all parameters to their authored defaults. */
   resetParams: () => void
 
-  /** Queue an external event (button click, drag, customEvent). */
+  /** Queue an external event in FIFO order and invalidate a paused preview.
+   * Events emitted during evaluation are processed on the next frame. */
   fireEvent: (event: RuntimeEvent) => void
 
   /** Dispatch a state-machine event (BL-09). Drives transitions whose
@@ -76,9 +79,13 @@ export interface InteractiveRuntimeReturn {
    *  re-evaluation so dispatched events + blends advance even when the global
    *  playhead is paused. */
   setSMTestActive: (active: boolean) => void
-  /** Monotonic counter bumped each frame while SM test mode is active. Add to
-   *  `useMemo` deps to re-run evaluateFrame without polling. 0 when inactive. */
+  /** Compatibility counter for active SM-test frames; retains its last value
+   * when inactive. frameRevision is the complete consumer invalidation token. */
   smTestTick: number
+  /** Token for runtime-owned input/segment/SM frames. Memo consumers also depend
+   * on scene, parameters, segment state and global time. With playbackDriven,
+   * global time drives frames and this counter retains its last value. */
+  frameRevision: number
   /** Live SM runtime instances keyed by machine id — for the editor's active
    *  state highlight and blend progress. */
   smRuntimes: Map<string, import('@/lib/statemachine').StateMachineRuntime>
@@ -97,8 +104,8 @@ export interface InteractiveRuntimeReturn {
   evaluateFrame: (globalTimeMs: number) => FrameEvalResult
   /** Monotonic counter that increments every animation frame while a
    *  segment is actively playing. Consumers add it to `useMemo` deps to
-   *  force re-evaluation on each frame without polling. Returns 0 when
-   *  no segment is active. */
+   *  force re-evaluation on each frame without polling. Retains its last value
+   *  when no segment is active. Prefer frameRevision for complete invalidation. */
   segmentTick: number
 }
 
@@ -106,27 +113,17 @@ export interface InteractiveRuntimeReturn {
 // Implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeReturn {
-  // ── Parameter overrides (reactive — sliders re-render) ──────────────────
-  const [overridesVersion, setOverridesVersion] = useState(0)
-  const overridesRef = useRef<Map<string, SceneParameterValue>>(new Map())
-
-  const setParamOverride = useCallback((paramId: string, value: SceneParameterValue) => {
-    overridesRef.current.set(paramId, value)
-    setOverridesVersion((v) => v + 1)
-  }, [])
-
-  const resetParams = useCallback(() => {
-    overridesRef.current.clear()
-    setOverridesVersion((v) => v + 1)
-  }, [])
+/** Owns ephemeral preview state, never authored scene/undo data. Parameters use
+ * the shared store contract; one cancellable frame signal serves input, segment
+ * and SM-test demand. Evaluation drains a snapshot of queued input so emitted
+ * feedback cannot recurse inside the same pass or skip the next SM bridge.
+ * playbackDriven is true only when the host will evaluate on its own advancing
+ * global clock; while false this owner schedules demanded frames itself. */
+export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDriven?: boolean } = {}): InteractiveRuntimeReturn {
+  const { paramValues, readValues, setParamOverride, resetParams } = useRuntimeParameters(scene.parameters)
 
   // ── Pending events queue (drained each frame) ──────────────────────────
   const eventQueueRef = useRef<RuntimeEvent[]>([])
-
-  const fireEvent = useCallback((event: RuntimeEvent) => {
-    eventQueueRef.current.push(event)
-  }, [])
 
   // ── State machines (BL-09) ───────────────────────────────────────────────
   // Inert when the scene has no machines, so the non-SM path is unchanged.
@@ -153,44 +150,21 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     setSegmentState(null)
   }, [])
 
-  // ── Per-frame tick while a segment is active ──────────────────────────
-  // evaluateFrame is wrapped in useMemo by callers — without a state
-  // change there's nothing to invalidate the memo. Segment playback time
-  // is derived from `performance.now()` in computeSegmentTime, so we just
-  // need to force a re-render at the display rate. A simple RAF loop
-  // bumps `segmentTick` which the consumer adds to its useMemo deps.
-  const [segmentTick, setSegmentTick] = useState(0)
-  useEffect(() => {
-    if (!segmentState) return
-    let raf = 0
-    const loop = () => {
-      setSegmentTick((t) => (t + 1) | 0)
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [segmentState])
-
-  // ── SM test mode: per-frame tick (BL-09) ──────────────────────────────────
-  // Same RAF pattern as segments — while test mode is on we force a re-eval
-  // each frame so dispatched events fire and blends animate even when the
-  // global playhead is paused.
+  // One RAF owner serves both continuous sources plus one-shot queued input.
   const [smTestActiveState, setSMTestActiveState] = useState(false)
-  const [smTestTick, setSMTestTick] = useState(0)
+  const { frameRevision, segmentTick, smTestTick, invalidate, acknowledge } = useRuntimeFrameSignal(
+    !!segmentState, smTestActiveState, options.playbackDriven === true)
   const setSMTestActive = useCallback((active: boolean) => {
     setSMTestActiveState(active)
-    if (active) setSMTestTick(t => (t + 1) | 0)
   }, [])
-  useEffect(() => {
-    if (!smTestActiveState) return
-    let raf = 0
-    const loop = () => {
-      setSMTestTick((t) => (t + 1) | 0)
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [smTestActiveState])
+  const fireEvent = useCallback((event: RuntimeEvent) => {
+    eventQueueRef.current.push(event)
+    invalidate()
+  }, [invalidate])
+  const dispatchSMEvent = useCallback((event: string, smId?: string) => {
+    sm.dispatchSMEvent(event, smId)
+    invalidate()
+  }, [sm.dispatchSMEvent, invalidate])
 
   // ── Listener registry ──────────────────────────────────────────────────
   const listenersRef = useRef<Set<(event: RuntimeEvent) => void>>(new Set())
@@ -204,7 +178,11 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
 
   // ── Per-frame evaluation ───────────────────────────────────────────────
   const evaluateFrame = useCallback((globalTimeMs: number): FrameEvalResult => {
-    const paramValues = buildParamValues(scene.parameters, overridesRef.current)
+    acknowledge()
+    const paramValues = readValues()
+    // Drain before the SM/trigger passes. Feedback emitted by either pass stays
+    // queued for the next signal and traverses the full bridge exactly once.
+    const externalEvents = eventQueueRef.current.splice(0)
 
     // Segment time override for the active timeline (if any).
     const seg = segmentRef.current
@@ -223,8 +201,8 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
 
     if (sm.hasSM) {
       // Bridge: SDK / preview customEvent("hover") → SM event "hover".
-      // Peek (don't drain) — the trigger engine still consumes them below.
-      for (const e of eventQueueRef.current) {
+      // The same input snapshot also reaches the trigger engine below.
+      for (const e of externalEvents) {
         if (e.type === 'customEvent' && e.refId) sm.dispatchSMEvent(e.refId)
       }
 
@@ -236,8 +214,7 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
       // Apply entry/exit actions produced by transitions this frame.
       for (const a of smRes.actions) {
         if (a.type === 'setParam' && a.param !== undefined && a.value !== undefined) {
-          overridesRef.current.set(a.param, a.value)
-          setOverridesVersion((v) => v + 1)
+          setParamOverride(a.param, a.value)
         } else if (a.type === 'emitEvent' && a.event) {
           // Re-enters as a customEvent → bridged back to SM + trigger engine.
           fireEvent({ type: 'customEvent', refId: a.event })
@@ -276,7 +253,6 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
 
     // ── Detect lifecycle events + drain external queue ────────────────────
     const lifecycleEvents = detectLifecycleEvents(scene, prevSnapshotRef.current, nextSnapshot)
-    const externalEvents  = eventQueueRef.current.splice(0)
     const allEvents = lifecycleEvents.concat(externalEvents)
 
     // ── Trigger engine → actions ──────────────────────────────────────────
@@ -287,7 +263,7 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
     if (seg && isSegmentComplete(seg, performance.now())) {
       segmentRef.current = null
       // Defer state set to avoid re-render storm inside the loop.
-      queueMicrotask(() => setSegmentState(null))
+      queueMicrotask(() => { if (!segmentRef.current) setSegmentState(null) })
     }
 
     // ── Notify listeners ──────────────────────────────────────────────────
@@ -305,7 +281,7 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
       actions,
       segmentState: segmentRef.current,
     }
-  }, [scene])
+  }, [scene, readValues, setParamOverride, fireEvent, sm.tickFrame, sm.dispatchSMEvent, acknowledge])
 
   // ── Action dispatcher ──────────────────────────────────────────────────
   const applyAction = useCallback((action: ResolvedAction) => {
@@ -314,7 +290,7 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
         if (!action.paramId) return
         // Dynamic value source from the firing event (drag dx/dy/progress)
         // takes priority over the static paramValue.
-        let value: any = action.paramValue
+        let value = action.paramValue
         if (action.paramValueFrom) {
           const ev = action.sourceEvent
           switch (action.paramValueFrom) {
@@ -324,8 +300,7 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
           }
         }
         if (value !== undefined) {
-          overridesRef.current.set(action.paramId, value)
-          setOverridesVersion((v) => v + 1)
+          setParamOverride(action.paramId, value)
         }
         return
       }
@@ -355,22 +330,17 @@ export function useInteractiveRuntime(scene: ChronoScene): InteractiveRuntimeRet
       // surfaces these as events for the host to wire up if desired.
       default: return
     }
-  }, [scene, fireEvent])
-
-  // ── Live param value snapshot (cheap derived value) ────────────────────
-  const paramValues = useMemo(
-    () => buildParamValues(scene.parameters, overridesRef.current),
-    [scene.parameters, overridesVersion],
-  )
+  }, [scene, fireEvent, setParamOverride])
 
   return {
     paramValues,
     setParamOverride,
     resetParams,
     fireEvent,
-    dispatchSMEvent: sm.dispatchSMEvent,
+    dispatchSMEvent,
     setSMTestActive,
     smTestTick,
+    frameRevision,
     smRuntimes: sm.runtimes,
     segmentState,
     playSegment,

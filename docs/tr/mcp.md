@@ -56,6 +56,8 @@ Ek araçlar:
 
 Araç açıklamalarının sahipliği, gerçek yanıt biçimleri, yeniden deneme sınırları ve Glama yeniden değerlendirme süreci [MCP araç sözleşmeleri](../en/mcp-tool-contracts.md) belgesinde açıklanır. `describe_layer` tam Layer kaydı değil, okunabilir bir özettir; iç içe alanları değiştirmeden önce `get_scene` kullanın. `add_keyframes` eski sayısal giriş şemasını korur; model tipindeki değerler ve customBezier için `set_keyframes` kullanın.
 
+Script ile sahne tasarımı için `scene.snapshot()` tam sahneyi; `layer.data` katmanın tamamını; `layer.get(path)` tek alanı bağımsız veri kopyası olarak okur. `layer.patch(partial)` iç içe ayarları birleştirir; `Layer.set` eski nesne değiştirme davranışını korur. `scene.useTimeline(id)` hem Layer.key hem clone/array animasyon kopyalarının hedefini belirler. Mevcut state machine ve etkileşim kayıtlarının CRUD metotları ile native ses klibi yardımcıları da script içinde kullanılabilir. Renk kanalları ve Vec2 interpolate edilir; metin/boolean key sınırında değişir. Çizim öncesi uygulanan animasyon verisi particle, repeater, shape, tipografi, efekt ve maskeleri kapsar. Kesin imzalar, örnekler ve sınırlar için [betikleme rehberini](scripting.md) okuyun; IO, önizleme ve kayıt ayrı MCP araçlarıdır.
+
 `patch_object` ile Layer modelinin effects, masks, typography, geometry, repeater ve diğer alanlarına erişilir. İç içe nesneler değiştirilir; kısmi iç içe güncellemelerde mevcut alanları koruyun. `update_track` easing/timeWarp/multiplier eğrilerini, outOfRange davranışını, modifier listesini ve waveform/noise controller'ı yönetir.
 
 ## Güvenli ve tutarlı düzenleme
@@ -91,6 +93,8 @@ idle.modifier('layers.'+ball.id+'.transform.y',{
 
 `Layer.key` seçilmiş timeline'a, seçim yoksa ilk timeline'a yazar. `Timeline.key` açıkça o timeline'a yazar. Easing başlangıç keyframe'ine uygulanır; customBezier nesnesi desteklenir. `scene.useTimeline`, editörde seçilmiş sekmeden bağımsız, script içindeki hedefi belirler.
 
+`cloneTimeline`, nesneleri paylaşırken keyframe'lere yeni kimlikler verir; kopyadaki düzenleme kaynak animasyonun keyframe'lerini değiştirmez. Tekil keyframe kimlikleriyle işlem yapmadan önce kopyalanan timeline'ı yeniden okuyun. State machine tarafından kullanılan timeline silinmeden önce state bağlantıları başka bir timeline'a taşınmalıdır.
+
 `control_playback` içindeki `timelineIds` canlı görüntüde animasyonları izole eder; boş dizi bütün timeline'ları geri getirir. `render_preview` ve `evaluate_frame` de bir veya birden fazla timeline alabilir. Parametre ve state machine olayları `control_runtime` ile kontrol edilir.
 
 State machine içeren sahnelerde `render_preview` zaman/parametre argümanı verilmezse mevcut canlı durumu yakalar. Belirli bir zamanı veya farklı parametreleri deterministik sınamak için `timelineIds` belirtin; böylece önizleme state machine'i yanlışlıkla başlangıç durumuna döndürmez.
@@ -115,3 +119,14 @@ npm run mcp:smoke
 ```
 
 Gerçek bağlı editörde oluşturma, çoklu timeline, script izolasyonu, PNG, medya paketleme, kaydetme/yükleme ve dışa aktarmayı sınamak için `npm run mcp:smoke -- --write` kullanın. Test önce mevcut sahneyi yedekler, sonunda geri yükler. `--keep-demo` örnek sahneyi editörde bırakır. Sonuçlar `.chorono/smoke/` altındadır.
+# Ses klipleri
+
+`import_asset` ses dosyasını aktif/seçilen timeline'a, belirtilen `startMs` veya playhead konumuna tek undo işlemiyle ekler. `add_audio_clip` mevcut bir ses kaynağını yeniden kullanır. Ses katmanı bir kliptir: `startMs/endMs` timeline aralığı, `audio.startOffsetMs` kaynak girişidir.
+
+`move_audio_clip`, `trim_audio_clip`, `split_audio_clip`, `set_audio_gain`, `set_audio_fades` ve `patch_audio_clip` editördeki aynı yerel komutları kullanır. Sol kırpma kaynak girişini ilerletir; taşıma kaynak girişini korur; bölme kaynak dosyasını paylaşır ve ses zarfını korur. Ses kırpmak için genel animasyon esnetme komutu kullanılmaz.
+
+`audio.volume` lineer kazançtır (0–4); dB için `set_audio_gain` kullanılır: 0 dB = 1, yaklaşık −6,02 dB = 0,5. Mute ayrı saklanır. Fade süreleri ses otomasyonuyla çarpılır; pan −1…1 aralığındadır. Timeline klonları görsel nesnelerde olduğu gibi mevcut ses klibini paylaşır; bağımsız düzenleme için klip çoğaltılır.
+
+`get_audio_state` canlı kaynakları, decode hatalarını ve metreleri okur. `render_audio_preview` en fazla 10 saniyelik gerçek WAV üretir; `export_audio` en fazla 120 saniye/24 MB stereo WAV kaydeder. Kazanç, fade, otomasyon, pan ve master ayarı aynı değerlendirme hattını kullanır. State machine sahnelerinde deterministik çıktı için `timelineIds` açık verilmelidir. PNG ve frame değerleri ses doğrulaması değildir. Runtime JSON veya görüntü dizisi karıştırılmış ses içermez; WAV ayrıca üretilmelidir.
+
+`normalize_audio_clip` kırpılmış kaynak aralığının peak seviyesini ölçerek statik kazancı ayarlar (varsayılan −1 dBFS). Kazanç otomasyonu varsa önce kaldırılmalıdır. `set_audio_master` master dB/mute ayarını projeye kaydeder. Dışa aktarım uyarıları sessiz aralığı, kazanç sınırını veya clipping'i bildirir.

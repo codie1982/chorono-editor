@@ -3,12 +3,21 @@
 // Handles MP4, MOV, WEBM, AVI imports.
 // Creates one VideoAsset + one VideoLayer.
 
+import type { MediaProbeSource } from '../../../asset/metadata'
+import { editorMediaProbes } from '../../../asset/metadata/editorMediaProbes'
+import { checkImportExecution, type ImportExecution } from '../../resources/ImportExecution'
+import { withImportSource } from '../../resources/importSources'
 import { BaseImportHandler } from '../BaseHandler'
 import { newVideoLayer }     from '../../../defaults'
 import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress } from '../../types'
 import type { Asset } from '../../../asset/types'
 
+/** Import orchestration borrows the shared probe owner; native handles, byte
+ * reservations and cancellation never enter asset/scene/undo JSON. */
 export class VideoHandler extends BaseImportHandler {
+  /** Private hosts can inject a narrow probe port without constructing DOM media. */
+  constructor(private readonly probes: MediaProbeSource = editorMediaProbes) { super() }
+
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = [
     'video/mp4',
@@ -16,8 +25,9 @@ export class VideoHandler extends BaseImportHandler {
     'video/webm',
   ]
 
-  async preflight(file: File): Promise<ImportPreflight> {
-    const { width, height, durationMs } = await this.probeVideo(file)
+  /** Probe source metadata within bounded shared capacity, without retaining a native handle. */
+  async preflight(file: File, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
+    const { width, height, durationMs } = await this.probes.video(file, execution)
     const source = this.makeSource(file)
     const format = this.getFormat(file)
 
@@ -34,7 +44,7 @@ export class VideoHandler extends BaseImportHandler {
         estimatedAssets:      1,
         estimatedGroups:      0,
         estimatedTracks:      0,
-        estimatedMemoryBytes: width * height * 4 * 30 * durationSec, // rough: 30fps RGBA
+        estimatedMemoryBytes: width * height * 4, // one display frame; native decoder internals are opaque
         detectedFeatures:     features,
         unsupportedFeatures:  [],
       },
@@ -48,107 +58,81 @@ export class VideoHandler extends BaseImportHandler {
     }
   }
 
+  /** Validate/probe before creator source adoption; caller owns final result publication. */
   async handle(
     file: File,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult> {
     const startMs = Date.now()
     this.reportProgress(onProgress, 'reading', 'Reading video…', 0.1)
 
-    const url      = URL.createObjectURL(file)
-    const { width, height, durationMs } = await this.probeVideo(file)
-    const assetId  = this.generateAssetId()
-    const format   = this.getFormat(file)
+    const { width, height, durationMs } = await this.probes.video(file, execution)
+    checkImportExecution(execution)
+    return withImportSource(file, async (url) => {
+      const assetId  = this.generateAssetId()
+      const format   = this.getFormat(file)
 
-    this.reportProgress(onProgress, 'converting', 'Creating layer…', 0.7)
+      this.reportProgress(onProgress, 'converting', 'Creating layer…', 0.7)
 
-    const asset: Asset = {
-      id:         assetId,
-      name:       file.name,
-      type:       'video',
-      url,
-      width,
-      height,
-      durationMs: durationMs > 0 ? durationMs : undefined,
-      storage:  { mode: 'external', originalFileName: file.name },
-      metadata: {
-        filesize:   file.size,
-        importedAt: Date.now(),
-        tags:       [],
-      },
-      runtime: { objectUrl: url },
-    }
+      const asset: Asset = {
+        id:         assetId,
+        name:       file.name,
+        type:       'video',
+        url,
+        width,
+        height,
+        durationMs: durationMs > 0 ? durationMs : undefined,
+        storage:  { mode: 'external', originalFileName: file.name },
+        metadata: {
+          filesize:   file.size,
+          importedAt: Date.now(),
+          tags:       [],
+        },
+        runtime: { objectUrl: url },
+      }
 
-    const layer = newVideoLayer(assetId, width, height, durationMs > 0 ? durationMs : undefined)
+      const layer = newVideoLayer(assetId, width, height, durationMs > 0 ? durationMs : undefined)
 
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
+      this.reportProgress(onProgress, 'complete', 'Done', 1)
+      checkImportExecution(execution)
 
-    const warnings = file.size > 100_000_000
-      ? [{ code: 'large_file' as const, severity: 'info' as const, message: `Large video (${(file.size / 1024 / 1024).toFixed(0)} MB)` }]
-      : []
+      const warnings = file.size > 100_000_000
+        ? [{ code: 'large_file' as const, severity: 'info' as const, message: `Large video (${(file.size / 1024 / 1024).toFixed(0)} MB)` }]
+        : []
 
-    return {
-      id:      this.generateId(),
-      source:  this.makeSource(file),
-      format,
-      kind:    'asset',
-      assets:  [asset],
-      layers:  [layer],
-      groups:  [],
-      tracks:  [],
-      timelines: [],
-      commands: [],
-      warnings,
-      errors:             [],
-      unsupportedFeatures: [],
-      report: {
-        title:          'Video Import',
-        sourceFileName: file.name,
+      return {
+        id:      this.generateId(),
+        source:  this.makeSource(file),
         format,
-        created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
-        warnings:       [],
-        errors:         [],
+        kind:    'asset',
+        assets:  [asset],
+        layers:  [layer],
+        groups:  [],
+        tracks:  [],
+        timelines: [],
+        commands: [],
+        warnings,
+        errors:             [],
         unsupportedFeatures: [],
-        suggestions:    [],
-        durationMs:     Date.now() - startMs,
-      },
-    }
+        report: {
+          title:          'Video Import',
+          sourceFileName: file.name,
+          format,
+          created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
+          warnings:       [],
+          errors:         [],
+          unsupportedFeatures: [],
+          suggestions:    [],
+          durationMs:     Date.now() - startMs,
+        },
+      }
+    })
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
-  private probeVideo(file: File): Promise<{ width: number; height: number; durationMs: number }> {
-    return new Promise((resolve, reject) => {
-      const url   = URL.createObjectURL(file)
-      const video = document.createElement('video')
-      video.preload  = 'metadata'
-      video.muted    = true
-
-      const cleanup = () => {
-        URL.revokeObjectURL(url)
-        video.removeAttribute('src')
-        video.load()
-      }
-
-      video.onloadedmetadata = () => {
-        const width  = video.videoWidth  || 0
-        const height = video.videoHeight || 0
-        // Durations under 100ms are almost always a metadata-parse failure
-        // rather than a genuinely tiny clip — treat as unknown (0) so the
-        // layer bar spans the full timeline and the user can trim.
-        const raw = video.duration
-        const durationMs = Number.isFinite(raw) && raw * 1000 >= 100 ? Math.round(raw * 1000) : 0
-        cleanup()
-        resolve({ width, height, durationMs })
-      }
-      video.onerror = () => {
-        cleanup()
-        reject(new Error(`Failed to probe video: ${file.name}`))
-      }
-      video.src = url
-    })
-  }
 
   private getFormat(file: File): ImportFormat {
     const mime = file.type.toLowerCase()

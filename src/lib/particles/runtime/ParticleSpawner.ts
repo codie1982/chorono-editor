@@ -3,7 +3,7 @@
 // Computes the set of ParticleInstance spawn params for a given emitter config
 // and current time. Pure — no side-effects, no state.
 
-import type { Vec2, ColorValue, Layer } from '@/lib/types'
+import type { Vec2, ColorValue } from '@/lib/types'
 import type {
   ParticleEmitterConfig, ParticleEmitterData, ParticleVisualConfig,
   ParticleRandomConfig, ParticleAnimationConfig, RangeNumber,
@@ -11,6 +11,9 @@ import type {
 import { ParticleInstance, type ParticleInstanceParams } from './ParticleInstance'
 import { ParticlePool } from './ParticlePool'
 import { ParticleRandom } from './ParticleRandom'
+import { sampleRectangleEmission } from '../animation/EmissionArea'
+import { resolveEmissionGeometry, type EmissionGeometry, type SourceLayerContext } from './EmissionGeometry'
+export type { SourceLayerContext } from './EmissionGeometry'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,16 +41,13 @@ function lerpColor(a: ColorValue, b: ColorValue, t: number): ColorValue {
  * NOTE: Always consumes exactly 2 RNG values (even for 'point') to keep
  * the PRNG call sequence stable regardless of shape — this is the contract.
  *
- * `sourceLayer` is RELATIVE to the particle layer's own transform: the source
- * layer's world position minus this layer's world position is added on top
- * of the area sampling. The caller must pass `sourceLayerOffset` when using
- * shape='sourceLayer'.
+ * Referenced path/source geometry is resolved into emitter-local coordinates
+ * once per frame, including the two layers' independent parent transforms.
  */
 function computeSpawnPosition(
   rng: ParticleRandom,
   cfg: ParticleEmitterConfig,
-  sourceLayerOffset?: Vec2,
-  sourceLayerHalfSize?: { hw: number; hh: number },
+  sourceGeometry?: EmissionGeometry,
 ): Vec2 {
   const area = cfg.area ?? {}
 
@@ -61,17 +61,15 @@ function computeSpawnPosition(
     case 'rectangle': {
       const hw = (area.width  ?? 100) / 2
       const hh = (area.height ?? 100) / 2
-      return {
-        x: rng.range(-hw, hw),
-        y: rng.range(-hh, hh),
-      }
+      return sampleRectangleEmission(rng.next(), rng.next(), hw, hh, !!area.emitFromEdge)
     }
 
     case 'circle': {
       // Uniform disk: sqrt prevents centre clustering
       const r    = area.radius ?? 50
       const angle = rng.next() * Math.PI * 2
-      const dist  = Math.sqrt(rng.next()) * r
+      const radial = rng.next()
+      const dist  = area.emitFromEdge ? r : Math.sqrt(radial) * r
       return {
         x: Math.cos(angle) * dist,
         y: Math.sin(angle) * dist,
@@ -87,62 +85,15 @@ function computeSpawnPosition(
     }
 
     case 'path': {
-      // Path emitter: delegate to point for now; full impl in Sprint P4
-      rng.next()
-      rng.next()
-      return { x: 0, y: 0 }
+      const u = rng.next(), v = rng.next()
+      return sourceGeometry?.(u, v) ?? { x: 0, y: 0 }
     }
 
     case 'sourceLayer': {
-      // Sample uniformly within the source layer's bounding box.
-      // sourceLayerOffset is the source's position relative to OUR layer,
-      // so the result is a layer-local coord. If the source has no size
-      // (e.g. it's a path with anchors), fall back to point at offset.
-      if (!sourceLayerOffset) {
-        rng.next(); rng.next()
-        return { x: 0, y: 0 }
-      }
-      if (!sourceLayerHalfSize) {
-        rng.next(); rng.next()
-        return { x: sourceLayerOffset.x, y: sourceLayerOffset.y }
-      }
-      return {
-        x: sourceLayerOffset.x + rng.range(-sourceLayerHalfSize.hw, sourceLayerHalfSize.hw),
-        y: sourceLayerOffset.y + rng.range(-sourceLayerHalfSize.hh, sourceLayerHalfSize.hh),
-      }
+      const u = rng.next(), v = rng.next()
+      return sourceGeometry?.(u, v) ?? { x: 0, y: 0 }
     }
   }
-}
-
-// ── Source-layer helper ───────────────────────────────────────────────────────
-//
-// Resolves a sourceLayerId into the offset + half-size the spawner needs.
-// Returns undefined if the source layer can't be found or has no size.
-
-export interface SourceLayerContext {
-  /** All scene layers (so the spawner can find the source by id) */
-  allLayers:        Layer[]
-  /** The particle emitter layer's OWN transform (used to compute relative offset) */
-  particleLayerX:   number
-  particleLayerY:   number
-}
-
-function resolveSourceLayer(
-  ctx:  SourceLayerContext,
-  cfg:  ParticleEmitterConfig,
-): { offset: Vec2; halfSize?: { hw: number; hh: number } } | undefined {
-  const id = cfg.area?.sourceLayerId
-  if (!id) return undefined
-  const src = ctx.allLayers.find(l => l.id === id)
-  if (!src) return undefined
-  const offset: Vec2 = {
-    x: src.transform.x - ctx.particleLayerX,
-    y: src.transform.y - ctx.particleLayerY,
-  }
-  if (src.size && src.size.width > 0 && src.size.height > 0) {
-    return { offset, halfSize: { hw: src.size.width / 2, hh: src.size.height / 2 } }
-  }
-  return { offset }
 }
 
 // ── Color selection ───────────────────────────────────────────────────────────
@@ -208,8 +159,8 @@ export function computeSpawnParams(
   const masterRng = new ParticleRandom(random.seed)
 
   // Resolve sourceLayer geometry once per frame (constant across all particles)
-  const srcGeom = (emitter.shape === 'sourceLayer' && sourceCtx)
-    ? resolveSourceLayer(sourceCtx, emitter)
+  const srcGeom = ((emitter.shape === 'sourceLayer' || emitter.shape === 'path') && sourceCtx)
+    ? resolveEmissionGeometry(sourceCtx, emitter)
     : undefined
 
   // Compute total particle count to simulate
@@ -248,7 +199,7 @@ export function computeSpawnParams(
     // 2. spawnXY (2 slots consumed inside)
     const spawnPos = computeSpawnPosition(
       masterRng, emitter,
-      srcGeom?.offset, srcGeom?.halfSize,
+      srcGeom,
     )
 
     // 3. lifetime

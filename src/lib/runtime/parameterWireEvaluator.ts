@@ -76,7 +76,7 @@ function readWireSource(
   // Layer property — try animated override first, fall back to static value
   const key = paramRefKey(source)
   const animated = overrides.get(key)
-  if (animated !== undefined) return animated
+  if (animated !== undefined) return typeof animated === 'number' && Number.isFinite(animated) ? animated : null
 
   const layer = layers.find((l) => l.id === source.layerId)
   if (!layer) return null

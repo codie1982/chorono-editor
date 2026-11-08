@@ -9,15 +9,17 @@ import {
   type CurveViewport, type ValueRange,
 } from '@/lib/timeline/curveMath'
 import { useCurveDrag } from './hooks/useCurveDrag'
+import { useBezierHandleDrag } from './hooks/useBezierHandleDrag'
+import { insertCurveKeyframe, makeReplaceCurveKeysCmd, makeCurveKeyframeChangesCmd } from '@/lib/timeline/curveEditing'
 import {
-  makeUpdateEasingCmd, makeAddKfCmd, makeDeleteKfCmd, makeUpdateKfValueCmd,
+  makeUpdateEasingCmd, makeDeleteKfCmd, makeUpdateKfValueCmd,
   makeMirrorTimingCmd, makeFlattenSegmentCmd, makeReverseValuesCmd,
   type KfValueRef,
 } from '@/lib/editor/commands-keyframe'
-import { evaluateTrack } from '@/lib/evaluator'
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { TangentMode } from '@/lib/types'
 import { nextKfId } from '@/lib/defaults'
+import { isScalarNumericTrack } from '@/lib/animation/typedValues'
 import ContextMenu, { useContextMenu, type MenuItem } from '@/components/ui/ContextMenu'
 import type { EasingType } from '@/lib/types'
 import {
@@ -46,8 +48,8 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
  * Shows every animated property of the selected layer as a colour-coded
  * curve on a shared time × value plot. Click anywhere on the plot to seek;
  * drag a keyframe node to retime (X) or revalue (Y) it in real time. Bezier
- * tangent handles for fully custom easing are a follow-up — for now, the
- * built-in easing types (linear / ease* / customBezier) are reflected in
+ * tangent handles edit custom easing directly. Built-in easing types
+ * (linear / ease* / customBezier) are reflected in
  * the sampled curve so the picture matches playback exactly.
  *
  * Non-numeric tracks (string / boolean / color) are hidden — they don't
@@ -83,7 +85,7 @@ export default function CurveEditor({
     return timeline.tracks.filter((t) =>
       t.target.startsWith(prefix) &&
       t.keyframes.length > 0 &&
-      typeof t.keyframes[0].value === 'number',
+      isScalarNumericTrack(t),
     )
   }, [timeline, layer])
 
@@ -103,6 +105,8 @@ export default function CurveEditor({
   // curves with very different value ranges (e.g. opacity 0–1 vs. x 0–1000)
   // become visually comparable at the same height.
   const [normalizeMode, setNormalizeMode] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [frozenRanges, setFrozenRanges] = useState<{ range: ValueRange; tracks: Map<string, ValueRange>; normalized: boolean } | null>(null)
 
   const perTrackRanges = useMemo((): Map<string, ValueRange> => {
     const m = new Map<string, ValueRange>()
@@ -141,17 +145,16 @@ export default function CurveEditor({
   // useEffect[] would miss the late mount).
   const [size, setSize] = useState({ w: 600, h: 320 })
   const containerCb = useCallback((el: HTMLDivElement | null) => {
-    containerRef.current = el
     // Tear down any previous observer (re-attach when remount happens).
     if (roRef.current) { roRef.current.disconnect(); roRef.current = null }
     if (!el) return
     // Measure once immediately so the first paint already uses real dims.
     const r = el.getBoundingClientRect()
-    setSize({ w: Math.max(200, r.width), h: Math.max(160, r.height) })
+    setSize({ w: Math.max(1, r.width), h: Math.max(1, r.height) })
     // Then keep tracking subsequent resizes (split drags, fullscreen, …).
     const ro = new ResizeObserver(() => {
       const rr = el.getBoundingClientRect()
-      setSize({ w: Math.max(200, rr.width), h: Math.max(160, rr.height) })
+      setSize({ w: Math.max(1, rr.width), h: Math.max(1, rr.height) })
     })
     ro.observe(el)
     roRef.current = ro
@@ -174,12 +177,12 @@ export default function CurveEditor({
   }, [duration])
 
   const range: ValueRange = useMemo(
-    () => valueRangeOverride ?? unionValueRange(visibleTracks) ?? { min: -1, max: 1 },
-    [valueRangeOverride, visibleTracks],
+    () => frozenRanges?.range ?? valueRangeOverride ?? unionValueRange(visibleTracks) ?? { min: -1, max: 1 },
+    [frozenRanges, valueRangeOverride, visibleTracks],
   )
 
-  const plotW = Math.max(50, size.w - LEFT_GUTTER - 8)
-  const plotH = Math.max(50, size.h - TOP_GUTTER - BOTTOM_PAD)
+  const plotW = Math.max(1, size.w - LEFT_GUTTER - 8)
+  const plotH = Math.max(1, size.h - TOP_GUTTER - BOTTOM_PAD)
   const viewport: CurveViewport = {
     startMs: viewStartMs, endMs: viewEndMs,
     range, widthPx: plotW, heightPx: plotH,
@@ -188,10 +191,10 @@ export default function CurveEditor({
   // Per-track viewport resolver — returns viewport with per-track range when
   // normalizeMode is on; falls back to shared range when off.
   const getTrackViewport = useCallback((target: string): CurveViewport => {
-    if (!normalizeMode) return viewport
-    const r = perTrackRanges.get(target) ?? range
+    if (!(frozenRanges?.normalized ?? normalizeMode)) return viewport
+    const r = (frozenRanges?.tracks ?? perTrackRanges).get(target) ?? range
     return { ...viewport, range: r }
-  }, [normalizeMode, perTrackRanges, viewport, range])
+  }, [frozenRanges, normalizeMode, perTrackRanges, viewport, range])
 
   // ── Pointer mapping (client → SVG-plot-local) ─────────────────────────────
   const clientToLocal = useCallback((clientX: number, clientY: number) => {
@@ -234,9 +237,6 @@ export default function CurveEditor({
   //   Add a `graphType: 'value' | 'speed'` state and a curve-sampling fork
   //   that returns dy/dt instead of y. Renderer reuses the same SVG path
   //   pipeline (just different sampler).
-  // TODO(big-feature): Normalize mode — per-track Y rescale to [0,1] so
-  //   curves with very different ranges (opacity 0–1 vs. x 0–1000) become
-  //   visually comparable. State flag + per-track range override in viewport.
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   // F = fit selected · A = fit all · H = toggle handles. Only fire while the
@@ -314,12 +314,12 @@ export default function CurveEditor({
     if (!selectedTimelineId || selectedKfIds.size === 0) return
     const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
     if (!tl) return
-    interface KfRef { target: string; kfId: string; fromEasing: EasingType }
+    interface KfRef { target: string; kfId: string; original: Keyframe }
     const refs: KfRef[] = []
     for (const tr of tl.tracks) {
       for (const k of tr.keyframes) {
         if (selectedKfIds.has(k.id)) {
-          refs.push({ target: tr.target, kfId: k.id, fromEasing: (k.easing?.type ?? 'easeOut') as EasingType })
+          refs.push({ target: tr.target, kfId: k.id, original: k })
         }
       }
     }
@@ -330,12 +330,13 @@ export default function CurveEditor({
     editor.dispatchCommand({
       label: `Set Easing: ${type} (${refs.length})`,
       execute: (s) => refs.reduce((sc, r) => updateKfEasing(sc, selectedTimelineId, r.target, r.kfId, toEasing as { type: EasingType }), s),
-      undo:    (s) => refs.reduce((sc, r) => updateKfEasing(sc, selectedTimelineId, r.target, r.kfId, { type: r.fromEasing }), s),
+      undo:    (s) => refs.reduce((sc, r) => mapKfInScene(sc, selectedTimelineId, r.target, r.kfId, () => r.original), s),
     })
   }, [scene.timelines, selectedTimelineId, selectedKfIds, editor])
 
   // ── Bulk tangent mode — applies to all selected kfs across all tracks ────
   const applyTangentToSelected = useCallback((mode: TangentMode) => {
+    if (mode === 'auto') return // The automatic tangent solver is not available.
     if (!selectedTimelineId || selectedKfIds.size === 0) return
     const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
     if (!tl) return
@@ -393,210 +394,49 @@ export default function CurveEditor({
     onSelectKeyframes(new Set())
   }, [scene.timelines, selectedTimelineId, selectedKfIds, editor, onSelectKeyframes])
 
-  // ── Add-keyframe helper — used by segment-dblclick and context menu ──────
-  // Evaluates the track at `ms` so the inserted keyframe sits ON the curve
-  // (no visual jump in the interpolated value). New keyframe inherits the
-  // previous keyframe's easing so the segment shape continues naturally.
+  // Split supported raw easing curves exactly; complex modifier/controller
+  // pipelines require baking rather than re-applying their evaluated output.
   const addKeyframeAt = useCallback((trackTarget: string, ms: number) => {
     if (!selectedTimelineId) return
-    const tl = scene.timelines.find((t) => t.id === selectedTimelineId)
+    const tl = editor.getScene().timelines.find((t) => t.id === selectedTimelineId)
     const tr = tl?.tracks.find((t) => t.target === trackTarget)
     if (!tr) return
-    const value = evaluateTrack(tr, ms)
-    if (value == null) return
-    // Find the previous kf to inherit its easing type so the curve doesn't
-    // visually kink at the inserted point.
-    const sorted = [...tr.keyframes].sort((a, b) => a.timeMs - b.timeMs)
-    const prev = [...sorted].reverse().find((k) => k.timeMs <= ms)
-    const easing = prev?.easing ?? { type: 'easeOut' as const }
-    editor.dispatchCommand(makeAddKfCmd(selectedTimelineId, trackTarget, {
-      id: nextKfId(), timeMs: Math.round(ms), value, easing,
-    }))
-  }, [scene.timelines, selectedTimelineId, editor])
+    const result = insertCurveKeyframe(tr, ms, nextKfId)
+    if (!result.ok) {
+      if (result.existingId) onSelectKeyframes(new Set([result.existingId]))
+      setNotice(result.reason)
+      return
+    }
+    editor.dispatchCommand(makeReplaceCurveKeysCmd(selectedTimelineId, tr, result.track))
+    setSelectedSegment(null)
+    onSelectKeyframes(new Set(result.insertedIds))
+    setNotice(result.message ?? null)
+  }, [selectedTimelineId, editor, onSelectKeyframes])
 
-  // ── Drag controller ───────────────────────────────────────────────────────
+  // Freeze value ranges during an edit so auto-fit cannot move the plot under
+  // the pointer. Each hook also captures the same per-track viewport.
+  const freezeRanges = () => {
+    setNotice(null)
+    setFrozenRanges({ range, tracks: perTrackRanges, normalized: normalizeMode })
+  }
+  const releaseRanges = () => setFrozenRanges(null)
   const drag = useCurveDrag({
-    scene, editor, viewport,
-    timelineId: selectedTimelineId, clientToLocal,
+    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal,
+    onDragStart: freezeRanges, onDragEnd: releaseRanges, onWarning: setNotice,
   })
-
-  // ── Bezier-handle drag — for customBezier easing on a segment ────────────
-  //
-  // Each customBezier kf carries `easing.bezier = {cx1, cy1, cx2, cy2}` in
-  // normalized [0,1] easing-space. We render P1 (orange) and P2 (cyan)
-  // visually positioned on the segment between kf[i] and kf[i+1], anchored
-  // to those kfs. Dragging maps the pointer back into normalized space
-  // and dispatches makeUpdateEasingCmd through the transaction system so
-  // we get a single undo step per drag.
-  interface BezierDragRef {
-    kfA:        Keyframe           // segment start (the one whose easing we edit)
-    kfB:        Keyframe           // segment end (for axis remapping)
-    trackTarget: string
-    handle:     'p1' | 'p2'
-    originalBezier: { cx1: number; cy1: number; cx2: number; cy2: number }
-  }
-  const bezierDragRef = useRef<BezierDragRef | null>(null)
-
-  const beginBezierDrag = (
-    e: React.PointerEvent<SVGElement>,
-    kfA: Keyframe, kfB: Keyframe, trackTarget: string, handle: 'p1' | 'p2',
-  ) => {
-    if (!selectedTimelineId) return
-    if (kfA.easing?.type !== 'customBezier') return
-    e.stopPropagation()
-    e.preventDefault()
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
-    bezierDragRef.current = {
-      kfA, kfB, trackTarget, handle,
-      originalBezier: { ...(kfA.easing.bezier ?? DEFAULT_BEZIER) },
-    }
-    editor.beginTransaction()
-  }
-
-  const moveBezierDrag = useCallback((e: PointerEvent) => {
-    const d = bezierDragRef.current
-    if (!d) return
-    const { x, y } = clientToLocal(e.clientX, e.clientY)
-    // Convert SVG-local px → time/value coords
-    const ms  = viewStartMs + (x / plotW) * Math.max(1, viewEndMs - viewStartMs)
-    const span = Math.max(0.0001, range.max - range.min)
-    const norm = (plotH - y) / plotH
-    const val  = range.min + norm * span
-    // Remap to normalized [0,1] easing space anchored at the segment.
-    const dt = d.kfB.timeMs - d.kfA.timeMs || 1
-    const dv = (d.kfB.value as number) - (d.kfA.value as number) || 1
-    // X must stay in [0,1] so easing remains monotone in time; Y may
-    // overshoot for bounce/back-style curves.
-    const cxRaw = (ms  - d.kfA.timeMs) / dt
-    const cyRaw = (val - (d.kfA.value as number)) / dv
-    let cx = Math.max(0, Math.min(1, cxRaw))
-    let cy = Math.max(-0.5, Math.min(1.5, cyRaw))
-
-    // ── Weighted-tangent axis lock (BL-40) ─────────────────────────────
-    // Shift → adjust WEIGHT (handle length along its original direction).
-    // Alt   → adjust ANGLE  (preserve original length, rotate handle).
-    // No modifier → free 2D drag (default — both weight and angle change).
-    //
-    // For P1 the handle vector is from (0,0); for P2 it's from (1,1).
-    // Project / scale the new (cx, cy) in that handle's local frame.
-    if (e.shiftKey || e.altKey) {
-      const origP = d.handle === 'p1'
-        ? { ox: 0, oy: 0, vx: d.originalBezier.cx1,     vy: d.originalBezier.cy1 }
-        : { ox: 1, oy: 1, vx: d.originalBezier.cx2 - 1, vy: d.originalBezier.cy2 - 1 }
-      const newVx = cx - origP.ox
-      const newVy = cy - origP.oy
-      const origLen2 = origP.vx * origP.vx + origP.vy * origP.vy
-      if (origLen2 > 1e-6) {
-        if (e.shiftKey) {
-          // Project (newV) onto origV — weight = magnitude along original dir
-          const scale = (newVx * origP.vx + newVy * origP.vy) / origLen2
-          cx = origP.ox + scale * origP.vx
-          cy = origP.oy + scale * origP.vy
-          cx = Math.max(0, Math.min(1, cx))
-        } else {
-          // Alt: preserve original length, just rotate to new direction
-          const newLen = Math.hypot(newVx, newVy)
-          if (newLen > 1e-6) {
-            const origLen = Math.sqrt(origLen2)
-            cx = origP.ox + (newVx / newLen) * origLen
-            cy = origP.oy + (newVy / newLen) * origLen
-            cx = Math.max(0, Math.min(1, cx))
-          }
-        }
-      }
-    }
-
-    // ── Tangent-mode-aware mutation ───────────────────────────────────
-    // 'broken' (default) → only the dragged handle moves.
-    // 'aligned'          → the OTHER handle mirrors across the keyframe so
-    //                      the two tangent lines stay collinear (smooth curve).
-    //                      P1 sits in [0,1]×any near kfA; "mirror across kfA"
-    //                      means reflect (cx, cy) through (0,0) but constrained
-    //                      to live near kfB. The simple, well-behaved choice is
-    //                      reflection through the segment midpoint (0.5, 0.5):
-    //                          mirrored = (1 - cx, 1 - cy).
-    //                      That keeps both handles inside the segment box and
-    //                      gives a visually symmetric S-curve out of the box.
-    const mode = (d.kfA.tangentMode ?? 'broken') as 'broken' | 'aligned' | 'auto' | 'linear'
-    let nextBezier = d.handle === 'p1'
-      ? { ...d.originalBezier, cx1: cx, cy1: cy }
-      : { ...d.originalBezier, cx2: cx, cy2: cy }
-    if (mode === 'aligned') {
-      if (d.handle === 'p1') {
-        nextBezier = { ...nextBezier, cx2: 1 - cx, cy2: 1 - cy }
-      } else {
-        nextBezier = { ...nextBezier, cx1: 1 - cx, cy1: 1 - cy }
-      }
-    }
-    // TODO(big-feature): 'auto' mode — solve handles from neighbouring kf
-    //   tangent (Catmull-Rom or Bessel). Until that lands, treat as 'broken'.
-
-    // Apply to live scene via previewTransaction so the curve re-samples.
-    const nextScene: ChronoScene = {
-      ...scene,
-      timelines: scene.timelines.map((tl) => tl.id !== selectedTimelineId ? tl :
-        { ...tl, tracks: tl.tracks.map((t) => t.target !== d.trackTarget ? t :
-          { ...t, keyframes: t.keyframes.map((k) => k.id !== d.kfA.id ? k :
-            { ...k, easing: { type: 'customBezier', bezier: nextBezier } }) }) }),
-    }
-    editor.previewTransaction(nextScene)
-  }, [scene, editor, selectedTimelineId, viewStartMs, viewEndMs, plotW, plotH, range, clientToLocal])
-
-  const endBezierDrag = useCallback(() => {
-    const d = bezierDragRef.current
-    if (!d) return
-    bezierDragRef.current = null
-    // Pull final bezier from the live (preview) scene so we commit the
-    // ACTUAL last position, not the cached snapshot.
-    const liveTl = editor.scene.timelines.find((tl) => tl.id === selectedTimelineId)
-    const liveTk = liveTl?.tracks.find((t) => t.target === d.trackTarget)
-    const liveKf = liveTk?.keyframes.find((k) => k.id === d.kfA.id)
-    const finalEasing = liveKf?.easing ?? { type: 'customBezier' as const, bezier: d.originalBezier }
-    const fromEasing  = { type: 'customBezier' as const, bezier: d.originalBezier }
-    editor.commitTransaction(makeUpdateEasingCmd(
-      selectedTimelineId!, d.trackTarget, d.kfA.id, fromEasing, finalEasing,
-    ))
-  }, [editor, selectedTimelineId])
-
-  useEffect(() => {
-    // Single global handlers — listening only while a handle drag is in flight.
-    if (!bezierDragRef.current) return
-    const onMove = (e: PointerEvent) => moveBezierDrag(e)
-    const onUp   = ()              => endBezierDrag()
-    const onKey  = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        bezierDragRef.current = null
-        editor.cancelTransaction()
-      }
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup',   onUp)
-    window.addEventListener('keydown',     onKey)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup',   onUp)
-      window.removeEventListener('keydown',     onKey)
-    }
-    // Re-arm after every render — the ref is the source of truth.
+  const bezierDrag = useBezierHandleDrag({
+    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal,
+    onDragStart: freezeRanges, onDragEnd: releaseRanges,
   })
-
-  // Global pointermove / pointerup once a drag is active. Single effect
-  // (rather than per-node listeners) avoids handler-ordering races during
-  // multi-track interaction.
+  const beginBezierDrag = (event: React.PointerEvent<SVGElement>, a: Keyframe, b: Keyframe,
+    target: string, handle: 'p1' | 'p2') => {
+    drag.cancel()
+    bezierDrag.begin(event, a, b, target, handle)
+  }
   useEffect(() => {
-    if (!drag.isDragging) return
-    const onMove = (e: PointerEvent) => drag.move(e)
-    const onUp   = ()              => drag.end()
-    const onKey  = (e: KeyboardEvent) => { if (e.key === 'Escape') drag.cancel() }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup',   onUp)
-    window.addEventListener('keydown',     onKey)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup',   onUp)
-      window.removeEventListener('keydown',     onKey)
-    }
-  }, [drag])
+    drag.cancel()
+    bezierDrag.cancel()
+  }, [selectedTimelineId, selectedLayerId, drag.cancel, bezierDrag.cancel])
 
   // ── Plot drag — three modes selected by modifier at pointerdown ──────────
   //
@@ -630,6 +470,7 @@ export default function CurveEditor({
   const onPlotPointerDown = (e: React.PointerEvent<SVGRectElement>) => {
     if (e.button !== 0 || drag.isDragging) return
     e.preventDefault()
+    e.currentTarget.ownerSVGElement?.focus({ preventScroll: true })
     ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
     const { x, y } = clientToLocal(e.clientX, e.clientY)
     // Modifier-driven mode selection. Alt for lasso (rectangle-select kfs)
@@ -726,6 +567,7 @@ export default function CurveEditor({
   // ── Wheel — still useful for quick zoom around cursor (no modifier),
   //          or pan with Shift (vertical wheel mapped to horizontal pan). ──
   const onWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    if (drag.isDragging || bezierDrag.active) return
     if (e.shiftKey) {
       const span = viewEndMs - viewStartMs
       const dx   = (e.deltaY / plotW) * span
@@ -764,7 +606,7 @@ export default function CurveEditor({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
-      ref={containerCb}
+      ref={containerRef}
       className="flex flex-col h-full bg-gray-950 relative overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -773,9 +615,8 @@ export default function CurveEditor({
       tabIndex={0}
     >
 
-      {/* Top bar — two rows:
-          Row 1: chart-wide toggles + curve legend
-          Row 2: (only when kfs selected) bulk easing / tangent / delete */}
+      {/* Reserve both toolbar rows even before selection: the first keyframe
+          pointerdown must not shift the SVG origin or shrink its viewport. */}
       <div className="flex flex-col border-b border-gray-800 bg-gray-900/70 shrink-0">
 
         {/* ── Row 1: toolbar + curve legend ──────────────────────────── */}
@@ -798,6 +639,7 @@ export default function CurveEditor({
             title="Normalize: rescale each curve to its own min/max so all curves fill the same height"
             onClick={() => setNormalizeMode((v) => !v)}
             active={normalizeMode}
+            disabled={drag.isDragging || bezierDrag.active}
           >Norm</ToolbarBtn>
           <ToolbarBtn
             title="Select all visible keyframes"
@@ -861,9 +703,10 @@ export default function CurveEditor({
           })}
         </div>
 
-        {/* ── Row 2: bulk easing/tangent/delete (only when kfs selected) ─ */}
-        {selectedKfIds.size > 0 && (
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-900/90 border-t border-gray-800/60 flex-wrap">
+        {/* Selection changes enable actions without changing chart geometry.
+            Keep one fixed-height row; narrow panels can scroll its actions. */}
+          <div role="toolbar" aria-label="Keyframe actions"
+            className="flex items-center gap-1 h-7 shrink-0 px-2 py-0.5 bg-gray-900/90 border-t border-gray-800/60 whitespace-nowrap overflow-x-auto overflow-y-hidden [&>button]:shrink-0">
             <span className="text-[9px] uppercase tracking-wider text-gray-600 font-semibold pr-1 shrink-0">
               Easing
             </span>
@@ -878,9 +721,10 @@ export default function CurveEditor({
               <button
                 key={type}
                 onClick={() => applyEasingToSelected(type)}
+                disabled={selectedKfIds.size === 0}
                 title={`Set easing to ${title} for selected keyframes`}
                 className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-800 hover:bg-blue-900
-                           text-gray-400 hover:text-blue-200 border border-gray-700 transition-colors"
+                           text-gray-400 hover:text-blue-200 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >{label}</button>
             ))}
 
@@ -891,16 +735,17 @@ export default function CurveEditor({
             </span>
             {([
               { mode: 'broken'  as TangentMode, label: 'Broken',  title: 'Broken — each handle moves independently' },
-              { mode: 'aligned' as TangentMode, label: 'Aligned', title: 'Aligned — handles stay collinear (smooth)' },
-              { mode: 'auto'    as TangentMode, label: 'Auto',    title: 'Auto — Catmull-Rom smooth tangent'        },
-              { mode: 'linear'  as TangentMode, label: 'Linear',  title: 'Linear — flat tangent (no overshoot)'     },
+              { mode: 'aligned' as TangentMode, label: 'Aligned', title: 'Mirror the two easing controls within this segment' },
+              { mode: 'auto'    as TangentMode, label: 'Auto (soon)', title: 'Automatic tangents are not available yet' },
+              { mode: 'linear'  as TangentMode, label: 'Linear',  title: 'Use straight linear interpolation for the segment' },
             ] as const).map(({ mode, label, title }) => (
               <button
                 key={mode}
                 onClick={() => applyTangentToSelected(mode)}
+                disabled={selectedKfIds.size === 0 || mode === 'auto'}
                 title={title}
                 className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-800 hover:bg-purple-900
-                           text-gray-400 hover:text-purple-200 border border-gray-700 transition-colors"
+                           text-gray-400 hover:text-purple-200 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >{label}</button>
             ))}
 
@@ -908,9 +753,10 @@ export default function CurveEditor({
 
             <button
               onClick={deleteSelectedKfs}
+              disabled={selectedKfIds.size === 0}
               title={`Delete ${selectedKfIds.size} selected keyframe${selectedKfIds.size !== 1 ? 's' : ''}`}
               className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-800 hover:bg-red-900
-                         text-gray-500 hover:text-red-300 border border-gray-700 transition-colors"
+                         text-gray-500 hover:text-red-300 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Delete ({selectedKfIds.size})
             </button>
@@ -919,13 +765,15 @@ export default function CurveEditor({
               {selectedKfIds.size} selected
             </span>
           </div>
-        )}
       </div>
 
+      <div ref={containerCb} className="flex-1 min-h-0 relative">
       <svg
         ref={svgRef}
+        tabIndex={0}
+        aria-label="Animation curves"
         width={size.w} height={size.h}
-        className="block flex-1 cursor-crosshair select-none"
+        className="block w-full h-full cursor-crosshair select-none"
         onWheel={onWheel}
       >
         {/* ── Left gutter: Y-axis value labels ─────────────────────────── */}
@@ -1037,7 +885,7 @@ export default function CurveEditor({
             if (selectedSegment?.trackTarget === t.target) {
               const a = sortedKfs.find((k) => k.id === selectedSegment.kfAId)
               const b = sortedKfs.find((k) => k.id === selectedSegment.kfBId)
-              if (a && b) {
+              if (a && b && sortedKfs.indexOf(b) === sortedKfs.indexOf(a) + 1) {
                 selSegD = buildCurvePath(
                   { ...t, keyframes: [a, b] },
                   { ...tvp, startMs: a.timeMs, endMs: b.timeMs,
@@ -1197,7 +1045,7 @@ export default function CurveEditor({
             for (let i = 0; i < sorted.length - 1; i++) {
               const kfA = sorted[i]
               const kfB = sorted[i + 1]
-              if (kfA.easing?.type !== 'customBezier') continue
+              if (kfA.easing?.type !== 'customBezier' || kfA.tangentMode === 'linear' || kfA.tangentMode === 'auto') continue
               if (typeof kfA.value !== 'number' || typeof kfB.value !== 'number') continue
               const bez = kfA.easing.bezier ?? DEFAULT_BEZIER
               const ax = msToX(tvp, kfA.timeMs),  ay = valueToY(tvp, kfA.value)
@@ -1251,8 +1099,7 @@ export default function CurveEditor({
             const color = pickTrackColor(t.target, i)
             const tvp = getTrackViewport(t.target)
             return t.keyframes.map((kf) => {
-              const isDragged = drag.preview != null && drag.isDragging
-                                && drag.preview.value === kf.value && drag.preview.ms === kf.timeMs
+              const isDragged = drag.preview?.kfId === kf.id
               const ms  = isDragged ? drag.preview!.ms    : kf.timeMs
               const val = isDragged ? drag.preview!.value : (kf.value as number)
               const cx = msToX(tvp, ms)
@@ -1282,26 +1129,24 @@ export default function CurveEditor({
                     })}
                     onMouseLeave={() => setHoveredKf(null)}
                     onPointerDown={(e) => {
+                      if (e.button !== 0) return
                       e.stopPropagation()
                       setHoveredKf(null)
-                      // Alt-drag duplicate: clone the keyframe first, then
-                      // begin drag on the new one. The original stays put;
-                      // the clone follows the cursor. Two undo steps
-                      // (add + move) — standard editor behaviour.
+                      bezierDrag.cancel()
+                      // Duplication belongs to the drag transaction. Escape
+                      // restores both the original scene and its selection.
                       if (e.altKey && selectedTimelineId) {
-                        const cloneId = nextKfId()
-                        const clone = { ...kf, id: cloneId }
-                        editor.dispatchCommand(makeAddKfCmd(selectedTimelineId, t.target, clone))
-                        onSelectKeyframes(new Set([cloneId]))
-                        drag.begin(e, clone, t.target)
+                        const previousSelection = new Set(selectedKfIds)
+                        const cloneId = drag.begin(e, kf, t.target, { duplicate: true,
+                          onCancel: () => onSelectKeyframes(previousSelection) })
+                        if (cloneId) onSelectKeyframes(new Set([cloneId]))
                         return
                       }
-                      // Update selection: replace unless Shift pressed
-                      const next = new Set(e.shiftKey ? selectedKfIds : [])
+                      const next = new Set(e.shiftKey || selectedKfIds.has(kf.id) ? selectedKfIds : [])
                       if (e.shiftKey && selectedKfIds.has(kf.id)) next.delete(kf.id)
                       else                                          next.add(kf.id)
                       onSelectKeyframes(next)
-                      drag.begin(e, kf, t.target)
+                      if (next.has(kf.id)) drag.begin(e, kf, t.target, { selectedIds: next })
                     }}
                     onDoubleClick={(e) => {
                       // Inline edit: open a small input over the kf node.
@@ -1333,6 +1178,7 @@ export default function CurveEditor({
           x2={LEFT_GUTTER + msToX(viewport, currentTimeMs)}
           y1={TOP_GUTTER} y2={TOP_GUTTER + plotH}
           stroke="#ef4444" strokeWidth={1.5} opacity={0.85}
+          pointerEvents="none"
         />
 
         {/* Lasso selection rectangle (visible while Alt+drag is active) */}
@@ -1348,6 +1194,7 @@ export default function CurveEditor({
           />
         )}
       </svg>
+      </div>
 
       {/* Inline value-edit input (kf double-click) ─────────────────────────
           Positioned absolutely over the SVG using the kf's pixel coords.
@@ -1388,7 +1235,8 @@ export default function CurveEditor({
                        focus:outline-none"
             style={{
               left: LEFT_GUTTER + editingKf.xPx - 40,
-              top:  TOP_GUTTER  + editingKf.yPx - 24,
+              top: (svgRef.current && containerRef.current
+                ? svgRef.current.getBoundingClientRect().top - containerRef.current.getBoundingClientRect().top : 0) + TOP_GUTTER + editingKf.yPx - 24,
             }}
           />
         )
@@ -1407,7 +1255,7 @@ export default function CurveEditor({
       {/* Status bar — drag readout / hover info / hint ─────────────────────── */}
       <div className="flex items-center gap-0 px-2 h-5 text-[9px] font-mono border-t border-gray-800
                       bg-gray-950/80 text-gray-600 shrink-0 select-none overflow-hidden">
-        {drag.preview ? (
+        {notice ? <span role="status" title={notice} className="text-amber-300 truncate">{notice}</span> : drag.preview ? (
           // Active drag — show time + value
           <span className="text-yellow-400">
             t = {Math.round(drag.preview.ms)}ms · v = {formatTickValue(drag.preview.value)}
@@ -1459,16 +1307,20 @@ export default function CurveEditor({
           if (typeof k.value !== 'number') return
           setEditingKf({
             trackTarget: ctxData.trackTarget, kfId: k.id,
-            xPx: msToX(viewport, k.timeMs),
-            yPx: valueToY(viewport, k.value),
+            xPx: msToX(getTrackViewport(ctxData.trackTarget), k.timeMs),
+            yPx: valueToY(getTrackViewport(ctxData.trackTarget), k.value),
             draft: String(k.value),
           })
         },
         setEasing:     (k, t) => setEasingFor(k, ctxData.trackTarget, t),
         deleteKf:      () => editor.dispatchCommand(makeDeleteKfCmd(selectedTimelineId!, ctxData.trackTarget, kf)),
         duplicateKf:   (k) => {
-          const clone = { ...k, id: nextKfId(), timeMs: k.timeMs + Math.max(100, frameMs) }
-          editor.dispatchCommand(makeAddKfCmd(selectedTimelineId!, ctxData.trackTarget, clone))
+          const step = Math.max(2, frameMs || 100)
+          let ms = k.timeMs + Math.max(100, frameMs)
+          while (track.keyframes.some(key => Math.abs(key.timeMs - ms) <= 1)) ms += step
+          if (ms > tl.durationMs) { setNotice('No free time remains after this keyframe. Alt-drag it into a free time instead.'); return }
+          const clone = { ...k, id: nextKfId(), timeMs: ms }
+          editor.dispatchCommand(makeCurveKeyframeChangesCmd(editor.getScene(), selectedTimelineId!, [{ target: ctxData.trackTarget, keyframe: clone, duplicate: true }]))
           onSelectKeyframes(new Set([clone.id]))
         },
         alignToFrame:  frameMs > 0 ? () => {

@@ -1,12 +1,13 @@
 // ── SM Override Blending (BL-09) ────────────────────────────────────────────
 // Cross-fade between two timelines' evaluated outputs during a state
-// transition. Both OverrideMaps are `property path → number`; we lerp each
+// transition. Both OverrideMaps contain typed values; we interpolate each
 // property the two states share so e.g. a layer's colour/position glides from
 // the "summer" value to the "winter" value with no opacity ghosting.
 //
 // alpha = 0 → fully `from`,  alpha = 1 → fully `to`.
 
 import type { OverrideMap } from '../evaluator'
+import { interpolateAnimatableValues } from '../animation/typedValues'
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
 
@@ -27,7 +28,7 @@ export function blendOverrides(from: OverrideMap, to: OverrideMap, alpha: number
   const out: OverrideMap = new Map(from)
   to.forEach((toVal, key) => {
     const fromVal = from.get(key)
-    out.set(key, fromVal === undefined ? toVal : fromVal * (1 - a) + toVal * a)
+    out.set(key, fromVal === undefined ? toVal : interpolateAnimatableValues(fromVal, toVal, a, key))
   })
   return out
 }

@@ -1,54 +1,56 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { ChronoScene } from '@/lib/types'
-import { AudioEngine } from '@/lib/audioEngine'
+import { AudioEngine, type AudioEngineOptions, type AudioEngineState, type AudioMeter, type AudioResourceSnapshot } from '@/lib/audioEngine'
+import { getAudioAssetService } from '@/lib/audio/AudioAssetService'
 
-interface Params {
+export interface AudioEngineParams extends AudioEngineOptions {
   scene: ChronoScene
   currentTimeMs: number
   isPlaying: boolean
   playbackSpeed: number
 }
+export interface AudioEngineHandle {
+  getResources: () => AudioResourceSnapshot
+  getState: () => AudioEngineState
+  subscribeMeter: (listener: (meter: AudioMeter) => void) => () => void
+}
+const idleState = (): AudioEngineState => ({ contextState: 'idle', masterVolume: 1,
+  meter: { peak: 0, rms: 0, clipped: false }, loadingAssetIds: [], errors: {}, sources: [] })
 
-/**
- * Owns a single AudioEngine for the lifetime of the editor.
- *
- *  - Loads audio assets when `scene.assets` changes
- *  - Calls engine.syncToTime on every time/play/speed change
- *  - Disposes the engine on unmount (closes AudioContext, revokes sources)
- */
-export function useAudioEngine({ scene, currentTimeMs, isPlaying, playbackSpeed }: Params): void {
+/** Effect ownership recreates the engine after React StrictMode's setup-cleanup
+ * cycle; late asset decodes may not revive the disposed graph. */
+export function useAudioEngine(params: AudioEngineParams): AudioEngineHandle {
   const engineRef = useRef<AudioEngine | null>(null)
-  if (engineRef.current === null) {
-    engineRef.current = new AudioEngine()
-  }
-
-  // ── Load / unload assets when the scene asset list changes ───────────────
-  useEffect(() => {
+  const latest = useRef(params); latest.current = params
+  const subscribers = useRef(new Map<(meter: AudioMeter) => void, (() => void) | null>())
+  const reconcile = useCallback(() => {
+    const value = latest.current
     const engine = engineRef.current
     if (!engine) return
-    const wanted = new Set<string>()
-    for (const asset of scene.assets) {
-      if (asset.type !== 'audio') continue
-      wanted.add(asset.id)
-      engine.loadAsset(asset)  // no-op if already loaded
-    }
-    // Nothing tracks removed audio assets explicitly; if needed in future,
-    // call engine.removeAsset for each id no longer in `wanted`.
-  }, [scene.assets])
-
-  // ── Reconcile playback every time/play/speed change ──────────────────────
-  useEffect(() => {
-    const engine = engineRef.current
-    if (!engine) return
-    engine.syncToTime(scene.layers, currentTimeMs, isPlaying, playbackSpeed)
-  }, [scene.layers, currentTimeMs, isPlaying, playbackSpeed])
-
-  // ── Cleanup on unmount ───────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      engineRef.current?.dispose()
-      engineRef.current = null
-    }
+    const prepared = engine.prepareForTime(value.scene, value.currentTimeMs, value.playbackSpeed, value)
+    if (prepared) void prepared.then(() => { if (engineRef.current === engine) reconcile() })
+    engine.syncToTime(value.scene, value.currentTimeMs, value.isPlaying, value.playbackSpeed, value)
   }, [])
+  useEffect(() => {
+    const engine = new AudioEngine(); engineRef.current = engine
+    for (const listener of Array.from(subscribers.current.keys())) subscribers.current.set(listener, engine.subscribeMeter(listener))
+    reconcile()
+    return () => {
+      for (const [listener, unsubscribe] of Array.from(subscribers.current)) { unsubscribe?.(); subscribers.current.set(listener, null) }
+      engine.dispose()
+      if (engineRef.current === engine) engineRef.current = null
+    }
+  }, [reconcile])
+  useEffect(reconcile, [params.scene, params.currentTimeMs, params.isPlaying, params.playbackSpeed,
+    params.overrides, params.timelineIds, params.masterVolume, params.getOverridesAtTime, reconcile])
+  const getState = useCallback(() => engineRef.current?.getState() ?? idleState(), [])
+  const getResources = useCallback(() => engineRef.current?.getResourceSnapshot(latest.current.scene.assets)
+    ?? { ...getAudioAssetService().getMemorySnapshot(), ...getAudioAssetService().describeAssets(latest.current.scene.assets) }, [])
+  const subscribeMeter = useCallback((listener: (meter: AudioMeter) => void) => {
+    subscribers.current.get(listener)?.()
+    subscribers.current.set(listener, engineRef.current?.subscribeMeter(listener) ?? null)
+    return () => { subscribers.current.get(listener)?.(); subscribers.current.delete(listener) }
+  }, [])
+  return { getState, getResources, subscribeMeter }
 }

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useLayoutEffect } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import {
@@ -8,6 +8,8 @@ import {
 } from '@/lib/editor/history'
 import type { CloneMetadata } from '@/lib/clone/CloneTypes'
 import { isCloneArrayCommand } from '@/lib/editor/commands-clone'
+import { AssetSourceOwner } from '@/lib/asset/sources'
+import { EditorDocumentLifetime } from '@/lib/editor/lifecycle/EditorDocumentLifetime'
 
 // ── Transaction ref ────────────────────────────────────────────────────────────
 // A transaction lets a drag op preview many intermediate scenes without each
@@ -24,6 +26,8 @@ export interface EditorStateReturn {
   canRedo: boolean
   getScene: () => ChronoScene
   getRevision: () => number
+  /** Runtime identity: resets abort old async work; edits and undo preserve it. */
+  getDocumentSignal: () => AbortSignal
   isTransactionActive: () => boolean
   dispatchCommand: (cmd: EditorCommand) => void
   beginTransaction: () => void
@@ -52,22 +56,49 @@ export interface EditorStateReturn {
  *
  * All scene mutations MUST go through dispatchCommand() or the transaction
  * helpers — never call setScene directly from a component.
+ *
+ * Owns original Blob URL leases for present/past/future and the active transaction
+ * base. Replacing history acquires new source sets before releasing dropped ones;
+ * source handles never enter scene/history JSON. Decoded media has separate owners.
+ * Layout setup/cleanup supports StrictMode replay through the pool's deferred
+ * final release. Reset discards both history and an in-progress transaction.
  */
 export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   const [history, setHistory] = useState<HistoryState>(() => initHistory(initialScene))
   const txRef = useRef<Transaction | null>(null)
   const historyRef = useRef(history)
   const revisionRef = useRef(0)
+  const documentRef = useRef<EditorDocumentLifetime | null>(null)
+  if (!documentRef.current) documentRef.current = new EditorDocumentLifetime()
+  const sourcesRef = useRef<AssetSourceOwner | null>(null)
+  if (!sourcesRef.current) sourcesRef.current = new AssetSourceOwner()
+  /** Reconcile retained immutable asset arrays, including an asset-less preview's
+   * base. The owner coalesces repeated arrays across history states. */
+  const syncSources = useCallback((value: HistoryState) => {
+    const scenes = [value.present, ...value.past, ...value.future]
+    if (txRef.current) scenes.push(txRef.current.baseScene)
+    sourcesRef.current!.update(scenes.map(item => item.assets))
+  }, [])
+  useLayoutEffect(() => {
+    documentRef.current!.start()
+    syncSources(historyRef.current); sourcesRef.current!.start()
+    return () => { documentRef.current!.stop(); sourcesRef.current!.stop() }
+  }, [syncSources])
+  /** Apply a synchronous state transition and reconcile source ownership even for
+   * no-op transaction setup or a throwing command. A failed command keeps the
+   * previous history; any changed transaction ref is still reflected by the owner. */
   const updateHistory = useCallback((update: (prev: HistoryState) => HistoryState) => {
     const prev = historyRef.current
-    const next = update(prev)
+    let next = prev
+    try { next = update(prev) } finally { syncSources(next) }
     if (next === prev) return
     historyRef.current = next
     revisionRef.current++
     setHistory(next)
-  }, [])
+  }, [syncSources])
   const getScene = useCallback(() => historyRef.current.present, [])
   const getRevision = useCallback(() => revisionRef.current, [])
+  const getDocumentSignal = useCallback(() => documentRef.current!.signal, [])
   const isTransactionActive = useCallback(() => txRef.current !== null, [])
 
   // BL-59 — Editor-level clone/array metadata, kept OUTSIDE scene JSON.
@@ -128,6 +159,8 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
 
   // ── Hard reset (used by "Clear" — bypasses undo on purpose) ──────────────
   const resetScene = useCallback((next: ChronoScene) => {
+    documentRef.current!.replace()
+    txRef.current = null
     updateHistory(() => initHistory(next))
     setLayerMetaById({})
   }, [updateHistory])
@@ -147,7 +180,7 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   }, [])
 
   return {
-    scene, canUndo, canRedo, getScene, getRevision, isTransactionActive,
+    scene, canUndo, canRedo, getScene, getRevision, getDocumentSignal, isTransactionActive,
     dispatchCommand,
     beginTransaction, previewTransaction, commitTransaction, cancelTransaction,
     undo, redo, resetScene,

@@ -49,14 +49,22 @@ function escapeHtml(s: string): string {
 }
 
 export function exportHTML(scene: ChronoScene, opts: HTMLExportOptions = {}): HTMLExportResult {
-  const { width, height } = scene.composition
-  const title      = opts.title ?? scene.composition.id ?? 'Chorono Animation'
+  return renderHTMLDocument(scene.composition,embedJson(scene),opts)
+}
+
+/** Render the existing standalone document around an already script-escaped
+ * JSON string. Output owners preflight/own serialization and `<`/`>` expansion
+ * before calling this template; raw exportHTML keeps its original contract.
+ * composition is borrowed, dimensions stay CSS/physical composition pixels.
+ * sceneJson MUST have literal `<` and `>` replaced by JSON unicode escapes.
+ * No IO, native handles, mutation or schema/renderer behavior is introduced. */
+export function renderHTMLDocument(composition:ChronoScene['composition'],sceneJson:string,opts:HTMLExportOptions={}):HTMLExportResult {
+  const { width, height } = composition
+  const title      = opts.title ?? composition.id ?? 'Chorono Animation'
   const runtimeUrl = opts.runtimeUrl ?? DEFAULT_RUNTIME_URL
   const loop       = opts.loop ?? true
   const autoplay   = opts.autoplay ?? true
   const pageBg     = opts.pageBackground ?? '#111'
-
-  const sceneJson = embedJson(scene)
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -89,5 +97,5 @@ export function exportHTML(scene: ChronoScene, opts: HTMLExportOptions = {}): HT
 </html>
 `
 
-  return { html, filename: `${scene.composition.id || 'scene'}.html` }
+  return { html, filename: `${composition.id || 'scene'}.html` }
 }

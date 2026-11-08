@@ -37,6 +37,8 @@ export default function DopeSheetToolbar({
       <div className="toolbar-row">
         {/* Filter buttons */}
         <button
+          type="button"
+          aria-pressed={uiState.filterAnimatedOnly}
           className={`toolbar-btn ${uiState.filterAnimatedOnly ? 'active' : ''}`}
           onClick={toggleAnimatedOnly}
           title="Show only tracks with keyframes"
@@ -45,6 +47,8 @@ export default function DopeSheetToolbar({
         </button>
 
         <button
+          type="button"
+          aria-pressed={uiState.filterSelectedObjectOnly}
           className={`toolbar-btn ${uiState.filterSelectedObjectOnly ? 'active' : ''}`}
           onClick={toggleSelectedOnly}
           title="Show only selected layer"
@@ -59,6 +63,7 @@ export default function DopeSheetToolbar({
           type="text"
           className="toolbar-search"
           placeholder="Search tracks..."
+          aria-label="Search Dope Sheet tracks"
           value={uiState.filterText}
           onChange={e => handleSearchChange(e.target.value)}
         />
@@ -67,6 +72,8 @@ export default function DopeSheetToolbar({
 
         {/* Snap toggle */}
         <button
+          type="button"
+          aria-pressed={settings.snapEnabled}
           className={`toolbar-btn ${settings.snapEnabled ? 'active' : ''}`}
           onClick={toggleSnap}
           title="Toggle snap to grid/frame"

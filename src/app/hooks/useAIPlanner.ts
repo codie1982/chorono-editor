@@ -38,6 +38,8 @@ export interface UseAIPlannerReturn {
   clear:     () => void
 }
 
+// TODO(remove-built-in-chat): Dahili sohbet kaldırıldığında bu hook ve
+// planner/checker istek akışı kaldırılacak. Paylaşılan MCP eylemleri korunacak.
 export function useAIPlanner({
   scene, dispatchCommand,
   currentTimeMs = 0,

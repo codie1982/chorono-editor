@@ -2,6 +2,13 @@
 
 [Repository home](../README.md) · [CLI package](../packages/cli/README.md)
 
+## Releases / Sürümler
+
+- [v0.2.0 release notes](releases/v0.2.0.md) / [Türkçe sürüm notları](tr/releases/v0.2.0.md)
+- [v0.2.0 validation and measurement scope](releases/v0.2.0-validation.md)
+- [Changelog](../CHANGELOG.md)
+- [Current 2D / 2.5D roadmap](tr/production-2d-roadmap.md)
+
 ## Install on your computer / Bilgisayarınıza kurun
 
 | Task / Konu | English | Türkçe |
@@ -31,6 +38,14 @@ Ajanla kullanım için kurulumu tamamlayın, editörü başlatın, tarayıcıda 
 
 ## Technical references / Teknik kaynaklar
 
+Local evidence linked under `artifacts/` (benchmark reports, recordings and renders) is intentionally ignored by Git and is not included in a fresh clone. The benchmark protocol and harness are versioned; reproducing measurements requires the portable fixtures described in the protocol. `outputs/` and `design-mockups/` are also local-only; curated distributable examples live in `examples/`.
+
+`artifacts/` bağlantılarındaki yerel kanıtlar (ölçüm raporları, kayıtlar ve render çıktıları) Git dışında tutulur; yeni klonlarda bulunmaz. Ölçüm protokolü ve araçları sürümlenir; tekrar ölçüm için protokolde açıklanan portable sahneler gerekir. `outputs/` ve `design-mockups/` da yereldir; dağıtılabilir örnekler `examples/` altında tutulur.
+
+- [Software engineering standards: SOLID, modules, reuse, documentation and handoff](../AGENTS.md#software-engineering-standards)
+- [Render resource ownership, shared mask/effect scratch pipeline and native regression checks](tr/render-resource-management.md)
+- [OPT0 renderer baseline protocol, reproducible browser harness and measured results](tr/performance-baseline.md)
+- [Frame layer indexing: snapshot ownership, renderer adapters and comparison protocol](tr/layer-indexing.md)
 - [MCP setup, tools, limits and smoke tests](tr/mcp.md)
 - [CLI lifecycle, skill distribution and maintainer packaging](tr/skills.md)
 - [CLI commands and package README](../packages/cli/README.md)

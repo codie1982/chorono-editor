@@ -11,7 +11,7 @@ export const IMPORT_ACCEPT = [
   // Video
   'video/mp4', 'video/quicktime', 'video/webm',
   // Audio
-  'audio/mpeg', 'audio/wav', 'audio/aac', 'audio/ogg',
+  'audio/mpeg', 'audio/wav', 'audio/aac', 'audio/ogg', 'audio/mp4', '.mp3', '.wav', '.aac', '.m4a', '.ogg',
   // Fonts (MIME + extension fallback — browsers are inconsistent here)
   'font/woff', 'font/woff2', 'font/ttf', 'font/otf', '.woff', '.woff2', '.ttf', '.otf',
   // Documents (Lottie JSON, dotLottie, Chorono scene)

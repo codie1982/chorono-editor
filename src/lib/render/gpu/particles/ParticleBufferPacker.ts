@@ -49,12 +49,24 @@ export class ParticleBufferPacker {
     return this.buffer
   }
 
-  private ensureCapacity(particleCount: number): void {
+  /** Required float capacity without allocation; GPU owners preflight both this
+   * staging store and matching VBO before prepareCapacity/pack. Includes existing
+   * 1.5x growth headroom, preserving old serializer output and reuse behavior. */
+  requiredCapacity(particleCount: number): number {
     const needed = particleCount * FLOATS_PER_PARTICLE
-    if (this.buffer.length < needed) {
-      this.buffer = new Float32Array(Math.ceil(needed * 1.5))
-    }
+    if (!Number.isSafeInteger(particleCount) || particleCount < 0 || !Number.isSafeInteger(needed)) throw new RangeError('Invalid particle capacity.')
+    return this.buffer.length < needed ? Math.ceil(needed * 1.5) : this.buffer.length
   }
+
+  /** Allocate the previously preflighted capacity. Standalone callers keep the
+   * existing unbudgeted serializer API; backend composition supplies admission. */
+  prepareCapacity(particleCount: number): void {
+    const length = this.requiredCapacity(particleCount)
+    if (length !== this.buffer.length) this.buffer = new Float32Array(length)
+  }
+
+  /** Release the CPU staging reference when its GPU workspace is reclaimed. */
+  clear(): void { this.buffer = new Float32Array(0) }
 
   /**
    * Packs alive particles into the staging buffer.
@@ -66,7 +78,7 @@ export class ParticleBufferPacker {
     relativeTime: number,
     layerAlpha:   number,
   ): number {
-    this.ensureCapacity(instances.length)
+    this.prepareCapacity(instances.length)
     const buf = this.buffer
     const starInner = cfg.particle.starInnerRatio ?? 0.4
 

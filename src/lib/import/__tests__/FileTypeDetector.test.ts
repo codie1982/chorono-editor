@@ -48,6 +48,13 @@ describe('FileTypeDetector — magic bytes', () => {
     expect(await det.detect(fileFromBytes(MP3_ID3, 'x.mp3'))).toBe('audio/mp3')
   })
 
+  it('routes M4A ftyp containers as audio rather than video', async () => {
+    const prefix = [0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]
+    expect(await det.detect(fileFromBytes(prefix, 'voice.m4a', 'audio/mp4'))).toBe('audio/aac')
+    expect(await det.detect(fileFromBytes(prefix, 'voice.m4a'))).toBe('audio/aac')
+    expect(await det.detect(fileFromBytes(prefix, 'movie.mp4', 'video/mp4'))).toBe('video/mp4')
+  })
+
   it('detects OGG', async () => {
     expect(await det.detect(fileFromBytes(OGG, 'x.ogg'))).toBe('audio/ogg')
   })
@@ -109,6 +116,10 @@ describe('FileTypeDetector — extension fallback', () => {
   it('returns unknown for unrecognized files', async () => {
     const f = fileFromBytes([0x00, 0x11, 0x22, 0x33], 'mystery.xyz')
     expect(await det.detect(f)).toBe('unknown')
+  })
+
+  it('recognizes M4A when its container header or MIME are unavailable', async () => {
+    expect(await det.detect(fileFromBytes([0, 1, 2, 3], 'voice.m4a'))).toBe('audio/aac')
   })
 })
 

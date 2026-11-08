@@ -1,3 +1,8 @@
+import { BoundedTextReader } from '../resources/io'
+import { GifImportService } from './gif'
+import { editorMediaPreparation } from '../resources/jobs'
+import { editorResourceBudget } from '../resources/budget'
+import { LottieMetadataReader } from './handlers/document/lottie/LottieMetadataReader'
 // ── initImportPipeline ────────────────────────────────────────────────────────
 //
 // Registers all built-in import handlers into the ImportManager singleton.
@@ -37,7 +42,7 @@ export function initImportPipeline(): void {
   _initialized = true
 
   // ── Asset handlers ──────────────────────────────────────────────────────────
-  importManager.registerHandler(new GifHandler())   // before ImageHandler — claims image/gif
+  importManager.registerHandler(new GifHandler(new GifImportService({ budget: editorResourceBudget, executor: editorMediaPreparation })))   // before ImageHandler — claims image/gif
   importManager.registerHandler(new ImageHandler())
   importManager.registerHandler(new SpriteSheetHandler())  // explicit format only (image/spritesheet)
   importManager.registerHandler(new VideoHandler())
@@ -45,9 +50,9 @@ export function initImportPipeline(): void {
   importManager.registerHandler(new FontHandler())
 
   // ── Document handlers ───────────────────────────────────────────────────────
-  importManager.registerHandler(new SvgDocumentHandler())
-  importManager.registerHandler(new LottieDocumentHandler())
-  importManager.registerHandler(new ChoronoSceneHandler())
+  importManager.registerHandler(new SvgDocumentHandler(new BoundedTextReader({ budget: editorResourceBudget, maxInputBytes: 16 * 1024 ** 2 })))
+  importManager.registerHandler(new LottieDocumentHandler(new LottieMetadataReader({ budget: editorResourceBudget })))
+  importManager.registerHandler(new ChoronoSceneHandler(new BoundedTextReader({ budget: editorResourceBudget })))
 }
 
 /**

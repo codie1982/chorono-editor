@@ -3,12 +3,13 @@ import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
 import {
-  exportRasterImage,
-  downloadBlob,
+  acquireRasterImage,
+  downloadOutput,
   type RasterFormat,
   type RasterBackground,
 } from '@/lib/export'
 import BaseExportDialog, { Field } from './BaseExportDialog'
+import {useOutputOperation} from './hooks/useOutputOperation'
 
 interface Props {
   scene: ChronoScene
@@ -20,6 +21,7 @@ interface Props {
   onExported?: (filename: string, warnings: string[]) => void
   /** Notify parent of failure. */
   onError?: (message: string) => void
+  documentSignal?:AbortSignal
 }
 
 const FORMATS: Array<{ id: RasterFormat; label: string; note: string }> = [
@@ -36,13 +38,14 @@ const SCALES = [1, 2, 3, 4] as const
  * client-side via RasterExportEngine + the shared CanvasRenderer.
  */
 export default function RasterExportDialog({
-  scene, assets, timeMs, onClose, onExported, onError,
+  scene, assets, timeMs, onClose, onExported, onError,documentSignal,
 }: Props) {
   const [format,      setFormat]      = useState<RasterFormat>('png')
   const [scale,       setScale]       = useState<number>(1)
   const [transparent, setTransparent] = useState(false)
   const [quality,     setQuality]     = useState(92)
-  const [busy,        setBusy]        = useState(false)
+  const operation=useOutputOperation(documentSignal)
+  const {busy,cancelling}=operation
 
   const { width, height } = scene.composition
   const outW = Math.round(width * scale)
@@ -51,24 +54,19 @@ export default function RasterExportDialog({
   const alphaLost = transparent && format === 'jpeg'
 
   const handleExport = async () => {
-    setBusy(true)
-    try {
-      const background: RasterBackground = transparent ? 'transparent' : 'scene'
-      const result = await exportRasterImage(scene, assets, {
+    const background: RasterBackground = transparent ? 'transparent' : 'scene'
+    await operation.run(signal=>acquireRasterImage(scene, assets, {
         format,
         timeMs,
         scale,
         background,
         quality: quality / 100,
-      })
-      downloadBlob(result.blob, result.filename)
+      },{signal}),lease=>{
+      const result=lease.value
+      downloadOutput(lease,value=>value.blob,result.filename)
       onExported?.(result.filename, result.warnings)
       onClose()
-    } catch (err) {
-      onError?.((err as Error).message)
-    } finally {
-      setBusy(false)
-    }
+    },onError)
   }
 
   return (
@@ -79,11 +77,11 @@ export default function RasterExportDialog({
       footer={
         <>
           <button
-            onClick={onClose}
-            disabled={busy}
+            onClick={busy?operation.cancel:onClose}
+            disabled={cancelling}
             className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50"
           >
-            Cancel
+            {cancelling?'Cancelling…':'Cancel'}
           </button>
           <button
             onClick={handleExport}
@@ -101,6 +99,7 @@ export default function RasterExportDialog({
             {FORMATS.map((f) => (
               <button
                 key={f.id}
+                disabled={busy}
                 onClick={() => setFormat(f.id)}
                 className={`p-2 rounded border text-left transition-colors
                   ${format === f.id
@@ -120,6 +119,7 @@ export default function RasterExportDialog({
             {SCALES.map((s) => (
               <button
                 key={s}
+                disabled={busy}
                 onClick={() => setScale(s)}
                 className={`py-1.5 rounded border text-xs transition-colors
                   ${scale === s
@@ -138,6 +138,7 @@ export default function RasterExportDialog({
             <input
               type="checkbox"
               checked={transparent}
+              disabled={busy}
               onChange={(e) => setTransparent(e.target.checked)}
               className="accent-blue-500"
             />
@@ -155,6 +156,7 @@ export default function RasterExportDialog({
           <Field label={`Quality — ${quality}%`}>
             <input
               type="range" min={10} max={100} value={quality}
+              disabled={busy}
               onChange={(e) => setQuality(Number(e.target.value))}
               className="w-full accent-blue-500"
             />

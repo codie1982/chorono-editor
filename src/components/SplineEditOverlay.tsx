@@ -13,6 +13,7 @@
 
 import type { Layer } from '@/lib/types'
 import type { SplineHandle } from '@/lib/types/spline'
+import type { Matrix2D } from '@/lib/geometry/Matrix2D'
 
 export type SplineHoverTarget =
   | { kind: 'point';   id: string }
@@ -23,6 +24,7 @@ export type SplineHoverTarget =
 interface SplineEditOverlayProps {
   layer: Layer
   zoom: number
+  worldMatrix: Matrix2D
   hover?: SplineHoverTarget
   selectedPointId?: string | null
 }
@@ -32,15 +34,16 @@ const HANDLE_DOT_R = 3.5
 const HOVER_COLOR  = '#F59E0B'
 const SELECT_COLOR = '#2563EB'
 
-export default function SplineEditOverlay({ layer, zoom, hover = null, selectedPointId = null }: SplineEditOverlayProps) {
+export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = null, selectedPointId = null }: SplineEditOverlayProps) {
   if (layer.type !== 'spline' || !layer.spline) return null
   const sp = layer.spline
   const points = Object.values(sp.points)
   if (points.length === 0) return null
 
-  const tx = layer.transform.x
-  const ty = layer.transform.y
-  const toScreen = (x: number, y: number) => ({ x: (tx + x) * zoom, y: (ty + y) * zoom })
+  const toScreen = (x: number, y: number) => {
+    const p = worldMatrix.applyToPoint({ x, y })
+    return { x: p.x * zoom, y: p.y * zoom }
+  }
 
   // Index handles by point id for quick lookup.
   const inH:  Record<string, SplineHandle> = {}

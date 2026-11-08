@@ -66,6 +66,7 @@ const EXTENSION_MAP: Record<string, ImportFormat> = {
   '.mp3':   'audio/mp3',
   '.wav':   'audio/wav',
   '.aac':   'audio/aac',
+  '.m4a':   'audio/aac',
   '.ogg':   'audio/ogg',
   // Font
   '.woff':  'font/woff',
@@ -95,6 +96,8 @@ const MIME_MAP: Record<string, ImportFormat> = {
   'video/webm':              'video/webm',
   'audio/mpeg':              'audio/mp3',
   'audio/wav':               'audio/wav',
+  'audio/x-wav':             'audio/wav',
+  'audio/wave':              'audio/wav',
   'audio/aac':               'audio/aac',
   'audio/ogg':               'audio/ogg',
   'audio/mp4':               'audio/aac',
@@ -122,6 +125,8 @@ export class FileTypeDetector {
     const magic = await this.readMagicBytes(file, 12)
     const byMagic = this.detectByMagic(magic, file.name)
     if (byMagic !== 'unknown') {
+      // MP4 is a container, not proof of a video stream. M4A shares its ftyp header.
+      if (byMagic === 'video/mp4' && (file.type.startsWith('audio/') || /\.m4a$/i.test(file.name))) return 'audio/aac'
       // dotLottie is a zip — check extension to confirm
       if (byMagic === 'application/dotlottie') {
         return this.isLottieExtension(file.name) ? 'application/dotlottie' : 'unknown'

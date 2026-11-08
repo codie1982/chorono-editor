@@ -4,6 +4,7 @@
 // provide their own implementations.
 
 import type { EditorMode } from './EditorMode'
+import type { AnimatableValue } from '../types'
 
 /** Dot-path reference to an animatable property, e.g. "layers.card.opacity". */
 export interface PropertyPath {
@@ -17,7 +18,7 @@ export interface PropertyPath {
 export interface PropertyValue {
   /** Dot-path that was evaluated, e.g. "layers.card.opacity". */
   path: string
-  value: number | boolean | string
+  value: AnimatableValue
 }
 
 export interface ITimeline {

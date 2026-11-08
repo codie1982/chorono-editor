@@ -1,124 +1,261 @@
-// ── OffscreenCanvasCache ──────────────────────────────────────────────────────
-//
-// Reusable offscreen canvas pool keyed by `key + version`. Used by:
-//   - GroupRenderer (precompose group contents)            [Sprint 6]
-//   - MaskRenderer  (render mask + content separately)     [Sprint 6]
-//   - Effect chain  (each effect output is one offscreen)  [Sprint 8]
-//
-// Lifecycle:
-//   1. Renderer asks for `get(key, version)`.
-//      → cache hit  : returns the canvas, marks lastUsed
-//      → cache miss : returns null, renderer renders fresh and calls set()
-//   2. set() inserts and evicts LRU if memory budget exceeded
-//   3. invalidate(key) on layer mutation — clears all versions of that key
-//
-// Memory accounting: width * height * 4 (RGBA). Default budget 64 MB.
-//
-// SKELETON: V1 ships with the API only — actual consumers wire it up in
-// Sprint 6 (groups/masks) and Sprint 8 (effects). Plain HTMLCanvasElement
-// is used here for broad compatibility; switch to OffscreenCanvas later if
-// renderer moves to a worker.
+import { canvasMemoryTracker } from '@/lib/resources/memory/CanvasMemoryTracker'
+import type { ResourceAllocator, ResourceReservation } from '@/lib/resources/budget'
 
+type CacheVersion = number | string
 interface CacheEntry {
-  canvas:   HTMLCanvasElement
-  version:  number
-  lastUsed: number   // ms epoch
-  bytes:    number   // for memory accounting
+  canvas: HTMLCanvasElement
+  version: CacheVersion
+  bytes: number
+  pixelBytes: number
+  lastUsed: number
+  owned: boolean
+  lost?: () => void
+  reservation?: ResourceReservation
+  pins: number
 }
-
 export interface OffscreenCanvasCacheOptions {
-  /** Hard memory cap in bytes. Default 64 MB. */
+  /** Retained + pending bytes; owned entries include UTF-16 key/version estimates. */
   maxBytes?: number
+  maxEntries?: number
+  /** Zero disables expiry for legacy borrowed set(). LOD supplies its own grace. */
+  maxIdleMs?: number
+  createCanvas?: (width: number, height: number) => HTMLCanvasElement
+  now?: () => number
+  /** Optional shared admission for OWNED stores; legacy set() remains borrowed
+   * and cannot preflight or take ownership of an existing external allocation. */
+  budget?: ResourceAllocator
 }
 
+/** Versioned LRU canvas cache. Legacy set() borrows an already allocated canvas;
+ * new getOrCreate() owns its output and admits bytes BEFORE allocation. Owned
+ * eviction/invalidation/expiry shrinks backing stores; borrowed legacy outputs
+ * remain untouched. No source scene, layer or draw callback is retained.
+ * A pending creation is reserved but never evicted/reused; reentrant clear()
+ * cancels its commit. Counters are cumulative, snapshots detached, one idle timer.
+ * Shared admission is optional; composition injects it for editor-owned caches.
+ * acquire() pins a result across local/global pressure and clear. Invalidated
+ * pinned entries retire and remain charged until their last lease is released.
+ * Legacy get/getOrCreate results are borrowed only until the next mutation;
+ * new consumers that allocate or retain a result must use acquire/finally.
+ */
 export class OffscreenCanvasCache {
-  private cache    = new Map<string, CacheEntry>()
-  private maxBytes: number
+  private cache = new Map<string, CacheEntry>()
   private usedBytes = 0
-  private counter   = 0   // monotonic clock for LRU
+  private pendingBytes = 0
+  private pendingEntries = 0
+  private retired = new Set<CacheEntry>()
+  private generation = 0
+  private timer?: ReturnType<typeof setTimeout>
+  private peakBytes = 0
+  private hits = 0
+  private misses = 0
+  private allocations = 0
+  private evictions = 0
+  private denials = 0
+  private failures = 0
+  private readonly maxBytes: number
+  private readonly maxEntries: number
+  private readonly maxIdleMs: number
+  private readonly allocate: NonNullable<OffscreenCanvasCacheOptions['createCanvas']>
+  private readonly now: () => number
+  private readonly budget?: ResourceAllocator
 
+  /** Creates no canvases or timers until the first admitted owned entry. */
   constructor(options: OffscreenCanvasCacheOptions = {}) {
-    this.maxBytes = options.maxBytes ?? 64 * 1024 * 1024
+    this.maxBytes = options.maxBytes ?? 64 * 1024 ** 2
+    this.maxEntries = options.maxEntries ?? 256
+    this.maxIdleMs = options.maxIdleMs ?? 0
+    if (![this.maxBytes, this.maxEntries, this.maxIdleMs].every(Number.isSafeInteger)
+      || this.maxBytes < 0 || this.maxEntries < 1 || this.maxIdleMs < 0 || this.maxIdleMs > 2147483647) {
+      throw new RangeError('Invalid canvas cache budget/capacity/idle duration.')
+    }
+    this.allocate = options.createCanvas ?? createOffscreen
+    this.now = options.now ?? (() => performance.now())
+    this.budget = options.budget
   }
 
-  /**
-   * Returns a cached canvas if `key` is present AND its stored version matches.
-   * Stale entries (wrong version) are removed and null is returned so the
-   * caller can render fresh.
-   */
-  get(key: string, version: number): HTMLCanvasElement | null {
+  /** Exact versions only; stale entries are released. Hits refresh LRU and idle age. */
+  get(key: string, version: CacheVersion): HTMLCanvasElement | null {
     const entry = this.cache.get(key)
-    if (!entry) return null
-    if (entry.version !== version) {
-      this.evict(key)
-      return null
+    if (!entry || entry.version !== version) {
+      if (entry) this.evict(key)
+      this.misses++; return null
     }
-    entry.lastUsed = ++this.counter
+    this.cache.delete(key); this.cache.set(key, entry)
+    entry.lastUsed = this.now(); this.hits++
+    entry.reservation?.touch()
     return entry.canvas
   }
 
-  /**
-   * Stores a canvas under (key, version). Evicts the previous entry for the
-   * same key. Triggers LRU eviction if the memory budget is exceeded.
-   */
-  set(key: string, version: number, canvas: HTMLCanvasElement): void {
-    if (this.cache.has(key)) this.evict(key)
+  /** Membership only, without extending lifetime; used for LOD hysteresis. */
+  has(key: string): boolean { return this.cache.has(key) }
 
-    const bytes = canvas.width * canvas.height * 4
-    this.cache.set(key, {
-      canvas,
-      version,
-      lastUsed: ++this.counter,
-      bytes,
-    })
-    this.usedBytes += bytes
-
-    if (this.usedBytes > this.maxBytes) this.evictLRU()
-  }
-
-  /** Drops every entry under `key`, regardless of version. */
-  invalidate(key: string): void {
+  /** Legacy borrowed insertion: caller retains backing-store ownership.
+   * This cannot preflight an allocation that already occurred; use getOrCreate
+   * for new budget-controlled consumers. Replacement keeps old API semantics. */
+  set(key: string, version: CacheVersion, canvas: HTMLCanvasElement): void {
     this.evict(key)
+    const bytes = canvas.width * canvas.height * 4
+    this.cache.set(key, { canvas, version, bytes, pixelBytes: bytes, lastUsed: this.now(), owned: false, pins: 0 })
+    this.usedBytes += bytes
+    this.makeRoom(0, 0)
   }
 
-  /** Drops everything — useful between scene loads or in tests. */
-  clear(): void {
-    this.cache.clear()
-    this.usedBytes = 0
-  }
-
-  /** Current memory pressure in bytes. */
-  size(): number {
-    return this.usedBytes
-  }
-
-  count(): number {
-    return this.cache.size
-  }
-
-  // ── Internals ───────────────────────────────────────────────────────────────
-
-  private evict(key: string): void {
-    const e = this.cache.get(key)
-    if (!e) return
-    this.cache.delete(key)
-    this.usedBytes -= e.bytes
-  }
-
-  private evictLRU(): void {
-    // Keep evicting the oldest entry until we're under budget.
-    while (this.usedBytes > this.maxBytes && this.cache.size > 0) {
-      let oldestKey: string | null = null
-      let oldestUsed = Infinity
-      this.cache.forEach((entry, key) => {
-        if (entry.lastUsed < oldestUsed) {
-          oldestUsed = entry.lastUsed
-          oldestKey  = key
-        }
-      })
-      if (oldestKey === null) break
-      this.evict(oldestKey)
+  /** Returns a borrowed cached result, or builds an admitted private canvas.
+   * Denial/allocation/context failure returns null for live-vector fallback.
+   * Painter exceptions propagate after release. Width/height are integer pixels;
+   * string versions are counted at two bytes/code unit, bounded by this budget.
+   * allowCreate=false permits hits but defers a miss before allocation (e.g.
+   * insufficient render-work budget). Caller consumes synchronously; no resize/retain. */
+  getOrCreate(key: string, version: CacheVersion, width: number, height: number,
+    paint: (context: CanvasRenderingContext2D) => void, allowCreate = true): { canvas: HTMLCanvasElement; created: boolean } | null {
+    const hit = this.get(key, version)
+    if (hit && hit.width === width && hit.height === height) return { canvas: hit, created: false }
+    if (hit) { this.evict(key); this.hits--; this.misses++ }
+    if (!allowCreate) return null
+    const pixelBytes = width * height * 4
+    const bytes = pixelBytes + key.length * 2 + (typeof version === 'string' ? version.length * 2 : 8)
+    if (![width, height, bytes].every(Number.isSafeInteger) || width <= 0 || height <= 0
+      || width > 16384 || height > 16384 || bytes + this.pendingBytes > this.maxBytes) {
+      this.denials++; return null
     }
+    if (!this.makeRoom(bytes, 1)) { this.denials++; return null }
+    const generation = this.generation
+    const reservation = this.budget?.reserve('preview', bytes)
+    if (this.budget && !reservation) { this.denials++; return null }
+    if (generation !== this.generation) { reservation?.release(); return null }
+    this.pendingBytes += bytes; this.pendingEntries++
+    this.peakBytes = Math.max(this.peakBytes, this.usedBytes + this.pendingBytes)
+    let canvas: HTMLCanvasElement | undefined, committed = false
+    try {
+      let context: CanvasRenderingContext2D | null
+      try {
+        canvas = this.allocate(width, height)
+        context = canvas.getContext('2d')
+        if (!context || context.isContextLost?.()) throw new Error('Canvas2D unavailable')
+        canvasMemoryTracker.track(canvas)
+        this.allocations++
+      } catch { this.failures++; return null }
+      paint(context)
+      if (generation !== this.generation) return null
+      this.evict(key)
+      if (!this.makeRoom(0, 0)) { this.denials++; return null }
+      const lost = () => this.invalidate(key)
+      canvas.addEventListener?.('contextlost', lost)
+      reservation?.commit()
+      const entry = { canvas, version, bytes, pixelBytes, lastUsed: this.now(), owned: true, lost, pins: 0, reservation: reservation ?? undefined }
+      this.cache.set(key, entry)
+      this.usedBytes += bytes; committed = true; this.scheduleExpiry()
+      this.allowSharedReclaim(key, entry)
+      return { canvas, created: true }
+    } finally {
+      this.pendingBytes -= bytes; this.pendingEntries--
+      if (!committed) { if (canvas) canvas.width = canvas.height = 0; reservation?.release() }
+    }
+  }
+
+  /** Pin an owned result until explicit idempotent release. Global/local pressure,
+   * invalidation and clear never shrink a pinned store. An invalidated pinned
+   * entry becomes retired and remains charged until its final borrower releases.
+   * Painter behavior/fallback matches getOrCreate; consume in try/finally. */
+  acquire(key: string, version: CacheVersion, width: number, height: number,
+    paint: (context: CanvasRenderingContext2D) => void, allowCreate = true): { canvas: HTMLCanvasElement; created: boolean; release(): void } | null {
+    const result = this.getOrCreate(key, version, width, height, paint, allowCreate)
+    const entry = this.cache.get(key)
+    if (!result || !entry || entry.canvas !== result.canvas) return null
+    entry.pins++; entry.reservation?.protect()
+    let released = false
+    return { ...result, release: () => {
+      if (released) return
+      released = true; entry.pins--
+      if (entry.pins === 0) {
+        if (this.retired.has(entry)) this.destroy(entry)
+        else this.allowSharedReclaim(key, entry)
+      }
+    } }
+  }
+
+  /** Drops an owned backing store immediately; borrowed legacy handles stay valid. */
+  invalidate(key: string): void { this.evict(key) }
+
+  /** Clears lookup and cancels pending commits; never interrupts paint or
+   * shrinks an active lease. Retired storage is released by its last borrower.
+   * Attempts every cleanup before reporting the first native disposal failure. */
+  clear(): void {
+    this.generation++
+    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer = undefined
+    let failure: unknown
+    for (const key of Array.from(this.cache.keys())) { try { this.evict(key) } catch (error) { failure ??= error } }
+    for (const entry of Array.from(this.retired)) if (entry.pins === 0) { try { this.destroy(entry) } catch (error) { failure ??= error } }
+    if (failure) throw failure
+  }
+
+  /** Completed retained bytes, including retired pins/signatures; pending separate. */
+  size(): number { return this.usedBytes }
+  count(): number { return this.cache.size }
+
+  /** Numeric diagnostics; pixelBytes is already part of CanvasMemoryTracker. */
+  getSnapshot() {
+    let pixelBytes = 0, pinnedBytes = 0
+    for (const entry of [...Array.from(this.cache.values()), ...Array.from(this.retired)]) {
+      pixelBytes += entry.pixelBytes; if (entry.pins) pinnedBytes += entry.bytes
+    }
+    return { maxBytes: this.maxBytes, residentBytes: this.usedBytes, pixelBytes,
+      metadataBytes: this.usedBytes - pixelBytes, pendingBytes: this.pendingBytes,
+      entries: this.cache.size, retiredEntries: this.retired.size, pinnedBytes, pendingEntries: this.pendingEntries,
+      maxEntries: this.maxEntries, peakBytes: this.peakBytes,
+      hits: this.hits, misses: this.misses, allocations: this.allocations,
+      evictions: this.evictions, budgetDenials: this.denials, allocationFailures: this.failures }
+  }
+
+  /** Admit against retained, retired and pending storage. Protected/pending
+   * working sets are tested before useful idle entries are discarded. */
+  private makeRoom(bytes: number, count: number): boolean {
+    const fits = () => this.usedBytes + this.pendingBytes + bytes <= this.maxBytes
+      && this.cache.size + this.retired.size + this.pendingEntries + count <= this.maxEntries
+    if (fits()) return true
+    const idle = Array.from(this.cache).filter(([, entry]) => entry.pins === 0)
+    const reclaimableBytes = idle.reduce((sum, [, entry]) => sum + entry.bytes, 0)
+    if (this.usedBytes + this.pendingBytes + bytes - reclaimableBytes > this.maxBytes
+      || this.cache.size + this.retired.size + this.pendingEntries + count - idle.length > this.maxEntries) return false
+    for (const [key] of idle) { this.evict(key); if (fits()) return true }
+    return fits()
+  }
+  /** Remove cache lookup immediately, but preserve an active borrow's storage. */
+  private evict(key: string): void {
+    const entry = this.cache.get(key)
+    if (!entry) return
+    this.cache.delete(key); this.retired.add(entry); this.evictions++
+    if (entry.lost) entry.canvas.removeEventListener?.('contextlost', entry.lost)
+    entry.reservation?.protect()
+    if (entry.pins === 0) this.destroy(entry)
+  }
+  /** Physically dispose before releasing shared/local charges. On failure the
+   * retired record remains charged for explicit retry/diagnostics. */
+  private destroy(entry: CacheEntry): void {
+    if (entry.owned) entry.canvas.width = entry.canvas.height = 0
+    this.usedBytes -= entry.bytes; this.retired.delete(entry); entry.reservation?.release()
+  }
+  /** A completed unused entry is recoverable under global pressure. */
+  private allowSharedReclaim(key: string, entry: CacheEntry): void {
+    if (entry.pins === 0 && this.cache.get(key) === entry) entry.reservation?.allowReclaim(() => this.evict(key))
+  }
+  /** One non-rendering timer expires only owned entries; refreshed hits survive. */
+  private scheduleExpiry(delay = this.maxIdleMs): void {
+    if (this.timer !== undefined || this.maxIdleMs === 0) return
+    this.timer = setTimeout(() => {
+      this.timer = undefined
+      const now = this.now()
+      let next = Infinity
+      this.cache.forEach((entry, key) => {
+        if (!entry.owned) return
+        if (now - entry.lastUsed >= this.maxIdleMs) this.evict(key)
+        else next = Math.min(next, this.maxIdleMs - (now - entry.lastUsed))
+      })
+      if (next !== Infinity) this.scheduleExpiry(next)
+    }, Math.max(1, delay))
+    ;(this.timer as { unref?: () => void }).unref?.()
   }
 }
 
@@ -136,6 +273,7 @@ export function createOffscreen(width: number, height: number): HTMLCanvasElemen
     : ({ width: 0, height: 0 } as unknown as HTMLCanvasElement)
   c.width  = width
   c.height = height
+  canvasMemoryTracker.track(c)
   return c
 }
 
@@ -179,6 +317,8 @@ export function createWebGLOffscreen(
       canvas.getContext('experimental-webgl', attrs)) as WebGLRenderingContext | null
   }
   if (!gl) return null
+
+  canvasMemoryTracker.track(canvas, 'webgl')
 
   return { canvas, gl }
 }

@@ -8,7 +8,7 @@ import { assertScene } from '../protocol'
 describe('published skill authoring examples', () => {
   it('creates independent animations, joins them with events and wires a real parameter', async () => {
     const reference = async (name: string) => readFile(path.resolve('skills/chorono/references', name + '.md'), 'utf8')
-    const codeBlocks = (text: string) => [...text.matchAll(/```js\n([\s\S]*?)```/g)].map(match => match[1])
+    const codeBlocks = (text: string) => Array.from(text.matchAll(/```js\n([\s\S]*?)```/g), match => match[1])
     const construction = codeBlocks(await reference('animation'))[0]
     const interactions = codeBlocks(await reference('interaction'))
     const created = await runSafeScript(construction, emptyScene())

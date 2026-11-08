@@ -81,8 +81,8 @@ export function hitTestSplineSegment(data: SplinePathData, x: number, y: number,
         const u = 1 - t
         const qx = u * u * from.x + 2 * u * t * seg.control1.x + t * t * to.x
         const qy = u * u * from.y + 2 * u * t * seg.control1.y + t * t * to.y
-        const { dSq } = distToSegmentSq(x, y, px, py, qx, qy)
-        if (dSq <= bestD) { bestD = dSq; best = { segmentId: seg.id, t } }
+        const { dSq, t: fraction } = distToSegmentSq(x, y, px, py, qx, qy)
+        if (dSq <= bestD) { bestD = dSq; best = { segmentId: seg.id, t: (i - 1 + fraction) / CUBIC_STEPS } }
         px = qx; py = qy
       }
       continue
@@ -98,8 +98,8 @@ export function hitTestSplineSegment(data: SplinePathData, x: number, y: number,
       const t = i / CUBIC_STEPS
       const qx = cubicAt(from.x, c1x, c2x, to.x, t)
       const qy = cubicAt(from.y, c1y, c2y, to.y, t)
-      const { dSq } = distToSegmentSq(x, y, px, py, qx, qy)
-      if (dSq <= bestD) { bestD = dSq; best = { segmentId: seg.id, t } }
+      const { dSq, t: fraction } = distToSegmentSq(x, y, px, py, qx, qy)
+      if (dSq <= bestD) { bestD = dSq; best = { segmentId: seg.id, t: (i - 1 + fraction) / CUBIC_STEPS } }
       px = qx; py = qy
     }
   }
@@ -108,8 +108,33 @@ export function hitTestSplineSegment(data: SplinePathData, x: number, y: number,
 
 /** First contour whose flattened polygon contains the point, else null. */
 export function hitTestSplineContour(data: SplinePathData, x: number, y: number): string | null {
+  for (const { id, poly } of closedContourPolygons(data)) {
+    if (pointInPolygon(x, y, poly)) return id
+  }
+  return null
+}
+
+/** Test the actual compound fill, preserving even-odd holes and winding. */
+export function hitTestSplineFill(data: SplinePathData, x: number, y: number): boolean {
+  let winding = 0
+  for (const { poly } of closedContourPolygons(data)) {
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length]
+      const side = (b.x - a.x) * (y - a.y) - (x - a.x) * (b.y - a.y)
+      if (a.y <= y && b.y > y && side > 0) winding++
+      else if (a.y > y && b.y <= y && side < 0) winding--
+    }
+  }
+  return data.fillRule === 'evenodd' ? Math.abs(winding) % 2 === 1 : winding !== 0
+}
+
+function closedContourPolygons(data: SplinePathData): Array<{ id: string; poly: Array<{ x: number; y: number }> }> {
   const handles = handleMap(data)
-  for (const contour of Object.values(data.contours)) {
+  const result: ReturnType<typeof closedContourPolygons> = []
+  const contourIds = new Set(Object.values(data.subShapes).flatMap(sub => sub.contourIds))
+  for (const id of Array.from(contourIds)) {
+    const contour = data.contours[id]
+    if (!contour) continue
     if (!contour.closed) continue
     const poly: Array<{ x: number; y: number }> = []
     const first = data.points[contour.pointIds[0]]
@@ -122,6 +147,13 @@ export function hitTestSplineContour(data: SplinePathData, x: number, y: number)
       if (!from || !to) continue
       if (seg.type === 'line') {
         poly.push({ x: to.x, y: to.y })
+      } else if (seg.type === 'quadratic') {
+        const control = seg.control1 ?? from
+        for (let i = 1; i <= CUBIC_STEPS; i++) {
+          const t = i / CUBIC_STEPS, u = 1 - t
+          poly.push({ x: u * u * from.x + 2 * u * t * control.x + t * t * to.x,
+                      y: u * u * from.y + 2 * u * t * control.y + t * t * to.y })
+        }
       } else {
         const out = handles.get(`${from.id}:out`)
         const inn = handles.get(`${to.id}:in`)
@@ -133,9 +165,9 @@ export function hitTestSplineContour(data: SplinePathData, x: number, y: number)
         }
       }
     }
-    if (pointInPolygon(x, y, poly)) return contour.id
+    result.push({ id: contour.id, poly })
   }
-  return null
+  return result
 }
 
 function pointInPolygon(px: number, py: number, poly: Array<{ x: number; y: number }>): boolean {

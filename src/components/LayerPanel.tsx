@@ -1,10 +1,15 @@
 'use client'
-import { useRef, useState } from 'react'
+import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
+import { useMemo, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import ChoronoIcon from '@/components/ui/ChoronoIcon'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
 import { LAYER_TYPE_ICON, ADD_LAYER_GROUPS } from '@/lib/icons/iconMap'
+import { buildLegacyLayerRows } from '@/lib/sceneExplorer/legacyLayerRows'
+import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+import { useRowWindow } from '@/components/virtualization/useRowWindow'
+import { WindowedRows } from '@/components/virtualization/WindowedRows'
 
 interface Props {
   layers: Layer[]
@@ -12,6 +17,8 @@ interface Props {
   selectedIds: Set<string>
   onSelect: (id: string, shiftHeld: boolean) => void
   onAdd: (kind: string) => void
+  /** Native media pickers borrow the initiating document identity. */
+  getDocumentSignal?: () => AbortSignal
   onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
   onAddAudio: (file: File) => void
@@ -43,7 +50,7 @@ interface DropTargetState { id: string; zone: DropZone }
 
 export default function LayerPanel({
   layers, selectedId, selectedIds, onSelect, onAdd,
-  onAddImage, onAddVideo, onAddAudio, onImportSvg,
+  onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate,
@@ -61,10 +68,6 @@ export default function LayerPanel({
   /** Descendants of the dragged layer — invalid drop targets (can't drop a
    *  layer onto its own subtree). Pre-computed once at drag start. */
   const dragDescendantsRef = useRef<Set<string>>(new Set())
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const videoInputRef = useRef<HTMLInputElement>(null)
-  const audioInputRef = useRef<HTMLInputElement>(null)
-  const svgInputRef   = useRef<HTMLInputElement>(null)
   const [menuOpen, setMenuOpen]       = useState(false)
   const [activeCategory, setCategory] = useState('Basic Shapes')
 
@@ -87,30 +90,33 @@ export default function LayerPanel({
   // Tree expand state — collapsed groups hide their children. Persists across
   // re-renders. Newly created groups default to EXPANDED (not in the set).
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const rows = useMemo(() => buildLegacyLayerRows(layers, collapsedGroups), [layers, collapsedGroups])
+  const layout = useMemo(() => new RowLayout(rows.map(row => row.layer.type === 'group' ? 20 : 36)), [rows])
+  const rowKeys = useMemo(() => rows.map(row => row.layer.id), [rows])
+  const listRef = useRef<HTMLUListElement>(null)
+  const windowed = useRowWindow(layout, rowKeys, listRef)
   const toggleCollapsed = (id: string) => setCollapsedGroups(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
 
-  const handleFilePicked = (handler: (file: File) => void) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) handler(file)
-      e.target.value = ''
-    }
+  /** Every media route uses the same captured-document picker guard. */
+  const pickFile = (accept: string, handler: (file: File) => void) => {
+    openDocumentFilePicker({ accept, getDocumentSignal, onFiles: files => handler(files[0]) })
+  }
 
   const handleAddItem = (type: string) => {
     setMenuOpen(false)
     switch (type) {
       case 'image':
-        return imageInputRef.current?.click()
+        return pickFile('image/*', onAddImage)
       case 'video':
-        return videoInputRef.current?.click()
+        return pickFile('video/*', onAddVideo)
       case 'audio':
-        return audioInputRef.current?.click()
+        return pickFile('audio/*', onAddAudio)
       case 'svgImport':
-        return svgInputRef.current?.click()
+        return pickFile('.svg,image/svg+xml', file => onImportSvg?.(file))
       default:
         // All shape kinds, text, pathStroke, bezierPath, pathStroke —
         // registry-driven via page.tsx addLayer().
@@ -282,16 +288,11 @@ export default function LayerPanel({
         </div>
       )}
 
-      {/* Hidden file inputs */}
-      <input ref={imageInputRef} type="file" accept="image/*"  className="hidden" onChange={handleFilePicked(onAddImage)} />
-      <input ref={videoInputRef} type="file" accept="video/*"  className="hidden" onChange={handleFilePicked(onAddVideo)} />
-      <input ref={audioInputRef} type="file" accept="audio/*"  className="hidden" onChange={handleFilePicked(onAddAudio)} />
-      <input ref={svgInputRef}   type="file" accept=".svg,image/svg+xml" className="hidden"
-             onChange={handleFilePicked((f) => onImportSvg?.(f))} />
-
       {/* ── Layer list ── */}
       <ul
-        className="flex-1 overflow-y-auto py-1"
+        ref={listRef}
+        className="flex-1 min-h-0 overflow-y-auto py-1 flex flex-col"
+        aria-label="Layers"
         onDragOver={(e) => { if (draggingId) e.preventDefault() }}
         onDrop={onDropEmpty}
         onContextMenu={(e) => {
@@ -307,29 +308,9 @@ export default function LayerPanel({
           </li>
         )}
 
-        {/* Flatten layers[] into a tree-ordered list respecting collapse state.
-            Roots are reversed so topmost-z-order appears first; children are
-            recursively appended right below their parent (also reversed). */}
-        {(() => {
-          interface Row { layer: Layer; realIdx: number; depth: number; hasChildren: boolean; collapsed: boolean }
-          const childrenOf = (parentId?: string) =>
-            layers
-              .map((l, idx) => ({ l, idx }))
-              .filter(({ l }) => l.parentId === parentId)
-              .reverse()   // topmost first
-
-          const rows: Row[] = []
-          const walk = (parentId: string | undefined, depth: number) => {
-            for (const { l, idx } of childrenOf(parentId)) {
-              const kids = layers.some(x => x.parentId === l.id)
-              const collapsed = collapsedGroups.has(l.id)
-              rows.push({ layer: l, realIdx: idx, depth, hasChildren: kids, collapsed })
-              if (kids && !collapsed) walk(l.id, depth + 1)
-            }
-          }
-          walk(undefined, 0)
-          return rows
-        })().map(({ layer, realIdx, depth, hasChildren, collapsed }) => {
+        <WindowedRows layout={layout} indices={windowed.indices} spacerTag="li" rowKey={index => rowKeys[index]}
+          renderRow={(index, attributes) => {
+          const { layer, realIdx, depth, hasChildren, collapsed } = rows[index]
           const isPrimary  = layer.id === selectedId
           const isInSet    = selectedIds.has(layer.id)
           const canMoveUp  = realIdx < layers.length - 1
@@ -360,6 +341,7 @@ export default function LayerPanel({
 
           return (
             <li
+              {...attributes}
               key={layer.id}
               // Disable native DnD while inline-renaming so the input gets
               // pointer events instead of being grabbed by the drag system.
@@ -381,7 +363,7 @@ export default function LayerPanel({
                 setCtxLayerId(layer.id)
                 ctxMenu.open(e)
               }}
-              style={depth > 0 ? { paddingLeft: 6 + depth * 14 } : undefined}
+              style={{ ...(depth > 0 ? { paddingLeft: 6 + depth * 14 } : {}), height: isGroup ? 20 : 32, flexShrink: 0 }}
               className={
                 (isGroup
                   ? `flex items-center gap-1 px-2 py-0.5 mx-0 my-0 cursor-grab active:cursor-grabbing group border-l-2
@@ -505,7 +487,7 @@ export default function LayerPanel({
               >✕</button>
             </li>
           )
-        })}
+        }} />
       </ul>
 
       {/* ── Stagger picker ── */}

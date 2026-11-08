@@ -1,3 +1,4 @@
+import type { ImportExecution } from './resources/ImportExecution'
 // ── DocumentImporter ──────────────────────────────────────────────────────────
 //
 // Handles complex document imports: SVG, Lottie, DXF, AE packages, etc.
@@ -23,10 +24,10 @@ export class DocumentImporter {
     this.handlers.push(handler)
   }
 
-  async preflight(file: File, format: ImportFormat, options?: ImportOptions): Promise<ImportPreflight> {
+  async preflight(file: File, format: ImportFormat, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
     const handler = this.findHandler(format)
     if (!handler) return this.unsupportedPreflight(file, format)
-    return handler.preflight(file, options)
+    return handler.preflight(file, options, execution)
   }
 
   async handle(
@@ -34,6 +35,7 @@ export class DocumentImporter {
     format: ImportFormat,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult> {
     onProgress?.({ stage: 'reading', label: 'Reading document…', progress: 0.05 })
 
@@ -42,7 +44,7 @@ export class DocumentImporter {
       throw new Error(`No handler registered for document format: ${format} (${file.name})`)
     }
 
-    return handler.handle(file, options, onProgress)
+    return handler.handle(file, options, onProgress, execution)
   }
 
   private findHandler(format: ImportFormat): ImportHandler | undefined {
