@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible problem with the editor, MCP connection, CLI or animation workflow.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Chorono. Check the [troubleshooting guide](https://github.com/codie1982/chorono-editor/blob/main/docs/en/troubleshooting.md) first if setup or MCP connection is blocked.
+        Report security vulnerabilities privately using [SECURITY.md](https://github.com/codie1982/chorono-editor/blob/main/SECURITY.md). Remove tokens, API keys and private assets from attachments.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected area
+      options:
+        - Installation or startup
+        - MCP connection or agent tools
+        - Canvas or layer editing
+        - Timelines, keyframes or easing
+        - Paths or splines
+        - Particles or effects
+        - Saving, reopening, importing or exporting
+        - Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: What did you expect, and what happened instead? Include any visible error message.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the command, editor action or minimal agent prompt. Name the timeline and preview time if relevant.
+      placeholder: |
+        1. Start Chorono and open ...
+        2. Select or create ...
+        3. Run or change ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Chorono commit or version
+      description: Use the source commit/tag, or the CLI version if known. Write "unknown" if setup failed before you could check.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include versions where available. Write "not applicable" for tools you did not use.
+      placeholder: |
+        OS and version:
+        Browser and version:
+        Node.js / npm:
+        Agent client and version (Codex / Claude Code / Claude Desktop / other):
+        Connection mode (MCP / visual editor only):
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Logs or doctor output
+      description: For setup/MCP issues, include relevant output from npm run chorono -- doctor. Redact secrets and private paths.
+      render: text
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal project, screenshot or recording
+      description: Attach a small example you are allowed to share. Include the timeline and time in milliseconds for animation problems.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I agree to follow the [Code of Conduct](https://github.com/codie1982/chorono-editor/blob/main/CODE_OF_CONDUCT.md).
+          required: true

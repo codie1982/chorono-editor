@@ -7,6 +7,7 @@ body:
       value: |
         Thanks for trying Chorono. Successful first runs and blocked attempts are both useful.
         Remove API keys, tokens and private information before sharing logs or project files.
+        For vulnerabilities, use [SECURITY.md](https://github.com/codie1982/chorono-editor/blob/main/SECURITY.md). Please follow our [Code of Conduct](https://github.com/codie1982/chorono-editor/blob/main/CODE_OF_CONDUCT.md).
   - type: dropdown
     id: operating-system
     attributes:
@@ -62,5 +63,5 @@ body:
     id: diagnostics
     attributes:
       label: Optional version and diagnostic details
-      description: Include your Node.js version, agent client version, source commit or tag, and relevant doctor output if useful.
+      description: Include your browser, Node.js and agent client versions, source commit/tag, and relevant doctor output if useful. Redact secrets and private paths.
       render: text

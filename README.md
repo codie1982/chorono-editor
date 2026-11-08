@@ -10,7 +10,9 @@ Chorono is an open-source, local-first 2D animation and motion graphics editor. 
 
 The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
 
-[Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
+[Website](https://www.chorono.com/) · [Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
+
+See the working [text animation example](https://www.chorono.com/text-animation), [kinetic typography study](https://www.chorono.com/kinetic-typography) and [Claude Code animation tutorial](https://www.chorono.com/blog/make-animations-with-claude). Each includes a preview and an editable project to inspect.
 
 ## Try an editable example
 
@@ -575,16 +577,15 @@ Each mode shares the same AI panel, scripting API, state machine system, and SDK
 - **Ask a question, report a bug or suggest a feature:** [Search existing issues](https://github.com/codie1982/chorono-editor/issues) or [open a new issue](https://github.com/codie1982/chorono-editor/issues/new).
 - **Share your first-run experience:** Use the [first-animation feedback form](https://github.com/codie1982/chorono-editor/issues/new?template=first-animation-feedback.yml).
 - **Share your work or discuss workflows:** Visit [Chorono Discussions](https://github.com/codie1982/chorono-editor/discussions).
+- **Report a security issue privately:** Follow the [security policy](SECURITY.md).
 
 For installation or animation problems, include your operating system, Node.js version, agent client, steps to reproduce, and the expected and actual behavior. If relevant, include the output of `npm run chorono -- doctor`. Remove API keys, tokens and other private information before sharing logs or project files.
 
 ## 🤝 Contributing
 
-1. Follow OOP style guide (CLAUDE.md)
-2. Write tests for new features
-3. Emit events for scripting support
-4. Update BACKLOG.md with progress
-5. Create PR with detailed description
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, validation commands and the PR process. Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Use the [bug report](https://github.com/codie1982/chorono-editor/issues/new?template=bug_report.yml), [feature request](https://github.com/codie1982/chorono-editor/issues/new?template=feature_request.yml) or [first animation feedback](https://github.com/codie1982/chorono-editor/issues/new?template=first-animation-feedback.yml) form. The required **Tests and builds** check must pass before changes can merge into `main`.
 
 ## 📄 License
 
