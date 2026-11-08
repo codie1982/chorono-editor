@@ -2,7 +2,7 @@
 
 Tarih: 4 Kasım 2026. Durum: uygulama öncesi mimari karar. Rigid Body, Fracture, Cloth ve Fluids planlarının ortak sözleşmesidir. Mevcut özelliklerin uygulanmış olduğu anlamına gelmez.
 
-**Güncel kapsam kararı: bütün geliştirmeler yalnızca `2danimation` modunda yapılacak. 3D mod, scene adapter, solver, kamera, renderer, timeline ve exporter geliştirmesi bu planın ve aşamaların dışındadır.** Önceki boyutlar arası değerlendirme yalnızca [arşiv referansıdır](../../../plan/archive/SIMULATION_CORE_2D_3D_REFERENCE.md); uygulama talimatı değildir. Gelecekte 3D ancak yeni ve açık bir kullanıcı talebiyle ele alınır.
+**Güncel kapsam kararı: bütün geliştirmeler yalnızca `2danimation` modunda yapılacak. 3D mod, scene adapter, solver, kamera, renderer, timeline ve exporter geliştirmesi bu planın ve aşamaların dışındadır.** Önceki boyutlar arası değerlendirme yalnızca [arşiv referansıdır](archive/simulation-core-2d-3d-reference.md); uygulama talimatı değildir. Gelecekte 3D ancak yeni ve açık bir kullanıcı talebiyle ele alınır.
 
 ## 1. Ana karar
 
