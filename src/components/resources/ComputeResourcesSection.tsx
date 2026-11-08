@@ -1,41 +1,46 @@
 import type { ProjectResourceSnapshot } from '@/lib/resources/monitor/ProjectResourceMonitor'
 import { formatBytes } from '@/lib/format/formatBytes'
+import { PaintResourcesSection } from './PaintResourcesSection'
 import { MetricList } from './MetricList'
 import styles from './ResourceMonitorPanel.module.css'
 
 /** Null remains unavailable, while a valid zero-duration sample remains a measured zero. */
-function milliseconds(value: number | null): string { return value === null ? 'Örnek yok' : `${value.toFixed(2)} ms` }
+function milliseconds(value: number | null): string { return value === null ? 'No samples' : `${value.toFixed(2)} ms` }
 
 /** Shows measured application intervals and WebGL workload, distinct from OS/hardware utilization. */
 export function ComputeResourcesSection({ snapshot: s }: { snapshot: ProjectResourceSnapshot }) {
   const { viewport, evaluation } = s.work
   return <>
-    <h3>CPU / ana iş parçacığı <span className={styles.badge}>Ölçülen · süre</span></h3>
+    <PaintResourcesSection snapshot={s} />
+    <h3>CPU / Main thread <span className={styles.badge}>Measured · time</span></h3>
     <MetricList rows={[
-      ['Viewport çizim/sn', s.isPlaying ? viewport.recentPerSecond : 'Beklemede'],
-      ['Viewport · son süre', milliseconds(viewport.lastMs)],
-      ['Viewport · ortalama / p95', `${milliseconds(viewport.meanMs)} / ${milliseconds(viewport.p95Ms)}`],
-      ['Değerlendirme · son süre', milliseconds(evaluation.lastMs)],
-      ['Değerlendirme · ortalama / p95', `${milliseconds(evaluation.meanMs)} / ${milliseconds(evaluation.p95Ms)}`],
-      ['Viewport · son 1 sn toplamı', milliseconds(viewport.measuredMsPerSecond)],
-      ['Değerlendirme · son 1 sn toplamı', milliseconds(evaluation.measuredMsPerSecond)],
-      ['Son 5 sn örnek · çizim / değerlendirme', `${viewport.count} / ${evaluation.count}`],
+      ['Viewport renders / second', s.isPlaying ? viewport.recentPerSecond : 'Idle'],
+      ['Viewport · last duration', milliseconds(viewport.lastMs)],
+      ['Viewport · mean / p95', `${milliseconds(viewport.meanMs)} / ${milliseconds(viewport.p95Ms)}`],
+      ['Evaluation · last duration', milliseconds(evaluation.lastMs)],
+      ['Evaluation · mean / p95', `${milliseconds(evaluation.meanMs)} / ${milliseconds(evaluation.p95Ms)}`],
+      ['Viewport · work in last second', milliseconds(viewport.measuredMsPerSecond)],
+      ['Evaluation · work in last second', milliseconds(evaluation.measuredMsPerSecond)],
+      ['Samples in last 5 s · render / evaluation', `${viewport.count} / ${evaluation.count}`],
     ]} />
-    <p>performance.now: viewport çizimi (ghost dahil) ve animasyon değerlendirmesi ayrı ölçülür. p95 son 5 saniye / en fazla 120 örnek. Render/sunum FPS’i ve sistem CPU yüzdesi değildir; React, worker ve browser paint süreleri dışarıdadır.</p>
-    <h3 className={styles.subheading}>GPU / WebGL <span className={styles.badge}>Ölçülen · iş yükü</span></h3>
-    {s.gpu.length === 0 && <p>WebGL parçacık backend’i henüz çalışmadı. Canvas2D’nin GPU kullanımı tarayıcı tarafından yönetilir.</p>}
+    <p>Viewport rendering, including onion skin, and animation evaluation are timed separately. p95 uses the last 5 seconds, up to 120 samples. These are not presentation FPS or system CPU utilization; React, worker, and browser-paint time are excluded.</p>
+    <h3 className={styles.subheading}>GPU / WebGL <span className={styles.badge}>Measured · workload</span></h3>
+    {s.gpu.length === 0 && <p>No WebGL backend has been initialized yet. Canvas2D GPU use is managed by the browser.</p>}
     {s.gpu.map((g, index) => <div key={index} className={styles.scope}>
       <h3>{g.backend}</h3>
       <MetricList rows={[
-        ['Context', g.contextLost ? 'Kaybedildi' : 'Hazır'], ['Toplam instanced draw', g.drawCalls],
-        ['Son draw · instance', g.lastInstances], ['Ayrılan buffer · tahmini', formatBytes(g.bufferBytes)],
-        ['CPU staging buffer', formatBytes(g.stagingBytes)],
-        ['GPU draw süresi', g.gpuMs !== null ? milliseconds(g.gpuMs) : g.timerSupported ? 'Örnek bekleniyor' : 'Timer desteklenmiyor'],
+        ['Context', g.cleanupFailed ? 'Cleanup failed · still charged' : g.contextLost ? 'Lost' : 'Ready'],
+        [g.drawKind === 'effect' ? 'Total effect passes' : 'Total instanced draws', g.drawCalls],
+        ...(g.drawKind === 'effect' ? [] : [['Instances in last draw', g.lastInstances]] as [string, number][]),
+        ['Allocated buffers · estimated', formatBytes(g.bufferBytes)],
+        ['Texture stores · RGBA8 estimate', g.textureBytes === undefined ? 'Not tracked' : formatBytes(g.textureBytes)],
+        ['CPU staging buffers', formatBytes(g.stagingBytes)],
+        ['GPU draw duration', g.gpuMs !== null ? milliseconds(g.gpuMs) : g.timerSupported ? 'Awaiting sample' : 'Timer unavailable'],
       ]} />
-      <p>EXT_disjoint_timer_query_webgl2: son geçerli draw örneği. Asenkron ölçüm; Canvas2D birleşimi ve diğer GPU pass’leri dahil değil. Destek yoksa CPU süresi GPU süresi olarak gösterilmez.</p>
+      <p>GPU timing uses the last valid asynchronous WebGL timer sample. Canvas2D compositing and other GPU passes are excluded. CPU time is never substituted for unavailable GPU timing.</p>
     </div>)}
     <MetricList rows={[
-      ['Sistem CPU / GPU yüzdesi', 'Tarayıcı sağlamıyor'], ['Toplam GPU belleği', 'Tarayıcı sağlamıyor'],
+      ['System CPU / GPU utilization', 'Not exposed by browser'], ['Total GPU memory', 'Not exposed by browser'],
     ]} />
   </>
 }

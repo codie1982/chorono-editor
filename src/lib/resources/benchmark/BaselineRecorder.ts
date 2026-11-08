@@ -38,7 +38,7 @@ export class BaselineRecorder {
 
   /** Returns versioned raw points and summaries; aborted/partial runs are never marked complete. */
   finish(reason: string | null = null) {
-    const values = (key: keyof BaselineSample) => this.samples.map(sample => sample[key]).filter((value): value is number => value !== null)
+    const values = (key: keyof BaselineSample) => this.samples.map(sample => sample[key]).filter((value): value is number => typeof value === 'number')
     const first = this.samples[0], last = this.samples[this.samples.length - 1]
     return {
       schemaVersion: 1, kind: 'sparse-render-baseline', status: !reason && this.samples.length === this.capacity ? 'complete' : 'incomplete',

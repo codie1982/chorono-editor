@@ -123,7 +123,9 @@ export interface AssetMetadata {
 export interface AssetRuntime {
   /**
    * Blob URL for in-browser display.
-   * Created by URL.createObjectURL(), must be revoked when asset is removed.
+   * Application-owned source URL created by URL.createObjectURL(). Source
+   * ownership is released only after document/history/job consumers leave;
+   * removing a decoded cache entry or current asset is not enough to revoke it.
    * IMPORTANT: NOT stored in scene JSON — stripped by AssetRegistry.serializeAssets().
    */
   objectUrl?: string

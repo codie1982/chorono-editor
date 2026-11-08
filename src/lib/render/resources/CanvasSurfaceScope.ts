@@ -3,10 +3,15 @@ import type { CanvasSurfaceLease, CanvasSurfaceProvider } from './CanvasSurfaceP
 
 /** Small ownership contract for synchronous canvas algorithms; never release borrowed input pixels. */
 export interface CanvasSurfaceAllocator {
+  readonly cropped?: boolean
   create(width: number, height: number): HTMLCanvasElement
   release(canvas: HTMLCanvasElement): void
   owns(canvas: HTMLCanvasElement): boolean
 }
+
+/** A backend cannot preserve a cropped pass. The host may retry once with the
+ * full composition after disposing all partial leases; budget errors differ. */
+export class SurfaceRegionFallback extends Error {}
 
 /**
  * Owns a render operation's active leases from an injected shared provider.
@@ -20,7 +25,7 @@ export class CanvasSurfaceScope implements CanvasSurfaceAllocator {
   private disposed = false
 
   /** Borrows lazily; provider admission/reset semantics remain authoritative. */
-  constructor(private readonly provider: CanvasSurfaceProvider) {}
+  constructor(private readonly provider: CanvasSurfaceProvider, readonly cropped = false) {}
 
   /** Returns exclusive, transparent backing pixels; no allocation after disposal. */
   create(width: number, height: number): HTMLCanvasElement {
@@ -70,6 +75,7 @@ export function withCanvasSurfaceResult(
   const source = allocator ?? standaloneCanvases
   const owned = new Set<HTMLCanvasElement>()
   const local: CanvasSurfaceAllocator = {
+    cropped: source.cropped,
     create(width, height) {
       const canvas = source.create(width, height)
       owned.add(canvas)

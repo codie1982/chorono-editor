@@ -103,9 +103,16 @@ export class ChronoPlayer {
     this._prevSnapshot = emptySnapshot()
   }
 
+  /** Transfer adapter lifecycle responsibility, disposing a previous backend's
+   * owned resources without changing playback/scene state. Same adapter is a no-op. */
   setAdapter(adapter: RenderAdapter): void {
+    if (this._adapter !== adapter) this._adapter?.dispose?.()
     this._adapter = adapter
   }
+
+  /** Replace externally owned media without resetting playback/state machines.
+   * A managed Canvas adapter owns its own clip pins, independent of this view. */
+  setAssets(assets: AssetElementMap): void { this._assets = assets }
 
   get currentTimeMs(): number {
     return this._offsetMs
@@ -190,8 +197,9 @@ export class ChronoPlayer {
     this.tick(timeMs)
   }
 
-  /** Tear down clock + listeners. */
+  /** Tear down clock, owned adapter resources and listeners. */
   destroy(): void {
+    this._adapter?.dispose?.()
     this._stopRaf()
     this._events.clear()
   }

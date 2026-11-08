@@ -1,6 +1,11 @@
 export interface GpuWorkSnapshot {
   backend: string
   contextLost: boolean
+  /** Absent preserves the legacy instanced-particle diagnostic contract. */
+  drawKind?: 'instanced' | 'effect'
+  /** Explicit managed texture stores, excluding the tracked default canvas. */
+  textureBytes?: number
+  cleanupFailed?: boolean
   bufferBytes: number
   stagingBytes: number
   drawCalls: number
@@ -13,6 +18,8 @@ export interface GpuWorkSnapshot {
 interface GpuWorkSource {
   getSnapshot(): GpuWorkSnapshot
   setSampling(enabled: boolean): void
+  /** Explicit cleanup action only; polling/observation never destroys storage. */
+  clearIdle?(): void
 }
 
 /**
@@ -46,6 +53,10 @@ export class GpuWorkRegistry {
   getSnapshot(): GpuWorkSnapshot[] {
     return Array.from(this.sources, source => source.getSnapshot())
   }
+
+  /** Retry/release unused registered stores while each owner preserves its
+   * active pins. Sources without resource ownership remain read-only adapters. */
+  clearIdle(): void { Array.from(this.sources).forEach(source => source.clearIdle?.()) }
 }
 
 export const gpuWorkRegistry = new GpuWorkRegistry()

@@ -47,3 +47,16 @@ describe('repeatable baseline protocol', () => {
     expect(recorder.memoryStopReason(0, protocol.heapByteLimit + 1)).toBe('heap-limit')
   })
 })
+
+it('preserves historical rows without optional paint fields and rejects supplied invalid numeric diagnostics', () => {
+  const old = new BaselineRecorder(protocol)
+  old.record(sample(0, 0))
+  expect(old.finish().samples[0].processedLayers).toBeUndefined()
+  const current = new BaselineRecorder(protocol)
+  current.record({ ...sample(0, 0), processedLayers: 300, culledLayers: 2700 })
+  expect(current.finish().samples[0].culledLayers).toBe(2700)
+  for (const patch of [{ renderMs: undefined }, { processedLayers: NaN }, { culledLayers: -1 }]) {
+    const recorder = new BaselineRecorder(protocol)
+    expect(() => recorder.record({ ...sample(0, 0), ...patch } as BaselineSample)).toThrow(RangeError)
+  }
+})

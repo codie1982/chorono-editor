@@ -4,8 +4,7 @@
  * Converts the flat Layer[] scene-graph (parent-child via parentId) into a
  * flat list of visible rows that the SceneExplorerPanel renders. Handles:
  *   - Collapsed groups (children of a collapsed parent are NOT emitted)
- *   - Solo / hidden visibility filters (scene-graph level, same rules as
- *     CanvasRenderer + TimelinePanel)
+ *   - Solo subtrees shared with TimelinePanel; hidden layers remain editable
  *   - Pinned-first ordering at the root level (preserves TimelinePanel's
  *     existing BL-38 behaviour: pinned roots float to top)
  *   - Text filter (substring on layer name + type)
@@ -16,6 +15,8 @@
 
 import type { Layer, Timeline } from '@/lib/types'
 import { SceneTraversal, type SceneNode } from '@/lib/scene/SceneTraversal'
+import { LayerIndex } from '@/lib/scene/LayerIndex'
+import { editorSoloScope } from '@/lib/scene/visibility/editorSoloScope'
 import {
   passesFilters, isPassThrough,
   type LayerVisibilityFilters,
@@ -90,10 +91,10 @@ export interface SceneExplorerFilterOptions {
  * Build the flat list of visible rows for the explorer.
  *
  * Visibility rules (in order):
- *   1. If ANY layer has solo === true, only solo'd layers (and their
- *      ancestors required to reach them) are emitted.
- *   2. Layers with hidden === true are skipped (but their ancestor groups
- *      are still emitted so the hierarchy stays readable).
+ *   1. Visual solo parents include their full subtree and ancestor context;
+ *      audio solo remains independent. Hidden/inactive descendants stay editable.
+ *   2. Explicit visibility/search filters retain ancestors of their matches.
+ *      Hidden flags alone do not remove a row, allowing users to show it again.
  *   3. Children of a collapsed parent are skipped entirely.
  *   4. Text filter — when set, only layers whose name or type contains the
  *      query (case-insensitive) are emitted; ancestors are kept so the
@@ -153,10 +154,6 @@ export function buildSceneExplorerRows(
   // Build tree once (cached in SceneTraversal).
   const roots = SceneTraversal.buildTree(layers)
 
-  // Pre-compute: any solo'd layer in the scene?
-  const anySolo = layers.some((l) => l.type !== 'audio' && l.solo)
-  const anyAudioSolo = layers.some(l => l.type === 'audio' && l.solo)
-
   // Pre-compute matches set (faceted query) — we need ancestors of matches.
   let matchIds: Set<string> | null = null
   if (!searchQuery.isEmpty) {
@@ -175,18 +172,8 @@ export function buildSceneExplorerRows(
     ancestorsOf.forEach((id) => matchIds!.add(id))
   }
 
-  // Pre-compute solo ancestors set (so a solo'd nested layer is reachable).
-  let visibleByFilter: Set<string> | null = null
-  if (anySolo || anyAudioSolo) {
-    visibleByFilter = new Set<string>()
-    for (const layer of layers) {
-      if ((layer.type === 'audio' ? !anyAudioSolo : !anySolo) || layer.solo) {
-        visibleByFilter.add(layer.id)
-        const ancestors = SceneTraversal.getAncestors(roots, layer.id)
-        for (const node of ancestors) visibleByFilter.add(node.layer.id)
-      }
-    }
-  }
+  // Shared solo subtrees plus ancestor context; no flat/tree disagreement.
+  const visibleByFilter = editorSoloScope(layers, true)
 
   const out: SceneExplorerRow[] = []
   const emit = (node: SceneNode) => {
@@ -344,14 +331,9 @@ export function buildLayerInfoRows(
 /**
  * Helper: how many descendants does this layer have (incl. nested)?
  * Used by drag-drop to forbid dropping a layer onto its own subtree.
+ * Preserves the legacy pre-order set for valid trees; the shared iterative
+ * query additionally terminates on malformed cycles and ignores missing roots.
  */
 export function collectDescendants(layers: Layer[], rootId: string): Set<string> {
-  const roots = SceneTraversal.buildTree(layers)
-  const node = SceneTraversal.findNode(roots, rootId)
-  const out = new Set<string>()
-  if (!node) return out
-  SceneTraversal.walk([node], (n) => {
-    if (n.layer.id !== rootId) out.add(n.layer.id)
-  })
-  return out
+  return new LayerIndex(layers).subtreeIds([rootId], false)
 }

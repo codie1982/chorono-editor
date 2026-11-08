@@ -3,7 +3,9 @@
 // Central registry for all imported assets in a Chorono scene.
 // Manages assets, collections, reverse indexing, and discovery.
 //
-// IMPORTANT: This class is NOT React state — it's a pure data manager.
+// IMPORTANT: This class is NOT React state. It owns metadata/indexes and sends
+// explicit deletion requests to an injectable source disposer; history/jobs may
+// defer physical URL revocation. It never owns decoded browser media.
 // Use useAssetRegistry hook to sync it with scene.assets in React.
 
 import type { Layer }      from '../types/core'
@@ -17,10 +19,14 @@ import type {
   DeleteAssetOptions,
 } from './types'
 import { AssetIndex } from './AssetIndex'
+import { assetSourcePool } from './sources'
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export class AssetRegistry {
+  /** Disposal is injectable; default preserves legacy explicit revocation while
+   * deferring it when document/history/async jobs still hold the same source. */
+  constructor(private readonly releaseSource: (url: string) => void = url => assetSourcePool.requestRevoke(url)) {}
   private assets      = new Map<string, Asset>()
   private collections = new Map<string, AssetCollection>()
   private index       = new AssetIndex()
@@ -88,16 +94,18 @@ export class AssetRegistry {
     this.assets.set(id, { ...existing, ...patch })
   }
 
+  /** Remove metadata and request source release, respecting active/history/job
+   * ownership. revokeUrl:false preserves both primary/runtime URLs. Disposer
+   * failures are tracked by the source owner without pretending storage freed. */
   deleteAsset(id: string, options: DeleteAssetOptions = {}): void {
     const asset = this.assets.get(id)
     if (!asset) return
 
-    // Revoke blob URL
-    if (options.revokeUrl !== false && asset.url?.startsWith('blob:')) {
-      URL.revokeObjectURL(asset.url)
-    }
-    if (asset.runtime?.objectUrl) {
-      URL.revokeObjectURL(asset.runtime.objectUrl)
+    // A logical delete cannot revoke another owner's live source. Explicit
+    // revokeUrl:false applies to both primary and runtime aliases.
+    if (options.revokeUrl !== false) {
+      const urls = new Set([asset.url, asset.runtime?.objectUrl])
+      urls.forEach(url => { if (url?.startsWith('blob:')) this.releaseSource(url) })
     }
 
     // Remove from collections

@@ -4,6 +4,7 @@ import {
 } from 'react'
 import type { ChronoScene, Layer, BezierPath, Timeline } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
+import { projectFrameFonts, projectFrameFontOverrides } from '@/lib/render/media/projectFrameFonts'
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
@@ -22,6 +23,7 @@ import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
 import MotionPathOverlay from './MotionPathOverlay'
+import ViewportPerformanceOverlay from './resources/ViewportPerformanceOverlay'
 import PathGuideOverlay from './PathGuideOverlay'
 import PathEditOverlay from './PathEditOverlay'
 import SplineEditOverlay from './SplineEditOverlay'
@@ -218,6 +220,12 @@ export default function SceneCanvas({
   // the editor-side mirror of CanvasRenderer's renderMode='preview'.
   const hideEditorUI = !!previewMode || !!isPlaying
 
+  // Borrow aliases only for geometry queries. Editor commands continue using
+  // the authored scene/ref, keeping runtime names out of history and save data.
+  const geometryScene = useMemo(() => projectFrameFonts(scene, assets.fonts), [scene, assets])
+  const geometryOverrides = useMemo(() => overrides && projectFrameFontOverrides(scene, overrides, assets.fonts), [scene, overrides, assets])
+  const geometrySceneRef = useRef(geometryScene)
+  useEffect(() => { geometrySceneRef.current = geometryScene }, [geometryScene])
   const { width, height } = scene.composition
 
   // ── Viewport: zoom / pan / fit presets / wheel zoom / pan drag ────────────
@@ -225,7 +233,7 @@ export default function SceneCanvas({
     zoom, pan, panDragRef,
     fitAll, fitWidth, fitHeight, actualSize, zoomTo, fitSelection, centreSelection,
     zoomIn, zoomOut, beginPan, handleWheel,
-  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene, selectedLayerId, timeMs, overrides })
+  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene: geometryScene, selectedLayerId, timeMs, overrides: geometryOverrides })
 
   // ── Snap config — owned upstream by useSnapSettings ─────────────────────
   // Mirror to a ref so pointermove closures see fresh values without being
@@ -361,7 +369,7 @@ export default function SceneCanvas({
 
   // BL-60 Faz 3 — Canvas marquee selection tools (box / lasso / circle / paint).
   const { selectionOverlay, beginSelectionDrag } = useSelectionTools({
-    canvasRef, sceneRef, width, height,
+    canvasRef, sceneRef: geometrySceneRef, width, height,
     selectionContainMode, onSelectByGeometry,
   })
 
@@ -487,7 +495,7 @@ export default function SceneCanvas({
     //    instead of changing selection. Lets the author exercise layer-click
     //    rules without leaving the builder.
     if (previewMode) {
-      const stack = hitTestLayersAt(scene, timeMs, cx, cy, overrides)
+      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides)
       // Prefer draggable layer over tappable when both are set, since drag
       // requires the drag-start handler to capture the pointer immediately.
       for (const id of stack) {
@@ -575,7 +583,7 @@ export default function SceneCanvas({
     // bypasses this and lets you pick the literal child.
     let hit: string | null
     if (e.altKey) {
-      const stack = hitTestLayersAt(scene, timeMs, cx, cy, overrides)
+      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides)
       if (stack.length === 0) hit = null
       else {
         const cur = selectedLayerId ?? ''
@@ -583,7 +591,7 @@ export default function SceneCanvas({
         hit = idx === -1 ? stack[0] : stack[(idx + 1) % stack.length]
       }
     } else {
-      hit = hitTestLayer(scene, timeMs, cx, cy, overrides)
+      hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
       // Bubble up to topmost ancestor group
       if (hit) {
         let cur = scene.layers.find(l => l.id === hit)
@@ -659,7 +667,7 @@ export default function SceneCanvas({
       cloneMode,
     }
     startDrag()
-  }, [scene, timeMs, width, height, overrides, onSelectLayer, editor, startDrag, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit, pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom])
+  }, [scene, geometryScene, geometryOverrides, timeMs, width, height, overrides, onSelectLayer, editor, startDrag, panMode, beginPan, selectedLayerId, previewMode, onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit, pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -863,6 +871,7 @@ export default function SceneCanvas({
 
   // ── Render canvas (scene + ghost / onion-skin overlay) ────────────────────
   useCanvasRenderer(canvasRef, {
+    viewportRef: containerRef, viewportScale: zoom, viewportKey: `${zoom}:${pan.x}:${pan.y}`,
     scene, timeMs, selectedLayerId, selectedLayerIds, assets,
     snapEnabled, snapToGridOn, gridSize,
     overrides, paramValues, dragOverrides,
@@ -895,9 +904,9 @@ export default function SceneCanvas({
     dragOverrides.forEach((v, k) => merged.set(k, v))
     return merged
   }, [overrides, scene.timelines, timeMs, dragOverrides])
-  const selectedDisplayTransform = useMemo(() => selectedLayer
+  const selectedDisplayTransform = useMemo(() => selectedLayer && !hideEditorUI
     ? resolveDisplayTransform(selectedLayer, scene, timeMs, displayOverrides)
-    : null, [selectedLayer, scene, timeMs, displayOverrides])
+    : null, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI])
   // Selection frame anchor: prefer live display transform but keep the
   // static fallback so empty paths / unconfigured followPath layers still
   // get a sensible gizmo origin.
@@ -905,14 +914,17 @@ export default function SceneCanvas({
   const selDY = selectedDisplayTransform?.y ?? selectedLayer?.transform.y ?? 0
   const selDR = selectedDisplayTransform?.rotationDeg ?? selectedLayer?.transform.rotationDeg ?? 0
   const selectedWorldMatrix = useMemo(() => {
-    if (!selectedLayer) return null
+    if (!selectedLayer || hideEditorUI) return null
     return resolveLayerWorldMatrix(selectedLayer, scene, timeMs, displayOverrides)
-  }, [selectedLayer, scene, timeMs, displayOverrides])
-  const boundsForFrame = useMemo(() => createLayerWorldBoundsResolver(scene, timeMs, displayOverrides),
-    [scene, timeMs, displayOverrides])
-  const selectedWorldBounds = useMemo(() => rawSelectedLayer
+  }, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI])
+  // Most playback frames have no selection/hover bounds consumer. Keep this
+  // scope lazy instead of materializing/indexing every layer just to discard
+  // the resolver. Visible rulers still need their selected extents in playback.
+  const boundsForFrame = useMemo(() => createLayerWorldBoundsResolver(geometryScene, timeMs,
+    projectFrameFontOverrides(scene, displayOverrides, assets.fonts), { deferPreparation: true }), [scene, geometryScene, timeMs, displayOverrides, assets])
+  const selectedWorldBounds = useMemo(() => rawSelectedLayer && (!hideEditorUI || showRulers)
     ? boundsForFrame(rawSelectedLayer)
-    : null, [rawSelectedLayer, boundsForFrame])
+    : null, [rawSelectedLayer, boundsForFrame, hideEditorUI, showRulers])
 
   // ── 3DS Max-style gizmo visibility per toolMode ──────────────────────────
   // Each mode shows only its own handle set so the user always sees the
@@ -1026,7 +1038,7 @@ export default function SceneCanvas({
               const sy = height / rect.height
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
-              const hitId = hitTestLayer(scene, timeMs, cx, cy, overrides)
+              const hitId = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
               const hitLayer = hitId ? scene.layers.find((l) => l.id === hitId) : null
               if (hitLayer?.type === 'path' && !hitLayer.locked) {
                 onSelectLayer(hitId!)
@@ -1063,7 +1075,7 @@ export default function SceneCanvas({
                 }
               }
 
-              const hit = hitTestLayer(scene, timeMs, cx, cy, overrides)
+              const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
               if (!hit) {
                 e.preventDefault()
                 emptyCanvasCtx.open(e)
@@ -1091,7 +1103,7 @@ export default function SceneCanvas({
                 const sy = height / rect.height
                 const cx = (clientX - rect.left) * sx
                 const cy = (clientY - rect.top)  * sy
-                const hit = hitTestLayer(scene, timeMs, cx, cy, overrides)
+                const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
                 setHoveredLayerId((cur) => (cur === hit ? cur : hit))
 
                 // BL-73 — hover over the selected spline's points / handles /
@@ -1456,6 +1468,8 @@ export default function SceneCanvas({
           gridSize={gridSize}       onGridSizeChange={snap.setGridSize}
         />
       </div>
+
+      <ViewportPerformanceOverlay />
 
       {/* Bottom-right controls: zoom pill */}
       <div className="absolute bottom-3 right-3 flex items-center gap-2 select-none">

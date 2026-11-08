@@ -49,13 +49,39 @@ async function main() {
     bundle: true, platform: 'browser', format: 'iife', target: 'es2022', jsx: 'automatic',
     define: { 'process.env.NODE_ENV': '"production"' }, minify: true, metafile: true,
     tsconfig: path.join(root, 'tsconfig.json'), outfile: path.join(output, 'baseline.js') })
-  const inputs = Object.keys(bundle.metafile.inputs).sort()
+  const paintQA = await build({ absWorkingDir: root, entryPoints: [path.join(root, 'src/lib/render/visibility/__tests__/browser-check.ts')],
+    bundle: true, platform: 'browser', format: 'iife', target: 'es2022', metafile: true,
+    define: { 'process.env.NODE_ENV': '"production"' }, minify: true,
+    tsconfig: path.join(root, 'tsconfig.json'), outfile: path.join(output, 'paint-check.js') })
+  await writeFile(path.join(output, 'paint-check.html'), '<!doctype html><html><head><meta charset="utf-8"><title>Paint visibility QA</title></head><body><script src="paint-check.js"></script></body></html>')
+  const lodQA = await build({ absWorkingDir: root, entryPoints: [path.join(root, 'src/lib/render/lod/__tests__/browser-check.ts')],
+    bundle: true, platform: 'browser', format: 'iife', target: 'es2022', metafile: true,
+    define: { 'process.env.NODE_ENV': '"production"' }, minify: true,
+    tsconfig: path.join(root, 'tsconfig.json'), outfile: path.join(output, 'lod-check.js') })
+  await writeFile(path.join(output, 'lod-check.html'), '<!doctype html><html><head><meta charset="utf-8"><title>Static LOD QA</title></head><body><script src="lod-check.js"></script></body></html>')
+  const regionChecks = []
+  for (const [entry, name] of [['browser-region-check.ts', 'region-check'], ['browser-region-scene-check.ts', 'region-scene-check']]) {
+    const check = await build({ absWorkingDir: root, entryPoints: [path.join(root, 'src/lib/render/resources/__tests__', entry)],
+      bundle: true, platform: 'browser', format: 'iife', target: 'es2022', metafile: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, minify: true,
+      tsconfig: path.join(root, 'tsconfig.json'), outfile: path.join(output, `${name}.js`) })
+    await writeFile(path.join(output, `${name}.html`), `<!doctype html><html><head><meta charset="utf-8"><title>Surface ROI QA</title></head><body><script src="${name}.js"></script></body></html>`)
+    regionChecks.push(check)
+  }
+  const budgetQA = await build({ absWorkingDir: root, entryPoints: [path.join(root, 'src/lib/resources/budget/__tests__/browser-budget.tsx')],
+    bundle: true, platform: 'browser', format: 'iife', target: 'es2022', metafile: true, jsx: 'automatic',
+    define: { 'process.env.NODE_ENV': '"production"' }, minify: true,
+    tsconfig: path.join(root, 'tsconfig.json'), outfile: path.join(output, 'budget-check.js') })
+  await writeFile(path.join(output, 'budget-check.html'), '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shared budget QA</title><link rel="stylesheet" href="budget-check.css"></head><body><div id="app"></div><script src="budget-check.js"></script></body></html>')
+  const inputs = Array.from(new Set([bundle, paintQA, lodQA, budgetQA, ...regionChecks].flatMap(result => Object.keys(result.metafile.inputs)))).sort()
   const inputDigests = []
   for (const input of inputs) inputDigests.push({ path: input, sha256: hash(await readFile(path.resolve(root, input))) })
   const metadata = {
     preparedAt: new Date().toISOString(), commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     dirtyWorkingTree: execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).length > 0,
-    sourceHash: hash(JSON.stringify(inputDigests)), bundleSha256: hash(await readFile(path.join(output, 'baseline.js'))),
+    sourceHash: hash(JSON.stringify(inputDigests)), bundleSha256: hash(await readFile(path.join(output, 'baseline.js'))), lodQASha256: hash(await readFile(path.join(output, 'lod-check.js'))), paintQASha256: hash(await readFile(path.join(output, 'paint-check.js'))),
+    regionQASha256: hash(await readFile(path.join(output, 'region-check.js'))), regionSceneQASha256: hash(await readFile(path.join(output, 'region-scene-check.js'))),
+    budgetQASha256: hash(await readFile(path.join(output, 'budget-check.js'))), budgetCSSSha256: hash(await readFile(path.join(output, 'budget-check.css'))),
     nodeVersion: process.version, platform: os.platform(), release: os.release(), architecture: os.arch(),
     physicalMemoryBytes: os.totalmem(), logicalCpuCount: os.cpus().length,
   }

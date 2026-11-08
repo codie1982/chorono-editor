@@ -45,7 +45,7 @@ export class BrowserMemoryReader {
     const available = platform.secure && platform.isolated && !!platform.measure
     return { heap, page: this.page ? { ...this.page } : {
       status: available ? 'ready' : 'unsupported', bytes: null, sampledAt: null,
-      reason: available ? '' : 'Bu tarayıcı/bağlam sayfa bellek ölçümünü sağlamıyor; güvenli ve cross-origin isolated bağlam gerekir.',
+      reason: available ? '' : 'Page-memory measurement is unavailable in this browser or context. A secure, cross-origin isolated context is required.',
     } }
   }
 
@@ -56,10 +56,10 @@ export class BrowserMemoryReader {
     if (!platform.secure || !platform.isolated || !platform.measure) return Promise.resolve()
     this.page = { status: 'pending', bytes: null, sampledAt: null, reason: '' }
     this.pending = Promise.resolve().then(() => platform.measure!()).then(result => {
-      if (!Number.isFinite(result.bytes) || result.bytes < 0) throw new Error('Geçersiz bellek ölçümü')
+      if (!Number.isFinite(result.bytes) || result.bytes < 0) throw new Error('Invalid memory measurement')
       this.page = { status: 'complete', bytes: result.bytes, sampledAt: Date.now(), reason: '' }
     }).catch(() => {
-      this.page = { status: 'error', bytes: null, sampledAt: null, reason: 'Tarayıcı bellek örneğini tamamlayamadı.' }
+      this.page = { status: 'error', bytes: null, sampledAt: null, reason: 'The browser could not complete the memory measurement.' }
     }).finally(() => { this.pending = null })
     return this.pending
   }

@@ -8,7 +8,8 @@ if (!args[0] || args.length > 2) throw new Error('Usage: npm run perf:serve -- o
 const directory = path.resolve(args[0])
 const port = Number(args[1] ?? 4319)
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local benchmark port')
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json' }
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css; charset=utf-8', '.woff': 'font/woff',
+  '.webm': 'video/webm', '.wav': 'audio/wav' }
 
 /** Loopback-only static test host. Allows prepared flat artifacts, never arbitrary paths or writes. */
 const server = http.createServer(async (request, response) => {

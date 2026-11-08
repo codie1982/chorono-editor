@@ -21,7 +21,7 @@ interface Props {
 const formats = ['youtube', 'square', 'story']
   .map(id => COMPOSITION_PRESETS.find(preset => preset.id === id))
   .filter((preset): preset is CompositionPreset => !!preset)
-const labels: Record<string, string> = { youtube: 'Yatay', square: 'Kare', story: 'Dikey' }
+const labels: Record<string, string> = { youtube: 'Landscape', square: 'Square', story: 'Portrait' }
 
 /**
  * Accessible startup surface using native dialog focus containment/inertness.
@@ -31,7 +31,7 @@ const labels: Record<string, string> = { youtube: 'Yatay', square: 'Kare', story
  */
 export default function WelcomeScreen(props: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
-  const [name, setName] = useState('İsimsiz proje')
+  const [name, setName] = useState('Untitled project')
   const [presetId, setPresetId] = useState('youtube')
   const [frameRate, setFrameRate] = useState(30)
   const [formError, setFormError] = useState<string | null>(null)
@@ -54,29 +54,29 @@ export default function WelcomeScreen(props: Props) {
     onKeyDown={event => event.stopPropagation()}>
     <div className={styles.shell}>
       <header className={styles.header}>
-        <div className={styles.brand}><span className={styles.brandMark} aria-hidden="true">c<span /></span>chorono<span className={styles.brandDivider} /> <span className={styles.brandCaption}>ANİMASYON STÜDYOSU</span></div>
-        <button type="button" className={styles.quietButton} onClick={props.onContinue}>Editörü aç <WelcomeIcon name="arrow" size={18} /></button>
+        <div className={styles.brand}><span className={styles.brandMark} aria-hidden="true">c<span /></span>chorono<span className={styles.brandDivider} /> <span className={styles.brandCaption}>ANIMATION STUDIO</span></div>
+        <button type="button" className={styles.quietButton} onClick={props.onContinue}>Open editor <WelcomeIcon name="arrow" size={18} /></button>
       </header>
 
       <main className={styles.main}>
         <section className={styles.intro}>
-          <div className={styles.eyebrow}><span /> FİKİRDEN İLK KAREYE</div>
-          <h1 id="welcome-title">Bir fikirle başla.<br /><span>Harekete dönüştür.</span></h1>
-          <p className={styles.description}>AI ile oluştur, her ayrıntıyı kendin düzenle.<br className={styles.desktopBreak} /> Hikâyenin ilk karesi burada başlıyor.</p>
+          <div className={styles.eyebrow}><span /> FROM IDEA TO FIRST FRAME</div>
+          <h1 id="welcome-title">Start with an idea.<br /><span>Make it move.</span></h1>
+          <p className={styles.description}>Create with AI. Fine-tune every detail.<br className={styles.desktopBreak} /> Your story starts with the first frame.</p>
           <div className={styles.artwork}><WelcomeArtwork /></div>
-          <div className={styles.capabilities}><span><WelcomeIcon name="layers" size={16} /> Vektör & katmanlar</span><span>Zaman çizelgesi</span><span>State machine</span></div>
+          <div className={styles.capabilities}><span><WelcomeIcon name="layers" size={16} /> Vectors & layers</span><span>Timeline</span><span>State machines</span></div>
         </section>
 
         <section className={styles.projectPanel} aria-labelledby="new-project-title">
-          <div className={styles.panelLabel}>YENİ BİR BAŞLANGIÇ</div>
-          <h2 id="new-project-title">Tuvalini hazırla.</h2>
-          <p className={styles.panelDescription}>Boyutunu seç, ilk hareketini oluştur.</p>
+          <div className={styles.panelLabel}>A FRESH START</div>
+          <h2 id="new-project-title">Set up your canvas.</h2>
+          <p className={styles.panelDescription}>Choose a format. Create your first animation.</p>
           <form onSubmit={create}>
-            <label className={styles.field}>Proje adı
+            <label className={styles.field}>Project name
               <input autoFocus required maxLength={80} value={name} onChange={event => setName(event.target.value)} autoComplete="off" />
             </label>
             <fieldset className={styles.formats}>
-              <legend>Tuval boyutu</legend>
+              <legend>Canvas size</legend>
               <div className={styles.formatGrid}>{formats.map(preset => <button type="button" key={preset.id}
                 className={`${styles.format} ${presetId === preset.id ? styles.selectedFormat : ''}`}
                 aria-pressed={presetId === preset.id} onClick={() => setPresetId(preset.id)}>
@@ -84,27 +84,27 @@ export default function WelcomeScreen(props: Props) {
                 <strong>{labels[preset.id]}</strong><small>{preset.width} × {preset.height}</small>
               </button>)}</div>
             </fieldset>
-            <div className={styles.frameRateRow}><label htmlFor="welcome-fps">Kare hızı</label>
+            <div className={styles.frameRateRow}><label htmlFor="welcome-fps">Frame rate</label>
               <select id="welcome-fps" value={frameRate} onChange={event => setFrameRate(Number(event.target.value))}>
                 {[24, 30, 60].map(value => <option value={value} key={value}>{value} FPS</option>)}
               </select>
             </div>
             {(formError || props.error) && <p className={styles.error} role="alert">{formError || props.error}</p>}
-            <button className={styles.primaryButton} type="submit">Animasyon oluştur <WelcomeIcon name="arrow" /></button>
+            <button className={styles.primaryButton} type="submit">Create animation <WelcomeIcon name="arrow" /></button>
           </form>
-          <div className={styles.or}><span />veya<span /></div>
-          <button className={styles.openButton} type="button" onClick={props.onOpenProject}><WelcomeIcon name="folder" /> Proje dosyası aç <span>.json</span></button>
+          <div className={styles.or}><span />or<span /></div>
+          <button className={styles.openButton} type="button" onClick={props.onOpenProject}><WelcomeIcon name="folder" /> Open project file <span>.json</span></button>
           {props.layerCount > 0 && <button className={styles.currentProject} type="button" onClick={props.onContinue}>
             <span className={styles.currentProjectIcon}><WelcomeIcon name="play" size={17} /></span>
-            <span><strong>Çalışma alanına dön</strong><small>{props.composition.id} · {props.layerCount} katman</small></span>
+            <span><strong>Return to workspace</strong><small>{props.composition.id} · {props.layerCount} {props.layerCount === 1 ? 'layer' : 'layers'}</small></span>
             <WelcomeIcon name="arrow" size={16} />
           </button>}
         </section>
       </main>
 
       <footer className={styles.footer}>
-        <span>Tarayıcında çalışır. Kontrol sende.</span>
-        <label><input type="checkbox" checked={props.showOnStartup} onChange={event => props.onStartupChange(event.target.checked)} /> Başlangıçta bu ekranı göster</label>
+        <span>Runs in your browser. You’re in control.</span>
+        <label><input type="checkbox" checked={props.showOnStartup} onChange={event => props.onStartupChange(event.target.checked)} /> Show this screen on startup</label>
       </footer>
     </div>
   </dialog>

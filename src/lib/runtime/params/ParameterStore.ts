@@ -11,9 +11,19 @@ export type RuntimeValue = string | number | boolean
 
 export type ParameterListener = (name: string, value: RuntimeValue | undefined) => void
 
+/** Mutable scalar values and synchronous per-key change subscriptions, owned by
+ * one runtime/preview. Strict equality suppresses unchanged writes. Snapshots
+ * are caller-owned copies; observers see revision advanced before notification.
+ * Unsubscribe releases the listener; clear removes values while keeping active
+ * subscriptions. Instances share no data, including the exported default store. */
 export class ParameterStore {
   private values    = new Map<string, RuntimeValue>()
   private listeners = new Set<ParameterListener>()
+  private changeRevision = 0
+
+  /** Monotonic change token for external-store adapters. Reads are side-effect
+   * free; same-value set, missing delete and empty clear do not advance it. */
+  get revision(): number { return this.changeRevision }
 
   // ── R/W ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +70,7 @@ export class ParameterStore {
   }
 
   private notify(name: string, value: RuntimeValue | undefined): void {
+    this.changeRevision++
     this.listeners.forEach(fn => fn(name, value))
   }
 }

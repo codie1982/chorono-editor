@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AudioHandler } from '../handlers/asset/AudioHandler'
+import { releaseImportSources } from '../resources/importSources'
 
 function mockAudio(duration: number, mode: 'metadata' | 'error' | 'hang' = 'metadata') {
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:audio')
@@ -23,6 +24,7 @@ describe('AudioHandler metadata', () => {
     expect(result.layers[0]).toMatchObject({ name: 'Click.wav', endMs: 50 })
     expect(result.warnings).toEqual([])
     expect(revoke).toHaveBeenCalled()
+    releaseImportSources(result)
   })
 
   it('reports unknown duration rather than silently claiming a fully probed import', async () => {
@@ -30,6 +32,7 @@ describe('AudioHandler metadata', () => {
     const result = await new AudioHandler().handle(new File(['sound'], 'Broken.mp3', { type: 'audio/mpeg' }))
     expect(result.assets[0].durationMs).toBeUndefined()
     expect(result.warnings[0]).toMatchObject({ severity: 'warning', code: 'parse_error' })
+    releaseImportSources(result)
   })
 
   it('times out an unresponsive metadata probe and releases the temporary URL', async () => {

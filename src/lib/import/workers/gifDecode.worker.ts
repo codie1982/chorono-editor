@@ -1,81 +1,37 @@
 /// <reference lib="webworker" />
-// ── gifDecode.worker (BL-08b) ─────────────────────────────────────────────────
-//
-// Decodes an animated GIF into a sprite-sheet PNG OFF the main thread, so large
-// GIFs never freeze the editor. Uses ImageDecoder + OffscreenCanvas — both
-// available in the Worker scope (Chromium, Safari 17+). The main thread falls
-// back to in-thread decoding when this worker is unavailable (e.g. Firefox).
-//
-// Protocol:
-//   main → worker : { buffer: ArrayBuffer }            (buffer transferred)
-//   worker → main : { ok: true, blob, ...grid } | { ok: false, error }
+import { composeGif } from '../gif/composeGif'
+import { browserGifPlatform } from '../gif/browserGifPlatform'
+import { readGifMetadata } from '../gif/readGifMetadata'
+import { planGifSheet } from '../gif/planGifSheet'
+import { resolveGifLimits, type GifSheetPlan } from '../gif/types'
+import type { GifWorkerRequest, GifWorkerReply } from '../gif/workerProtocol'
 
-interface DecodeRequest { buffer: ArrayBuffer }
+const context = self as unknown as DedicatedWorkerGlobalScope
+let controller: AbortController | undefined
+let started = false
 
-export interface GifWorkerResult {
-  ok: true
-  blob: Blob
-  sheetWidth: number
-  sheetHeight: number
-  frameWidth: number
-  frameHeight: number
-  frameCount: number
-  columns: number
-  rows: number
-  avgFrameMs: number
-}
-export interface GifWorkerError { ok: false; error: string }
-
-const ctx = self as unknown as DedicatedWorkerGlobalScope
-
-ctx.onmessage = async (e: MessageEvent<DecodeRequest>) => {
+/** One-shot transport delegates every frame/resource to the same composer as
+ * the main-thread backend. Errors are sent only after its finally cleanup has
+ * completed. Parent may request cooperative abort while native awaits settle. */
+context.onmessage = async (event: MessageEvent<GifWorkerRequest>) => {
+  const request = event.data
+  if (request.kind === 'cancel') { controller?.abort(); return }
+  if (started) return
+  started = true; controller = new AbortController()
+  let reply: GifWorkerReply
   try {
-    const { buffer } = e.data
-    const decoder = new ImageDecoder({ data: buffer, type: 'image/gif' })
-    await decoder.tracks.ready
-    const frameCount = decoder.tracks.selectedTrack?.frameCount ?? 1
-
-    const frames: VideoFrame[] = []
-    let totalUs = 0
-    for (let i = 0; i < frameCount; i++) {
-      const { image } = await decoder.decode({ frameIndex: i })
-      frames.push(image)
-      totalUs += image.duration ?? 0
-    }
-    if (frames.length === 0) throw new Error('GIF produced no frames')
-
-    const fw = frames[0].displayWidth  || frames[0].codedWidth
-    const fh = frames[0].displayHeight || frames[0].codedHeight
-    const columns = Math.ceil(Math.sqrt(frames.length))
-    const rows    = Math.ceil(frames.length / columns)
-
-    const canvas = new OffscreenCanvas(columns * fw, rows * fh)
-    const c2d = canvas.getContext('2d')
-    if (!c2d) throw new Error('OffscreenCanvas 2D context unavailable')
-    frames.forEach((f, i) => {
-      c2d.drawImage(f, (i % columns) * fw, Math.floor(i / columns) * fh, fw, fh)
-      f.close()
-    })
-    decoder.close?.()
-
-    const blob = await canvas.convertToBlob({ type: 'image/png' })
-    const result: GifWorkerResult = {
-      ok: true,
-      blob,
-      sheetWidth:  canvas.width,
-      sheetHeight: canvas.height,
-      frameWidth:  fw,
-      frameHeight: fh,
-      frameCount:  frames.length,
-      columns,
-      rows,
-      avgFrameMs:  totalUs > 0 ? (totalUs / 1000) / frames.length : 100,
-    }
-    ctx.postMessage(result)
-  } catch (err) {
-    const out: GifWorkerError = { ok: false, error: (err as Error).message }
-    ctx.postMessage(out)
-  }
+    const limits = resolveGifLimits(request.limits), metadata = readGifMetadata(request.buffer, limits), plan = planGifSheet(metadata, limits)
+    if (Object.entries(plan).some(([key, value]) => request.plan[key as keyof GifSheetPlan] !== value)) throw new Error('GIF worker plan differs from admitted metadata.')
+    const sheet = await composeGif(request.buffer, plan, limits, browserGifPlatform, { signal: controller.signal })
+    reply = { kind: 'result', sheet }
+  } catch (error) { reply = { kind: 'error', name: error instanceof Error ? error.name : 'Error', message: String(error) } }
+  context.postMessage(reply)
 }
 
-export {}
+/** Never receive/transfer input until actual worker codec support is known. */
+async function ready(): Promise<void> {
+  let supported = false
+  try { supported = typeof ImageDecoder !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && await ImageDecoder.isTypeSupported('image/gif') } catch { /* explicit unsupported handshake */ }
+  context.postMessage({ kind: 'ready', supported } satisfies GifWorkerReply)
+}
+void ready()

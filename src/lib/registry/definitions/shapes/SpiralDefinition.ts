@@ -48,6 +48,7 @@ export const spiralDefinition: LayerDefinition = {
   iconKey: 'spiral',
   category: 'Basic Shapes',
   createDefault: () => newSpiralLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(spiralGeometry())]),
   toPath,
 }

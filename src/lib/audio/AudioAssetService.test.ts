@@ -9,7 +9,7 @@ describe('shared audio decode and waveform', () => {
     const buffer = pcm([[1, 1], [1, 1]])
     const other = pcm([[1]])
     const service = new AudioAssetService({
-      fetch: vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) } as Response)),
+      fetch: vi.fn(async () => new Response(new Uint8Array(1))),
       createContext: () => ({ state: 'running', decodeAudioData: async () => buffer } as unknown as AudioContext),
     })
     await service.loadUrl('a')
@@ -19,7 +19,7 @@ describe('shared audio decode and waveform', () => {
   })
   it('deduplicates concurrent decoding and retries a failed URL', async () => {
     const buffer = pcm([[0, 0.5, 1]])
-    const fetcher = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) })
+    const fetcher = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(new Response(new Uint8Array(1)))
     const decodeAudioData = vi.fn(async () => buffer)
     const service = new AudioAssetService({ fetch: fetcher, createContext: () => ({ state: 'running', decodeAudioData } as unknown as AudioContext) })
     await expect(service.loadUrl('a')).rejects.toThrow('offline')
@@ -29,9 +29,11 @@ describe('shared audio decode and waveform', () => {
   })
   it('bounds PCM cache and refuses to cache stale completions after clear', async () => {
     let complete!: (value: AudioBuffer) => void
-    const service = new AudioAssetService({ fetch: vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) } as Response)), maxBytes: 8,
-      createContext: () => ({ state: 'running', decodeAudioData: () => new Promise<AudioBuffer>(resolve => { complete = resolve }) } as unknown as AudioContext) })
-    const pending = service.loadUrl('a'); await Promise.resolve(); await Promise.resolve(); service.clear()
+    let started!: () => void
+    const decoding = new Promise<void>(resolve => { started = resolve })
+    const service = new AudioAssetService({ fetch: vi.fn(async () => new Response(new Uint8Array(1))), maxBytes: 8,
+      createContext: () => ({ state: 'running', decodeAudioData: () => new Promise<AudioBuffer>(resolve => { complete = resolve; started() }) } as unknown as AudioContext) })
+    const pending = service.loadUrl('a'); await decoding; service.clear()
     complete(pcm([[1, 1, 1]])); await pending; expect(service.peek('a')).toBeUndefined()
   })
   it('preserves stereo opposition and the final source sample in every peak reduction', () => {
@@ -43,12 +45,16 @@ describe('shared audio decode and waveform', () => {
   })
   it('does not recreate a decoder when a request completes after disposal', async () => {
     let complete!: (value: Response) => void
+    let started!: () => void
+    const fetching = new Promise<void>(resolve => { started = resolve })
     const createContext = vi.fn()
-    const service = new AudioAssetService({ fetch: vi.fn(() => new Promise<Response>(resolve => { complete = resolve })), createContext })
+    const service = new AudioAssetService({ fetch: vi.fn(() => new Promise<Response>(resolve => { complete = resolve; started() })), createContext })
     const pending = service.loadUrl('late')
+    const rejected = expect(pending).rejects.toThrow('disposed')
+    await fetching
     await service.dispose()
-    complete({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) } as Response)
-    await expect(pending).rejects.toThrow('disposed')
+    complete(new Response(new Uint8Array(1)))
+    await rejected
     expect(createContext).not.toHaveBeenCalled()
   })
 })

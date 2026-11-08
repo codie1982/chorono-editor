@@ -18,3 +18,14 @@ it('reference-counts visible observers and turns off queries on final unsubscrib
   unregister()
   expect(registry.getSnapshot()).toEqual([])
 })
+
+it('never cleans storage while polling and delegates explicit unused-resource cleanup', () => {
+  const registry = new GpuWorkRegistry(), clearIdle = vi.fn()
+  const unregister = registry.register({setSampling(){},clearIdle,getSnapshot:() => ({backend:'effect',contextLost:false,
+    bufferBytes:48,stagingBytes:0,textureBytes:80,drawKind:'effect',drawCalls:2,lastInstances:0,lastDrawAt:1,
+    timerSupported:false,gpuMs:null,gpuSampleAt:null})})
+  expect(registry.getSnapshot()[0]).toMatchObject({textureBytes:80,drawKind:'effect'})
+  expect(clearIdle).not.toHaveBeenCalled()
+  registry.clearIdle();expect(clearIdle).toHaveBeenCalledOnce()
+  unregister();registry.clearIdle();expect(clearIdle).toHaveBeenCalledOnce()
+})

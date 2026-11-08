@@ -28,11 +28,41 @@ function harness() {
     createGain: () => { const node = new Node(); gains.push(node); return node }, createStereoPanner: () => new Node(), createChannelSplitter: () => new Node(),
     createAnalyser: () => { const node = new Node(); analysers.push(node); return node } }
   const service = new AudioAssetService({ createContext: () => context as unknown as AudioContext,
-    fetch: vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) } as Response)) })
-  return { engine: new AudioEngine(service), context, sources, gains, analysers }
+    fetch: vi.fn(async () => new Response(new Uint8Array(1))) })
+  return { engine: new AudioEngine(service), service, context, sources, gains, analysers }
 }
 
 describe('live Web Audio reconciliation', () => {
+  it('loads only audible time-window sources from thousands of registered assets and releases old consumers on seek', async () => {
+    const { engine, service, context, sources } = harness()
+    const sample = { ...scene([layer({ endMs: 1000 }), layer({ id: 'next', startMs: 10000, endMs: 11000,
+      audio: { assetId: 'next', loop: true } })]), assets: [asset(), asset('next'), ...Array.from({ length: 3000 }, (_, i) => asset(`unused-${i}`))] }
+    await engine.prepareForTime(sample, 0, 1)
+    expect(context.decodeAudioData).toHaveBeenCalledOnce()
+    expect(engine.prepareForTime(sample, 0, 1)).toBeNull()
+    engine.syncToTime(sample, 0, true, 1)
+    expect(engine.getState().sources[0].assetId).toBe('asset')
+    await engine.prepareForTime(sample, 10000, 1)
+    expect(context.decodeAudioData).toHaveBeenCalledTimes(2)
+    expect(sources[0].buffer).toBeNull()
+    engine.syncToTime(sample, 10000, true, 1)
+    expect(engine.getResourceSnapshot().assets.map(value => value.id)).toEqual(['next'])
+    expect(engine.getState().sources[0].assetId).toBe('next')
+    await engine.prepareForTime({ ...sample, layers: [] }, 10000, 1)
+    service.clearIdle()
+    expect(service.getMemorySnapshot().residency?.chargedBytes).toBe(0)
+    engine.dispose()
+  })
+  it('unwinds a source start failure without leaking the active source PCM pin', async () => {
+    const { engine, service, context, sources } = harness()
+    await engine.setAssets([asset()])
+    const create = context.createBufferSource
+    context.createBufferSource = () => { const node = create(); node.start.mockImplementation(() => { throw new Error('start failed') }); return node }
+    expect(() => engine.syncToTime(scene(), 0, true, 1)).toThrow('start failed')
+    expect(sources[0].buffer).toBeNull(); expect(engine.getState().sources).toEqual([])
+    engine.dispose(); service.clearIdle()
+    expect(service.getMemorySnapshot().residency?.chargedBytes).toBe(0)
+  })
   it('seeks late looping audio by modulo and stops it at the full exact clip end', async () => {
     const { engine, sources } = harness(); await engine.setAssets([asset()])
     engine.syncToTime(scene(), 12000, true, 1)

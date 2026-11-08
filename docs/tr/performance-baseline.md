@@ -1,5 +1,11 @@
 # OPT0 başlangıç ölçümü
 
+Güncel kapanış (8 Kasım2026): genel optimizasyonun büyük editör/uzun oynatma,
+panel,undo-redo ve kaynak cleanup kabulü
+[OPT32 raporunda](../../artifacts/performance/opt32-whole-editor-20261108/README.md)
+tamamlandı. Sıradaki aşama Export E0'dır. Aşağıdaki OPT0 notları ilk renderer
+ölçümünün tarihsel kapsamıdır;37GB ilk gözlemin kök nedeni iddia edilmez.
+
 Bu araç genel optimizasyon öncesinde **renderer için tekrarlanabilir referans** alır. Üretim evaluator/renderer, asset ve ses hook'ları ile kaynak monitor'ını yeniden kullanır. Kaynak tüketimini azaltan bir optimizasyon uygulamaz. Tam editör/DOM profili, uzun oynatma soak testi ve 37 GB gözleminin süreç/sütun doğrulaması ayrı kabul işleri olarak açık kalır.
 
 ## Protokol ve anlamı
@@ -63,3 +69,15 @@ Gerçek Chrome'da yedi sahnenin tamamı `complete`: **420 süre örneği ve 42 k
 Ekran dışındaki 2.700 rectangle hâlâ 3.000 ziyaret; 90 saydam parent bulunan sahne 3.100 ziyaret üretiyor. Sade vektörlerde izlenen canvas belleği 7,91 MiB'da sabitken mixed/Four Seasons geçici canvas kayıtları artıyor. Shared PNG tek decoded kaynak olarak paylaşılıyor. Önce frame bağıntıları/index ve güvenli paint görünürlüğü; ardından dış mask/effect tampon sahipliği/ROI üzerinde çalışılacak. Toplam CPU maliyetinin bu alt aşamalara dağılımı henüz ölçülmedi; sızıntı veya 37 GB kök nedeni kanıtlanmış değildir.
 
 **165 dosya / 1.538 test**, MCP build ve Next production build geçti; Next build öncesinde sunucu kapatıldı. Bu teslim başlangıç ölçüm altyapısıdır; kaynakları azaltan optimizasyon ve tam OPT0/OPT1 kabulü olarak işaretlenmez. Ham GPU draw sayaçları ve canvas kayıtları kümülatiftir; per-frame draw/physical allocation sayısı diye yorumlanmaz.
+
+## OPT3 görünürlük karşılaştırması
+
+Benchmark örnekleri artık `processedLayers` / `culledLayers` benzersiz ana-kare
+sayaçlarını da taşır. Eski `layerVisits` tanımı korunur; örneğin 3.000 root ziyaret
+edilip 2.700 çizim elenebilir. Tarihî raporların bu yeni alanları içermesi gerekmez.
+`perf:prepare` ayrıca yalnız testte kullanılan `/paint-check.html` paketini üretir;
+control-hull, mask/repeater/temporal geri dönüş ve panel sayacı yaşam döngüsü native
+Canvas'ta optimizasyon kapalı referansa karşı kontrol edilir. Hazırlık manifest'i
+bu paketin hash'ini ve iki bundle'ın bütün kaynak girdilerini de kaydeder.
+
+[Görünürlük sözleşmesi](paint-visibility.md), [OPT3 ölçüm raporu](../../artifacts/performance/opt3-paint-20261107/README.md).

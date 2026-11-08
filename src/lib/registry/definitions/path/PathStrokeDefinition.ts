@@ -27,5 +27,6 @@ export const pathStrokeDefinition: LayerDefinition = {
   iconKey: 'motionPath',
   category: 'Path & Vector',
   createDefault: () => newPathStrokeLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => [transformGroup(), appearanceGroup(), pathStrokeStyleGroup()],
 }

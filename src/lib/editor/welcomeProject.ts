@@ -18,10 +18,10 @@ export interface WelcomeProjectSettings {
 export function createWelcomeProject(settings: WelcomeProjectSettings): ChronoScene {
   const name = settings.name.trim()
   const preset = COMPOSITION_PRESETS.find(item => item.id === settings.presetId && item.width > 0 && item.height > 0)
-  if (!name) throw new Error('Projeye bir ad ver.')
-  if (!preset) throw new Error('Geçerli bir tuval boyutu seç.')
+  if (!name) throw new Error('Enter a project name.')
+  if (!preset) throw new Error('Choose a valid canvas size.')
   if (!Number.isInteger(settings.frameRate) || settings.frameRate < 1 || settings.frameRate > 120) {
-    throw new Error('Kare hızı 1–120 arasında bir tam sayı olmalı.')
+    throw new Error('Frame rate must be a whole number between 1 and 120.')
   }
   const scene = emptyScene()
   scene.composition = {

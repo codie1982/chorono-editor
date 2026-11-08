@@ -3,8 +3,9 @@
 // segmentComplete, markerReached, …) representing the transitions that
 // happened in the gap. Pure function — the hook handles state.
 
-import type { ChronoScene, Timeline } from '../types'
+import type { ChronoScene } from '../types'
 import type { RuntimeEvent } from './triggerEngine'
+import { LayerTrackIndex } from '../timeline/LayerTrackIndex'
 
 export interface PlaybackSnapshot {
   timeMs:               number
@@ -32,7 +33,13 @@ export function emptySnapshot(): PlaybackSnapshot {
  * Compare previous and next snapshots and emit the lifecycle events that
  * correspond to the diff. Returned events are intended to be merged with
  * any externally-fired events (button click, customEvent) before being
- * passed to the trigger engine.
+ * passed to the trigger engine. Inputs are borrowed and never mutated; times
+ * are global composition milliseconds. Layer completion uses the last authored
+ * key of each matching track (not a sorted/max-key reinterpretation). A frame
+ * owns one temporary LayerTrackIndex, making canonical-ID completion lookup
+ * O(tracks + layers + matches) rather than scanning every track for every layer.
+ * Legacy dotted IDs retain the index's prefix compatibility path. Equal/backward
+ * time has no forward completion crossings, but all other lifecycle diffs remain.
  */
 export function detectLifecycleEvents(
   scene: ChronoScene,
@@ -95,9 +102,10 @@ export function detectLifecycleEvents(
   const tlForLayers = next.activeTimelineId
     ? scene.timelines.find((t) => t.id === next.activeTimelineId)
     : null
-  if (tlForLayers) {
+  if (tlForLayers && next.timeMs > prev.timeMs) {
+    const tracks = new LayerTrackIndex(tlForLayers.tracks)
     for (const layer of scene.layers) {
-      const lastTime = layerLastKeyframeTime(tlForLayers, layer.id)
+      const lastTime = layerLastKeyframeTime(tracks, layer.id)
       if (lastTime == null) continue
       if (prev.timeMs < lastTime && next.timeMs >= lastTime) {
         events.push({ type: 'layerAnimationComplete', layerId: layer.id })
@@ -134,11 +142,10 @@ export function detectLifecycleEvents(
   return events
 }
 
-function layerLastKeyframeTime(timeline: Timeline, layerId: string): number | null {
+/** Borrow matching tracks; preserve last-authored-key and duplicate-target semantics. */
+function layerLastKeyframeTime(index: LayerTrackIndex, layerId: string): number | null {
   let last: number | null = null
-  const prefix = `layers.${layerId}.`
-  for (const track of timeline.tracks) {
-    if (!track.target.startsWith(prefix)) continue
+  for (const track of index.forLayer(layerId)) {
     const t = track.keyframes[track.keyframes.length - 1]?.timeMs
     if (t != null && (last == null || t > last)) last = t
   }

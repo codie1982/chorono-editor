@@ -7,7 +7,9 @@ import { LayerIndex } from '@/lib/scene/LayerIndex'
 
 type PropertyOverride = { path: string[]; value: AnimatableValue }
 type LayerOverrideIndex = Map<string, PropertyOverride[]>
-export type RenderSchemaProvider = (layer: Layer) => readonly PropertySchema[]
+/** Existing array providers remain supported; compiled consumers may borrow a
+ * readonly path index to avoid rebuilding identical validation maps per layer. */
+export type RenderSchemaProvider = (layer: Layer) => readonly PropertySchema[] | ReadonlyMap<string, PropertySchema>
 const forbidden = new Set(['__proto__', 'prototype', 'constructor'])
 const identity = new Set(['id', 'type', 'instanceOf', 'parentId'])
 
@@ -40,9 +42,16 @@ function indexOverrides(overrides: OverrideMap): LayerOverrideIndex {
   return byLayer
 }
 
-/** Persistent update: untouched objects/arrays retain identity. Array tracks
- * address existing entries only; a bad index cannot allocate a huge array. */
-function setProperty(object: unknown, path: string[], value: unknown, depth = 0): unknown {
+/** Copy-on-write update in one projection's private ownership scope. Only
+ * containers cloned by this projection may be changed in place; caller/source/value
+ * objects remain borrowed. Repeated sibling writes reuse their already private
+ * parent instead of copying it for every track. The last private container at each
+ * depth is enough: switching branches may make another copy, but can never
+ * treat a borrowed value as owned. This O(path depth) scratch avoids retaining
+ * and hashing every cloned frame object. It is not shared between frames. Unchanged branches keep identity. Array tracks address
+ * existing entries only; an invalid index cannot allocate a huge sparse array.
+ * Writes retain the original sequential Map order, including parent/child paths. */
+function setProperty(object: unknown, path: string[], value: unknown, copies: Array<object | undefined>, depth = 0): unknown {
   const key = path[depth]
   if (Array.isArray(object) && (!/^\d+$/.test(key) || Number(key) >= object.length)) return object
   const source = object && typeof object === 'object' ? object as Record<string, unknown> : {}
@@ -60,9 +69,14 @@ function setProperty(object: unknown, path: string[], value: unknown, depth = 0)
     // id, handles, scale or other authored metadata.
     next = isVec2(value) && previous && typeof previous === 'object'
       ? { ...previous, ...value } : value
-  } else next = setProperty(previous, path, value, depth + 1)
+  } else next = setProperty(previous, path, value, copies, depth + 1)
   if (Object.is(previous, next)) return object
-  const clone = Array.isArray(object) ? object.slice() : { ...source }
+  // Legacy noncanonical array paths such as "01" create a string property,
+  // which the next Array.slice intentionally drops. Do not retain that property
+  // through in-place reuse; canonical integer paths take the fast owned route.
+  const legacyArrayKey = Array.isArray(object) && String(Number(key)) !== key
+  const clone = copies[depth] === source && !legacyArrayKey ? source : Array.isArray(object) ? object.slice() : { ...source }
+  copies[depth] = legacyArrayKey ? undefined : clone
   ;(clone as Record<string, unknown>)[key] = next
   return clone
 }
@@ -71,10 +85,14 @@ function setProperty(object: unknown, path: string[], value: unknown, depth = 0)
 // still have fixed numeric types even when no schema provider was supplied.
 const numericPath = /^(?:opacity|transform\.[^.]+|size\.(?:width|height)|effects\.[^.]+|shapeParams\.(?!kind$)[^.]+|style\.(?:cornerRadius|(?:fill|stroke)\.(?:opacity|width)|stroke\.trim\.(?:start|end|offset))|text\.(?:fontSize|letterSpacing|lineHeight)|followPath\.(?:progress|rotationOffset|perpendicularOffset))$/
 
-function applyLayerOverrides(layer: Layer, entries: PropertyOverride[] | undefined, schemasForLayer?: RenderSchemaProvider): Layer {
+/** Validate and project one layer through the per-call private container scratch. The
+ * schema provider is read-only and receives the authored/resolved layer. */
+function applyLayerOverrides(layer: Layer, entries: PropertyOverride[] | undefined, copies: Array<object | undefined>, schemasForLayer?: RenderSchemaProvider): Layer {
   let result = layer
   if (!entries?.length) return result
-  const schemas = new Map(schemasForLayer?.(layer).map(schema => [schema.path, schema]) ?? [])
+  const supplied = schemasForLayer?.(layer)
+  const schemas: ReadonlyMap<string, PropertySchema> = !supplied ? new Map()
+    : isSchemaArray(supplied) ? new Map(supplied.map(schema => [schema.path, schema])) : supplied
   for (const { path, value } of entries ?? []) {
     const property = path.join('.')
     const schema = schemas.get(property)
@@ -91,35 +109,61 @@ function applyLayerOverrides(layer: Layer, entries: PropertyOverride[] | undefin
     const projected = color && path[0] === 'particleEmitter'
       ? parseAnimatableColor(bounded) ?? bounded
       : color && (typeof bounded === 'number' || isColorValue(bounded)) ? renderColor(bounded) : bounded
-    result = setProperty(result, path, projected) as Layer
+    result = setProperty(result, path, projected, copies) as Layer
   }
   return result
 }
 
-/** Materialize numeric/typed leaf values for a standalone draw/helper call. */
-export function materializeLayerOverrides(layer: Layer, overrides: OverrideMap, schemasForLayer?: RenderSchemaProvider): Layer {
-  return applyLayerOverrides(layer, indexOverrides(overrides).get(layer.id), schemasForLayer)
+/** Narrows legacy array providers without requiring a particular map backend. */
+function isSchemaArray(value: ReturnType<RenderSchemaProvider>): value is readonly PropertySchema[] {
+  return Array.isArray(value)
 }
 
-/** Resolve live instances BEFORE animation. Source edits propagate, while a
- * source animation never overwrites an instance's independent visual tracks.
- * One index per frame avoids scanning every track for every particle/copy. */
+/** Materialize numeric/typed leaf values for a standalone draw/helper call. */
+export function materializeLayerOverrides(layer: Layer, overrides: OverrideMap, schemasForLayer?: RenderSchemaProvider): Layer {
+  return applyLayerOverrides(layer, indexOverrides(overrides).get(layer.id), [], schemasForLayer)
+}
+
+/**
+ * Produce an immutable render snapshot in authored stacking order. The input
+ * scene contains a dense array of valid layers; neither it nor its nested data
+ * is mutated. Unchanged layers/branches retain identity, and a wholly unchanged
+ * frame returns the original scene and layer array. An output array is allocated
+ * only when the first layer changes or is omitted, copying its unchanged prefix.
+ *
+ * Instances resolve against authored sources BEFORE animation, so source edits
+ * propagate without inheriting the source's independent evaluated tracks.
+ * Missing/cyclic/over-depth instances follow resolveInstanceLayer's omission
+ * contract. Resolved snapshots clear instanceOf to prevent a second resolution
+ * against already animated data. Typed validation, color conversion and schema
+ * limits reuse the same leaf projection as standalone layer rendering.
+ *
+ * Overrides address layer IDs; one per-call index avoids scanning all tracks per
+ * layer. A private per-call depth scratch permits reusing cloned parent branches across
+ * consecutive sibling writes. Only copies created here enter that scratch. No
+ * snapshot, index, scratch or output is retained internally between calls.
+ */
 export function materializeRenderScene(scene: ChronoScene, overrides: OverrideMap, schemasForLayer?: RenderSchemaProvider): ChronoScene {
   const index = indexOverrides(overrides)
+  const copies: Array<object | undefined> = []
   // Source lookups stay separate from the projected frame so an instance
   // cannot inherit its source's evaluated animation. Build only if needed.
   let sourceIndex: LayerIndex | undefined
-  let changed = false
-  const layers = scene.layers.flatMap(layer => {
+  let layers: Layer[] | undefined
+  for (let position = 0; position < scene.layers.length; position++) {
+    const layer = scene.layers[position]
     if (layer.instanceOf) sourceIndex ??= new LayerIndex(scene.layers)
     const resolved = resolveInstanceLayer(layer, scene.layers, 0, sourceIndex)
-    if (!resolved) { changed = true; return [] }
-    let projected = applyLayerOverrides(resolved, index.get(layer.id), schemasForLayer)
+    if (!resolved) {
+      layers ??= scene.layers.slice(0, position)
+      continue
+    }
+    let projected = applyLayerOverrides(resolved, index.get(layer.id), copies, schemasForLayer)
     // This is a render-only snapshot. Downstream bounds/path helpers must
     // not resolve it again against an already animated source snapshot.
     if (projected.instanceOf) projected = { ...projected, instanceOf: undefined }
-    if (projected !== layer) changed = true
-    return [projected]
-  })
-  return changed ? { ...scene, layers } : scene
+    if (projected !== layer) layers ??= scene.layers.slice(0, position)
+    layers?.push(projected)
+  }
+  return layers ? { ...scene, layers } : scene
 }

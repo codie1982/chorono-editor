@@ -19,18 +19,13 @@ import { evaluateTimelines, getLayerValue } from '@/lib/evaluator'
 import type { ParamValueMap } from './RenderContext'
 import type { AssetElementMap } from '@/lib/renderer'
 import type { CanvasRenderer } from './CanvasRenderer'
-import { createOffscreen } from './OffscreenCanvasCache'
+import { renderSurfacePool, type CanvasSurfaceLease } from './resources/CanvasSurfacePool'
 import { gpuMotionBlur } from './gpu/effects/GPUMotionBlur'
 
-// Reusable composition-sized sample canvas (one, reused across samples/frames).
-let sampleCanvas: HTMLCanvasElement | null = null
-function getSampleCanvas(w: number, h: number): HTMLCanvasElement {
-  if (!sampleCanvas || sampleCanvas.width !== w || sampleCanvas.height !== h) {
-    sampleCanvas = createOffscreen(w, h)
-  }
-  return sampleCanvas
-}
-
+/** Render equal-weight sub-frame samples using one leased sample surface. The
+ * sample and streaming GPU pin survive nested layer draws, then release on every
+ * return/exception. Time remains composition milliseconds; source scene/override
+ * maps are borrowed. Admission failures propagate without changing quality. */
 export function renderMotionBlurAccumulated(
   renderer:     CanvasRenderer,
   ctx:          CanvasRenderingContext2D,
@@ -70,38 +65,45 @@ export function renderMotionBlurAccumulated(
   const sampleCount = Math.min(32, Math.max(12, mb.trailCount * 4))
 
   if (!gpuMotionBlur.begin(compW, compH, sampleCount)) return false   // GPU unavailable
+  let sample: CanvasSurfaceLease | undefined
+  try {
+    // Render samples with NORMAL compositing so blend-mode layers sample cleanly
+    // onto the empty buffer; the real blend mode is applied at final composite.
+    const sampleLayer: Layer = { ...layer, blendMode: 'source-over' as Layer['blendMode'] }
+    sample = renderSurfacePool.acquire(compW, compH)
+    const canvas = sample.canvas
+    const sctx = sample.context
 
-  // Render samples with NORMAL compositing so blend-mode layers sample cleanly
-  // onto the empty buffer; the real blend mode is applied at final composite.
-  const sampleLayer: Layer = { ...layer, blendMode: 'source-over' as Layer['blendMode'] }
-  const canvas = getSampleCanvas(compW, compH)
-  const sctx = canvas.getContext('2d')!
+    for (let k = 0; k < sampleCount; k++) {
+      const t = sampleCount > 1 ? k / (sampleCount - 1) : 0
+      const sampleTimeMs    = Math.max(0, timeMs - shutterMs * t)
+      const sampleOverrides = evaluateTimelines(scene.timelines, sampleTimeMs)
 
-  for (let k = 0; k < sampleCount; k++) {
-    const t = sampleCount > 1 ? k / (sampleCount - 1) : 0
-    const sampleTimeMs    = Math.max(0, timeMs - shutterMs * t)
-    const sampleOverrides = evaluateTimelines(scene.timelines, sampleTimeMs)
+      sctx.setTransform(1, 0, 0, 1, 0, 0)
+      sctx.clearRect(0, 0, compW, compH)
+      renderer.renderSingleLayer(sctx, sampleLayer, scene, assets, {
+        overrides:   sampleOverrides,
+        paramValues,
+        timeMs:      sampleTimeMs,
+      })
+      gpuMotionBlur.addSample(canvas)
+    }
 
-    sctx.setTransform(1, 0, 0, 1, 0, 0)
-    sctx.clearRect(0, 0, compW, compH)
-    renderer.renderSingleLayer(sctx, sampleLayer, scene, assets, {
-      overrides:   sampleOverrides,
-      paramValues,
-      timeMs:      sampleTimeMs,
-    })
-    gpuMotionBlur.addSample(canvas)
+    const result = gpuMotionBlur.finish()
+    if (!result) return false
+
+    // ── Composite the averaged smear (identity transform; keep parent alpha,
+    //    apply this layer's blend mode) ──────────────────────────────────────
+    ctx.save()
+    try {
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) ?? 'source-over'
+      ctx.drawImage(result, 0, 0, compW, compH)
+    } finally { ctx.restore() }
+
+    return true
+  } finally {
+    sample?.release()
+    gpuMotionBlur.cancel()
   }
-
-  const result = gpuMotionBlur.finish()
-  if (!result) return false
-
-  // ── Composite the averaged smear (identity transform; keep parent alpha,
-  //    apply this layer's blend mode) ──────────────────────────────────────
-  ctx.save()
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.globalCompositeOperation = (layer.blendMode as GlobalCompositeOperation) ?? 'source-over'
-  ctx.drawImage(result, 0, 0, compW, compH)
-  ctx.restore()
-
-  return true
 }

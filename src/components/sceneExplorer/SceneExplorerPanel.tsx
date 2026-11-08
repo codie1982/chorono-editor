@@ -23,16 +23,22 @@ import {
   type ColumnDefinition,
 } from '@/lib/sceneExplorer/sceneExplorerColumns'
 import SceneExplorerRow, {
+  SCENE_EXPLORER_ROW_HEIGHT,
   type DropTargetState,
   type DropZone,
 } from './SceneExplorerRow'
 import ContextMenu from '@/components/ui/ContextMenu'
 import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
+import SubtreeOperationsToolbar from './SubtreeOperationsToolbar'
+import { useSceneExplorerBranches } from './hooks/useSceneExplorerBranches'
 import LayerVisibilityPanel from './LayerVisibilityPanel'
 import SceneExplorerStatusBar from './SceneExplorerStatusBar'
 import QuickFilterChips from './QuickFilterChips'
 import SearchInput from './SearchInput'
+import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+import { useRowWindow } from '@/components/virtualization/useRowWindow'
+import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { DEFAULT_VISIBILITY_FILTERS, type LayerVisibilityFilters } from '@/lib/sceneExplorer/visibilityFilters'
 
 interface Props {
@@ -81,6 +87,8 @@ export default function SceneExplorerPanel({
 }: Props) {
   // ── State ────────────────────────────────────────────────────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
+  const branches = useSceneExplorerBranches({ layers, selectedId, selectedIds, setCollapsedIds,
+    onHidden: contextHandlers?.bulkToggleFlag })
   const [textFilter, setTextFilter]     = useState('')
   // BL-57 C-lite — which layers have their info sub-rows expanded inline.
   // Independent of `collapsedIds` so the user can hide group children but
@@ -209,6 +217,17 @@ export default function SceneExplorerPanel({
     }),
     [layers, collapsedIds, subInfoExpandedIds, timeline, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects],
   )
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const layout = useMemo(() => RowLayout.fixed(rows.length, SCENE_EXPLORER_ROW_HEIGHT), [rows.length])
+  const rowKeys = useMemo(() => rows.map(row => row.id), [rows])
+  const canFocusRow = useCallback((index: number) => rows[index].kind === 'layer', [rows])
+  const windowed = useRowWindow(layout, rowKeys, scrollRef, undefined, canFocusRow)
+  const revealedSelection = useRef<string | null>(null)
+  useEffect(() => {
+    if (revealedSelection.current === selectedId) return
+    revealedSelection.current = selectedId
+    windowed.reveal(rows.findIndex(row => row.id === selectedId))
+  }, [selectedId, rows, windowed.reveal])
 
   // ── BL-58 Keyboard shortcuts ─────────────────────────────────────────────
   // Active only when the pointer is over the panel — keeps Delete / Cmd+D
@@ -406,6 +425,15 @@ export default function SceneExplorerPanel({
         onChange={setVisibilityFilters}
       />
 
+      {branches.roots.length > 0 && <SubtreeOperationsToolbar
+        selectedCount={branches.roots.length} affectedCount={branches.ids.size}
+        hasChildren={branches.hasChildren} hiddenCount={branches.hiddenCount}
+        canSetHidden={!!contextHandlers?.bulkToggleFlag}
+        onExpand={() => branches.setExpanded(branches.roots, true)}
+        onCollapse={() => branches.setExpanded(branches.roots, false)}
+        onShow={() => branches.setHidden(branches.roots, false)}
+        onHide={() => branches.setHidden(branches.roots, true)} />}
+
       {/* BL-53 — Bulk operations toolbar (appears when 2+ rows selected) */}
       {selectedIds.size >= 2 && contextHandlers && (
         <BulkOperationsToolbar
@@ -467,6 +495,7 @@ export default function SceneExplorerPanel({
 
       {/* Scrollable rows */}
       <div
+        ref={scrollRef}
         className="flex-1 overflow-auto"
         role="tree"
         aria-label="Scene Explorer"
@@ -478,9 +507,12 @@ export default function SceneExplorerPanel({
               : 'No layers match the current filter.'}
           </div>
         ) : (
-          rows.map((row) => (
+          <WindowedRows layout={layout} indices={windowed.indices} rowKey={index => rowKeys[index]}
+            renderRow={(index, attributes) => {
+            const row = rows[index]
+            return (
             <SceneExplorerRow
-              key={row.id}
+              attributes={attributes}
               row={row}
               columns={columns}
               isSelected={selectedIds.has(row.id) || row.id === selectedId}
@@ -506,7 +538,7 @@ export default function SceneExplorerPanel({
               subInfoExpanded={subInfoExpandedIds.has(row.id)}
               onToggleSubInfo={toggleSubInfo}
             />
-          ))
+          )}} />
         )}
       </div>
 
@@ -620,6 +652,9 @@ export default function SceneExplorerPanel({
           bulkToggleFlag: contextHandlers.bulkToggleFlag ?? (() => {}),
           isolate:       contextHandlers.isolate,
           showAll:       contextHandlers.showAll,
+          expandSubtrees: ids => branches.setExpanded(ids, true),
+          collapseSubtrees: ids => branches.setExpanded(ids, false),
+          setSubtreeHidden: contextHandlers.bulkToggleFlag ? branches.setHidden : undefined,
         }
         return (
           <ContextMenu

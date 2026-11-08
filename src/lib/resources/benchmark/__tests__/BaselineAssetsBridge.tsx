@@ -35,6 +35,12 @@ export function BaselineAssetsBridge({ scene, onReady, onError }: {
             if (!(element instanceof HTMLVideoElement) || element.readyState < 2) ready = false
           } else if (asset.type === 'audio' && !loadedAudio.has(asset.id)) ready = false
           else if (asset.type === 'font') {
+            if (assets.fonts) {
+              const state = assets.fonts.state(asset)
+              if (state === 'error') throw new Error('Font fixture decode failed')
+              if (state !== 'ready') ready = false
+              continue
+            }
             const family = asset.metadata?.notes?.match(/^family: (.+)$/)?.[1]
             let loaded = false
             document.fonts.forEach(face => {

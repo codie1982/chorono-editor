@@ -24,6 +24,8 @@ export interface TintEffectDefinition extends EffectDefinition {
 
 export const tintEffect: EffectPlugin<TintEffectDefinition> = {
   type: 'tint',
+  alphaSafe: true,
+  regionPadding: () => 0,
   apply: withEffectSurfaces<TintEffectDefinition>((input, effect, surfaces) => {
     const { color = '#3B82F6', strength = 0.5, blend = 'overlay' } = effect.params
     const W = input.width

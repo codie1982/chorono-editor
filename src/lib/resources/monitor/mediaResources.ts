@@ -8,14 +8,19 @@ export interface MediaElement {
   error?: unknown
   getAttribute?(name: string): string | null
 }
+/** Managed status lookup is diagnostic only; it must never promote/load media. */
+export interface MediaElementMap extends ReadonlyMap<string, MediaElement> {
+  media?: { snapshot(): { loading: readonly string[]; errors: Readonly<Record<string, string>> } }
+  fonts?: { state(asset: Asset): 'ready' | 'loading' | 'error' | 'notResident' }
+}
 export interface MediaQuery { page: number; search: string }
 export interface MediaResourceRow {
   id: string; name: string; type: string
-  state: 'ready' | 'loading' | 'error' | 'untracked'
+  state: 'ready' | 'loading' | 'error' | 'untracked' | 'notResident'
   bytes: number | null
 }
 export interface MediaResourceSnapshot {
-  total: number; ready: number; loading: number; errors: number; untracked: number
+  total: number; ready: number; loading: number; errors: number; untracked: number; notResident: number
   images: number; videos: number; playingVideos: number
   imageBytes: number; videoFrameBytes: number; sourceBytes: number; unknownSourceSizes: number
   rows: MediaResourceRow[]; page: number; pages: number; filteredCount: number
@@ -31,7 +36,7 @@ export interface MediaResourceSnapshot {
  * all assets without materializing their data/URLs or serializing scene JSON.
  */
 export function summarizeMediaResources(
-  assets: readonly Asset[], elements: ReadonlyMap<string, MediaElement>,
+  assets: readonly Asset[], elements: MediaElementMap,
   audio: AudioResourceSnapshot, audioErrors: Record<string, string>,
   query: MediaQuery = { page: 0, search: '' },
 ): MediaResourceSnapshot {
@@ -41,11 +46,14 @@ export function summarizeMediaResources(
   const pages = Math.max(1, Math.ceil(filteredCount / 25))
   const page = Math.max(0, Math.min(pages - 1, Math.floor(query.page) || 0))
   const result: MediaResourceSnapshot = { total: assets.length, ready: 0, loading: 0, errors: 0, untracked: 0,
+    notResident: 0,
     images: 0, videos: 0, playingVideos: 0, imageBytes: 0, videoFrameBytes: 0,
     sourceBytes: 0, unknownSourceSizes: 0, rows: [], page, pages, filteredCount }
   const seen = new Set<MediaElement>()
   const sources = new Map<string, number | null>()
   const pcm = new Map(audio.assets.map(asset => [asset.id, asset.bytes]))
+  const loadingAudio = audio.loadingAssetIds === undefined ? null : new Set(audio.loadingAssetIds)
+  const managed = elements.media?.snapshot(), loadingVisual = managed ? new Set(managed.loading) : null
   let matchIndex = 0
   for (const asset of assets) {
     const fileBytes = asset.metadata?.filesize
@@ -62,7 +70,7 @@ export function summarizeMediaResources(
         state = width > 0 && height > 0 ? 'ready' : element.complete ? 'error' : 'loading'
         if (state === 'ready') bytes = width * height * 4
         if (bytes !== null && !seen.has(element)) result.imageBytes += bytes
-      } else state = 'loading'
+      } else state = managed?.errors[asset.id] ? 'error' : loadingVisual ? loadingVisual.has(asset.id) ? 'loading' : 'notResident' : 'loading'
     } else if (asset.type === 'video') {
       result.videos++
       if (sameSource) {
@@ -74,15 +82,21 @@ export function summarizeMediaResources(
             if (element.paused === false) result.playingVideos++
           }
         }
-      } else state = 'loading'
+      } else state = managed?.errors[asset.id] ? 'error' : loadingVisual ? loadingVisual.has(asset.id) ? 'loading' : 'notResident' : 'loading'
     } else if (asset.type === 'audio') {
       bytes = pcm.get(asset.id) ?? null
-      state = audioErrors[asset.id] ? 'error' : bytes !== null ? 'ready' : 'loading'
+      state = audioErrors[asset.id] ? 'error' : bytes !== null ? 'ready'
+        : loadingAudio ? loadingAudio.has(asset.id) ? 'loading' : 'notResident' : 'untracked'
+    } else if (asset.type === 'font') {
+      // Native glyph/face storage is opaque. Admission policy charges are not
+      // decoded memory estimates and must never enter this row's byte total.
+      state = elements.fonts?.state(asset) ?? 'untracked'
     }
     if (sameSource) seen.add(element)
     if (state === 'ready') result.ready++
     else if (state === 'loading') result.loading++
     else if (state === 'error') result.errors++
+    else if (state === 'notResident') result.notResident++
     else result.untracked++
     if (matches(asset)) {
       if (matchIndex >= page * 25 && matchIndex < (page + 1) * 25) {

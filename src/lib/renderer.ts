@@ -1,4 +1,4 @@
-import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor } from './types'
+import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor, Asset } from './types'
 import { buildPathOnCanvas } from './geometry/PathCommand'
 import { splineToPathDefinition } from './spline/splineToPath'
 import { computeSplineBounds } from './spline/geometry/computeSplineBounds'
@@ -19,10 +19,12 @@ import { hitTestSegment as hitTestSegmentLocal } from './path/pathOps'
 import { measureTextLayout } from './text/measureText'
 import { buildShapePath, computeShapeLength } from './render/shapeRenderer'
 import { buildGradient } from './render/buildGradient'
-import { resolveRenderColor } from './render/materializeOverrides'
+import { resolveRenderColor, materializeRenderScene } from './render/materializeOverrides'
+import { videoForLayer } from './asset/visual/AssetElementMap'
+import type { AssetElementMap } from './asset/visual/AssetElementMap'
 
 /** Element cache passed in from React (image / video DOM elements keyed by Asset.id). */
-export type AssetElementMap = Map<string, HTMLImageElement | HTMLVideoElement>
+export type { AssetElementMap } from './asset/visual/AssetElementMap'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -479,7 +481,7 @@ export function drawVideoLayer(
   assets: AssetElementMap,
 ) {
   if (!layer.video || !layer.size) return
-  const el = assets.get(layer.video.assetId)
+  const el = videoForLayer(assets, layer.id, layer.video.assetId)
   if (!el || !(el instanceof HTMLVideoElement)) return
   // Use 'cover' for video by default so it fills the layer box
   drawFitted(ctx, el, layer.size.width, layer.size.height, 'cover')
@@ -874,6 +876,9 @@ export function hitTestLayersAt(
   // Hit-test the same frame the canvas displays (timeline isolation, state
   // machines and parameter bindings may replace the normal timeline values).
   const overrides = frameOverrides ?? evaluateTimelines(scene.timelines, timeMs)
+  // Query the same typed/instance text values as drawing. Ready aliases may be
+  // projected by the caller; ordinary source metrics use the explicit asset scope.
+  scene = materializeRenderScene(scene, overrides)
   const hits: string[] = []
   const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
 
@@ -898,7 +903,7 @@ export function hitTestLayersAt(
       hitLayer = resolved
     }
 
-    if (hitTestLayerLocal(hitLayer, lx, ly)) hits.push(layer.id)
+    if (hitTestLayerLocal(hitLayer, lx, ly, scene.assets)) hits.push(layer.id)
   }
 
   // BL-03: Group AABB hit-test. After per-leaf hits are collected, walk
@@ -923,8 +928,15 @@ export function hitTestLayersAt(
 /**
  * Per-layer hit test in LOCAL coordinates (relative to layer.transform.x/y).
  * Returns true if the local point (lx, ly) is on the layer's body or stroke.
+ * Text uses shared ready-face metrics and textAlign in local pixels; imported
+ * font storage is borrowed from the supplied source scope, never loaded here.
  */
-function hitTestLayerLocal(layer: Layer, lx: number, ly: number): boolean {
+function hitTestLayerLocal(layer: Layer, lx: number, ly: number, assets: readonly Asset[]): boolean {
+  if (layer.type === 'text' && layer.text) {
+    const size = measureTextLayout(layer.text, assets)
+    const left = layer.text.textAlign === 'center' ? -size.width / 2 : layer.text.textAlign === 'right' ? -size.width : 0
+    return lx >= left && lx <= left + size.width && ly >= 0 && ly <= size.height
+  }
   if (layer.type === 'spline') {
     if (!layer.spline) return false
     // Splines are centred around local origin and have no size box. Pick the

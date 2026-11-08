@@ -9,6 +9,22 @@ class Video {
 }
 afterEach(() => vi.unstubAllGlobals())
 describe('video playback animated properties', () => {
+  it('keeps managed clip clocks independent and does not reseek an unchanged paused frame', () => {
+    vi.stubGlobal('HTMLVideoElement', Video)
+    const a = new Video(), b = new Video()
+    const scene = { layers: [
+      { id: 'a', type: 'video', video: { assetId: 'shared', startOffsetMs: 100 } },
+      { id: 'b', type: 'video', video: { assetId: 'shared', startOffsetMs: 500 } },
+    ], timelines: [] } as unknown as ChronoScene
+    const setA = vi.fn(), setB = vi.fn()
+    let timeA = 0, timeB = 0
+    Object.defineProperty(a, 'currentTime', { get: () => timeA, set: value => { timeA = value; setA(value) } })
+    Object.defineProperty(b, 'currentTime', { get: () => timeB, set: value => { timeB = value; setB(value) } })
+    const assetCache = Object.assign(new Map(), { videoForLayer: (id: string) => (id === 'a' ? a : b) as unknown as HTMLVideoElement })
+    const params = { scene, assetCache, currentTimeMs: 0, isPlaying: false, playbackSpeed: 1 }
+    syncVideoPlayback(params); syncVideoPlayback(params)
+    expect(timeA).toBe(0.1); expect(timeB).toBe(0.5); expect(setA).toHaveBeenCalledOnce(); expect(setB).toHaveBeenCalledOnce()
+  })
   it('applies evaluated video volume and mute to the actual media element without changing stored defaults', () => {
     vi.stubGlobal('HTMLVideoElement', Video)
     const video = new Video()

@@ -7,6 +7,9 @@ import { makeBulkMoveKfCmd } from '@/lib/editor/commands-keyframe'
 import { dopeSheetTickStep, keysInDopeSheetBox, selectDopeSheetKeys } from '@/lib/dope-sheet/rows'
 import DopeSheetHierarchy from './DopeSheetHierarchy'
 import DopeSheetKeyframeRow from './DopeSheetKeyframeRow'
+import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+import { useRowWindow } from '@/components/virtualization/useRowWindow'
+import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { DOPE_SHEET_LABEL_WIDTH as LABEL_WIDTH, DOPE_SHEET_ROW_HEIGHT as ROW_HEIGHT,
   DOPE_SHEET_RULER_HEIGHT as RULER_HEIGHT, type DopeSheetRow, type DopeSheetUIState } from './types'
 
@@ -32,9 +35,13 @@ interface Box { x1: number; y1: number; x2: number; y2: number }
 export default function DopeSheetGrid(props: Props) {
   const { selectedTimeline: timeline, editor, selectedKfIds, onSelectKeyframes } = props
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rowsRef = useRef<HTMLDivElement>(null)
   const baseSceneRef = useRef<ChronoScene | null>(null)
   const interactionCleanupRef = useRef<(() => void) | null>(null)
-  const [viewport, setViewport] = useState({ width: 800, height: 300, left: 0 })
+  const layout = useMemo(() => RowLayout.fixed(props.rows.length, ROW_HEIGHT), [props.rows.length])
+  const rowKeys = useMemo(() => props.rows.map(row => row.node.id), [props.rows])
+  const windowed = useRowWindow(layout, rowKeys, scrollRef, rowsRef)
+  const viewport = windowed.viewport
   const [userZoom, setUserZoom] = useState(1)
   const [box, setBox] = useState<Box | null>(null)
   const durationMs = Math.max(1, timeline.durationMs)
@@ -45,24 +52,19 @@ export default function DopeSheetGrid(props: Props) {
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const measure = () => setViewport(prev => ({ ...prev, width: el.clientWidth, height: el.clientHeight }))
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
     const wheel = (event: WheelEvent) => {
       if (!event.shiftKey) return
       event.preventDefault()
       setUserZoom(zoom => Math.max(0.25, Math.min(8, zoom * (event.deltaY > 0 ? 0.9 : 1.1))))
     }
     el.addEventListener('wheel', wheel, { passive: false })
-    return () => { observer.disconnect(); el.removeEventListener('wheel', wheel) }
+    return () => { el.removeEventListener('wheel', wheel) }
   }, [])
 
   useEffect(() => {
     setUserZoom(1)
     setBox(null)
     if (scrollRef.current) { scrollRef.current.scrollLeft = 0; scrollRef.current.scrollTop = 0 }
-    setViewport(prev => ({ ...prev, left: 0 }))
     return () => interactionCleanupRef.current?.()
   }, [timeline.id, durationMs])
 
@@ -186,11 +188,7 @@ export default function DopeSheetGrid(props: Props) {
   const visibleEndMs = (viewport.left + Math.max(0, viewport.width - LABEL_WIDTH)) / pixelsPerMs
 
   return <div className="dope-sheet-grid" ref={scrollRef} tabIndex={0}
-    role="region" aria-label="Dope Sheet keyframes"
-    onScroll={event => {
-      const left = event.currentTarget.scrollLeft
-      setViewport(prev => ({ ...prev, left }))
-    }}>
+    role="region" aria-label="Dope Sheet keyframes">
     <div className="dope-sheet-content" style={{ width: LABEL_WIDTH + timeAreaWidth }}>
       <div className="grid-ruler-row" style={{ height: RULER_HEIGHT }}>
         <div className="ruler-label-spacer" style={{ width: LABEL_WIDTH }}>
@@ -207,19 +205,21 @@ export default function DopeSheetGrid(props: Props) {
           <div className="ruler-playhead" style={{ left: props.currentTimeMs * pixelsPerMs }} />
         </div>
       </div>
-      <div className="dope-sheet-rows">
+      <div className="dope-sheet-rows" ref={rowsRef}>
         <div className="dope-sheet-labels" style={{ width: LABEL_WIDTH }}>
           <DopeSheetHierarchy rows={props.rows} selectedLayerId={props.selectedLayerId}
+            layout={layout} indices={windowed.indices}
             collapsedNodeIds={props.uiState.collapsedNodeIds} onToggleExpand={props.onToggleExpand}
             onSelectLayer={props.onSelectLayer} />
         </div>
         <div className="dope-sheet-keyrows" style={{ width: timeAreaWidth,
           minHeight: Math.max(0, viewport.height - RULER_HEIGHT) }} onPointerDown={beginMarquee}>
-          {props.rows.map(row => <DopeSheetKeyframeRow key={row.node.id} row={row}
+          <WindowedRows layout={layout} indices={windowed.indices} rowKey={index => rowKeys[index]}
+            renderRow={(index, attributes) => <DopeSheetKeyframeRow row={props.rows[index]} attributes={attributes}
             selectedKfIds={selectedKfIds} previewMs={drag.previewMs} pixelsPerMs={pixelsPerMs}
             visibleStartMs={visibleStartMs} visibleEndMs={visibleEndMs}
             currentTimeMs={props.currentTimeMs} snapTarget={drag.snapTarget} gridStepMs={gridStepMs}
-            onKeyPointerDown={keyPointerDown} onKeySelect={selectKey} onEmptyPointerDown={beginMarquee} />)}
+            onKeyPointerDown={keyPointerDown} onKeySelect={selectKey} onEmptyPointerDown={beginMarquee} />} />
         </div>
       </div>
       {box && <div className="dope-sheet-marquee" style={{

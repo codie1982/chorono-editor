@@ -3,12 +3,21 @@
 // Handles MP3, WAV, AAC, OGG imports.
 // Creates one AudioAsset + one AudioLayer (no visual size — audio only).
 
+import type { MediaProbeSource } from '../../../asset/metadata'
+import { editorMediaProbes } from '../../../asset/metadata/editorMediaProbes'
+import { checkImportExecution, type ImportExecution } from '../../resources/ImportExecution'
+import { withImportSource } from '../../resources/importSources'
 import { BaseImportHandler } from '../BaseHandler'
 import { newAudioLayer }     from '../../../defaults'
 import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress, ImportWarning } from '../../types'
 import type { Asset } from '../../../asset/types'
 
+/** Import orchestration borrows the shared probe owner; native handles, byte
+ * reservations and cancellation never enter asset/scene/undo JSON. */
 export class AudioHandler extends BaseImportHandler {
+  /** Private hosts can inject a narrow probe port without constructing DOM media. */
+  constructor(private readonly probes: MediaProbeSource = editorMediaProbes) { super() }
+
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = [
     'audio/mp3',  // canonical — FileTypeDetector maps audio/mpeg → audio/mp3
@@ -17,8 +26,9 @@ export class AudioHandler extends BaseImportHandler {
     'audio/ogg',
   ]
 
-  async preflight(file: File): Promise<ImportPreflight> {
-    const { durationMs } = await this.probeAudio(file)
+  /** Probe source metadata within bounded shared capacity, without retaining a native handle. */
+  async preflight(file: File, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
+    const { durationMs } = await this.probes.audio(file, execution)
     const source  = this.makeSource(file)
     const format  = this.getFormat(file)
     const features: string[] = []
@@ -48,107 +58,77 @@ export class AudioHandler extends BaseImportHandler {
     }
   }
 
+  /** Validate/probe before creator source adoption; caller owns final result publication. */
   async handle(
     file: File,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult> {
     const startMs = Date.now()
     this.reportProgress(onProgress, 'reading', 'Reading audio…', 0.1)
 
-    const url      = URL.createObjectURL(file)
-    const { durationMs } = await this.probeAudio(file)
-    const assetId  = this.generateAssetId()
-    const format   = this.getFormat(file)
+    const { durationMs } = await this.probes.audio(file, execution)
+    checkImportExecution(execution)
+    return withImportSource(file, async (url) => {
+      const assetId  = this.generateAssetId()
+      const format   = this.getFormat(file)
 
-    this.reportProgress(onProgress, 'converting', 'Creating layer…', 0.7)
+      this.reportProgress(onProgress, 'converting', 'Creating layer…', 0.7)
 
-    const asset: Asset = {
-      id:         assetId,
-      name:       file.name,
-      type:       'audio',
-      url,
-      durationMs: durationMs > 0 ? durationMs : undefined,
-      storage:  { mode: 'external', originalFileName: file.name },
-      metadata: {
-        filesize:   file.size,
-        importedAt: Date.now(),
-        tags:       [],
-      },
-      runtime: { objectUrl: url },
-    }
+      const asset: Asset = {
+        id:         assetId,
+        name:       file.name,
+        type:       'audio',
+        url,
+        durationMs: durationMs > 0 ? durationMs : undefined,
+        storage:  { mode: 'external', originalFileName: file.name },
+        metadata: {
+          filesize:   file.size,
+          importedAt: Date.now(),
+          tags:       [],
+        },
+        runtime: { objectUrl: url },
+      }
 
-    const layer = newAudioLayer(assetId, durationMs > 0 ? durationMs : undefined)
-    layer.name = file.name
-    const warnings: ImportWarning[] = durationMs > 0 ? [] : [{ code: 'parse_error', severity: 'warning', message: 'Audio duration could not be read. A temporary clip duration was used; check the imported source.', affectedIds: [layer.id] }]
+      const layer = newAudioLayer(assetId, durationMs > 0 ? durationMs : undefined)
+      layer.name = file.name
+      const warnings: ImportWarning[] = durationMs > 0 ? [] : [{ code: 'parse_error', severity: 'warning', message: 'Audio duration could not be read. A temporary clip duration was used; check the imported source.', affectedIds: [layer.id] }]
 
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
+      this.reportProgress(onProgress, 'complete', 'Done', 1)
+      checkImportExecution(execution)
 
-    return {
-      id:      this.generateId(),
-      source:  this.makeSource(file),
-      format,
-      kind:    'asset',
-      assets:  [asset],
-      layers:  [layer],
-      groups:  [],
-      tracks:  [],
-      timelines: [],
-      commands: [],
-      warnings,
-      errors:             [],
-      unsupportedFeatures: [],
-      report: {
-        title:          'Audio Import',
-        sourceFileName: file.name,
+      return {
+        id:      this.generateId(),
+        source:  this.makeSource(file),
         format,
-        created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
+        kind:    'asset',
+        assets:  [asset],
+        layers:  [layer],
+        groups:  [],
+        tracks:  [],
+        timelines: [],
+        commands: [],
         warnings,
-        errors:         [],
+        errors:             [],
         unsupportedFeatures: [],
-        suggestions:    [],
-        durationMs:     Date.now() - startMs,
-      },
-    }
+        report: {
+          title:          'Audio Import',
+          sourceFileName: file.name,
+          format,
+          created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
+          warnings,
+          errors:         [],
+          unsupportedFeatures: [],
+          suggestions:    [],
+          durationMs:     Date.now() - startMs,
+        },
+      }
+    })
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
-  private probeAudio(file: File): Promise<{ durationMs: number }> {
-    return new Promise((resolve) => {
-      const url   = URL.createObjectURL(file)
-      const audio = document.createElement('audio')
-      audio.preload = 'metadata'
-      let settled = false
-      let timeout: ReturnType<typeof setTimeout>
-
-      const cleanup = () => {
-        clearTimeout(timeout)
-        audio.onloadedmetadata = null
-        audio.onerror = null
-        URL.revokeObjectURL(url)
-        audio.removeAttribute('src')
-        audio.load()
-      }
-      const finish = (durationMs: number) => {
-        if (settled) return
-        settled = true
-        cleanup()
-        resolve({ durationMs })
-      }
-
-      audio.onloadedmetadata = () => {
-        const raw = audio.duration
-        finish(Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.round(raw * 1000)) : 0)
-      }
-      // If probe fails, resolve with 0 — audio can still be imported without duration
-      audio.onerror = () => {
-        finish(0)
-      }
-      timeout = setTimeout(() => finish(0), 10000)
-      audio.src = url
-    })
-  }
 
   private getFormat(file: File): ImportFormat {
     const mime = file.type.toLowerCase()

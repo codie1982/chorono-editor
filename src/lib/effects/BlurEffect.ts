@@ -7,6 +7,8 @@
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { withEffectSurfaces } from './withEffectSurfaces'
+import { gaussianRegionPadding } from './effectRegionPadding'
+import { requireRegionBackend } from './requireRegionBackend'
 import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface BlurEffectDefinition extends EffectDefinition {
@@ -19,6 +21,9 @@ export interface BlurEffectDefinition extends EffectDefinition {
 
 export const blurEffect: EffectPlugin<BlurEffectDefinition> = {
   type: 'blur',
+  alphaSafe: true,
+  regionPadding: effect => (effect.params.radius ?? 0) > 0 && !gpuImageEffects.supportsRegionBlur()
+    ? null : gaussianRegionPadding(effect.params.radius ?? 0),
   apply: withEffectSurfaces<BlurEffectDefinition>((input, effect, surfaces) => {
     const r = Math.max(0, effect.params.radius ?? 0)
     if (r === 0) return input
@@ -26,6 +31,7 @@ export const blurEffect: EffectPlugin<BlurEffectDefinition> = {
     // GPU path: separable Gaussian. Copy the GL result into a fresh 2D canvas so
     // the singleton's GL canvas is free to be reused by the next effect.
     const gpu = gpuImageEffects.blur(input, r)
+    requireRegionBackend(surfaces, gpu, r)
     if (gpu) {
       const out = surfaces.create(input.width, input.height)
       out.getContext('2d')!.drawImage(gpu, 0, 0)

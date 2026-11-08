@@ -55,6 +55,7 @@ export const bezierPathDefinition: LayerDefinition = {
   iconKey: 'bezierPath',
   category: 'Path & Vector',
   createDefault: () => newBezierPathLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => [
     transformGroup(),
     appearanceGroup(),

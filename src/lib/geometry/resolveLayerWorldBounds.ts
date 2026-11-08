@@ -4,16 +4,27 @@ import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { bezierPathToPathDefinition } from '@/lib/path/bezierToPathDefinition'
 import { computeSplineBounds } from '@/lib/spline/geometry/computeSplineBounds'
 import { measureTextLayout } from '@/lib/text/measureText'
+import { resolveTextFontFamily } from '@/lib/text/resolveTextFontFamily'
 import { SvgPathParser } from '@/lib/svg/SvgPathParser'
 import { computePathBounds, type PathBounds } from './computePathBounds'
 import { resolveLayerWorldMatrix } from './resolveLayerWorldMatrix'
 import { ShapeToPathConverter } from './ShapeToPathConverter'
+import { unionBounds } from './boundsMath'
 import type { Matrix2D } from './Matrix2D'
 import type { Vec2 } from './CoordinateSystem'
 import { materializeRenderScene } from '@/lib/render/materializeOverrides'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 
 export type LayerWorldBoundsResolver = (layer: Layer) => PathBounds | null
+
+/** Optional scheduling policy; the geometric result and memo ownership are
+ * unchanged. Callers must keep source/override inputs immutable for the scope. */
+export interface LayerWorldBoundsOptions {
+  /** Delay evaluation, scene projection and indexing until the first query.
+   * Useful for editor frames with no visible bounds consumer. Default false
+   * preserves eager callers' preparation/error timing. */
+  deferPreparation?: boolean
+}
 
 function pointBounds(points: Vec2[]): PathBounds {
   const x = Math.min(...points.map(point => point.x))
@@ -41,16 +52,6 @@ function ellipseBounds(cx: number, cy: number, rx: number, ry: number, matrix: M
   return { x: center.x - xRadius, y: center.y - yRadius, width: xRadius * 2, height: yRadius * 2 }
 }
 
-function union(a: PathBounds | null, b: PathBounds): PathBounds {
-  if (!a) return b
-  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
-  return {
-    x, y,
-    width: Math.max(a.x + a.width, b.x + b.width) - x,
-    height: Math.max(a.y + a.height, b.y + b.height) - y,
-  }
-}
-
 /** Shared geometry bounds for editor frames, picking aids, rulers and fitting.
  * Resolves live visual instances and parent transforms. Stroke/effect padding
  * is intentionally excluded: this measures the editable geometry itself. */
@@ -64,12 +65,27 @@ export function resolveLayerWorldBounds(
 }
 
 /** Prepare one immutable scene/frame for bulk operations such as marquee
- * selection or drawing many outlines. Do not retain across scene edits. */
+ * selection or drawing many outlines. Coordinates are composition pixels;
+ * timeMs is the scene timeline time, and supplied overrides take precedence.
+ * Queries memoize bounds by layer ID within this scope, never across edits.
+ *
+ * With deferPreparation, an unused resolver performs no evaluation, scene
+ * materialization or indexing. The first query prepares once through this same
+ * implementation; subsequent queries share the ordinary frame memo. Failures
+ * propagate at first query and are not cached. Borrowed source/override inputs
+ * must remain immutable until the scope is discarded, including before that
+ * first query. Default eager behavior remains compatible with existing callers.
+ * No native resources, timers or historical frame cache are owned here. */
 export function createLayerWorldBoundsResolver(
   scene: ChronoScene,
   timeMs = 0,
   overrides?: OverrideMap,
+  options?: LayerWorldBoundsOptions,
 ): LayerWorldBoundsResolver {
+  if (options?.deferPreparation) {
+    let prepared: LayerWorldBoundsResolver | undefined
+    return layer => (prepared ??= createLayerWorldBoundsResolver(scene, timeMs, overrides))(layer)
+  }
   const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
   scene = materializeRenderScene(scene, frame)
   const layerIndex = new LayerIndex(scene.layers)
@@ -100,7 +116,7 @@ export function createLayerWorldBoundsResolver(
       let bounds: PathBounds | null = null
       for (const child of layerIndex.childrenOf(item.id)) {
         const childBounds = visit(child)
-        if (childBounds) bounds = union(bounds, childBounds)
+        if (childBounds) bounds = unionBounds(bounds, childBounds)
       }
       active.delete(item.id)
       return bounds
@@ -158,10 +174,11 @@ export function createLayerWorldBoundsResolver(
       if (!effective.text) return null
       const hasAnimatedSize = ['fontSize', 'letterSpacing', 'value', 'fontFamily', 'fontWeight', 'fontStyle', 'uppercase', 'lineHeight']
         .some(property => frame.has(`layers.${effective.id}.text.${property}`))
-      const size = !hasAnimatedSize && effective.size ? effective.size : measureTextLayout({
+      const fontMapped=resolveTextFontFamily(effective.text.fontFamily??'sans-serif',scene.assets)!==(effective.text.fontFamily??'sans-serif')
+      const size = !hasAnimatedSize && !fontMapped && effective.size ? effective.size : measureTextLayout({
         ...effective.text,
         fontSize: getLayerValue(frame, effective.id, 'text.fontSize', effective.text.fontSize),
-      })
+      },scene.assets)
       const left = effective.text.textAlign === 'center' ? -size.width / 2
         : effective.text.textAlign === 'right' ? -size.width : 0
       return rectangleBounds(size.width, size.height, matrix, left)

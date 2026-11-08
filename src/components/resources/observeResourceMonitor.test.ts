@@ -14,6 +14,38 @@ class Visibility extends EventTarget {
 afterEach(() => vi.useRealTimers())
 
 describe('resource monitor observation lifecycle', () => {
+  it('coalesces pushed changes without polling during idle', () => {
+    vi.useFakeTimers()
+    let changed = () => {}
+    const release = vi.fn(), read = vi.fn(() => ({})), publish = vi.fn()
+    const source = { getSnapshot: read, subscribe: (listener: () => void) => { changed = listener; return release } }
+    const stop = observeResourceMonitor(source, new Visibility(), publish)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(10000)
+    expect(read).toHaveBeenCalledTimes(1)
+    for (let i = 0; i < 100; i++) changed()
+    expect(vi.getTimerCount()).toBe(1)
+    vi.advanceTimersByTime(499); expect(read).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1); expect(read).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+    stop(); stop(); expect(release).toHaveBeenCalledTimes(1)
+  })
+  it('detaches pushed observation and cancels a pending refresh while hidden or stopped', () => {
+    vi.useFakeTimers()
+    const visibility = new Visibility(), read = vi.fn(() => ({})), release = vi.fn()
+    let changed = () => {}
+    const subscribe = vi.fn((listener: () => void) => { changed = listener; return release })
+    const stop = observeResourceMonitor({ getSnapshot: read, subscribe }, visibility, () => {})
+    changed(); visibility.setHidden(true)
+    expect(release).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0)
+    changed(); vi.advanceTimersByTime(1000); expect(read).toHaveBeenCalledTimes(1)
+    visibility.setHidden(false)
+    expect(read).toHaveBeenCalledTimes(2); expect(subscribe).toHaveBeenCalledTimes(2)
+    changed(); stop()
+    expect(release).toHaveBeenCalledTimes(2); expect(vi.getTimerCount()).toBe(0)
+    changed(); vi.advanceTimersByTime(1000); expect(read).toHaveBeenCalledTimes(2)
+  })
   it('releases optional GPU observation while hidden and reacquires only when visible', () => {
     vi.useFakeTimers()
     const release = vi.fn()

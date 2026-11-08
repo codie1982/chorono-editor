@@ -1,200 +1,176 @@
 'use client'
-// ── useImport ─────────────────────────────────────────────────────────────────
-//
-// React integration for the universal import pipeline (BL-04–06).
-// Wires the ImportManager singleton into the editor: route any source through
-// importManager → atomic EditorCommand → dispatchCommand().
-//
-// Sources: local files, remote URLs (https), clipboard. Each shares the same
-// commit + reporting logic so behaviour is consistent everywhere.
-
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { importManager }       from '@/lib/import/ImportManager'
-import { initImportPipeline }  from '@/lib/import/initImportPipeline'
-import { toast }               from '@/lib/toast/toast'
-import type { EditorCommand }  from '@/lib/editor/commands-keyframe'
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { importManager, type ImportManager } from '@/lib/import/ImportManager'
+import { initImportPipeline } from '@/lib/import/initImportPipeline'
+import { toast } from '@/lib/toast/toast'
+import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import type { ImportResult, ImportProgress, ImportPreflight, SpriteImportOptions } from '@/lib/import/types'
+import { releaseImportSources } from '@/lib/import/resources/importSources'
+import { ImportActivity, type ImportOperation } from '@/lib/import/lifecycle/ImportActivity'
+import { editorSceneDocumentLoader, type SceneDocumentSource } from '@/lib/editor/document'
+import type { ChronoScene } from '@/lib/types'
+import { reportImportResult } from './import/reportImportResult'
 
+type ImportPort = Pick<ImportManager, 'importFile' | 'importFileAs' | 'importUrl' | 'importClipboardItem' | 'preflight' | 'canImport'>
 export interface UseImportOptions {
-  /** Dispatch the atomic import command into the editor (one undo step). */
-  dispatchCommand: (cmd: EditorCommand) => void
-  /** Called with the first created layer id so the editor can select it. */
+  dispatchCommand: (command: EditorCommand) => void
   onSelectLayer?: (id: string) => void
   selectedTimelineId?: string | null
   currentTimeMs?: number
+  /** Stable getter for runtime document identity, not scene ID/revision. Omit
+   * only in standalone hosts whose document lives exactly as long as this hook. */
+  getDocumentSignal?: () => AbortSignal
+  /** Injectable routing contract for private hosts/tests; default app singleton. */
+  manager?: ImportPort
+  /** Project-source preparation only; caller controls actual reset/adoption. */
+  sceneLoader?: SceneDocumentSource
 }
-
 export interface UseImportReturn {
-  /** Import a single File. Returns the result or null on failure. */
+  /** Latest open wins; onOpen is synchronous and may reset the document. */
+  openScene: (file: File, onOpen: (scene: ChronoScene) => void, onError?: (error: Error) => void) => Promise<boolean>
   importFile: (file: File) => Promise<ImportResult | null>
-  /** Import many files sequentially. Returns successful results. */
   importFiles: (files: FileList | File[]) => Promise<ImportResult[]>
-  /** Import from a remote URL (https; http only for localhost). */
   importUrl: (url: string) => Promise<ImportResult | null>
-  /** Import an image from the system clipboard. */
   importFromClipboard: () => Promise<ImportResult | null>
-  /** Import an image as a sprite sheet (explicit grid options). */
-  importSpriteSheet: (file: File, opts: SpriteImportOptions) => Promise<ImportResult | null>
-  /** Run preflight analysis (summary + warnings) without committing. */
+  importSpriteSheet: (file: File, options: SpriteImportOptions) => Promise<ImportResult | null>
   preview: (file: File) => Promise<ImportPreflight | null>
-  /** Check whether a file is importable before committing. */
   canImport: (file: File) => Promise<boolean>
-  /** True while an import is running. */
   importing: boolean
-  /** Latest progress event (for a progress UI). */
+  activeCount: number
+  settlingCount: number
+  label: string | null
   progress: ImportProgress | null
+  cancel: () => void
 }
 
-export function useImport({ dispatchCommand, onSelectLayer, selectedTimelineId, currentTimeMs = 0 }: UseImportOptions): UseImportReturn {
-  const [importing, setImporting] = useState(false)
-  const [progress, setProgress]   = useState<ImportProgress | null>(null)
+/** Document-scoped UI integration for every import entry point. Each action
+ * captures placement and document once; multi-file actions cannot spill into a
+ * replacement document. Cancellation stops publication/UI immediately while
+ * native jobs keep their actual settlement/byte owners. Sync dispatch adopts
+ * source leases before creator release. Late success/failure/progress is quiet.
+ * Injected managers remain externally owned; this hook never cancels a global
+ * queue. Mutable request controllers never enter undo or serialized scene data. */
+export function useImport(options: UseImportOptions): UseImportReturn {
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+  const fallback = useRef<AbortController | null>(null)
+  if (!fallback.current) fallback.current = new AbortController()
+  const getDocumentSignal = useCallback(() => optionsRef.current.getDocumentSignal?.() ?? fallback.current!.signal, [])
+  const activityRef = useRef<ImportActivity | null>(null)
+  if (!activityRef.current) activityRef.current = new ImportActivity()
+  const activity = activityRef.current
+  const latestOpen = useRef<ImportOperation | null>(null)
+  const status = useSyncExternalStore(activity.subscribe, activity.getSnapshot, activity.getSnapshot)
+  useLayoutEffect(() => { activity.start(); return () => activity.stop() }, [activity])
+  useEffect(() => { if (!options.manager) initImportPipeline() }, [options.manager])
 
-  // Register all built-in handlers exactly once.
-  useEffect(() => { initImportPipeline() }, [])
-
-  // Keep latest callbacks in refs so the importer identities stay stable.
-  const dispatchRef = useRef(dispatchCommand)
-  const selectRef   = useRef(onSelectLayer)
-  dispatchRef.current = dispatchCommand
-  selectRef.current   = onSelectLayer
-  const placementRef = useRef({ timelineId: selectedTimelineId ?? undefined, startMs: currentTimeMs })
-  placementRef.current = { timelineId: selectedTimelineId ?? undefined, startMs: currentTimeMs }
-
-  // Shared: commit a completed result and report it. `label` names the source.
-  const commitResult = useCallback((result: ImportResult, label: string): ImportResult | null => {
-    // Surface fatal errors without committing.
-    if (result.errors.some(e => e.fatal)) {
-      const first = result.errors.find(e => e.fatal)!
-      toast.error(`Import failed: ${label}`, { detail: first.message })
-      return null
-    }
-
-    // Commit the atomic command (assets + layers + tracks in one undo step).
-    const command = result.commands[0]
-    if (command) dispatchRef.current(command)
-
-    // Select the first created layer, if any.
-    const firstLayer = result.layers[0]
-    if (firstLayer) selectRef.current?.(firstLayer.id)
-
-    // Report outcome.
-    const { assets, layers } = result.report.created
-    const parts: string[] = []
-    if (layers) parts.push(`${layers} layer${layers === 1 ? '' : 's'}`)
-    if (assets) parts.push(`${assets} asset${assets === 1 ? '' : 's'}`)
-    const summary = parts.length > 0 ? parts.join(', ') : 'no editable content'
-
-    const warningCount = result.warnings.length
-    if (warningCount > 0) {
-      toast.warning(`Imported ${label} (${summary})`, {
-        detail: `${warningCount} warning${warningCount === 1 ? '' : 's'} — see import report`,
-      })
-      console.info(`[import] ${label} warnings:`, result.warnings)
-    } else {
-      toast.success(`Imported ${label}`, { detail: summary })
-    }
-    return result
+  /** Transfer only to the captured live document; always release creator leases
+   * after synchronous adoption or stale/fatal/throwing-command discard. */
+  const commit = useCallback((result: ImportResult, label: string, operation: ImportOperation): ImportResult | null => {
+    try {
+      if (!operation.isCurrent()) return null
+      const fatal = result.errors.find(error => error.fatal)
+      if (fatal) { toast.error(`Import failed: ${label}`, { detail: fatal.message }); return null }
+      const command = result.commands[0]
+      if (command) optionsRef.current.dispatchCommand(command)
+      if (!operation.isCurrent()) return null
+      if (result.layers[0]) optionsRef.current.onSelectLayer?.(result.layers[0].id)
+      if (operation.isCurrent()) reportImportResult(result, label)
+      return result
+    } finally { releaseImportSources(result) }
   }, [])
 
-  const importFile = useCallback(async (file: File): Promise<ImportResult | null> => {
-    setImporting(true)
-    setProgress(null)
+  /** One action scope spans all awaits, including native clipboard permission.
+   * The matching operation alone may finish/update its status. */
+  const run = useCallback(async <T,>(label: string, fallbackValue: T,
+    work: (operation: ImportOperation, port: ImportPort, placement: { timelineId?: string; startMs: number }) => Promise<T>): Promise<T> => {
+    let operation: ImportOperation | undefined
     try {
-      const result = await importManager.importFile(file, { ...placementRef.current }, (p) => setProgress(p))
-      return commitResult(result, file.name)
-    } catch (err) {
-      toast.error(`Import failed: ${file.name}`, { detail: (err as Error).message })
-      console.error('[import] failed:', file.name, err)
-      return null
-    } finally {
-      setImporting(false)
-      setProgress(null)
-    }
-  }, [commitResult])
+      operation = activity.begin(label, getDocumentSignal)
+      const current = optionsRef.current
+      return await work(operation, current.manager ?? importManager,
+        { timelineId: current.selectedTimelineId ?? undefined, startMs: current.currentTimeMs ?? 0 })
+    } catch (error) {
+      if ((!operation || operation.isCurrent()) && (error as Error).name !== 'AbortError') {
+        toast.error(`Import failed: ${label}`, { detail: (error as Error).message })
+        console.error('[import] failed:', label, error)
+      }
+      return fallbackValue
+    } finally { operation?.finish() }
+  }, [activity, getDocumentSignal])
 
-  const importFiles = useCallback(async (files: FileList | File[]): Promise<ImportResult[]> => {
-    const list = Array.from(files)
+  /** Project opening has latest-request ownership independent of merge imports.
+   * A replacement open cancels only the previous open; adopting a prepared scene
+   * synchronously resets/aborts the old document, including ordinary imports. */
+  const openScene = useCallback((file: File, onOpen: (scene: ChronoScene) => void, onError?: (error: Error) => void) => {
+    latestOpen.current?.cancel()
+    return run(file.name, false, async operation => {
+      latestOpen.current = operation
+      operation.report({ stage: 'reading', label: 'Preparing scene document…', progress: 0.05 })
+      try {
+        const scene = await (optionsRef.current.sceneLoader ?? editorSceneDocumentLoader).load(file, { signal: operation.signal })
+        if (!operation.isCurrent()) return false
+        onOpen(scene)
+        return true
+      } catch (error) {
+        if (operation.isCurrent() && (error as Error).name !== 'AbortError') onError?.(error as Error)
+        throw error
+      } finally { if (latestOpen.current === operation) latestOpen.current = null }
+    })
+  }, [run])
+
+  const importFile = useCallback((file: File) => run<ImportResult | null>(file.name, null, async (op, port, placement) =>
+    commit(await port.importFile(file, placement, op.report, { signal: op.signal }), file.name, op)), [run, commit])
+
+  const importFiles = useCallback((files: FileList | File[]) => run<ImportResult[]>('Files', [], async (op, port, placement) => {
     const results: ImportResult[] = []
-    for (const file of list) {
-      const r = await importFile(file)
-      if (r) results.push(r)
+    for (const file of Array.from(files)) {
+      if (!op.isCurrent()) break
+      try {
+        const result = commit(await port.importFile(file, placement, op.report, { signal: op.signal }), file.name, op)
+        if (result) results.push(result)
+      } catch (error) {
+        if (!op.isCurrent() || (error as Error).name === 'AbortError') break
+        toast.error(`Import failed: ${file.name}`, { detail: (error as Error).message })
+      }
     }
     return results
-  }, [importFile])
+  }), [run, commit])
 
-  const importUrl = useCallback(async (url: string): Promise<ImportResult | null> => {
+  const importUrl = useCallback((url: string) => {
     const trimmed = url.trim()
-    if (!trimmed) return null
+    if (!trimmed) return Promise.resolve(null)
     const label = trimmed.split('/').pop() || trimmed
-    setImporting(true)
-    setProgress(null)
-    try {
-      const result = await importManager.importUrl(trimmed, { ...placementRef.current }, (p) => setProgress(p))
-      return commitResult(result, label)
-    } catch (err) {
-      toast.error('Import from URL failed', { detail: (err as Error).message })
-      console.error('[import] url failed:', trimmed, err)
-      return null
-    } finally {
-      setImporting(false)
-      setProgress(null)
-    }
-  }, [commitResult])
+    return run<ImportResult | null>(label, null, async (op, port, placement) =>
+      commit(await port.importUrl(trimmed, placement, op.report, { signal: op.signal }), label, op))
+  }, [run, commit])
 
-  const importFromClipboard = useCallback(async (): Promise<ImportResult | null> => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.read) {
-      toast.error('Clipboard import not supported in this browser')
-      return null
+  const importFromClipboard = useCallback(() => run<ImportResult | null>('Clipboard', null, async (op, port, placement) => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.read) throw new Error('Clipboard import is not supported in this browser.')
+    const items = await navigator.clipboard.read()
+    for (const item of items) {
+      if (!op.isCurrent()) return null
+      const result = await port.importClipboardItem(item, placement, op.report, { signal: op.signal })
+      if (result) return commit(result, 'clipboard', op)
     }
-    setImporting(true)
-    setProgress(null)
-    try {
-      const items = await navigator.clipboard.read()
-      for (const item of items) {
-        const result = await importManager.importClipboardItem(item, undefined, (p) => setProgress(p))
-        if (result) return commitResult(result, 'clipboard')
-      }
-      toast.info('No importable image found on the clipboard')
-      return null
-    } catch (err) {
-      toast.error('Clipboard import failed', { detail: (err as Error).message })
-      console.error('[import] clipboard failed:', err)
-      return null
-    } finally {
-      setImporting(false)
-      setProgress(null)
-    }
-  }, [commitResult])
+    if (op.isCurrent()) toast.info('No importable image found on the clipboard')
+    return null
+  }), [run, commit])
 
-  const importSpriteSheet = useCallback(async (file: File, opts: SpriteImportOptions): Promise<ImportResult | null> => {
-    setImporting(true)
-    setProgress(null)
-    try {
-      const result = await importManager.importFileAs(file, 'image/spritesheet', opts, (p) => setProgress(p))
-      return commitResult(result, file.name)
-    } catch (err) {
-      toast.error(`Sprite sheet import failed: ${file.name}`, { detail: (err as Error).message })
-      console.error('[import] sprite sheet failed:', file.name, err)
-      return null
-    } finally {
-      setImporting(false)
-      setProgress(null)
-    }
-  }, [commitResult])
+  const importSpriteSheet = useCallback((file: File, opts: SpriteImportOptions) =>
+    run<ImportResult | null>(file.name, null, async (op, port, placement) =>
+      commit(await port.importFileAs(file, 'image/spritesheet', { ...placement, ...opts }, op.report, { signal: op.signal }), file.name, op)), [run, commit])
 
-  const preview = useCallback(async (file: File): Promise<ImportPreflight | null> => {
-    try {
-      return await importManager.preflight(file)
-    } catch (err) {
-      console.error('[import] preflight failed:', file.name, err)
-      return null
-    }
-  }, [])
+  const preview = useCallback((file: File) => run<ImportPreflight | null>(file.name, null, async (op, port) => {
+    const result = await port.preflight(file, undefined, { signal: op.signal })
+    return op.isCurrent() ? result : null
+  }), [run])
+  const canImport = useCallback((file: File) => run('Format check', false, async (op, port) => {
+    const result = await port.canImport(file, { signal: op.signal })
+    return op.isCurrent() && result.supported
+  }), [run])
 
-  const canImport = useCallback(async (file: File): Promise<boolean> => {
-    const { supported } = await importManager.canImport(file)
-    return supported
-  }, [])
-
-  return { importFile, importFiles, importUrl, importFromClipboard, importSpriteSheet, preview, canImport, importing, progress }
+  return { openScene, importFile, importFiles, importUrl, importFromClipboard, importSpriteSheet, preview, canImport,
+    importing: status.active > 0, activeCount: status.active, settlingCount: status.settling,
+    label: status.label, progress: status.progress, cancel: activity.cancel }
 }

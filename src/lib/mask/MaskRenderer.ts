@@ -27,6 +27,15 @@ export interface MaskRenderArgs {
   /** Width × height of the destination area (composition pixels). */
   width:         number
   height:        number
+  /** Integer composition origin of a cropped surface; default (0,0). Host
+   * content is already surface-local. Mask callbacks draw in composition space
+   * and must preserve their incoming transform. Inversion fills only this
+   * local domain; the planner must preserve all host/filter neighbourhoods. */
+  origin?:      { x: number; y: number }
+  /** When supplied, rasterize the silhouette/feather/inversion in the original
+   * full composition, then copy the integer ROI. Preserves native path AA and
+   * CSS filter extent semantics; content/output leases remain region-sized. */
+  compositionSize?: { width: number; height: number }
   /** Host layer being masked. */
   hostLayer:     Layer
   /** Renders the host layer's content to a given offscreen canvas. */
@@ -69,20 +78,24 @@ export class MaskRenderer {
         const maskLayer = args.getLayer(mask.maskLayerId)
         if (!maskLayer) continue
 
-        const silhouette = this.surfaces.acquire(args.width, args.height)
+        const full = args.compositionSize
+        const silhouette = this.surfaces.acquire(full?.width ?? args.width, full?.height ?? args.height)
         try {
           const maskCtx = silhouette.context
           if (mask.feather && mask.feather > 0) {
             maskCtx.filter = `blur(${mask.feather}px)`
           }
+          const { x, y } = args.origin ?? { x: 0, y: 0 }
+          if (!full && (x || y)) maskCtx.translate(-x, -y)
           args.renderMask(maskLayer, maskCtx)
+          if (!full && (x || y)) maskCtx.translate(x, y)
           maskCtx.filter = 'none'
 
           if (mask.inverted) {
             maskCtx.save()
             maskCtx.globalCompositeOperation = 'difference'
             maskCtx.fillStyle = '#FFFFFF'
-            maskCtx.fillRect(0, 0, args.width, args.height)
+            maskCtx.fillRect(0, 0, silhouette.canvas.width, silhouette.canvas.height)
             maskCtx.restore()
           }
 
@@ -91,7 +104,8 @@ export class MaskRenderer {
           contentCtx.globalCompositeOperation =
               mask.mode === 'subtract' ? 'destination-out'
             : 'destination-in'
-          contentCtx.drawImage(silhouette.canvas, 0, 0)
+          if (full) contentCtx.drawImage(silhouette.canvas,x,y,args.width,args.height,0,0,args.width,args.height)
+          else contentCtx.drawImage(silhouette.canvas, 0, 0)
           contentCtx.restore()
         } finally {
           silhouette.release()

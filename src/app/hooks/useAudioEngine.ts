@@ -26,12 +26,15 @@ export function useAudioEngine(params: AudioEngineParams): AudioEngineHandle {
   const subscribers = useRef(new Map<(meter: AudioMeter) => void, (() => void) | null>())
   const reconcile = useCallback(() => {
     const value = latest.current
-    engineRef.current?.syncToTime(value.scene, value.currentTimeMs, value.isPlaying, value.playbackSpeed, value)
+    const engine = engineRef.current
+    if (!engine) return
+    const prepared = engine.prepareForTime(value.scene, value.currentTimeMs, value.playbackSpeed, value)
+    if (prepared) void prepared.then(() => { if (engineRef.current === engine) reconcile() })
+    engine.syncToTime(value.scene, value.currentTimeMs, value.isPlaying, value.playbackSpeed, value)
   }, [])
   useEffect(() => {
     const engine = new AudioEngine(); engineRef.current = engine
     for (const listener of Array.from(subscribers.current.keys())) subscribers.current.set(listener, engine.subscribeMeter(listener))
-    void engine.setAssets(latest.current.scene.assets).then(reconcile)
     reconcile()
     return () => {
       for (const [listener, unsubscribe] of Array.from(subscribers.current)) { unsubscribe?.(); subscribers.current.set(listener, null) }
@@ -39,12 +42,11 @@ export function useAudioEngine(params: AudioEngineParams): AudioEngineHandle {
       if (engineRef.current === engine) engineRef.current = null
     }
   }, [reconcile])
-  useEffect(() => { void engineRef.current?.setAssets(params.scene.assets).then(reconcile) }, [params.scene.assets, reconcile])
   useEffect(reconcile, [params.scene, params.currentTimeMs, params.isPlaying, params.playbackSpeed,
     params.overrides, params.timelineIds, params.masterVolume, params.getOverridesAtTime, reconcile])
   const getState = useCallback(() => engineRef.current?.getState() ?? idleState(), [])
-  const getResources = useCallback(() => engineRef.current?.getResourceSnapshot()
-    ?? { ...getAudioAssetService().getMemorySnapshot(), assets: [] }, [])
+  const getResources = useCallback(() => engineRef.current?.getResourceSnapshot(latest.current.scene.assets)
+    ?? { ...getAudioAssetService().getMemorySnapshot(), ...getAudioAssetService().describeAssets(latest.current.scene.assets) }, [])
   const subscribeMeter = useCallback((listener: (meter: AudioMeter) => void) => {
     subscribers.current.get(listener)?.()
     subscribers.current.set(listener, engineRef.current?.subscribeMeter(listener) ?? null)

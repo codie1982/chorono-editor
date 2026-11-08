@@ -1,262 +1,138 @@
-"use client";
+'use client'
+import {useCallback,useEffect,useRef,useState} from 'react'
+import type {ChronoScene} from '@/lib/types'
+import {assetSourcePool} from '@/lib/asset/sources'
+import {SceneFileWriter,SceneAutoSaveCoordinator,type SceneWritable} from '@/lib/editor/persistence'
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import type { ChronoScene } from "@/lib/types/core";
-
-export type FileVersioningState =
-  | "no-directory" // No directory selected yet
-  | "idle"
-  | "saving"
-  | "saved"
-  | "error"
-  | "unsupported"; // File System Access API not available
-
-interface UseFileVersioningOptions {
-  /** Debounce interval for the "current" file write (ms). Default 500. */
-  interval_ms?: number;
-  /** Fallback save interval (ms) — force write even without new changes. Default 10000. */
-  fallback_ms?: number;
-  /** Auto-snapshot interval (ms). A timestamped version file. Default 600000 (10 min). */
-  snapshot_ms?: number;
-  /** Base name used for files. Default derived from scene.composition.id. */
-  baseName?: string;
+export type FileVersioningState='no-directory'|'idle'|'saving'|'saved'|'error'|'unsupported'
+/** Platform directory capability, outside scene JSON/undo. Native and private
+ * storage adapters share only file-open operations needed by this feature. */
+export interface SceneDirectory{
+  readonly name:string
+  getFileHandle(name:string,options:{create:true}):Promise<{createWritable():Promise<SceneWritable>}>
+}
+interface UseFileVersioningOptions{
+  interval_ms?:number;fallback_ms?:number;snapshot_ms?:number;baseName?:string
+  documentSignal?:AbortSignal
+  /** Optional host-native picker; browser composition uses showDirectoryPicker. */
+  pickDirectory?:()=>Promise<SceneDirectory>
+}
+interface Selection{directory:SceneDirectory}
+interface FolderOwner{
+  writer:SceneFileWriter;autosave:SceneAutoSaveCoordinator;initializing:boolean;active:boolean
+  snapshot():Promise<void>
+}
+/** Filesystem-safe version timestamp, unchanged local-time naming contract. */
+function formatTimestamp(d:Date):string{
+  const pad=(value:number)=>String(value).padStart(2,'0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
+}
+/** Native picker is UI orchestration; writer/serialization never opens a picker. */
+async function browserDirectory():Promise<SceneDirectory>{
+  const picker=(window as Window&{showDirectoryPicker?:(options:{mode:string;id:string})=>Promise<SceneDirectory>}).showDirectoryPicker
+  if(!picker)throw new Error('File System Access API is unavailable.')
+  return picker.call(window,{mode:'readwrite',id:'chorono-scenes'})
 }
 
-/**
- * Format a Date as a filesystem-safe timestamp: 2026-05-21_14-30-45
+/** Selected-folder persistence with bounded IO and current-scene coalescing.
+ * One local writer serializes current/snapshot files, and the common autosave
+ * coordinator retains only an active plus latest pending current scene. Text
+ * and native writable cleanup share output admission through actual settlement.
+ *
+ * Picker resolves after the initial current+version writes, as before. StrictMode
+ * replay/document replacement invalidates obsolete setup without publishing its
+ * status. Later versions keep timestamp naming and original JSON/source policy.
+ * No directory/native handles enter scene/undo. Timers/pending picker are released
+ * on unmount; same-folder selection can intentionally create another version.
  */
-function formatTimestamp(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
-  );
-}
-
-/**
- * Check whether the File System Access API is available (Chrome / Edge).
- */
-function isFileSystemAccessSupported(): boolean {
-  return typeof window !== "undefined" && "showDirectoryPicker" in window;
-}
-
-/**
- * useFileVersioning Hook
- *
- * Browser-based scene persistence using the File System Access API.
- * NO server, NO MongoDB, NO Git — pure file output to a user-chosen folder.
- *
- * Two kinds of writes:
- * 1. "current" file ({baseName}.json) — overwritten on every change (500ms debounce + 10s fallback)
- * 2. timestamped snapshots ({baseName}_2026-05-21_14-30-45.json) — every 10 min + manual save
- *
- * Usage:
- * ```
- * const fv = useFileVersioning(scene, { baseName: scene.composition.id })
- *
- * <button onClick={fv.pickDirectory}>Choose Folder</button>
- * <button onClick={fv.saveSnapshotNow}>Save Version</button>
- * {fv.state === "saving" && <span>Saving...</span>}
- * ```
- */
-export function useFileVersioning(
-  scene: ChronoScene | null,
-  options: UseFileVersioningOptions = {}
-) {
-  const {
-    interval_ms = 500,
-    fallback_ms = 10000,
-    snapshot_ms = 600000, // 10 minutes
-    baseName = "scene",
-  } = options;
-
-  // SSR-safe: start with a neutral state. `mounted` stays false on the server
-  // and during the first client render so server/client HTML match (avoids
-  // React hydration errors). Capability detection happens after mount.
-  const [mounted, setMounted] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
-  const [state, setState] = useState<FileVersioningState>("no-directory");
-  const [directoryName, setDirectoryName] = useState<string | null>(null);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [lastSnapshotAt, setLastSnapshotAt] = useState<Date | null>(null);
-  const [snapshotCount, setSnapshotCount] = useState(0);
-
-  // FileSystemDirectoryHandle — kept in ref (not serializable)
-  const dirHandleRef = useRef<any>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const fallbackRef = useRef<ReturnType<typeof setTimeout>>();
-  const snapshotTimerRef = useRef<ReturnType<typeof setInterval>>();
-  const lastWrittenRef = useRef<ChronoScene | null>(null);
-  const sceneRef = useRef<ChronoScene | null>(scene);
-
-  // Detect File System Access API support after mount (client only).
-  useEffect(() => {
-    setMounted(true);
-    const supported = isFileSystemAccessSupported();
-    setIsSupported(supported);
-    if (!supported) {
-      setState("unsupported");
+export function useFileVersioning(scene:ChronoScene|null,options:UseFileVersioningOptions={}){
+  const {interval_ms=500,fallback_ms=10000,snapshot_ms=600000,baseName='scene',documentSignal}=options
+  const [mounted,setMounted]=useState(false),[isSupported,setSupported]=useState(false)
+  const [state,setState]=useState<FileVersioningState>('no-directory'),[selection,setSelection]=useState<Selection|null>(null)
+  const [lastSavedAt,setLastSavedAt]=useState<Date|null>(null),[lastSnapshotAt,setLastSnapshotAt]=useState<Date|null>(null),[snapshotCount,setSnapshotCount]=useState(0)
+  const latest=useRef({scene,options});latest.current={scene,options}
+  const owner=useRef<FolderOwner>(),alive=useRef(false),picking=useRef(false)
+  const initialized=useRef<WeakSet<Selection>>(),statusTimer=useRef<ReturnType<typeof setTimeout>>()
+  if(!initialized.current)initialized.current=new WeakSet<Selection>()
+  const pendingPicker=useRef<{selection:Selection;resolve():void;reject(error:unknown):void}>()
+  useEffect(()=>{
+    alive.current=true;setMounted(true)
+    const supported=!!latest.current.options.pickDirectory||'showDirectoryPicker' in window
+    setSupported(supported);if(!supported)setState('unsupported')
+    return()=>{alive.current=false;clearTimeout(statusTimer.current);pendingPicker.current?.reject(new Error('Folder selection was cancelled.'));pendingPicker.current=undefined}
+  },[])
+  useEffect(()=>{
+    if(!selection)return
+    const writer=new SceneFileWriter(),directory=selection.directory
+    let lastWritten:WeakRef<ChronoScene>|undefined
+    const current=():boolean=>alive.current&&owner.current===context&&context.active&&!documentSignal?.aborted
+    const saved=()=>{if(current()){setState('saved');clearTimeout(statusTimer.current);statusTimer.current=setTimeout(()=>{if(current())setState(value=>value==='saved'?'idle':value)},2000)}}
+    /** Validate before deriving a filename or opening a native handle. */
+    const filename=(suffix:string)=>{if(!baseName.length||baseName.length>512)throw new RangeError('Scene filename base must contain 1–512 characters.');return baseName+suffix}
+    const write=(name:string,value:ChronoScene,signal=documentSignal)=>writer.write(value,async()=>{
+      const file=await directory.getFileHandle(name,{create:true});return file.createWritable()
+    },signal)
+    const context:FolderOwner={writer,active:true,initializing:!initialized.current!.has(selection),
+      autosave:new SceneAutoSaveCoordinator({intervalMs:interval_ms,fallbackMs:fallback_ms,
+        retain:value=>assetSourcePool.retainAssets(value.assets),
+        save:async(value,version,signal)=>{
+          if(lastWritten?.deref()!==value){await write(filename('.json'),value,signal);lastWritten=new WeakRef(value)}
+          return version+1
+        },
+        onStatus:status=>{if(!current())return;clearTimeout(statusTimer.current);setState(status.state==='offline'?'error':status.state);if(status.state==='saved')setLastSavedAt(new Date())},
+      }),
+      snapshot:async()=>{
+        const value=latest.current.scene;if(!value||!current())return
+        clearTimeout(statusTimer.current);setState('saving')
+        try{
+          await write(filename(`_${formatTimestamp(new Date())}.json`),value)
+          if(current()){setLastSnapshotAt(new Date());setSnapshotCount(count=>count+1);saved()}
+        }catch(error){if(current()&&!(error instanceof Error&&error.name==='AbortError'))setState('error');throw error}
+      },
     }
-  }, []);
-
-  // Keep latest scene in a ref for timers
-  useEffect(() => {
-    sceneRef.current = scene;
-  }, [scene]);
-
-  /**
-   * Write a JSON file into the chosen directory.
-   */
-  const writeFile = useCallback(
-    async (filename: string, data: ChronoScene): Promise<void> => {
-      const dirHandle = dirHandleRef.current;
-      if (!dirHandle) throw new Error("No directory selected");
-
-      const fileHandle = await dirHandle.getFileHandle(filename, {
-        create: true,
-      });
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(data, null, 2));
-      await writable.close();
-    },
-    []
-  );
-
-  /**
-   * Save the "current" file (overwrite). Called by debounce + fallback.
-   */
-  const saveCurrent = useCallback(
-    async (sceneToSave: ChronoScene) => {
-      if (!dirHandleRef.current) {
-        setState("no-directory");
-        return;
+    owner.current=context
+    const abort=()=>{context.active=false;context.autosave.dispose();writer.dispose();clearTimeout(statusTimer.current)}
+    documentSignal?.addEventListener('abort',abort,{once:true});if(documentSignal?.aborted)abort()
+    void(async()=>{
+      try{
+        if(context.initializing&&latest.current.scene){
+          const value=latest.current.scene;setState('saving')
+          await write(filename('.json'),value);lastWritten=new WeakRef(value)
+          if(current()){setLastSavedAt(new Date());await context.snapshot()}
+        }
+        if(!current())return
+        initialized.current!.add(selection);context.initializing=false
+        if(pendingPicker.current?.selection===selection){pendingPicker.current.resolve();pendingPicker.current=undefined}
+        if(latest.current.scene)context.autosave.request(latest.current.scene)
+      }catch(error){
+        if(current()){
+          setState('error');context.initializing=false
+          if(pendingPicker.current?.selection===selection){pendingPicker.current.reject(error);pendingPicker.current=undefined}
+        }
       }
-
-      setState("saving");
-      try {
-        await writeFile(`${baseName}.json`, sceneToSave);
-        lastWrittenRef.current = sceneToSave;
-        setLastSavedAt(new Date());
-        setState("saved");
-        // Auto-hide "saved" indicator
-        setTimeout(() => setState((s) => (s === "saved" ? "idle" : s)), 2000);
-      } catch (err) {
-        console.error("File save error:", err);
-        setState("error");
-      }
-    },
-    [baseName, writeFile]
-  );
-
-  /**
-   * Save a timestamped snapshot (new file). Called by interval + manual.
-   */
-  const saveSnapshotNow = useCallback(async () => {
-    const currentScene = sceneRef.current;
-    if (!currentScene) return;
-    if (!dirHandleRef.current) {
-      setState("no-directory");
-      return;
-    }
-
-    setState("saving");
-    try {
-      const ts = formatTimestamp(new Date());
-      await writeFile(`${baseName}_${ts}.json`, currentScene);
-      setLastSnapshotAt(new Date());
-      setSnapshotCount((c) => c + 1);
-      setState("saved");
-      setTimeout(() => setState((s) => (s === "saved" ? "idle" : s)), 2000);
-    } catch (err) {
-      console.error("Snapshot save error:", err);
-      setState("error");
-    }
-  }, [baseName, writeFile]);
-
-  /**
-   * Prompt user to choose a directory (File System Access API).
-   */
-  const pickDirectory = useCallback(async () => {
-    if (!isFileSystemAccessSupported()) {
-      setState("unsupported");
-      return;
-    }
-
-    try {
-      // @ts-expect-error - showDirectoryPicker not in older TS DOM types
-      const handle = await window.showDirectoryPicker({
-        mode: "readwrite",
-        id: "chorono-scenes",
-      });
-      dirHandleRef.current = handle;
-      setDirectoryName(handle.name);
-      setState("idle");
-
-      // Write initial snapshot + current immediately
-      if (sceneRef.current) {
-        await saveCurrent(sceneRef.current);
-        await saveSnapshotNow();
-      }
-    } catch (err) {
-      // User cancelled the picker → not an error
-      if ((err as Error).name === "AbortError") {
-        return;
-      }
-      console.error("Directory pick error:", err);
-      setState("error");
-    }
-  }, [saveCurrent, saveSnapshotNow]);
-
-  /**
-   * Debounce + fallback: write "current" file on scene changes.
-   */
-  useEffect(() => {
-    if (!scene || !dirHandleRef.current) return;
-    if (lastWrittenRef.current === scene) return;
-
-    clearTimeout(debounceRef.current);
-    clearTimeout(fallbackRef.current);
-
-    debounceRef.current = setTimeout(() => {
-      saveCurrent(scene);
-    }, interval_ms);
-
-    fallbackRef.current = setTimeout(() => {
-      saveCurrent(scene);
-    }, fallback_ms);
-
-    return () => {
-      clearTimeout(debounceRef.current);
-      clearTimeout(fallbackRef.current);
-    };
-  }, [scene, saveCurrent, interval_ms, fallback_ms]);
-
-  /**
-   * Auto-snapshot interval (10 min).
-   */
-  useEffect(() => {
-    if (state === "no-directory" || state === "unsupported") return;
-
-    snapshotTimerRef.current = setInterval(() => {
-      if (dirHandleRef.current && sceneRef.current) {
-        saveSnapshotNow();
-      }
-    }, snapshot_ms);
-
-    return () => {
-      clearInterval(snapshotTimerRef.current);
-    };
-  }, [state, snapshot_ms, saveSnapshotNow]);
-
-  return {
-    mounted,
-    state,
-    directoryName,
-    lastSavedAt,
-    lastSnapshotAt,
-    snapshotCount,
-    isSupported,
-    pickDirectory,
-    saveSnapshotNow,
-  };
+    })()
+    return()=>{documentSignal?.removeEventListener('abort',abort);abort();if(owner.current===context)owner.current=undefined}
+  },[selection,baseName,interval_ms,fallback_ms,documentSignal])
+  useEffect(()=>{if(scene&&owner.current&&!owner.current.initializing)owner.current.autosave.request(scene)},[scene])
+  const saveSnapshotNow=useCallback(async()=>{
+    if(!owner.current){setState(isSupported?'no-directory':'unsupported');return}
+    try{await owner.current.snapshot()}catch{/* The current owner publishes its error; stale owners publish nothing. */}
+  },[isSupported])
+  useEffect(()=>{
+    if(!selection||!Number.isSafeInteger(snapshot_ms)||snapshot_ms<1||snapshot_ms>2147483647)return
+    const timer=setInterval(()=>{void saveSnapshotNow()},snapshot_ms)
+    return()=>clearInterval(timer)
+  },[selection,snapshot_ms,saveSnapshotNow])
+  const pickDirectory=useCallback(async()=>{
+    if(picking.current)return;picking.current=true
+    try{
+      const directory=await(latest.current.options.pickDirectory??browserDirectory)()
+      if(!alive.current)return
+      const chosen={directory}
+      const ready=new Promise<void>((resolve,reject)=>{pendingPicker.current={selection:chosen,resolve,reject}})
+      setSelection(chosen);setState('saving');await ready
+    }catch(error){if(alive.current&&!(error instanceof Error&&error.name==='AbortError'))setState('error')}
+    finally{picking.current=false}
+  },[])
+  return {mounted,state,directoryName:selection?.directory.name??null,lastSavedAt,lastSnapshotAt,snapshotCount,isSupported,pickDirectory,saveSnapshotNow}
 }

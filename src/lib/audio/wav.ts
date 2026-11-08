@@ -22,12 +22,21 @@ export function measurePCM(buffer: PCMBuffer) {
     rmsDbFS: rms ? 20 * Math.log10(rms) : null, clippedSamples }
 }
 
-export function encodeWav(buffer: PCMBuffer): Uint8Array {
+/** Validate PCM16 WAV dimensions/rate and measure exact allocation before it
+ * happens. This shares the encoder's authoritative 24 MiB data policy. */
+export function wavByteLength(buffer:Pick<PCMBuffer,'numberOfChannels'|'length'|'sampleRate'>):number{
   if (![1, 2].includes(buffer.numberOfChannels) || !Number.isInteger(buffer.length) || buffer.length < 1
     || !Number.isFinite(buffer.sampleRate) || buffer.sampleRate < 8000 || buffer.sampleRate > 96000) throw new Error('Invalid PCM output')
   const dataSize = buffer.length * buffer.numberOfChannels * 2
   if (dataSize > 24 * 1024 * 1024) throw new Error('WAV output exceeds 24 MB; shorten the range')
-  const bytes = new Uint8Array(44 + dataSize), view = new DataView(bytes.buffer)
+  return 44+dataSize
+}
+
+/** Encode into a new ordinary ArrayBuffer-backed view (never SharedArrayBuffer),
+ * suitable for Blob/Response consumers without a type cast or extra byte copy. */
+export function encodeWav(buffer: PCMBuffer): Uint8Array<ArrayBuffer> {
+  const length=wavByteLength(buffer),dataSize=length-44
+  const bytes = new Uint8Array(length), view = new DataView(bytes.buffer)
   const label = (at: number, text: string) => { for (let i = 0; i < text.length; i++) view.setUint8(at + i, text.charCodeAt(i)) }
   label(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); label(8, 'WAVE'); label(12, 'fmt ')
   view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, buffer.numberOfChannels, true)

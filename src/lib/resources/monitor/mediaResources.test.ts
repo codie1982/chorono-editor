@@ -5,6 +5,22 @@ const audio = { bytes: 16, bufferCount: 1, pendingCount: 0, assets: [{ id: 'a', 
 const asset = (id: string, type: Asset['type'] = 'image', url = id): Asset => ({ id, name: id, type, url })
 
 describe('project media inventory', () => {
+  it('reports cold managed visual metadata separately from current preparation/errors without starting loads', () => {
+    const snapshot = () => ({ loading: ['pending'], errors: { broken: 'native failure' } })
+    const elements = Object.assign(new Map<string, MediaElement>(), { media: { snapshot } })
+    const result = summarizeMediaResources([asset('pending'), asset('cold'), asset('broken', 'video')], elements, audio, {})
+    expect(result.rows.map(row => row.state)).toEqual(['loading', 'notResident', 'error'])
+    expect(result).toMatchObject({ loading: 1, notResident: 1, errors: 1 })
+  })
+  it('distinguishes absent PCM, current decode and unavailable legacy diagnostics', () => {
+    const assets = [asset('resident', 'audio'), asset('pending', 'audio'), asset('idle', 'audio')]
+    const known = { bytes: 16, bufferCount: 1, pendingCount: 1, assets: [{ id: 'resident', bytes: 16 }], loadingAssetIds: ['pending'] }
+    const summary = summarizeMediaResources(assets, new Map(), known, {})
+    expect(summary).toMatchObject({ ready: 1, loading: 1, notResident: 1, untracked: 0 })
+    expect(summary.rows.map(row => row.state)).toEqual(['ready', 'loading', 'notResident'])
+    const legacy = summarizeMediaResources(assets, new Map(), { bytes: 0, bufferCount: 0, pendingCount: 0, assets: [] }, {})
+    expect(legacy).toMatchObject({ loading: 0, notResident: 0, untracked: 3 })
+  })
   it('separates source bytes, image pixels, video display frame and PCM without duplicating shared elements', () => {
     const image = { naturalWidth: 100, naturalHeight: 50, complete: true }
     const assets = [{ ...asset('i', 'image', 'shared'), metadata: { filesize: 1024 } },
@@ -29,4 +45,13 @@ describe('project media inventory', () => {
     expect(filtered).toMatchObject({ page: 0, filteredCount: 1 })
     expect(filtered.rows[0].id).toBe('image-2999')
   })
+})
+
+it('reports managed font ownership without inventing native decoded bytes',()=>{
+  const states={ready:'ready',pending:'loading',bad:'error',cold:'notResident'} as const
+  const assets=Object.keys(states).map(id=>asset(id,'font'))
+  const elements=Object.assign(new Map<string,MediaElement>(),{fonts:{state:(a:Asset)=>states[a.id as keyof typeof states]}})
+  const summary=summarizeMediaResources(assets,elements,audio,{})
+  expect(summary).toMatchObject({ready:1,loading:1,errors:1,notResident:1,imageBytes:0,videoFrameBytes:0})
+  expect(summary.rows.every(row=>row.bytes===null)).toBe(true)
 })

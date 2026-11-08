@@ -201,7 +201,7 @@ export default function FileMenu(props: FileMenuProps) {
               <div className={sectionLabel}>View</div>
               {props.onShowResources && (
                 <button className={item} onClick={() => { setOpen(false); props.onShowResources!() }}>
-                  Kaynak ve Performans
+                  Resources & Performance
                 </button>
               )}
               {(() => {
@@ -261,7 +261,7 @@ export default function FileMenu(props: FileMenuProps) {
           {/* ── Help ── */}
           <div className={sectionLabel}>Help</div>
           {props.onShowWelcome && <button className={item + ' min-h-[44px]'} onClick={() => { setOpen(false); props.onShowWelcome!() }}>
-            Başlangıç ekranı
+            Welcome screen
           </button>}
           <button className={item} onClick={() => { setOpen(false); props.onShowShortcuts() }}>
             ⌨ Show Shortcuts (Cmd+/)

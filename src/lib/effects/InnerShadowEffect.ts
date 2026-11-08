@@ -30,6 +30,7 @@ export interface InnerShadowEffectDefinition extends EffectDefinition {
 
 export const innerShadowEffect: EffectPlugin<InnerShadowEffectDefinition> = {
   type: 'innerShadow',
+  alphaSafe: true,
   apply: withEffectSurfaces<InnerShadowEffectDefinition>((input, effect, surfaces) => {
     const {
       color = '#000000', blur = 4, offsetX = 2, offsetY = 2, opacity = 0.5,

@@ -1,13 +1,15 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChronoScene, Layer, TimelineSettings, Track, EasingType } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { DragSnapshot } from '@/components/timeline/hooks/useKeyframeDrag'
-import { gainToDb, dbToGain, resolveAudioClipWindow } from '@/lib/audio/audioClip'
+import { dbToGain, resolveAudioClipWindow } from '@/lib/audio/audioClip'
+import { gainEnvelopeY } from './gainEnvelopeY'
 import { evaluateTrack } from '@/lib/evaluator'
 import { audioGainKeyCommand } from './audioGainKeyCommand'
 import AudioWaveform from '@/components/timeline/AudioWaveform'
 import TimelineKeyframe from '@/components/timeline/TimelineKeyframe'
+import { KeyGlyphLayer } from '@/components/timeline/glyphs'
 import { audioGestureEdge, createAudioClipGesture, type AudioClipGestureKind } from './audioClipGesture'
 import { activateAudioClipSelection } from './audioClipSelection'
 
@@ -17,7 +19,7 @@ export interface AudioTimelineContext {
 }
 interface Props {
   layer: Layer; context: AudioTimelineContext; audioUrl?: string; durationMs: number; visibleStartMs: number; visibleEndMs: number;
-  msToScreenPx: (ms: number) => number; onSelect: (shiftHeld: boolean) => void; tracks: Track[];
+  msToScreenPx: (ms: number) => number; onSelect: (shiftHeld: boolean) => void; tracks: readonly Track[];
   selectedKfIds: Set<string>; previewMs: Record<string, number>;
   onSelectKf: (id: string, shift: boolean) => void;
   onBeginKfDrag: (leader: DragSnapshot, isLone: boolean, shift: boolean) => (event: React.PointerEvent) => void;
@@ -27,10 +29,7 @@ interface Props {
   onKfDoubleClick?: (target: string, id: string, event: React.MouseEvent) => void;
 }
 const HEIGHT = 56
-export function gainEnvelopeY(gain: number, height = HEIGHT): number {
-  const db = gainToDb(gain)
-  return 4 + (1 - Math.max(0, Math.min(1, ((Number.isFinite(db) ? db : -60) + 60) / 72))) * (height - 8)
-}
+export { gainEnvelopeY } from './gainEnvelopeY'
 
 export default function AudioClipTimeline(props: Props) {
   const { layer, context } = props
@@ -45,6 +44,11 @@ export default function AudioClipTimeline(props: Props) {
   const visibleEnd = Math.min(range.endMs, props.visibleEndMs)
   const visibleWidth = Math.max(0, (visibleEnd - visibleStart) * pixelsPerMs)
   const volumeTrack = props.tracks.find(track => track.target === `layers.${layer.id}.audio.volume`)
+  const glyphPoints = useMemo(() => (volumeTrack?.keyframes ?? []).flatMap((key, sourceIndex) => {
+    const time = props.previewMs[key.id] ?? key.timeMs
+    return time < visibleStart || time > visibleEnd || typeof key.value !== 'number' ? []
+      : [{ id: key.id, sourceIndex, x: (time - visibleStart) * pixelsPerMs, y: gainEnvelopeY(key.value) }]
+  }), [volumeTrack, props.previewMs, visibleStart, visibleEnd, pixelsPerMs])
   const gainAt = (ms: number) => {
     const value = volumeTrack ? evaluateTrack(volumeTrack, ms) : layer.audio?.volume ?? 1
     return typeof value === 'number' ? value : layer.audio?.volume ?? 1
@@ -133,10 +137,24 @@ export default function AudioClipTimeline(props: Props) {
         {range.fadeInMs > 0 && <path d={`M0,${HEIGHT} L${Math.max(0, (range.fadeStartMs + range.fadeInMs - visibleStart) * pixelsPerMs)},0 L0,0 Z`} fill="#fbbf2425" />}
         {range.fadeOutMs > 0 && <path d={`M${Math.max(0, (range.fadeEndMs - range.fadeOutMs - visibleStart) * pixelsPerMs)},0 L${visibleWidth},${HEIGHT} L${visibleWidth},0 Z`} fill="#fbbf2425" />}
       </svg>
-      {volumeTrack?.keyframes.map(key => {
-        const time = props.previewMs[key.id] ?? key.timeMs
-        if (time < visibleStart || time > visibleEnd || typeof key.value !== 'number') return null
-        return <TimelineKeyframe key={key.id} kf={key} x={(time - visibleStart) * pixelsPerMs} y={gainEnvelopeY(key.value)}
+      {volumeTrack && <KeyGlyphLayer points={glyphPoints} width={visibleWidth} height={HEIGHT} label={`${layer.name} gain`}
+        selected={props.selectedKfIds}
+        onPointerDown={(point, event) => {
+          if (layer.locked) { event.preventDefault(); event.stopPropagation(); return }
+          const key = volumeTrack.keyframes[point.sourceIndex]
+          activateAudioClipSelection('gainKey', event.shiftKey, props.onSelect, context.clearKeySelection)
+          props.onBeginKfDrag({ kfId: key.id, trackTarget: volumeTrack.target, timelineId: context.timelineId ?? '', originalMs: key.timeMs },
+            !props.selectedKfIds.has(key.id) && !event.shiftKey, event.shiftKey)(event)
+        }}
+        onSelect={(point, event) => {
+          activateAudioClipSelection('gainKey', event.shiftKey, props.onSelect, context.clearKeySelection)
+          props.onSelectKf(point.id, event.shiftKey)
+        }}
+        onContextMenu={props.onKfContextMenu ? (point, event) => props.onKfContextMenu!(volumeTrack.target, point.id, event) : undefined}
+        onDoubleClick={!layer.locked && props.onKfDoubleClick ? (point, event) => props.onKfDoubleClick!(volumeTrack.target, point.id, event) : undefined}
+        renderKey={(point, glyphAccessibility) => {
+        const key = volumeTrack.keyframes[point.sourceIndex]
+        return <TimelineKeyframe kf={key} x={point.x} y={point.y} glyphAccessibility={glyphAccessibility}
           isSelected={props.selectedKfIds.has(key.id)} isDragging={props.previewMs[key.id] != null}
           onSelect={shift => {
             activateAudioClipSelection('gainKey', shift, props.onSelect, context.clearKeySelection)
@@ -151,7 +169,7 @@ export default function AudioClipTimeline(props: Props) {
             props.onBeginKfDrag({ kfId: key.id, trackTarget: volumeTrack.target, timelineId: context.timelineId ?? '', originalMs: key.timeMs },
               !props.selectedKfIds.has(key.id) && !event.shiftKey, event.shiftKey)(event)
           }} />
-      })}
+      }} />}
       {handle('fadeIn', 'Fade in', audioGestureEdge(range, 'fadeIn'), 0)}
       {handle('fadeOut', 'Fade out', audioGestureEdge(range, 'fadeOut'), HEIGHT - 16)}
       {leftEdgeVisible && <button type="button" aria-label={`Trim start ${layer.name}`} disabled={layer.locked || context.isPlaying}

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { loadWaveformPeaks, peekCachedPeaks, type WaveformPeaks } from '@/lib/timeline/audioWaveform'
-import { loadAudioBufferFromUrl } from '@/lib/audio/AudioAssetService'
+import { acquireAudioBufferFromUrl, type AudioPcmLease } from '@/lib/audio/AudioAssetService'
 import { MAX_WAVEFORM_BUCKETS, waveformBucketCount, waveformExtrema, waveformPixelSourceRange } from '@/components/audio/waveformWindow'
 
 interface Props {
@@ -24,26 +24,30 @@ export default function AudioWaveform({ url, color = '#80d8ef', background, buck
   const resolution = bucketCount ?? (data && pixelsPerMs ? waveformBucketCount(data.durationSec * 1000, pixelsPerMs) : 512)
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
     const cached = peekCachedPeaks(url, resolution)
     if (cached) setLoaded({ url, data: cached })
     else setLoaded(previous => previous.url === url ? previous : { url, data: null })
     setError(null)
     if (cached) return
-    loadWaveformPeaks(url, resolution).then(peaks => {
+    loadWaveformPeaks(url, resolution, { signal: controller.signal }).then(peaks => {
       if (!cancelled) setLoaded({ url, data: peaks })
     }).catch(reason => {
       if (!cancelled) setError({ url, message: reason instanceof Error ? reason.message : String(reason) })
     })
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort() }
   }, [url, resolution, retry])
   const needsDetail = !!(data && pixelsPerMs && data.durationSec * 1000 * pixelsPerMs > MAX_WAVEFORM_BUCKETS)
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    let lease: AudioPcmLease | undefined
     setDetail(null)
-    if (needsDetail) loadAudioBufferFromUrl(url).then(buffer => {
-      if (!cancelled) setDetail({ url, buffer })
+    if (needsDetail) acquireAudioBufferFromUrl(url, { signal: controller.signal }).then(result => {
+      if (cancelled) { result.release(); return }
+      lease = result; setDetail({ url, buffer: result.buffer })
     }).catch(() => { /* overview peaks remain available */ })
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort(); lease?.release() }
   }, [url, needsDetail])
   useLayoutEffect(() => {
     const el = containerRef.current

@@ -1,28 +1,53 @@
 import type { ChronoScene } from '@/lib/types'
 import type { AudioResourceSnapshot } from '@/lib/audioEngine'
 import { getAudioAssetService } from '@/lib/audio/AudioAssetService'
+import { staticGroupLodCache } from '@/lib/render/lod/StaticGroupLodCache'
 import { renderSurfacePool } from '@/lib/render/resources/CanvasSurfacePool'
 import { canvasMemoryTracker } from '../memory/CanvasMemoryTracker'
 import { browserMemoryReader } from '../memory/BrowserMemoryReader'
+import { paintWorkMonitor } from '../performance/PaintWorkMonitor'
 import { renderWorkMonitor } from '../performance/RenderWorkMonitor'
 import { gpuWorkRegistry } from '../performance/GpuWorkRegistry'
-import { summarizeMediaResources, type MediaElement, type MediaQuery } from './mediaResources'
+import { editorResourceBudget } from '../budget'
+import { editorMediaPreparation } from '../jobs'
+import { editorImportPreparation } from '@/lib/import/resources/editorImportPreparation'
+import { assetSourcePool } from '@/lib/asset/sources'
+import { visualAssetService } from '@/lib/asset/visual'
+import { fontAssetService } from '@/lib/asset/fonts'
+import {editorMediaProbes} from '@/lib/asset/metadata/editorMediaProbes'
+import {editorOutlineFonts} from '@/lib/text/fonts'
+import {editorOutputResources} from '@/lib/export/resources'
+import { summarizeMediaResources, type MediaElementMap, type MediaQuery } from './mediaResources'
 
 export interface ProjectMonitorInputs {
   scene: ChronoScene
-  media: ReadonlyMap<string, MediaElement>
+  media: MediaElementMap
   isPlaying: boolean
   audio?: () => AudioResourceSnapshot
   audioErrors?: () => Record<string, string>
 }
 const defaults = { pool: renderSurfacePool, canvases: canvasMemoryTracker,
-  browser: browserMemoryReader, work: renderWorkMonitor, gpu: gpuWorkRegistry }
+  browser: browserMemoryReader, work: renderWorkMonitor, paint: paintWorkMonitor, lod: staticGroupLodCache, gpu: gpuWorkRegistry,
+  budget: editorResourceBudget, sources: assetSourcePool, visual: visualAssetService, fonts: fontAssetService,
+  mediaPreparation: editorMediaPreparation, importPreparation: editorImportPreparation,
+  probes:editorMediaProbes,outlines:editorOutlineFonts,outputs:editorOutputResources }
 interface Dependencies {
   pool: Pick<typeof renderSurfacePool, 'getSnapshot' | 'clearIdle'>
   canvases: Pick<typeof canvasMemoryTracker, 'getSnapshot'>
   browser: Pick<typeof browserMemoryReader, 'getSnapshot' | 'requestSample'>
   work: Pick<typeof renderWorkMonitor, 'getSnapshot'>
-  gpu: Pick<typeof gpuWorkRegistry, 'getSnapshot' | 'observe'>
+  paint: Pick<typeof paintWorkMonitor, 'getSnapshot'>
+  lod: Pick<typeof staticGroupLodCache, 'getSnapshot' | 'clear'>
+  gpu: Pick<typeof gpuWorkRegistry, 'getSnapshot' | 'observe'> & Partial<Pick<typeof gpuWorkRegistry, 'clearIdle'>>
+  budget: Pick<typeof editorResourceBudget, 'getSnapshot' | 'reclaimIdle'>
+  sources: Pick<typeof assetSourcePool, 'getSnapshot'>
+  visual: Pick<typeof visualAssetService, 'getSnapshot'> & Partial<Pick<typeof visualAssetService,'clearIdle'>>
+  fonts: Pick<typeof fontAssetService, 'getSnapshot' | 'clearIdle'>
+  probes:Pick<typeof editorMediaProbes,'getSnapshot'|'clearIdle'>
+  outlines:Pick<typeof editorOutlineFonts,'getSnapshot'|'clearIdle'>
+  outputs:Pick<typeof editorOutputResources,'getSnapshot'|'clearIdle'>
+  mediaPreparation: Pick<typeof editorMediaPreparation, 'getSnapshot'>
+  importPreparation: Pick<typeof editorImportPreparation, 'getSnapshot'>
 }
 
 /** Counts persisted project work only when the scene identity changes; no JSON copy/size estimation. */
@@ -52,8 +77,15 @@ export class ProjectResourceMonitor {
     this.deps = { ...defaults, ...dependencies }
   }
 
-  /** Replaces borrowed current inputs; never accumulates prior scene/history references. */
-  setInputs(inputs: ProjectMonitorInputs): void { this.inputs = inputs }
+  /** Replaces borrowed inputs and invalidates cached counts on scene replacement.
+   * Drop the previous identity immediately, including while observation is paused:
+   * retaining it until the next snapshot would keep a closed project's graph alive.
+   * Counts remain lazy; repeated renders of the same source do not rescan tracks.
+   */
+  setInputs(inputs: ProjectMonitorInputs): void {
+    if (inputs.scene !== this.inputs.scene) { this.countedScene = null; this.project = null }
+    this.inputs = inputs
+  }
 
   /** Lightweight explicit filter/paging action; the next snapshot clamps invalid page indices. */
   setMediaQuery(query: MediaQuery): void { this.query = { ...query } }
@@ -61,8 +93,13 @@ export class ProjectResourceMonitor {
   /** Enables optional GPU timers only for an actively observed, visible panel. */
   observe(): () => void { return this.deps.gpu.observe() }
 
-  /** Clears only idle mask surfaces, preserving rendering/medias/undo ownership. */
-  clearIdle(): void { this.deps.pool.clearIdle() }
+  /** Releases idle registered resources (scratch/LOD/PCM); preserves active
+   * leases, original source assets and undo. Does not cancel native work. */
+  clearIdle(): void {
+    this.deps.budget.reclaimIdle(); this.deps.gpu.clearIdle?.(); this.deps.fonts.clearIdle()
+    this.deps.visual.clearIdle?.();this.deps.outputs.clearIdle()
+    this.deps.probes.clearIdle();this.deps.outlines.clearIdle();this.deps.pool.clearIdle();this.deps.lod.clear()
+  }
 
   /** Explicit, single-flight browser-page estimate; no automatic isolation/header changes. */
   requestMemorySample(): Promise<void> { return this.deps.browser.requestSample() }
@@ -74,17 +111,27 @@ export class ProjectResourceMonitor {
       this.project = summarizeProject(scene)
       this.countedScene = scene
     }
-    const audio = getAudio?.() ?? { ...getAudioAssetService().getMemorySnapshot(), assets: [] }
+    const audio = getAudio?.() ?? { ...getAudioAssetService().getMemorySnapshot(), ...getAudioAssetService().describeAssets(scene.assets) }
     const resources = summarizeMediaResources(scene.assets, media, audio, audioErrors?.() ?? {}, this.query)
+    const visual = this.deps.visual.getSnapshot()
     const canvases = this.deps.canvases.getSnapshot()
     const gpu = this.deps.gpu.getSnapshot()
     const gpuBufferBytes = gpu.reduce((sum, g) => sum + g.bufferBytes, 0)
     const stagingBytes = gpu.reduce((sum, g) => sum + g.stagingBytes, 0)
-    const knownBytes = canvases.canvas2dBytes + canvases.webglBytes + resources.imageBytes
-      + resources.videoFrameBytes + audio.bytes + gpuBufferBytes + stagingBytes
+    const gpuTextureBytes = gpu.reduce((sum, g) => sum + (g.textureBytes ?? 0), 0)
+    // Managed maps are borrowed views: include their owner's warm/retired values
+    // once, not just viewport-ready aliases. Legacy foreign maps retain their
+    // earlier partial element estimate (their external lifetime is untracked).
+    const visualBytes = media.media ? visual.residency.categories.image.residentBytes + visual.residency.categories.video.residentBytes
+      : resources.imageBytes + resources.videoFrameBytes
+    const knownBytes = canvases.canvas2dBytes + canvases.webglBytes + visualBytes + audio.bytes + gpuBufferBytes + stagingBytes + gpuTextureBytes
     return { sampledAt: Date.now(), project: this.project!, isPlaying, media: resources,
-      audio: { bytes: audio.bytes, bufferCount: audio.bufferCount, pendingCount: audio.pendingCount },
-      canvases, gpu, gpuBufferBytes, stagingBytes, knownBytes,
+      audio: { bytes: audio.bytes, bufferCount: audio.bufferCount, pendingCount: audio.pendingCount,
+        preparation: audio.preparation, residency: audio.residency },
+      visual, fonts: this.deps.fonts.getSnapshot(),probes:this.deps.probes.getSnapshot(),outlines:this.deps.outlines.getSnapshot(),outputs:this.deps.outputs.getSnapshot(),
+      mediaPreparation: this.deps.mediaPreparation.getSnapshot(), importPreparation: this.deps.importPreparation.getSnapshot(),
+      canvases, gpu, gpuBufferBytes, stagingBytes, gpuTextureBytes, knownBytes, lod: this.deps.lod.getSnapshot(),
+      budget: this.deps.budget.getSnapshot(), sources: this.deps.sources.getSnapshot(), paint: this.deps.paint.getSnapshot(scene),
       browser: this.deps.browser.getSnapshot(), work: this.deps.work.getSnapshot(), pool: this.deps.pool.getSnapshot() }
   }
 }

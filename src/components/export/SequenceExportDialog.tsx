@@ -3,12 +3,13 @@ import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
 import {
-  exportSequence,
-  downloadBlob,
+  acquireSequence,
+  downloadOutput,
   type RasterFormat,
   type RasterBackground,
 } from '@/lib/export'
 import BaseExportDialog, { Field } from './BaseExportDialog'
+import {useOutputOperation} from './hooks/useOutputOperation'
 
 interface Props {
   scene: ChronoScene
@@ -16,6 +17,7 @@ interface Props {
   onClose: () => void
   onExported?: (filename: string, frameCount: number, warnings: string[]) => void
   onError?: (message: string) => void
+  documentSignal?:AbortSignal
 }
 
 const FORMATS: Array<{ id: RasterFormat; label: string }> = [
@@ -30,37 +32,30 @@ const SCALES = [1, 2, 3, 4] as const
  * BL-83 — image sequence export. Renders the composition to numbered frames at
  * the chosen fps and downloads them as a ZIP. Progress is shown per frame.
  */
-export default function SequenceExportDialog({ scene, assets, onClose, onExported, onError }: Props) {
+export default function SequenceExportDialog({ scene, assets, onClose, onExported, onError,documentSignal }: Props) {
   const [format, setFormat]           = useState<RasterFormat>('png')
   const [fps, setFps]                 = useState(scene.composition.frameRate || 30)
   const [scale, setScale]             = useState(1)
   const [transparent, setTransparent] = useState(false)
-  const [busy, setBusy]               = useState(false)
-  const [progress, setProgress]       = useState<{ frame: number; total: number } | null>(null)
+  const operation=useOutputOperation(documentSignal)
+  const {busy,cancelling,progress}=operation
 
   const durationMs = scene.composition.durationMs
   const estFrames = Math.max(1, Math.round((durationMs / 1000) * fps))
   const alphaLost = transparent && format === 'jpeg'
 
   const handleExport = async () => {
-    setBusy(true)
-    setProgress({ frame: 0, total: estFrames })
-    try {
-      const background: RasterBackground = transparent ? 'transparent' : 'scene'
-      const result = await exportSequence(
+    const background: RasterBackground = transparent ? 'transparent' : 'scene'
+    await operation.run((signal,report)=>acquireSequence(
         scene, assets,
         { format, fps, scale, background },
-        (frame, total) => setProgress({ frame, total }),
-      )
-      downloadBlob(result.blob, result.filename)
+        {signal},report,
+      ),lease=>{
+      const result=lease.value
+      downloadOutput(lease,value=>value.blob,result.filename)
       onExported?.(result.filename, result.frameCount, result.warnings)
       onClose()
-    } catch (err) {
-      onError?.((err as Error).message)
-    } finally {
-      setBusy(false)
-      setProgress(null)
-    }
+    },onError)
   }
 
   const pct = progress ? Math.round((progress.frame / progress.total) * 100) : 0
@@ -69,13 +64,12 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
     <BaseExportDialog
       title="Export Image Sequence"
       onClose={onClose}
-      closeDisabled={busy}
       maxWidth="max-w-md"
       footer={
         <>
-          <button onClick={onClose} disabled={busy}
+          <button onClick={busy?operation.cancel:onClose} disabled={cancelling}
             className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50">
-            Cancel
+            {cancelling?'Cancelling…':'Cancel'}
           </button>
           <button onClick={handleExport} disabled={busy}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium disabled:opacity-50">

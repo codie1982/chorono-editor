@@ -8,22 +8,22 @@ export function SurfacePoolSection({ snapshot: s, onClearIdle }: { snapshot: Can
   const percent = s.maxBytes > 0 ? Math.min(100, s.residentBytes / s.maxBytes * 100) : 0
   return <>
     <div className={styles.scope}>
-      <h3>Maske ve efekt tamponları</h3><span className={styles.badge}>Tahmini · RGBA8</span>
-      <p>Katman içeriği, yerleşik efektler ve maskeler için ortak havuz. Canvas2D toplamının alt kümesi; ikinci kez eklenmez.</p>
+      <h3>Mask and effect surfaces</h3><span className={styles.badge}>Estimated · RGBA8</span>
+      <p>Shared scratch surfaces for layer content, built-in effects, and masks. Already included in Canvas2D memory; not counted twice.</p>
     </div>
     <div className={styles.budget}>
-      <div className={styles.budgetHeading}><span>Havuz rezervasyonu</span><strong>{formatBytes(s.residentBytes)}</strong></div>
-      <progress max={100} value={percent} aria-label="Geçici tampon havuzu bütçe kullanımı"
+      <div className={styles.budgetHeading}><span>Pool reservation</span><strong>{formatBytes(s.residentBytes)}</strong></div>
+      <progress max={100} value={percent} aria-label="Scratch surface pool budget usage"
         aria-valuetext={`${formatBytes(s.residentBytes)} / ${formatBytes(s.maxBytes)}`} />
-      <div className={styles.budgetCaption}><span>Bütçe: {formatBytes(s.maxBytes)}</span><span>{percent.toFixed(1)}%</span></div>
+      <div className={styles.budgetCaption}><span>Budget: {formatBytes(s.maxBytes)}</span><span>{percent.toFixed(1)}%</span></div>
     </div>
     <MetricList rows={[
-      ['Aktif', `${formatBytes(s.activeBytes)} · ${s.activeSurfaces} yüzey`],
-      ['Boş / tekrar kullanılabilir', `${formatBytes(s.idleBytes)} · ${s.idleSurfaces} yüzey`],
-      ['Tepe rezervasyon', formatBytes(s.peakResidentBytes)],
-      ['Tahsis', s.allocations], ['Yeniden kullanım', s.reuses], ['Bırakılan yüzey', s.evictions], ['Bütçe nedeniyle ret', s.budgetDenials],
+      ['Active', `${formatBytes(s.activeBytes)} · ${s.activeSurfaces} surfaces`],
+      ['Idle / reusable', `${formatBytes(s.idleBytes)} · ${s.idleSurfaces} surfaces`],
+      ['Peak reservation', formatBytes(s.peakResidentBytes)],
+      ['Allocations', s.allocations], ['Reuses', s.reuses], ['Evicted surfaces', s.evictions], ['Budget denials', s.budgetDenials],
     ]} />
-    <button type="button" className={styles.cleanup} onClick={onClearIdle}>Boş yüzeyleri bırak</button>
-    <p>Aktif yüzeyler korunur. Boş yüzeyler normalde 2 saniyede bırakılır. Sayaçlar bu sayfa açıldığından beri; kaynak: CanvasSurfacePool.getSnapshot().</p>
+    <button type="button" className={styles.cleanup} onClick={onClearIdle}>Release unused resources</button>
+    <p>Active surfaces are preserved. Idle surfaces normally expire after 2 seconds. Counters accumulate for this page session.</p>
   </>
 }

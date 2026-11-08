@@ -22,6 +22,7 @@ export interface InnerGlowEffectDefinition extends EffectDefinition {
 
 export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
   type: 'innerGlow',
+  alphaSafe: true,
   apply: withEffectSurfaces<InnerGlowEffectDefinition>((input, effect, surfaces) => {
     const { color = '#FFFFFF', radius = 8, intensity = 0.8 } = effect.params
     const W = input.width

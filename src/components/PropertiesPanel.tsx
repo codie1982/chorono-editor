@@ -382,7 +382,7 @@ export default function PropertiesPanel({
   // still go through plain `update`.)
   const updateText = (partial: Partial<NonNullable<Layer['text']>>) => {
     if (!layer?.text) return
-    onLayerChange(syncTextLayerSize({ ...layer, text: { ...layer.text, ...partial } }))
+    onLayerChange(syncTextLayerSize({ ...layer, text: { ...layer.text, ...partial } },scene?.assets))
   }
 
   // BL-69 — Update the layer's paramBindings map. Null clears the binding.

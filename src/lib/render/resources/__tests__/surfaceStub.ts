@@ -4,7 +4,7 @@ export function surfaceStub(width: number, height: number, draw = () => {}): HTM
   const defaults = { globalAlpha: 1, globalCompositeOperation: 'source-over', filter: 'none', fillStyle: '' }
   const states: typeof defaults[] = []
   const context = { ...defaults, canvas: undefined as unknown as HTMLCanvasElement,
-    drawImage: draw, fillRect: draw,
+    drawImage: draw, fillRect: draw, translate() {},
     save() { states.push({ globalAlpha:this.globalAlpha,globalCompositeOperation:this.globalCompositeOperation,filter:this.filter,fillStyle:this.fillStyle }) },
     restore() { Object.assign(this,states.pop()) },
     createRadialGradient: () => ({ addColorStop() {} }) }

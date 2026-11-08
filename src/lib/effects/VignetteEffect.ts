@@ -19,6 +19,7 @@ export interface VignetteEffectDefinition extends EffectDefinition {
 
 export const vignetteEffect: EffectPlugin<VignetteEffectDefinition> = {
   type: 'vignette',
+  alphaSafe: true,
   apply: withEffectSurfaces<VignetteEffectDefinition>((input, effect, surfaces) => {
     const { color = '#000000', strength = 0.5, innerStop = 0.4 } = effect.params
     const W = input.width

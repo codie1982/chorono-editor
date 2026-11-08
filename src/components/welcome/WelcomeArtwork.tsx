@@ -19,7 +19,7 @@ export function WelcomeArtwork() {
     <circle cx="102" cy="91" r="4" fill="#14181F" stroke="#C0CAFF" /><circle cx="451" cy="159" r="4" fill="#14181F" stroke="#C0CAFF" />
     <g transform="rotate(-9 280 150)">
       <rect x="151" y="80" width="255" height="138" rx="12" fill={`url(#${gradient})`} />
-      <text x="177" y="174" fill="white" fontSize="59" fontWeight="550" letterSpacing="-3" fontFamily="system-ui, sans-serif">hareket.</text>
+      <text x="177" y="174" fill="white" fontSize="59" fontWeight="550" letterSpacing="-3" fontFamily="system-ui, sans-serif">move.</text>
       <rect x="145" y="74" width="267" height="150" stroke="#B8C5FF" strokeWidth="1" />
       {[[145, 74], [412, 74], [145, 224], [412, 224]].map(([x, y]) => <rect key={`${x}-${y}`} x={x - 3} y={y - 3} width="6" height="6" fill="#DDE4FF" />)}
     </g>

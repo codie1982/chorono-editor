@@ -261,6 +261,9 @@ function renderParticlesGPU(
 
 export const particleRendererPlugin: LayerRendererPlugin = {
   id: 'particle-emitter-renderer',
+  // Emission source layers supply geometry, not decoded pixel media.
+  nativeMediaFree: true,
+  mediaDependencies: () => ({}),
 
   supports(layer: Layer): boolean {
     return layer.type === 'particleEmitter' && !!(layer as any).particleEmitter

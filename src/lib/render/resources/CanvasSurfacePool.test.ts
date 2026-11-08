@@ -99,14 +99,33 @@ describe('CanvasSurfacePool ownership and admission', () => {
     b.release()
   })
 
-  it('shrinks oldest idle backing stores to admit a different size within the same budget', () => {
+  it('recycles the oldest idle canvas and evicts other backing stores to resize within budget', () => {
     const { instance } = pool(32)
     const a = instance.acquire(2, 2), b = instance.acquire(2, 2)
     a.release(); b.release()
     const larger = instance.acquire(2, 4)
-    expect([a.canvas.width, a.canvas.height, b.canvas.width, b.canvas.height]).toEqual([0, 0, 0, 0])
-    expect(instance.getSnapshot()).toMatchObject({ residentBytes: 32, peakResidentBytes: 32, evictions: 2 })
+    expect(larger.canvas).toBe(a.canvas)
+    expect([a.canvas.width, a.canvas.height, b.canvas.width, b.canvas.height]).toEqual([2, 4, 0, 0])
+    expect(instance.getSnapshot()).toMatchObject({ residentBytes: 32, peakResidentBytes: 32, evictions: 1, reuses: 1, allocations: 2 })
     larger.release()
+  })
+
+  it('does not retain one canvas for every animated ROI size', () => {
+    const { instance, createCanvas } = pool(4096)
+    for (let size = 1; size <= 30; size++) instance.acquire(size, size).release()
+    expect(createCanvas).toHaveBeenCalledTimes(1)
+    expect(instance.getSnapshot()).toMatchObject({ allocations:1,reuses:29,residentBytes:3600,idleSurfaces:1 })
+  })
+
+  it('rolls back a failed idle resize and leaves active leases untouched', () => {
+    const {instance}=pool(128)
+    const idle=instance.acquire(2,2),active=instance.acquire(2,2)
+    idle.release()
+    Object.defineProperty(idle.canvas,'height',{get:()=>2,set(value){if(value===3)throw new Error('resize failed')},configurable:true})
+    expect(()=>instance.acquire(3,3)).toThrow('resize failed')
+    expect(instance.getSnapshot()).toMatchObject({residentBytes:16,activeSurfaces:1,idleSurfaces:0})
+    expect(active.canvas.width).toBe(2)
+    active.release()
   })
 
   it.each([[0, 2], [-1, 2], [1.5, 2], [NaN, 2], [Infinity, 2], [Number.MAX_SAFE_INTEGER, 2]])(

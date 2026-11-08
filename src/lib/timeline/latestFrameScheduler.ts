@@ -1,4 +1,7 @@
-/** Coalesce pointer samples while always rendering the newest queued value. */
+/** Coalesce deferred host work while delivering the newest queued value.
+ * One task is pending; flush consumes once, cancel discards work. Pointer edits,
+ * viewport drawing and runtime signals reuse this contract with their own
+ * payload ownership. Injected scheduling defers callbacks as browser RAF does. */
 export function createLatestFrameScheduler<T>(
   render: (value: T) => void,
   schedule: (cb: FrameRequestCallback) => number = cb => requestAnimationFrame(cb),

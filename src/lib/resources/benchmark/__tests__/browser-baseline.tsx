@@ -21,6 +21,11 @@ async function main(): Promise<void> {
   // A failed warmup must remain failed. This explicit separate profile only
   // verifies six visual references within the SAME guards; never compare its
   // unwarmed CPU samples with the timing baseline.
+  const staticGroups = new URL(location.href).searchParams.get('staticGroups') === '1'
+  const surfaceRegions = new URL(location.href).searchParams.get('surfaceRegions') !== '0'
+  const requestedLod = new URL(location.href).searchParams.get('lodZoom')
+  const lodZoom = requestedLod === null ? undefined : Number(requestedLod)
+  if (lodZoom !== undefined && (!Number.isFinite(lodZoom) || lodZoom <= 0 || lodZoom > 1)) throw new Error('Invalid LOD zoom')
   const visualOnly = new URL(location.href).searchParams.get('profile') === 'visual-only'
   const protocol = visualOnly ? { ...DEFAULT_BASELINE_PROTOCOL, warmupMs: 0, repetitions: 1 } : DEFAULT_BASELINE_PROTOCOL
   const expectedSamples = protocol.sampleFractions.length * protocol.repetitions
@@ -52,8 +57,11 @@ async function main(): Promise<void> {
   if (!response.ok) throw new Error('Fixture unavailable')
   const bytes = await response.arrayBuffer()
   if (await sha256(bytes) !== fixture.sha256) throw new Error('Fixture hash changed; prepare a new baseline')
-  const scene: ChronoScene = JSON.parse(new TextDecoder().decode(bytes))
+  let scene: ChronoScene = JSON.parse(new TextDecoder().decode(bytes))
   if (scene.layers.length !== fixture.layers) throw new Error('Unexpected fixture layer count')
+  if (staticGroups && fixture.id !== 'groups-transparent') throw new Error('Static derivation is only defined for the groups fixture')
+  if (staticGroups) scene = { ...scene, timelines: [] } // Test-only held geometry; original portable bytes stay untouched.
+  const effectiveSceneSha256 = await sha256(new TextEncoder().encode(JSON.stringify(scene)).buffer as ArrayBuffer)
   const root = createRoot(document.getElementById('assets')!)
   const onError = (error: Error) => {
     status.textContent = `ERROR: ${error.message}`; start.disabled = true
@@ -68,7 +76,7 @@ async function main(): Promise<void> {
     root.render(createElement(BaselineAssetsBridge, { scene, onError, onReady: async (assets, audio) => {
       if (hostStarted) return
       hostStarted = true
-      const host = new BrowserBaselineHost(scene, canvas, assets, audio)
+      const host = new BrowserBaselineHost(scene, canvas, assets, audio, lodZoom, surfaceRegions)
       const controller = new AbortController()
       cancel.disabled = false; cancel.onclick = () => controller.abort()
       const runStartedAt = new Date().toISOString()
@@ -81,6 +89,9 @@ async function main(): Promise<void> {
             ? `${fixture.id}: ısınma ${(value.warmupMs / 1000).toFixed(1)} / 60 sn`
             : value.phase === 'sampling' ? `${fixture.id}: ölçüm ${value.samples} / ${expectedSamples}` : `${fixture.id}: görsel referanslar hazırlanıyor`
         })
+        if (staticGroups && lodZoom !== undefined && !result.samples.some(sample => (sample.lodGroups ?? 0) > 0)) {
+          result.status = 'incomplete'; result.reason = 'no-proxies-in-static-lod-acceptance'
+        }
         const endSnapshot = host.getSnapshot()
         await new Promise(resolve => setTimeout(resolve, 2250))
         const idleSnapshot = host.getSnapshot()
@@ -90,9 +101,9 @@ async function main(): Promise<void> {
           environment: { userAgent: navigator.userAgent, logicalCpuCount: navigator.hardwareConcurrency,
             viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
             visibility: document.visibilityState, gpu: endSnapshot.gpu.length ? gpuCapabilities.getReport() : null,
-            rendererMode: 'standalone-preview', sceneSize: scene.composition,
+            rendererMode: 'standalone-preview', surfaceRegions, lodZoom: lodZoom ?? null, staticGroupsDerived: staticGroups, effectiveSceneSha256, sceneSize: scene.composition,
             editorPanelsMounted: false, videoTransportExercised: false, systemProcessMemory: null },
-          endResources: endSnapshot, idleAfterMs: 2250, idleResources: idleSnapshot }
+          lodQuality: host.getLodQuality(), endResources: endSnapshot, idleAfterMs: 2250, idleResources: idleSnapshot }
         document.getElementById('report')!.textContent = JSON.stringify(report, null, 2)
         summary.textContent = JSON.stringify({ fixture: fixture.id, status: result.status, reason: result.reason,
           warmup: result.warmup, summary: result.summary, layerCount: scene.layers.length,

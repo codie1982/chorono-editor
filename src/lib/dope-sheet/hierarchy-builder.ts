@@ -1,5 +1,6 @@
 import type { ChronoScene, Timeline, Track, Layer } from '@/lib/types'
 import type { TrackNode } from '@/components/dope-sheet/types'
+import { LayerTrackIndex } from '@/lib/timeline/LayerTrackIndex'
 
 /** Map a property path to its display group (Transform, Style, etc.) */
 function groupLabel(propPath: string): string {
@@ -40,14 +41,7 @@ export function buildHierarchy(
   const layers = scene.layers ?? []
 
   // Group this timeline's tracks by owning layer id.
-  const tracksByLayer = new Map<string, Track[]>()
-  for (const t of timeline.tracks ?? []) {
-    const m = t.target.match(/^layers\.([^.]+)\./)
-    if (!m) continue
-    const arr = tracksByLayer.get(m[1]) ?? []
-    arr.push(t)
-    tracksByLayer.set(m[1], arr)
-  }
+  const tracksByLayer = new LayerTrackIndex(timeline.tracks ?? [])
 
   const root: TrackNode = {
     id: 'scene', name: 'Scene', type: 'group', depth: 0,
@@ -83,7 +77,7 @@ export function buildHierarchy(
     visited.add(layer.id)
     if (allowedBySelection && !allowedBySelection.has(layer.id) && !ancestors.has(layer.id)) return null
 
-    const layerTracks = allowedBySelection && !allowedBySelection.has(layer.id) ? [] : tracksByLayer.get(layer.id) ?? []
+    const layerTracks = allowedBySelection && !allowedBySelection.has(layer.id) ? [] : tracksByLayer.forLayer(layer.id)
     const layerHasKeys = layerTracks.some(t => (t.keyframes?.length ?? 0) > 0)
     const nameMatches = !filter || layer.name.toLowerCase().includes(filter)
 

@@ -23,6 +23,15 @@ For fonts, import the actual supported font file, read the registered family fro
 
 Use the returned absolute path instead of inventing an output location. Existing files require explicit overwrite; choose a fresh name when the user has not requested replacement. Saved projects live under the configured project directory, with exports in its `exports/` subdirectory.
 
+Output work also shares the editor's managed resource budget and finite queue.
+Complex geometry, dense runtime baking or large JSON/media copies can be refused
+before allocation even when a tool's outer frame/duration/transport cap allows
+them. These are admission policies, not a hard limit on native/browser process
+RAM. Do not treat quota errors as permission to truncate data or silently lower
+quality. Cancellation may keep a non-abortable encoder, renderer or consumer
+active until it actually settles; the resource panel shows pending/protected and
+failed-cleanup state. Legacy raw output helpers do not manage caller retention.
+
 At this implementation version, a sequence call is bounded to 300 frames, 4 MP per frame and 24 MB ZIP output. A 10-second sequence at 30 FPS reaches 300 frames. Audio mixdown is a separate WAV operation; image sequences have no soundtrack. Query connected capabilities before a large output. MP4/GIF/WebM encoding and video/audio muxing require an additional encoder workflow.
 
 ## Editable audio clips

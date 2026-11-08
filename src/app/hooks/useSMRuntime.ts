@@ -46,6 +46,10 @@ const EMPTY: SMFrameResult = {
   actions: [],
 }
 
+/** Own live machines for immutable editor definitions. Reconcile membership on
+ * renders, but sync only a replaced definition: same-input playback ticks must
+ * not rescan states or emit a spurious definitionSynced event. Timeline edits
+ * still reach tickFrame through its scene dependency; active state is retained. */
 export function useSMRuntime(scene: ChronoScene): SMRuntimeReturn {
   const runtimesRef = useRef<Map<string, StateMachineRuntime>>(new Map())
   const eventQueueRef = useRef<QueuedEvent[]>([])
@@ -60,7 +64,7 @@ export function useSMRuntime(scene: ChronoScene): SMRuntimeReturn {
     for (const def of machines) {
       seen.add(def.id)
       const existing = rts.get(def.id)
-      if (existing) existing.sync(def)
+      if (existing) { if (existing.sm !== def) existing.sync(def) }
       else rts.set(def.id, new StateMachineRuntime(def))
     }
     for (const id of Array.from(rts.keys())) {

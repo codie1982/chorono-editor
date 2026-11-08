@@ -5,6 +5,7 @@ import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 import { CanvasSurfacePool } from './CanvasSurfacePool'
 import { LayerSurfacePipeline, type LayerSurfacePass } from './LayerSurfacePipeline'
 import { surfaceStub } from './__tests__/surfaceStub'
+import { SurfaceRegionFallback } from './CanvasSurfaceScope'
 
 const pools: CanvasSurfacePool[] = []
 /** Creates one shared budget and a complete content/effect/mask destination contract. */
@@ -23,6 +24,46 @@ function fixture(maxBytes = 128, width = 2, height = 2) {
 afterEach(() => { pools.splice(0).forEach(pool=>pool.dispose());vi.restoreAllMocks() })
 
 describe('LayerSurfacePipeline bounded composition',()=>{
+  it('uses the fused maskless shadow capability with full source/output and small scratch',()=>{
+    vi.spyOn(gpuImageEffects,'blur').mockReturnValue(surfaceStub(2,2))
+    const {pool,pass,pipeline,composite}=fixture(80016,100,100)
+    pass.masks=[];pass.region={x:35,y:41,width:2,height:2}
+    pass.effects=[{id:'s',type:'shadow',enabled:true,params:{blur:3}}]
+    pipeline.render(pass)
+    expect(pool.getSnapshot()).toMatchObject({peakResidentBytes:80016,allocations:3,activeBytes:0,budgetDenials:0})
+    expect(composite).toHaveBeenCalledTimes(1)
+    expect(composite.mock.calls[0][0]).toMatchObject({width:100,height:100})
+  })
+  it('reduces a masked pass peak while retaining full-domain source rasterization',()=>{
+    const {pool,pass,pipeline,composite}=fixture(40100,100,100)
+    pass.region={x:35,y:41,width:2,height:2}
+    pipeline.render(pass)
+    expect(pool.getSnapshot()).toMatchObject({activeBytes:0,budgetDenials:0})
+    expect(pool.getSnapshot().peakResidentBytes).toBeLessThan(40100)
+    expect(composite.mock.calls[0][1]).toEqual({x:0,y:0,width:100,height:100})
+    expect(composite.mock.calls[0][0]).toMatchObject({width:100,height:100})
+  })
+
+  it('retries once at full domain after a cropped backend fails, releasing partial leases first',()=>{
+    const {pool,pass,composite}=fixture(40100,100,100)
+    pass.masks=[];pass.region={x:35,y:41,width:2,height:2}
+    const applyChain=vi.fn((input:HTMLCanvasElement,_effects:readonly EffectDefinition[],scope?:import('./CanvasSurfaceScope').CanvasSurfaceAllocator)=>{
+      if(scope?.cropped)throw new SurfaceRegionFallback('context lost')
+      return input
+    })
+    new LayerSurfacePipeline(pool,{applyChain}).render(pass)
+    expect(applyChain).toHaveBeenCalledTimes(2)
+    expect(composite).toHaveBeenCalledTimes(1)
+    expect(composite.mock.calls[0][1]).toEqual({x:0,y:0,width:100,height:100})
+    expect(pool.getSnapshot().activeBytes).toBe(0)
+  })
+
+  it('rejects invalid or out-of-domain crops before allocation',()=>{
+    const {pool,pass,pipeline}=fixture()
+    pass.region={x:-1,y:0,width:2,height:2}
+    expect(()=>pipeline.render(pass)).toThrow(/region/)
+    expect(pool.getSnapshot().allocations).toBe(0)
+  })
   it('keeps host, shadow scratch and mask passes at four reusable surfaces over 100 frames',()=>{
     vi.spyOn(gpuImageEffects,'blur').mockReturnValue(null)
     const {pool,pass,pipeline,composite}=fixture()

@@ -1,5 +1,6 @@
 import type { ChronoScene } from '../types'
 import { assertTrackValues, isColorTarget } from '../animation/typedValues'
+import {measureJson} from '../format/json'
 
 export const MCP_VERSION = '1.0.0'
 export const LIMITS = { layers: 5000, timelines: 100, keyframes: 50000, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
@@ -23,11 +24,13 @@ export function assertJson(value: unknown): void {
 }
 
 export function assertScene(value: unknown): asserts value is ChronoScene {
+  // Preflight before traversal/stringification: cycle/depth/size rejection must
+  // not itself allocate a complete oversized serialized project.
+  measureJson(value,{maxChars:LIMITS.sceneBytes,maxBytes:LIMITS.sceneBytes*3})
   assertJson(value)
   const scene = value as ChronoScene
   if (!scene || !scene.composition || !Array.isArray(scene.layers) || !Array.isArray(scene.timelines) || !Array.isArray(scene.assets) || !Array.isArray(scene.parameters) || !Array.isArray(scene.bindings) || !Array.isArray(scene.triggers)) throw new Error('Invalid Chorono scene')
   if (!String(scene.formatVersion).startsWith('1.')) throw new Error('Unsupported scene version')
-  if (JSON.stringify(scene).length > LIMITS.sceneBytes) throw new Error('Scene size limit exceeded')
   const comp = scene.composition
   if (comp.audioVolume !== undefined && (!Number.isFinite(comp.audioVolume) || comp.audioVolume < 0 || comp.audioVolume > 4)) throw new Error('Invalid master audio gain')
   if (comp.audioMuted !== undefined && typeof comp.audioMuted !== 'boolean') throw new Error('Invalid master audio mute')

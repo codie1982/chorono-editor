@@ -21,6 +21,16 @@ export interface BaselineSample {
   timeMs: number
   evaluationMs: number
   renderMs: number
+  /** Unique main-frame counters; optional for historical reports and test hosts. */
+  lodRepresentedLayers?: number
+  lodGroups?: number
+  lodBuilds?: number
+  lodResidentBytes?: number
+  lodHits?: number
+  lodMisses?: number
+  lodBudgetDenials?: number
+  processedLayers?: number
+  culledLayers?: number
   layerVisits: number
   knownBytes: number
   heapBytes: number | null
@@ -30,6 +40,11 @@ export interface BaselineSample {
   maskResidentBytes: number
   maskAllocations: number
   maskReuses: number
+  /** Registered allocation ledger only, overlapping the resource estimates.
+   * Historical references omit these counters; never interpret that as zero. */
+  admittedBytes?: number
+  admissionProtectedBytes?: number
+  admissionDenials?: number
   imageBytes: number
   videoFrameBytes: number
   pcmBytes: number

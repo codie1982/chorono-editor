@@ -8,6 +8,22 @@ function layer(id: string, parentId?: string): Layer {
 }
 
 describe('LayerIndex snapshot relationships', () => {
+  it('collects overlapping subtrees once in legacy pre-order, independent of visibility', () => {
+    const root=layer('root'),a=layer('a','root'),b=layer('b','root'),grand=layer('grand','a'),other=layer('other')
+    grand.hidden=true
+    const layers=[root,a,b,grand,other],index=new LayerIndex(layers)
+    expect(Array.from(index.subtreeIds(['root','a','missing']))).toEqual(['root','a','grand','b'])
+    expect(Array.from(index.subtreeIds(['root','a'],false))).toEqual(['grand','b'])
+    expect(layers).toEqual([root,a,b,grand,other])
+  })
+  it('collects deep and cyclic branches iteratively, without promoting missing ids', () => {
+    const deep=Array.from({length:5000},(_,i)=>layer(String(i),i?String(i-1):undefined))
+    expect(new LayerIndex(deep).subtreeIds(['0']).size).toBe(5000)
+    const index=new LayerIndex([layer('a','b'),layer('b','a'),layer('orphan','missing')])
+    expect(Array.from(index.subtreeIds(['a']))).toEqual(['a','b'])
+    expect(Array.from(index.subtreeIds(['a'],false))).toEqual(['b'])
+    expect(index.subtreeIds(['missing']).size).toBe(0)
+  })
   it('preserves input root/sibling stacking order without promoting missing-parent children', () => {
     const childB = layer('b', 'parent'), parent = layer('parent')
     const childA = layer('a', 'parent'), orphan = layer('orphan', 'missing'), root = layer('root')

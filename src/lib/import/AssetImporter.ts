@@ -1,3 +1,4 @@
+import type { ImportExecution } from './resources/ImportExecution'
 // ── AssetImporter ─────────────────────────────────────────────────────────────
 //
 // Handles simple asset imports: Image, Video, Audio, Font.
@@ -24,10 +25,10 @@ export class AssetImporter {
   }
 
   /** Run preflight for a specific format */
-  async preflight(file: File, format: ImportFormat, options?: ImportOptions): Promise<ImportPreflight> {
+  async preflight(file: File, format: ImportFormat, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
     const handler = this.findHandler(format)
     if (!handler) return this.unsupportedPreflight(file, format)
-    return handler.preflight(file, options)
+    return handler.preflight(file, options, execution)
   }
 
   /** Run the import */
@@ -36,6 +37,7 @@ export class AssetImporter {
     format: ImportFormat,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult> {
     onProgress?.({ stage: 'reading', label: 'Reading file…', progress: 0.1 })
 
@@ -44,7 +46,7 @@ export class AssetImporter {
       throw new Error(`No handler registered for asset format: ${format} (${file.name})`)
     }
 
-    return handler.handle(file, options, onProgress)
+    return handler.handle(file, options, onProgress, execution)
   }
 
   private findHandler(format: ImportFormat): ImportHandler | undefined {

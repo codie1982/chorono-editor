@@ -44,6 +44,11 @@ export interface SceneExplorerMenuHandlers {
   isolate?:      (ids: string[]) => void
   /** Clear hidden + solo flags on all layers (Show All). */
   showAll?:      () => void
+  /** Panel-only tree state; never writes scene visibility. */
+  expandSubtrees?: (ids:readonly string[]) => void
+  collapseSubtrees?: (ids:readonly string[]) => void
+  /** Explicit recursive visibility, delegated as one reversible editor command. */
+  setSubtreeHidden?: (ids:readonly string[],hidden:boolean) => void
 }
 
 export interface BuildMenuOptions {
@@ -60,7 +65,8 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
   const { target, selectionIds, allLayers, handlers } = opts
   const ids = selectionIds.length > 0 ? selectionIds : [target.id]
   const multi = ids.length > 1
-  const layers = allLayers.filter((l) => ids.includes(l.id))
+  const selected = new Set(ids)
+  const layers = allLayers.filter((l) => selected.has(l.id))
 
   // "ANY off → all on, else all off" — Figma / AE convention
   const computeNext = (field: 'locked' | 'hidden' | 'solo' | 'pinned'): boolean => {
@@ -105,6 +111,15 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
     flagSubmenu('solo',   'Toggle Solo'),
     flagSubmenu('pinned', 'Toggle Pin'),
   ]
+
+  if (handlers.expandSubtrees || handlers.collapseSubtrees || handlers.setSubtreeHidden) items.push({
+    kind: 'submenu', label: 'Subtree (selected + children)', items: [
+      { kind: 'action', label: 'Expand subtree', disabled: !handlers.expandSubtrees, onSelect: () => handlers.expandSubtrees?.(ids) },
+      { kind: 'action', label: 'Collapse subtree', disabled: !handlers.collapseSubtrees, onSelect: () => handlers.collapseSubtrees?.(ids) },
+      { kind: 'action', label: 'Show subtree', disabled: !handlers.setSubtreeHidden, onSelect: () => handlers.setSubtreeHidden?.(ids, false) },
+      { kind: 'action', label: 'Hide subtree', disabled: !handlers.setSubtreeHidden, onSelect: () => handlers.setSubtreeHidden?.(ids, true) },
+    ],
+  })
 
   // Isolate / Show All — only meaningful when the helpers are wired
   if (handlers.isolate || handlers.showAll) {

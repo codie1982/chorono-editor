@@ -18,7 +18,8 @@ const EMPTY_CHILDREN: readonly Layer[] = Object.freeze([])
  * Roots and siblings retain input stacking order; only a falsy parentId makes
  * a root, matching the renderer's filter (unlike SceneTraversal's orphan tree).
  * Missing parents, hidden layers and reference cycles remain data, not repaired
- * or recursively expanded here. Traversal callers retain their cycle guards.
+ * by construction. subtreeIds() explicitly traverses with its own cycle guard;
+ * other traversal callers retain responsibility for their guards.
  *
  * Valid scenes have unique ids. For malformed duplicates, get() returns the
  * first occurrence just as Array.find does; relationship lists keep all input
@@ -53,4 +54,22 @@ export class LayerIndex implements LayerRelations {
 
   /** Direct children in original stacking order, including hidden ones; shared empty view if absent. */
   childrenOf(parentId: string): readonly Layer[] { return this.children.get(parentId) ?? EMPTY_CHILDREN }
+
+  /** Collect existing roots and descendants in deterministic pre-order with
+   * authored sibling order. Overlapping roots and cycles are visited once; missing
+   * ids are ignored. includeRoots=false excludes every supplied root. Returns
+   * a caller-owned id set in O(n + roots), without recursion/model mutation.
+   */
+  subtreeIds(rootIds: readonly string[] | ReadonlySet<string>, includeRoots = true): Set<string> {
+    const roots = Array.from(rootIds), pending = roots.filter(id => this.byId.has(id)).reverse(), ids = new Set<string>()
+    while (pending.length) {
+      const id = pending.pop()!
+      if (ids.has(id)) continue
+      ids.add(id)
+      const children = this.childrenOf(id)
+      for (let i = children.length - 1; i >= 0; i--) pending.push(children[i].id)
+    }
+    if (!includeRoots) roots.forEach(id => ids.delete(id))
+    return ids
+  }
 }

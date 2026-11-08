@@ -65,6 +65,12 @@ import { makeAddAnimationCmd } from '@/lib/timeline/addAnimationCommand'
 import { toast } from '@/lib/toast/toast'
 import { makeMoveAudioClipCmd, makePatchAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd } from '@/lib/editor/commands-audio'
 import { resolveAudioClipWindow } from '@/lib/audio/audioClip'
+import { LayerTrackIndex } from '@/lib/timeline/LayerTrackIndex'
+import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+import { WindowedRows } from '@/components/virtualization/WindowedRows'
+import { useRowWindow } from '@/components/virtualization/useRowWindow'
+import { editorSoloScope } from '@/lib/scene/visibility/editorSoloScope'
+import { headerHeight, timelineKeysInBox, timelineSectionHeight } from './timeline/layout/timelineRows'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
 // the label. Same set is used by the LayerPanel-side picker so a layer
@@ -163,6 +169,9 @@ export default function TimelinePanel({
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
   const timeline = scene.timelines.find((t) => t.id === selectedTimelineId) ?? null
+  const layerTracks = useMemo(() => new LayerTrackIndex(timeline?.tracks ?? []), [timeline?.tracks])
+  const tracksByTimeline = useMemo(() => new Map(scene.timelines.map(item => [item.id, new LayerTrackIndex(item.tracks)])), [scene.timelines])
+  const assetById = useMemo(() => new Map(scene.assets.map(asset => [asset.id, asset])), [scene.assets])
   const duration = timeline?.durationMs ?? scene.composition.durationMs
 
   // ── Viewport (panel height managed by parent dock splitter) ─────────────
@@ -320,10 +329,9 @@ export default function TimelinePanel({
   }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker, jumpToAdjacentKeyframe])
   const visibleLayers = useMemo(() => {
     const q = layerFilter.trim().toLowerCase()
-    // Step 1: solo mode — if any layer is solo'd, hide everything else.
-    const visualSolo = scene.layers.some(layer => layer.type !== 'audio' && layer.solo)
-    const audioSolo = scene.layers.some(layer => layer.type === 'audio' && layer.solo)
-    let next = scene.layers.filter(layer => layer.type === 'audio' ? !audioSolo || layer.solo : !visualSolo || layer.solo)
+    // Step 1: solo subtrees; a group's tracks need not belong to this timeline.
+    const soloScope = editorSoloScope(scene.layers)
+    let next = scene.layers.filter(layer => !soloScope || soloScope.has(layer.id))
     next = next.filter(layer => layer.type !== 'audio' || !layer.audio?.timelineId || layer.audio.timelineId === selectedTimelineId)
     // Step 2: timeline opt-in filter — when layerIds is set, only show those layers.
     if (timeline?.layerIds !== undefined) {
@@ -335,7 +343,7 @@ export default function TimelinePanel({
       next = next.filter((l) => {
         if (l.name.toLowerCase().includes(q)) return true
         if (l.type.toLowerCase().includes(q)) return true
-        const tracks = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${l.id}.`)) ?? []
+        const tracks = layerTracks.forLayer(l.id)
         return tracks.some((t) => t.target.toLowerCase().includes(q))
       })
     }
@@ -343,7 +351,7 @@ export default function TimelinePanel({
     const pinned   = next.filter((l) =>  l.pinned)
     const unpinned = next.filter((l) => !l.pinned)
     return [...pinned, ...unpinned]
-  }, [scene.layers, layerFilter, timeline, selectedTimelineId])
+  }, [scene.layers, layerFilter, timeline, selectedTimelineId, layerTracks])
 
   // Map: layerId → pin index (0,1,2…) — only set for pinned layers.
   const pinIndexFor = useMemo(() => {
@@ -910,22 +918,25 @@ export default function TimelinePanel({
     const s = lassoStartRef.current
     const el = lassoContainerRef.current
     if (!s || !el || !lassoRect) { lassoStartRef.current = null; setLassoRect(null); return }
-    // Convert lasso (container-local) rect to viewport coords for hit-test.
-    const c = el.getBoundingClientRect()
-    const vx1 = c.left + lassoRect.x - el.scrollLeft
-    const vy1 = c.top  + lassoRect.y - el.scrollTop
-    const vx2 = vx1 + lassoRect.w
-    const vy2 = vy1 + lassoRect.h
     const next = new Set<string>(s.addToExisting ? selectedKfIds : [])
-    el.querySelectorAll<HTMLElement>('[data-kf-id]').forEach((node) => {
-      const r = node.getBoundingClientRect()
-      const cx = r.left + r.width / 2
-      const cy = r.top  + r.height / 2
-      if (cx >= vx1 && cx <= vx2 && cy >= vy1 && cy <= vy2) {
-        const id = node.dataset.kfId
-        if (id) next.add(id)
-      }
-    })
+    const hits = timelineKeysInBox({ rows: sectionRows, layout: sectionLayout, graph: settings.timelineMode === 'curve',
+      box: lassoRect, labelWidth: labelColWidth, trackWidth: vp.trackWidth, offset: sectionWindow.viewport.offset,
+      previewMs: drag.previewMs, msToX: vp.msToScreenPx,
+      headerTop: index => {
+        const row = sectionRows[index], top = sectionLayout.top(index) + sectionWindow.viewport.offset
+        return row.layer.pinned ? Math.min(Math.max(top, el.scrollTop + (pinTopFor.get(row.layer.id) ?? 0)),
+          sectionLayout.top(index + 1) + sectionWindow.viewport.offset - headerHeight(row.layer)) : top
+      },
+      audioKeys: layer => {
+        const window = resolveAudioClipWindow(layer, assetById.get(layer.audio?.assetId ?? '')?.durationMs, duration)
+        const track = (tracksByTimeline.get(layer.audio?.timelineId ?? selectedTimelineId ?? '')?.forLayer(layer.id) ?? [])
+          .find(item => item.target === `layers.${layer.id}.audio.volume`)
+        return track?.keyframes.filter(key => {
+          const time = drag.previewMs[key.id] ?? key.timeMs
+          return time >= Math.max(window.startMs, vp.visibleStartMs) && time <= Math.min(window.endMs, vp.visibleEndMs)
+        }) ?? []
+      } })
+    hits.forEach(id => next.add(id))
     onSelectKeyframes(next)
     lassoStartRef.current = null
     setLassoRect(null)
@@ -973,13 +984,19 @@ export default function TimelinePanel({
   )
 
   // Helper: tracks belonging to a layer
-  const tracksFor = (layerId: string) => {
-    const base = timeline?.tracks.filter((t) => t.target.startsWith(`layers.${layerId}.`)) ?? []
-    if (!propFilter) return base
-    if (propFilter === 'all') return base.filter((t) => t.keyframes.length > 0)
-    const suffixes = PROP_SUFFIXES[propFilter]
-    return base.filter((t) => suffixes.some((s) => t.target.endsWith(s)))
-  }
+  const tracksForLayer = useMemo(() => new Map(visibleLayers.map(layer => {
+    const base = layerTracks.forLayer(layer.id)
+    const tracks = !propFilter ? base : propFilter === 'all' ? base.filter(track => track.keyframes.length > 0)
+      : base.filter(track => PROP_SUFFIXES[propFilter].some(suffix => track.target.endsWith(suffix)))
+    return [layer.id, tracks] as const
+  })), [visibleLayers, layerTracks, propFilter])
+  const sectionRows = useMemo(() => visibleLayers.map(layer => ({ layer,
+    tracks: tracksForLayer.get(layer.id) ?? [], expanded: !collapsedIds.has(layer.id) })), [visibleLayers, tracksForLayer, collapsedIds])
+  const sectionKeys = useMemo(() => sectionRows.map(row => row.layer.id), [sectionRows])
+  const sectionLayout = useMemo(() => new RowLayout(sectionRows.map(row => timelineSectionHeight(row, settings.timelineMode === 'curve'))),
+    [sectionRows, settings.timelineMode])
+  const sectionContentRef = useRef<HTMLDivElement>(null)
+  const sectionWindow = useRowWindow(sectionLayout, sectionKeys, lassoContainerRef, sectionContentRef)
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1255,12 +1272,17 @@ export default function TimelinePanel({
           </div>
         )}
 
-        {visibleLayers.map((layer) => (
+        <div ref={sectionContentRef}>
+        <WindowedRows layout={sectionLayout} indices={sectionWindow.indices} rowKey={index => sectionKeys[index]}
+          renderRow={(index, attributes) => {
+          const { layer, tracks, expanded } = sectionRows[index]
+          return (
           <LayerTimelineSection
-            key={layer.id}
+            attributes={attributes}
+            scrollRef={lassoContainerRef}
             layer={layer}
-            tracks={tracksFor(layer.id)}
-            expanded={!collapsedIds.has(layer.id)}
+            tracks={tracks}
+            expanded={expanded}
             graphMode={settings.timelineMode === 'curve'}
             isPrimary={selectedLayerId === layer.id}
             isInSet={selectedLayerIds.has(layer.id)}
@@ -1316,7 +1338,8 @@ export default function TimelinePanel({
               ))
             }}
           />
-        ))}
+        )}} />
+        </div>
 
         {/* Snap indicator (single global) */}
         {snapIndicatorX != null && (

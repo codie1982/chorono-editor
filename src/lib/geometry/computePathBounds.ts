@@ -38,9 +38,14 @@ function cubicExtrema(p0: number, p1: number, p2: number, p3: number): number[] 
   return q === 0 ? [-b / (2 * a)] : [q / a, c / q]
 }
 
-/** Tight AABB of the actual path. Controls are transformed before extrema are
- * solved, so rotated curves keep their true bounds rather than a rotated box. */
-export function computePathBounds(path: PathDefinition, matrix?: Matrix2D): PathBounds {
+/** AABB of a normalized path in local coordinates, or matrix output coordinates.
+ * Default 'tight' solves curve extrema, preserving existing selection semantics.
+ * 'control-hull' includes Bezier control points instead: the convex-hull property
+ * guarantees a conservative enclosure without solving derivatives. This cheaper,
+ * looser mode is appropriate for rejecting paint, never for editable tight bounds.
+ * Empty paths return the zero box; invalid points retain legacy ignore behavior. */
+export function computePathBounds(path: PathDefinition, matrix?: Matrix2D,
+  mode: 'tight' | 'control-hull' = 'tight'): PathBounds {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   let current: Vec2 = { x: 0, y: 0 }
   let start: Vec2 = current
@@ -66,6 +71,9 @@ export function computePathBounds(path: PathDefinition, matrix?: Matrix2D): Path
     }
     if (command.type === 'Q') {
       const control = transform({ x: command.x1, y: command.y1 })
+      if (mode === 'control-hull') {
+        include(control); current = end; continue
+      }
       for (const axis of ['x', 'y'] as const) {
         const denominator = current[axis] - 2 * control[axis] + end[axis]
         if (denominator === 0) continue
@@ -78,6 +86,9 @@ export function computePathBounds(path: PathDefinition, matrix?: Matrix2D): Path
     } else if (command.type === 'C') {
       const control1 = transform({ x: command.x1, y: command.y1 })
       const control2 = transform({ x: command.x2, y: command.y2 })
+      if (mode === 'control-hull') {
+        include(control1); include(control2); current = end; continue
+      }
       const extrema = [
         ...cubicExtrema(current.x, control1.x, control2.x, end.x),
         ...cubicExtrema(current.y, control1.y, control2.y, end.y),

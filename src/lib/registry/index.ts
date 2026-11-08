@@ -7,7 +7,7 @@
 export { LayerRegistry } from './LayerRegistry'
 export { LayerRendererRegistry } from './LayerRendererRegistry'
 export type { LayerDefinition, LayerCategory } from './LayerDefinition'
-export type { LayerRendererPlugin } from './LayerRendererRegistry'
+export type { LayerRendererPlugin, LayerPaintCapability } from './LayerRendererRegistry'
 export type { PropertySchema, PropertyGroup, PropValueType } from './PropertySchema'
 
 // Singletons (declared in a separate module to avoid ESM hoisting TDZ bugs

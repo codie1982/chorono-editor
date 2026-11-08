@@ -10,6 +10,7 @@
 //   3. Registering both in registry/bootstrap.ts
 // No other file changes — open/closed principle satisfied.
 
+import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry'
 import type { RenderContext } from '../RenderContext'
@@ -22,6 +23,10 @@ import { drawPathStrokeLayer } from '@/lib/runtime/pathStrokeRenderer'
 
 export const shapeRendererPlugin: LayerRendererPlugin = {
   id: 'shape',
+  nativeMediaFree: true,
+  mediaDependencies: () => ({}),
+  // Outside stroke uses destination-over, which depends on the live backdrop.
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => layer.style?.stroke?.alignment !== 'outside', localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'shape' && !!layer.size,
   render(ctx: RenderContext, layer: Layer): void {
     drawShape(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
@@ -32,6 +37,8 @@ export const shapeRendererPlugin: LayerRendererPlugin = {
 
 export const textRendererPlugin: LayerRendererPlugin = {
   id: 'text',
+  mediaDependencies: layer => ({fontFamilies:[layer.text?.fontFamily??'sans-serif']}),
+  paint: { alphaSafe: true },
   supports: (layer: Layer) => layer.type === 'text',
   render(ctx: RenderContext, layer: Layer): void {
     drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides)
@@ -42,6 +49,8 @@ export const textRendererPlugin: LayerRendererPlugin = {
 
 export const imageRendererPlugin: LayerRendererPlugin = {
   id: 'image',
+  mediaDependencies: layer => ({ assetIds: layer.image ? [layer.image.assetId] : [] }),
+  paint: { alphaSafe: true, regionSafe: true, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'image',
   render(ctx: RenderContext, layer: Layer): void {
     drawImageLayer(ctx.canvas, layer, ctx.assets)
@@ -52,6 +61,8 @@ export const imageRendererPlugin: LayerRendererPlugin = {
 
 export const videoRendererPlugin: LayerRendererPlugin = {
   id: 'video',
+  mediaDependencies: layer => ({ assetIds: layer.video ? [layer.video.assetId] : [] }),
+  paint: { alphaSafe: true, regionSafe: true, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'video',
   render(ctx: RenderContext, layer: Layer): void {
     drawVideoLayer(ctx.canvas, layer, ctx.assets)
@@ -62,6 +73,9 @@ export const videoRendererPlugin: LayerRendererPlugin = {
 
 export const pathStrokeRendererPlugin: LayerRendererPlugin = {
   id: 'pathStroke',
+  nativeMediaFree: true,
+  mediaDependencies: () => ({}),
+  paint: { alphaSafe: true },
   supports: (layer: Layer) => layer.type === 'pathStroke',
   render(ctx: RenderContext, layer: Layer): void {
     drawPathStrokeLayer(ctx.canvas, layer, ctx.overrides)
@@ -72,6 +86,9 @@ export const pathStrokeRendererPlugin: LayerRendererPlugin = {
 
 export const bezierPathRendererPlugin: LayerRendererPlugin = {
   id: 'bezierPath',
+  nativeMediaFree: true,
+  mediaDependencies: () => ({}),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: true, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'path' && !!layer.path,
   render(ctx: RenderContext, layer: Layer): void {
     drawBezierPath(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
@@ -85,6 +102,9 @@ export const bezierPathRendererPlugin: LayerRendererPlugin = {
 
 export const groupRendererPlugin: LayerRendererPlugin = {
   id: 'group',
+  nativeMediaFree: true,
+  mediaDependencies: () => ({}),
+  paint: { alphaSafe: true, regionSafe: true, sceneChildren: true, staticRasterSafe: true },
   supports: (layer: Layer) => layer.type === 'group',
   render(ctx: RenderContext, layer: Layer): void {
     const children = ctx.layerIndex ? ctx.layerIndex.childrenOf(layer.id)
@@ -101,6 +121,7 @@ import { defaultRepeaterResolver } from '@/lib/repeater/RepeaterResolver'
 
 export const repeaterRendererPlugin: LayerRendererPlugin = {
   id: 'repeater',
+  mediaDependencies: layer => ({ layerIds: layer.repeater ? [layer.repeater.sourceLayerId] : [] }),
   supports: (layer: Layer) => layer.type === 'repeater' && !!layer.repeater,
   render(ctx: RenderContext, layer: Layer): void {
     const cfg = layer.repeater
@@ -134,6 +155,9 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
 
 export const splineRendererPlugin: LayerRendererPlugin = {
   id: 'spline',
+  nativeMediaFree: true,
+  mediaDependencies: () => ({}),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: true, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'spline' && !!layer.spline,
   render(ctx: RenderContext, layer: Layer): void {
     drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues)

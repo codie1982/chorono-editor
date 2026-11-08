@@ -1,5 +1,7 @@
 import type { ProjectResourceSnapshot } from '@/lib/resources/monitor/ProjectResourceMonitor'
 import { formatBytes } from '@/lib/format/formatBytes'
+import { PaintResourcesSection } from './PaintResourcesSection'
+import { ManagedBudgetSection } from './ManagedBudgetSection'
 import { MetricList } from './MetricList'
 import styles from './ResourceMonitorPanel.module.css'
 
@@ -8,35 +10,46 @@ export function OverviewSection({ snapshot: s, onSampleMemory }: { snapshot: Pro
   const { heap, page } = s.browser
   return <>
     <div className={styles.scope}>
-      <h3>Proje ve editör kaynakları</h3>
-      <span className={styles.badge}>Tahmini · bilinen kaynaklar</span>
+      <h3>Project and editor resources</h3>
+      <span className={styles.badge}>Estimated · tracked resources</span>
       <div className={styles.bigValue}>{formatBytes(s.knownBytes)}</div>
-      <p>Canvas, görüntü, tek video karesi, ses PCM ve izlenen GPU tamponları. Toplam işlem RAM’i değildir.</p>
+      <p>Canvas surfaces, images, one video frame, decoded audio, and tracked GPU buffers. This is not total process RAM.</p>
     </div>
     <MetricList rows={[
-      ['Katman / animasyon', `${s.project.layers} / ${s.project.timelines}`],
-      ['Track / keyframe', `${s.project.tracks} / ${s.project.keyframes}`],
-      ['Medya kaynağı', s.project.assets],
-      ['Canvas2D · RGBA8', `${formatBytes(s.canvases.canvas2dBytes)} · ${s.canvases.canvas2dCount} yüzey`],
-      ['Görüntü / sprite · RGBA8', formatBytes(s.media.imageBytes)],
-      ['Video · bir RGBA karesi', formatBytes(s.media.videoFrameBytes)],
-      ['Ses PCM · Float32', `${formatBytes(s.audio.bytes)} · ${s.audio.bufferCount} tampon`],
-      ['GPU renk yüzeyi · RGBA8', formatBytes(s.canvases.webglBytes)],
-      ['GPU parçacık buffer', formatBytes(s.gpuBufferBytes)],
-      ['CPU parçacık staging', formatBytes(s.stagingBytes)],
+      ['Layers / timelines', `${s.project.layers} / ${s.project.timelines}`],
+      ['Tracks / keyframes', `${s.project.tracks} / ${s.project.keyframes}`],
+      ['Media assets', s.project.assets],
+      ['Original blob URLs · owned / borrowed', `${s.sources.ownedUrls} / ${s.sources.borrowedUrls}`],
+      ['Source references / pending / failed', `${s.sources.references} / ${s.sources.pendingUrls} / ${s.sources.failedUrls}`],
+      ['Canvas2D surfaces · RGBA8', `${formatBytes(s.canvases.canvas2dBytes)} · ${s.canvases.canvas2dCount} surfaces`],
+      ['Images / sprites · RGBA8', formatBytes(s.media.imageBytes)],
+      ['Video · one RGBA frame', formatBytes(s.media.videoFrameBytes)],
+      ['Decoded audio · Float32', `${formatBytes(s.audio.bytes)} · ${s.audio.bufferCount} buffers`],
+      ['GPU color surfaces · RGBA8', formatBytes(s.canvases.webglBytes)],
+      ['GPU particle buffers', formatBytes(s.gpuBufferBytes)],
+      ['CPU particle staging', formatBytes(s.stagingBytes)],
+      ['LOD cache · usage / budget', `${formatBytes(s.lod.residentBytes)} / ${formatBytes(s.lod.maxBytes)}`],
+      ['LOD cache · pixels / metadata', `${formatBytes(s.lod.pixelBytes)} / ${formatBytes(s.lod.metadataBytes)}`],
+      ['LOD cache · entries / hits / misses', `${s.lod.entries} / ${s.lod.hits} / ${s.lod.misses}`],
+      ['LOD cache · pinned / retired', `${formatBytes(s.lod.pinnedBytes)} / ${s.lod.retiredEntries} retired entries`],
+      ['LOD cache · evictions / budget denials', `${s.lod.evictions} / ${s.lod.budgetDenials}`],
     ]} />
-    {!s.canvases.supported && <p>Canvas takibi bu tarayıcıda desteklenmiyor; kaynak toplamı eksik.</p>}
-    <h3>Tarayıcı belleği <span className={styles.badge}>Ayrı kapsam</span></h3>
+    <p>Original source handles belong to document, history and pending jobs. These counts are separate from decoded media bytes and do not measure source-file RAM.</p>
+    <p>LOD pixels are already included in Canvas2D memory; they are not counted twice. Cached previews and version keys share a default 64 MiB budget. Unused previews expire after 2 seconds.</p>
+    {!s.canvases.supported && <p>Canvas tracking is unavailable in this browser; the tracked total is incomplete.</p>}
+    <ManagedBudgetSection snapshot={s.budget} />
+    <PaintResourcesSection snapshot={s} />
+    <h3>Browser memory <span className={styles.badge}>Separate scope</span></h3>
     <MetricList rows={[
-      ['JS heap · tahmini', heap ? formatBytes(heap.used) : 'Ölçülemiyor'],
-      ['Heap ayrılan / sınır', heap ? `${formatBytes(heap.allocated)} / ${formatBytes(heap.limit)}` : 'Ölçülemiyor'],
-      ['Sayfa bellek örneği', page.bytes === null ? page.status === 'pending' ? 'Ölçülüyor…' : 'Örnek yok' : formatBytes(page.bytes)],
+      ['JavaScript heap · estimated', heap ? formatBytes(heap.used) : 'Unavailable'],
+      ['Heap allocated / limit', heap ? `${formatBytes(heap.allocated)} / ${formatBytes(heap.limit)}` : 'Unavailable'],
+      ['Page-memory sample', page.bytes === null ? page.status === 'pending' ? 'Measuring…' : 'No samples' : formatBytes(page.bytes)],
     ]} />
     <button type="button" onClick={onSampleMemory} disabled={page.status === 'unsupported' || page.status === 'pending'}>
-      {page.status === 'pending' ? 'Örnek alınıyor…' : 'Sayfa belleğini örnekle'}
+      {page.status === 'pending' ? 'Measuring…' : 'Measure page memory'}
     </button>
     {page.reason && <p>{page.reason}</p>}
-    {page.sampledAt && <p>Örnek zamanı: {new Date(page.sampledAt).toLocaleTimeString('tr-TR')}</p>}
-    <p>Heap: performance.memory (Chromium, yaklaşık). Sayfa örneği: measureUserAgentSpecificMemory. Kaynak toplamıyla toplanmaz; sekme ve proje dışı paylaşımlar bulunabilir.</p>
+    {page.sampledAt && <p>Sampled at: {new Date(page.sampledAt).toLocaleTimeString('en-GB')}</p>}
+    <p>Heap uses the approximate Chromium performance.memory API. Page samples use measureUserAgentSpecificMemory. These may include shared data outside this project and must not be added to the tracked-resource total.</p>
   </>
 }

@@ -1,10 +1,9 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Layer, Track, EasingType, AnimatableProperty, ParameterWire } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
-import { sampleTrackValueRange, valueToY } from '@/lib/timeline/valueGraph'
 import { findWireForProperty } from '@/lib/wiring/helpers'
-import TimelineKeyframe from './TimelineKeyframe'
+import TrackKeyframes from './glyphs/TrackKeyframes'
 import TrackValueGraph  from './TrackValueGraph'
 import AudioWaveform    from './AudioWaveform'
 import AudioClipTimeline, { type AudioTimelineContext } from '@/components/audio/AudioClipTimeline'
@@ -13,6 +12,10 @@ import { makePatchAudioClipCmd } from '@/lib/editor/commands-audio'
 import { audioGainAtPlayhead, audioGainKeyCommand } from '@/components/audio/audioGainKeyCommand'
 import { activateAudioClipSelection } from '@/components/audio/audioClipSelection'
 import type { DragSnapshot } from './hooks/useKeyframeDrag'
+import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+import { WindowedRows, type VirtualRowAttributes } from '@/components/virtualization/WindowedRows'
+import { useRowWindow } from '@/components/virtualization/useRowWindow'
+import { TIMELINE_HEADER as ROW_HEADER, TIMELINE_ADD as ROW_ADD, headerHeight, trackHeight } from './layout/timelineRows'
 
 /**
  * AE-style: one section per layer. Renders both the left label column AND the
@@ -23,7 +26,9 @@ import type { DragSnapshot } from './hooks/useKeyframeDrag'
  */
 interface Props {
   layer: Layer
-  tracks: Track[]
+  tracks: readonly Track[]
+  attributes?: VirtualRowAttributes
+  scrollRef?: React.RefObject<HTMLElement>
   expanded: boolean
   graphMode: boolean
   isPrimary: boolean
@@ -97,11 +102,6 @@ interface Props {
   pinTop?: number
 }
 
-const ROW_HEADER  = 32
-const ROW_TRACK   = 28
-const ROW_TRACK_G = 72
-const ROW_ADD     = 28
-
 export default function LayerTimelineSection({
   layer, tracks, expanded, graphMode, isPrimary, isInSet,
   trackWidth, msToScreenPx, visibleStartMs, visibleEndMs,
@@ -113,7 +113,7 @@ export default function LayerTimelineSection({
   onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
   durationMs, currentTimeMs, frameRate, labelColWidth, onLayerBarCommit, pinIndex, audioUrl,
   parameterWires, onEditWire,
-  audioContext, pinTop,
+  audioContext, pinTop, attributes, scrollRef,
 }: Props) {
 
   // A track "has a key at the playhead" when one sits within half a frame of
@@ -122,7 +122,13 @@ export default function LayerTimelineSection({
 
   const isPinned = pinIndex != null && pinIndex >= 0
 
-  const rowH = graphMode ? ROW_TRACK_G : ROW_TRACK
+  const rowH = trackHeight(graphMode)
+  const trackRowsRef = useRef<HTMLDivElement>(null)
+  const fallbackScrollRef = useRef<HTMLDivElement>(null)
+  const trackLayout = useMemo(() => RowLayout.fixed(expanded ? tracks.length : 0, rowH), [expanded, tracks.length, rowH])
+  const trackKeys = useMemo(() => tracks.map(track => track.target), [tracks])
+  const trackWindow = useRowWindow(trackLayout, trackKeys, scrollRef ?? fallbackScrollRef, trackRowsRef)
+  const trackIndices = scrollRef ? trackWindow.indices : tracks.map((_, i) => i)
   const audioTimelineId = layer.audio?.timelineId ?? audioContext?.timelineId
   const audioTracks = audioContext?.scene.timelines.find(timeline => timeline.id === audioTimelineId)?.tracks
     .filter(track => track.target.startsWith(`layers.${layer.id}.`)) ?? tracks
@@ -137,14 +143,14 @@ export default function LayerTimelineSection({
   })
 
   return (
-    <div className={`${isInSet && !isPrimary ? 'bg-blue-950/30' : ''}`}>
+    <div {...attributes} className={`${isInSet && !isPrimary ? 'bg-blue-950/30' : ''}`}>
       {/* ── Layer header row (label + activity bar) ───────────────────────── */}
       <div
         className={`flex items-stretch border-b border-gray-800
           ${isPrimary ? 'bg-blue-950/40' : ''} ${layer.hidden ? 'opacity-60' : ''}
           ${isPinned ? 'bg-gray-900 shadow-md shadow-black/40' : ''}`}
         style={{
-          height: layer.type === 'audio' ? 64 : ROW_HEADER,
+          height: headerHeight(layer),
           ...(isPinned ? {
             position: 'sticky',
             top: pinTop ?? pinIndex! * ROW_HEADER,
@@ -230,13 +236,14 @@ export default function LayerTimelineSection({
       </div>
 
       {/* ── Property track rows (expanded only) ───────────────────────────── */}
-      {expanded && tracks.map((track) => {
+      {expanded && <div ref={trackRowsRef}><WindowedRows layout={trackLayout} indices={trackIndices}
+        rowKey={index => trackKeys[index]} renderRow={(index, trackAttributes) => {
+        const track = tracks[index]
         const propPath = track.target.replace(`layers.${layer.id}.`, '')
-        const range = sampleTrackValueRange(track)
         // BL-05: any enabled wire driving this property? Drives 🔗 indicator.
         const wireOnProp = findWireForProperty(parameterWires, layer.id, propPath)
         return (
-          <div key={track.target} className="flex items-stretch border-b border-gray-800/60"
+          <div {...trackAttributes} className="flex items-stretch border-b border-gray-800/60"
             style={{ height: rowH }}>
             <div
               className="shrink-0 flex items-center gap-1 pl-8 pr-2 border-r border-gray-700 group"
@@ -335,41 +342,14 @@ export default function LayerTimelineSection({
                 visibleStartMs={visibleStartMs} visibleEndMs={visibleEndMs}
                 msToScreenPx={msToScreenPx} emphasized={graphMode}
               />
-              {track.keyframes.map((kf) => {
-                const effectiveMs = previewMs[kf.id] ?? kf.timeMs
-                const x = msToScreenPx(effectiveMs)
-                if (x < -10 || x > trackWidth + 10) return null
-                const y = graphMode && range && typeof kf.value === 'number'
-                  ? valueToY(kf.value, range, rowH)
-                  : rowH / 2
-                return (
-                  <TimelineKeyframe
-                    key={kf.id}
-                    kf={kf}
-                    x={x} y={y}
-                    isSelected={selectedKfIds.has(kf.id)}
-                    isDragging={previewMs[kf.id] != null}
-                    onSelect={(shiftHeld) => onSelectKf(kf.id, shiftHeld)}
-                    onDelete={() => { if (!layer.locked) onDeleteKf(track.target, kf.id) }}
-                    onSetEasing={(et) => { if (!layer.locked) onSetEasing(track.target, kf.id, et) }}
-                    onPointerDown={(e) => {
-                      if (layer.locked) { e.preventDefault(); e.stopPropagation(); return }
-                      const isLone = !selectedKfIds.has(kf.id) && !e.shiftKey
-                      const handler = onBeginKfDrag(
-                        { kfId: kf.id, trackTarget: track.target, timelineId: '', originalMs: kf.timeMs },
-                        isLone, e.shiftKey,
-                      )
-                      handler(e)
-                    }}
-                    onContextMenu={onKfContextMenu && ((e) => onKfContextMenu(track.target, kf.id, e))}
-                    onDoubleClick={!layer.locked && onKfDoubleClick ? ((e) => onKfDoubleClick(track.target, kf.id, e)) : undefined}
-                  />
-                )
-              })}
+              <TrackKeyframes track={track} width={trackWidth} height={rowH} graph={graphMode} locked={!!layer.locked}
+                msToX={msToScreenPx} previewMs={previewMs} selected={selectedKfIds} onSelect={onSelectKf}
+                onDelete={onDeleteKf} onEasing={onSetEasing} onBeginDrag={onBeginKfDrag}
+                onContextMenu={onKfContextMenu} onDoubleClick={onKfDoubleClick} />
             </div>
           </div>
         )
-      })}
+      }} /></div>}
 
       {/* ── Inline "Add animation" picker (always at the bottom) ─────────── */}
       {expanded && (

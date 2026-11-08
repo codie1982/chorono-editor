@@ -9,6 +9,8 @@
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
 import { withEffectSurfaces } from './withEffectSurfaces'
+import { gaussianRegionPadding } from './effectRegionPadding'
+import { requireRegionBackend } from './requireRegionBackend'
 import type { CanvasSurfaceAllocator } from '@/lib/render/resources/CanvasSurfaceScope'
 import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
@@ -24,6 +26,7 @@ export interface GlowEffectDefinition extends EffectDefinition {
 /** Gaussian-blur the tinted glow on the GPU, falling back to CSS filter. */
 function blurGlow(glow: HTMLCanvasElement, radius: number, surfaces: CanvasSurfaceAllocator): HTMLCanvasElement {
   const gpu = gpuImageEffects.blur(glow, radius)
+  requireRegionBackend(surfaces, gpu, radius)
   const blurred = surfaces.create(glow.width, glow.height)
   const bctx = blurred.getContext('2d')!
   if (gpu) {
@@ -38,6 +41,9 @@ function blurGlow(glow: HTMLCanvasElement, radius: number, surfaces: CanvasSurfa
 
 export const glowEffect: EffectPlugin<GlowEffectDefinition> = {
   type: 'glow',
+  alphaSafe: true,
+  regionPadding: effect => (effect.params.radius ?? 8) > 0 && !gpuImageEffects.supportsRegionBlur()
+    ? null : gaussianRegionPadding(effect.params.radius ?? 8),
   apply: withEffectSurfaces<GlowEffectDefinition>((input, effect, surfaces) => {
     const { color = '#FFFFFF', radius = 8, intensity = 0.8 } = effect.params
 

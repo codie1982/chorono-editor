@@ -1,4 +1,5 @@
-import { loadAudioBufferFromUrl } from '../audio/AudioAssetService'
+import { acquireAudioBufferFromUrl } from '../audio/AudioAssetService'
+import { cancelledJobError } from '../resources/jobs'
 
 export interface WaveformPeaks {
   bucketCount: number
@@ -10,7 +11,6 @@ export interface WaveformPeaks {
 }
 const DEFAULT_BUCKETS = 400
 const cache = new Map<string, WaveformPeaks>()
-const inflight = new Map<string, Promise<WaveformPeaks>>()
 const normalizeBuckets = (count: number) => Math.max(1, Math.min(131072, Math.floor(Number.isFinite(count) ? count : DEFAULT_BUCKETS)))
 const keyFor = (url: string, count: number) => JSON.stringify([url, normalizeBuckets(count)])
 
@@ -37,20 +37,25 @@ export function downsampleAudioBuffer(audio: AudioBuffer, requestedBuckets: numb
   return { bucketCount, peaks, channelPeaks, channelCount: audio.numberOfChannels, durationSec: audio.duration }
 }
 
-export async function loadWaveformPeaks(url: string, bucketCount = DEFAULT_BUCKETS): Promise<WaveformPeaks> {
+/** Per-view cancellation shares URL decoding in AudioAssetService. Peak
+ * calculation is synchronous; a cache recheck deduplicates identical reductions
+ * after shared decoding without coupling different views' abort lifetimes. */
+export async function loadWaveformPeaks(url: string, bucketCount = DEFAULT_BUCKETS,
+  options: { signal?: AbortSignal } = {}): Promise<WaveformPeaks> {
+  if (options.signal?.aborted) throw cancelledJobError()
   const key = keyFor(url, bucketCount), cached = cache.get(key)
   if (cached) { cache.delete(key); cache.set(key, cached); return cached }
-  const pending = inflight.get(key)
-  if (pending) return pending
-  const work = (async () => {
-    const peaks = downsampleAudioBuffer(await loadAudioBufferFromUrl(url), bucketCount)
+  const lease = await acquireAudioBufferFromUrl(url, options)
+  try {
+    if (options.signal?.aborted) throw cancelledJobError()
+    const shared = cache.get(key)
+    if (shared) return shared
+    const peaks = downsampleAudioBuffer(lease.buffer, bucketCount)
     cache.set(key, peaks)
     // Peak arrays are small but zoom histories must not grow without bound.
     while (cache.size > 24) cache.delete(cache.keys().next().value!)
     return peaks
-  })()
-  inflight.set(key, work)
-  try { return await work } finally { if (inflight.get(key) === work) inflight.delete(key) }
+  } finally { lease.release() }
 }
 export function peekCachedPeaks(url: string, bucketCount = DEFAULT_BUCKETS): WaveformPeaks | null {
   return cache.get(keyFor(url, bucketCount)) ?? null
