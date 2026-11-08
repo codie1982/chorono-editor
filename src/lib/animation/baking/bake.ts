@@ -19,6 +19,7 @@
 import type { Track, Keyframe } from '../../types'
 import { evaluateTrack } from '../../evaluator'
 import { simplifyRDP, type Sample } from './simplify'
+import { isScalarNumericTrack } from '../typedValues'
 
 export interface BakeOptions {
   /** Inclusive start time of the bake window (ms). */
@@ -52,6 +53,9 @@ export function sampleTrackDense(track: Track, opts: BakeOptions): Sample[] {
  *  kfs have stable ids derived from index so a re-bake of the same window
  *  produces deterministic diff (cheap to undo/redo). */
 export function bakeTrackToKeyframes(track: Track, opts: BakeOptions): Keyframe[] {
+  if (!isScalarNumericTrack(track)) {
+    throw new Error('Baking supports scalar numeric tracks only; color, vector and discrete tracks must retain their typed keys.')
+  }
   const raw = sampleTrackDense(track, opts)
   const simplified = simplifyRDP(raw, opts.tolerance)
   return simplified.map((s, i) => ({

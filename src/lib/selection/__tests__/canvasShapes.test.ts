@@ -9,6 +9,7 @@ import {
   layerAnchorWorldPos, getLayerWorldBounds,
 } from '../canvasShapes'
 import type { ChronoScene, Layer } from '../../types'
+import { newSplineLayerFromPrimitive } from '../../defaults'
 
 function makeLayer(p: {
   id: string; x?: number; y?: number; w?: number; h?: number
@@ -39,6 +40,64 @@ function makeScene(layers: Layer[]): ChronoScene {
     initialState: {},
   } as unknown as ChronoScene
 }
+
+describe('transformed spline selection bounds', () => {
+  it('uses rotated/scaled parent bounds for box selection', () => {
+    const parent = makeLayer({ id: 'parent', type: 'group', x: 100, y: 50 })
+    Object.assign(parent.transform, { rotationDeg: 90, scaleX: 2, scaleY: 3 })
+    const spline = newSplineLayerFromPrimitive('rectangle', { width: 40, height: 20 })!
+    Object.assign(spline.transform, { x: 10, y: 20 })
+    spline.parentId = parent.id
+    const scene = makeScene([parent, spline])
+    const bounds = getLayerWorldBounds(scene, spline)
+    expect(bounds.x).toBeCloseTo(10)
+    expect(bounds.y).toBeCloseTo(30)
+    expect(bounds.w).toBeCloseTo(60)
+    expect(bounds.h).toBeCloseTo(80)
+    expect(layersInRect(scene, { x: 0, y: 20, w: 80, h: 100 }, 'inside').has(spline.id)).toBe(true)
+    expect(layersInRect(scene, { x: 90, y: 70, w: 40, h: 20 }).has(spline.id)).toBe(false)
+  })
+})
+
+describe('shared vector/group/instance geometry bounds', () => {
+  function pathLayer(): Layer {
+    return {
+      ...makeLayer({ id: 'path', type: 'path', x: 200, y: 100 }),
+      // A converted vector can retain an obsolete primitive size.
+      size: { width: 999, height: 999 },
+      path: { closed: true, anchors: [{ x: -50, y: -20 }, { x: 30, y: -20 }, { x: 30, y: 60 }] },
+    }
+  }
+
+  it('selects actual path geometry even when stale size metadata is present', () => {
+    const layer = pathLayer()
+    const scene = makeScene([layer])
+    expect(getLayerWorldBounds(scene, layer)).toEqual({ x: 150, y: 80, w: 80, h: 80 })
+    expect(layersInRect(scene, { x: 140, y: 70, w: 100, h: 100 }, 'inside').has(layer.id)).toBe(true)
+  })
+
+  it('resolves a raw live instance before marquee selection', () => {
+    const source = pathLayer()
+    source.hidden = true
+    const instance = { ...makeLayer({ id: 'instance', type: 'shape', x: 400, y: 200 }), instanceOf: source.id }
+    const scene = makeScene([source, instance])
+    expect(instance.path).toBeUndefined()
+    expect(instance.size).toBeUndefined()
+    expect(getLayerWorldBounds(scene, instance)).toEqual({ x: 350, y: 180, w: 80, h: 80 })
+    expect(layersInRect(scene, { x: 340, y: 170, w: 100, h: 100 }, 'inside').has(instance.id)).toBe(true)
+  })
+
+  it('selects a group using the real bounds of its size-less vector children', () => {
+    const group = makeLayer({ id: 'group', type: 'group', x: 100, y: 50 })
+    const path = pathLayer()
+    path.parentId = group.id
+    path.transform.x = 20
+    path.transform.y = 30
+    const scene = makeScene([group, path])
+    expect(getLayerWorldBounds(scene, group)).toEqual({ x: 70, y: 60, w: 80, h: 80 })
+    expect(layersInRect(scene, { x: 60, y: 50, w: 100, h: 100 }, 'inside').has(group.id)).toBe(true)
+  })
+})
 
 describe('point-in-shape primitives', () => {
   it('pointInRect — inside / edge / outside', () => {

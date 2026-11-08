@@ -1,344 +1,112 @@
 # Scripting
 
-Chorono has a built-in scripting engine that lets you automate tasks, generate animations programmatically, and build reusable workflows — all in plain JavaScript. There is no custom language to learn: if you know JS, you are ready to script.
+Chorono scripts use JavaScript to create and edit native layers, timelines and interactions. The result stays editable. Scripts run once during authoring; the player evaluates the resulting animation on each frame.
 
----
+For Claude and Codex, use MCP `run_script`. It executes synchronous code in isolated QuickJS with no Node, DOM, network, imports or filesystem access. Prepare external data with the agent's normal tools, then include JSON in the script or import assets with MCP. The manual Script Console still uses the legacy browser runner and does not have the MCP sandbox's isolation or execution limits.
 
-## Why Script?
+## Discover and execute
 
-The visual editor is great for hand-crafted animations, but scripting unlocks a different class of work:
+Start with `list_sessions`, `get_capabilities`, `chorono://scripting` and `get_scene`. Choose an explicit `sessionId` when multiple editors are connected. Capabilities describe the running version's object kinds, property schemas, particle presets and limits.
 
-- **Automate repetitive tasks** — rename 50 layers, reposition a grid of shapes, or set uniform timing across a sequence in seconds rather than minutes.
-- **Generate complex animations** — create hundreds of keyframes with mathematical precision that would be impractical to place by hand.
-- **Build reusable workflows** — save scripts as macros and replay them on any scene, across any project.
-- **Integrate with external data** — feed JSON, CSV, or API responses directly into your scene to create data-driven animations.
+1. Read the current scene and revision; preserve unrelated work.
+2. Call `run_script({code,dryRun:true,expectedRevision,requestId})`.
+3. Inspect the returned objects, timelines, logs and `planId`.
+4. Commit with `apply_script_plan({planId,expectedRevision,requestId})` through the same running MCP server. Do not replay the script: the plan preserves generated ids. Plans expire after five minutes, a scene change, or a server restart; separate short-lived stdio server processes do not share plans.
+5. Inspect actual `render_preview` images, validate, then `save_project`.
 
----
+An error discards the working scene. A successful commit is one undo step. Separate import, playback, runtime-event, preview, save and export operations use MCP tools; these are not filesystem or browser APIs inside `scene`.
 
-## Opening the Script Panel
+## Read and safely update existing data
 
-1. Go to **Window → Script Panel**, or press **`** (backtick).
-2. The panel slides in from the bottom of the workspace.
-3. Type or paste JavaScript in the editor area on the left.
-4. Click **Run** (or press **Shift+Enter**) to execute.
-5. Output and errors appear in the console area on the right.
+`scene.snapshot()` returns a full detached scene snapshot. `scene.assets`, `assetCollections`, `parameters`, `triggers`, `bindings`, `parameterWires`, `stateMachines` and `initialState` expose detached data. `scene.composition()` and `scene.timelines` also return copies.
 
-The editor supports syntax highlighting, bracket matching, and multi-line editing.
+`scene.get(id)` and `scene.find(name)` return layer handles; `scene.layers` lists handles. `layer.data` returns the complete detached layer. `layer.get(path)` reads a nested property.
 
----
-
-## The Scene API
-
-All scripting is done through the global `scene` object. It is always available in the script environment — no imports needed.
-
-### Adding Layers
-
-```javascript
-const rect = scene.add('rect', {
-  name: 'My Box',
-  x: 100,
-  y: 100,
-  width: 200,
-  height: 200
-})
+```js
+const hero = scene.find('Hero card');
+if (!hero) throw new Error('Hero card not found');
+scene.log(hero.data, hero.get('style.fill.color'));
+hero.patch({style:{stroke:{color:'#ffffff',width:2}}});
+scene.log(scene.snapshot().layers.length, scene.assets.length);
 ```
 
-Supported layer types: `'rect'`, `'ellipse'`, `'text'`, `'image'`, `'group'`, `'spline'`, `'null'`.
+`layer.patch(partial)` recursively merges objects and replaces arrays, preserving unspecified nested fields. `layer.set(partial)` keeps its original shallow replacement behavior: replacing `audio`, `style`, `transform` or another nested object replaces that whole object. Changing a detached snapshot does not edit the scene. Use handles or entity commands to commit edits. Layer identity cannot be changed through a patch.
 
-The returned object includes the layer's `id`, which you need for subsequent operations.
+## Create a scene with several animations
 
-### Updating Properties
+Adapt composition settings and ids when extending existing work. All times are milliseconds and rotations are degrees.
 
-```javascript
-scene.update(rect.id, { opacity: 0.5, fill: '#FF0000' })
+```js
+scene.composition({width:960,height:540,durationMs:4000,frameRate:30,backgroundColor:'#0b1220'});
+const intro = scene.createTimeline({id:'intro',durationMs:2000});
+const idle = scene.createTimeline({id:'idle',durationMs:2000,loop:true});
+const hero = scene.add('rect');
+hero.set({name:'Hero card'});
+hero.pos = [90,160];
+hero.size = [300,180];
+hero.fill = '#2563eb';
+hero.cornerRadius = 24;
+intro.key(hero,'transform.x',0,90,'easeOut').key(hero,'transform.x',1800,480);
+intro.key(hero,'style.fill.color',0,'#2563eb').key(hero,'style.fill.color',1800,'#f97316');
+idle.key(hero,'transform.y',0,160);
+idle.modifier('layers.'+hero.id+'.transform.y',{
+  type:'sine',parameters:{amplitude:12,frequency:1}
+});
+scene.log(hero.id,intro.data,idle.data);
 ```
 
-Pass any number of properties in the second argument. Changes are applied immediately and are reflected in the Inspector panel.
+Timeline names do not sequence animations. Use absolute key times on one master timeline for a continuous film, or explicit state-machine transitions for interactive sequences. With overlapping tracks, inspect the combined result; do not assume values add.
 
-### Deleting Layers
+`scene.useTimeline(id)` chooses the target of subsequent `Layer.key`, `scene.clone` and `scene.array` calls. Without a script selection, the first timeline is used. The editor's selected tab does not choose this target. `Timeline.key` always uses its own id. Clone/array can explicitly override the timeline; inspect the current scripting resource for their signatures. `scene.cloneTimeline(id,newId)` duplicates tracks with fresh keyframe ids while sharing the objects.
 
-```javascript
-scene.delete(rect.id)
-```
+## Appearance and animation values
 
-### Querying Layers
+Use `scene.add(kind)` with a kind from capabilities. Handles provide `pos`, `size`, `opacity`, `rotation`, `scale`, `fill`, `text`, `cornerRadius`, `blendMode`, plus `font`, `stroke`, `shapeParam`, `parent`, `interactive`, `followPath`, `configureParticles` and `key`.
 
-```javascript
-// Get all layers in the scene
-const layers = scene.getLayers()
+Frame evaluation applies animated layer properties before rendering. This includes shape parameters, typography, effects, masks, repeater configuration and particle configuration. Values must fit the actual property schema. A property must exist in the renderer/model; an arbitrary property name does not create a new rendering feature.
 
-// Find by name
-const bg = layers.find(l => l.name === 'Background')
+Numeric values interpolate with easing. Color properties interpolate color channels; ordinary strings and booleans change at key boundaries. Vec2 values interpolate their components. Numeric controllers and modifiers remain numeric. Use scalar coordinate paths to animate existing path/spline points and handles while preserving topology; arbitrary whole-object/topology morphing is not supported.
 
-// Filter by type
-const allText = layers.filter(l => l.type === 'text')
-```
+Easing belongs to the starting keyframe: `linear`, `hold`, `easeIn`, `easeOut`, `easeInOut`, or `{type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}`.
 
-### Adding Keyframes
+`Timeline.data` reads a full timeline. `set`, `key`, `track`, `removeTrack`, `modifier` and `bake` edit it. `key` takes layer-local properties such as `transform.x`; track methods take full targets such as `layers.<id>.transform.x`. Track patches expose out-of-range behavior, controllers, time warps, multiplier curves and modifiers. Bake numeric tracks when sampled keys are required.
 
-```javascript
-// Animate x from 0 at t=0 to 500 at t=2s
-scene.addKeyframe(rect.id, 'transform.x', { time: 0,    value: 0   })
-scene.addKeyframe(rect.id, 'transform.x', { time: 2000, value: 500 })
-```
+## Paths, particles and interactions
 
-The `time` field is in milliseconds. The `value` can be a number, string (for colors), or array (for multi-component properties like position).
+Create paths with `scene.addPath(points,{role:'motion',name:...})` or `scene.addSpline(kind,params,options)`. Attach `layer.followPath(path.id,{orientToPath:true})`, then animate `followPath.progress` from 0 to 1. Use capability schemas for spline trim/style and particle/repeater data.
 
-You can also set the easing function per keyframe:
+`scene.addEmitter(preset,options)` and `configureParticles` create native particle animations. Choose a real preset and inspect representative frames. Animated emitter settings are evaluated deterministically at the requested frame; scripts do not register particle callbacks.
 
-```javascript
-scene.addKeyframe(rect.id, 'opacity', {
-  time: 1000,
-  value: 0,
-  easing: 'easeInOutCubic'
-})
-```
+## Particle, spline and Scene Explorer domains
 
-### Working with Timelines
+| Namespace | Structured script access |
+| --- | --- |
+| `scene.particlePresets`, `layer.particles` | Detached config/preset reads; validated deep config edits; emission, visuals, animation, randomness and rendering sections; deterministic integer/string seeds; scale/opacity/color life keys; native motion-modifier CRUD |
+| `layer.spline` | Detached geometry/bounds reads; primitive/contour creation; point and handle editing/locking; line/cubic/quadratic segment editing and splitting; contour closing/reversing; sub-shape removal/renaming; affine geometry transforms |
+| `scene.explorer` | Tree/node/relationship reads; faceted search; grouping, ungrouping and reparenting; sibling render order; rename and bulk visibility/lock/solo/pin flags |
 
-```javascript
-// Create a new timeline
-const timeline = scene.createTimeline({ duration: 5000, name: 'Intro' })
+Use domain commands for structural edits and reuse returned ids. A spline's coordinates are layer-local; its transform, parent and pivot are preserved. Deleting spline elements also removes their animation tracks in the same undoable edit. Instance domain data is readable, while edits require explicitly opening the source layer. Point/handle locks and locked/frozen affected hierarchies are respected.
 
-// Set the active timeline
-scene.setActiveTimeline(timeline.id)
+Particle life keys use normalized positions 0..1; their easing belongs to the **destination stop**. `life('color',stops)` accepts supported CSS colors or 0..255 RGBA data. Native motion types are `noiseDrift`, `sineWave`, and `spiral`; modifier indices must be re-read after removal. Path/source-layer emitters reference existing geometry through `area.pathLayerId` / `area.sourceLayerId`. Circle/rectangle `emitFromEdge` and modifier phase are evaluated by the native engine. Flow graphs and extra `burstMarkers` are not implemented; the particle API rejects them.
 
-// Get current playhead time (ms)
-const now = scene.getCurrentTime()
-```
+Explorer reads use authored scene order and the script-selected timeline (or first timeline) at time 0 by default. `node(id,{timelineId,timeMs})` includes complete layer data; `nodes`, `tree` and `query` return metadata. `query({search:'type:spline',includeAncestors:true})` uses the same search grammar as the panel. Children/ancestors/descendants are id lists. UI selection, collapse, columns and temporary sorting/filter state are separate. World-preserving reparent/ungroup defaults to `keepWorld:true`; animated/bound transforms, shear, singular transforms and lossy group compositing require baking or an explicit local-space move.
 
----
+See the [domain API reference and complete path-emitter example](../../skills/chorono/references/domains.md) for method signatures, returned ids and constraints.
 
-## Undo / Redo
+## Interaction definitions
 
-Every operation you perform through the Scene API is fully undoable. Chorono wraps each call in an undoable command, so **Ctrl+Z** (or **Cmd+Z** on Mac) reverses script actions just like manual edits.
+`scene.addParam`, `scene.addTrigger`, `scene.wire`, `scene.addBinding` and `scene.addStateMachine` define interactions. Read existing definitions before editing them. `scene.stateMachine(id)` opens an existing machine. Machine handles expose detached `data`, metadata/state/transition editing and `setInitial`. Scene entity commands update/remove parameters, triggers, wires and bindings. Consult `chorono://scripting` for exact signatures.
 
-If you want to group multiple operations into a single undo step:
+Dispatch runtime events and parameter overrides with `control_runtime`, then inspect `get_runtime` and live previews. Authoring scripts do not provide `scene.on`, `scene.update`, asynchronous event listeners, macro recording or per-frame callbacks.
 
-```javascript
-scene.beginUndoGroup('My batch operation')
+## Audio and files
 
-scene.add('rect', { name: 'A', x: 0,   y: 0 })
-scene.add('rect', { name: 'B', x: 100, y: 0 })
-scene.add('rect', { name: 'C', x: 200, y: 0 })
+`scene.audioClip(assetId,{timelineId,startMs,name})` reuses an imported audio asset. Its returned handle supports `audioGain`, `audioFades`, `moveAudio`, `trimAudio` and `splitAudio`; these share the editor's native non-destructive audio commands. `splitAudio` returns the right-hand clip. Set a key time when changing animated gain. Raw layer timing patches do not implement audio trimming semantics.
 
-scene.endUndoGroup()
-// Ctrl+Z now removes all three rects at once
-```
+Import new files with MCP `import_asset`. `render_preview` produces PNG; audio preview/export produces WAV. Validate and save a portable project with `save_project`; report its returned path and warnings. Three.js/modeling APIs are outside this script surface.
 
----
+## Limits
 
-## Event System
+The current MCP limits are 128 KiB script text, 2 seconds, 32 MiB QuickJS memory and 20,000 commands per run; scene totals are 5,000 layers, 100 timelines and 50,000 keyframes. Read connected capabilities for exact limits. These are workload limits, not a playback frame-rate guarantee.
 
-Scripts can listen to scene events in real time. This is useful for building reactive tools or for triggering logic when something changes in the editor.
-
-```javascript
-// Fire when any layer is added
-scene.on('layer:added', (layer) => {
-  console.log('New layer:', layer.name)
-})
-
-// Fire when a layer's properties change
-scene.on('layer:updated', (layer, changes) => {
-  console.log('Changed:', changes)
-})
-
-// Fire when the selection changes
-scene.on('selection:changed', (selectedIds) => {
-  console.log('Selected:', selectedIds)
-})
-
-// Fire when a layer is deleted
-scene.on('layer:deleted', (layerId) => {
-  console.log('Deleted layer id:', layerId)
-})
-
-// Fire when playback state changes
-scene.on('playback:stateChange', (state) => {
-  // state is 'playing', 'paused', or 'stopped'
-})
-
-// Remove a listener when you no longer need it
-const handler = (layer) => console.log(layer.name)
-scene.on('layer:added', handler)
-scene.off('layer:added', handler)
-```
-
-Event listeners registered in the Script Panel persist until you close the panel or reload the scene.
-
----
-
-## Practical Examples
-
-### Create 10 circles with staggered fade-in
-
-```javascript
-for (let i = 0; i < 10; i++) {
-  const circle = scene.add('ellipse', {
-    name: `Circle ${i + 1}`,
-    x: 80 + i * 90,
-    y: 300,
-    width: 60,
-    height: 60,
-    fill: `hsl(${i * 36}, 80%, 55%)`
-  })
-
-  const delay = i * 150  // stagger by 150ms per circle
-
-  scene.addKeyframe(circle.id, 'opacity', { time: delay,       value: 0 })
-  scene.addKeyframe(circle.id, 'opacity', { time: delay + 400, value: 1, easing: 'easeOutQuad' })
-}
-```
-
-### Batch rename all layers with a prefix
-
-```javascript
-const prefix = 'SCENE_01_'
-
-scene.getLayers().forEach(layer => {
-  scene.update(layer.id, { name: prefix + layer.name })
-})
-```
-
-### Auto-distribute layers evenly across the canvas
-
-```javascript
-const { width: canvasWidth } = scene.getCanvasSize()
-const selected = scene.getSelectedLayers()
-
-if (selected.length < 2) {
-  console.log('Select at least 2 layers first.')
-} else {
-  const step = canvasWidth / (selected.length + 1)
-
-  selected.forEach((layer, i) => {
-    scene.update(layer.id, { x: step * (i + 1) })
-  })
-}
-```
-
-### Generate a grid of shapes
-
-```javascript
-const cols = 6
-const rows = 4
-const cellW = 120
-const cellH = 120
-const startX = 60
-const startY = 60
-
-scene.beginUndoGroup('Generate grid')
-
-for (let row = 0; row < rows; row++) {
-  for (let col = 0; col < cols; col++) {
-    scene.add('rect', {
-      name: `Cell_${row}_${col}`,
-      x: startX + col * cellW,
-      y: startY + row * cellH,
-      width: 100,
-      height: 100,
-      fill: `hsl(${(row * cols + col) * 15}, 70%, 60%)`
-    })
-  }
-}
-
-scene.endUndoGroup()
-```
-
----
-
-## Animation Modifiers via Script
-
-Animation Modifiers let you apply procedural signals on top of keyframed values. You can add and configure them through script for precise control.
-
-```javascript
-// Apply a sine wave to a layer's Y position
-scene.addModifier(rect.id, 'transform.y', {
-  type: 'sine',
-  amplitude: 30,    // peak deviation in pixels
-  frequency: 0.5,   // cycles per second
-  phase: 0          // offset in radians
-})
-
-// Apply a pulse (square wave) to opacity
-scene.addModifier(rect.id, 'opacity', {
-  type: 'pulse',
-  low: 0,
-  high: 1,
-  frequency: 2
-})
-
-// Quantize noise for a jittery, frame-by-frame feel
-scene.addModifier(rect.id, 'transform.x', {
-  type: 'quantizeNoise',
-  amplitude: 10,
-  frequency: 8,
-  steps: 4
-})
-```
-
-### Physics Modifiers
-
-```javascript
-// Spring: overshoots and settles
-scene.addModifier(rect.id, 'transform.y', {
-  type: 'spring',
-  stiffness: 200,
-  damping: 12,
-  mass: 1
-})
-
-// Bounce: simulates gravity + floor bounce
-scene.addModifier(rect.id, 'transform.y', {
-  type: 'bounce',
-  gravity: 980,
-  restitution: 0.6   // 0 = no bounce, 1 = perfect bounce
-})
-
-// Elastic: snappy overshoot
-scene.addModifier(rect.id, 'transform.x', {
-  type: 'elastic',
-  amplitude: 50,
-  period: 0.3
-})
-```
-
-Remove a modifier:
-
-```javascript
-scene.removeModifiers(rect.id, 'transform.y')
-```
-
----
-
-## Running Scripts
-
-**Script Panel** — the primary way to write and run one-off scripts. Open it with the backtick key and click **Run**.
-
-**AI Assistant** — when you use Chorono's built-in AI to make changes to your scene, it uses the same `scene` scripting API internally via `run_script`. You can inspect what the AI ran in the Script Panel's history tab.
-
-**Saved Scripts** — click the **Save** button in the Script Panel to give a script a name. Saved scripts appear in **Window → Scripts** and can be assigned keyboard shortcuts via **Edit → Keyboard Shortcuts**.
-
----
-
-## Macro Recording
-
-Macro recording lets you capture a sequence of manual editor actions and export them as a reusable script.
-
-1. Open the Script Panel and click **Record**.
-2. Perform your actions in the editor: add layers, move things, set keyframes, etc.
-3. Click **Stop Recording**.
-4. The panel shows the generated JavaScript. Review, edit, and save it.
-
-Recorded macros are fully editable — use them as a starting point for more complex automation.
-
----
-
-## Console and Debugging
-
-The right half of the Script Panel is the console:
-
-- `console.log()`, `console.warn()`, and `console.error()` all write here.
-- Runtime errors are shown with a stack trace and the offending line highlighted in the editor.
-- Click **Clear** to reset the console output.
-- Use **History** (the clock icon) to recall and re-run previous scripts.
+See the [MCP reference](../tr/mcp.md) and [authoring skill](../../skills/chorono/SKILL.md).

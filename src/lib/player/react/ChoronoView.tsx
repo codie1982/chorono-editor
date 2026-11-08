@@ -55,6 +55,9 @@ export const ChoronoView = forwardRef<ChoronoViewHandle, ChoronoViewProps>(funct
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const playerRef = useRef<ChronoPlayer | null>(null)
+  const assetsRef = useRef(assets)
+  assetsRef.current = assets
+  useEffect(() => { if (assets) playerRef.current?.setAssets(assets) }, [assets])
 
   // Keep callbacks current without re-creating the player every render.
   const onEventRef = useRef(onEvent)
@@ -78,7 +81,7 @@ export const ChoronoView = forwardRef<ChoronoViewHandle, ChoronoViewProps>(funct
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const player = new ChronoPlayer(scene, new CanvasRenderAdapter(ctx), { assets, loop })
+    const player = new ChronoPlayer(scene, new CanvasRenderAdapter(ctx), { assets: assetsRef.current, loop })
     playerRef.current = player
 
     const off = player.onAny((e) => onEventRef.current?.(e))
@@ -92,7 +95,7 @@ export const ChoronoView = forwardRef<ChoronoViewHandle, ChoronoViewProps>(funct
       player.destroy()
       playerRef.current = null
     }
-  }, [scene, assets, autoplay, loop])
+  }, [scene, autoplay, loop])
 
   // Canvas click → hit-test → fire a 'click' runtime event on the topmost
   // tappable layer, so state machines / triggers react (interactive runtime).

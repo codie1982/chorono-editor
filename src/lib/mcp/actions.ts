@@ -7,6 +7,8 @@ import { makeBatchCmd } from '../editor/commands-batch'
 import type { EditorCommand } from '../editor/commands-keyframe'
 import { makeGroupCmd, makeUngroupCmd } from '../editor/commands-group'
 import { layerRegistry } from '../registry'
+import { makeAddAudioClipCmd, makePatchAudioClipCmd, makeMoveAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd, makeSetAudioGainKeyCmd } from '../editor/commands-audio'
+import { dbToGain } from '../audio/audioClip'
 
 let ready: Promise<void> | undefined
 const str = { type: 'string' }
@@ -23,6 +25,57 @@ function scripted(label: string, scene: ChronoScene, run: (api: SceneAPI) => voi
 
 export function bootstrapMCPActions(): Promise<void> {
   return ready ??= bootstrapAIActions().then(() => {
+    const audioAction = (name: string, description: string, properties: Record<string, any>, required: string[], toCommand: (p: any, scene: ChronoScene) => EditorCommand) => {
+      actionRegistry.register({ id: `mcp.${name}`, toolName: name, description,
+        parameters: { type: 'object', properties, required }, toCommand })
+    }
+    const time = { type: 'number', minimum: 0 }
+    audioAction('set_audio_master', 'Set saved master mix gain in dB (-60..12) and/or mute without losing its gain setting.',
+      { gainDb: { type: 'number', minimum: -60, maximum: 12 }, muted: { type: 'boolean' } }, [], (p, scene) => {
+        if (p.gainDb === undefined && p.muted === undefined) throw new Error('Supply gainDb or muted')
+        return { label: 'Set Audio Master', execute: s => ({ ...s, composition: { ...s.composition,
+          ...(p.gainDb === undefined ? {} : { audioVolume: dbToGain(p.gainDb) }), ...(p.muted === undefined ? {} : { audioMuted: p.muted }) } }), undo: () => scene }
+      })
+    audioAction('add_audio_clip', 'Add an editable audio clip from an existing audio asset to an explicit timeline. Placement, membership and duration are one undo step.',
+      { assetId: str, timelineId: str, startMs: time, name: str, layerId: str }, ['assetId', 'timelineId'], (p, scene) => {
+        const asset = scene.assets.find(a => a.id === p.assetId && a.type === 'audio')
+        if (!asset) throw new Error('Audio asset not found')
+        return makeAddAudioClipCmd(asset, p)
+      })
+    audioAction('set_audio_gain', 'Set gain in dB (-60..12). If gain is animated, supply timeMs (and optional timelineId) to key the value at that time. Mute is separate; existing automation is preserved.',
+      { layerId: str, gainDb: { type: 'number', minimum: -60, maximum: 12 }, muted: { type: 'boolean' }, timeMs: time, timelineId: str }, ['layerId', 'gainDb'], (p, scene) => {
+        const layer = scene.layers.find(layer => layer.id === p.layerId && layer.type === 'audio')
+        const target = `layers.${p.layerId}.audio.volume`
+        const candidates = scene.timelines.filter(t => t.tracks.some(track => track.target === target))
+        const timeline = scene.timelines.find(t => t.id === (p.timelineId ?? layer?.audio?.timelineId)) ?? (candidates.length === 1 ? candidates[0] : undefined)
+        if (p.timelineId && !scene.timelines.some(t => t.id === p.timelineId)) throw new Error('Audio timeline not found')
+        if (!timeline && candidates.length > 1) throw new Error('Choose timelineId for the animated gain')
+        const animated = timeline?.tracks.some(t => t.target === target)
+        if (animated || p.timeMs !== undefined) {
+          if (p.timeMs === undefined) throw new Error('Gain is animated; supply timeMs to edit a gain keyframe')
+          if (!timeline) throw new Error('Choose timelineId to add a gain keyframe')
+          return makeBatchCmd('Set Audio Gain Key', [makeSetAudioGainKeyCmd(p.layerId, p.timeMs, dbToGain(p.gainDb), { timelineId: timeline.id }),
+            ...(p.muted === undefined ? [] : [makePatchAudioClipCmd(p.layerId, { muted: p.muted })])])
+        }
+        return makePatchAudioClipCmd(p.layerId, { volume: dbToGain(p.gainDb), ...(p.muted === undefined ? {} : { muted: p.muted }) })
+      })
+    audioAction('set_audio_fades', 'Set non-destructive linear fade-in/out durations in milliseconds. The envelope multiplies gain automation.',
+      { layerId: str, fadeInMs: time, fadeOutMs: time }, ['layerId'], p => {
+        if (p.fadeInMs === undefined && p.fadeOutMs === undefined) throw new Error('Supply fadeInMs or fadeOutMs')
+        return makePatchAudioClipCmd(p.layerId, { ...(p.fadeInMs === undefined ? {} : { fadeInMs: p.fadeInMs }), ...(p.fadeOutMs === undefined ? {} : { fadeOutMs: p.fadeOutMs }) })
+      })
+    audioAction('move_audio_clip', 'Move a clip without changing its source-in. Moves only its owning timeline gain automation, in one undo step.',
+      { layerId: str, startMs: time }, ['layerId', 'startMs'], p => makeMoveAudioClipCmd(p.layerId, p.startMs))
+    audioAction('trim_audio_clip', 'Non-destructively trim timeline clip edges. Left trim advances source-in by the same amount; source limits are enforced.',
+      { layerId: str, startMs: time, endMs: time, timelineId: str }, ['layerId'], p => {
+        if (p.startMs === undefined && p.endMs === undefined) throw new Error('Supply startMs or endMs')
+        return makeTrimAudioClipCmd(p.layerId, { startMs: p.startMs, endMs: p.endMs }, { timelineId: p.timelineId })
+      })
+    audioAction('split_audio_clip', 'Split an audio clip at timeline time. Shares the source asset, advances the right source-in, preserves gain/fades, and is one undo step.',
+      { layerId: str, timeMs: time, timelineId: str, rightLayerId: str }, ['layerId', 'timeMs'], p =>
+        makeSplitAudioClipCmd(p.layerId, p.timeMs, { timelineId: p.timelineId, rightLayerId: p.rightLayerId }))
+    audioAction('patch_audio_clip', 'Validate and patch audio clip settings (linear volume 0..4, mute, loop, pan -1..1, fades, source-in, timeline ownership). Use set_audio_gain for dB.',
+      { layerId: str, patch: obj, timelineId: str }, ['layerId', 'patch'], p => makePatchAudioClipCmd(p.layerId, p.patch, { timelineId: p.timelineId }))
     const register = (name: string, description: string, properties: Record<string, any>, required: string[], run: (p: any, api: SceneAPI, scene: ChronoScene) => void) => {
       actionRegistry.register({ id: `mcp.${name}`, toolName: name, description, parameters: { type: 'object', properties, required }, toCommand: (p, scene) => scripted(name, scene, api => run(p, api, scene)) })
     }

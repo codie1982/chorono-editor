@@ -10,6 +10,10 @@ Chorono is an open-source, local-first 2D animation and motion graphics editor. 
 
 The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
 
+**v0.2.0:** large-scene rendering, bounded resource ownership, media loading,
+timeline/Scene Explorer fixes and subtree tools.
+[Release notes](docs/releases/v0.2.0.md) · [Türkçe sürüm notları](docs/tr/releases/v0.2.0.md) · [Changelog](CHANGELOG.md)
+
 [Website](https://www.chorono.com/) · [Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
 
 See the working [text animation example](https://www.chorono.com/text-animation), [kinetic typography study](https://www.chorono.com/kinetic-typography) and [Claude Code animation tutorial](https://www.chorono.com/blog/make-animations-with-claude). Each includes a preview and an editable project to inspect.
@@ -203,19 +207,18 @@ At ~50k particles the CPU draw alone (49.5 ms) blows the 16.6 ms/60 FPS budget; 
 #### JavaScript-Based Scripting (No Custom DSL)
 - **Full undo/redo** — Scripts operate through command system (automatic undo)
 - **Scene API** — Add layers, update properties, delete, group
-- **Timeline API** — Create tracks, add keyframes, evaluate at time
-- **Event system** — Listen to layer events (transform, visibility, etc.)
+- **Timeline API** — Create tracks, keyframes, modifiers and independent animations
+- **Event definitions** — Author triggers, bindings, wires and state-machine transitions
 - **Expression evaluator** — Runtime property calculation with parameter context
 
 #### Authoring Scripts (Editor-Time)
-- **MAXScript/Blender Python style** — `card = scene.add('rect')` syntax
+- **JavaScript handles** — `const card = scene.add('rect')`
 - **Command wrapping** — Every script mutation wrapped in undoable command
 - **Game engine foundation** — Extensible for future engine workflows
 
 #### Interactive Runtime & Console
 - **Headless ChronoPlayer** — Standalone animation playback (no UI)
-- **DevTools-style console** — Live event log, REPL, watch expressions
-- **Macro recording** — Record user actions as scripts
+- **Manual Script Console** — Run trusted local authoring code; agents use isolated MCP scripts
 - **Trigger system** — Time-based, event-based, and manual triggers
 
 ### ✨ Animation Effects & Modifiers
@@ -419,6 +422,8 @@ Run `npm run mcp:build`, `npm run mcp:setup`, then `npm run dev:mcp` (or build a
 - **Multiple animations** — Explicit timelines, modifiers, controllers, preview isolation and runtime controls
 - **Persistence** — Portable scene JSON with embedded local media, runtime JSON, SVG and image sequence exports
 
+For code-driven scene design, scripts can read a complete detached `scene.snapshot()`, inspect `layer.data` / `layer.get(path)`, and preserve nested settings with `layer.patch(...)`. Script-selected timelines also govern clone/array animation copies. Existing state machines, parameters, bindings, triggers and wires can be edited without rebuilding the scene. Native audio clip helpers share the editor's trim/split/gain commands. Animated layer data is applied before rendering, including particles, repeaters, shape geometry, typography, effects and masks. See the [scripting guide](docs/en/scripting.md) ([Türkçe](docs/tr/scripting.md)) for actual APIs, typed values, limits and the dry-run/commit workflow. Three.js/modeling support is separate future work.
+
 ---
 
 ## 🚀 Getting Started
@@ -537,7 +542,7 @@ Technical references: [MCP tools and limits](docs/tr/mcp.md), [CLI and skill dis
 | **Spline Object System** | ✅ Ready | 8 primitives, point editing, text-to-spline conversion |
 | **Smart Selection** | ✅ Ready | Select Similar/Transform, canvas tools, Inside/Touching toggle |
 | **Clone & Array** | ✅ Ready | Live instances, 5 array patterns, instance resolver |
-| **JavaScript Scripting** | ✅ Ready | Full undo/redo, Scene/Timeline/Event APIs |
+| **JavaScript Scripting** | ✅ Ready | Full reads, safe patches, timelines, interaction definitions, native audio helpers |
 
 ### In Progress
 | Branch | Feature | ETA |

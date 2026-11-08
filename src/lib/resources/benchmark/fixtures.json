@@ -1,0 +1,9 @@
+[
+  { "id": "vector-visible", "project": "opt0-vector-visible-3000-20261107-v3", "layers": 3000, "description": "3000 visible rectangles, 3000 opacity tracks" },
+  { "id": "vector-offscreen", "project": "opt0-vector-offscreen-3000-20261107-v3", "layers": 3000, "description": "Same workload, 2700 rectangles outside composition" },
+  { "id": "groups-transparent", "project": "opt0-groups-transparent-3100-20261107-v3", "layers": 3100, "description": "100 groups / 3000 children, 90 zero-alpha parents" },
+  { "id": "text", "project": "opt0-text-200-20261107-v1", "layers": 200, "description": "200 multiline sans-serif text layers" },
+  { "id": "shared-image", "project": "opt0-shared-image-3000-20261107-v1", "layers": 3000, "description": "3000 image layers, one shared 128x128 PNG" },
+  { "id": "mixed", "project": "opt0-mixed-media-particles-mask-20261107-v1", "layers": 7, "description": "Image, decoded silent audio, static video, particles and mask" },
+  { "id": "four-seasons", "project": "chorono-four-seasons-48s-v1", "layers": 4079, "description": "Unmodified real reference, 42512 keys / 905 groups / 8 emitters" }
+]

@@ -5,31 +5,18 @@
 // for letters with holes like O / A / B). Quadratic on-curve commands are
 // elevated to cubics so everything fits the handle-canonical model.
 //
-// The font is fetched + parsed once and cached. opentype.js only reads the
-// outlines client-side; the font file itself isn't redistributed in output.
+// The bounded outline-font owner lends parsed input only for conversion.
 
-import * as opentype from 'opentype.js'
+import type * as opentype from 'opentype.js'
 import type { SplinePathData } from '@/lib/types/spline'
 import type { AnchorSpec, ContourSpec } from '../spline/util/buildSplineData'
 import { buildSplineData } from '../spline/util/buildSplineData'
 import { mergeSplineData } from '../spline/factory/mergeSplineData'
 import { computeSplineBounds } from '../spline/geometry/computeSplineBounds'
 import { translateSplineData } from '../spline/geometry/translateSplineData'
+import {editorOutlineFonts} from './fonts'
 
 const DEFAULT_FONT_URL = '/fonts/GeistVF.woff'
-
-let cachedFont: opentype.Font | null = null
-let pending: Promise<opentype.Font> | null = null
-
-async function loadFont(url: string): Promise<opentype.Font> {
-  if (cachedFont) return cachedFont
-  if (!pending) {
-    pending = fetch(url)
-      .then(r => r.arrayBuffer())
-      .then(buf => { cachedFont = opentype.parse(buf); return cachedFont })
-  }
-  return pending
-}
 
 const EPS = 0.01
 
@@ -95,19 +82,39 @@ function glyphPathToContours(cmds: opentype.PathCommand[]): ContourSpec[] {
 /**
  * Builds centered granular spline data for `text` at `fontSize` px.
  * Returns null when the string yields no drawable glyphs (e.g. only spaces).
+ * Owns no font cache: the shared bounded font owner pins input through conversion.
+ * Runtime cancellation is optional and never serialized; stale output rejects.
+ * Text is limited to 4096 UTF-16 units and 50000 path commands, preventing an
+ * unbounded synchronous geometry expansion. Geometry uses the original centered
+ * pixel convention, contour closure and quadratic-to-cubic approximation.
  */
 export async function textToSplineData(
   text: string,
   fontSize: number,
   fontUrl: string = DEFAULT_FONT_URL,
+  options: {signal?:AbortSignal} = {},
 ): Promise<SplinePathData | null> {
-  const font = await loadFont(fontUrl)
+  validateOutlineInput(text,fontSize)
+  return editorOutlineFonts.withFont(fontUrl,font=>fontTextToSplineData(font,text,fontSize),options)
+}
+
+/** Pure copied-geometry conversion while caller owns the parsed font. Never
+ * returns lazy glyph/path objects. Command limit counts all glyphs, including
+ * contours later discarded as degenerate; no scene/native state is modified.
+ * Uses centered editor pixels, EPS=0.01px closure and quadratic elevation.
+ * Same input-size/command policy as the asynchronous convenience entry point. */
+export function fontTextToSplineData(font:opentype.Font,text:string,fontSize:number):SplinePathData|null {
+  validateOutlineInput(text,fontSize)
+  if(!Number.isFinite(font.unitsPerEm)||font.unitsPerEm<=0)throw new RangeError('Outline font units per em must be positive.')
   const scale = fontSize / font.unitsPerEm
   let penX = 0
   let merged: SplinePathData | null = null
+  let commandCount=0
 
   for (const glyph of font.stringToGlyphs(text)) {
     const path = glyph.getPath(penX, 0, fontSize)
+    commandCount+=path.commands.length
+    if(commandCount>50000)throw new RangeError('Outline conversion exceeds the 50000-command limit.')
     const contours = glyphPathToContours(path.commands)
     if (contours.length) {
       const data = buildSplineData({
@@ -125,4 +132,10 @@ export async function textToSplineData(
   if (!merged) return null
   const b = computeSplineBounds(merged)
   return translateSplineData(merged, -(b.x + b.width / 2), -(b.y + b.height / 2))
+}
+
+/** Shared conversion contract checked before IO and by direct converter callers. */
+function validateOutlineInput(text:string,fontSize:number):void {
+  if(!Number.isFinite(fontSize)||fontSize<=0)throw new RangeError('Outline font size must be positive.')
+  if(text.length>4096)throw new RangeError('Outline conversion exceeds the 4096-character limit.')
 }

@@ -1,7 +1,8 @@
 'use client'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Timeline, TimelineSettings } from '@/lib/types'
 import { buildSnapTargets, snapToTargets } from '@/lib/timeline/snapping'
+import { createLatestFrameScheduler } from '@/lib/timeline/latestFrameScheduler'
 
 /** One keyframe participating in a drag (leading or follower). */
 export interface DragSnapshot {
@@ -65,68 +66,82 @@ interface DragReturn {
  *   • If the selection has only one member, behaviour matches single-kf drag.
  */
 export function useKeyframeDrag(params: Params): DragReturn {
-  const dragRef        = useRef<DragState | null>(null)
-  const pendingMsRef   = useRef<number | null>(null)
-  const rafScheduledRef = useRef(false)
-
+  const paramsRef = useRef(params)
+  paramsRef.current = params
+  const dragRef = useRef<DragState | null>(null)
+  const pendingMsRef = useRef<number | null>(null)
+  const removeListeners = useRef<() => void>(() => {})
   const [previewMs,       setPreviewMs]       = useState<Record<string, number>>({})
   const [snapIndicatorMs, setSnapIndicatorMs] = useState<number | null>(null)
+  const scheduler = useRef<ReturnType<typeof createLatestFrameScheduler<{ delta: number; snap: number | null }>> | null>(null)
+  if (!scheduler.current) {
+    scheduler.current = createLatestFrameScheduler(({ delta, snap }) => {
+      const active = dragRef.current
+      if (!active) return
+      const moves: Record<string, number> = {}
+      for (const item of active.group) moves[item.kfId] = item.originalMs + delta
+      setPreviewMs(moves)
+      setSnapIndicatorMs(snap)
+      paramsRef.current.onPreview(moves)
+    })
+  }
 
-  // ── Pointer event handlers — installed via window addEventListener ────────
+  const cancelDrag = useCallback((updateUI = true) => {
+    scheduler.current?.cancel()
+    removeListeners.current()
+    const active = dragRef.current
+    dragRef.current = null
+    pendingMsRef.current = null
+    if (updateUI) { setPreviewMs({}); setSnapIndicatorMs(null) }
+    if (active) paramsRef.current.onCancel()
+  }, [])
+
+  // A panel/timeline change cannot leave a transaction or queued rAF alive.
+  useEffect(() => {
+    setPreviewMs({})
+    setSnapIndicatorMs(null)
+    return () => cancelDrag(false)
+  }, [params.timeline?.id, cancelDrag])
+
   const handlePointerMove = useCallback((e: PointerEvent) => {
-    if (!dragRef.current) return
     const drag = dragRef.current
-    const rawMs = params.clientXToMs(e.clientX)
+    if (!drag) return
+    const rawMs = paramsRef.current.clientXToMs(e.clientX)
     const { timeMs: leaderRaw, snappedTo } = snapToTargets(
       rawMs, drag.snapTargets, e.metaKey || e.ctrlKey,
     )
 
-    // Compute the leader's intended delta, then clamp so no group member escapes [0,duration]
     let delta = leaderRaw - drag.leader.originalMs
     delta = Math.max(drag.minDelta, Math.min(drag.maxDelta, delta))
     pendingMsRef.current = drag.leader.originalMs + delta
-
-    if (rafScheduledRef.current) return
-    rafScheduledRef.current = true
-    requestAnimationFrame(() => {
-      rafScheduledRef.current = false
-      if (!dragRef.current) return
-
-      const moves: Record<string, number> = {}
-      for (const m of dragRef.current.group) {
-        moves[m.kfId] = m.originalMs + delta
-      }
-      setPreviewMs(moves)
-      setSnapIndicatorMs(snappedTo != null && delta === leaderRaw - drag.leader.originalMs ? snappedTo : null)
-      params.onPreview(moves)
+    scheduler.current!.push({
+      delta,
+      snap: snappedTo != null && delta === leaderRaw - drag.leader.originalMs ? snappedTo : null,
     })
-  }, [params])
+  }, [])
 
   const handlePointerUp = useCallback((e: PointerEvent) => {
     if (!dragRef.current) return
     const drag = dragRef.current
+    // Paint the same newest sample that the command will commit, even when
+    // pointerup arrives before the next animation frame.
+    scheduler.current!.flush()
     const finalLeaderMs = pendingMsRef.current ?? drag.leader.originalMs
     const delta = finalLeaderMs - drag.leader.originalMs
 
     dragRef.current        = null
     pendingMsRef.current   = null
-    rafScheduledRef.current = false
     setPreviewMs({})
     setSnapIndicatorMs(null)
 
-    const target = e.target as HTMLElement
-    try { target.releasePointerCapture(e.pointerId) } catch { /* already released */ }
-
-    window.removeEventListener('pointermove', handlePointerMove)
-    window.removeEventListener('pointerup',   handlePointerUp)
-    window.removeEventListener('keydown',     handleKeyDown)
+    removeListeners.current()
 
     // If user didn't really move (e.g. a click), don't commit a no-op.
     // Route it to the host as a click so selection (toggle) still works —
     // beginDrag preventDefaulted the native click event.
     if (Math.abs(delta) < 0.5) {
-      params.onLoneClick?.(drag.leader.kfId, e.shiftKey)
-      params.onCancel()
+      paramsRef.current.onLoneClick?.(drag.leader.kfId, e.shiftKey)
+      paramsRef.current.onCancel()
       return
     }
 
@@ -137,22 +152,14 @@ export function useKeyframeDrag(params: Params): DragReturn {
       fromMs:      m.originalMs,
       toMs:        m.originalMs + delta,
     }))
-    params.onCommit(moves)
-  }, [handlePointerMove, params])
+    paramsRef.current.onCommit(moves)
+  }, [])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Escape' || !dragRef.current) return
     e.preventDefault()
-    dragRef.current        = null
-    pendingMsRef.current   = null
-    rafScheduledRef.current = false
-    setPreviewMs({})
-    setSnapIndicatorMs(null)
-    window.removeEventListener('pointermove', handlePointerMove)
-    window.removeEventListener('pointerup',   handlePointerUp)
-    window.removeEventListener('keydown',     handleKeyDown)
-    params.onCancel()
-  }, [handlePointerMove, handlePointerUp, params])
+    cancelDrag()
+  }, [cancelDrag])
 
   const beginDrag = useCallback((
     e: React.PointerEvent<HTMLElement>,
@@ -160,9 +167,14 @@ export function useKeyframeDrag(params: Params): DragReturn {
     group: DragSnapshot[],
   ) => {
     if (e.button !== 0) return
-    if (!params.timeline) return
     e.stopPropagation()
     e.preventDefault()
+    if (dragRef.current) cancelDrag()
+    // preventDefault suppresses the browser's normal focus transfer. Commit
+    // any input blur before opening the editor transaction and reading props.
+    e.currentTarget.focus({ preventScroll: true })
+    const current = paramsRef.current
+    if (!current.timeline) return
 
     // Make sure leader is in group (callers should pass it, but be defensive)
     const fullGroup = group.some((g) => g.kfId === leader.kfId) ? group : [leader, ...group]
@@ -171,24 +183,39 @@ export function useKeyframeDrag(params: Params): DragReturn {
     const minOriginal = fullGroup.reduce((m, g) => Math.min(m, g.originalMs), Infinity)
     const maxOriginal = fullGroup.reduce((m, g) => Math.max(m, g.originalMs), -Infinity)
     const minDelta = -minOriginal
-    const maxDelta = params.durationMs - maxOriginal
+    const maxDelta = current.durationMs - maxOriginal
+    const movingIds = new Set(fullGroup.map(item => item.kfId))
 
     dragRef.current = {
       leader, group: fullGroup,
-      snapTargets: buildSnapTargets(
-        params.timeline, params.frameRate, params.settings,
-        // Exclude every group member so the leader doesn't snap to a follower's old position
-        leader.kfId,
-      ),
+      snapTargets: current.settings.snapEnabled ? buildSnapTargets(
+        { ...current.timeline, tracks: current.timeline.tracks.map(track => ({
+          ...track, keyframes: track.keyframes.filter(key => !movingIds.has(key.id)),
+        })) }, current.frameRate, current.settings,
+      ) : [],
       minDelta, maxDelta,
     }
     pendingMsRef.current = leader.originalMs
-    params.onBegin()
+    current.onBegin()
+
+    const target = e.currentTarget
+    const pointerId = e.pointerId
+    try { target.setPointerCapture(pointerId) } catch { /* detached target */ }
+    const onPointerCancel = () => cancelDrag()
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup',   handlePointerUp)
     window.addEventListener('keydown',     handleKeyDown)
-  }, [params, handlePointerMove, handlePointerUp, handleKeyDown])
+    window.addEventListener('pointercancel', onPointerCancel)
+    removeListeners.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('pointercancel', onPointerCancel)
+      try { target.releasePointerCapture(pointerId) } catch { /* capture already lost */ }
+      removeListeners.current = () => {}
+    }
+  }, [cancelDrag, handlePointerMove, handlePointerUp, handleKeyDown])
 
   return { beginDrag, previewMs, snapIndicatorMs }
 }

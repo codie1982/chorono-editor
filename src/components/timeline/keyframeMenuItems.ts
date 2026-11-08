@@ -68,10 +68,9 @@ export function buildKeyframeMenu(
       items: [
         action('Broken',  undefined, h.setTangentMode && (() => h.setTangentMode!(kf, 'broken'))),
         action('Aligned', undefined, h.setTangentMode && (() => h.setTangentMode!(kf, 'aligned'))),
-        // TODO(big-feature): Auto / Linear modes — auto requires a tangent
-        //   solver (Catmull-Rom / Bessel), linear flattens the segment.
+        // Auto requires a neighbouring-key tangent solver.
         action('Auto (soon)',   undefined, undefined, true),
-        action('Linear (soon)', undefined, undefined, true),
+        action('Linear', undefined, h.setTangentMode && (() => h.setTangentMode!(kf, 'linear'))),
       ],
     },
     sep(),

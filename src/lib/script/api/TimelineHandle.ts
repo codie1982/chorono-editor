@@ -3,6 +3,7 @@ import type { ApiContext } from './LayerHandle'
 import { LayerHandle } from './LayerHandle'
 import { nextModifierId, makeAddCurveModifierCmd, makeBakeTrackToKeyframesCmd } from '../../editor/commands-track'
 import type { CurveModifier } from '../../animation/modifiers/types'
+import { copyScriptData } from './scriptData'
 
 export class TimelineHandle {
   constructor(public readonly id: string, private readonly ctx: ApiContext) {}
@@ -10,7 +11,7 @@ export class TimelineHandle {
   get data(): Timeline {
     const timeline = this.ctx.host.getScene().timelines.find(t => t.id === this.id)
     if (!timeline) throw new Error(`Timeline '${this.id}' not found`)
-    return structuredClone(timeline)
+    return copyScriptData(timeline)
   }
 
   set(patch: Partial<Omit<Timeline, 'id' | 'tracks'>>): this {

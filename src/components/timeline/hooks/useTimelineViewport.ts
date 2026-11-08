@@ -1,10 +1,7 @@
 'use client'
 import { useState, useRef, useCallback, useLayoutEffect } from 'react'
 import { clientXToMs, msToPixel, pixelToMs } from '@/lib/timeline/coordinates'
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v))
-}
+import { clampTimelineScroll, clampTimelineZoom } from '@/lib/timeline/viewport'
 
 interface ViewportReturn {
   /** Ref to attach to the scrollable track area container */
@@ -30,9 +27,6 @@ interface ViewportReturn {
   msToScreenPx: (timeMs: number) => number
 }
 
-const MIN_ZOOM = 0.25
-const MAX_ZOOM = 20
-
 /**
  * Viewport state for one timeline area: zoom factor + pixel scroll.
  *
@@ -41,8 +35,8 @@ const MAX_ZOOM = 20
  */
 export function useTimelineViewport(durationMs: number): ViewportReturn {
   const trackAreaRef = useRef<HTMLDivElement | null>(null)
-  const [zoomFactor,   setZoomFactor]   = useState(1)
-  const [scrollLeftPx, setScrollLeftPx] = useState(0)
+  const [zoomFactor, setZoom] = useState(1)
+  const [rawScrollLeftPx, setScroll] = useState(0)
   const [trackWidth,   setTrackWidth]   = useState(0)
 
   // ── Measure container width on mount + resize ────────────────────────────
@@ -59,6 +53,16 @@ export function useTimelineViewport(durationMs: number): ViewportReturn {
   // ── Derived viewport values ──────────────────────────────────────────────
   const totalContentPx = trackWidth * zoomFactor
   const maxScrollPx    = Math.max(0, totalContentPx - trackWidth)
+  // Derive the valid offset immediately; no frame may render beyond the new
+  // content after a zoom/resize. Persist it once a measured width is available.
+  const scrollLeftPx = clampTimelineScroll(rawScrollLeftPx, trackWidth, zoomFactor)
+  useLayoutEffect(() => {
+    if (trackWidth > 0) setScroll(scrollLeftPx)
+  }, [scrollLeftPx, trackWidth])
+  const setScrollLeftPx = useCallback((px: number) => {
+    setScroll(clampTimelineScroll(px, trackWidth, zoomFactor))
+  }, [trackWidth, zoomFactor])
+  const setZoomFactor = useCallback((zoom: number) => setZoom(clampTimelineZoom(zoom)), [])
   const visibleStartMs = pixelToMs(scrollLeftPx,                durationMs, zoomFactor, trackWidth)
   const visibleEndMs   = pixelToMs(scrollLeftPx + trackWidth,   durationMs, zoomFactor, trackWidth)
 
@@ -76,8 +80,8 @@ export function useTimelineViewport(durationMs: number): ViewportReturn {
     if (!el) return
     const delta = e.shiftKey ? e.deltaY : (e.deltaX || e.deltaY)
     if (delta === 0) return
-    setScrollLeftPx((s) => clamp(s + delta, 0, maxScrollPx))
-  }, [maxScrollPx])
+    setScroll(s => clampTimelineScroll(s + delta, trackWidth, zoomFactor))
+  }, [trackWidth, zoomFactor])
 
   // ── Helpers for components ────────────────────────────────────────────────
   const clientXToMsHelper = useCallback((clientX: number): number => {

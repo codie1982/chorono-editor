@@ -1,165 +1,93 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import type { Keyframe } from '@/lib/types'
-
-export interface DragSnapshot {
-  kfId: string
-  trackTarget: string
-  originalMs: number
-}
+'use client'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Timeline, TimelineSettings } from '@/lib/types'
+import type { KfMove } from '@/lib/editor/commands-keyframe'
+import { createDopeSheetDrag, type DopeSheetDragUpdate } from '@/lib/dope-sheet/key-drag'
+export type { DragSnapshot } from '@/lib/dope-sheet/key-drag'
 
 interface Props {
-  selectedKfIds: Set<string>
-  tracks: any[] // Track[]
-  onDragStart: (snapshots: DragSnapshot[]) => void
-  onDragMove: (delta: number, snapshots: DragSnapshot[]) => void
-  onDragEnd: (delta: number, snapshots: DragSnapshot[]) => void
+  timeline: Timeline
+  settings: TimelineSettings
+  frameRate: number
+  pixelsPerMs: number
+  gridStepMs: number
+  enabled: boolean
+  onDragStart: () => void
+  onDragMove: (update: DopeSheetDragUpdate) => void
+  onDragEnd: (moves: KfMove[]) => void
   onCancel: () => void
-  snapEnabled: boolean
-  durationMs: number
 }
 
-export function useDopeSheetKeyDrag({
-  selectedKfIds,
-  tracks,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  onCancel,
-  snapEnabled,
-  durationMs,
-}: Props) {
-  const [isDragging, setIsDragging] = useState(false)
+/** Window listeners are torn down on release, Escape, pointercancel and unmount. */
+export function useDopeSheetKeyDrag(props: Props) {
+  const latest = useRef(props)
+  latest.current = props
+  const cleanupRef = useRef<((updateState?: boolean) => void) | null>(null)
   const [previewMs, setPreviewMs] = useState<Record<string, number>>({})
   const [snapTarget, setSnapTarget] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
-  const dragStartRef = useRef<{ clientX: number; snapshots: DragSnapshot[] } | null>(null)
-
-  // Build snapshots of selected keys (called when drag starts)
-  const buildSnapshots = useCallback(() => {
-    const snapshots: DragSnapshot[] = []
-
-    for (const track of tracks) {
-      if (!track.keyframes) continue
-      for (const kf of track.keyframes) {
-        if (selectedKfIds.has(kf.id)) {
-          snapshots.push({
-            kfId: kf.id,
-            trackTarget: track.target,
-            originalMs: kf.timeMs,
-          })
-        }
-      }
+  const beginDrag = useCallback((
+    event: React.PointerEvent<HTMLElement>, kfId: string, selectedIds: Set<string>, onClick?: () => void,
+  ) => {
+    if (event.button !== 0 || !latest.current.enabled) return
+    cleanupRef.current?.()
+    event.preventDefault()
+    event.stopPropagation()
+    const current = latest.current
+    const session = createDopeSheetDrag({
+      timeline: current.timeline, settings: current.settings, frameRate: current.frameRate,
+      pixelsPerMs: current.pixelsPerMs, gridStepMs: current.gridStepMs,
+      startX: event.clientX, leaderId: kfId, selectedIds,
+      onBegin: current.onDragStart,
+      onPreview: update => {
+        setPreviewMs(update.previewMs)
+        setSnapTarget(update.snappedTo)
+        current.onDragMove(update)
+      },
+      onCommit: current.onDragEnd, onCancel: current.onCancel, onClick,
+    })
+    if (!session) return
+    setIsDragging(true)
+    const pointerId = event.pointerId
+    const target = event.currentTarget
+    try { target.setPointerCapture(pointerId) } catch { /* optional in embedded browsers */ }
+    const clear = (updateState = true) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', key, true)
+      try { target.releasePointerCapture(pointerId) } catch { /* already released */ }
+      session.cancel()
+      cleanupRef.current = null
+      if (updateState) { setIsDragging(false); setPreviewMs({}); setSnapTarget(null) }
     }
+    const move = (e: PointerEvent) => {
+      if (e.pointerId === pointerId) session.move(e.clientX, e.ctrlKey || e.metaKey)
+    }
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      session.finish(e.clientX, e.ctrlKey || e.metaKey)
+      clear()
+    }
+    const cancel = (e: PointerEvent) => { if (e.pointerId === pointerId) clear() }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); clear() }
+    }
+    cleanupRef.current = clear
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('keydown', key, true)
+  }, [])
 
-    return snapshots
-  }, [selectedKfIds, tracks])
-
-  // Calculate snap target (grid or frame)
-  const calculateSnapTarget = useCallback(
-    (deltaMs: number, snapshots: DragSnapshot[]) => {
-      if (!snapEnabled) return 0
-
-      // Snap to nearest 10ms (frame at 100fps, or grid)
-      const snapInterval = 10
-      const firstKey = snapshots[0]
-      if (!firstKey) return 0
-
-      const newTime = Math.max(0, Math.min(durationMs, firstKey.originalMs + deltaMs))
-      const snapped = Math.round(newTime / snapInterval) * snapInterval
-      return snapped - firstKey.originalMs
-    },
-    [snapEnabled, durationMs],
-  )
-
-  // Pointer down handler
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent, kfId: string) => {
-      if (!selectedKfIds.has(kfId)) return
-
-      e.preventDefault()
-      const snapshots = buildSnapshots()
-      if (snapshots.length === 0) return
-
-      setIsDragging(true)
-      dragStartRef.current = {
-        clientX: e.clientX,
-        snapshots,
-      }
-
-      onDragStart(snapshots)
-    },
-    [selectedKfIds, buildSnapshots, onDragStart],
-  )
-
-  // Pointer move handler (via effect, triggered by window events)
   useEffect(() => {
-    if (!isDragging || !dragStartRef.current) return
+    if (!props.enabled) cleanupRef.current?.()
+  }, [props.enabled])
+  useEffect(() => {
+    setIsDragging(false); setPreviewMs({}); setSnapTarget(null)
+    return () => cleanupRef.current?.(false)
+  }, [props.timeline.id])
 
-    const { clientX: startX, snapshots } = dragStartRef.current
-
-    const handleMove = (e: PointerEvent) => {
-      const pxDelta = e.clientX - startX
-      const deltaMs = pxDelta * 10 // Adjust scale (10ms per pixel)
-
-      // Apply snap if enabled
-      const snappedDelta = snapEnabled ? calculateSnapTarget(deltaMs, snapshots) : deltaMs
-
-      // Clamp delta to keep all keys in valid range
-      let clampedDelta = snappedDelta
-      for (const snap of snapshots) {
-        const newTime = snap.originalMs + clampedDelta
-        if (newTime < 0) clampedDelta = Math.max(clampedDelta, -snap.originalMs)
-        if (newTime > (durationMs - 1)) clampedDelta = Math.min(clampedDelta, durationMs - 1 - snap.originalMs)
-      }
-
-      // Update preview
-      const next: Record<string, number> = {}
-      for (const snap of snapshots) {
-        next[snap.kfId] = snap.originalMs + clampedDelta
-      }
-      setPreviewMs(next)
-      setSnapTarget(snapEnabled ? calculateSnapTarget(clampedDelta, snapshots) : null)
-
-      onDragMove(clampedDelta, snapshots)
-    }
-
-    const handleUp = (e: PointerEvent) => {
-      const pxDelta = e.clientX - startX
-      const deltaMs = pxDelta * 10
-      const snappedDelta = snapEnabled ? calculateSnapTarget(deltaMs, snapshots) : deltaMs
-
-      onDragEnd(snappedDelta, snapshots)
-      setIsDragging(false)
-      setPreviewMs({})
-      setSnapTarget(null)
-      dragStartRef.current = null
-    }
-
-    const handleCancel = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onCancel()
-        setIsDragging(false)
-        setPreviewMs({})
-        setSnapTarget(null)
-        dragStartRef.current = null
-      }
-    }
-
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-    window.addEventListener('keydown', handleCancel)
-
-    return () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-      window.removeEventListener('keydown', handleCancel)
-    }
-  }, [isDragging, snapEnabled, calculateSnapTarget, durationMs, onDragMove, onDragEnd, onCancel])
-
-  return {
-    isDragging,
-    previewMs,
-    snapTarget,
-    handlePointerDown,
-  }
+  return { beginDrag, previewMs, snapTarget, isDragging }
 }

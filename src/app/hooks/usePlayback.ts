@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { PlaybackClock, playbackWindow } from '@/lib/timeline/playbackClock'
 
 interface UsePlaybackReturn {
   currentTimeMs: number
@@ -34,93 +35,57 @@ interface UsePlaybackOptions {
  * Uses startRef + offsetRef so seek and speed changes don't jump.
  */
 export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
-  const { maxDuration, wrapAtEnd, workAreaInMs, workAreaOutMs } = opts
-
-  // Effective playback window. Falls back to [0, maxDuration] when no valid
-  // work area is set.
-  const hasWorkArea =
-    workAreaInMs != null && workAreaOutMs != null && workAreaOutMs > workAreaInMs
-  const loMs = hasWorkArea ? workAreaInMs! : 0
-  const hiMs = hasWorkArea ? Math.min(workAreaOutMs!, maxDuration) : maxDuration
-
-  const [currentTimeMs, setTimeMs]   = useState(0)
+  const window = playbackWindow(opts)
+  const clock = useRef<PlaybackClock | null>(null)
+  if (!clock.current) clock.current = new PlaybackClock(window)
+  const [currentTimeMs, setTimeMs] = useState(clock.current.timeMs)
   const [isPlaying, setPlaying]      = useState(false)
   const [playbackSpeed, setSpeed]    = useState(1)
-
-  const rafRef       = useRef<number | null>(null)
-  const startRef     = useRef(0)
-  const offsetRef    = useRef(0)
-  const speedRef     = useRef(1)
-
-  const tick = useCallback((now: number) => {
-    const elapsed = (now - startRef.current) * speedRef.current + offsetRef.current
-
-    if (maxDuration <= 0) {
-      setTimeMs(0)
-      rafRef.current = requestAnimationFrame(tick)
-      return
-    }
-
-    if (elapsed >= hiMs) {
-      if (wrapAtEnd) {
-        const span = hiMs - loMs
-        setTimeMs(span > 0 ? loMs + ((elapsed - loMs) % span) : loMs)
-        rafRef.current = requestAnimationFrame(tick)
-      } else {
-        // Auto-pause: clamp at the end of the window, stop the loop
-        setTimeMs(hiMs)
-        offsetRef.current = hiMs
-        setPlaying(false)
-        return
-      }
-    } else {
-      setTimeMs(elapsed)
-      rafRef.current = requestAnimationFrame(tick)
-    }
-  }, [maxDuration, wrapAtEnd, loMs, hiMs])
+  const rafRef = useRef<number | null>(null)
+  const publish = useCallback(() => {
+    setTimeMs(clock.current!.timeMs)
+    setPlaying(clock.current!.playing)
+    setSpeed(clock.current!.speed)
+  }, [])
 
   useEffect(() => {
-    if (isPlaying) {
-      startRef.current = performance.now()
-      rafRef.current = requestAnimationFrame(tick)
-    } else {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    clock.current!.configure(window, performance.now())
+    publish()
+    // Scalar bounds describe the playback window independently of renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [window.durationMs, window.startMs, window.endMs, window.wrapAtEnd, publish])
+
+  const tick = useCallback((now: number) => {
+    rafRef.current = null
+    clock.current!.sample(now)
+    publish()
+    if (clock.current!.playing) rafRef.current = requestAnimationFrame(tick)
+  }, [publish])
+
+  useEffect(() => {
+    if (isPlaying) rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
     }
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [isPlaying, tick])
 
   const handlePlayToggle = useCallback(() => {
-    setPlaying((playing) => {
-      if (playing) {
-        // Pause: freeze offset at current time
-        offsetRef.current = currentTimeMs
-      } else {
-        // Resume: snap into the active window if the playhead is sitting
-        // outside it (or parked at the end of a bounded run) so play always
-        // replays from the IN point.
-        if (maxDuration > 0 && (currentTimeMs < loMs || currentTimeMs >= hiMs)) {
-          offsetRef.current = loMs
-          setTimeMs(loMs)
-        }
-        startRef.current = performance.now()
-      }
-      return !playing
-    })
-  }, [currentTimeMs, maxDuration, wrapAtEnd, loMs, hiMs])
+    const current = clock.current!
+    if (current.playing) current.pause(performance.now())
+    else current.play(performance.now())
+    publish()
+  }, [publish])
 
   const handleSeek = useCallback((ms: number) => {
-    offsetRef.current = ms
-    startRef.current  = performance.now()
-    setTimeMs(ms)
-  }, [])
+    clock.current!.seek(ms, performance.now())
+    publish()
+  }, [publish])
 
   const setPlaybackSpeed = useCallback((speed: number) => {
-    // Re-anchor so current time stays put when speed changes
-    offsetRef.current = currentTimeMs
-    startRef.current  = performance.now()
-    speedRef.current  = speed
-    setSpeed(speed)
-  }, [currentTimeMs])
+    clock.current!.setSpeed(speed, performance.now())
+    publish()
+  }, [publish])
 
   return { currentTimeMs, isPlaying, playbackSpeed, handlePlayToggle, handleSeek, setPlaybackSpeed }
 }

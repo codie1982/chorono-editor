@@ -10,18 +10,17 @@
 //   3. Encode the output canvas to the requested format.
 //
 // Runs fully client-side — no server round-trip. The same CanvasRenderer the
-// editor uses guarantees the export matches the on-screen result pixel-for-pixel.
+// editor uses shares preparation/drawing semantics; full output parity is verified separately.
 
+import { assetSourcePool } from '../../asset/sources'
+import type { VisualMediaSession } from '../../render/media/VisualMediaSession'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
 import type { ParamValueMap } from '@/lib/render/RenderContext'
-import { canvasRenderer } from '@/lib/render/CanvasRenderer'
-import {
-  encodeCanvas,
-  RASTER_EXTENSION,
-  RASTER_SUPPORTS_ALPHA,
-  type RasterFormat,
-} from './ImageEncoders'
+import type { RasterFormat } from './ImageEncoders'
+import type { ResourceLease } from '../../resources/residency'
+import { editorOutputResources, type OutputResources } from '../resources'
+import { renderRasterFrame } from './renderRasterFrame'
 
 export type RasterBackground = 'scene' | 'transparent' | { color: string }
 
@@ -50,68 +49,35 @@ export interface RasterExportResult {
   warnings: string[]
 }
 
-function createCanvas(width: number, height: number): HTMLCanvasElement {
-  const c = document.createElement('canvas')
-  c.width = width
-  c.height = height
-  return c
+/** Acquire a budgeted raster result. Release after its final consumer has
+ * finished; an independent download/transport pin may extend that lifetime.
+ * Native encode always settles before cancellation frees surfaces/media pins.
+ * Inject an output owner for private hosts; production shares the editor ledger.
+ */
+export function acquireRasterImage(
+  scene: ChronoScene,
+  _assets: AssetElementMap,
+  opts: RasterExportOptions,
+  execution: {signal?:AbortSignal;resources?:OutputResources} = {},
+  mediaSession?: VisualMediaSession,
+): Promise<ResourceLease<RasterExportResult>> {
+  return assetSourcePool.withAssets(scene.assets, () =>
+    (execution.resources ?? editorOutputResources).run((scope,signal) => renderRasterFrame(scene,opts,scope,signal,mediaSession),execution))
 }
 
-/**
- * Render one frame of `scene` to a raster Blob. Throws if the canvas 2D context
- * cannot be acquired or the codec encode fails.
+/** Legacy raw result handoff. Preparation/copies remain bounded, but a returned
+ * raw Blob is caller-owned outside managed accounting. Application consumers
+ * use acquireRasterImage and explicit release. Composition render/upscale/time
+ * and warning semantics are unchanged; full export parity is a separate gate.
  */
 export async function exportRasterImage(
   scene: ChronoScene,
   assets: AssetElementMap,
   opts: RasterExportOptions,
+  mediaSession?: VisualMediaSession,
 ): Promise<RasterExportResult> {
-  const { composition } = scene
-  const timeMs   = opts.timeMs ?? 0
-  const scale    = Math.max(1, opts.scale ?? 1)
-  const quality  = opts.quality ?? 0.92
-  const format   = opts.format
-  const warnings: string[] = []
-
-  // JPEG has no alpha — fall back to a white fill so the frame isn't black.
-  let background = opts.background ?? 'scene'
-  if (background === 'transparent' && !RASTER_SUPPORTS_ALPHA[format]) {
-    background = { color: '#ffffff' }
-    warnings.push(`${format.toUpperCase()} has no alpha channel — transparent background exported as white.`)
-  }
-
-  const baseW = composition.width
-  const baseH = composition.height
-
-  // 1. Render at composition resolution (preview mode → clean frame).
-  const base = createCanvas(baseW, baseH)
-  const baseCtx = base.getContext('2d')
-  if (!baseCtx) throw new Error('RasterExport: failed to acquire 2D context')
-  canvasRenderer.render(baseCtx, scene, timeMs, null, assets, {
-    renderMode:  'preview',
-    background,
-    paramValues: opts.paramValues,
-  })
-
-  // 2. Optional upscale to the target resolution.
-  const outW = Math.round(baseW * scale)
-  const outH = Math.round(baseH * scale)
-  let target: HTMLCanvasElement = base
-  if (scale !== 1) {
-    target = createCanvas(outW, outH)
-    const tctx = target.getContext('2d')
-    if (!tctx) throw new Error('RasterExport: failed to acquire scaled 2D context')
-    tctx.imageSmoothingEnabled = true
-    tctx.imageSmoothingQuality = 'high'
-    tctx.drawImage(base, 0, 0, outW, outH)
-  }
-
-  // 3. Encode.
-  const blob = await encodeCanvas(target, format, quality)
-  const sceneName = composition.id || 'scene'
-  const filename = `${sceneName}.${RASTER_EXTENSION[format]}`
-
-  return { blob, width: outW, height: outH, filename, warnings }
+  const result=await acquireRasterImage(scene,assets,opts,{},mediaSession)
+  try{return result.value}finally{result.release()}
 }
 
 /** Trigger a browser download for an exported Blob. */

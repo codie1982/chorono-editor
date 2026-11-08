@@ -2,6 +2,8 @@
 
 export { EffectRegistry, effectRegistry } from './EffectRegistry'
 export type { EffectPlugin, EffectDefinition } from './EffectRegistry'
+export { withEffectSurfaces } from './withEffectSurfaces'
+export type { CanvasSurfaceAllocator } from '@/lib/render/resources/CanvasSurfaceScope'
 
 export { blurEffect }         from './BlurEffect'
 export { glowEffect }         from './GlowEffect'

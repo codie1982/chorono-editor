@@ -4,9 +4,6 @@ export interface DopeSheetUIState {
   /** Collapsed track node ids (nodes are expanded by default) */
   collapsedNodeIds: Set<string>
 
-  /** Selected keyframe IDs (multi-select) */
-  selectedKfIds: Set<string>
-
   /** Selected track targets (for bulk operations) */
   selectedTrackTargets: Set<string>
 
@@ -47,11 +44,22 @@ export interface TrackNode {
   expanded: boolean
   hasKeys: boolean
   isParent: boolean
+  /** Owning layer, absent on structural property groups and the Scene root. */
+  layerId?: string
 }
+
+export interface DopeSheetRow {
+  node: TrackNode
+  /** A parent row summarizes the same filtered descendant tracks. */
+  tracks: import('@/lib/types').Track[]
+}
+
+export const DOPE_SHEET_ROW_HEIGHT = 28
+export const DOPE_SHEET_RULER_HEIGHT = 28
+export const DOPE_SHEET_LABEL_WIDTH = 220
 
 export const INITIAL_DOPE_SHEET_STATE: DopeSheetUIState = {
   collapsedNodeIds: new Set(),
-  selectedKfIds: new Set(),
   selectedTrackTargets: new Set(),
   filterAnimatedOnly: false,
   filterSelectedObjectOnly: false,

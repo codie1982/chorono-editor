@@ -5,6 +5,7 @@
 // shows the exact frame. The canvas is already translated to the layer origin
 // by CanvasRenderer (top-left of the layer box).
 
+import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry/LayerRendererRegistry'
 import type { RenderContext } from '../RenderContext'
@@ -61,6 +62,8 @@ function renderFrameSequence(ctx: RenderContext, layer: Layer): void {
 
 export const frameSequenceRendererPlugin: LayerRendererPlugin = {
   id: 'frameSequence',
+  mediaDependencies: layer => ({ assetIds: layer.frameSequence ? [layer.frameSequence.assetId] : [] }),
+  paint: { alphaSafe: true, regionSafe: true, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'frameSequence' && !!layer.frameSequence,
   render: renderFrameSequence,
 }

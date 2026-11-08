@@ -94,6 +94,7 @@ export const rectDefinition: LayerDefinition = {
   iconKey: 'rectangle',
   category: 'Basic Shapes',
   createDefault: () => newRectLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(rectGeometry())]),
   toPath: toPathHelper,
 }
@@ -104,6 +105,7 @@ export const roundedRectDefinition: LayerDefinition = {
   iconKey: 'roundedRectangle',
   category: 'Basic Shapes',
   createDefault: () => newRoundedRectLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(rectGeometry())]),
   toPath: toPathHelper,
 }
@@ -114,6 +116,7 @@ export const circleDefinition: LayerDefinition = {
   iconKey: 'circle',
   category: 'Basic Shapes',
   createDefault: () => newCircleLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups(),
   toPath: toPathHelper,
 }
@@ -124,6 +127,7 @@ export const ellipseDefinition: LayerDefinition = {
   iconKey: 'ellipse',
   category: 'Basic Shapes',
   createDefault: () => newEllipseLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups(),
   toPath: toPathHelper,
 }
@@ -134,6 +138,7 @@ export const lineDefinition: LayerDefinition = {
   iconKey: 'line',
   category: 'Basic Shapes',
   createDefault: () => newLineLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(lineGeometry())]),
   toPath: toPathHelper,
 }
@@ -144,6 +149,7 @@ export const arrowDefinition: LayerDefinition = {
   iconKey: 'arrow',
   category: 'Basic Shapes',
   createDefault: () => newArrowLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(arrowGeometry())]),
   toPath: toPathHelper,
 }
@@ -154,6 +160,7 @@ export const polygonDefinition: LayerDefinition = {
   iconKey: 'polygon',
   category: 'Basic Shapes',
   createDefault: () => newPolygonLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(polygonGeometry())]),
   toPath: toPathHelper,
 }
@@ -164,6 +171,7 @@ export const starDefinition: LayerDefinition = {
   iconKey: 'star',
   category: 'Basic Shapes',
   createDefault: () => newStarLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(starGeometry())]),
   toPath: toPathHelper,
 }
@@ -174,6 +182,7 @@ export const ringDefinition: LayerDefinition = {
   iconKey: 'ring',
   category: 'Basic Shapes',
   createDefault: () => newRingLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(ringGeometry())]),
   toPath: toPathHelper,
 }
@@ -184,6 +193,7 @@ export const arcDefinition: LayerDefinition = {
   iconKey: 'arc',
   category: 'Basic Shapes',
   createDefault: () => newArcLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(arcGeometry())]),
   toPath: toPathHelper,
 }
@@ -194,6 +204,7 @@ export const capsuleDefinition: LayerDefinition = {
   iconKey: 'capsule',
   category: 'Basic Shapes',
   createDefault: () => newCapsuleLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups(),
   toPath: toPathHelper,
 }

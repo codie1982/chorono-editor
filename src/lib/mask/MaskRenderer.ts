@@ -19,7 +19,7 @@
 // pixel-level intersection.
 
 import type { Layer, MaskDefinition } from '@/lib/types'
-import { OffscreenCanvasCache, createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { renderSurfacePool, type CanvasSurfaceProvider } from '@/lib/render/resources/CanvasSurfacePool'
 
 export interface MaskRenderArgs {
   /** Canvas to draw the final masked result onto. */
@@ -27,6 +27,15 @@ export interface MaskRenderArgs {
   /** Width × height of the destination area (composition pixels). */
   width:         number
   height:        number
+  /** Integer composition origin of a cropped surface; default (0,0). Host
+   * content is already surface-local. Mask callbacks draw in composition space
+   * and must preserve their incoming transform. Inversion fills only this
+   * local domain; the planner must preserve all host/filter neighbourhoods. */
+  origin?:      { x: number; y: number }
+  /** When supplied, rasterize the silhouette/feather/inversion in the original
+   * full composition, then copy the integer ROI. Preserves native path AA and
+   * CSS filter extent semantics; content/output leases remain region-sized. */
+  compositionSize?: { width: number; height: number }
   /** Host layer being masked. */
   hostLayer:     Layer
   /** Renders the host layer's content to a given offscreen canvas. */
@@ -37,55 +46,76 @@ export interface MaskRenderArgs {
   getLayer:      (id: string) => Layer | undefined
 }
 
+/**
+ * Composites masks with temporary, exclusively borrowed Canvas2D surfaces.
+ * The pool owns backing-store residency; this renderer retains no scene pixels
+ * or versioned mask results. A mask list uses one content and one sequential
+ * silhouette lease, independent of its length. Nested renders borrow distinct
+ * surfaces. All leases return on success and on callback/compositing failures.
+ */
 export class MaskRenderer {
-  constructor(private cache: OffscreenCanvasCache = new OffscreenCanvasCache()) {}
+  /** Shares the application's scratch budget unless a caller injects an isolated pool. */
+  constructor(private readonly surfaces: CanvasSurfaceProvider = renderSurfacePool) {}
 
+  /**
+   * Draws the host and masks in the caller's composition-pixel coordinate space.
+   * Existing feather/inversion/mode/opacity semantics are preserved. No masks
+   * draw directly to destCtx; otherwise admission/drawing errors propagate after
+   * cleanup so callers never receive an unmasked frame as a successful result.
+   */
   render(masks: MaskDefinition[], args: MaskRenderArgs): void {
     if (masks.length === 0) {
       args.renderHost(args.destCtx)
       return
     }
 
-    // ── 1. Render host content ─────────────────────────────────────────────
-    const contentCanvas = createOffscreen(args.width, args.height)
-    const contentCtx    = contentCanvas.getContext('2d')!
-    args.renderHost(contentCtx)
+    const content = this.surfaces.acquire(args.width, args.height)
+    try {
+      const contentCtx = content.context
+      args.renderHost(contentCtx)
 
-    // ── 2. For each mask, composite with the content canvas ────────────────
-    for (const mask of masks) {
-      const maskLayer = args.getLayer(mask.maskLayerId)
-      if (!maskLayer) continue
+      for (const mask of masks) {
+        const maskLayer = args.getLayer(mask.maskLayerId)
+        if (!maskLayer) continue
 
-      // Mask silhouette → offscreen
-      const maskCanvas = createOffscreen(args.width, args.height)
-      const maskCtx    = maskCanvas.getContext('2d')!
-      if (mask.feather && mask.feather > 0) {
-        maskCtx.filter = `blur(${mask.feather}px)`
+        const full = args.compositionSize
+        const silhouette = this.surfaces.acquire(full?.width ?? args.width, full?.height ?? args.height)
+        try {
+          const maskCtx = silhouette.context
+          if (mask.feather && mask.feather > 0) {
+            maskCtx.filter = `blur(${mask.feather}px)`
+          }
+          const { x, y } = args.origin ?? { x: 0, y: 0 }
+          if (!full && (x || y)) maskCtx.translate(-x, -y)
+          args.renderMask(maskLayer, maskCtx)
+          if (!full && (x || y)) maskCtx.translate(x, y)
+          maskCtx.filter = 'none'
+
+          if (mask.inverted) {
+            maskCtx.save()
+            maskCtx.globalCompositeOperation = 'difference'
+            maskCtx.fillStyle = '#FFFFFF'
+            maskCtx.fillRect(0, 0, silhouette.canvas.width, silhouette.canvas.height)
+            maskCtx.restore()
+          }
+
+          contentCtx.save()
+          contentCtx.globalAlpha = mask.opacity ?? 1
+          contentCtx.globalCompositeOperation =
+              mask.mode === 'subtract' ? 'destination-out'
+            : 'destination-in'
+          if (full) contentCtx.drawImage(silhouette.canvas,x,y,args.width,args.height,0,0,args.width,args.height)
+          else contentCtx.drawImage(silhouette.canvas, 0, 0)
+          contentCtx.restore()
+        } finally {
+          silhouette.release()
+        }
       }
-      args.renderMask(maskLayer, maskCtx)
-      maskCtx.filter = 'none'
 
-      // Optional inversion via difference composite with full-opacity rect
-      if (mask.inverted) {
-        maskCtx.save()
-        maskCtx.globalCompositeOperation = 'difference'
-        maskCtx.fillStyle = '#FFFFFF'
-        maskCtx.fillRect(0, 0, args.width, args.height)
-        maskCtx.restore()
-      }
-
-      // Composite the mask onto the content canvas
-      contentCtx.save()
-      contentCtx.globalAlpha = mask.opacity ?? 1
-      contentCtx.globalCompositeOperation =
-          mask.mode === 'subtract' ? 'destination-out'
-        : /* add | intersect */      'destination-in'
-      contentCtx.drawImage(maskCanvas, 0, 0)
-      contentCtx.restore()
+      args.destCtx.drawImage(content.canvas, 0, 0)
+    } finally {
+      content.release()
     }
-
-    // ── 3. Stamp final composite to destination ────────────────────────────
-    args.destCtx.drawImage(contentCanvas, 0, 0)
   }
 }
 

@@ -403,10 +403,19 @@ export function makeUpdateEasingCmd(
   fromEasing: EasingDefinition,
   toEasing: EasingDefinition,
 ): EditorCommand {
+  let original: Keyframe | undefined
   return {
     label: 'Change Easing',
-    execute: (scene) => updateKfEasing(scene, timelineId, target, kfId, toEasing),
-    undo:    (scene) => updateKfEasing(scene, timelineId, target, kfId, fromEasing),
+    execute: (scene) => {
+      original ??= scene.timelines.find(timeline => timeline.id === timelineId)?.tracks
+        .find(track => track.target === target)?.keyframes.find(key => key.id === kfId)
+      return updateKfEasing(scene, timelineId, target, kfId, toEasing)
+    },
+    undo: (scene) => original ? { ...scene, timelines: scene.timelines.map(timeline => timeline.id !== timelineId ? timeline : {
+      ...timeline, tracks: timeline.tracks.map(track => track.target !== target ? track : {
+        ...track, keyframes: track.keyframes.map(key => key.id === kfId ? original! : key),
+      }),
+    }) } : updateKfEasing(scene, timelineId, target, kfId, fromEasing),
   }
 }
 

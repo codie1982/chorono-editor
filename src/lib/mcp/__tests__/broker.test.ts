@@ -27,6 +27,40 @@ function fakeEditor() {
 }
 
 describe('live editor broker', () => {
+  it('edits timeline-owned audio through the native tools with one undo per clip operation', async () => {
+    const editor = fakeEditor()
+    try {
+      await editor.call('create_timeline', { id: 'sound', durationMs: 1000 })
+      await editor.call('update_timeline', { timelineId: 'sound', patch: { layerIds: [] } })
+      const source = { id: 'sound_asset', name: 'voice.wav', type: 'audio' as const, url: 'data:audio/wav;base64,AA==', durationMs: 4000 }
+      editor.host.editor.dispatchCommand({ label: 'Fixture source', execute: scene => ({ ...scene, assets: [source] }), undo: scene => scene })
+      await editor.call('add_audio_clip', { assetId: source.id, timelineId: 'sound', layerId: 'voice', startMs: 500 })
+      const scene = editor.host.editor.getScene()
+      expect(scene.timelines[0].layerIds).toContain('voice')
+      expect(scene.composition.durationMs).toBe(4500)
+      await editor.call('set_audio_gain', { layerId: 'voice', gainDb: -6.020599913279624 })
+      await editor.call('set_audio_fades', { layerId: 'voice', fadeInMs: 1000, fadeOutMs: 500 })
+      await editor.call('trim_audio_clip', { layerId: 'voice', startMs: 1500, endMs: 4000 })
+      const trimmed = structuredClone(editor.host.editor.getScene())
+      expect(trimmed.layers[0]).toMatchObject({ startMs: 1500, endMs: 4000, audio: { startOffsetMs: 1000, volume: .5 } })
+      await editor.call('split_audio_clip', { layerId: 'voice', timeMs: 2500, rightLayerId: 'voice_right' })
+      expect(editor.host.editor.getScene().layers[1]).toMatchObject({ id: 'voice_right', startMs: 2500, audio: { startOffsetMs: 2000, assetId: source.id } })
+      await editor.call('undo')
+      expect(editor.host.editor.getScene()).toEqual(trimmed)
+      await editor.call('redo')
+      expect(editor.host.editor.getScene().layers[1].id).toBe('voice_right')
+      await editor.call('move_audio_clip', { layerId: 'voice_right', startMs: 0 })
+      expect(editor.host.editor.getScene().layers[1]).toMatchObject({ startMs: 0, endMs: 1500, audio: { startOffsetMs: 2000 } })
+      await expect(editor.call('patch_audio_clip', { layerId: 'voice', patch: { inventedProperty: true } })).rejects.toThrow(/Unknown audio/)
+      await expect(editor.call('set_audio_gain', { layerId: 'voice', gainDb: 99 })).rejects.toThrow('Invalid arguments')
+      await editor.call('set_audio_master', { gainDb: -6.020599913279624, muted: true })
+      expect(editor.host.editor.getScene().composition).toMatchObject({ audioVolume: .5, audioMuted: true })
+      await editor.call('set_keyframes', { timelineId: 'sound', layerId: 'voice', property: 'audio.volume', keyframes: [{ timeMs: 0, value: .2 }, { timeMs: 4000, value: .8 }] })
+      await expect(editor.call('set_audio_gain', { layerId: 'voice', gainDb: 0 })).rejects.toThrow('supply timeMs')
+      await editor.call('set_audio_gain', { layerId: 'voice', gainDb: 0, timeMs: 2000 })
+      expect(editor.host.editor.getScene().timelines[0].tracks.find(track => track.target === 'layers.voice.audio.volume')?.keyframes.find(key => key.timeMs === 2000)?.value).toBe(1)
+    } finally { await editor.close() }
+  })
   it('applies scripts exactly once and preserves ids used by subsequent tools', async () => {
     const editor = fakeEditor()
     try {

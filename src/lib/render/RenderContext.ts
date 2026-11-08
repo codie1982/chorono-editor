@@ -11,6 +11,7 @@ import type { AssetElementMap } from '@/lib/renderer'           // legacy import
 import type { OverrideMap } from '@/lib/evaluator'
 import type { LayerRegistry } from '@/lib/registry/LayerRegistry'
 import type { LayerRendererRegistry } from '@/lib/registry/LayerRendererRegistry'
+import type { LayerRelations } from '@/lib/scene/LayerIndex'
 
 export type ParamValueMap = Map<string, string | number | boolean>
 
@@ -29,6 +30,9 @@ export interface RenderContext {
 
   /** Scene currently being rendered — read-only for plugins. */
   scene: ChronoScene
+
+  /** Relationships for this exact evaluated frame. Optional for legacy standalone plugin hosts. */
+  layerIndex?: LayerRelations
 
   /** Override map from evaluateTimelines() (keyframe values at current time). */
   overrides: OverrideMap

@@ -1,64 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ZipReader } from '../ZipReader'
 
-// ── Minimal ZIP builder (stored or deflate) for tests ───────────────────────────
-
-async function buildZip(files: { name: string; data: Uint8Array; deflate?: boolean }[]): Promise<ArrayBuffer> {
-  const enc = new TextEncoder()
-  const local: Uint8Array[] = []
-  const central: Uint8Array[] = []
-  let offset = 0
-
-  for (const f of files) {
-    const name = enc.encode(f.name)
-    let stored = f.data
-    let method = 0
-    if (f.deflate) {
-      const cs = new CompressionStream('deflate-raw')
-      const buf = await new Response(new Blob([f.data as BlobPart]).stream().pipeThrough(cs)).arrayBuffer()
-      stored = new Uint8Array(buf)
-      method = 8
-    }
-    const lh = new Uint8Array(30 + name.length)
-    const lv = new DataView(lh.buffer)
-    lv.setUint32(0, 0x04034b50, true)
-    lv.setUint16(8, method, true)
-    lv.setUint32(18, stored.length, true)
-    lv.setUint32(22, f.data.length, true)
-    lv.setUint16(26, name.length, true)
-    lh.set(name, 30)
-    local.push(lh, stored)
-
-    const ch = new Uint8Array(46 + name.length)
-    const cv = new DataView(ch.buffer)
-    cv.setUint32(0, 0x02014b50, true)
-    cv.setUint16(10, method, true)
-    cv.setUint32(20, stored.length, true)
-    cv.setUint32(24, f.data.length, true)
-    cv.setUint16(28, name.length, true)
-    cv.setUint32(42, offset, true)
-    ch.set(name, 46)
-    central.push(ch)
-    offset += lh.length + stored.length
-  }
-
-  const cdStart = offset
-  const cdSize = central.reduce((s, c) => s + c.length, 0)
-  const eocd = new Uint8Array(22)
-  const ev = new DataView(eocd.buffer)
-  ev.setUint32(0, 0x06054b50, true)
-  ev.setUint16(8, files.length, true)
-  ev.setUint16(10, files.length, true)
-  ev.setUint32(12, cdSize, true)
-  ev.setUint32(16, cdStart, true)
-
-  const all = [...local, ...central, eocd]
-  const total = all.reduce((s, a) => s + a.length, 0)
-  const out = new Uint8Array(total)
-  let p = 0
-  for (const a of all) { out.set(a, p); p += a.length }
-  return out.buffer
-}
+import { buildZip } from './zipFixtures'
 
 const text = (s: string) => new TextEncoder().encode(s)
 const str  = (u: Uint8Array) => new TextDecoder().decode(u)

@@ -11,7 +11,8 @@
 // Inside is the stricter pick-the-fully-enclosed-objects mode.
 
 import type { ChronoScene, Layer } from '../types'
-import { computeSplineBounds } from '../spline/geometry/computeSplineBounds'
+import { resolveLayerWorldBounds, createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
+import type { PathBounds } from '../geometry/computePathBounds'
 
 interface Vec2 { x: number; y: number }
 interface AABB { x: number; y: number; w: number; h: number }
@@ -39,31 +40,32 @@ export function layerAnchorWorldPos(scene: ChronoScene, layer: Layer): Vec2 {
   return { x, y }
 }
 
-/** Axis-aligned bounding box of a layer in scene-world coords. Ignores
- *  rotation/scale — uses the raw size at the layer's world top-left.
- *  Falls back to a 1×1 "point" box when the layer has no size (audio,
- *  path-only layers, etc.) so anchor-based hits still work. */
+/** Actual static geometry in world coords, including vector/group/instance
+ *  bounds. Unsupported or empty content keeps the 1×1 point-box API fallback. */
 export function getLayerWorldBounds(scene: ChronoScene, layer: Layer): AABB {
+  const b = resolveLayerWorldBounds(layer, scene, 0, new Map())
+  return asSelectionBounds(scene, layer, b)
+}
+
+function asSelectionBounds(scene: ChronoScene, layer: Layer, b: PathBounds | null): AABB {
+  if (b) {
+    return { x: b.x, y: b.y, w: b.width, h: b.height }
+  }
   // World top-left (no anchor offset — anchor is local pivot, not bbox origin)
   let x = layer.transform.x
   let y = layer.transform.y
   let cur: Layer | undefined = layer
+  const visited = new Set<string>([layer.id])
   while (cur?.parentId) {
+    if (visited.has(cur.parentId)) break
+    visited.add(cur.parentId)
     const parent = scene.layers.find((p) => p.id === cur!.parentId)
     if (!parent) break
     x += parent.transform.x
     y += parent.transform.y
     cur = parent
   }
-  // Spline layers carry no `size` — derive bounds from actual geometry.
-  if (layer.type === 'spline' && layer.spline) {
-    const b = computeSplineBounds(layer.spline)
-    return { x: x + b.x, y: y + b.y, w: b.width, h: b.height }
-  }
-
-  const w = layer.size?.width  ?? 1
-  const h = layer.size?.height ?? 1
-  return { x, y, w, h }
+  return { x, y, w: 1, h: 1 }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,9 +193,10 @@ export function layersInRect(
   mode: SelectionContainMode = 'touching',
 ): Set<string> {
   const out = new Set<string>()
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, 0, new Map())
   for (const layer of scene.layers) {
     if (!isSelectable(layer)) continue
-    const bounds = getLayerWorldBounds(scene, layer)
+    const bounds = asSelectionBounds(scene, layer, boundsForFrame(layer))
     const ok = mode === 'inside'
       ? rectInsideRect(bounds, rect)
       : rectIntersectsRect(bounds, rect)
@@ -208,9 +211,10 @@ export function layersInCircle(
   mode: SelectionContainMode = 'touching',
 ): Set<string> {
   const out = new Set<string>()
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, 0, new Map())
   for (const layer of scene.layers) {
     if (!isSelectable(layer)) continue
-    const bounds = getLayerWorldBounds(scene, layer)
+    const bounds = asSelectionBounds(scene, layer, boundsForFrame(layer))
     const ok = mode === 'inside'
       ? rectInsideCircle(bounds, circle)
       : rectIntersectsCircle(bounds, circle)
@@ -225,9 +229,10 @@ export function layersInPolygon(
   mode: SelectionContainMode = 'touching',
 ): Set<string> {
   const out = new Set<string>()
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, 0, new Map())
   for (const layer of scene.layers) {
     if (!isSelectable(layer)) continue
-    const bounds = getLayerWorldBounds(scene, layer)
+    const bounds = asSelectionBounds(scene, layer, boundsForFrame(layer))
     const ok = mode === 'inside'
       ? rectInsidePolygon(bounds, polygon)
       : rectIntersectsPolygon(bounds, polygon)

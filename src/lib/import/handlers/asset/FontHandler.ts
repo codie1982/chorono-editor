@@ -2,25 +2,19 @@
 //
 // Handles WOFF2, TTF, OTF font imports.
 // Creates one FontAsset (no layer — fonts are applied to text layers via name).
-// Registers the font via the FontFace API so it's immediately usable.
+// Validates through the shared bounded font service; registration has an owner.
 
+import { withImportSource } from '../../resources/importSources'
 import { BaseImportHandler } from '../BaseHandler'
 import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress } from '../../types'
 import type { Asset } from '../../../asset/types'
+import {fontAssetService,importedFontNames,FontRegistrationUnavailable} from '../../../asset/fonts'
+import {checkImportExecution,type ImportExecution} from '../../resources/ImportExecution'
 
-/** Strip common font file extension to derive a display name */
-function fontDisplayName(filename: string): string {
-  return filename
-    .replace(/\.(woff2?|ttf|otf)$/i, '')
-    .replace(/[-_]/g, ' ')
-    .trim()
-}
-
-/** Map MIME / extension → CSS font-family-safe name (no spaces, no special chars) */
-function fontFamilyName(displayName: string): string {
-  return displayName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
-}
-
+/** Convert an imported source to the existing font asset schema and validate
+ * native readability with a temporary managed pin. No unowned FontFace is
+ * inserted into document.fonts. Only expected native compatibility failures
+ * preserve warnings; malformed input, budgets, abort and deadline stay fatal. */
 export class FontHandler extends BaseImportHandler {
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = [
@@ -30,10 +24,14 @@ export class FontHandler extends BaseImportHandler {
     'font/otf',
   ]
 
-  async preflight(file: File): Promise<ImportPreflight> {
+  /** Scalar preflight is cheap; full actual-byte/container validation happens
+   * inside the shared font queue during handle, before FontFace construction. */
+  async preflight(file: File, _options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
+    checkImportExecution(execution)
+    if(file.size>32*1024**2)throw new RangeError('Font source exceeds the 32 MiB input policy.')
     const source      = this.makeSource(file)
     const format      = this.getFormat(file)
-    const displayName = fontDisplayName(file.name)
+    const displayName = importedFontNames(file.name,'preflight').name
 
     return {
       source,
@@ -60,76 +58,69 @@ export class FontHandler extends BaseImportHandler {
     file: File,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult> {
+    checkImportExecution(execution)
     const startMs     = Date.now()
-    const displayName = fontDisplayName(file.name)
-    const familyName  = fontFamilyName(displayName)
+    const assetId=this.generateAssetId()
+    const {name:displayName,family:familyName}=importedFontNames(file.name,assetId)
 
     this.reportProgress(onProgress, 'reading', 'Loading font…', 0.2)
 
-    const url     = URL.createObjectURL(file)
-    const assetId = this.generateAssetId()
-    const format  = this.getFormat(file)
+    return withImportSource(file, async (url) => {
+      const format  = this.getFormat(file)
+      const asset: Asset = {
+        id:   assetId,
+        name: displayName,
+        type: 'font',
+        url,
+        storage: { mode: 'external', originalFileName: file.name },
+        metadata: {
+          filesize:   file.size,
+          importedAt: Date.now(),
+          tags:       [],
+          notes:      `family: ${familyName}`,
+        },
+        runtime: { objectUrl: url },
+      }
 
-    // Register with the browser FontFace API so text layers can use it immediately
-    const warnings: ImportResult['warnings'] = []
-    try {
-      const face = new FontFace(familyName, `url(${url})`)
-      await face.load()
-      document.fonts.add(face)
-    } catch {
-      warnings.push({
-        code:     'unsupported_feature',
-        severity: 'warning',
-        message:  `Could not register font "${displayName}" — it may not render in text layers`,
-      })
-    }
+      const warnings:ImportResult['warnings']=[]
+      try {const lease=await fontAssetService.acquire(asset,{signal:execution?.signal});lease.release()}
+      catch(error) {if(!(error instanceof FontRegistrationUnavailable))throw error
+        warnings.push({code:'unsupported_feature',severity:'warning',message:`Could not register font "${displayName}" — it may not render in text layers`})}
+      checkImportExecution(execution)
+      this.reportProgress(onProgress,'converting','Preparing font asset…',0.8)
 
-    this.reportProgress(onProgress, 'converting', 'Registering font…', 0.8)
+      this.reportProgress(onProgress, 'complete', 'Done', 1)
+      checkImportExecution(execution)
 
-    const asset: Asset = {
-      id:   assetId,
-      name: displayName,
-      type: 'font',
-      url,
-      storage: { mode: 'external', originalFileName: file.name },
-      metadata: {
-        filesize:   file.size,
-        importedAt: Date.now(),
-        tags:       [],
-        notes:      `family: ${familyName}`,
-      },
-      runtime: { objectUrl: url },
-    }
-
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
-
-    return {
-      id:      this.generateId(),
-      source:  this.makeSource(file),
-      format,
-      kind:    'asset',
-      assets:  [asset],
-      layers:  [],        // Fonts don't auto-create layers
-      groups:  [],
-      tracks:  [],
-      timelines: [],
-      commands: [],
-      warnings,
-      errors:             [],
-      unsupportedFeatures: [],
-      report: {
-        title:          'Font Import',
-        sourceFileName: file.name,
+      return {
+        id:      this.generateId(),
+        source:  this.makeSource(file),
         format,
-        created:        { assets: 1, layers: 0, groups: 0, tracks: 0, compositions: 0 },
-        warnings:       [],
-        errors:         [],
+        kind:    'asset',
+        assets:  [asset],
+        layers:  [],        // Fonts don't auto-create layers
+        groups:  [],
+        tracks:  [],
+        timelines: [],
+        commands: [],
+        warnings,
+        errors:             [],
         unsupportedFeatures: [],
-        suggestions:    ['Apply font by setting the font-family of a text layer to: ' + familyName],
-        durationMs:     Date.now() - startMs,
-      },
-    }
+        report: {
+          title:          'Font Import',
+          sourceFileName: file.name,
+          format,
+          created:        { assets: 1, layers: 0, groups: 0, tracks: 0, compositions: 0 },
+          warnings:       [],
+          errors:         [],
+          unsupportedFeatures: [],
+          suggestions:    ['Apply font by setting the font-family of a text layer to: ' + familyName],
+          durationMs:     Date.now() - startMs,
+        },
+      }
+    })
   }
 
   // ── Private ────────────────────────────────────────────────────────────────

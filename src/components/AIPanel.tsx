@@ -31,6 +31,8 @@ const QUICK_ACTIONS = [
   { label: '⚽ Bouncing ball',   prompt: '360×640 canvas, mavi bir top (ellipse 60×60), yukarıdan düşüp zemine zıplayan bounce animasyonu, 2 saniye' },
 ]
 
+// TODO(remove-built-in-chat): Dahili sohbet arayüzü geçici olarak editörden çıkarıldı.
+// Bu panel ve yalnızca panelin kullandığı yardımcılar kaldırılacak.
 export default function AIPanel({
   scene, dispatchCommand, onClose,
   currentTimeMs, selectedLayerId, selectedTimelineId,

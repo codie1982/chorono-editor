@@ -14,13 +14,18 @@ import type { ChronoScene, Layer, Transform } from '@/lib/types'
 import { ShapeToPathConverter, pathToSvgString, type Size } from '@/lib/geometry'
 import { bezierPathToPathDefinition } from '@/lib/path/bezierToPathDefinition'
 import { evaluateTimelines, getLayerValue } from '@/lib/evaluator'
+import { materializeRenderScene } from '@/lib/render/materializeOverrides'
 import {
   GradientRegistry,
   buildStyleAttrs,
   escapeXml,
   num,
 } from './SVGStyleBuilder'
-import { collectLayerAnimations, type LayerAnimations } from './SVGAnimationBuilder'
+import { collectLayerAnimations } from './SVGAnimationBuilder'
+import {BoundedTextBuilder} from '../../format/text'
+import {measureJson} from '../../format/json'
+import {LayerIndex} from '../../scene/LayerIndex'
+import {preflightSvgOutput,resolveSvgOutputLimits,type SVGOutputLimits} from './SVGOutputLimits'
 
 export type SVGBackground = 'scene' | 'transparent' | { color: string }
 
@@ -37,6 +42,8 @@ export interface SVGExportOptions {
    * (single-frame static export).
    */
   animated?: boolean
+  /** Finite construction policy; refusal does not truncate or lower detail. */
+  limits?:Partial<SVGOutputLimits>
 }
 
 export interface SVGExportResult {
@@ -51,17 +58,27 @@ type OverrideMap = ReturnType<typeof evaluateTimelines>
 /** Layer kinds that V1 static SVG export can faithfully represent. */
 const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
 
+/** Serialize the same static/SMIL SVG with bounded geometry/text construction.
+ * Scene is borrowed and never changed. Native output ownership belongs to the
+ * caller; application jobs use svgInScope through acquireSceneText/download.
+ * Invalid/oversized geometry, cycles and unsupported precision reject before
+ * dense conversion. Unsupported layer kinds retain their existing warnings. */
 export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGExportResult {
+  measureJson(scene,{maxBytes:96*1024**2})
+  const limits=resolveSvgOutputLimits(opts.limits)
   const { composition } = scene
   const timeMs    = opts.timeMs ?? 0
   const precision = opts.precision ?? 2
+  if(!Number.isInteger(precision)||precision<0||precision>12||!Number.isFinite(timeMs))throw new RangeError('Invalid SVG time/precision.')
   const warnings: string[] = []
   const gradients = new GradientRegistry()
   const overrides = evaluateTimelines(scene.timelines, timeMs)
+  scene = materializeRenderScene(scene, overrides)
+  preflightSvgOutput(scene,opts.animated??false,limits)
 
   // Solo filter mirrors CanvasRenderer: if any layer is soloed, only soloed
   // layers render.
-  const anySolo = scene.layers.some((l) => l.solo)
+  const anySolo = scene.layers.some((l) => l.type !== 'audio' && l.solo)
   const isVisible = (l: Layer): boolean => {
     if (anySolo && !l.solo) return false
     if (l.hidden) return false
@@ -74,15 +91,13 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
     scene, overrides, gradients, warnings, precision, isVisible, timeMs,
     animated: opts.animated ?? false,
     durationMs: composition.durationMs,
+    index:new LayerIndex(scene.layers),
   }
 
   // Root layers in document order; groups recurse into their children.
-  const rootLayers = scene.layers.filter((l) => !l.parentId)
-  const body = rootLayers
-    .filter((l) => isVisible(l))
-    .map((l) => buildLayer(l, ctx))
-    .filter(Boolean)
-    .join('\n')
+  const bodyWriter=new BoundedTextBuilder(limits.maxChars)
+  writeChildren(ctx.index.roots,ctx,bodyWriter)
+  const body=bodyWriter.finish();bodyWriter.clear()
 
   // Background rectangle (skipped when transparent).
   const bg = opts.background ?? 'scene'
@@ -106,6 +121,7 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
     body +
     (body ? '\n' : '') +
     `</svg>\n`
+  if(svg.length>limits.maxChars)throw new RangeError('SVG document limit exceeded.')
 
   return {
     svg,
@@ -128,6 +144,7 @@ interface BuildCtx {
   animated: boolean
   /** Composition duration used as the SMIL animation period. */
   durationMs: number
+  index:LayerIndex
 }
 
 /** Resolve the animated transform at the current time (anchors stay static). */
@@ -162,61 +179,28 @@ function opacityAttr(layer: Layer, overrides: OverrideMap, precision: number): s
   return o < 1 ? ` opacity="${num(Math.max(0, o), precision)}"` : ''
 }
 
-function buildLayer(layer: Layer, ctx: BuildCtx): string {
-  if (!SUPPORTED.has(layer.type)) {
-    ctx.warnings.push(`Layer "${layer.name}" (${layer.type}) skipped — not supported by SVG export.`)
-    return ''
+/** Write siblings in original order with the exact old nonempty separators.
+ * Group content streams into one builder; it is not copied at each ancestor.
+ * Animated empty path/text content still keeps the old SMIL wrapper. */
+function writeChildren(layers:readonly Layer[],ctx:BuildCtx,writer:BoundedTextBuilder):void{
+  let written=false
+  for(const layer of layers){
+    if(!ctx.isVisible(layer))continue
+    if(!SUPPORTED.has(layer.type)){ctx.warnings.push(`Layer "${layer.name}" (${layer.type}) skipped — not supported by SVG export.`);continue}
+    const anims=ctx.animated?collectLayerAnimations(layer,ctx.scene.timelines,ctx.durationMs):null
+    if(!anims&&((layer.type==='path'&&!layer.path?.anchors.length)||(layer.type==='text'&&!layer.text)))continue
+    if(written)writer.append('\n');written=true
+    let xform=transformAttr(resolveTransform(layer,ctx.overrides),ctx.precision),opacity=opacityAttr(layer,ctx.overrides,ctx.precision)
+    if(anims){
+      writer.append(`<g>\n${anims.transformAnims}${anims.opacityAnim?`\n${anims.opacityAnim}`:''}\n`)
+      const {anchorX:ax,anchorY:ay}=layer.transform
+      xform=ax!==0||ay!==0?` transform="translate(${num(-ax,ctx.precision)} ${num(-ay,ctx.precision)})"`:'';opacity=''
+    }
+    if(layer.type==='group'){
+      writer.append(`<g${xform}${opacity}>\n`);writeChildren(ctx.index.childrenOf(layer.id),ctx,writer);writer.append('\n</g>')
+    }else writer.append(layer.type==='shape'?buildShape(layer,ctx,xform,opacity):layer.type==='path'?buildPath(layer,ctx,xform,opacity):buildText(layer,ctx,xform,opacity))
+    if(anims)writer.append('\n</g>')
   }
-
-  // BL-84 animated — when the layer has animated transform/opacity tracks,
-  // emit a SMIL-wrapped element instead of a frozen frame.
-  if (ctx.animated) {
-    const anims = collectLayerAnimations(layer, ctx.scene.timelines, ctx.durationMs)
-    if (anims) return buildAnimatedLayer(layer, ctx, anims)
-  }
-
-  const xform   = transformAttr(resolveTransform(layer, ctx.overrides), ctx.precision)
-  const opacity = opacityAttr(layer, ctx.overrides, ctx.precision)
-
-  switch (layer.type) {
-    case 'group':  return `<g${xform}${opacity}>\n${buildGroupChildren(layer, ctx)}\n</g>`
-    case 'shape':  return buildShape(layer, ctx, xform, opacity)
-    case 'path':   return buildPath(layer, ctx, xform, opacity)
-    case 'text':   return buildText(layer, ctx, xform, opacity)
-    default:       return ''
-  }
-}
-
-function buildGroupChildren(layer: Layer, ctx: BuildCtx): string {
-  return ctx.scene.layers
-    .filter((l) => l.parentId === layer.id && ctx.isVisible(l))
-    .map((l) => buildLayer(l, ctx))
-    .filter(Boolean)
-    .join('\n')
-}
-
-/**
- * Build a layer as a SMIL-animated <g>. Transform/opacity come from
- * <animateTransform>/<animate>; the content carries the static anchor offset
- * (translate(-ax,-ay)) so rotation/scale pivot on the anchor — matching the
- * canvas pipeline.
- */
-function buildAnimatedLayer(layer: Layer, ctx: BuildCtx, anims: LayerAnimations): string {
-  const { anchorX: ax, anchorY: ay } = layer.transform
-  const n = (v: number) => num(v, ctx.precision)
-  const contentXform = (ax !== 0 || ay !== 0) ? ` transform="translate(${n(-ax)} ${n(-ay)})"` : ''
-
-  let content: string
-  switch (layer.type) {
-    case 'group':  content = `<g${contentXform}>\n${buildGroupChildren(layer, ctx)}\n</g>`; break
-    case 'shape':  content = buildShape(layer, ctx, contentXform, ''); break
-    case 'path':   content = buildPath(layer, ctx, contentXform, ''); break
-    case 'text':   content = buildText(layer, ctx, contentXform, ''); break
-    default:       content = ''
-  }
-
-  const opacity = anims.opacityAnim ? `\n${anims.opacityAnim}` : ''
-  return `<g>\n${anims.transformAnims}${opacity}\n${content}\n</g>`
 }
 
 function buildShape(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {

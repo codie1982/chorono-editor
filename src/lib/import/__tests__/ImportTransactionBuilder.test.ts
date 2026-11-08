@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ImportTransactionBuilder } from '../ImportTransactionBuilder'
-import { emptyScene as makeEmptyScene } from '../../defaults'
+import { emptyScene as makeEmptyScene, newAudioLayer, newTimeline } from '../../defaults'
 import type { ImportResult } from '../types'
 import type { ChronoScene, Layer, Timeline, Track } from '../../types/core'
 import type { Asset } from '../../asset/types'
@@ -64,6 +64,26 @@ describe('ImportTransactionBuilder', () => {
   const builder = new ImportTransactionBuilder()
 
   describe('build → execute', () => {
+    it('places imported audio in the active timeline and extends duration in the same undo step', () => {
+      const source: Asset = { id: 'music', name: 'Music.wav', type: 'audio', url: 'blob:music', durationMs: 20000 }
+      const audio = newAudioLayer(source.id, source.durationMs)
+      const scene = emptyScene({ timelines: [{ ...newTimeline(), id: 'active' }, { ...newTimeline(), id: 'other' }] })
+      const command = builder.build(importResult({ assets: [source], layers: [audio], format: 'audio/wav' }), { timelineId: 'active', startMs: 3000 })
+      const after = command.execute(scene)
+      expect(after.layers[0]).toMatchObject({ name: 'Music.wav', startMs: 3000, endMs: 23000, audio: { timelineId: 'active' } })
+      expect(after.timelines[0]).toMatchObject({ layerIds: [audio.id], durationMs: 23000 })
+      expect(after.timelines[1]).toBe(scene.timelines[1])
+      expect(after.composition.durationMs).toBe(23000)
+      expect(command.undo(after)).toBe(scene)
+      expect(command.execute(scene).layers[0].id).toBe(audio.id)
+    })
+
+    it('does not reinterpret audio clip timing in imported documents', () => {
+      const source: Asset = { id: 'music', name: 'Music.wav', type: 'audio', url: 'blob:music', durationMs: 20000 }
+      const audio = { ...newAudioLayer(source.id, source.durationMs), startMs: 2000, endMs: 4000 }
+      const after = builder.build(importResult({ assets: [source], layers: [audio], kind: 'document' })).execute(emptyScene())
+      expect(after.layers[0]).toBe(audio)
+    })
     it('adds assets and layers to the scene', () => {
       const cmd = builder.build(importResult({
         assets: [asset('a1')],

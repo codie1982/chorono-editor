@@ -23,6 +23,39 @@ export interface Size {
  * know about shape-specific math.
  */
 export class ShapeToPathConverter {
+  /** Conservative command count before any path/vertex allocation. Mirrors
+   * the converter's authoritative subdivision helpers; fixed primitive kinds
+   * need at most 32 commands. The result may be nonfinite for malformed input:
+   * admission callers must reject non-safe/nonpositive counts. No clamping of
+   * polygon/star/arc detail is introduced; callers reject rather than degrade.
+   * Dimensions/radii are layer-local pixels; count is dimensionless. */
+  static estimateCommandCount(shape:ShapeKind|'rect'|'circle',size:Size,params?:ShapeParams,cornerRadius=0):number{
+    switch(shape){
+      case 'rect':return cornerRadius>0?10:5
+      case 'circle':case 'ellipse':return 6
+      case 'capsule':return 10
+      case 'line':return 2
+      case 'arrow':return 8
+      case 'polygon':return this.polygonSides(params?.sides??6)+1
+      case 'star':return this.polygonSides(params?.sides??5)*2+1
+      case 'ring':return this.arcSamples(params?.startAngle??0,params?.endAngle??360)*2+3
+      case 'arc':return this.arcSamples(params?.startAngle??-90,params?.endAngle??90)+1
+      case 'spiral':return this.spiralSamples(this.clamp(params?.turns??3,.5,20))+1
+      case 'wave':return this.waveSamples(size.width)+1
+      case 'blob':return 65
+      default:return 32
+    }
+  }
+
+  /** Shared subdivision rules for construction and preallocation queries. */
+  private static polygonSides(value:number):number{return Math.max(3,Math.round(value))}
+  /** One line sample per five degrees, with eight as the existing minimum. */
+  private static arcSamples(start:number,end:number):number{return Math.max(8,Math.ceil(Math.abs(end-start)/5))}
+  /** Existing spiral resolution, bounded independently of the angle span. */
+  private static spiralSamples(turns:number):number{return Math.min(4096,Math.max(24,Math.ceil(turns*180)))}
+  /** Existing wave resolution in layer-local pixels, with 48–4096 samples. */
+  private static waveSamples(width:number):number{return Math.min(4096,Math.max(48,Math.ceil(width/1.5)))}
+
   static convert(
     shape:        ShapeKind | 'rect' | 'circle',
     size:         Size,
@@ -160,7 +193,7 @@ export class ShapeToPathConverter {
   // ── Polygon ─────────────────────────────────────────────────────────────────
 
   private static polygon(w: number, h: number, params?: ShapeParams): PathDefinition {
-    const sides = Math.max(3, Math.round(params?.sides ?? 6))
+    const sides = this.polygonSides(params?.sides??6)
     const r     = Math.min(w, h) / 2
     const cx = w / 2, cy = h / 2
     const cmds: PathDefinition['commands'] = []
@@ -177,7 +210,7 @@ export class ShapeToPathConverter {
   // ── Star (alternating outer / inner radius) ─────────────────────────────────
 
   private static star(w: number, h: number, params?: ShapeParams): PathDefinition {
-    const points = Math.max(3, Math.round(params?.sides ?? 5))
+    const points = this.polygonSides(params?.sides??5)
     const outerR = params?.outerRadius ?? Math.min(w, h) / 2
     const innerR = params?.innerRadius ?? outerR * 0.45
     const cx = w / 2, cy = h / 2
@@ -203,7 +236,7 @@ export class ShapeToPathConverter {
     const cx = w / 2, cy = h / 2
     // Sample the arc into line segments (12 per 360°). Trade-off:
     // simpler than building exact cubic bezier arcs, good enough for V1.
-    const samples = Math.max(8, Math.ceil(Math.abs(endDeg - startDeg) / 5))
+    const samples = this.arcSamples(startDeg,endDeg)
     const cmds: PathDefinition['commands'] = []
     // Outer arc forward
     for (let i = 0; i <= samples; i++) {
@@ -234,7 +267,7 @@ export class ShapeToPathConverter {
     const endDeg   = params?.endAngle   ??  90
     const r = Math.min(w, h) / 2
     const cx = w / 2, cy = h / 2
-    const samples = Math.max(8, Math.ceil(Math.abs(endDeg - startDeg) / 5))
+    const samples = this.arcSamples(startDeg,endDeg)
     const cmds: PathDefinition['commands'] = []
     for (let i = 0; i <= samples; i++) {
       const t = i / samples
@@ -265,7 +298,7 @@ export class ShapeToPathConverter {
     const cx = w / 2, cy = h / 2
     const totalAngle = turns * Math.PI * 2
     // ~2° per sample, capped between 24 and 4096 samples
-    const samples    = Math.min(4096, Math.max(24, Math.ceil(turns * 180)))
+    const samples    = this.spiralSamples(turns)
     const cmds: PathDefinition['commands'] = []
     for (let i = 0; i <= samples; i++) {
       const t = i / samples
@@ -291,7 +324,7 @@ export class ShapeToPathConverter {
     const phase     = params?.phase ?? 0
     const cy        = h / 2
     // ~1.5px per sample, capped between 48 and 4096 samples
-    const samples   = Math.min(4096, Math.max(48, Math.ceil(w / 1.5)))
+    const samples   = this.waveSamples(w)
     const cmds: PathDefinition['commands'] = []
     for (let i = 0; i <= samples; i++) {
       const t = i / samples

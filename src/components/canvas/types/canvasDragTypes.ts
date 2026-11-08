@@ -1,5 +1,7 @@
 import type { Layer } from '@/lib/types'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
+import type { Matrix2D } from '@/lib/geometry/Matrix2D'
+import type { RotationGesture } from '@/lib/canvas/math/rotationGesture'
 
 /** Resize-handle identifiers (8-point selection frame). */
 export type Handle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se'
@@ -18,6 +20,9 @@ export interface MoveState {
   startClientY: number
   width:  number
   height: number
+  /** Visual box offset from transform origin for centered root splines. */
+  boundsOffsetX?: number
+  boundsOffsetY?: number
   /** Forced single-axis constraint (Move-mode axis arrows). Null = free.
    *  Distinct from Shift-while-dragging which dynamically picks the
    *  dominant axis — this is a hard lock set by the user clicking an arrow. */
@@ -44,6 +49,8 @@ export interface AnchorState {
   originalLayer: Layer
   startClientX: number
   startClientY: number
+  parentWorld: Matrix2D
+  displayTransform: Layer['transform']
 }
 
 /** Rotation drag — rotates the layer (or multi-select group) around a pivot. */
@@ -61,6 +68,8 @@ export interface RotateState {
   /** World coords of the layer's anchor (rotation pivot). */
   anchorWorldX: number
   anchorWorldY: number
+  /** Single-layer rotation in the parent's displayed coordinate system. */
+  gesture?: RotationGesture
   /** BL-03: When set, the drag rotates EVERY layer here around the common
    *  pivot (anchorWorldX/Y, which is the selection center). Each layer's
    *  origin is stored so the rotated position is computed from a stable
@@ -145,6 +154,8 @@ export interface SplinePointDrag {
   /** Local point position at drag start. */
   startX: number
   startY: number
+  /** Rendered inverse at drag start, including the complete parent chain. */
+  worldToLocal: Matrix2D
 }
 
 /** BL-73 Sprint 4 — dragging a spline bezier handle. */
@@ -159,6 +170,8 @@ export interface SplineHandleDrag {
   /** Local handle position at drag start. */
   startX: number
   startY: number
+  /** Rendered inverse at drag start, including the complete parent chain. */
+  worldToLocal: Matrix2D
 }
 
 export type ActiveDrag =

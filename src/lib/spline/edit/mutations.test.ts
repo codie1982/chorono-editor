@@ -68,6 +68,35 @@ describe('spline mutations', () => {
     expect(Object.keys(next.segments).length).toBe(2)
   })
 
+  it('insertPointOnSegment(quadratic) preserves both halves of the curve', () => {
+    const line = createLineSpline({ x1: 0, y1: 0, x2: 100, y2: 0 })
+    const seg = Object.values(line.segments)[0]
+    line.segments[seg.id] = { ...seg, type: 'quadratic', control1: { x: 30, y: 80 } }
+    const next = insertPointOnSegment(line, seg.id, 0.4)
+    const contour = Object.values(next.contours)[0]
+    const halves = contour.segmentIds.map(id => next.segments[id])
+    const q = (a: number, b: number, c: number, t: number) => (1 - t) ** 2 * a + 2 * (1 - t) * t * b + t ** 2 * c
+
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20
+      const half = halves[t <= 0.4 ? 0 : 1]
+      const u = t <= 0.4 ? t / 0.4 : (t - 0.4) / 0.6
+      const from = next.points[half.fromPointId], to = next.points[half.toPointId]
+      expect(half.type).toBe('quadratic')
+      expect(q(from.x, half.control1!.x, to.x, u)).toBeCloseTo(q(0, 30, 100, t), 8)
+      expect(q(from.y, half.control1!.y, to.y, u)).toBeCloseTo(q(0, 80, 0, t), 8)
+    }
+    expect(line.segments[seg.id].control1).toEqual({ x: 30, y: 80 })
+  })
+
+  it('does not insert degenerate or non-finite split points', () => {
+    const line = createLineSpline({ x1: 0, y1: 0, x2: 100, y2: 0 })
+    const seg = Object.values(line.segments)[0]
+    for (const t of [0, 1, -0.5, 1.5, NaN, Infinity]) {
+      expect(insertPointOnSegment(line, seg.id, t)).toBe(line)
+    }
+  })
+
   it('deleteSplinePoint removes the point and merges segments', () => {
     const r = createRectangleSpline({ width: 100, height: 60, cornerMode: 'sharp' }) // 4 pts, 4 segs
     const pid = Object.keys(r.points)[0]
@@ -96,6 +125,28 @@ describe('spline mutations', () => {
     const orig = [...c.contours[cid].pointIds]
     const next = reverseContour(c, cid)
     expect(next.contours[cid].pointIds).toEqual([...orig].reverse())
+    const contour = next.contours[cid]
+    contour.segmentIds.forEach((sid, i) => {
+      const seg = next.segments[sid]
+      expect(seg.fromPointId).toBe(contour.pointIds[i])
+      expect(seg.toPointId).toBe(contour.pointIds[(i + 1) % contour.pointIds.length])
+    })
+    const restored = reverseContour(next, cid)
+    expect(restored.contours[cid]).toEqual(c.contours[cid])
+    expect(restored.handles).toEqual(c.handles)
+    expect(restored.segments).toEqual(c.segments)
+  })
+
+  it('reverses a quadratic using the same control point', () => {
+    const line = createLineSpline({ x1: 0, y1: 0, x2: 100, y2: 0 })
+    const seg = Object.values(line.segments)[0]
+    line.segments[seg.id] = { ...seg, type: 'quadratic', control1: { x: 30, y: 80 } }
+    const cid = Object.keys(line.contours)[0]
+    const next = reverseContour(line, cid)
+    expect(next.segments[seg.id]).toEqual({
+      ...line.segments[seg.id], fromPointId: seg.toPointId, toPointId: seg.fromPointId,
+    })
+    expect(reverseContour(next, cid)).toEqual(line)
   })
 
   it('setSegmentType line→cubic creates handles', () => {

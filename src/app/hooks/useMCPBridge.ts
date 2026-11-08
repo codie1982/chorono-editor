@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { executeEditorJob, type MCPHost } from '@/lib/mcp/editor'
+import type { MCPHost } from '@/lib/mcp/editor'
+import {withEditorReply} from '@/lib/mcp/output/EditorReply'
 import type { BridgeJob } from '@/lib/mcp/protocol'
 
 export function useMCPBridge(host: MCPHost) {
@@ -56,10 +57,11 @@ export function useMCPBridge(host: MCPHost) {
           const job: BridgeJob | null = data.job
           if (!job) continue
           setStatus(`Running ${job.method}`)
-          let result: unknown, error: string | undefined
-          try { result = await executeEditorJob(job, hostRef.current, controller.signal) } catch (failure) { error = (failure as Error).message }
-          const reply = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${connection!.token}` }, body: JSON.stringify({ op: 'reply', sessionId: connection!.id, jobId: job.id, result, error }), signal: controller.signal })
-          if (!reply.ok) throw new Error('Unable to deliver MCP result; read the scene before retrying')
+          const {error}=await withEditorReply(job,hostRef.current,connection!.id,async(body,signal)=>{
+            const reply=await fetch('/api/mcp',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${connection!.token}`},body,signal})
+            await reply.body?.cancel()
+            if(!reply.ok)throw new Error('Unable to deliver MCP result; read the scene before retrying')
+          },{signal:controller.signal})
           setStatus('Connected')
           setError(error ?? '')
         } catch (failure) {

@@ -6,6 +6,9 @@
 // stays a thin orchestrator. No side effects beyond the passed-in ctx.
 
 import type { ShapeKind, ShapeParams } from '@/lib/types'
+import { ShapeToPathConverter } from '@/lib/geometry/ShapeToPathConverter'
+import { buildPathOnCanvas } from '@/lib/geometry/PathCommand'
+import { defaultPathSampler } from '@/lib/path/PathSampler'
 
 /** Degrees → radians, with 0° pointing at 12 o'clock (top). */
 const polarToRad = (deg: number) => (deg - 90) * (Math.PI / 180)
@@ -57,12 +60,12 @@ export function computeShapeLength(
       return Math.hypot(x2, y2)
     }
     case 'polygon': {
-      const sides = Math.round(params?.sides ?? 6)
+      const sides = Math.max(3, Math.min(12, Math.round(params?.sides ?? 6)))
       const side  = 2 * r * Math.sin(Math.PI / sides)
       return side * sides
     }
     case 'star': {
-      const points = Math.round(params?.sides ?? 5)
+      const points = Math.max(3, Math.min(12, Math.round(params?.sides ?? 5)))
       const outerR = params?.outerRadius ?? r
       const innerR = params?.innerRadius ?? outerR * 0.45
       const stepA  = Math.PI / points
@@ -76,6 +79,10 @@ export function computeShapeLength(
       const corners  = 2 * Math.PI * cr
       return straight + corners
     }
+    case 'spiral':
+    case 'wave':
+    case 'blob':
+      return defaultPathSampler.buildLengthTable(ShapeToPathConverter.convert(shapeKind, { width:w, height:h }, params)).totalLength
     default: return 0
   }
 }
@@ -135,6 +142,11 @@ export function buildShapePath(
   const cx = w / 2, cy = h / 2
 
   switch (shape) {
+    case 'spiral':
+    case 'wave':
+    case 'blob':
+      buildPathOnCanvas(ctx, ShapeToPathConverter.convert(shape, { width:w, height:h }, params))
+      return
     case 'circle': {
       const r = Math.min(w, h) / 2
       ctx.arc(cx, cy, r, 0, Math.PI * 2)
@@ -185,7 +197,7 @@ export function buildShapePath(
     }
 
     case 'polygon': {
-      const sides     = Math.max(3, Math.round(params?.sides ?? 6))
+      const sides     = Math.max(3, Math.min(12, Math.round(params?.sides ?? 6)))
       const r         = Math.min(w, h) / 2
       const roundness = Math.max(0, Math.min(1, params?.roundness ?? 0))
       const pts: [number, number][] = []
@@ -198,7 +210,7 @@ export function buildShapePath(
     }
 
     case 'star': {
-      const points    = Math.max(3, Math.round(params?.sides ?? 5))
+      const points    = Math.max(3, Math.min(12, Math.round(params?.sides ?? 5)))
       const outerR    = params?.outerRadius ?? Math.min(w, h) / 2
       const innerR    = params?.innerRadius ?? outerR * 0.45
       const roundness = Math.max(0, Math.min(1, params?.roundness ?? 0))

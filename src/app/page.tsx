@@ -14,18 +14,30 @@ import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
 import type { TimelineProperty } from './hooks/useKeyboard'
 import type { ShortcutContext } from '@/lib/shortcuts'
+import { deletionTargetForPanel, panelFromAttribute, shortcutContextForPanel, type EditorPanel } from '@/lib/editor/keyboardContext'
+import { resolveSelectedKeyframes } from '@/lib/timeline/keyframeSelection'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
+import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
+import { ImportActivityBar } from '@/components/import/ImportActivityBar'
 import { useImport }           from './hooks/useImport'
 import { useVideoPlaybackSync } from './hooks/useVideoPlaybackSync'
 import { useAudioEngine }      from './hooks/useAudioEngine'
+import AudioOutputControls from '@/components/timeline/AudioOutputControls'
+import { normalizedClipGain } from '@/lib/audio/audioRender'
+import { makePatchAudioClipCmd } from '@/lib/editor/commands-audio'
 import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
 import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
 import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
 import { FileVersioningControl } from '@/components/FileVersioningControl'
+import WelcomeScreen from '@/components/welcome/WelcomeScreen'
+import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
+import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
+import { useWelcomeScreen } from '@/components/welcome/useWelcomeScreen'
+import { createWelcomeProject, type WelcomeProjectSettings } from '@/lib/editor/welcomeProject'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
@@ -62,7 +74,7 @@ import FileMenu        from '@/components/TopToolbar/FileMenu'
 import RasterExportDialog from '@/components/export/RasterExportDialog'
 import SVGExportDialog   from '@/components/export/SVGExportDialog'
 import SequenceExportDialog from '@/components/export/SequenceExportDialog'
-import { exportHTML } from '@/lib/export'
+import {useSceneOutputActions} from './hooks/useSceneOutputActions'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
 import SpriteSheetImportModal from '@/components/modals/SpriteSheetImportModal'
@@ -98,7 +110,6 @@ import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 import CloneModal             from '@/components/modals/CloneModal'
 import ArrayModal             from '@/components/modals/ArrayModal'
-import AIPanel                from '@/components/AIPanel'
 import { makeCloneCmd, makeArrayCmd, makeCloneAlignCmd } from '@/lib/editor/commands-clone'
 import { makeConvertToRepeaterCmd, makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
@@ -176,6 +187,7 @@ export default function BuilderPage() {
     scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo,
     layerMetaById, getSiblingsInArray,
   } = editor
+  const welcome = useWelcomeScreen()
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
@@ -183,6 +195,7 @@ export default function BuilderPage() {
   //  - {name}_TIMESTAMP.json → version snapshots (every 10 min + manual)
   // No server / MongoDB / Git — pure browser file output.
   const fileVersioning = useFileVersioning(scene, {
+    documentSignal:editor.getDocumentSignal(),
     interval_ms: 500,
     fallback_ms: 10000,
     snapshot_ms: 600000, // 10 minutes
@@ -206,7 +219,6 @@ export default function BuilderPage() {
   // BL-05: WireParameterModal state — opened by PropertiesPanel 🔗, WiringListPanel, etc.
   const wireModal = useWireModal()
   const [showHelp,        setShowHelp]      = useState(false)
-  const [showAI,          setShowAI]        = useState(false)
 
   // BL-59 — Clone & Array modals. Source layer is captured at open time
   // so re-selection during the modal session doesn't change the target.
@@ -222,7 +234,7 @@ export default function BuilderPage() {
     'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
-    'particles', 'shortcuts',
+    'particles', 'shortcuts', 'player', 'scriptConsole', 'resourceMonitor',
   ])
 
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
@@ -265,6 +277,27 @@ export default function BuilderPage() {
   const dockContainerRef = useRef<HTMLDivElement | null>(null)
   /** UUID-based keyframe multi-selection — survives drag, persists across renders */
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
+  const selectTimeline = useCallback((id: string) => {
+    setSelectedTl(id)
+    setSelectedKfIds(new Set())
+  }, [])
+  const selectedKeyframes = useMemo(
+    () => resolveSelectedKeyframes(scene, selectedTlId, selectedKfIds),
+    [scene, selectedTlId, selectedKfIds],
+  )
+  // Timeline changes, undo and imports cannot leave invisible keys selected.
+  useEffect(() => {
+    const timeline = scene.timelines.find((tl) => tl.id === selectedTlId)
+    if (!timeline) {
+      const nextId = scene.timelines[0]?.id ?? ''
+      if (nextId !== selectedTlId) selectTimeline(nextId)
+    }
+    const valid = new Set(timeline?.tracks.flatMap((track) => track.keyframes.map((key) => key.id)) ?? [])
+    setSelectedKfIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => valid.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [scene.timelines, selectedTlId, selectTimeline])
   /** Editor preferences (snap, auto-key, graph editor mode) — outside undo */
   const [timelineSettings, setTimelineSettings] = useState<TimelineSettings>(DEFAULT_TIMELINE_SETTINGS)
 
@@ -308,7 +341,7 @@ export default function BuilderPage() {
   }, [selectedLayer?.id, selectedLayer?.type, dispatchTab])
 
   // ── Asset cache: loads images/videos referenced in scene.assets ──────────
-  const assetCache = useAssetCache(scene.assets)
+  const assetCache = useAssetCache(scene.assets, { managed: true })
 
   // Active timeline's work area confines playback to a sub-range when set.
   const activeWorkArea = useMemo(() => {
@@ -339,36 +372,54 @@ export default function BuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Video sync: keep each <video> element in step with the playhead ──────
-  useVideoPlaybackSync({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed })
-
-  // ── Audio engine: separate from canvas (Web Audio API) ───────────────────
-  useAudioEngine({ scene, currentTimeMs, isPlaying, playbackSpeed })
-
   // ── Interactive runtime: parameters / events / segments preview ──────────
   // Ephemeral state — never touches scene tree or undo history. Drives the
   // four "Interactive" panels and the canvas's runtime preview overlay.
   const [mcpTimelineIds, setMCPTimelineIds] = useState<string[] | null>(null)
   const playbackScene = useMemo(() => mcpTimelineIds ? { ...scene, timelines: scene.timelines.filter(t => mcpTimelineIds.includes(t.id)), stateMachines: [] } : scene, [scene, mcpTimelineIds])
-  const runtime = useInteractiveRuntime(playbackScene)
+  const runtime = useInteractiveRuntime(playbackScene, { playbackDriven: isPlaying })
   const mcp = useMCPBridge({ editor, assets: assetCache, selectedTimelineId: selectedTlId, currentTimeMs, isPlaying,
     getLiveFrame: () => frame,
     getRuntimeState: () => ({ parameters: Object.fromEntries(runtime.paramValues), stateMachines: Array.from(runtime.smRuntimes.values(), rt => ({id:rt.sm.id,stateId:rt.currentStateId,stateName:rt.currentState?.name,timelineId:rt.activeTimelineId})) }),
     setRuntimeTest: runtime.setSMTestActive,
-    selectTimeline: setSelectedTl, isolateTimelines: setMCPTimelineIds, seek: handleSeek, playToggle: handlePlayToggle, setSpeed: setPlaybackSpeed,
+    selectTimeline, isolateTimelines: setMCPTimelineIds, seek: handleSeek, playToggle: handlePlayToggle, setSpeed: setPlaybackSpeed,
     setParameter: runtime.setParamOverride, dispatchEvent: runtime.dispatchSMEvent,
+    getAudioState: () => audioTransport.getState(),
   })
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
   const frame = useMemo(
-    () => runtime.evaluateFrame(currentTimeMs),
+    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs)),
     // We deliberately include paramValues so slider edits cause a re-eval.
-    // runtime.segmentTick increments on every animation frame while a
-    // segment is playing — without it the segment freezes at startMs.
+    // One revision includes segment/test playback and queued events while paused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.segmentTick, runtime.smTestTick],
+    [scene, playbackScene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.frameRevision],
   )
+
+  // Video properties use the same evaluated frame as the canvas and audio.
+  useVideoPlaybackSync({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides: frame.overrides })
+
+  const audioTimelineIds = useMemo(() => {
+    if (mcpTimelineIds) return mcpTimelineIds
+    if (!scene.stateMachines?.length) return undefined
+    const owned = new Set(scene.stateMachines.flatMap(machine => machine.states.map(state => state.timelineId)))
+    const active = new Set(Array.from(runtime.smRuntimes.values()).map(machine => machine.activeTimelineId))
+    return scene.timelines.filter(timeline => !owned.has(timeline.id) || active.has(timeline.id)).map(timeline => timeline.id)
+  }, [scene.timelines, scene.stateMachines, mcpTimelineIds, runtime.smRuntimes, frame])
+  const audioTransport = useAudioEngine({ scene, currentTimeMs, isPlaying, playbackSpeed,
+    overrides: frame.overrides, timelineIds: audioTimelineIds,
+    masterVolume: scene.composition.audioMuted ? 0 : scene.composition.audioVolume ?? 1 })
+  const normalizeAudio = useCallback(async (layerId: string) => {
+    const revision = editor.getRevision()
+    try {
+      const normalized = await normalizedClipGain(editor.getScene(), layerId)
+      if (editor.getRevision() !== revision) throw new Error('Scene changed while measuring audio; try again.')
+      dispatchCommand(makePatchAudioClipCmd(layerId, { volume: normalized.volume }))
+      if (normalized.warnings.length) toast.warning('Audio normalized', { detail: normalized.warnings.join(' ') })
+      else toast.success('Source peak normalized to −1 dBFS')
+    } catch (error) { toast.error('Audio normalization failed', { detail: (error as Error).message }) }
+  }, [editor, dispatchCommand])
 
   /**
    * Click → replace selection. Shift+click → toggle in/out. Keeps the most
@@ -395,60 +446,60 @@ export default function BuilderPage() {
 
   // ── Universal import pipeline (BL-04–06) ─────────────────────────────────
   // Routes any File through ImportManager → atomic command → dispatch.
-  // SVG, Lottie and Chorono-scene imports flow through here; legacy media
-  // handlers below still exist for the existing per-type file inputs.
+  // All media/document pickers below use this document-scoped pipeline.
   const {
     importFile: importAnyFile,
+    openScene: openSceneFile,
     importFiles: importAnyFiles,
     importUrl: importAnyUrl,
     importFromClipboard: importAnyClipboard,
     importSpriteSheet,
     preview: previewImport,
+    activeCount: importActiveCount, settlingCount: importSettlingCount,
+    label: importLabel, progress: importProgress, cancel: cancelImports,
   } = useImport({
-    dispatchCommand,
+    dispatchCommand, getDocumentSignal: editor.getDocumentSignal,
+    selectedTimelineId: selectedTlId, currentTimeMs,
     onSelectLayer: (id) => selectLayer(id),
   })
 
-  const [showImportUrl, setShowImportUrl] = useState(false)
+  const [importUrlDocument, setImportUrlDocument] = useState<AbortSignal | null>(null)
   // Single-file imports show a preflight preview before committing.
-  const [pendingImport, setPendingImport] = useState<{ file: File; preflight: ImportPreflight } | null>(null)
+  const [pendingImport, setPendingImport] = useState<{ file: File; preflight: ImportPreflight; document: AbortSignal } | null>(null)
   // Sprite-sheet import: an image awaiting grid configuration.
-  const [pendingSprite, setPendingSprite] = useState<File | null>(null)
+  const [pendingSprite, setPendingSprite] = useState<{ file: File; document: AbortSignal } | null>(null)
+  const importDocument = editor.getDocumentSignal()
+  const previewRequest = useRef(0)
+  useEffect(() => {
+    setPendingImport(value => value?.document === importDocument ? value : null)
+    setPendingSprite(value => value?.document === importDocument ? value : null)
+    setImportUrlDocument(value => value === importDocument ? value : null)
+  }, [importDocument])
 
   const openSpriteSheetPicker = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/png,image/jpeg,image/webp'
-    input.onchange = () => {
-      const f = input.files?.[0]
-      if (f) setPendingSprite(f)
-    }
-    input.click()
-  }, [])
+    openDocumentFilePicker({ accept: 'image/png,image/jpeg,image/webp', getDocumentSignal: editor.getDocumentSignal,
+      onFiles: files => setPendingSprite({ file: files[0], document: editor.getDocumentSignal() }) })
+  }, [editor.getDocumentSignal])
 
   const handleImportFiles = useCallback(async (files: FileList | File[]) => {
+    const scope = editor.getDocumentSignal(), request = ++previewRequest.current
+    setPendingImport(null)
     const list = Array.from(files)
     if (list.length === 1) {
       const preflight = await previewImport(list[0])
-      if (preflight) { setPendingImport({ file: list[0], preflight }); return }
-      // Preflight failed — fall back to a direct import attempt.
-      void importAnyFile(list[0])
+      if (preflight && request === previewRequest.current && !scope.aborted && editor.getDocumentSignal() === scope) {
+        setPendingImport({ file: list[0], preflight, document: scope })
+      }
       return
     }
     void importAnyFiles(list)
-  }, [previewImport, importAnyFile, importAnyFiles])
+  }, [previewImport, importAnyFiles, editor.getDocumentSignal])
 
   // Programmatic file picker for the File menu "Import File…" entry.
   const openImportPicker = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.multiple = true
-    input.accept = IMPORT_ACCEPT
-    input.onchange = () => {
-      if (input.files && input.files.length > 0) void handleImportFiles(input.files)
-    }
-    input.click()
-  }, [handleImportFiles])
+    openDocumentFilePicker({ accept: IMPORT_ACCEPT, multiple: true, getDocumentSignal: editor.getDocumentSignal,
+      onFiles: files => { void handleImportFiles(files) } })
+  }, [handleImportFiles, editor.getDocumentSignal])
 
   // ── Layer commands ───────────────────────────────────────────────────────
   // Layer creation is fully registry-driven: every kind looks up its
@@ -485,8 +536,10 @@ export default function BuilderPage() {
   const convertTextToSpline = useCallback(async () => {
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
     if (layer?.type !== 'text' || !layer.text?.value) return
+    const document=editor.getDocumentSignal()
     try {
-      const data = await textToSplineData(layer.text.value, layer.text.fontSize ?? 48)
+      const data = await textToSplineData(layer.text.value, layer.text.fontSize ?? 48,undefined,{signal:document})
+      if(document.aborted)return
       if (!data) { toast.info('No drawable glyphs to convert'); return }
       const splineLayer = newSplineLayerFromData(data, {
         name: `${layer.name} Outlines`,
@@ -496,9 +549,10 @@ export default function BuilderPage() {
       dispatchCommand(makeAddLayerCmd(splineLayer))
       selectLayer(splineLayer.id)
     } catch (err) {
+      if(document.aborted)return
       toast.error('Text → Spline failed: ' + (err as Error).message)
     }
-  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer,editor.getDocumentSignal])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -570,21 +624,25 @@ export default function BuilderPage() {
   // Which panel last received a pointer-down. Lets the global Delete shortcut
   // act in-context: in the timeline it strips the layer's animation, elsewhere
   // (canvas / layer list) it deletes the layer itself.
-  const activePanelRef = useRef<'canvas' | 'timeline' | 'layers' | null>(null)
+  const activePanelRef = useRef<EditorPanel>('canvas')
   useEffect(() => {
-    const onDown = (e: PointerEvent) => {
-      const inTimeline = !!(e.target as HTMLElement | null)?.closest?.('[data-panel="timeline"]')
-      activePanelRef.current = inTimeline ? 'timeline' : 'canvas'
+    const updatePanel = (e: Event) => {
+      const panel = (e.target as HTMLElement | null)?.closest?.<HTMLElement>('[data-panel]')?.dataset.panel
+      activePanelRef.current = panelFromAttribute(panel, activePanelRef.current)
     }
-    document.addEventListener('pointerdown', onDown, true)
-    return () => document.removeEventListener('pointerdown', onDown, true)
+    document.addEventListener('pointerdown', updatePanel, true)
+    document.addEventListener('focusin', updatePanel, true)
+    return () => {
+      document.removeEventListener('pointerdown', updatePanel, true)
+      document.removeEventListener('focusin', updatePanel, true)
+    }
   }, [])
 
   // Maps the last-focused panel to a shortcut context so the same key can do
   // different things in the canvas vs the timeline (e.g. S = Scale tool on the
   // canvas, Show Scale track in the timeline). Stable identity (reads a ref).
   const getShortcutContext = useCallback(
-    (): ShortcutContext => (activePanelRef.current === 'timeline' ? 'timeline' : 'canvas'),
+    (): ShortcutContext => shortcutContextForPanel(activePanelRef.current),
     [],
   )
 
@@ -1053,101 +1111,30 @@ export default function BuilderPage() {
   const [showSequenceExport, setShowSequenceExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
-  const saveSceneJson = useCallback(() => {
-    const blob = new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `${scene.composition.id || 'scene'}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [scene])
-
-  const copySceneJson = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(scene, null, 2))
-      toast.success('Scene JSON copied to clipboard')
-    } catch (err) {
-      toast.error('Clipboard write failed', { detail: (err as Error).message })
-      console.warn('Clipboard write failed:', err)
-    }
-  }, [scene])
-
-  const exportSceneHtml = useCallback(() => {
-    try {
-      const { html, filename } = exportHTML(scene)
-      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success(`Exported ${filename}`)
-    } catch (err) {
-      toast.error('HTML export failed', { detail: (err as Error).message })
-    }
-  }, [scene])
+  const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(scene,importDocument)
 
   const openSceneJson = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json,application/json'
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-      try {
-        const text = await file.text()
-        const parsed = JSON.parse(text)
+    openDocumentFilePicker({ accept: '.json,application/json', getDocumentSignal: editor.getDocumentSignal,
+      onFiles: files => { void openSceneFile(files[0], parsed => {
         resetScene(parsed)
         selectLayer(null)
         handleSeek(0)
-        toast.success(`Loaded scene from ${file.name}`)
-      } catch (err) {
-        toast.error('Failed to load scene', { detail: (err as Error).message })
-      }
-    }
-    input.click()
-  }, [resetScene, selectLayer, handleSeek])
+        setSelectedTl(parsed.timelines[0]?.id ?? '')
+        welcome.close()
+        toast.success(`Loaded scene from ${files[0].name}`)
+      }, error => welcome.setError(`Could not open project: ${error.message}`)) } })
+  }, [editor.getDocumentSignal, openSceneFile, resetScene, selectLayer, handleSeek, welcome.close, welcome.setError])
 
-  const newScene = useCallback(() => {
-    if (!confirm('Start a new empty scene? Unsaved changes will be lost.')) return
-    resetScene(emptyScene())
+  const newScene = useCallback((settings?: WelcomeProjectSettings): boolean => {
+    if (editor.getRevision() > 0 && !confirm('Start a new project? Unsaved changes will be lost.')) return false
+    const next = settings ? createWelcomeProject(settings) : emptyScene()
+    resetScene(next)
     selectLayer(null)
     handleSeek(0)
-  }, [resetScene, selectLayer, handleSeek])
-
-  // ── Runtime JSON export — runs validator + optimizer + triggers download ─
-  const exportRuntimeJson = useCallback(async () => {
-    try {
-      const { defaultRuntimeExporter, RuntimeExportError } = await import('@/lib/export')
-      const pkg = defaultRuntimeExporter.export(scene)
-      const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `chorono-runtime-${Date.now()}.json`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success('Runtime JSON exported', {
-        detail: pkg.warnings.length > 0
-          ? `${pkg.warnings.length} warning(s) — check console`
-          : `${scene.layers.length} layers, ${scene.timelines.length} timelines`,
-      })
-      if (pkg.warnings.length > 0) {
-        console.info(`Runtime export: ${pkg.warnings.length} warning(s)`, pkg.warnings)
-      }
-    } catch (err: any) {
-      if (err?.name === 'RuntimeExportError') {
-        const errMsg = err.validation.errors.map((e: any) => '• ' + e.message).join('\n')
-        toast.error('Runtime export validation failed', { detail: errMsg, duration: 8000 })
-        console.error('Runtime export validation failed:', err.validation)
-      } else {
-        toast.error('Runtime export error', { detail: err?.message ?? String(err) })
-        console.error('Runtime export error:', err)
-      }
-    }
-  }, [scene])
+    setSelectedTl(next.timelines[0]?.id ?? '')
+    welcome.close()
+    return true
+  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close])
 
   const ungroupSelected = useCallback(async () => {
     if (!selectedLayerId) return
@@ -1188,22 +1175,12 @@ export default function BuilderPage() {
 
   // ── Bulk delete selected keyframes (single undo step) ───────────────────
   const deleteSelectedKeyframes = useCallback(() => {
-    if (selectedKfIds.size === 0) return false
-    const items: KfDeletion[] = []
-    for (const tl of scene.timelines) {
-      for (const track of tl.tracks) {
-        for (const kf of track.keyframes) {
-          if (selectedKfIds.has(kf.id)) {
-            items.push({ timelineId: tl.id, target: track.target, kf })
-          }
-        }
-      }
-    }
+    const items: KfDeletion[] = selectedKeyframes
     if (items.length === 0) return false
     dispatchCommand(makeBulkDeleteKfCmd(items))
     setSelectedKfIds(new Set())
     return true
-  }, [selectedKfIds, scene.timelines, dispatchCommand])
+  }, [selectedKeyframes, dispatchCommand])
 
   // ── Timeline property shortcuts (After Effects-style P/S/R/T + Alt+key) ───
   // Each "property" maps to the transform sub-paths it keys together: position
@@ -1271,19 +1248,18 @@ export default function BuilderPage() {
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
+    isTransactionActive: editor.isTransactionActive,
     onUndo: undo,
     onRedo: redo,
     onPlayToggle: handlePlayToggle,
     onStepBack:    (frames) => handleSeek(Math.max(0, currentTimeMs - (frames * 1000) / frameRate)),
     onStepForward: (frames) => handleSeek(Math.min(maxDuration, currentTimeMs + (frames * 1000) / frameRate)),
     onDeleteSelected: () => {
-      // Prefer deleting selected keyframes (timeline focus) over the layer.
-      if (deleteSelectedKeyframes()) return
-      if (!selectedLayerId) return
-      // In the timeline, Delete clears the layer's animation but keeps the
-      // object; in the canvas / layer list it deletes the layer itself.
-      if (activePanelRef.current === 'timeline') deleteLayerAnimation(selectedLayerId)
-      else deleteLayer(selectedLayerId)
+      if (selectedLayer?.type === 'audio' && selectedLayer.locked) return
+      const target = deletionTargetForPanel(activePanelRef.current, selectedKeyframes.length > 0, !!selectedLayerId, selectedLayer?.type)
+      if (target === 'keyframes') deleteSelectedKeyframes()
+      else if (target === 'animation' && selectedLayerId) deleteLayerAnimation(selectedLayerId)
+      else if (target === 'layer' && selectedLayerId) deleteLayer(selectedLayerId)
     },
     onDuplicateSelected: duplicateSelectedLayer,
     onCopy:  () => clipboard.copySelected(),
@@ -1333,6 +1309,7 @@ export default function BuilderPage() {
       { id: 'particles',      title: 'Particle',       render: () => null },
       { id: 'scriptConsole',  title: 'Script',         render: () => null },
       { id: 'shortcuts',      title: 'Shortcuts',      render: () => null },
+      { id: 'resourceMonitor', title: 'Resources & Performance', render: () => null },
     ]
     return makeRegistry(defs)
   }, [])
@@ -1341,14 +1318,17 @@ export default function BuilderPage() {
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
 
+      <ImportActivityBar activeCount={importActiveCount} settlingCount={importSettlingCount}
+        label={importLabel} progress={importProgress} onCancel={cancelImports} />
+
       {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
+      <header data-panel="canvas" className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
         <FileMenu
           filename={scene.composition.id}
           onRename={(next) => updateComposition({ ...scene.composition, id: next })}
           onNewScene={newScene}
           onImportFile={openImportPicker}
-          onImportUrl={() => setShowImportUrl(true)}
+          onImportUrl={() => setImportUrlDocument(editor.getDocumentSignal())}
           onImportClipboard={() => { void importAnyClipboard() }}
           onImportSpriteSheet={openSpriteSheetPicker}
           onOpenSceneJson={openSceneJson}
@@ -1360,6 +1340,8 @@ export default function BuilderPage() {
           onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
+          onShowWelcome={welcome.open}
+          onShowResources={() => dock.dispatchRestorePanel('resourceMonitor')}
           onResetLayout={dock.resetLayout}
           panelRegistry={panelRegistry}
           dockLayout={dock.layout}
@@ -1502,20 +1484,15 @@ export default function BuilderPage() {
           {manualPreview ? <>⏹ Exit Preview</> : <>▶ Preview</>}
         </button>
 
-        {/* AI Planner toggle — chat panel for natural-language animation control */}
-        <button
-          onClick={() => setShowAI((v) => !v)}
-          title="AI Planner (right side chat panel)"
-          className={`px-3 py-1.5 text-xs rounded font-medium transition-colors flex items-center gap-1.5
-            ${showAI
-              ? 'bg-purple-500 hover:bg-purple-400 text-white'
-              : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
-        >
-          🤖 AI
-        </button>
-
         {/* Panel registry is created below — passed here via context/props */}
         {/* Primary export — rest live inside FileMenu */}
+        <button
+          onClick={() => dock.dispatchRestorePanel('resourceMonitor')}
+          title="Open Resources & Performance"
+          className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
+        >
+          Resources
+        </button>
         <button
           onClick={() => setShowJson(true)}
           title="Inspect raw scene JSON"
@@ -1547,6 +1524,7 @@ export default function BuilderPage() {
                     selectedIds={selectedLayerIds}
                     onSelect={selectLayer}
                     onAdd={addLayer}
+                    getDocumentSignal={editor.getDocumentSignal}
                     onAddImage={addImageLayerFromFile}
                     onAddVideo={addVideoLayerFromFile}
                     onImportSvg={importSvgFile}
@@ -1663,6 +1641,7 @@ export default function BuilderPage() {
                   <SceneCanvas
                     scene={scene}
                     editor={editor}
+                    getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
                     selectedLayerId={selectedLayerId}
                     selectedLayerIds={selectedLayerIds}
@@ -1837,6 +1816,9 @@ export default function BuilderPage() {
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
                     <PropertiesPanel
                       layer={selectedLayer}
+                      currentTimeMs={currentTimeMs}
+                      selectedTimelineId={selectedTlId}
+                      onNormalizeAudio={normalizeAudio}
                       composition={scene.composition}
                       onLayerChange={updateLayer}
                       onCompositionChange={updateComposition}
@@ -1862,6 +1844,7 @@ export default function BuilderPage() {
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
                         scene={scene}
+                        selectedTimelineId={selectedTlId}
                         selectedKfIds={selectedKfIds}
                         editor={editor}
                       />
@@ -1887,7 +1870,7 @@ export default function BuilderPage() {
                       playbackSpeed={playbackSpeed}
                       onTimeChange={handleSeek}
                       onPlayToggle={handlePlayToggle}
-                      onSelectTimeline={id => { setMCPTimelineIds(null); setSelectedTl(id) }}
+                      onSelectTimeline={id => { setMCPTimelineIds(null); selectTimeline(id) }}
                       onSelectKeyframes={setSelectedKfIds}
                       onSelectLayer={selectLayer}
                       onToggleLayerFlag={toggleLayerFlag}
@@ -1901,6 +1884,11 @@ export default function BuilderPage() {
                       onEditWire={wireModal.openForEdit}
                       onWireRequest={wireModal.openForTarget}
                       revealProperty={revealProperty}
+                      audioControls={<AudioOutputControls scene={scene} timelineId={selectedTlId}
+                        documentSignal={importDocument}
+                        getState={audioTransport.getState} subscribeMeter={audioTransport.subscribeMeter}
+                        onMasterChange={volume => updateComposition({ ...scene.composition, audioVolume: volume })}
+                        onMasterMute={muted => updateComposition({ ...scene.composition, audioMuted: muted })} />}
                     />
                   </div>
                 ),
@@ -1908,6 +1896,7 @@ export default function BuilderPage() {
               {
                 id: 'curveEditor', title: 'Curve Editor',
                 render: () => (
+                  <div className="h-full min-h-0 overflow-hidden" data-panel="curveEditor">
                   <CurveEditor
                     scene={scene}
                     editor={editor}
@@ -1918,11 +1907,13 @@ export default function BuilderPage() {
                     selectedKfIds={selectedKfIds}
                     onSelectKeyframes={setSelectedKfIds}
                   />
+                  </div>
                 ),
               },
               {
                 id: 'dopeSheet', title: 'Dope Sheet',
                 render: () => (
+                  <div className="h-full min-h-0 overflow-hidden" data-panel="dopeSheet">
                   <DopeSheetPanel
                     scene={scene}
                     editor={editor}
@@ -1937,6 +1928,7 @@ export default function BuilderPage() {
                     onSelectKeyframes={setSelectedKfIds}
                     onSelectLayer={selectLayer}
                   />
+                  </div>
                 ),
               },
               {
@@ -2003,6 +1995,8 @@ export default function BuilderPage() {
                   <AssetsPanel
                     scene={scene}
                     editor={editor}
+                    selectedTimelineId={selectedTlId}
+                    currentTimeMs={currentTimeMs}
                     onSelectLayer={(id) => selectLayer(id)}
                     onImportFiles={handleImportFiles}
                   />
@@ -2035,6 +2029,10 @@ export default function BuilderPage() {
                     dispatchCommand={dispatchCommand}
                   />
                 ),
+              },
+              {
+                id: 'resourceMonitor', title: 'Resources & Performance',
+                render: () => <ResourceMonitorPanel scene={scene} assets={assetCache} audio={audioTransport} isPlaying={isPlaying} />,
               },
             ] satisfies PanelDefinition[])
             // Fullscreen canvas: skip the dock entirely and render only the
@@ -2075,7 +2073,13 @@ export default function BuilderPage() {
       </DockDragProvider>
 
       {/* ── JSON Modal ─────────────────────────────────────────────── */}
-      {showJson && <JsonModal scene={scene} onClose={() => setShowJson(false)} />}
+      {welcome.isOpen && <WelcomeScreen
+        composition={scene.composition} layerCount={scene.layers.length}
+        showOnStartup={welcome.showOnStartup} onStartupChange={welcome.changeStartup}
+        error={welcome.error} onCreate={newScene} onOpenProject={openSceneJson} onContinue={welcome.close}
+      />}
+
+      {showJson && <JsonModal scene={scene} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
 
       {/* ── Composition Preset Modal ───────────────────────────────── */}
       {showCompModal && (
@@ -2093,6 +2097,7 @@ export default function BuilderPage() {
       {showRasterExport && (
         <RasterExportDialog
           scene={scene}
+          documentSignal={importDocument}
           assets={assetCache}
           timeMs={currentTimeMs}
           onClose={() => setShowRasterExport(false)}
@@ -2111,6 +2116,7 @@ export default function BuilderPage() {
       {showSvgExport && (
         <SVGExportDialog
           scene={scene}
+          documentSignal={importDocument}
           timeMs={currentTimeMs}
           onClose={() => setShowSvgExport(false)}
           onExported={(filename, warnings) => {
@@ -2128,6 +2134,7 @@ export default function BuilderPage() {
       {showSequenceExport && (
         <SequenceExportDialog
           scene={scene}
+          documentSignal={importDocument}
           assets={assetCache}
           onClose={() => setShowSequenceExport(false)}
           onExported={(filename, frameCount, warnings) => {
@@ -2140,28 +2147,28 @@ export default function BuilderPage() {
       )}
 
       {/* ── Import from URL (BL-09) ──────────────────────────────────── */}
-      {showImportUrl && (
+      {importUrlDocument === importDocument && !importDocument.aborted && (
         <ImportUrlModal
-          onImport={(url) => { void importAnyUrl(url) }}
-          onClose={() => setShowImportUrl(false)}
+          onImport={(url) => { if (!importUrlDocument?.aborted && importUrlDocument === editor.getDocumentSignal()) void importAnyUrl(url) }}
+          onClose={() => setImportUrlDocument(null)}
         />
       )}
 
       {/* ── Import preflight preview (BL-09) ──────────────────────────── */}
-      {pendingImport && (
+      {pendingImport && pendingImport.document === importDocument && !importDocument.aborted && (
         <ImportPreviewModal
           fileName={pendingImport.file.name}
           preflight={pendingImport.preflight}
-          onConfirm={() => { void importAnyFile(pendingImport.file); setPendingImport(null) }}
+          onConfirm={() => { if (!pendingImport.document.aborted && pendingImport.document === editor.getDocumentSignal()) void importAnyFile(pendingImport.file); setPendingImport(null) }}
           onCancel={() => setPendingImport(null)}
         />
       )}
 
       {/* ── Sprite sheet grid import (BL-07b) ─────────────────────────── */}
-      {pendingSprite && (
+      {pendingSprite && pendingSprite.document === importDocument && !importDocument.aborted && (
         <SpriteSheetImportModal
-          file={pendingSprite}
-          onImport={(opts) => { void importSpriteSheet(pendingSprite, opts) }}
+          file={pendingSprite.file}
+          onImport={(opts) => { if (!pendingSprite.document.aborted && pendingSprite.document === editor.getDocumentSignal()) void importSpriteSheet(pendingSprite.file, opts) }}
           onClose={() => setPendingSprite(null)}
         />
       )}
@@ -2184,18 +2191,6 @@ export default function BuilderPage() {
           allLayers={scene.layers}
           onApply={handleArrayApply}
           onClose={() => setArrayModalSource(null)}
-        />
-      )}
-
-      {/* ── AI Planner side panel ──────────────────────────────────── */}
-      {showAI && (
-        <AIPanel
-          scene={scene}
-          dispatchCommand={dispatchCommand}
-          currentTimeMs={currentTimeMs}
-          selectedLayerId={selectedLayerId}
-          selectedTimelineId={selectedTlId}
-          onClose={() => setShowAI(false)}
         />
       )}
 

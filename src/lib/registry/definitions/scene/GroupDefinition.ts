@@ -24,5 +24,6 @@ export const groupDefinition: LayerDefinition = {
   iconKey:  'group',
   category: 'Groups',
   createDefault: () => newGroupLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => [transformGroup(), appearanceGroup()],
 }

@@ -7,6 +7,10 @@
 //
 // Output is a single asset + single layer → an 'asset' import.
 
+import type { MediaProbeSource } from '../../../asset/metadata'
+import { editorMediaProbes } from '../../../asset/metadata/editorMediaProbes'
+import { checkImportExecution, type ImportExecution } from '../../resources/ImportExecution'
+import { withImportSource } from '../../resources/importSources'
 import { BaseImportHandler } from '../BaseHandler'
 import { newFrameSequenceLayer } from '../../../defaults'
 import { buildSpriteGrid } from '../../../frameSequence/spriteGrid'
@@ -17,15 +21,21 @@ function isSpriteOptions(o: ImportOptions | undefined): o is SpriteImportOptions
   return !!o && typeof (o as SpriteImportOptions).columns === 'number'
 }
 
+/** Import orchestration borrows the shared probe owner; native handles, byte
+ * reservations and cancellation never enter asset/scene/undo JSON. */
 export class SpriteSheetHandler extends BaseImportHandler {
+  /** Private hosts can inject a narrow probe port without constructing DOM media. */
+  constructor(private readonly probes: MediaProbeSource = editorMediaProbes) { super() }
+
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = ['image/spritesheet']
 
-  async preflight(file: File, options?: ImportOptions): Promise<ImportPreflight> {
-    const { width, height } = await this.probeImageDims(file)
-    const cols = isSpriteOptions(options) ? Math.max(1, Math.floor(options.columns)) : 1
-    const rows = isSpriteOptions(options) ? Math.max(1, Math.floor(options.rows))    : 1
-    const frames = cols * rows
+  /** Probe source metadata within bounded shared capacity, without retaining a native handle. */
+  async preflight(file: File, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
+    const { width, height } = await this.probes.image(file, execution)
+    const grid = buildSpriteGrid('preflight', { imageWidth: width, imageHeight: height,
+      columns: isSpriteOptions(options) ? options.columns : 1, rows: isSpriteOptions(options) ? options.rows : 1 })
+    const cols = grid.columns, rows = grid.rows, frames = grid.frameCount
 
     return {
       source: this.makeSource(file),
@@ -46,10 +56,12 @@ export class SpriteSheetHandler extends BaseImportHandler {
     }
   }
 
+  /** Validate/probe before creator source adoption; caller owns final result publication. */
   async handle(
     file: File,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult> {
     const startMs = Date.now()
     this.reportProgress(onProgress, 'reading', 'Reading sprite sheet…', 0.2)
@@ -58,81 +70,76 @@ export class SpriteSheetHandler extends BaseImportHandler {
       throw new Error('Sprite sheet import requires grid options (columns, rows)')
     }
 
-    const url = URL.createObjectURL(file)
-    const { width, height } = await this.probeImageDims(file)
-    const assetId = this.generateAssetId()
+    const { width, height } = await this.probes.image(file, execution)
+    checkImportExecution(execution)
+    return withImportSource(file, async (url) => {
+      const assetId = this.generateAssetId()
 
-    this.reportProgress(onProgress, 'converting', 'Building frame sequence…', 0.7)
+      this.reportProgress(onProgress, 'converting', 'Building frame sequence…', 0.7)
 
-    const seq = buildSpriteGrid(assetId, {
-      imageWidth:  width,
-      imageHeight: height,
-      columns:     options.columns,
-      rows:        options.rows,
-      frameCount:  options.frameCount,
-      fps:         options.fps,
-      loop:        options.loop,
-    })
+      const seq = buildSpriteGrid(assetId, {
+        imageWidth:  width,
+        imageHeight: height,
+        columns:     options.columns,
+        rows:        options.rows,
+        frameCount:  options.frameCount,
+        fps:         options.fps,
+        loop:        options.loop,
+      })
 
-    const asset: Asset = {
-      id:        assetId,
-      name:      file.name,
-      type:      'spriteSheet',
-      url,
-      width,
-      height,
-      frameRate: seq.fps,
-      storage:   { mode: 'external', originalFileName: file.name },
-      metadata: {
-        filesize:   file.size,
-        importedAt: Date.now(),
-        tags:       [],
-        notes:      `${seq.frameCount} frames · ${seq.columns}×${seq.rows} grid @ ${seq.fps}fps`,
-      },
-      runtime: { objectUrl: url },
-    }
+      const asset: Asset = {
+        id:        assetId,
+        name:      file.name,
+        type:      'spriteSheet',
+        url,
+        width,
+        height,
+        frameRate: seq.fps,
+        storage:   { mode: 'external', originalFileName: file.name },
+        metadata: {
+          filesize:   file.size,
+          importedAt: Date.now(),
+          tags:       [],
+          notes:      `${seq.frameCount} frames · ${seq.columns}×${seq.rows} grid @ ${seq.fps}fps`,
+        },
+        runtime: { objectUrl: url },
+      }
 
-    const layer = newFrameSequenceLayer(seq, seq.frameWidth, seq.frameHeight)
+      const layer = newFrameSequenceLayer(seq, seq.frameWidth, seq.frameHeight)
 
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
+      this.reportProgress(onProgress, 'complete', 'Done', 1)
+      checkImportExecution(execution)
 
-    return {
-      id:      this.generateId(),
-      source:  this.makeSource(file),
-      format:  'image/spritesheet',
-      kind:    'asset',
-      assets:  [asset],
-      layers:  [layer],
-      groups:  [],
-      tracks:  [],
-      timelines: [],
-      commands:  [],
-      warnings:  [],
-      errors:             [],
-      unsupportedFeatures: [],
-      report: {
-        title:          'Sprite Sheet Import',
-        sourceFileName: file.name,
-        format:         'image/spritesheet',
-        created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
-        warnings:       [],
-        errors:         [],
+      return {
+        id:      this.generateId(),
+        source:  this.makeSource(file),
+        format:  'image/spritesheet',
+        kind:    'asset',
+        assets:  [asset],
+        layers:  [layer],
+        groups:  [],
+        tracks:  [],
+        timelines: [],
+        commands:  [],
+        warnings:  [],
+        errors:             [],
         unsupportedFeatures: [],
-        suggestions:    [`Imported ${seq.frameCount}-frame sequence @ ${seq.fps}fps — adjust FPS/loop in the layer properties.`],
-        durationMs:     Date.now() - startMs,
-      },
-    }
+        report: {
+          title:          'Sprite Sheet Import',
+          sourceFileName: file.name,
+          format:         'image/spritesheet',
+          created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
+          warnings:       [],
+          errors:         [],
+          unsupportedFeatures: [],
+          suggestions:    [`Imported ${seq.frameCount}-frame sequence @ ${seq.fps}fps — adjust FPS/loop in the layer properties.`],
+          durationMs:     Date.now() - startMs,
+        },
+      }
+    })
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
-  private probeImageDims(file: File): Promise<{ width: number; height: number }> {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.onload  = () => { URL.revokeObjectURL(url); resolve({ width: img.naturalWidth, height: img.naturalHeight }) }
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`Failed to load image: ${file.name}`)) }
-      img.src = url
-    })
-  }
+
 }

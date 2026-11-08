@@ -1,6 +1,6 @@
 'use client'
 import { useState, useCallback, useMemo } from 'react'
-import type { ChronoScene, Timeline } from '@/lib/types'
+import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { TimelineSettings } from '@/lib/types'
 import DopeSheetToolbar from './DopeSheetToolbar'
@@ -65,12 +65,6 @@ export default function DopeSheetPanel({
     setUiState(prev => ({ ...prev, [key]: value }))
   }, [])
 
-  // Update selected keyframes
-  const handleSelectKeyframes = useCallback((kfIds: Set<string>) => {
-    setUiState(prev => ({ ...prev, selectedKfIds: kfIds }))
-    onSelectKeyframes(kfIds)
-  }, [onSelectKeyframes])
-
   if (!selectedTimeline) {
     return (
       <div className="dope-sheet-panel">
@@ -93,17 +87,16 @@ export default function DopeSheetPanel({
         scene={scene}
         selectedTimeline={selectedTimeline}
         editor={editor}
+        settings={settings}
         selectedLayerId={selectedLayerId}
-        selectedKfIds={uiState.selectedKfIds}
-        collapsedNodeIds={uiState.collapsedNodeIds}
+        selectedKfIds={selectedKfIds}
         onToggleExpand={toggleNodeExpand}
-        onSelectKeyframes={handleSelectKeyframes}
+        onSelectKeyframes={onSelectKeyframes}
         onSelectLayer={onSelectLayer}
         currentTimeMs={currentTimeMs}
         isPlaying={isPlaying}
         onTimeChange={onTimeChange}
         uiState={uiState}
-        onUpdateUIState={setUiState}
       />
     </div>
   )

@@ -15,7 +15,8 @@
  *   - dropping onto a descendant of the dragged layer is rejected
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import type { VirtualRowAttributes } from '@/components/virtualization/WindowedRows'
 import type { Layer, Timeline } from '@/lib/types'
 import type {
   ColumnDefinition,
@@ -33,6 +34,7 @@ export interface DropTargetState {
 
 interface Props {
   row: Row
+  attributes?: VirtualRowAttributes
   columns: ColumnDefinition[]
   isSelected:   boolean
   isPrimary:    boolean
@@ -86,16 +88,8 @@ export default function SceneExplorerRow(props: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [hovered, setHovered] = useState(false)
 
-  // BL-54 — When this row becomes the primary selection from an EXTERNAL
-  // source (canvas click, keyboard nav, AI), scroll it into view. We only
-  // react to isPrimary transitions, so clicking the row itself (which
-  // already had keyboard/mouse focus) won't re-scroll and yank the view.
-  useEffect(() => {
-    if (!isPrimary || !ref.current) return
-    // `block: 'nearest'` only scrolls when the row is actually off-screen —
-    // no jolt when the user is just clicking around in the visible list.
-    ref.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [isPrimary])
+  // Selection reveal belongs to the full data list in SceneExplorerPanel.
+  // Remounting an overscanned selected row must not yank native scrolling.
 
   // BL-57 C-lite — Read-only info rows. Render a slim, non-interactive row
   // with just an icon + label. No drag, no select, no context menu — keeps
@@ -104,6 +98,7 @@ export default function SceneExplorerRow(props: Props) {
   if (row.kind === 'info') {
     return (
       <div
+        {...props.attributes}
         role="row"
         aria-label={`${row.infoKind} ${row.infoLabel}`}
         style={{
@@ -140,6 +135,7 @@ export default function SceneExplorerRow(props: Props) {
 
   return (
     <div
+      {...props.attributes}
       ref={ref}
       role="row"
       aria-selected={isSelected}

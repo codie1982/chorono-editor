@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback } from 'react'
 import type { ChronoScene, Layer, Track } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
-import { evaluateTrack } from '@/lib/evaluator'
+import { evaluateNumericTrack } from '@/lib/evaluator'
 import { updateKfValue } from '@/lib/timeline/keyframeOps'
 import { makeUpdateKfValueCmd } from '@/lib/editor/commands-keyframe'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
@@ -225,8 +225,8 @@ function evalXY(
   fallbackX: number,
   fallbackY: number,
 ): { x: number; y: number } {
-  const x = xTrack ? evaluateTrack(xTrack, timeMs) : null
-  const y = yTrack ? evaluateTrack(yTrack, timeMs) : null
+  const x = xTrack ? evaluateNumericTrack(xTrack, timeMs) : null
+  const y = yTrack ? evaluateNumericTrack(yTrack, timeMs) : null
   return {
     x: x !== null ? x : fallbackX,
     y: y !== null ? y : fallbackY,

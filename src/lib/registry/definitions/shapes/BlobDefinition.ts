@@ -45,6 +45,7 @@ export const blobDefinition: LayerDefinition = {
   iconKey: 'blob',
   category: 'Basic Shapes',
   createDefault: () => newBlobLayer(),
+  propertyGroupsAreStatic: true,
   getPropertyGroups: () => baseGroups([geometryGroup(blobGeometry())]),
   toPath,
 }

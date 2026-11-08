@@ -42,7 +42,7 @@ describe('blob URL lifecycle', () => {
 
   it('respects revokeUrl:false (asset moved, not freed)', () => {
     const r = new AssetRegistry()
-    r.addAsset(asset('a1', { url: 'blob:keep' }))
+    r.addAsset(asset('a1', { url: 'blob:keep', runtime: { objectUrl: 'blob:runtime-keep' } }))
     r.deleteAsset('a1', { revokeUrl: false })
     expect(revoke).not.toHaveBeenCalled()
   })

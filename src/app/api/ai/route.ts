@@ -55,6 +55,8 @@ function readEnvConfig(forProvider?: AIProviderName): AIProviderConfig {
   }
 }
 
+// TODO(remove-built-in-chat): Kullanılmayan dahili sohbet API'si, AIPanel ve
+// useAIPlanner ile birlikte kaldırılacak. /api/mcp bağımsız olarak korunacak.
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as RequestBody

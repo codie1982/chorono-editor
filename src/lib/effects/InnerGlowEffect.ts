@@ -8,7 +8,7 @@
 // centred, which is cheap and visually convincing for moderate radii.
 
 import type { EffectPlugin, EffectDefinition } from './EffectRegistry'
-import { createOffscreen } from '@/lib/render/OffscreenCanvasCache'
+import { withEffectSurfaces } from './withEffectSurfaces'
 import { gpuImageEffects } from '@/lib/render/gpu/effects/GPUImageEffects'
 
 export interface InnerGlowEffectDefinition extends EffectDefinition {
@@ -22,7 +22,8 @@ export interface InnerGlowEffectDefinition extends EffectDefinition {
 
 export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
   type: 'innerGlow',
-  apply(input, effect) {
+  alphaSafe: true,
+  apply: withEffectSurfaces<InnerGlowEffectDefinition>((input, effect, surfaces) => {
     const { color = '#FFFFFF', radius = 8, intensity = 0.8 } = effect.params
     const W = input.width
     const H = input.height
@@ -30,7 +31,7 @@ export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
     // Tint a full-rect copy with the glow colour, then knock out the input
     // silhouette (so we keep the ring of glow colour OUTSIDE the silhouette).
     // Then blur and clip back to the original shape with source-atop.
-    const ring = createOffscreen(W, H)
+    const ring = surfaces.create(W, H)
     const rctx = ring.getContext('2d')!
     rctx.fillStyle = color
     rctx.fillRect(0, 0, W, H)
@@ -41,7 +42,7 @@ export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
     // Blur the ring so it bleeds inward when clipped to the silhouette.
     // GPU separable Gaussian when available; CSS-filter fallback otherwise.
     const r = Math.max(0, radius)
-    const blurred = createOffscreen(W, H)
+    const blurred = surfaces.create(W, H)
     const bctx    = blurred.getContext('2d')!
     const gpu = r > 0 ? gpuImageEffects.blur(ring, r) : null
     if (gpu) {
@@ -52,8 +53,9 @@ export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
       bctx.filter = 'none'
     }
 
+    surfaces.release(ring)
     // Composite original + clipped glow
-    const out  = createOffscreen(W, H)
+    const out  = surfaces.create(W, H)
     const octx = out.getContext('2d')!
     octx.drawImage(input, 0, 0)
     octx.globalAlpha = Math.max(0, Math.min(1, intensity))
@@ -62,5 +64,5 @@ export const innerGlowEffect: EffectPlugin<InnerGlowEffectDefinition> = {
     octx.globalAlpha = 1
     octx.globalCompositeOperation = 'source-over'
     return out
-  },
+  }),
 }

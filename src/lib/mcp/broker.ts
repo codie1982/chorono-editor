@@ -140,10 +140,11 @@ export async function callEditorTool(name: string, args: JsonObject, clientName 
       checkRevision(before.revision)
       return ask(session, 'apply_scene', { scene: await loadProject(args.name), expectedRevision: before.revision, label: 'Load MCP project' })
     }
-    if (['export_runtime', 'export_svg', 'export_sequence'].includes(name)) {
+    if (['export_runtime', 'export_svg', 'export_sequence', 'render_audio_preview', 'export_audio'].includes(name)) {
       const exported = await ask(session, name, args, 120000)
       const data = Buffer.from(exported.data, 'base64')
-      return { ...await writeArtifact(args.name ?? 'animation-' + Date.now(), exported.extension, data, false, 'exports'), revision: exported.revision, warnings: exported.warnings ?? [] }
+      const { data: _data, extension: _extension, ...metadata } = exported
+      return { ...metadata, ...await writeArtifact(args.name ?? 'animation-' + Date.now(), exported.extension, data, false, 'exports'), revision: exported.revision, warnings: exported.warnings ?? [] }
     }
     return ask(session, name, args, name === 'render_preview' ? 60000 : 30000)
   })

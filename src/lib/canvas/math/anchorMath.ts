@@ -3,6 +3,8 @@
  */
 
 import { snapToGrid } from './coordinateMath'
+import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import type { Transform } from '@/lib/types'
 
 export interface AnchorMoveInput {
   /** Relevant fields from the layer's transform at drag start. */
@@ -20,6 +22,8 @@ export interface AnchorMoveInput {
   snapPixel: boolean
   /** Grid step (composition px) used when snapGrid is on. */
   gridSize: number
+  /** Parent-local → composition transform at gesture start. */
+  parentWorld?: Matrix2D
 }
 
 export interface AnchorMoveResult {
@@ -27,6 +31,20 @@ export interface AnchorMoveResult {
   anchorY: number
   x: number
   y: number
+}
+
+/** Change the local pivot while keeping every rendered point in place. */
+export function reanchorTransform(transform: Transform, anchorX: number, anchorY: number): Transform {
+  const dx = anchorX - transform.anchorX
+  const dy = anchorY - transform.anchorY
+  const linear = Matrix2D.rotation(transform.rotationDeg).scale(transform.scaleX, transform.scaleY)
+  const rotated = linear.applyToVector({ x: dx, y: dy })
+  return {
+    ...transform,
+    anchorX, anchorY,
+    x: transform.x + rotated.x - dx,
+    y: transform.y + rotated.y - dy,
+  }
 }
 
 /**
@@ -39,32 +57,26 @@ export interface AnchorMoveResult {
  */
 export function calculateAnchorMove(input: AnchorMoveInput): AnchorMoveResult {
   const { x, y, anchorX: origAX, anchorY: origAY, rotationDeg, scaleX, scaleY, dx, dy } = input
+  const parent = input.parentWorld ?? Matrix2D.identity()
+  const linear = parent.multiply(Matrix2D.rotation(rotationDeg).scale(scaleX, scaleY))
+  if (Math.abs(linear.determinant()) < 1e-9) return { x, y, anchorX: origAX, anchorY: origAY }
 
-  let nAX = origAX + dx
-  let nAY = origAY + dy
+  const pivot = parent.applyToPoint({ x: x + origAX, y: y + origAY })
+  let targetX = pivot.x + dx
+  let targetY = pivot.y + dy
   if (input.snapGrid) {
-    // Snap the WORLD position of the anchor to the grid, then back to local.
-    const wx = x + nAX
-    const wy = y + nAY
-    nAX = snapToGrid(wx, input.gridSize) - x
-    nAY = snapToGrid(wy, input.gridSize) - y
+    targetX = snapToGrid(targetX, input.gridSize)
+    targetY = snapToGrid(targetY, input.gridSize)
   }
   if (input.snapPixel) {
-    nAX = Math.round(nAX)
-    nAY = Math.round(nAY)
+    targetX = Math.round(targetX)
+    targetY = Math.round(targetY)
   }
 
-  const r  = (rotationDeg * Math.PI) / 180
-  const cR = Math.cos(r), sR = Math.sin(r)
-  const dAX = nAX - origAX
-  const dAY = nAY - origAY
-  const compX = dAX * (scaleX * cR - 1) - scaleY * sR * dAY
-  const compY = scaleX * sR * dAX + dAY * (scaleY * cR - 1)
-
-  return {
-    anchorX: nAX,
-    anchorY: nAY,
-    x: x + compX,
-    y: y + compY,
-  }
+  // Convert the cursor's world movement to the geometry's local axes. Passing
+  // dx/dy through directly makes a rotated pivot move in the wrong direction.
+  const delta = linear.invert().applyToVector({ x: targetX - pivot.x, y: targetY - pivot.y })
+  const result = reanchorTransform({ x, y, anchorX: origAX, anchorY: origAY, rotationDeg, scaleX, scaleY },
+    origAX + delta.x, origAY + delta.y)
+  return { anchorX: result.anchorX, anchorY: result.anchorY, x: result.x, y: result.y }
 }

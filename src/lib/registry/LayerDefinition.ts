@@ -48,6 +48,14 @@ export interface LayerDefinition<T extends Layer = Layer> {
    */
   getPropertyGroups(layer: T): PropertyGroup[]
 
+  /** Opt-in: the paths, types and constraints returned by getPropertyGroups
+   * are independent of the layer and stable for this definition's lifetime.
+   * showWhen predicates may still inspect the current layer. Render consumers
+   * may compile a readonly schema index once; inspector arrays stay caller-owned.
+   * Omit for dynamic schemas. Replace the definition/provider to change a
+   * certified schema; mutating external constraints breaks this contract. */
+  readonly propertyGroupsAreStatic?: boolean
+
   /**
    * Optional: converts the layer to a unified PathDefinition. Used by:
    *   - Trim Path renderer (so trim works on every parametric shape)

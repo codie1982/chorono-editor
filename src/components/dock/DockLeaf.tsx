@@ -113,6 +113,7 @@ export default function DockLeafComponent({
     <div
       ref={containerRef}
       key={leaf.id}
+      data-panel={activePanelId}
       className="relative flex flex-col h-full bg-gray-900 border border-gray-800 overflow-hidden dock-leaf-in"
     >
       {/* Tab strip — also the drag handle. Collapse button sits on the
@@ -141,6 +142,7 @@ export default function DockLeafComponent({
           return (
             <div
               key={pid}
+              data-panel={pid}
               onPointerDown={(e) => {
                 if (e.button !== 0) return
                 // Ignore close button clicks

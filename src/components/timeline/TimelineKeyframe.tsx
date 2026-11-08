@@ -1,5 +1,6 @@
 'use client'
 import type { Keyframe, EasingType } from '@/lib/types'
+import type { KeyGlyphAccessibility } from './glyphs'
 
 const EASING_OPTS: EasingType[] = ['linear', 'easeOut', 'easeIn', 'easeInOut', 'hold']
 
@@ -19,6 +20,7 @@ interface Props {
   onContextMenu?: (e: React.MouseEvent<HTMLDivElement>) => void
   /** Double-click — opens inline value editor in TimelinePanel. */
   onDoubleClick?: (e: React.MouseEvent<HTMLDivElement>) => void
+  glyphAccessibility?: KeyGlyphAccessibility
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  */
 export default function TimelineKeyframe({
   kf, x, y, isSelected, isDragging,
-  onSelect, onDelete, onSetEasing, onPointerDown, onContextMenu, onDoubleClick,
+  onSelect, onDelete, onSetEasing, onPointerDown, onContextMenu, onDoubleClick, glyphAccessibility,
 }: Props) {
 
   const colorClass = isSelected
@@ -48,8 +50,25 @@ export default function TimelineKeyframe({
     <div
       className="absolute group z-10"
       data-kf-id={kf.id}
+      data-glyph-control=""
+      tabIndex={0}
+      role="button"
+      aria-label={`Keyframe at ${Math.round(kf.timeMs)} milliseconds${glyphAccessibility?.ordinal ? ` · ${glyphAccessibility.ordinal}` : ''}`}
+      aria-describedby={glyphAccessibility?.descriptionId}
+      aria-pressed={!!isSelected}
       style={positionStyle}
-      onClick={(e) => { e.stopPropagation(); onSelect(e.shiftKey) }}
+      onClick={(e) => {
+        e.stopPropagation()
+        // Pointer clicks are selected once by useKeyframeDrag.onLoneClick.
+        // detail=0 preserves assistive/programmatic click activation.
+        if (e.detail === 0) onSelect(e.shiftKey)
+      }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        e.stopPropagation()
+        onSelect(e.shiftKey)
+      }}
       onPointerDown={onPointerDown}
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}

@@ -1,3 +1,4 @@
+import type { ImportExecution } from '../resources/ImportExecution'
 // ── BaseHandler ───────────────────────────────────────────────────────────────
 //
 // Interface and abstract base for all import handlers.
@@ -19,16 +20,23 @@ export interface ImportHandler {
    * Run pre-import analysis without committing anything.
    * Used to show the user a preflight summary and options.
    */
-  preflight(file: File, options?: ImportOptions): Promise<ImportPreflight>
+  preflight(file: File, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight>
 
   /**
    * Run the full import and return the result.
-   * Must not throw on partial failures — collect warnings instead.
+   * Recoverable conversion gaps collect warnings. Cancellation, byte/budget
+   * refusal and malformed containers reject; never retry via an unbounded fallback.
+   * Optional runtime execution is forwarded to aware handlers; legacy handlers
+   * remain valid and are checked for stale publication by ImportManager.
+   * Owned persistent Blob URLs use import/resources/withImportSource; callers
+   * releaseImportSources after commit/discard. Temporary probe URLs remain local
+   * to their probe. Runtime source leases never enter the serialized result.
    */
   handle(
     file: File,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult>
 }
 
@@ -42,11 +50,12 @@ export abstract class BaseImportHandler implements ImportHandler {
     return this.supportedFormats.includes(format)
   }
 
-  abstract preflight(file: File, options?: ImportOptions): Promise<ImportPreflight>
+  abstract preflight(file: File, options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight>
   abstract handle(
     file: File,
     options?: ImportOptions,
     onProgress?: (p: ImportProgress) => void,
+    execution?: ImportExecution,
   ): Promise<ImportResult>
 
   // ── Shared Helpers ────────────────────────────────────────────────────────

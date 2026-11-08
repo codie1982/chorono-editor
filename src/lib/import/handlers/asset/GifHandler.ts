@@ -1,44 +1,31 @@
-// ── GifHandler (BL-07) ────────────────────────────────────────────────────────
-//
-// Animated GIF → sprite sheet + frameSequence layer (editable playback).
-// Static GIF → plain image asset + image layer (same as ImageHandler).
-//
-// Decoding uses the browser ImageDecoder (WebCodecs). When it is unavailable
-// (e.g. Firefox) or decoding fails, we fall back to a static image import so
-// the GIF still lands in the scene as its first frame.
-//
-// Output is a SINGLE asset + SINGLE layer, so this is an 'asset' import.
+// Animated GIF imports use bounded metadata/native preparation. This handler
+// only maps prepared media into existing editable asset/layer result contracts.
 
+import { withImportSource } from '../../resources/importSources'
 import { BaseImportHandler } from '../BaseHandler'
-import { GifDecodeWorkerClient, gifDecodeWorkerClient } from '../../workers/GifDecodeWorkerClient'
+import { GifImportService, type GifImportProvider, type DecodedGifSheet } from '../../gif'
+import { checkImportExecution, type ImportExecution } from '../../resources/ImportExecution'
+import { buildSpriteGrid } from '../../../frameSequence/spriteGrid'
 import { newImageLayer, newFrameSequenceLayer } from '../../../defaults'
 import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress, ImportWarning } from '../../types'
 import type { Asset } from '../../../asset/types'
-import type { FrameSequenceData } from '../../../types/media'
 
-interface DecodedGif {
-  frames: VideoFrame[]
-  width: number
-  height: number
-  /** Average frame duration in ms (fallback 100ms ≈ 10fps). */
-  avgFrameMs: number
-}
-
+/** Scene/source result orchestration only. Preparation owns input, workers,
+ * decoders and byte admission; existing withImportSource owns persistent URLs.
+ * A prepared output is released after synchronous source adoption/discard. No
+ * dense frames/native objects enter scene JSON, cloning or undo snapshots. */
 export class GifHandler extends BaseImportHandler {
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = ['image/gif']
 
-  async preflight(file: File): Promise<ImportPreflight> {
-    const source = this.makeSource(file)
-    let frameCount = 1
-    let width = 0, height = 0
-    try {
-      const probe = await this.probeFrameCount(file)
-      frameCount = probe.frameCount
-      width = probe.width
-      height = probe.height
-    } catch { /* fall back to static */ }
+  /** The application injects its shared preparation executor and budget. */
+  constructor(private readonly preparation: GifImportProvider = new GifImportService()) { super() }
 
+  /** Header-only bounded preflight, with actual counts and no decoded frame. */
+  async preflight(file: File, _options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
+    const source = this.makeSource(file)
+    const plan = await this.preparation.inspect(file, execution)
+    const { width, height, frameCount } = plan
     const animated = frameCount > 1
     const features: string[] = []
     if (width && height) features.push(`${width}×${height}px`)
@@ -53,78 +40,35 @@ export class GifHandler extends BaseImportHandler {
         estimatedAssets:      1,
         estimatedGroups:      0,
         estimatedTracks:      0,
-        estimatedMemoryBytes: width * height * 4 * Math.max(1, frameCount),
+        estimatedMemoryBytes: plan.frameBytes + plan.sheetBytes + plan.encodeReserveBytes + file.size * 2,
         detectedFeatures:     features,
         unsupportedFeatures:  [],
       },
       availableOptions: { centerInComposition: true, collection: true },
       defaultOptions:   { centerInComposition: true },
-      warnings: typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder === 'undefined'
+      warnings: !this.preparation.canAnimate
         ? ['Animated GIF decoding not supported in this browser — will import the first frame only']
         : [],
     }
   }
 
-  async handle(
-    file: File,
-    options?: ImportOptions,
-    onProgress?: (p: ImportProgress) => void,
-  ): Promise<ImportResult> {
+  /** Create one existing image/frameSequence result after admitted conversion.
+   * Fatal decode/capacity/abort errors propagate without automatic re-decode. */
+  async handle(file: File, _options?: ImportOptions, onProgress?: (p: ImportProgress) => void, execution?: ImportExecution): Promise<ImportResult> {
+    checkImportExecution(execution)
     const startMs = Date.now()
     this.reportProgress(onProgress, 'reading', 'Reading GIF…', 0.1)
-
-    // 1. Off-thread decode (worker) — large GIFs don't freeze the editor.
-    if (GifDecodeWorkerClient.isSupported()) {
-      try {
-        this.reportProgress(onProgress, 'parsing', 'Decoding frames (worker)…', 0.3)
-        const buffer = await file.arrayBuffer()
-        const sheet  = await gifDecodeWorkerClient.decode(buffer)
-        if (sheet.frameCount > 1) {
-          this.reportProgress(onProgress, 'complete', 'Done', 1)
-          return this.buildSheetResult(file, sheet.blob, sheet, startMs)
-        }
-        return this.staticImport(file, startMs, onProgress)
-      } catch (err) {
-        console.warn('[GifHandler] worker decode failed, falling back to main thread:', err)
-      }
-    }
-
-    // 2. Main-thread decode (fallback when no worker / ImageDecoder).
-    let decoded: DecodedGif | null = null
-    if (typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder !== 'undefined') {
-      try {
-        this.reportProgress(onProgress, 'parsing', 'Decoding frames…', 0.3)
-        decoded = await this.decodeGif(file)
-      } catch (err) {
-        console.warn('[GifHandler] decode failed, falling back to static:', err)
-      }
-    }
-
-    // Static GIF (or decode unavailable/failed) → plain image import.
-    if (!decoded || decoded.frames.length <= 1) {
-      decoded?.frames.forEach(f => f.close())
-      return this.staticImport(file, startMs, onProgress)
-    }
-
-    this.reportProgress(onProgress, 'converting', 'Building sprite sheet…', 0.7)
-    const composed = this.compositeSpriteSheet(decoded)
-    decoded.frames.forEach(f => f.close())
-
-    const blob = await new Promise<Blob | null>(resolve =>
-      composed.canvas.toBlob(resolve, 'image/png'))
-    if (!blob) return this.staticImport(file, startMs, onProgress)
-
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
-    return this.buildSheetResult(file, blob, {
-      sheetWidth:  composed.sheetWidth,
-      sheetHeight: composed.sheetHeight,
-      frameWidth:  decoded.width,
-      frameHeight: decoded.height,
-      frameCount:  composed.frameCount,
-      columns:     composed.columns,
-      rows:        composed.rows,
-      avgFrameMs:  decoded.avgFrameMs,
-    }, startMs)
+    checkImportExecution(execution)
+    this.reportProgress(onProgress, 'parsing', 'Preparing GIF frames…', 0.3)
+    const prepared = await this.preparation.prepare(file, execution)
+    try {
+      checkImportExecution(execution)
+      const sheet = prepared.sheet
+      this.reportProgress(onProgress, 'complete', 'Done', 1)
+      checkImportExecution(execution)
+      return sheet ? this.buildSheetResult(file, sheet.blob, sheet, startMs)
+        : this.staticImport(file, prepared.metadata, startMs)
+    } finally { prepared.release() }
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -133,215 +77,119 @@ export class GifHandler extends BaseImportHandler {
   private buildSheetResult(
     file: File,
     blob: Blob,
-    grid: {
-      sheetWidth: number; sheetHeight: number
-      frameWidth: number; frameHeight: number
-      frameCount: number; columns: number; rows: number; avgFrameMs: number
-    },
+    grid: Omit<DecodedGifSheet, 'blob'>,
     startMs: number,
   ): ImportResult {
-    const url     = URL.createObjectURL(blob)
-    const assetId = this.generateAssetId()
-    const fps     = Math.max(1, Math.round(1000 / grid.avgFrameMs))
+    return withImportSource(blob, (url): ImportResult => {
+      const assetId = this.generateAssetId()
+      const fps     = Math.max(1, Math.round(1000 / grid.avgFrameMs))
 
-    const asset: Asset = {
-      id:        assetId,
-      name:      file.name,
-      type:      'spriteSheet',
-      url,
-      width:     grid.sheetWidth,
-      height:    grid.sheetHeight,
-      frameRate: fps,
-      storage:   { mode: 'external', originalFileName: file.name },
-      metadata: {
-        filesize:   file.size,
-        importedAt: Date.now(),
-        sourceApp:  'GIF',
-        tags:       [],
-        notes:      `${grid.frameCount} frames @ ${fps}fps`,
-      },
-      runtime: { objectUrl: url },
-    }
+      const asset: Asset = {
+        id:        assetId,
+        name:      file.name,
+        type:      'spriteSheet',
+        url,
+        width:     grid.sheetWidth,
+        height:    grid.sheetHeight,
+        frameRate: fps,
+        storage:   { mode: 'external', originalFileName: file.name },
+        metadata: {
+          filesize:   file.size,
+          importedAt: Date.now(),
+          sourceApp:  'GIF',
+          tags:       [],
+          notes:      `${grid.frameCount} frames @ ${fps}fps`,
+        },
+        runtime: { objectUrl: url },
+      }
 
-    const seq: FrameSequenceData = {
-      assetId,
-      columns:     grid.columns,
-      rows:        grid.rows,
-      frameCount:  grid.frameCount,
-      frameWidth:  grid.frameWidth,
-      frameHeight: grid.frameHeight,
-      fps,
-      loop:        true,
-      objectFit:   'contain',
-    }
-    const layer = newFrameSequenceLayer(seq, grid.frameWidth, grid.frameHeight)
+      const seq = buildSpriteGrid(assetId, { imageWidth: grid.sheetWidth, imageHeight: grid.sheetHeight,
+        columns: grid.columns, rows: grid.rows, frameCount: grid.frameCount, fps, loop: true })
+      const layer = newFrameSequenceLayer(seq, grid.frameWidth, grid.frameHeight)
 
-    return {
-      id:      this.generateId(),
-      source:  this.makeSource(file),
-      format:  'image/gif',
-      kind:    'asset',
-      assets:  [asset],
-      layers:  [layer],
-      groups:  [],
-      tracks:  [],
-      timelines: [],
-      commands:  [],
-      warnings:  [],
-      errors:             [],
-      unsupportedFeatures: [],
-      report: {
-        title:          'Animated GIF Import',
-        sourceFileName: file.name,
-        format:         'image/gif',
-        created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
-        warnings:       [],
-        errors:         [],
+      return {
+        id:      this.generateId(),
+        source:  this.makeSource(file),
+        format:  'image/gif',
+        kind:    'asset',
+        assets:  [asset],
+        layers:  [layer],
+        groups:  [],
+        tracks:  [],
+        timelines: [],
+        commands:  [],
+        warnings:  [],
+        errors:             [],
         unsupportedFeatures: [],
-        suggestions:    [`Imported as a ${grid.frameCount}-frame sprite sequence @ ${fps}fps — adjust FPS/loop in the layer properties.`],
-        durationMs:     Date.now() - startMs,
-      },
-    }
-  }
-
-  private async decodeGif(file: File): Promise<DecodedGif> {
-    const buffer = await file.arrayBuffer()
-    const decoder = new ImageDecoder({ data: buffer, type: 'image/gif' })
-    await decoder.tracks.ready
-    const track = decoder.tracks.selectedTrack
-    const frameCount: number = track?.frameCount ?? 1
-
-    const frames: VideoFrame[] = []
-    let totalDurationUs = 0
-    for (let i = 0; i < frameCount; i++) {
-      const { image } = await decoder.decode({ frameIndex: i })
-      frames.push(image)
-      totalDurationUs += (image.duration ?? 0)
-    }
-
-    const width  = frames[0]?.displayWidth  ?? frames[0]?.codedWidth  ?? 0
-    const height = frames[0]?.displayHeight ?? frames[0]?.codedHeight ?? 0
-    // duration is in microseconds; default to 100ms/frame if missing/zero
-    const avgFrameMs = totalDurationUs > 0
-      ? (totalDurationUs / 1000) / frameCount
-      : 100
-
-    decoder.close?.()
-    return { frames, width, height, avgFrameMs }
-  }
-
-  private compositeSpriteSheet(decoded: DecodedGif): {
-    canvas: HTMLCanvasElement
-    columns: number
-    rows: number
-    frameCount: number
-    sheetWidth: number
-    sheetHeight: number
-  } {
-    const frameCount = decoded.frames.length
-    const columns = Math.ceil(Math.sqrt(frameCount))
-    const rows    = Math.ceil(frameCount / columns)
-    const sheetWidth  = columns * decoded.width
-    const sheetHeight = rows * decoded.height
-
-    const canvas = document.createElement('canvas')
-    canvas.width  = sheetWidth
-    canvas.height = sheetHeight
-    const ctx = canvas.getContext('2d')!
-
-    decoded.frames.forEach((frame, i) => {
-      const col = i % columns
-      const row = Math.floor(i / columns)
-      ctx.drawImage(frame, col * decoded.width, row * decoded.height, decoded.width, decoded.height)
+        report: {
+          title:          'Animated GIF Import',
+          sourceFileName: file.name,
+          format:         'image/gif',
+          created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
+          warnings:       [],
+          errors:         [],
+          unsupportedFeatures: [],
+          suggestions:    [`Imported as a ${grid.frameCount}-frame sprite sequence @ ${fps}fps — adjust FPS/loop in the layer properties.`],
+          durationMs:     Date.now() - startMs,
+        },
+      }
     })
-
-    return { canvas, columns, rows, frameCount, sheetWidth, sheetHeight }
-  }
-
-  /** Probe frame count + dimensions without keeping decoded frames. */
-  private async probeFrameCount(file: File): Promise<{ frameCount: number; width: number; height: number }> {
-    if (typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder === 'undefined') {
-      const dims = await this.probeImageDims(file)
-      return { frameCount: 1, ...dims }
-    }
-    const buffer = await file.arrayBuffer()
-    const decoder = new ImageDecoder({ data: buffer, type: 'image/gif' })
-    await decoder.tracks.ready
-    const track = decoder.tracks.selectedTrack
-    const frameCount: number = track?.frameCount ?? 1
-    // Decode frame 0 just for dimensions
-    const { image } = await decoder.decode({ frameIndex: 0 })
-    const width  = image.displayWidth  ?? image.codedWidth  ?? 0
-    const height = image.displayHeight ?? image.codedHeight ?? 0
-    image.close()
-    decoder.close?.()
-    return { frameCount, width, height }
   }
 
   /** Static image fallback (same shape as ImageHandler output). */
-  private async staticImport(
+  private staticImport(
     file: File,
+    { width, height }: { width: number; height: number },
     startMs: number,
-    onProgress?: (p: ImportProgress) => void,
-  ): Promise<ImportResult> {
-    const url = URL.createObjectURL(file)
-    const { width, height } = await this.probeImageDims(file)
-    const assetId = this.generateAssetId()
+  ): ImportResult {
+    return withImportSource(file, (url): ImportResult => {
+      const assetId = this.generateAssetId()
 
-    const asset: Asset = {
-      id:     assetId,
-      name:   file.name,
-      type:   'image',
-      url,
-      width,
-      height,
-      storage:  { mode: 'external', originalFileName: file.name },
-      metadata: { filesize: file.size, importedAt: Date.now(), tags: [] },
-      runtime:  { objectUrl: url },
-    }
-    const layer = newImageLayer(assetId, width, height)
+      const asset: Asset = {
+        id:     assetId,
+        name:   file.name,
+        type:   'image',
+        url,
+        width,
+        height,
+        storage:  { mode: 'external', originalFileName: file.name },
+        metadata: { filesize: file.size, importedAt: Date.now(), tags: [] },
+        runtime:  { objectUrl: url },
+      }
+      const layer = newImageLayer(assetId, width, height)
 
-    this.reportProgress(onProgress, 'complete', 'Done', 1)
-    const warnings: ImportWarning[] = [{
-      code: 'unsupported_feature', severity: 'info',
-      message: 'Imported GIF as a single still frame',
-    }]
+      const warnings: ImportWarning[] = [{
+        code: 'unsupported_feature', severity: 'info',
+        message: 'Imported GIF as a single still frame',
+      }]
 
-    return {
-      id:      this.generateId(),
-      source:  this.makeSource(file),
-      format:  'image/gif',
-      kind:    'asset',
-      assets:  [asset],
-      layers:  [layer],
-      groups:  [],
-      tracks:  [],
-      timelines: [],
-      commands:  [],
-      warnings,
-      errors:             [],
-      unsupportedFeatures: [],
-      report: {
-        title:          'GIF Import (static)',
-        sourceFileName: file.name,
-        format:         'image/gif',
-        created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
-        warnings:       [],
-        errors:         [],
+      return {
+        id:      this.generateId(),
+        source:  this.makeSource(file),
+        format:  'image/gif',
+        kind:    'asset',
+        assets:  [asset],
+        layers:  [layer],
+        groups:  [],
+        tracks:  [],
+        timelines: [],
+        commands:  [],
+        warnings,
+        errors:             [],
         unsupportedFeatures: [],
-        suggestions:    [],
-        durationMs:     Date.now() - startMs,
-      },
-    }
-  }
-
-  private probeImageDims(file: File): Promise<{ width: number; height: number }> {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file)
-      const img = new Image()
-      img.onload  = () => { URL.revokeObjectURL(url); resolve({ width: img.naturalWidth, height: img.naturalHeight }) }
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`Failed to load GIF: ${file.name}`)) }
-      img.src = url
+        report: {
+          title:          'GIF Import (static)',
+          sourceFileName: file.name,
+          format:         'image/gif',
+          created:        { assets: 1, layers: 1, groups: 0, tracks: 0, compositions: 0 },
+          warnings:       [],
+          errors:         [],
+          unsupportedFeatures: [],
+          suggestions:    [],
+          durationMs:     Date.now() - startMs,
+        },
+      }
     })
   }
+
 }

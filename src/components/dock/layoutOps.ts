@@ -226,19 +226,26 @@ export function setSplitRatio(tree: DockNode, splitId: string, ratio: number): D
 // ── Validation ───────────────────────────────────────────────────────────────
 
 /**
- * Check that the tree references exactly the expected panel ids — no
- * duplicates, no orphans, no unknown panels. Used on load to detect a
- * persisted layout that was corrupted by an older bug or schema change.
+ * Validates persisted dock structure against the registered panel ids.
+ * Registered panels may be absent: users can close panels, and new panels must
+ * not discard an existing arrangement. Rejects duplicate/unknown panels, invalid
+ * node ids, tab indices and split geometry. Does not mutate the saved tree.
  */
 export function isValidLayout(node: DockNode, expectedPanels: Set<string>): boolean {
   const seen = new Set<string>()
+  const nodeIds = new Set<string>()
   let invalid = false
 
   function walk(n: DockNode) {
     if (invalid) return
     if (!n || typeof n !== 'object' || !('kind' in n)) { invalid = true; return }
+    if (typeof n.id !== 'string' || !n.id || nodeIds.has(n.id)) { invalid = true; return }
+    nodeIds.add(n.id)
     if (n.kind === 'leaf') {
       if (!Array.isArray(n.panels)) { invalid = true; return }
+      if (!Number.isInteger(n.activeIndex) || n.activeIndex < 0
+        || n.activeIndex >= Math.max(1, n.panels.length)
+        || (n.collapsed !== undefined && typeof n.collapsed !== 'boolean')) { invalid = true; return }
       for (const p of n.panels) {
         if (typeof p !== 'string') { invalid = true; return }
         if (seen.has(p))            { invalid = true; return }
@@ -249,32 +256,36 @@ export function isValidLayout(node: DockNode, expectedPanels: Set<string>): bool
     }
     if (n.kind === 'split') {
       if (!Array.isArray(n.children) || n.children.length !== 2) { invalid = true; return }
+      if (!['h', 'v'].includes(n.direction) || !Number.isFinite(n.ratio)
+        || n.ratio < 0 || n.ratio > 1) { invalid = true; return }
       walk(n.children[0]); walk(n.children[1])
       return
     }
     invalid = true
   }
   walk(node)
-  if (invalid) return false
-  // Every expected panel must be present
-  let allPresent = true
-  expectedPanels.forEach((p) => { if (!seen.has(p)) allPresent = false })
-  return allPresent
+  return !invalid
 }
 
 // ── Default layout ───────────────────────────────────────────────────────────
 
 /**
- * Add a panel to the first available leaf, or if no leaves exist, create a
- * minimal single-leaf tree. Returns the modified tree.
+ * Opens a panel without duplicating it. An existing tab is selected and its
+ * leaf expanded. A missing panel is appended to the first leaf and expanded;
+ * if no leaf exists a minimal single-leaf tree is returned. Input is immutable.
  */
 export function addPanelToLayout(tree: DockNode, panelId: string): DockNode {
+  const existing = findLeafOfPanel(tree, panelId)
+  if (existing) {
+    const selected = setActiveTab(tree, existing.id, panelId)
+    return existing.collapsed ? setLeafCollapsed(selected, existing.id, false) : selected
+  }
   let inserted = false
   const result = mapNode(tree, (n) => {
     if (inserted) return n
     if (n.kind !== 'leaf') return n
     inserted = true
-    return { ...n, panels: [...n.panels, panelId], activeIndex: n.panels.length }
+    return { ...n, panels: [...n.panels, panelId], activeIndex: n.panels.length, collapsed: false }
   })
   if (inserted) return result
   // Tree had no leaves — return single leaf with the panel
@@ -300,7 +311,7 @@ export function defaultLayout(): DockNode {
               { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas', 'stateMachine'], activeIndex: 0 },
               {
                 kind: 'leaf', id: 'properties-leaf',
-                panels: ['properties', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'snap', 'shortcuts'],
+                panels: ['properties', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'snap', 'shortcuts'],
                 activeIndex: 0,
               },
             ],

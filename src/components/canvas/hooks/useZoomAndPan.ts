@@ -4,6 +4,8 @@ import {
 } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import { clamp } from '@/lib/canvas/math/coordinateMath'
+import type { OverrideMap } from '@/lib/evaluator'
+import { resolveLayerWorldBounds } from '@/lib/geometry/resolveLayerWorldBounds'
 
 export const MIN_ZOOM  = 0.1
 export const MAX_ZOOM  = 8
@@ -21,6 +23,8 @@ export interface UseZoomAndPanOptions {
   containerRef: RefObject<HTMLDivElement>
   scene: ChronoScene
   selectedLayerId: string | null
+  timeMs?: number
+  overrides?: OverrideMap
 }
 
 export interface UseZoomAndPanReturn {
@@ -53,7 +57,7 @@ export interface UseZoomAndPanReturn {
  * interaction — so it's fully decoupled from the drag/transform system.
  */
 export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
-  const { width, height, padding, containerRef, scene, selectedLayerId } = opts
+  const { width, height, padding, containerRef, scene, selectedLayerId, timeMs = 0, overrides } = opts
 
   const [zoom, setZoom] = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
@@ -114,27 +118,29 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
   // Fit selected layer to viewport (with 40px padding) and centre it.
   const fitSelection = useCallback(() => {
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!layer || !layer.size) return
+    if (!layer) return
+    const box = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+    if (!box) return
     const PAD = 40
     const z = clamp(
-      Math.min((maxSide.w - PAD * 2) / layer.size.width, (maxSide.h - PAD * 2) / layer.size.height),
+      Math.min((maxSide.w - PAD * 2) / Math.max(1, box.width), (maxSide.h - PAD * 2) / Math.max(1, box.height)),
       MIN_ZOOM, MAX_ZOOM,
     )
-    const cx = layer.transform.x + layer.size.width  / 2
-    const cy = layer.transform.y + layer.size.height / 2
+    const cx = box.x + box.width / 2
+    const cy = box.y + box.height / 2
     setZoom(z); setPan(panToCentre(cx, cy, z))
-  }, [scene.layers, selectedLayerId, maxSide, panToCentre])
+  }, [scene, selectedLayerId, maxSide, panToCentre, timeMs, overrides])
 
   // Re-centre selected layer in the viewport without changing zoom.
   const centreSelection = useCallback(() => {
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
     if (!layer) return
-    const w = layer.size?.width  ?? (layer.text?.fontSize ? 120 : 80)
-    const h = layer.size?.height ?? (layer.text?.fontSize ?? 24)
-    const cx = layer.transform.x + w / 2
-    const cy = layer.transform.y + h / 2
+    const box = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+    if (!box) return
+    const cx = box.x + box.width / 2
+    const cy = box.y + box.height / 2
     setPan(panToCentre(cx, cy, zoom))
-  }, [scene.layers, selectedLayerId, zoom, panToCentre])
+  }, [scene, selectedLayerId, zoom, panToCentre, timeMs, overrides])
 
   const zoomIn  = useCallback(() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)), [])
   const zoomOut = useCallback(() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)), [])

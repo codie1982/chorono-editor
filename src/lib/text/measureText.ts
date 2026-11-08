@@ -16,6 +16,8 @@
 // then "just works".
 
 import type { TextStyle } from '@/lib/types/text'
+import type { Asset } from '@/lib/types'
+import { resolveTextFontFamily } from './resolveTextFontFamily'
 
 export interface TextMetrics2D {
   width: number
@@ -61,8 +63,11 @@ function estimate(style: TextStyle): TextMetrics2D {
  *   - `ctx.font = "${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}"`
  *   - per-character advance + letterSpacing when letterSpacing !== 0
  *   - uppercase transform applied before measuring
+ * Optional assets is the immutable source scope for ready imported-font lookup.
+ * Measurement never loads or pins a face. Async work must own its font consumer
+ * and may pass an already resolved alias in style.fontFamily instead.
  */
-export function measureTextLayout(style: TextStyle): TextMetrics2D {
+export function measureTextLayout(style: TextStyle, assets?:readonly Asset[]): TextMetrics2D {
   const ctx = getMeasureContext()
   if (!ctx) return estimate(style)
 
@@ -74,7 +79,7 @@ export function measureTextLayout(style: TextStyle): TextMetrics2D {
 
   const display = uppercase ? value.toUpperCase() : value
   const lines = display.split('\n')
-  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
+  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${resolveTextFontFamily(fontFamily,assets)}`
 
   let maxWidth = 0
   for (const line of lines) {
@@ -112,9 +117,9 @@ export function measureTextLayout(style: TextStyle): TextMetrics2D {
  */
 export function syncTextLayerSize<
   T extends { type: string; text?: TextStyle; size?: { width: number; height: number } }
->(layer: T): T {
+>(layer: T, assets?:readonly Asset[]): T {
   if (layer.type !== 'text' || !layer.text) return layer
-  const m = measureTextLayout(layer.text)
+  const m = measureTextLayout(layer.text,assets)
   if (layer.size && layer.size.width === m.width && layer.size.height === m.height) {
     return layer
   }

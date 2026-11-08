@@ -71,7 +71,7 @@ export class ParticleEvaluator {
         case 'noiseDrift': {
           const drift = evaluateNoiseDrift(
             ageMs,
-            particle.seedPhase,
+            particle.seedPhase + (mod.phase ?? 0),
             mod.amount ?? 20,
             mod.speed  ?? 1,
           )
@@ -81,14 +81,14 @@ export class ParticleEvaluator {
         }
         case 'sineWave': {
           // Horizontal wave
-          x += Math.sin(ageMs / 1000 * (mod.speed ?? 1) * Math.PI * 2 + particle.seedPhase) * (mod.amount ?? 15)
+          x += Math.sin(ageMs / 1000 * (mod.speed ?? 1) * Math.PI * 2 + particle.seedPhase + (mod.phase ?? 0)) * (mod.amount ?? 15)
           break
         }
         case 'spiral': {
           const t2 = ageMs / 1000 * (mod.speed ?? 1)
           const r = t2 * (mod.amount ?? 20)
-          x += Math.cos(t2 * Math.PI * 2 + particle.seedPhase) * r
-          y += Math.sin(t2 * Math.PI * 2 + particle.seedPhase) * r
+          x += Math.cos(t2 * Math.PI * 2 + particle.seedPhase + (mod.phase ?? 0)) * r
+          y += Math.sin(t2 * Math.PI * 2 + particle.seedPhase + (mod.phase ?? 0)) * r
           break
         }
       }
