@@ -99,34 +99,13 @@ function ensureTrack(
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
+/** Register the legacy numeric full-target keyframe action; the MCP set_keyframes tool supports richer model values. */
 export function registerKeyframeActions(reg: ActionRegistry): void {
   reg.register<AddKeyframesParams>({
     id: 'keyframe.addBatch',
     toolName: 'add_keyframes',
     description:
-`Add keyframes to animate a layer property. Auto-creates timeline + track if missing.
-
-TRACK TARGET FORMAT: "layers.{layerId}.{property}"
-
-AVAILABLE PROPERTIES:
-  opacity                → 0.0 - 1.0
-  transform.x            → pixels (horizontal position)
-  transform.y            → pixels (vertical position)
-  transform.scaleX       → 1.0 = 100%
-  transform.scaleY       → 1.0 = 100%
-  transform.rotationDeg  → degrees
-  style.fill.color       → "#rrggbb" hex string (SNAP — does NOT interpolate)
-  style.fill.opacity     → 0.0 - 1.0
-  style.stroke.width     → pixels
-  style.cornerRadius     → pixels
-  text.fontSize          → pixels
-  text.letterSpacing     → pixels
-  effects.blur           → 0 - 100
-
-EXAMPLES:
-  target: "layers.bg_circle.opacity"
-  target: "layers.title_text.transform.y"
-  target: "layers.logo.transform.scaleX"`,
+`Upsert numeric keyframes using a full track target such as layers.hero.transform.x. Auto-creates a missing timeline/track and preserves unrelated keys. This legacy input schema accepts numeric values and named easing strings; use set_keyframes for model-typed values or customBezier. Positions use pixels, rotation degrees, scales 1=100%, opacity 0..1. Easing belongs to the starting keyframe.`,
     parameters: {
       type: 'object',
       required: ['timelineId', 'target', 'keyframes'],
@@ -135,13 +114,13 @@ EXAMPLES:
         target:     { type: 'string', description: 'Track target e.g. "layers.bg_circle.opacity"' },
         keyframes: {
           type: 'array',
-          description: 'Array of keyframes. Minimum 2 keyframes for animation.',
+          description: 'Keys to insert or replace at matching times. One key sets a held value; two or more define motion.',
           items: {
             type: 'object',
             required: ['timeMs', 'value'],
             properties: {
               timeMs: { type: 'number', description: 'Time in milliseconds' },
-              value:  { type: 'number', description: 'number for most props, "#rrggbb" hex for colors' },
+              value:  { type: 'number', description: 'Numeric property value. For color strings, vectors or custom easing use MCP set_keyframes instead.' },
               easing: {
                 type: 'string',
                 enum: ['linear', 'easeIn', 'easeOut', 'easeInOut', 'hold'],
