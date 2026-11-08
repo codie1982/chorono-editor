@@ -1,73 +1,85 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 7 Kasım 2026; ilk kaynak yönetimi uygulaması ve renderer başlangıç ölçümleri §12'ye eklendi. Durum: katman indeksleme, ortak maske/efekt tampon sahipliği ve ilk renderer referansları uygulandı; genel optimizasyon ve diğer özelliklerin kabul kapıları açık. Kullanıcı önceliği: **export tutarlılığı → bileşen kütüphanesi → çoklu format üretimi**. Bütün projelerde kullanılan kaynak bütçeleri, görünürlük, çalışma zamanlaması ve temel ölçüm paneli bu ürün kuyruğunun önünde teknik önkoşuldur. Sonraki sıra kullanıcı seçimiyle üretim otomasyonu → kutulu 3D nesne → karakter → fizik/simülasyon → tamamlayıcı 2D araçlardır. Poly/ağ araçları kırılma ve kumaşın; Blob Surface sıvı görünümünün geometri önkoşuludur. Kullanıcı akışları `2danimation` içindedir; 2.5D, bu çalışma alanındaki derinlikli kumaş ve kutulu 3D model görünümünü tanımlar.
+Tarih: 4 Kasım 2026. Güncelleme: 8 Kasım 2026. **Güncel ve onaylanan sıra:**
+önce bekleyen viewport/ortak düzenleme işleri → dar entegrasyon sözleşmeleri →
+kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
+kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
+ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
+[Ayrıntılı sıra ve bağımlılık sınırları](plans/geometry-material-boxed3d-sequence.md)
+bu sıranın uygulama rehberidir. Önceki sıra kayıtları §12'de tarihsel kanıttır;
+güncel iş kuyruğu bu bölüm ve bağlantılı sıra belgesidir.
+
+Genel optimizasyonun ilk kabulü §12.37'de, viewport V1/V2 §12.40'ta ve V3
+position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
+2.5D; 2D çalışma alanında kutulu 3D ve derinlikli kumaş anlamındadır;
+bağımsız tam 3D Modeling veya Game Engine modunu etkinleştirmez.
 
 ## 1. Kapsam ve öncelikler
 
-| Öncelik | Özellik | Ayrıntılı plan | İlk somut teslim |
-| --- | --- | --- | --- |
-| 0 — kritik teknik temel | Genel optimizasyon ve kaynak yönetimi | [Genel optimizasyon §8](#8-genel-optimizasyon-ve-kaynak-yönetimi) | Ortak ölçüm/bütçe altyapısı, temel kaynak paneli; CPU/GPU/medya/UI ve iş kuyruğu optimizasyonları. |
-| 1 | Export tutarlılığı | [Export Consistency](plans/export-consistency-2d-plan.md) | File/JSON/MCP/player aynı sahne/profil sözleşmesini kullanır; asset/state/wire kaybı olmaz. |
-| 1 — raster kalite dilimi | Yüksek kaliteli 2D final render | [Final render §9](plans/export-consistency-2d-plan.md#9-viewporttan-bağımsız-yüksek-kaliteli-2d-final-render) | Hedef çözünürlükte gerçek redraw, 2× spatial sampling ve editör içinde final Render Preview. |
-| 2 | Bileşen kütüphanesi | [Component Library](plans/component-library-2d-plan.md) | Başlık/kart/logo'yu kütüphaneye kaydet; iki bağımsız instance ve klip başlangıcıyla kullan. |
-| 3 | Çoklu format üretimi | [Multiformat Production](plans/multiformat-production-2d-plan.md) | Aynı tasarımdan 9:16, 16:9, 1:1 varyant ve desteklenen export queue'su. |
-| 4 | Veriden animasyon | [Üretim Otomasyonu §1](plans/production-automation-2d-plan.md#1-veriden-animasyon-üretimi--öncelik-4) | CSV/JSON satırlarını component controls'e bağla; sınırlı batch üret. |
-| 5 | Sese bağlı hareket | [Üretim Otomasyonu §2](plans/production-automation-2d-plan.md#2-sesin-hareketi-sürmesi--öncelik-5) | Offline RMS/band feature → numeric property → keyframe bake. |
-| 6 | Kelime zamanlamalı altyazı | [Üretim Otomasyonu §3](plans/production-automation-2d-plan.md#3-kelime-zamanlamalı-altyazı--öncelik-6) | Word-timed kaynak → sabit satır yerleşimi ve aktif kelime vurgusu → export. |
-| 7 | Kaynak ve Performans paneli — ileri analiz | [Üretim Otomasyonu §4](plans/production-automation-2d-plan.md#4-performans-inceleme-ve-akıllı-önizleme--öncelik-7), [panel sözleşmesi §8.9](#89-kaynak-ve-performans-paneli) | Temel panelin üzerinde ayrıntılı trace, pahalı katkılar ve karşılaştırmalı profil analizi. |
-| 8 | Kutulu 3D nesne katmanı | [3D modelin 2D entegrasyonu](multi-mode-architecture.md#61-önerilen-kullanım-2d-içinde-kutulu-3d-nesne) | Modeli kutusunda çevir; kamera/ışık/malzeme ayarla; 2D sahnede yerleştir ve bake et. |
-| 9 | Character Motion | [Karakter planı](character-motion-plan.md) | Rig/FK, iki kemikli IK, adlandırılmış sprite klipleri ve bağımsız state-machine kontrolü. |
-| 9 — geometri önkoşulu | Editable Poly 2D ve native ağ araçları | [Poly ve algoritmalar §9](#9-editable-poly-2d-native-ağ-üretimi-ve-blob-surface) | Vertex/edge/triangle/quad düzenleme; kare ızgara, triangulation ve kontrollü quad üretimi. |
-| 10 | Ortak simülasyon ve bake | [Simulation Core](plans/simulation-core-2d-architecture.md) | Sabit saat, worker job, alan/collider/hedef listeleri, typed cache, güvenli bake/re-bake. |
-| 11 | Katı cisim fiziği | [Rigid Body](plans/physics-fracture-bake-plan.md) | Gravity, çarpışma, sürtünme ve sekme → x/y/dönme keyframe'leri. |
-| 12 | Voronoi parçalanma | [Fracture](plans/physics-fracture-bake-plan.md) | Seed'li parçalar, zamanlı kırılma, momentum devri ve bake. |
-| 13 | Particle fiziği | Bu belgedeki ortak kararlar ve [Simulation Core](plans/simulation-core-2d-architecture.md) | Mevcut emitter/çizimi koru; gravity, wind, drag, force fields ve particle–collider temasını hesapla/cache'e bake et. |
-| 14 | Fabric/kumaş | [Cloth](plans/cloth-fabric-simulation-bake-plan.md) | Derinlikli bayrak/perde; pin, gravity/wind, collision ve deformasyon bake. |
-| 14 — yüzey önkoşulu | Blob Surface 2D / Metaballs | [Blob Surface §9.4](#94-blob-surface-2d--metaballs) | Etki noktalarını saran yüzey; aynı grupta yakınlaşınca birleşme, uzaklaşınca ayrılma; elle kontrol. |
-| 15 | Sıvı | [Liquids](plans/fluid-liquid-simulation-bake-plan.md) | 2D kap/engel, emitter/drain, kuvvet alanları ve particle/surface klibi. |
-| 16 | Akış/duman | [Grid Flow](plans/fluid-liquid-simulation-bake-plan.md) | Grid velocity/density, engeller, alanlar ve oynatılabilir cache. |
-| 17 | Particle V2+ görsel araçları | Tamamlayıcı 2D teslim | Var olan preset seçicisini geliştir; life kontrolleri ve gerçek trail geometrisi ekle. |
-| 18 | Runtime konsolu | Tamamlayıcı 2D teslim | State/geçiş nedeni, parametre, olay ve bozuk bağlantı incelemesi; profiler verisini tekrar toplama. |
-| 19 | Gelişmiş metin animasyonu | Tamamlayıcı 2D teslim | Harf/kelime bazlı kontroller ve preset'ler; ortak text layout'u kullan. |
-| 20 | 2D çizim araçları | Tamamlayıcı 2D teslim | Mevcut spline/vector sistemi üzerinde serbest çizim ve fırça akışı. |
-| 21 | Yeni çıktı biçimleri | Tamamlayıcı 2D teslim | MP4 → GIF; SVG sequence/Lottie için gerçek destek kapsamıyla sınırlı profiller. |
+| Sıra | İş | Durum / ilk teslim |
+| --- | --- | --- |
+| Tamamlandı | İlk genel optimizasyon; viewport V1/V2/V3 | Mevcut kazanımlar ve regresyon fixture'ları korunur. |
+| Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
+| Şimdi 2 | V5 — çoklu Array | V4 üzerine Linear/Grid/Radial/Path; sınırlı preview, açık space/pivot/timing, Apply/Cancel. |
+| Şimdi 3 | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
+| Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
+| Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
+| Sonra 4 | Texture, vertex color, UV ve basit material | Texture gizmo ve UV paneli; dokulu/deforme mesh adapter'ı. |
+| Sonra 5 | Kutulu 3D ileri düzenleme | Çoklu model, camera animasyonu, imported rig/clip/morph; rig oluşturma/IK ayrı artımlı dilimler. |
+| Sonra 6 | Bileşen kütüphanesi ve Character Motion | Source component/local clock; 2D rig/FK/IK/sprite/state-machine. |
+| Sonra 7 | Simulation Core, rigid, Voronoi ve particle fiziği | Poly kaynaklı kırılma; sabit adım, gravity/field/collision, cache/bake. |
+| Sonra 8 | Fabric/kumaş | Poly rest mesh/UV; gravity/wind/pin/collision ve bake. |
+| Sonra 9 | Blob Surface, sıvı, akış/duman | Değişken topoloji, contour/mesh görünümü; alanlar/collision ve bake. |
+| Sonra 10 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
+| Sona taşındı 1 | Export tutarlılığı ve yüksek kaliteli final render | Yeni türlerin parity/capability'si; hedef çözünürlükte redraw, sampling/preview; ardından ileri renk/backend/FP16. |
+| Sona taşındı 2 | Çoklu format ve üretim otomasyonu | Ekran oranları/codec desteği, queue, data-driven üretim, audio-driven hareket ve kelime zamanlı altyazı. |
+| En son | İkinci genel optimizasyon, ileri profiler ve birleşik kabul | Four Seasons + yeni Poly/3D/rig/cloth/Blob/fluid/export alanlarında CPU/bellek/GPU/job ve görüntü eşliği. |
 
-Öncelik 1–3 ana teslim sırasıdır. Sonraki dört özellik bunların ortak sözleşmeleri üzerine kurulur. Temel süre/bellek sayaçları ve doğruluk kontrolleri ilk aşamalarda bulunabilir; tam profiler ürünü öncelik 7'dir. Bir özellikteki kolay iş, öncelikli teslimin kabul kapısını atlatmak için tamamlanmış sayılmaz.
+Tam export/refactor ve kapsamlı son optimizasyon ertelenir; her yeni feature'ın
+kaynak bütçesi, acquire/release/dispose, cache invalidation, kaydet/aç/undo/clone,
+doğru zamanda değerlendirme ve asgari raster çıktı/bake kontrolleri ertelenmez.
+Desteksiz exporter yeni layer'ı sessizce atlayamaz; capability/fallback açık olur.
+Son optimizasyon turu kritik bellek sızıntısı veya doğruluk hatasını bekletme izni değildir.
 
-Öncelik 0, ileri profiler'ın tamamlanmasını beklemez. Temel Kaynak ve Performans paneli; görünürlük, kaynak yaşam döngüsü, bütçe/admission ve uygulama genelinde regresyon ölçümünü ilk aşamada görünür kılar. Öncelik 7 aynı veri kaynağına ayrıntılı analiz ekler; ikinci bir sayaç veya ayrı bellek penceresi oluşturmaz.
-
-Kutulu 3D nesne için gerekli dar kapsamlı model/renderer köprüsü bu plana dahildir. Ayrı tam 3D Modeling modu, hacimsel 3D solver'lar, game engine, yeni video-editor modu, cloud library ve otomatik uzak paylaşım kapsam dışıdır. Önceki alt belgelerdeki genel “3D renderer kapsam dışı” ifadesi kendi simülasyon kapsamı için geçerlidir; kutulu model katmanını yasaklayan üst karar değildir. Arşivdeki 3D simülasyon görevleri aktif olmaz.
-
-Elle düzeltme ayrı bir son faza bırakılmaz. [§7](#7-elle-düzeltme-ve-kullanıcı-müdahalesi) her ilgili feature'ın teslim koşuludur. Çoklu formatın ilk teslimi üç ekran oranını ve mevcut çalışan raster/kare dizisi çıktıları kapsar; yeni codec teslimleri bunu bekletmez. Ortak simülasyon çekirdeği ilk rigid bake içinde geliştirilir; önce bütün solver'ları kapsayan ayrı bir framework tamamlanması beklenmez.
-
-Yüksek kaliteli final render, export E3 raster/sequence ve ortak frame/resource sözleşmesine bağlanır. İlk teslim native hedef çözünürlükte redraw + supersampling + Render Preview'dır. Viewport hızlı profilini korur; iki profil aynı sahne/zamanı değerlendirir. CanvasKit değerlendirmesi, renk/gradient yönetimi, FP16 ve gelişmiş temporal blur sonraki kalite dilimleridir; ilk bileşen/çoklu oran teslimlerini bloke etmez. Render kalitesi, çıktı ölçüsü, dosya codec'i ve ekran oranı ayrı seçeneklerdir. Ayrıntı: [final render planı](plans/export-consistency-2d-plan.md#9-viewporttan-bağımsız-yüksek-kaliteli-2d-final-render).
+Elle düzeltme her feature'ın teslim koşuludur (§7). Soft selection/connected-loop
+kullanıcının isteğine göre en son tartışılacak ayrı konudur. Önceden yazılmış
+özellik planları ve kabul koşulları korunur; yalnız teslim sırası değişir.
 
 ## 2. Bağımlılıklar ve geçiş kapıları
 
 ```mermaid
 flowchart TD
-    E[Export E0-E2: canonical model ve parity] --> C[Component C0-C1: tanım, kontroller, local clock]
-    C --> M[Multiformat M0-M3: text/layout, varyant, queue]
-    M --> D[Data-driven batch]
-    E --> A[Offline audio features ve binding]
-    M --> T[Word-timed captions]
-    E --> P[Trace altyapısı ve sonra profiler]
-    E --> X[Export E3: HTML, raster, sequence capability]
-    X --> M
-    E --> FQ[Final render FQ0-FQ2: native redraw, sampling, preview]
-    O[Ortak resource budget ve collector] --> FQ
-    FQ --> FQA[Ileri renk, backend, FP16 ve temporal blur]
-    G[Poly 2D: tri/quad topoloji ve native ağ üretimi] --> V[Voronoi kaynak geometri adapterı]
-    G --> CL[Kumaş rest mesh ve UV adapterı]
-    B[Blob Surface: nokta alanı ve contour çıkarımı] --> LA[Sıvı görünümü ve surface bake]
-    L[PBF: fiziksel particle hareketi ve cache] --> LA
+    V4[Subtree duplicate / drag-copy] --> V5[Çoklu Array]
+    V5 --> H[Kalan ortak düzenleme ve araç kabulü]
+    H --> I[Dar source / time / resource sözleşmeleri]
+    I --> B[Kutulu 3D ilk sürüm]
+    B --> G[Poly 2D]
+    G --> U[UV / vertex color / material]
+    U --> B2[İleri kutulu 3D]
+    B2 --> C[Bileşen ve karakter]
+    C --> S[Simulation core / rigid / Voronoi / particle]
+    G --> S
+    S --> CL[Kumaş]
+    U --> CL
+    CL --> L[Blob / sıvı / akış]
+    L --> T[Tamamlayıcı 2D araçlar]
+    T --> E[Export parity ve final kalite]
+    E --> M[Çoklu format / otomasyon]
+    M --> O[Bütün alanlarda ikinci optimizasyon / birleşik kabul]
 ```
 
+Bu diyagram teslim sırasını ve önemli geometri bağımlılıklarını gösterir;
+her ok zorunlu kod bağımlılığı değildir. Tam export compiler bileşen source
+modelinin önkoşulu değildir; kesin zaman/asset/capability sözleşmesi önkoşuldur.
+
+
+- **G0 — İnsan–ajan devam edebilir:** E−1 birleşik kabulü geçer; taze okuma ve manuel alan/kimlik koruması, tek undo, keyset/transport/eğri ve viewport pivot/seçim/key çizimi/subtree çoğaltma doğrulanır. Ayrıntı E−1 ve viewport planındadır; soft selection tartışması bu kapıya eklenmez.
 - **G1 — Export güvenilir:** E1/E2 temel 2D fixture'ları geçer. Aynı snapshot/profil File/JSON/MCP ve standalone'da aynı anlamı taşır. Yeni codec veya gelecekteki solver bütünlüğü beklenmez.
 - **G2 — Bileşen yeniden kullanılabilir:** C1 kart örneği iki instance'ta farklı text/color/başlangıçla çalışır; source ve asset'ler korunur; portable ve runtime parity geçer. İleri nested/interactive C2 işleri ilk çoklu formatı bekletmez.
 - **G3 — Çoklu format teslim edilebilir:** M0 text layout ve font/bounds, M1 variant compiler, M2 queue ve M3 portable/MCP doğrulaması tamamdır. Üç oran gerçek desteklenen formatta alınır; source değişmez, overflow ve stale bake görünürdür.
 
-Bu kapılar uygulama sırasında kanıtla tamamlanır. §12'deki ilk optimizasyon dilimi uygulanmıştır; tam OPT0/OPT1 veya G1–G3 tamamlanmış sayılmaz. Takvim/ETA ilgili gerçek iş yükü ölçümlerinden sonra çıkarılır.
+Bu kapılar uygulama sırasında kanıtla tamamlanır. Optimizasyonun güncel kapanışı §12.37'dedir; önceki §12 kayıtları teslim günündeki açıkları anlatır. G0–G3 henüz tamamlanmış sayılmaz. Takvim/ETA ilgili gerçek iş yükü ölçümlerinden sonra çıkarılır.
 
 ## 3. Ortak mimari kararlar
 
@@ -87,7 +99,7 @@ Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; 
 
 [Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Yeni kullanıcı önceliği nedeniyle ilk uygulama kuyruğu export → bileşen → çoklu format olur. Physics/character işlerinin tamamlanması bu üçünün önkoşulu değildir. İleride bu feature'lar canonical export, component/time ve native cache capability sözleşmelerini kullanır.
+Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. Önce V4/V5 ve kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
@@ -488,7 +500,7 @@ Bu bölüm uygulama öncesi inceleme kaydıdır. Daha sonraki §12 dilimi MaskRe
 
 ### 10.3. Sıraya etkisi ve tamamlanma koşulu
 
-Ana sıra değiştirilmez: **OPT0–OPT4 kritik temel → export ve ilk raster kalite → component → çoklu format → otomasyon/ileri analiz → kutulu model → karakter → Poly temel → rigid/core → Voronoi → particle → cloth → Blob temel → liquid → flow → tamamlayıcı araçlar.**
+Bu incelemenin eski sıra kaydı, 8 Kasım kullanıcı kararıyla §1 ve [onaylanan sıra belgesi](plans/geometry-material-boxed3d-sequence.md) tarafından güncellenmiştir. Teknik geometri ve source koruma gereksinimleri geçerliliğini korur.
 
 Export aşamasında capability/schema/asset extension noktaları tasarlanır; gelecekteki tüm solver'ların binary formatları o aşamada uygulanmaz. Component C0/C1'de bağımsız local time ve türetilmiş frame görünümü ilk gerçek kullanımda doğrulanır. Bu altyapı Character/Poly/cloth/fluid tarafından genişletilir. Böylece aynı saat veya frame pipeline'ı tekrar yazılmaz.
 
@@ -1252,13 +1264,15 @@ dosya/decoder yollarının tamamlandığı anlamına gelmez.
 özelliği veya renderer değişimi içermez. Dördüncü adımda ölçülen bir gerileme
 bulunursa ilgili owner'da düzeltilir; yeni özellikler geçiş şartı yapılmaz.
 
-Bu dört bloktan sonra **Export E0** başlar: aynı zaman/çözünürlükte viewport,
+Bu dört blok optimizasyon kabulünü tamamladı. 8 Kasım'daki yeni kullanıcı
+önceliğiyle önce **E−1 ortak düzenleme/Timeline/Viewport**, ardından **Export E0** başlar:
+aynı zaman/çözünürlükte viewport,
 render preview ve export sonuçlarını karşılaştıran fixture'lar kurulur ve farklar
 kaydedilir. Ardından ortak sahne değerlendirme ve çıktı tutarlılığı geliştirmesi
 bu kanıta göre yürütülür. Poly/Blob, simülasyonlar ve 2.5D bu geçişin önkoşulu
 değildir.
 
-**Güncel sıra: Export E0.** Çıktı sahipliği §12.35'te, büyük editör/transport/
+**Güncel sıra: E−1 → Export E0; ayrıntı §12.38.** Çıktı sahipliği §12.35'te, büyük editör/transport/
 panel/heap-process ve CPU karşılaştırma kapısı §12.37'de kapandı. OPT28'in yüksek
 CPU tail'i düşük yükte iki yerleşimli120 çift/A/A ve profille yeniden incelendi;
 aynı byte A/A da yüksek değişkenlik gösterdi. Sabit FPS veya her projede aynı
@@ -1620,4 +1634,155 @@ eklenmedi. Kaynak/font/admission/çıktı sahipliği önceki tamamlanmış dilim
 
 [Ham kanıt ve sınırlamalar](../../artifacts/performance/opt32-whole-editor-20261108/README.md),
 [gereksinim bazında kapanış](../../artifacts/performance/opt32-whole-editor-20261108/COMPLETION_AUDIT.md).
-**Sıradaki geliştirme Export E0**: viewport/render-preview/export eşliği fixture'ları.
+Bu kapanışta sıradaki iş Export E0 idi. Aynı gün gelen kullanıcı isteğiyle
+E−1 ortak düzenleme/Timeline/Viewport bloğu öne alındı; güncel sıra §12.38'dedir.
+
+### 12.38. Yeni öncelik: insan–ajan ortak düzenleme ve Timeline — 8 Kasım 2026
+
+Kullanıcı isteği: ajan sahneyi oluşturduktan sonra yapılan manuel düzeltmeleri
+okuyup korumalı; yeni üretim anlaşılır isim/parent yapısı bırakmalı. İnsan sahneyi
+Timeline'da toplu key, doğrudan Set Key ve eksiksiz gezinmeyle sürdürebilmeli.
+
+[Kod incelemesi ve ayrıntılı E−1 planı](plans/human-agent-editing-timeline-plan.md)
+uygulama sırasını ve her dilimin kabulünü tanımlar:
+
+1. **E−1.0 — skill/örnek:** her yeni takip düzenlemesinde taze `get_scene`,
+   istenen scope dışını koruma ve çalışan waveform/bake örneği. Bu incelemede
+   canonical skill ve örnek güncellendi; runtime enforcement uygulanmış sayılmaz.
+2. **E−1.1 — güvenli mutasyon:** zorunlu revision/okuma ilişkisi, stale/retry/plan
+   koruması ve odaklı property/key değişiklikleri.
+3. **E−1.2 — authoring kökeni:** human/agent/import/unknown, creation ve son-yazan
+   ayrımı, seyrek metadata, atomik undo/save/load ve runtime çıktısından çıkarma.
+   Hermes bir ajan adı olabilir; animasyon parametresi olmaz. Kaydı olmayan veri
+   otomatik insan yapımı sayılmaz.
+4. **E−1.3 — düzenlenebilir organizasyon:** semantik isimler, mevcut hiyerarşiyi
+   koruma; Explorer/Timeline'da indexed subtree ve çoklu seçim uyumu.
+5. **E−1.4 — Set Key/toplu key/transport:** şemaya bağlı desteklenen kanallar,
+   source-channel örnekleme ve key ID/easing koruma; tek undo, ortak zaman ve
+   collision politikası; görünür Set Key ve frame/key/ilk/son/başlangıç/bitiş.
+6. **E−1.5 — prosedürel eğri:** parser/UI doğrulaması, controller eğrisinin
+   görünmesi ve explicit sampling/bake.
+7. **E−1.6 — viewport araçları:** doğru pivot/seçim/bağlı geometri sürükleme;
+   viewport key düzenleme/çizme; ortak subtree duplicate/drag-copy ve çoklu array.
+   [V0–V6 ayrıntılı planı](plans/viewport-authoring-2d-plan.md), yeni inceleme §12.39.
+8. **E−1.7 — birleşik kabul:** insanın 09:05'e ayarladığı saat üzerinde ajan
+   devamı, gerçek viewport etkileşimleri ve büyük sahne regresyonu.
+
+Kodda tespit edilen somut açıklar: `expectedRevision` isteğe bağlı; K şu anda
+Next Keyframe olmasına rağmen bazı açıklamalar key eklemeyi söyler; snapshot
+key komutu authored değeri okuyup yakın key'in ID/ayarlarını değiştirebilir.
+Script ile örneklenmiş `sin(2t)` veya native waveform bugün mümkündür; genel
+zaman-expression controller'ı yoktur. Mevcut wire parser'ının numeric token
+işleme ve Curve Editor'ın sıfır-key controller görünümü de E−1'e kaydedildi.
+
+**Sonra Export E0 → bileşen → çoklu format.** Tamamlanmış optimizasyon kabulü
+korunur. Soft selection (zamansal/geometrik ağırlıklı etki) ve connected/loop
+selection kullanıcının açıklamasına göre **en son tartışılacak**; ripple edit
+olarak yorumlanmaz ve E0'a önkoşul eklenmez. Yeni runtime/veri modeli/UI
+sözleşmelerinin tümü uygulama öncesi öneridir.
+
+### 12.39. Viewport araçları ve doğrudan animasyon düzenleme — 8 Kasım 2026
+
+E−1'e kullanıcının yeni viewport talepleri eklendi. [Viewport planı](plans/viewport-authoring-2d-plan.md)
+mevcut kodla karşılaştırmayı, sahipleri, V0–V6 sırasını ve kabul testlerini içerir.
+Bu plan değişikliğidir; runtime düzeltmesi veya canlı sahnede doğrulama değildir.
+
+Önce mevcut araçların onarımı: pivot/gizmo/rotation hesabının aynı noktayı
+kullanması; primary/secondary ve point seçiminin anlaşılması; parent/child'ın
+çift taşınmaması; world/local dönüşümü ve bağlı handle/topoloji korunması.
+Ardından viewport'ta key seç/ekle/sürükle/sil ve rota çizimi, bütün alt ağacı ve
+animasyonu koruyan duplicate/drag-copy, etkileşimli Linear/Grid/Radial/Path array.
+
+Kodda bu araçların önemli kısmı vardır. Single rotation matrix/pivot helper'ı,
+spline edit inverse matrix'i, subtree clone ve array solver'ları yeniden kullanılır.
+Somut açıklar: multi pivot/gizmo ayrışması, parent-local hareket delta'sı,
+Shift seçim bilgisinin adapter'da düşmesi, motion overlay'in selected timeline
+yerine son eşleşen track'i alması, registry ile gesture modifier'larının farklı
+olması ve drag clone'da animasyonun kapalı olmasıdır. Kullanıcı sahnesindeki
+görsel belirtiler V0 fixture/native kabulünde ayrıca yeniden üretilir.
+
+İlgili mevcut testler **15 dosya/185 test**, ek trajectory/world/curve incelemesi
+**5 suite/47 test** geçti; örtüşen testler toplanmaz. Pointer/UI regresyonları
+uygulama dilimlerinde eklenecek. Final kabul aynı Four Seasons ve 512 MiB managed
+bütçeyi korur; kaynak optimizasyonu yeniden açılmaz. Güncel sıra **E−1.1–7 →
+Export E0 → bileşen → çoklu format**; soft selection/connected-loop en son
+tartışılacak ayrı başlıktır.
+
+### 12.40. İlk viewport doğruluk ve çoklu seçim dilimi uygulandı — 8 Kasım 2026
+
+Kullanıcı yönlendirmesiyle V1/V2'nin ilk doğruluk işleri diğer E−1 API işlerinden
+önce uygulandı. [Gerçek sözleşme ve bakım devri](viewport-transform-editing.md)
+modül sahiplerini, coordinate/time/undo/cancel kurallarını ve sınırları kaydeder.
+
+Single pivot/parent-aware rotation korundu; multi rotation/scale aynı görünen
+pivot'u kullanır. Ortak/aktif pivot seçimi, bütün selection için bounding kutusu
+ve toplu resize, canvas Arrows1px/Shift10px nudge eklendi. Timeline frame
+navigation ayrı kalır. Shift seçim bilgisi ve primary membership atomikleşti;
+marquee/paint güncel evaluated bounds kullanır. Parent+child root normalizasyonu,
+inverse parent delta, affine selection frame ve full-inverse legacy path
+point/handle edit kaymaları giderir.
+
+Gesture lifecycle/preview/commit sorumlulukları ayrıldı. Source+key değişikliği
+tek undo olur; mevcut key ID/easing/tangent kayıtları korunur. Son pointer örneği,
+Escape/cancel/blur/unmount/document conflict ve ikinci pointer korumaları test
+edildi. Resize custom pivot'u değiştirmez. Animated anchor, singular resize ve
+TRS'ye sığmayan/driven pose güvenli diagnostic verir; yanlış veri yazılmaz.
+
+**273 dosya/2189 test**, TypeScript, MCP/CLI bundle/Next build geçti. Chrome'da
+actual SceneCanvas üzerinden **13/13** fixture grubu ve ayrıca gerçek fare
+path-point sürüklemesi doğrulandı. Kanıt/source hash ve tekrar script'i sözleşme
+belgesindedir. Bu tam WCAG uyumu veya yeni Four Seasons 10-cycle kabulü değildir.
+Önceki kaynak optimizasyonu kapanışı korunur.
+
+E−1.6 sürüyor: viewport'tan key çizimi, clone/array genişletmeleri ve tam V6
+ayrı işlerdir; MCP/provenance/Set Key API işleri de tamamlandı sayılmaz.
+Soft selection/connected-loop en son tartışılacak başlık olarak kalır.
+
+### 12.41. Viewport motion key authoring uygulandı — 8 Kasım 2026
+
+Kullanıcı isteğiyle V3 native position key düzenleme ve rota çizimi tamamlandı.
+[Gerçek sözleşme ve bakım devri](viewport-motion-keys.md) public modülleri,
+koordinat/yerel zaman, source sahipliği, undo/cancel ve sınırları kaydeder.
+
+**Motion Keys → Edit / Add Key / Draw Motion** açık Timeline üzerinde çalışır.
+Viewport key seçimi Timeline/Curve seçimini ve yerel playhead'i paylaşır;
+sürükleme/oklar, sayısal world X/Y/time, duplicate/delete ve click-to-place rota
+preview/Apply vardır. Append collision'da durur; replace-range açık tercihtir.
+Parent inverse her key'in zamanında hesaplanır. Loop duration endpoint authoring
+frame'i doğrudur. Mevcut key ID/metadata, başka kanallar ve Timeline'lar korunur;
+eksik eksen canonical curve insertion kullanır. Rota taslağı source/document
+değişiminde geçersizleşir. Her gesture tek undo; ortak pointer lifecycle Escape,
+capture/cancel ve source conflict temizliğini yönetir.
+
+Procedural/follow/inline/binding çıktısına x/y yazılmaz; diagnostic ve Follow Path
+kaynak/timing bağlantısı gösterilir. Tek nesnede native position rotası teslimidir;
+serbest el/spatial Bezier tangent authoring ve otomatik bake eklenmedi. Araçlar
+viewport'a sabitlenir; yoğun örnekleme kapalı modda yapılmaz, node/sample bütçesi
+uygulanır. Yeni subsystem feature dizinlerinde, geometri/evaluator/curve/history
+yardımcıları tekrar kullanılarak geliştirildi; mevcut büyük integration dosyaları
+uyumluluk için korundu, ilgili sorumluluklar küçük sahip modüllere çıkarıldı.
+
+**280 dosya/2239 test**, TypeScript, MCP ve Next build geçti. Chrome'da gerçek
+üç panelle **12/12**, eski viewport pointer regresyonuyla **13/13** kabul ve ayrıca
+gerçek fareyle key sürükleme/Undo/Redo doğrulandı. Bundle/source hash ve ham kanıt
+sözleşme belgesindedir. Canlı kullanıcı sahnesi değiştirilmedi. Bu dilim tam V6
+veya yeni Four Seasons kaynak ölçümü değildir. E−1'in kalan MCP/provenance,
+Set Key/procedural ve V4/V5 işleri ayrı kalır; ardından birleşik kabul ve Export E0.
+
+### 12.42. V4 native duplicate ve drag-copy — 8 Kasım 2026
+
+Keyframe'li nesne kopyalama hatası düzeltildi: drag-copy artık animasyonu kapatmaz;
+yerleşim farkı evaluated başlangıçtan hesaplanır. Duplicate/quick/modal/context
+ve viewport kopyalama aynı forest sahibini kullanır. Seçili parent+child bir kez
+çoğalır; kaynak parent/keys değişmez, bütün ilgili timeline'lar ve membership
+korunur. İç parent/mask/follow/repeater/particle/baked-trail referansları remap
+edilir. Önizleme kaynakları oynatmadan gerçek kopyayı gösterir, ID'ler sabittir;
+Apply tek undo, click/tiny/Escape/cancel kaynak ve history'yi korur.
+
+[Gerçek API, kullanım, instance/driver/follow sınırları ve bakım devri](viewport-clone-editing.md).
+284 dosya/2261 test, TypeScript, MCP ve Next build geçti. Chrome native clone9/9,
+viewport regresyon13/13 ve gerçek Cmd+D kontrolü geçti; source/bundle hash'leri
+doğrulandı. Yeni genel Four Seasons kaynak kabulü değildir. Çalışma ayrı
+`codex/viewport-v4-duplicate-drag-copy` dalındadır; main'e gönderilmedi.
+Sıradaki iş V5 çoklu Array'dir; provenance/Set Key/procedural ve birleşik kabul
+ayrı işlerdir. Onaylanan 3D/Poly sırası ve export/son optimizasyon ertelemesi korunur.

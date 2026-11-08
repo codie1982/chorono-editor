@@ -11,19 +11,22 @@ The following is a starting point for a new, empty scene. For an existing projec
 ```js
 scene.composition({width:1080,height:1920,durationMs:5000,frameRate:30,backgroundColor:'#0b1020'});
 const intro = scene.createTimeline({id:'intro',durationMs:2000});
-const idle = scene.createTimeline({id:'idle',durationMs:2000,loop:true});
+const idle = scene.createTimeline({id:'idle',durationMs:Math.PI*1000,loop:true});
 const outro = scene.createTimeline({id:'outro',durationMs:1000});
 const hero = scene.add('rect');
 hero.set({name:'Hero card'});
-hero.pos = [90,500];
+hero.pos = [90,200];
 hero.size = [900,600];
 hero.fill = '#152442';
 hero.cornerRadius = 48;
 intro.key(hero,'opacity',0,0,'easeOut').key(hero,'opacity',600,1);
-intro.key(hero,'transform.y',0,580,'easeOut').key(hero,'transform.y',1000,500);
-idle.key(hero,'transform.y',0,500);
-idle.modifier('layers.'+hero.id+'.transform.y',{
-  type:'sine',parameters:{amplitude:12,frequency:1}
+intro.key(hero,'transform.y',0,280,'easeOut').key(hero,'transform.y',1000,200);
+// key() includes the layer in this timeline; the controller ignores its value.
+idle.key(hero,'transform.y',0,200);
+idle.track('layers.'+hero.id+'.transform.y',{
+  controller:{type:'waveform',waveform:{
+    shape:'sine',amplitude:100,frequency:1/Math.PI,phase:0,offset:200,duty:0.5
+  }}
 });
 outro.key(hero,'opacity',0,1,'easeIn').key(hero,'opacity',1000,0);
 scene.log(hero.id,intro.id,idle.id,outro.id);
@@ -32,6 +35,23 @@ scene.log(hero.id,intro.id,idle.id,outro.id);
 These timelines have independent local clocks; their names do not make them run sequentially. To inspect `intro`, use `render_preview({timeMs:1000,timelineIds:['intro']})`. To chain intro → idle → outro interactively, bind them to explicit state-machine states and events. For a single continuous film, place all tracks on one master timeline with the required absolute times.
 
 When timelines affect the same property, inspect the combined result instead of assuming their values add together. Use `control_playback` with `timelineIds` to isolate one or several timelines and `[]` to restore all. `timelineId` chooses the editable tab; `timelineIds` chooses runtime isolation.
+
+## Continuous sine and sampled curves
+
+The `idle` controller above evaluates `y = 200 + 100 * sin(2 * tSec)`, where `tSec` is that timeline's local time in seconds. Its period is π seconds, matching the loop duration. Key times and `durationMs` use milliseconds; waveform `frequency` uses cycles per second (Hz), and `phase` and trigonometric inputs use radians. Setting `frequency:2` would mean two complete cycles per second.
+
+Controllers ignore stored key values. `Timeline.key` records layer membership; `Timeline.track` alone does not. The current curve display derives its range from stored keys, so bake when you need an editable sampled curve:
+
+```js
+const idle = scene.timeline('idle');
+const hero = scene.find('Hero card');
+if (!hero) throw new Error('Hero card not found');
+idle.bake('layers.'+hero.id+'.transform.y',60,0);
+```
+
+This replaces the controller with linear keys sampled over the full timeline at 60 fps; tolerance `0` disables simplification. It approximates the sine between samples and preserves the original through undo. To generate other sampled formulas, use synchronous loops and `Timeline.key`, computing values with ordinary JavaScript such as `Math.sin(2 * timeMs / 1000)`.
+
+The `sine` **modifier** uses normalized time within each keyframe segment, with frequency in cycles per segment; it is different from the waveform controller's clock. A single-key track has no advancing segment time. Parameter-wire expressions receive `source` (alias `s`), not `t` or `x`; write `sin(2 * source)` with explicit multiplication. Arbitrary time-expression controllers and per-frame script callbacks are not available.
 
 ## Tracks and easing
 

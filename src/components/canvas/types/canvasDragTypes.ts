@@ -2,9 +2,12 @@ import type { Layer } from '@/lib/types'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
 import type { Matrix2D } from '@/lib/geometry/Matrix2D'
 import type { RotationGesture } from '@/lib/canvas/math/rotationGesture'
+import type { SelectionResizeHandle } from '@/lib/canvas/math/selectionResize'
+import type { PreparedTransformTarget } from '@/lib/canvas/math/preparedTransforms'
+import type { PathBounds } from '@/lib/geometry/computePathBounds'
 
 /** Resize-handle identifiers (8-point selection frame). */
-export type Handle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se'
+export type Handle = SelectionResizeHandle
 
 export interface MoveState {
   kind: 'move'
@@ -27,11 +30,13 @@ export interface MoveState {
    *  Distinct from Shift-while-dragging which dynamically picks the
    *  dominant axis — this is a hard lock set by the user clicking an arrow. */
   axisLock?: 'x' | 'y' | null
-  /** Clone-drag (Cmd/Ctrl held at drag start). When set, the move is treated
-   *  as a clone gesture: the original is dragged for live feedback, then on
-   *  release a clone is created at the drop offset and the original snaps back
-   *  to its start position — all in ONE undo step. Undefined = normal move. */
+  /** Copy/instance gesture resolved from the shortcut registry at pointer-down.
+   * After the CSS-pixel threshold the source remains in place while a prepared
+   * forest is previewed with stable IDs. Release commits that exact copy and
+   * every relevant timeline once; undefined means an ordinary source move. */
   cloneMode?: CloneMode
+  /** Evaluated selection roots and parent inverses borrowed for this gesture. */
+  targets?: readonly PreparedTransformTarget[]
 }
 
 export interface ResizeState {
@@ -41,6 +46,10 @@ export interface ResizeState {
   handle: Handle
   startClientX: number
   startClientY: number
+  /** Complete displayed layer inverse; geometry dimensions are layer-local. */
+  worldToLocal?: Matrix2D
+  /** Evaluated layer-local TRS, when animation changes the visible pose. */
+  displayTransform?: Layer['transform']
 }
 
 export interface AnchorState {
@@ -70,6 +79,8 @@ export interface RotateState {
   anchorWorldY: number
   /** Single-layer rotation in the parent's displayed coordinate system. */
   gesture?: RotationGesture
+  /** Evaluated selection roots; world-space composition is used for multi-rotate. */
+  targets?: readonly PreparedTransformTarget[]
   /** BL-03: When set, the drag rotates EVERY layer here around the common
    *  pivot (anchorWorldX/Y, which is the selection center). Each layer's
    *  origin is stored so the rotated position is computed from a stable
@@ -93,6 +104,8 @@ export interface PathPointDrag {
   anchorIndex: number
   /** Which part of the anchor is being moved */
   part: 'anchor' | 'inHandle' | 'outHandle'
+  /** Displayed composition-to-layer inverse captured before the edit. */
+  worldToLocal: Matrix2D
 }
 
 /**
@@ -116,6 +129,8 @@ export interface NewAnchorDrawDrag {
   startClientY: number
   /** Index of the anchor that was provisionally appended. */
   anchorIndex: number
+  /** Displayed composition-to-layer inverse; legacy root callers may omit it. */
+  worldToLocal?: Matrix2D
 }
 
 /** Scale-mode axis gizmo drag — modifies transform.scaleX / scaleY
@@ -141,6 +156,11 @@ export interface ScaleAxisState {
   }>
   pivotX?: number
   pivotY?: number
+  /** Evaluated selection roots and their complete parent coordinate systems. */
+  targets?: readonly PreparedTransformTarget[]
+  /** A common selection-frame handle scales all roots around the opposite
+   * world edge/corner. Bounds/handle are immutable gesture-start values. */
+  selectionResize?: { bounds: PathBounds; handle: Handle }
 }
 
 /** BL-73 Sprint 4 — dragging a spline on-curve point. */

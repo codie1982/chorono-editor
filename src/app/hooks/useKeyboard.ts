@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
 import { shortcutRegistry } from '@/lib/shortcuts'
 import type { ShortcutContext } from '@/lib/shortcuts'
+import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 
 /** Timeline property addressed by the P/S/R/T shortcut family. */
 export type TimelineProperty = 'position' | 'scale' | 'rotation' | 'opacity'
@@ -13,6 +14,9 @@ interface Handlers {
   onPlayToggle: () => void
   onStepBack: (frames: number) => void
   onStepForward: (frames: number) => void
+  /** Canvas-only composition-pixel movement. Missing legacy hosts keep global
+   * Left/Right frame navigation; key repeat invokes one nudge per keydown. */
+  onNudgeSelected?: (dx: number, dy: number) => void
   onDeleteSelected: () => void
   onDuplicateSelected: () => void
   onCopy?: () => void
@@ -33,7 +37,7 @@ interface Handlers {
   /** Timeline context — jump to previous / next keyframe (J / K). */
   onTimelinePrevKeyframe?: () => void
   onTimelineNextKeyframe?: () => void
-  /** Returns the context the pointer is currently in. Drives which binding
+  /** Returns the active editor panel's context. Drives which binding
    *  wins when the same key is mapped in multiple contexts (e.g. S = Scale
    *  tool on the canvas, Show Scale track in the timeline). */
   getContext?: () => ShortcutContext
@@ -63,13 +67,14 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
  * active context) to a shortcut id, then dispatch the matching handler.
  *
  * Context-awareness means the same physical key can do different things
- * depending on where the pointer is: `S` is the Scale tool on the canvas
+ * depending on the active panel: `S` is the Scale tool on the canvas
  * but "Show Scale track" in the timeline.
  */
 export function useKeyboard(handlers: Handlers) {
   const {
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
+    onNudgeSelected,
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
@@ -96,6 +101,14 @@ export function useKeyboard(handlers: Handlers) {
       'global.playback.stepForward':   () => onStepForward(1),
       'global.playback.stepBack10':    () => onStepBack(10),
       'global.playback.stepForward10': () => onStepForward(10),
+      'canvas.nudge.left':    onNudgeSelected ? () => onNudgeSelected(-1, 0) : undefined,
+      'canvas.nudge.right':   onNudgeSelected ? () => onNudgeSelected(1, 0) : undefined,
+      'canvas.nudge.up':      onNudgeSelected ? () => onNudgeSelected(0, -1) : undefined,
+      'canvas.nudge.down':    onNudgeSelected ? () => onNudgeSelected(0, 1) : undefined,
+      'canvas.nudge.left10':  onNudgeSelected ? () => onNudgeSelected(-10, 0) : undefined,
+      'canvas.nudge.right10': onNudgeSelected ? () => onNudgeSelected(10, 0) : undefined,
+      'canvas.nudge.up10':    onNudgeSelected ? () => onNudgeSelected(0, -10) : undefined,
+      'canvas.nudge.down10':  onNudgeSelected ? () => onNudgeSelected(0, 10) : undefined,
 
       'canvas.select.duplicate':  onDuplicateSelected,
       'canvas.select.cloneQuick': onCloneQuick,
@@ -123,15 +136,22 @@ export function useKeyboard(handlers: Handlers) {
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      // Skip when the user is typing in an input/textarea/contenteditable.
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      const target = e.target as HTMLElement | null
+      // Native form controls, IME and inner widgets own their keyboard input.
+      if (e.defaultPrevented || e.isComposing || !target
+          || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
+          || target.closest?.('[role="menu"], [role="dialog"], [aria-modal="true"], dialog')) {
         return
       }
 
       const context: ShortcutContext = getContext?.() ?? 'canvas'
-      const id = shortcutRegistry.resolve(e, context)
+      let id = shortcutRegistry.resolve(e, context)
+      if (id?.startsWith('canvas.nudge.') && !onNudgeSelected) id = shortcutRegistry.resolve(e, 'global')
       if (!id) return
+      // A menu/dialog may own focus through a portal while a canvas node is
+      // still the event target. Do not move source objects behind that scope.
+      if (id.startsWith('canvas.nudge.')
+          && hasVisibleKeyboardScope()) return
       const action = actions[id]
       if (!action) return
       e.preventDefault()
@@ -144,6 +164,7 @@ export function useKeyboard(handlers: Handlers) {
   }, [
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
+    onNudgeSelected,
     onDeleteSelected, onDuplicateSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,

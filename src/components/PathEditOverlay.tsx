@@ -12,26 +12,28 @@
 'use client'
 
 import type { Layer } from '@/lib/types'
+import type { Matrix2D } from '@/lib/geometry/Matrix2D'
 
 interface PathEditOverlayProps {
   layer: Layer
   zoom: number
+  worldMatrix: Matrix2D
 }
 
 const ANCHOR_SIZE  = 7
 const HANDLE_DOT_R = 3.5
 
-export default function PathEditOverlay({ layer, zoom }: PathEditOverlayProps) {
+/** Display path anchors/handles through the same complete matrix used by
+ * picking and dragging; handles retain screen-pixel size at every zoom. */
+export default function PathEditOverlay({ layer, zoom, worldMatrix }: PathEditOverlayProps) {
   if (layer.type !== 'path' || !layer.path) return null
   const anchors = layer.path.anchors
   if (anchors.length === 0) return null
 
-  const tx = layer.transform.x
-  const ty = layer.transform.y
-  const toScreen = (x: number, y: number) => ({
-    x: (tx + x) * zoom,
-    y: (ty + y) * zoom,
-  })
+  const toScreen = (x: number, y: number) => {
+    const point = worldMatrix.applyToPoint({ x, y })
+    return { x: point.x * zoom, y: point.y * zoom }
+  }
 
   return (
     <svg

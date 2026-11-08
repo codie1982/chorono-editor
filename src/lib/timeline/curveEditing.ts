@@ -98,8 +98,15 @@ function splitSegment(a: Keyframe, b: Keyframe, ms: number, id: string): { leadi
 }
 
 /** Split the underlying easing, rather than writing an already-modified
- * evaluated value back into its input. Unsupported pipelines remain untouched. */
-export function insertCurveKeyframe(track: Track, timeMs: number, nextId: () => string): InsertionResult {
+ * evaluated value back into its input. Unsupported pipelines remain untouched.
+ * roundTimeMs defaults to true for existing curve UI callers. Exact-time
+ * authoring may set it false; near-key/support-key collisions still refuse
+ * insertion rather than shifting or replacing an existing key. idForTime may
+ * reserve stable IDs for repeated previews; it receives each actual inserted
+ * time, including an easing midpoint. Without it, nextId retains ownership. */
+export function insertCurveKeyframe(track: Track, timeMs: number, nextId: () => string,
+  options: { roundTimeMs?: boolean; idForTime?: (timeMs: number) => string } = {}): InsertionResult {
+  if (!Number.isFinite(timeMs)) return { ok: false, reason: 'Keyframe time must be finite.' }
   if (track.controller && track.controller.type !== 'keyframe') return { ok: false, reason: 'Bake the procedural controller before inserting a curve keyframe.' }
   if (track.easeCurve || track.timeWarp || track.multiplierCurve || track.modifiers?.some(mod => mod.enabled)
       || track.keyframes.some(key => key.segmentModifiers?.some(mod => mod.enabled))) {
@@ -107,7 +114,7 @@ export function insertCurveKeyframe(track: Track, timeMs: number, nextId: () => 
   }
   const keys = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
   if (!keys.length || keys.some(key => typeof key.value !== 'number' || !Number.isFinite(key.value))) return { ok: false, reason: 'This curve has no numeric keyframes to split.' }
-  let ms = Math.max(0, Math.round(timeMs))
+  const ms = Math.max(0, options.roundTimeMs === false ? timeMs : Math.round(timeMs))
   const existing = keys.find(key => Math.abs(key.timeMs - ms) <= 1)
   if (existing) return { ok: false, reason: 'A keyframe already exists at this time.', existingId: existing.id }
   const index = keys.findIndex(key => key.timeMs > ms)
@@ -116,7 +123,7 @@ export function insertCurveKeyframe(track: Track, timeMs: number, nextId: () => 
       return { ok: false, reason: 'Insert inside the keyed range to preserve out-of-range repetition.' }
     }
     const value = (index === 0 ? keys[0] : keys[keys.length - 1]).value
-    const key: Keyframe = { id: nextId(), timeMs: ms, value, easing: { type: 'linear' } }
+    const key: Keyframe = { id: options.idForTime?.(ms) ?? nextId(), timeMs: ms, value, easing: { type: 'linear' } }
     return { ok: true, track: { ...track, keyframes: [...keys, key].sort((a, b) => a.timeMs - b.timeMs) }, insertedIds: [key.id] }
   }
   let a = keys[index - 1], b = keys[index]
@@ -125,16 +132,19 @@ export function insertCurveKeyframe(track: Track, timeMs: number, nextId: () => 
     // The built-in Ease In Out is two cubic polynomials. Keep its exact
     // midpoint as a support key before splitting either half.
     const midpoint = (a.timeMs + b.timeMs) / 2
-    const mid: Keyframe = { id: nextId(), timeMs: midpoint, value: ((a.value as number) + (b.value as number)) / 2, easing: { type: 'easeOut' }, tangentMode: 'broken' }
+    const mid: Keyframe = { id: options.idForTime?.(midpoint) ?? nextId(), timeMs: midpoint, value: ((a.value as number) + (b.value as number)) / 2, easing: { type: 'easeOut' }, tangentMode: 'broken' }
     a = { ...a, easing: { type: 'easeIn' } }
     keys[index - 1] = a
     keys.splice(index, 0, mid)
     insertedIds.push(mid.id)
-    if (Math.abs(ms - midpoint) <= 1) return { ok: true, track: { ...track, keyframes: keys }, insertedIds }
+    if (options.roundTimeMs === false ? ms === midpoint : Math.abs(ms - midpoint) <= 1) return { ok: true, track: { ...track, keyframes: keys }, insertedIds }
+    if (options.roundTimeMs === false && Math.abs(ms - midpoint) <= 1) {
+      return { ok: false, reason: 'An easing support key would collide with this exact time. Insert at the segment midpoint or choose a time more than 1 ms away.' }
+    }
     if (ms < midpoint) b = mid
     else a = mid
   }
-  const split = splitSegment(a, b, ms, nextId())
+  const split = splitSegment(a, b, ms, options.idForTime?.(ms) ?? nextId())
   if (!split) return { ok: false, reason: 'This easing cannot be split here without changing its shape. Choose another time or bake the curve first.' }
   const result = keys.map(key => key.id === a.id ? split.leading : key)
   result.push(split.inserted)

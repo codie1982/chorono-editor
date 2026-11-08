@@ -9,12 +9,12 @@ Use the real Chorono MCP connection to keep the result editable in the user's ed
 
 ## Read and build
 
-1. Call `list_sessions`, choose the intended editor, and read `get_scene`. If more than one tab is connected, include `sessionId` in every call. Preserve unrelated objects and animations.
+1. Call `list_sessions`, choose the intended editor, and read `get_scene`. At the start of each new follow-up editing turn, read that editor's scene again before preparing edits, even if this chat created it. The live scene is authoritative over earlier scripts, screenshots and chat memory. If more than one tab is connected, include `sessionId` in every call. Preserve unrelated objects and animations.
 2. Read `get_capabilities` and the `chorono://scripting` resource. These describe the connected version's actual tool schemas, object kinds, properties, particle presets and limits. MCP clients may prefix tool names with the server name. Do not invent method or property names.
 3. Translate the brief into named objects, canvas dimensions, timing and output. Infer routine choices; ask only when a missing requirement changes the result materially. Check existing composition settings before changing them.
 4. Prefer a native tool for a narrow edit, `batch_actions` for related native edits, and `run_script` for procedural construction. Give objects meaningful names and reuse returned ids.
 
-Pass the last scene `revision` as `expectedRevision` on mutations. For a transport retry, reuse a stable `requestId` with the identical payload. After a revision conflict, read the changed scene and adapt; blindly resubmitting can overwrite manual work.
+Pass the latest known scene `revision` as `expectedRevision` on mutations. A fresh read starts a follow-up editing turn; it is not required between actions within one atomic batch. After a successful mutation, use its returned revision for dependent edits in the same turn. For a transport retry, reuse a stable `requestId` with the identical payload. After a revision conflict, read the changed scene and adapt; do not merely substitute a newer revision into an old edit.
 
 For generated scripts, use `run_script({code, dryRun:true, ...})`, inspect the returned plan, then call `apply_script_plan` with its `planId`. Commit the plan instead of executing the script a second time: it preserves generated ids. A plan expires and becomes invalid when the scene changes. Re-plan from the latest scene when necessary.
 
@@ -22,6 +22,7 @@ Generated scripts run only through the isolated MCP sandbox. It exposes synchron
 
 ## Choose the relevant reference
 
+- Read [collaborative-editing.md](references/collaborative-editing.md) when continuing or revising existing work, especially after manual changes, uncertain retries or overlapping edits.
 - Read [animation.md](references/animation.md) for keyframes, multiple timelines, modifiers, cloning, paths and procedural scripts.
 - Read [domains.md](references/domains.md) for particle configuration and life channels, spline points/handles/contours, and Scene Explorer hierarchy queries and edits.
 - Read [interaction.md](references/interaction.md) for state machines, runtime events, parameters, bindings and wiring.

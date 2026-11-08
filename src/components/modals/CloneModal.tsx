@@ -5,16 +5,17 @@
 // from the context menu; this modal opens when the user wants to choose
 // count + offset + animation toggle in a single dispatch.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
 
 interface Props {
   source:                Layer
-  /** Whether the active timeline has any tracks targeting `source`. Used
+  sourceCount?:          number
+  /** Whether any timeline has tracks targeting the source forest. Used
    *  to enable / disable the "duplicate animation" checkbox. */
   hasAnimationOnSource:  boolean
-  onApply:               (params: CloneApplyParams) => void
+  onApply:               (params: CloneApplyParams) => boolean | void
   onClose:               () => void
 }
 
@@ -31,28 +32,48 @@ const MAX_COUNT  = 200
 const MIN_OFFSET = -2000
 const MAX_OFFSET = 2000
 
+/** Numeric alternative to copy dragging. A failed/stale source command keeps
+ * the dialog open; this view owns only form/focus state, never source templates.
+ * Counts are occurrences of the forest, not a misleading single-layer total. */
 export default function CloneModal({
-  source, hasAnimationOnSource, onApply, onClose,
+  source, sourceCount = 1, hasAnimationOnSource, onApply, onClose,
 }: Props) {
   const [count,   setCount]   = useState(1)
   const [offsetX, setOffsetX] = useState(20)
   const [offsetY, setOffsetY] = useState(20)
   const [dupAnim, setDupAnim] = useState(true)
   const [mode,    setMode]    = useState<CloneMode>('copy')
+  const dialog = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose); close.current = onClose
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    dialog.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); return }
+      if (event.key !== 'Tab') return
+      const fields = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled)') ?? [])
+      const next = event.shiftKey ? fields[fields.length - 1] : fields[0]
+      const edge = event.shiftKey ? fields[0] : fields[fields.length - 1]
+      if (next && (document.activeElement === edge || !dialog.current?.contains(document.activeElement))) { event.preventDefault(); next.focus() }
+    }
+    document.addEventListener('keydown', key, true)
+    return () => { document.removeEventListener('keydown', key, true); if (previous?.isConnected) previous.focus() }
+  }, [])
 
-  const validCount = count >= MIN_COUNT && count <= MAX_COUNT
-  const canApply   = validCount
+  const validCount = Number.isInteger(count) && count >= MIN_COUNT && count <= MAX_COUNT
+  const canApply   = validCount && Number.isFinite(offsetX) && Number.isFinite(offsetY)
 
+  /** Submit finite form values. Only successful dispatch closes the dialog. */
   function apply() {
     if (!canApply) return
-    onApply({
+    const applied = onApply({
       count,
       offsetX,
       offsetY,
       duplicateAnimation: dupAnim,
       mode,
     })
-    onClose()
+    if (applied !== false) onClose()
   }
 
   return (
@@ -62,11 +83,13 @@ export default function CloneModal({
     >
       <div
         className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-[380px] p-4"
+        ref={dialog}
+        role="dialog" aria-modal="true" aria-label="Clone selection"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-100">
-            Clone &ldquo;{source.name}&rdquo;
+            {sourceCount > 1 ? `Clone ${sourceCount} selected sources` : <>Clone &ldquo;{source.name}&rdquo;</>}
           </h2>
           <button
             onClick={onClose}
@@ -98,7 +121,7 @@ export default function CloneModal({
           </div>
           <div className="mt-1 text-[10px] text-gray-600 italic">
             {mode === 'copy' && 'Independent deep copy. Editing source has no effect.'}
-            {mode === 'instance' && 'Tagged copy — linked to source via metadata (Phase 3 hot-swap render).'}
+            {mode === 'instance' && 'Linked appearance; transforms and copied animation remain independent. Group child membership is a snapshot.'}
           </div>
         </div>
 
@@ -150,7 +173,7 @@ export default function CloneModal({
           />
         </div>
         <div className="-mt-1 mb-3 text-[10px] text-gray-600">
-          Offset is applied per-clone (clone #N sits at N × offset from the source).
+          Parent-local offset per occurrence; descendants retain their local layout.
         </div>
 
         {/* Animation duplication */}
@@ -164,7 +187,7 @@ export default function CloneModal({
               className="accent-blue-500"
             />
             <span className={hasAnimationOnSource ? '' : 'text-gray-600'}>
-              Duplicate animation tracks
+              Duplicate animation tracks from all timelines
               {!hasAnimationOnSource && (
                 <span className="ml-1 text-gray-600 italic">(no tracks on source)</span>
               )}
@@ -174,10 +197,10 @@ export default function CloneModal({
 
         {/* Summary */}
         <div className="mb-4 px-3 py-2 bg-gray-800/50 border border-gray-800 rounded text-[11px] text-gray-400">
-          Will create <span className="text-gray-200 font-medium">{count}</span> new layer
-          {count === 1 ? '' : 's'}
+          Will create <span className="text-gray-200 font-medium">{count}</span> new occurrence
+          {count === 1 ? '' : 's'} of the selected forest, including descendants
           {dupAnim && hasAnimationOnSource && ' + duplicate animation'}.
-          One undo step.
+          Layer count includes every descendant; overlapping parent/child selections clone once. One undo step.
         </div>
 
         {/* Actions */}

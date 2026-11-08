@@ -19,6 +19,16 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.tool.circle-select',    label: 'Circle Select',      contexts: ['canvas'], binding: { type: 'keyboard', key: 'o' } },
   { id: 'canvas.tool.paint-select',     label: 'Paint Select',       contexts: ['canvas'], binding: { type: 'keyboard', key: 'w' } },
 
+  // Canvas movement takes precedence over the global timeline frame shortcuts.
+  { id: 'canvas.nudge.left',    label: 'Move Selected Left 1 px',   contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowleft' } },
+  { id: 'canvas.nudge.right',   label: 'Move Selected Right 1 px',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowright' } },
+  { id: 'canvas.nudge.up',      label: 'Move Selected Up 1 px',     contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowup' } },
+  { id: 'canvas.nudge.down',    label: 'Move Selected Down 1 px',   contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowdown' } },
+  { id: 'canvas.nudge.left10',  label: 'Move Selected Left 10 px',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowleft', shift: true } },
+  { id: 'canvas.nudge.right10', label: 'Move Selected Right 10 px', contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowright', shift: true } },
+  { id: 'canvas.nudge.up10',    label: 'Move Selected Up 10 px',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowup', shift: true } },
+  { id: 'canvas.nudge.down10',  label: 'Move Selected Down 10 px',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowdown', shift: true } },
+
   // ── Selection / deletion (works in any context — handler is context-aware) ─
   { id: 'global.delete',            label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'delete' } },
   { id: 'global.deleteBackspace',   label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'backspace' } },
@@ -43,8 +53,8 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.distribute.vertical',    label: 'Distribute Vertical',     contexts: ['canvas'], binding: { type: 'keyboard', key: 'v', meta: true, alt: true } },
 
   // ── Canvas — gestures ────────────────────────────────────────────────────
-  { id: 'canvas.gesture.cloneDrag',    label: 'Clone while dragging',          contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['shift'] } },
-  { id: 'canvas.gesture.instanceDrag', label: 'Instance clone while dragging', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['alt'] } },
+  { id: 'canvas.gesture.cloneDrag',    label: 'Clone while dragging',          contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta'] }, description: 'Cmd/Ctrl + drag copies the complete selected subtree and animation' },
+  { id: 'canvas.gesture.instanceDrag', label: 'Instance clone while dragging', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta', 'shift'] }, description: 'Cmd/Ctrl + Shift + drag creates linked appearance with independent animation' },
 
   // ── Playback ─────────────────────────────────────────────────────────────
   { id: 'global.playback.toggle',        label: 'Play / Pause',           contexts: ['global'],   binding: { type: 'keyboard', key: ' ' } },

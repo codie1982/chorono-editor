@@ -1116,6 +1116,9 @@ export default function CurveEditor({
                     />
                   )}
                   <circle
+                    data-curve-key-id={kf.id}
+                    data-curve-key-target={t.target}
+                    data-curve-key-selected={isSelected ? 'true' : 'false'}
                     cx={cx} cy={cy}
                     r={isSelected ? 5 : 4}
                     fill={isSelected ? '#fff' : color}

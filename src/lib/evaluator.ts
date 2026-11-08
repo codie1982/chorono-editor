@@ -302,7 +302,7 @@ export function hasInfinitePlayback(timelines: Timeline[]): boolean {
  * Compute the per-timeline playback head, accounting for loop, loopCount, and
  * ping-pong. globalTimeMs is the project-wide playback time (from usePlayback).
  */
-function computeLocalTime(tl: Timeline, globalTimeMs: number): number {
+export function computeLocalTime(tl: Timeline, globalTimeMs: number): number {
   const duration = tl.durationMs
   if (duration <= 0) return 0
 

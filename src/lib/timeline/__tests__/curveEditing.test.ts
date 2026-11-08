@@ -34,6 +34,26 @@ describe('shape-preserving curve insertion', () => {
     if (result.ok) for (let ms = 0; ms <= 1000; ms += 7) expect(evaluateNumericTrack(result.track, ms)).toBeCloseTo(evaluateNumericTrack(track, ms)!, 8)
   })
 
+  it('preserves fractional exact-time insertion and keeps legacy rounding by default', () => {
+    const track = makeTrack({ type: 'easeIn' })
+    const exact = insertCurveKeyframe(track, 373.25, idFactory(), { roundTimeMs: false })
+    expect(exact.ok).toBe(true)
+    if (!exact.ok) return
+    expect(exact.track.keyframes.find(key => key.id === exact.insertedIds[0])?.timeMs).toBe(373.25)
+    for (let ms = 0; ms <= 1000; ms += 7.5) expect(evaluateNumericTrack(exact.track, ms)).toBeCloseTo(evaluateNumericTrack(track, ms)!, 7)
+    const rounded = insertCurveKeyframe(track, 373.25, idFactory())
+    expect(rounded.ok && rounded.track.keyframes.some(key => key.timeMs === 373)).toBe(true)
+  })
+
+  it('refuses fractional collisions with source or required easing support keys', () => {
+    const track = makeTrack({ type: 'easeInOut' }), before = structuredClone(track)
+    expect(insertCurveKeyframe(track, 500.25, idFactory(), { roundTimeMs: false }).ok).toBe(false)
+    const nearby = { ...track, keyframes: [{ ...track.keyframes[0], timeMs: 10.25 }, track.keyframes[1]] }
+    const collision = insertCurveKeyframe(nearby, 10.75, idFactory(), { roundTimeMs: false })
+    expect(collision).toMatchObject({ ok: false, existingId: 'a' })
+    expect(track).toEqual(before)
+  })
+
   it('splits a custom Bezier with overshoot via De Casteljau', () => {
     const track = makeTrack({ type: 'customBezier', bezier: { cx1: 0.15, cy1: -0.5, cx2: 0.8, cy2: 1.5 } })
     const result = insertCurveKeyframe(track, 317, idFactory())

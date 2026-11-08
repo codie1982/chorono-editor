@@ -1,234 +1,188 @@
 'use client'
-import { useMemo, useRef, useCallback } from 'react'
-import type { ChronoScene, Layer, Track } from '@/lib/types'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
+import type { ChronoScene, Layer } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
-import { evaluateNumericTrack } from '@/lib/evaluator'
-import { updateKfValue } from '@/lib/timeline/keyframeOps'
-import { makeUpdateKfValueCmd } from '@/lib/editor/commands-keyframe'
-import { makeBatchCmd } from '@/lib/editor/commands-batch'
+import { buildTrajectoryModel, prepareTrajectoryContext, projectTrajectoryPosition, type TrajectoryModel, type TrajectoryNode } from '@/lib/timeline/trajectory'
+import { moveTrajectoryNodes, setTrajectoryPoint } from '@/lib/timeline/trajectory/commands'
+import { MotionKeyToolbar } from './canvas/motion/MotionKeyToolbar'
+import { MotionKeyInspector } from './canvas/motion/MotionKeyInspector'
+import { MotionDrawingPanel } from './canvas/motion/MotionDrawingPanel'
+import { useMotionKeyActions } from './canvas/motion/useMotionKeyActions'
+import { useMotionDrawing } from './canvas/motion/useMotionDrawing'
+import { useMotionKeyDrag, motionPointerWorld } from './canvas/motion/useMotionKeyDrag'
+import { useMotionKeyboard } from './canvas/motion/useMotionKeyboard'
+import { isMotionNodeSelected, selectMotionNode, trajectoryNodeRef, type MotionEditorMode } from './canvas/motion/types'
 
-interface Props {
-  layer:         Layer
-  scene:         ChronoScene
-  zoom:          number
+export interface MotionPathOverlayProps {
+  layer: Layer
+  scene: ChronoScene
+  zoom: number
+  /** Active timeline's exact local authoring time, milliseconds. */
   currentTimeMs: number
-  /** Editor handle — lets keyframe nodes be dragged to edit their values. */
-  editor:        EditorStateReturn
-  /** Composition width (px) — used to convert client px deltas to comp px. */
+  editor: EditorStateReturn
+  /** Retained for existing callers; native canvas dimensions own projection. */
   compositionWidth: number
+  timelineId?: string
+  selectedKeyframeIds?: ReadonlySet<string>
+  onSelectKeyframes?: (ids: Set<string>) => void
+  onSeek?: (localMs: number) => void
+  canvasRef?: RefObject<HTMLCanvasElement>
+  /** Positioned, unscaled viewport host for controls. Missing/unattached hosts
+   * keep controls inline; trajectory geometry always stays in composition space. */
+  controlsHostRef?: RefObject<HTMLElement>
+  mode?: MotionEditorMode
+  onModeChange?: (mode: MotionEditorMode) => void
+  onEditingChange?: (editing: boolean) => void
+  onEditPathSource?: (sourceId: string) => void
+  onEditProgressTiming?: (layerId: string) => void
+  snapWorldPoint?: (point: { x: number; y: number }) => { x: number; y: number }
 }
 
-/**
- * SVGator-style motion path visualisation + editable keyframe nodes.
- *
- * Finds the position keyframes (transform.x / transform.y) for the selected
- * layer, samples the interpolated trajectory, draws it, and renders a draggable
- * diamond at each keyframe time. Dragging a diamond edits that keyframe's
- * transform.x / transform.y values directly on the canvas.
- *
- * Renders nothing when fewer than 2 position keyframes exist.
- */
-export default function MotionPathOverlay({
-  layer, scene, zoom, currentTimeMs, editor, compositionWidth,
-}: Props) {
-  const data = useMemo(() => buildPathData(layer, scene), [layer, scene])
-  const svgRef = useRef<SVGSVGElement | null>(null)
-  const dragRef = useRef<{
-    scale: number
-    startClientX: number; startClientY: number
-    xKfId?: string; yKfId?: string
-    startX: number; startY: number
-  } | null>(null)
-
-  const handleMove = useCallback((e: PointerEvent) => {
-    const d = dragRef.current
-    if (!d || !data) return
-    const dx = (e.clientX - d.startClientX) * d.scale
-    const dy = (e.clientY - d.startClientY) * d.scale
-    let next = editor.scene
-    if (d.xKfId && data.xTrack && data.xTimelineId)
-      next = updateKfValue(next, data.xTimelineId, data.xTrack.target, d.xKfId, d.startX + dx)
-    if (d.yKfId && data.yTrack && data.yTimelineId)
-      next = updateKfValue(next, data.yTimelineId, data.yTrack.target, d.yKfId, d.startY + dy)
-    editor.previewTransaction(next)
-  }, [data, editor])
-
-  const handleUp = useCallback((e: PointerEvent) => {
-    const d = dragRef.current
-    dragRef.current = null
-    window.removeEventListener('pointermove', handleMove)
-    window.removeEventListener('pointerup', handleUp)
-    if (!d || !data) return
-    const dx = (e.clientX - d.startClientX) * d.scale
-    const dy = (e.clientY - d.startClientY) * d.scale
-    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) { editor.cancelTransaction(); return }
-    const cmds = []
-    if (d.xKfId && data.xTrack && data.xTimelineId)
-      cmds.push(makeUpdateKfValueCmd(data.xTimelineId, data.xTrack.target, d.xKfId, d.startX, d.startX + dx))
-    if (d.yKfId && data.yTrack && data.yTimelineId)
-      cmds.push(makeUpdateKfValueCmd(data.yTimelineId, data.yTrack.target, d.yKfId, d.startY, d.startY + dy))
-    if (cmds.length === 0) { editor.cancelTransaction(); return }
-    editor.commitTransaction(cmds.length === 1 ? cmds[0] : makeBatchCmd('Move Keyframe', cmds))
-  }, [data, editor, handleMove])
-
-  const beginKfDrag = useCallback((t: number) => (e: React.PointerEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    const svg = svgRef.current
-    if (!svg || !data) return
-    const rect = svg.getBoundingClientRect()
-    const scale = rect.width > 0 ? compositionWidth / rect.width : 1
-    const xKf = data.xTrack?.keyframes.find((k) => Math.abs(k.timeMs - t) < 0.5)
-    const yKf = data.yTrack?.keyframes.find((k) => Math.abs(k.timeMs - t) < 0.5)
-    if (!xKf && !yKf) return
-    dragRef.current = {
-      scale,
-      startClientX: e.clientX, startClientY: e.clientY,
-      xKfId: xKf?.id, yKfId: yKf?.id,
-      startX: xKf ? (xKf.value as number) : 0,
-      startY: yKf ? (yKf.value as number) : 0,
-    }
-    editor.beginTransaction()
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-  }, [data, editor, compositionWidth, handleMove, handleUp])
-
-  if (!data) return null
-
-  const { samples, keyframeTimes, xTrack, yTrack, anchorX, anchorY } = data
-
-  // Resolve the current time position on the path so we can highlight it.
-  const head = evalXY(xTrack, yTrack, currentTimeMs, layer.transform.x, layer.transform.y)
-
-  // SVG path string built from sample points (M then series of L)
-  const d = samples.length
-    ? `M ${samples[0].x * zoom} ${samples[0].y * zoom} ` +
-      samples.slice(1).map((p) => `L ${p.x * zoom} ${p.y * zoom}`).join(' ')
-    : ''
-
-  return (
-    <svg
-      ref={svgRef}
-      className="absolute inset-0 z-30 overflow-visible"
-      style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
-    >
-      {/* Trajectory line */}
-      <path d={d} fill="none" stroke="#60a5fa" strokeWidth={1.5} strokeDasharray="0" opacity={0.9} />
-
-      {/* Interpolation sample dots — every 4th sample */}
-      {samples.map((p, i) => (i % 4 === 0 ? (
-        <circle key={`s-${i}`} cx={p.x * zoom} cy={p.y * zoom} r={1.5} fill="#60a5fa" opacity={0.55} />
-      ) : null))}
-
-      {/* Keyframe nodes — draggable diamonds at each kf time. pointerEvents
-          re-enabled here only (the svg itself stays transparent to clicks). */}
-      {keyframeTimes.map((t, i) => {
-        const pos = evalXY(xTrack, yTrack, t, layer.transform.x, layer.transform.y)
-        const cx = (pos.x + anchorX) * zoom
-        const cy = (pos.y + anchorY) * zoom
-        return (
-          <g
-            key={`k-${i}`}
-            transform={`translate(${cx} ${cy}) rotate(45)`}
-            style={{ pointerEvents: 'all', cursor: 'grab' }}
-            onPointerDown={beginKfDrag(t)}
-          >
-            {/* invisible larger hit target for easier grabbing */}
-            <rect x={-7} y={-7} width={14} height={14} fill="transparent" />
-            <rect x={-4} y={-4} width={8} height={8} fill="#1e293b" stroke="#60a5fa" strokeWidth={1.5} />
-          </g>
-        )
-      })}
-
-      {/* Current time indicator */}
-      <circle
-        cx={(head.x + anchorX) * zoom}
-        cy={(head.y + anchorY) * zoom}
-        r={3.5}
-        fill="#3b82f6"
-        stroke="#ffffff"
-        strokeWidth={1.5}
-      />
-    </svg>
-  )
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-interface SamplePoint { x: number; y: number }
-
-interface PathData {
-  samples:       SamplePoint[]
-  keyframeTimes: number[]
-  xTrack:        Track | null
-  yTrack:        Track | null
-  xTimelineId:   string | null
-  yTimelineId:   string | null
-  anchorX:       number
-  anchorY:       number
-}
-
-/** Walk every timeline track looking for this layer's x/y position tracks.
- *  Returns null when there's no path worth drawing (< 2 keyframes total). */
-function buildPathData(layer: Layer, scene: ChronoScene): PathData | null {
-  let xTrack: Track | null = null
-  let yTrack: Track | null = null
-  let xTimelineId: string | null = null
-  let yTimelineId: string | null = null
-  const xTarget = `layers.${layer.id}.transform.x`
-  const yTarget = `layers.${layer.id}.transform.y`
-
-  for (const tl of scene.timelines ?? []) {
-    for (const tr of tl.tracks) {
-      if (tr.target === xTarget) { xTrack = tr; xTimelineId = tl.id }
-      if (tr.target === yTarget) { yTrack = tr; yTimelineId = tl.id }
-    }
+/** Editable native position trajectory on one explicit timeline. Geometry path
+ * authoring and Follow Path progress remain separate source models. Toolbar and
+ * numeric actions are keyboard/single-pointer alternatives to spatial dragging.
+ * Read-only drivers still show diagnostics/preview without writing output back
+ * into their inputs. Draft routes and shared pointer sessions never serialize UI
+ * state; editor commands own atomic source/key history and stable identities. */
+export default function MotionPathOverlay(props: MotionPathOverlayProps) {
+  const { scene, layer, editor, zoom, currentTimeMs, timelineId = '', canvasRef } = props
+  const [internalMode, setInternalMode] = useState<MotionEditorMode>('off')
+  const mode = props.mode ?? internalMode
+  const [localSelection, setLocalSelection] = useState<Set<string>>(new Set())
+  const selection = props.selectedKeyframeIds ?? localSelection
+  const [warning, setWarning] = useState('')
+  const [duplicateMs, setDuplicateMs] = useState(1000 / Math.max(1, scene.composition.frameRate))
+  const [addStep, setAddStep] = useState(1)
+  const [stepUnit, setStepUnit] = useState<'frames' | 'ms'>('frames')
+  const [controlsHost, setControlsHost] = useState<HTMLElement | null>(null)
+  // Parent refs attach after rendering. Recheck on each commit so a reused ref
+  // also follows host replacement without subscribing to canvas pan or zoom.
+  useEffect(() => {
+    const next = props.controlsHostRef?.current ?? null
+    if (next !== controlsHost) setControlsHost(next)
+  })
+  const documentSignal = editor.getDocumentSignal()
+  const contextKey = `${timelineId}:${layer.id}:${mode}`
+  const dragging = editor.isTransactionActive()
+  const model = useMemo<TrajectoryModel>(() => {
+    if (mode !== 'off') return buildTrajectoryModel(scene, timelineId, layer.id, { maxSamples: dragging ? 64 : 256 })
+    const prepared = prepareTrajectoryContext(scene, timelineId, layer.id)
+    return { context: prepared.ok ? prepared.context : null, timelineId, layerId: layer.id,
+      durationMs: prepared.ok ? prepared.context.timeline.durationMs : 0,
+      capability: prepared.ok ? prepared.context.capability : { editable: false, kind: 'none', diagnostics: prepared.diagnostics },
+      nodes: [], segments: [] }
+  }, [scene, timelineId, layer.id, mode, dragging])
+  const selectedNodes = useMemo(() => model.nodes.filter(node => isMotionNodeSelected(node, selection)), [model.nodes, selection])
+  const changeMode = useCallback((next: MotionEditorMode) => {
+    if (props.mode === undefined) setInternalMode(next)
+    props.onModeChange?.(next); setWarning('')
+  }, [props.mode, props.onModeChange])
+  const select = useCallback((ids: Set<string>) => {
+    if (!props.selectedKeyframeIds) setLocalSelection(ids)
+    props.onSelectKeyframes?.(ids)
+  }, [props.selectedKeyframeIds, props.onSelectKeyframes])
+  const editingCallback = useRef(props.onEditingChange); editingCallback.current = props.onEditingChange
+  useEffect(() => {
+    editingCallback.current?.(mode !== 'off')
+    return () => editingCallback.current?.(false)
+  }, [mode])
+  useEffect(() => { setLocalSelection(new Set()); setWarning('') }, [timelineId, layer.id, documentSignal])
+  const actions = useMotionKeyActions({ editor, timelineId, layerId: layer.id, selectedNodes,
+    onSelect: select, onSeek: props.onSeek, onWarning: setWarning })
+  const drawing = useMotionDrawing({ scene, editor, timelineId, layerId: layer.id, durationMs: model.durationMs,
+    localTimeMs: currentTimeMs, contextKey, documentSignal, apply: actions.apply, onWarning: setWarning })
+  const drag = useMotionKeyDrag({ editor, timelineId, layerId: layer.id, canvasRef, contextKey,
+    documentSignal, onSelect: select, onWarning: setWarning, snapWorldPoint: props.snapWorldPoint })
+  const moveSelected = useCallback((dx: number, dy: number) => actions.apply(() => moveTrajectoryNodes(editor.getScene(), {
+    timelineId, layerId: layer.id, nodes: selectedNodes.map(trajectoryNodeRef), deltaWorld: { x: dx, y: dy },
+  })), [actions.apply, editor, timelineId, layer.id, selectedNodes])
+  const cancel = useCallback(() => { drag.cancel(); drawing.clear(); changeMode('select') }, [drag.cancel, drawing.clear, changeMode])
+  useMotionKeyboard({ active: mode !== 'off', canEdit: model.capability.editable,
+    hasSelection: selectedNodes.length > 0, move: moveSelected, remove: actions.remove, cancel })
+  const preview = useMemo(() => drawing.previewScene ? buildTrajectoryModel(drawing.previewScene, timelineId, layer.id) : null,
+  [drawing.previewScene, timelineId, layer.id])
+  const head = mode !== 'off' && model.context ? projectTrajectoryPosition(model.context, currentTimeMs) : null
+  const pick = (node: TrajectoryNode, shift = false) => {
+    const next = selectMotionNode(selection, node, shift)
+    select(next); props.onSeek?.(node.timeMs)
+    return next
   }
-
-  // Union of keyframe times — anywhere x OR y changes is a node on the path.
-  const tSet = new Set<number>()
-  xTrack?.keyframes.forEach((k) => tSet.add(k.timeMs))
-  yTrack?.keyframes.forEach((k) => tSet.add(k.timeMs))
-  const keyframeTimes = Array.from(tSet).sort((a, b) => a - b)
-
-  // Need at least 2 distinct anchor points to draw a trajectory.
-  if (keyframeTimes.length < 2) return null
-
-  const t0 = keyframeTimes[0]
-  const t1 = keyframeTimes[keyframeTimes.length - 1]
-  const N = 48
-  const samples: SamplePoint[] = []
-  for (let i = 0; i <= N; i++) {
-    const t = t0 + ((t1 - t0) * i) / N
-    const p = evalXY(xTrack, yTrack, t, layer.transform.x, layer.transform.y)
-    samples.push({ x: p.x + layer.transform.anchorX, y: p.y + layer.transform.anchorY })
+  const beginNode = (node: TrajectoryNode) => (event: React.PointerEvent<SVGGElement>) => {
+    if (event.button !== 0 || editor.isTransactionActive()) return
+    event.stopPropagation(); event.preventDefault()
+    const next = pick(node, event.shiftKey)
+    if (event.shiftKey || !model.capability.editable) return
+    drag.begin(event, [node, ...model.nodes.filter(item => item.id !== node.id && isMotionNodeSelected(item, next))])
   }
-
-  return {
-    samples,
-    keyframeTimes,
-    xTrack,
-    yTrack,
-    xTimelineId,
-    yTimelineId,
-    anchorX: layer.transform.anchorX,
-    anchorY: layer.transform.anchorY,
+  const place = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0 || !model.capability.editable || !canvasRef?.current || (mode !== 'add' && mode !== 'draw')) return
+    event.preventDefault(); event.stopPropagation()
+    try {
+      const raw = motionPointerWorld(canvasRef.current, event.clientX, event.clientY), point = props.snapWorldPoint?.(raw) ?? raw
+      if (mode === 'draw') drawing.add(point)
+      else if (actions.apply(() => setTrajectoryPoint(editor.getScene(), { timelineId, layerId: layer.id, timeMs: currentTimeMs, worldPoint: point }))) {
+        const step = stepUnit === 'frames' ? addStep * 1000 / Math.max(1, scene.composition.frameRate) : addStep
+        if (Number.isFinite(step) && step > 0) props.onSeek?.(Math.min(model.durationMs, currentTimeMs + step))
+      }
+    } catch (error) { setWarning(error instanceof Error ? error.message : String(error)) }
   }
-}
-
-/** Evaluate (x, y) at a given time, falling back to the layer's static
- *  transform value if the track is missing or has no keyframes. */
-function evalXY(
-  xTrack: Track | null,
-  yTrack: Track | null,
-  timeMs: number,
-  fallbackX: number,
-  fallbackY: number,
-): { x: number; y: number } {
-  const x = xTrack ? evaluateNumericTrack(xTrack, timeMs) : null
-  const y = yTrack ? evaluateNumericTrack(yTrack, timeMs) : null
-  return {
-    x: x !== null ? x : fallbackX,
-    y: y !== null ? y : fallbackY,
-  }
+  const active = mode !== 'off', editable = model.capability.editable && !!canvasRef?.current
+  const diagnostics = model.capability.diagnostics.map(item => item.message)
+  const lines = preview?.segments ?? model.segments
+  const controls = <div className="absolute left-2 top-2 z-[65] overflow-y-auto rounded-md border border-slate-600 bg-slate-900/95 p-2 text-white shadow-xl pointer-events-auto"
+      style={{ maxWidth: 'min(720px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)' }}
+      onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} data-motion-controls>
+      <MotionKeyToolbar mode={mode} onModeChange={changeMode} timelineId={timelineId} selectedCount={selectedNodes.length} editable={editable}
+        duplicateMs={duplicateMs} onDuplicateMs={setDuplicateMs} onDuplicate={() => actions.duplicate(duplicateMs)} onDelete={actions.remove} />
+      {active && <>
+        <p className="mt-1 text-xs text-slate-300">{mode === 'draw' ? 'Place route points, set timing, then Apply. Source stays unchanged during preview.'
+          : mode === 'add' ? `Click to set a position key at ${currentTimeMs.toFixed(2)} ms.` : 'Click a key to select and seek. Shift adds/removes; drag or use arrows to move selected keys.'}</p>
+        {!!model.nodes.length && <label className="mt-2 flex items-center gap-2 text-xs text-slate-300">Key time
+          <select aria-label="Select motion key time" className="max-w-64 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-white"
+            value={selectedNodes.length === 1 ? selectedNodes[0].id : ''} onChange={event => {
+              const node = model.nodes.find(item => item.id === event.target.value)
+              if (node) { select(new Set(node.keyIds)); props.onSeek?.(node.timeMs) }
+            }}><option value="">Choose a key…</option>{model.nodes.map(node => <option key={node.id} value={node.id}>{node.timeMs.toFixed(2)} ms · {node.world.x.toFixed(1)}, {node.world.y.toFixed(1)}</option>)}</select>
+        </label>}
+        {mode === 'add' && <div className="mt-2 flex items-center gap-2 text-xs"><label>Advance after key
+          <input aria-label="Motion key advance" type="number" min={0} step="any" value={addStep} onChange={event => setAddStep(Number(event.target.value))}
+            className="ml-2 w-16 rounded border border-slate-600 bg-slate-950 px-1 py-1" /></label>
+          <select aria-label="Motion key advance unit" value={stepUnit} onChange={event => setStepUnit(event.target.value as 'frames' | 'ms')}
+            className="rounded border border-slate-600 bg-slate-950 px-1 py-1"><option value="frames">frames</option><option value="ms">ms</option></select></div>}
+        {selectedNodes.length === 1 && mode === 'select' && <MotionKeyInspector node={selectedNodes[0]} durationMs={model.durationMs}
+          disabled={!model.capability.editable} onApply={actions.numeric} />}
+        {mode === 'draw' && <MotionDrawingPanel settings={drawing.settings} onChange={drawing.setSettings} pointCount={drawing.points.length}
+          durationMs={model.durationMs} canApply={drawing.canApply} onApply={drawing.apply} onClear={drawing.clear} onCancel={cancel} />}
+        {layer.followPath && <div className="mt-2 flex gap-2 text-xs">
+          <button type="button" className="rounded border border-slate-500 px-2 py-1 disabled:opacity-40" disabled={!props.onEditPathSource}
+            onClick={() => props.onEditPathSource?.(layer.followPath!.pathLayerId)}>Edit Path Source</button>
+          <button type="button" className="rounded border border-slate-500 px-2 py-1 disabled:opacity-40" disabled={!props.onEditProgressTiming}
+            onClick={() => props.onEditProgressTiming?.(layer.id)}>Edit Progress Timing</button></div>}
+        {(warning || drawing.warning || diagnostics.length > 0) && <p role="status" className="mt-2 max-w-xl text-xs text-amber-300">
+          {!model.capability.editable ? 'Read only. ' : ''}{[warning, drawing.warning, ...diagnostics].filter(Boolean).join(' ')}</p>}
+      </>}
+    </div>
+  return <>
+    {controlsHost ? createPortal(controls, controlsHost) : controls}
+    {active && <svg className="absolute inset-0 z-40 overflow-visible" style={{ width: '100%', height: '100%',
+      pointerEvents: mode === 'add' || mode === 'draw' ? 'auto' : 'none', cursor: mode === 'add' || mode === 'draw' ? 'crosshair' : undefined }}
+      aria-label="Motion trajectory" data-testid="motion-input-surface" onPointerDown={place}>
+      {lines.map((samples, index) => <polyline key={index} points={samples.map(sample => `${sample.world.x * zoom},${sample.world.y * zoom}`).join(' ')}
+        fill="none" stroke={preview ? '#fbbf24' : '#7dd3fc'} strokeWidth={2} strokeDasharray={preview ? '5 3' : undefined} pointerEvents="none" />)}
+      {drawing.points.map((point, index) => <circle key={`draft-${index}`} cx={point.x * zoom} cy={point.y * zoom} r={4} fill="#fbbf24" pointerEvents="none" />)}
+      {model.nodes.map(node => <g key={node.id} data-motion-node-id={node.id} data-motion-time-ms={node.timeMs}
+        transform={`translate(${node.world.x * zoom} ${node.world.y * zoom})`} role="button" tabIndex={mode === 'select' ? 0 : -1}
+        aria-label={`Motion key ${node.timeMs.toFixed(2)} milliseconds`} aria-pressed={isMotionNodeSelected(node, selection)}
+        style={{ pointerEvents: mode === 'select' ? 'all' : 'none', cursor: model.capability.editable ? 'grab' : 'pointer' }}
+        onPointerDown={beginNode(node)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); pick(node, event.shiftKey) } }}>
+        <title>{node.timeMs.toFixed(2)} ms · world {node.world.x.toFixed(2)}, {node.world.y.toFixed(2)}</title>
+        <circle r={12} fill="transparent" />
+        <rect x={isMotionNodeSelected(node, selection) ? -6 : -5} y={isMotionNodeSelected(node, selection) ? -6 : -5}
+          width={isMotionNodeSelected(node, selection) ? 12 : 10} height={isMotionNodeSelected(node, selection) ? 12 : 10}
+          transform="rotate(45)" fill={isMotionNodeSelected(node, selection) ? '#38bdf8' : '#0f172a'} stroke="#e0f2fe" strokeWidth={2} />
+      </g>)}
+      {head && <circle cx={head.world.x * zoom} cy={head.world.y * zoom} r={4} fill="#2563eb" stroke="white" strokeWidth={1.5} pointerEvents="none" />}
+    </svg>}
+  </>
 }

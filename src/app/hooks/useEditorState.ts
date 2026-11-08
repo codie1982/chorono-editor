@@ -33,7 +33,7 @@ export interface EditorStateReturn {
   beginTransaction: () => void
   previewTransaction: (scene: ChronoScene) => void
   commitTransaction: (cmd: EditorCommand) => void
-  cancelTransaction: () => void
+  cancelTransaction: (options?: { preserveScene?: boolean }) => void
   undo: () => void
   redo: () => void
   /** Replace the entire scene without history (use sparingly — e.g. Clear). */
@@ -146,11 +146,14 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
     }
   }, [dispatchCommand, updateHistory])
 
-  const cancelTransaction = useCallback(() => {
+  /** End a gesture. Normal cancellation restores its baseline. A caller that
+   * detects an intervening source edit may preserve the current scene instead;
+   * abandoning that stale gesture must never restore an older user document. */
+  const cancelTransaction = useCallback((options?: { preserveScene?: boolean }) => {
     if (!txRef.current) return
     const base = txRef.current.baseScene
     txRef.current = null
-    updateHistory((h) => ({ ...h, present: base }))
+    updateHistory((h) => options?.preserveScene ? h : ({ ...h, present: base }))
   }, [updateHistory])
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────

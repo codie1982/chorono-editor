@@ -11,7 +11,9 @@
 // Inside is the stricter pick-the-fully-enclosed-objects mode.
 
 import type { ChronoScene, Layer } from '../types'
+import { evaluateTimelines, type OverrideMap } from '../evaluator'
 import { resolveLayerWorldBounds, createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
+import { resolveLayerWorldMatrix } from '../geometry/resolveLayerWorldMatrix'
 import type { PathBounds } from '../geometry/computePathBounds'
 
 interface Vec2 { x: number; y: number }
@@ -19,6 +21,16 @@ interface AABB { x: number; y: number; w: number; h: number }
 
 /** Containment mode for canvas selection tools (BL-60 Faz 3). */
 export type SelectionContainMode = 'inside' | 'touching'
+
+/** One borrowed evaluated frame for composition-space selection. Supply the
+ * canvas's overrides when timeline isolation, parameters or runtime bindings
+ * affect its display. With timeMs alone, ordinary timelines are evaluated.
+ * Omitting both fields preserves legacy static/source selection semantics.
+ * Inputs remain immutable for the synchronous query; no cache is retained. */
+export interface SelectionFrameOptions {
+  timeMs?: number
+  overrides?: OverrideMap
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer position helpers
@@ -40,31 +52,23 @@ export function layerAnchorWorldPos(scene: ChronoScene, layer: Layer): Vec2 {
   return { x, y }
 }
 
-/** Actual static geometry in world coords, including vector/group/instance
- *  bounds. Unsupported or empty content keeps the 1×1 point-box API fallback. */
-export function getLayerWorldBounds(scene: ChronoScene, layer: Layer): AABB {
-  const b = resolveLayerWorldBounds(layer, scene, 0, new Map())
-  return asSelectionBounds(scene, layer, b)
+/** Return editable geometry bounds in composition pixels, including evaluated
+ * parents, vectors and instances. Omitted frame keeps the legacy static view.
+ * Unsupported/empty geometry retains a 1×1 box at its evaluated local origin;
+ * input scene, overrides and geometry are never mutated. */
+export function getLayerWorldBounds(scene: ChronoScene, layer: Layer, options: SelectionFrameOptions = {}): AABB {
+  const { timeMs, overrides } = resolveSelectionFrame(scene, options)
+  const b = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+  return asSelectionBounds(scene, layer, b, timeMs, overrides)
 }
 
-function asSelectionBounds(scene: ChronoScene, layer: Layer, b: PathBounds | null): AABB {
+/** Adapt canonical bounds to selection's historical width/height names and
+ * unsupported-geometry fallback, using the same frame for both branches. */
+function asSelectionBounds(scene: ChronoScene, layer: Layer, b: PathBounds | null, timeMs: number, overrides: OverrideMap): AABB {
   if (b) {
     return { x: b.x, y: b.y, w: b.width, h: b.height }
   }
-  // World top-left (no anchor offset — anchor is local pivot, not bbox origin)
-  let x = layer.transform.x
-  let y = layer.transform.y
-  let cur: Layer | undefined = layer
-  const visited = new Set<string>([layer.id])
-  while (cur?.parentId) {
-    if (visited.has(cur.parentId)) break
-    visited.add(cur.parentId)
-    const parent = scene.layers.find((p) => p.id === cur!.parentId)
-    if (!parent) break
-    x += parent.transform.x
-    y += parent.transform.y
-    cur = parent
-  }
+  const { x, y } = resolveLayerWorldMatrix(layer, scene, timeMs, overrides).applyToPoint({ x: 0, y: 0 })
   return { x, y, w: 1, h: 1 }
 }
 
@@ -185,80 +189,85 @@ export function segmentsIntersect(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2): boole
 // Bulk hit-tests against scene layers (with mode parameter)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Returns ids of every visible+unlocked layer whose bounds satisfy the
- *  containment relationship with `rect` per `mode`. */
+/** Select non-audio, visible, unlocked, unfrozen layers by composition-pixel
+ * rectangle bounds. Results preserve scene order and source/override inputs.
+ * Frame options are optional for backward-compatible static callers. */
 export function layersInRect(
   scene: ChronoScene,
   rect: AABB,
   mode: SelectionContainMode = 'touching',
+  frame: SelectionFrameOptions = {},
 ): Set<string> {
-  const out = new Set<string>()
-  const boundsForFrame = createLayerWorldBoundsResolver(scene, 0, new Map())
-  for (const layer of scene.layers) {
-    if (!isSelectable(layer)) continue
-    const bounds = asSelectionBounds(scene, layer, boundsForFrame(layer))
-    const ok = mode === 'inside'
-      ? rectInsideRect(bounds, rect)
-      : rectIntersectsRect(bounds, rect)
-    if (ok) out.add(layer.id)
-  }
-  return out
+  return selectLayersByBounds(scene, frame, bounds => mode === 'inside'
+    ? rectInsideRect(bounds, rect) : rectIntersectsRect(bounds, rect))
 }
 
+/** Select layers whose evaluated bounds meet a composition-pixel circle.
+ * Containment, ordering, flags and ownership match layersInRect. */
 export function layersInCircle(
   scene: ChronoScene,
   circle: { x: number; y: number; r: number },
   mode: SelectionContainMode = 'touching',
+  frame: SelectionFrameOptions = {},
 ): Set<string> {
-  const out = new Set<string>()
-  const boundsForFrame = createLayerWorldBoundsResolver(scene, 0, new Map())
-  for (const layer of scene.layers) {
-    if (!isSelectable(layer)) continue
-    const bounds = asSelectionBounds(scene, layer, boundsForFrame(layer))
-    const ok = mode === 'inside'
-      ? rectInsideCircle(bounds, circle)
-      : rectIntersectsCircle(bounds, circle)
-    if (ok) out.add(layer.id)
-  }
-  return out
+  return selectLayersByBounds(scene, frame, bounds => mode === 'inside'
+    ? rectInsideCircle(bounds, circle) : rectIntersectsCircle(bounds, circle))
 }
 
+/** Select layers by composition-pixel lasso polygon and evaluated bounds.
+ * Fewer than three polygon points select nothing; inputs are never mutated. */
 export function layersInPolygon(
   scene: ChronoScene,
   polygon: Vec2[],
   mode: SelectionContainMode = 'touching',
+  frame: SelectionFrameOptions = {},
 ): Set<string> {
-  const out = new Set<string>()
-  const boundsForFrame = createLayerWorldBoundsResolver(scene, 0, new Map())
-  for (const layer of scene.layers) {
-    if (!isSelectable(layer)) continue
-    const bounds = asSelectionBounds(scene, layer, boundsForFrame(layer))
-    const ok = mode === 'inside'
-      ? rectInsidePolygon(bounds, polygon)
-      : rectIntersectsPolygon(bounds, polygon)
-    if (ok) out.add(layer.id)
-  }
-  return out
+  return selectLayersByBounds(scene, frame, bounds => mode === 'inside'
+    ? rectInsidePolygon(bounds, polygon) : rectIntersectsPolygon(bounds, polygon))
 }
 
-/** Paint brush — always uses 'touching' semantics (bounds intersects circle)
- *  since the brush is meant to be a permissive sweep tool. */
+/** Select layers touched by a composition-pixel paint brush in one frame.
+ * Always uses touching semantics; caller owns accumulation across samples. */
 export function layersUnderPaintBrush(
   scene: ChronoScene,
   cursor: Vec2,
   radius: number,
+  frame: SelectionFrameOptions = {},
 ): Set<string> {
-  return layersInCircle(scene, { x: cursor.x, y: cursor.y, r: radius }, 'touching')
+  return layersInCircle(scene, { x: cursor.x, y: cursor.y, r: radius }, 'touching', frame)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal
 // ─────────────────────────────────────────────────────────────────────────────
 
-function isSelectable(layer: Layer): boolean {
-  if (layer.hidden) return false
-  if (layer.locked) return false
-  if ((layer as { frozen?: boolean }).frozen) return false
+/** Resolve once per query. Explicit overrides are authoritative, including an
+ * empty map; legacy callers never begin evaluating timelines implicitly. */
+function resolveSelectionFrame(scene: ChronoScene, options: SelectionFrameOptions): { timeMs: number; overrides: OverrideMap } {
+  const timeMs = options.timeMs ?? 0
+  return { timeMs, overrides: options.overrides
+    ?? (options.timeMs === undefined ? new Map() : evaluateTimelines(scene.timelines, timeMs)) }
+}
+
+/** Share frame evaluation and canonical bounds preparation across one query. */
+function selectLayersByBounds(scene: ChronoScene, options: SelectionFrameOptions, matches: (bounds: AABB) => boolean): Set<string> {
+  const { timeMs, overrides } = resolveSelectionFrame(scene, options)
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
+  const out = new Set<string>()
+  for (const layer of scene.layers) {
+    if (!isSelectable(layer, overrides)) continue
+    if (matches(asSelectionBounds(scene, layer, boundsForFrame(layer), timeMs, overrides))) out.add(layer.id)
+  }
+  return out
+}
+
+/** Preserve per-layer selection exclusions, using evaluated boolean flags
+ * when supplied by the displayed frame. Group/child scope remains caller-owned. */
+function isSelectable(layer: Layer, overrides: OverrideMap): boolean {
+  for (const flag of ['hidden', 'locked', 'frozen'] as const) {
+    const value = overrides.get(`layers.${layer.id}.${flag}`)
+    if (typeof value === 'boolean' ? value : layer[flag]) return false
+  }
   if (layer.type === 'audio') return false   // audio has no canvas presence
   return true
 }

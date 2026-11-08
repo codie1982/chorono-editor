@@ -61,7 +61,7 @@ export function cloneSingleLayer<L extends Layer>(
     const stripKeys: Array<keyof Layer> = [
       'shape', 'shapeKind', 'shapeParams',
       'path', 'spline', 'style', 'size',
-      'text', 'image', 'video', 'audio',
+      'text', 'image', 'video', 'audio', 'frameSequence', 'particleEmitter',
       'pathStroke', 'motionPath', 'followPath',
       'masks', 'internalGrid', 'repeater',
     ]

@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import {
   layersInRect, layersInCircle, layersInPolygon, layersUnderPaintBrush,
+  type SelectionFrameOptions,
 } from '@/lib/selection/canvasShapes'
 
 export type SelectionTool = 'box' | 'lasso' | 'circle' | 'paint'
@@ -22,6 +23,8 @@ export interface UseSelectionToolsOptions {
   /** Composition dimensions (for the on-screen → composition scale). */
   width: number
   height: number
+  /** Displayed frame for every query, including the first paint sample. */
+  frame?: SelectionFrameOptions
   selectionContainMode: 'inside' | 'touching'
   onSelectByGeometry?: (layerIds: Set<string>, mode: SelectionMode) => void
 }
@@ -43,7 +46,9 @@ export interface UseSelectionToolsReturn {
  * geometry helpers, handing them back through onSelectByGeometry.
  */
 export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionToolsReturn {
-  const { canvasRef, sceneRef, width, height, selectionContainMode, onSelectByGeometry } = opts
+  const { canvasRef, sceneRef, width, height, selectionContainMode, onSelectByGeometry, frame } = opts
+  const frameRef = useRef(frame)
+  frameRef.current = frame
 
   // ref stores the live shape (mutated continuously without re-render) and the
   // modifier mode; a separate React state mirrors enough to drive the overlay.
@@ -55,12 +60,13 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
     points: Array<{ x: number; y: number }>
     /** Accumulated paint-mode selection (built across pointermove). */
     paintAcc: Set<string>
+    pointerId: number
   } | null>(null)
   const [selectionOverlay, setSelectionOverlay] = useState<SelectionOverlay | null>(null)
 
   const handleSelectionDragMove = useCallback((e: PointerEvent) => {
     const drag = selectionDragRef.current
-    if (!drag) return
+    if (!drag || e.pointerId !== drag.pointerId) return
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -93,7 +99,7 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
         break
       }
       case 'paint': {
-        const hits = layersUnderPaintBrush(sceneRef.current!, { x: cx, y: cy }, PAINT_BRUSH_RADIUS)
+        const hits = layersUnderPaintBrush(sceneRef.current!, { x: cx, y: cy }, PAINT_BRUSH_RADIUS, frameRef.current)
         hits.forEach((id) => drag.paintAcc.add(id))
         setSelectionOverlay({ kind: 'paint', cx, cy, r: PAINT_BRUSH_RADIUS })
         break
@@ -103,9 +109,9 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
 
   const handleSelectionDragUp = useCallback((e: PointerEvent) => {
     const drag = selectionDragRef.current
-    if (!drag) return
+    if (!drag || e.pointerId !== drag.pointerId) return
     const canvas = canvasRef.current
-    canvas?.releasePointerCapture(e.pointerId)
+    if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
     window.removeEventListener('pointermove', handleSelectionDragMove)
     window.removeEventListener('pointerup',   handleSelectionDragUp)
 
@@ -122,7 +128,7 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
         const cy = (e.clientY - rect2.top)  * sy
         const x = Math.min(last.x, cx), y = Math.min(last.y, cy)
         const w = Math.abs(cx - last.x), h = Math.abs(cy - last.y)
-        hits = layersInRect(sceneRef.current!, { x, y, w, h }, containMode)
+        hits = layersInRect(sceneRef.current!, { x, y, w, h }, containMode, frameRef.current)
         break
       }
       case 'circle': {
@@ -133,12 +139,12 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
         const cx = (e.clientX - rect2.left) * sx
         const cy = (e.clientY - rect2.top)  * sy
         const r = Math.hypot(cx - drag.startX, cy - drag.startY)
-        hits = layersInCircle(sceneRef.current!, { x: drag.startX, y: drag.startY, r }, containMode)
+        hits = layersInCircle(sceneRef.current!, { x: drag.startX, y: drag.startY, r }, containMode, frameRef.current)
         break
       }
       case 'lasso': {
         if (drag.points.length >= 3) {
-          hits = layersInPolygon(sceneRef.current!, drag.points, containMode)
+          hits = layersInPolygon(sceneRef.current!, drag.points, containMode, frameRef.current)
         }
         break
       }
@@ -157,9 +163,9 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
   const beginSelectionDrag = useCallback((
     tool: SelectionTool, mode: SelectionMode, cx: number, cy: number, pointerId: number,
   ) => {
-    canvasRef.current?.setPointerCapture(pointerId)
+    try { canvasRef.current?.setPointerCapture(pointerId) } catch { /* Synthetic tests have no native capture. */ }
     selectionDragRef.current = {
-      tool, mode,
+      tool, mode, pointerId,
       startX: cx, startY: cy,
       points: [{ x: cx, y: cy }],
       paintAcc: new Set<string>(),
@@ -176,12 +182,37 @@ export function useSelectionTools(opts: UseSelectionToolsOptions): UseSelectionT
       setSelectionOverlay({ kind: 'paint', cx, cy, r: PAINT_BRUSH_RADIUS })
       // Seed with what's under the cursor at click-down
       const drag = selectionDragRef.current!
-      const hits = layersUnderPaintBrush(sceneRef.current!, { x: cx, y: cy }, PAINT_BRUSH_RADIUS)
+      const hits = layersUnderPaintBrush(sceneRef.current!, { x: cx, y: cy }, PAINT_BRUSH_RADIUS, frameRef.current)
       hits.forEach((id) => drag.paintAcc.add(id))
     }
     window.addEventListener('pointermove', handleSelectionDragMove)
     window.addEventListener('pointerup',   handleSelectionDragUp)
   }, [canvasRef, sceneRef, handleSelectionDragMove, handleSelectionDragUp])
+
+  /** Selection previews have no source writes; cancellation drops only the
+   * transient overlay/listeners and keeps the user's previous selection. */
+  useEffect(() => {
+    const cancel = () => {
+      const active = selectionDragRef.current
+      selectionDragRef.current = null
+      window.removeEventListener('pointermove', handleSelectionDragMove)
+      window.removeEventListener('pointerup', handleSelectionDragUp)
+      if (active && canvasRef.current?.hasPointerCapture(active.pointerId)) {
+        canvasRef.current.releasePointerCapture(active.pointerId)
+      }
+      setSelectionOverlay(null)
+    }
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel() }
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('blur', cancel)
+    window.addEventListener('keydown', key)
+    return () => {
+      cancel()
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('blur', cancel)
+      window.removeEventListener('keydown', key)
+    }
+  }, [canvasRef, handleSelectionDragMove, handleSelectionDragUp])
 
   return { selectionOverlay, beginSelectionDrag }
 }
