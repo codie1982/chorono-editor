@@ -8,7 +8,7 @@ Tarih: 5 Kasım 2026. Güncelleme: 6 Kasım 2026, 2D içindeki kutulu 3D nesne d
 
 2D kompozisyona 3D model koymak için tam modelleme editörünün tamamlanması gerekmez. İçe aktarılan bir GLB veya parametrik model, kendi kamerasıyla render edilerek 2D katman yığınına katılır. Ayrı modelleme alanı bu varlığın hazırlanmasını ve düzenlenmesini sağlar. Bu değerlendirme, önceki yalnız 2D geliştirme kararına yeni bir ürün kapsamı önerisidir; bütün 3D işlerinin uygulamaya alındığı anlamına gelmez.
 
-[2D üretim yol haritasındaki](../../plan/PRODUCTION_2D_ROADMAP.md) export tutarlılığı → bileşen kütüphanesi → çoklu format önceliği korunur. Bu belge 3D model/render entegrasyonunu planlar. Arşivdeki 3D rigid body, kumaş, sıvı solver'larını yeniden aktif etmez; game engine ve video editor kapsamını genişletmez.
+[2D üretim yol haritasındaki](production-2d-roadmap.md) export tutarlılığı → bileşen kütüphanesi → çoklu format önceliği korunur. Bu belge 3D model/render entegrasyonunu planlar. Arşivdeki 3D rigid body, kumaş, sıvı solver'larını yeniden aktif etmez; game engine ve video editor kapsamını genişletmez.
 
 ## 2. Kodda doğrulanan başlangıç
 

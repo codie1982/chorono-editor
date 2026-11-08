@@ -10,6 +10,10 @@ Chorono is an open-source, local-first 2D animation and motion graphics editor. 
 
 The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
 
+**v0.2.0:** large-scene rendering, bounded resource ownership, media loading,
+timeline/Scene Explorer fixes and subtree tools.
+[Release notes](docs/releases/v0.2.0.md) · [Türkçe sürüm notları](docs/tr/releases/v0.2.0.md) · [Changelog](CHANGELOG.md)
+
 [Website](https://www.chorono.com/) · [Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
 
 See the working [text animation example](https://www.chorono.com/text-animation), [kinetic typography study](https://www.chorono.com/kinetic-typography) and [Claude Code animation tutorial](https://www.chorono.com/blog/make-animations-with-claude). Each includes a preview and an editable project to inspect.

@@ -58,7 +58,7 @@ Bir warmup guard'ı görsel checkpoint'lerden önce durdurursa rapor `incomplete
 
 Fixture görsel kontrolünde native MCP `add_layer` dolgu opaklığının 1, renderer'ın ise yüzde 0–100 kullanması nedeniyle rectangle'lar %1 opak görünüyordu. Sentetik vektör fixture'larında **gerçek model alanı `style.fill.opacity:100`** MCP patch'iyle ayarlanıp v3 olarak yeniden kaydedildi. Production davranışı bu aşamada değiştirilmedi. Bu API/model birim uyuşmazlığı export/schema tutarlılığı bulgusu olarak korunur. Yüksek katmanlı fixture'larda validator'ın `EXCESSIVE_LAYERS` tavsiye uyarısı beklenir; `valid:true` yapısal sonucu ayrıdır.
 
-Uzun kesintisiz oynatma/GC/RSS ölçümü, editör panel açık/kapalı overhead'i, timeline/dope-sheet mounted DOM, dev/prod editör karşılaştırması, interaktif state/binding workload, pan/zoom, hızlı seek, 50 undo/redo, context loss ve export/iptal peak'i bu ilk renderer dilimiyle tamamlanmış sayılmaz. Kaynak raporu [render kaynak yönetimi](render-resource-management.md), genel sıra [OPT0–OPT4](../../plan/PRODUCTION_2D_ROADMAP.md#811-genel-teslim-sırası-ve-uygulama-genelinde-kabul) içindedir.
+Uzun kesintisiz oynatma/GC/RSS ölçümü, editör panel açık/kapalı overhead'i, timeline/dope-sheet mounted DOM, dev/prod editör karşılaştırması, interaktif state/binding workload, pan/zoom, hızlı seek, 50 undo/redo, context loss ve export/iptal peak'i bu ilk renderer dilimiyle tamamlanmış sayılmaz. Kaynak raporu [render kaynak yönetimi](render-resource-management.md), genel sıra [OPT0–OPT4](production-2d-roadmap.md#811-genel-teslim-sırası-ve-uygulama-genelinde-kabul) içindedir.
 
 ## Alınan ilk referans — 7 Kasım 2026
 

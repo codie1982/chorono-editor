@@ -2,6 +2,13 @@
 
 [Repository home](../README.md) · [CLI package](../packages/cli/README.md)
 
+## Releases / Sürümler
+
+- [v0.2.0 release notes](releases/v0.2.0.md) / [Türkçe sürüm notları](tr/releases/v0.2.0.md)
+- [v0.2.0 validation and measurement scope](releases/v0.2.0-validation.md)
+- [Changelog](../CHANGELOG.md)
+- [Current 2D / 2.5D roadmap](tr/production-2d-roadmap.md)
+
 ## Install on your computer / Bilgisayarınıza kurun
 
 | Task / Konu | English | Türkçe |
