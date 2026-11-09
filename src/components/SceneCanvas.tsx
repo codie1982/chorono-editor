@@ -304,7 +304,7 @@ export default function SceneCanvas({
 
   // ── Viewport: zoom / pan / fit presets / wheel zoom / pan drag ────────────
   const {
-    zoom, pan, panDragRef,
+    zoom, pan, panDragRef, isPanning, cancelPan,
     fitAll, fitWidth, fitHeight, actualSize, zoomTo, fitSelection, centreSelection,
     zoomIn, zoomOut, beginPan, handleWheel,
   } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene: geometryScene, selectedLayerId, timeMs, overrides: geometryOverrides })
@@ -391,6 +391,9 @@ export default function SceneCanvas({
     if (onPanModeChange) onPanModeChange(resolved)
     else setInternalPanMode(resolved)
   }
+  // A tool/scope handover must release the previous view owner before the next
+  // source/guide gesture measures canvas coordinates. It keeps the current view.
+  useEffect(() => { cancelPan() }, [cancelPan, toolMode, panMode, placingShape, hideEditorUI, motionEditing, arrayEditing])
 
   // ── Hover preview (red outline of the layer that would be selected) ─────
   const [hoveredLayerId, setHoveredLayerId] = useState<string | null>(null)
@@ -561,6 +564,7 @@ export default function SceneCanvas({
   const handleOffArtboardPointerDown = useCallback((id: string, event: React.PointerEvent<SVGRectElement>) => {
     if (event.button === 1 || (panMode && event.button === 0)) return
     if (event.button !== 0 || dragRef.current || editor.isTransactionActive() || hideEditorUI || motionEditing || arrayEditing) return
+    cancelPan()
     event.preventDefault(); event.stopPropagation()
     const cloneMode = resolveCloneDragMode(event)
     if (event.shiftKey && !cloneMode) { onSelectLayer(id, true); return }
@@ -568,7 +572,7 @@ export default function SceneCanvas({
     if (!selected) onSelectLayer(id)
     const ids = selected && selectedLayerIds?.size ? Array.from(selectedLayerIds) : [id]
     beginMoveForSelection(ids, id, event, null, cloneMode)
-  }, [panMode, editor, hideEditorUI, motionEditing, arrayEditing, selectedLayerIds, selectedLayerId, onSelectLayer, beginMoveForSelection])
+  }, [panMode, editor, hideEditorUI, motionEditing, arrayEditing, selectedLayerIds, selectedLayerId, onSelectLayer, beginMoveForSelection, cancelPan])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current || editor.isTransactionActive()) return
@@ -578,6 +582,7 @@ export default function SceneCanvas({
       beginPan(e)
       return
     }
+    cancelPan()
     if (arrayEditing) { if (e.button === 0) arrayAuthoring?.close(); return }
     if (e.button !== 0) return
     if (placingShape) { shapePlacement.begin(e); return }
@@ -749,7 +754,7 @@ export default function SceneCanvas({
     editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode,
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
-    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin])
+    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1043,7 +1048,7 @@ export default function SceneCanvas({
       ref={containerRef}
       data-testid="canvas-viewport"
       className={`min-h-0 flex-1 flex items-center justify-center bg-neutral-800 overflow-hidden relative ${
-        panDragRef.current ? 'cursor-grabbing' : panMode ? 'cursor-grab' : placingShape ? 'cursor-crosshair' : ''
+        isPanning ? 'cursor-grabbing' : panMode ? 'cursor-grab' : placingShape ? 'cursor-crosshair' : ''
       }`}
       onWheel={handleWheel}
       onContextMenu={event => {
@@ -1237,7 +1242,7 @@ export default function SceneCanvas({
               : dragRef.current?.kind === 'move' ? 'cursor-crosshair'
               : hoveredLayerId ? 'cursor-crosshair'
               : 'cursor-default'
-            } ${panDragRef.current ? '!cursor-grabbing' : ''}`}
+            } ${isPanning ? '!cursor-grabbing' : ''}`}
             style={{
               width:  `${width  * zoom}px`,
               height: `${height * zoom}px`,
@@ -1252,7 +1257,7 @@ export default function SceneCanvas({
           {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
             scene={scene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
-            cursor={panDragRef.current ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
+            cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
             onLayerPointerDown={handleOffArtboardPointerDown} onDiagnostics={setOffArtboardDiagnostic} />}
 
           {/* Hover preview — red outline showing which layer a click would select.

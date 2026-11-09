@@ -107,6 +107,27 @@ describe('canvas pointer transaction ownership', () => {
     expect(moved.commit).toHaveBeenCalledTimes(1)
   })
 
+  it('freezes the last pressed source preview when an up was missed, ignoring later hover coordinates', () => {
+    const h = harness()
+    h.emit(h.events, 'pointermove', { ...sample(20), buttons: 1, pointerType: 'mouse' })
+    h.emit(h.events, 'pointermove', { ...sample(300), buttons: 0, pointerType: 'mouse' })
+    expect(h.getScene().layers[0].transform.x).toBe(20)
+    expect(h.history).toEqual([h.base])
+    expect(h.clear).toHaveBeenCalledOnce()
+    h.emit(h.events, 'pointerup', { ...sample(400), buttons: 0 })
+    expect(h.getScene().layers[0].transform.x).toBe(20)
+    expect(h.commit).toHaveBeenCalledOnce()
+  })
+
+  it('does not promote an undersized clone drag using the later unpressed hover distance', () => {
+    const h = harness('copy')
+    h.emit(h.events, 'pointermove', { ...sample(2), buttons: 1, pointerType: 'mouse' })
+    h.emit(h.events, 'pointermove', { ...sample(300), buttons: 0, pointerType: 'mouse' })
+    expect(h.getScene()).toBe(h.base)
+    expect(h.commit).not.toHaveBeenCalled()
+    expect(h.history).toEqual([])
+  })
+
   it('rolls back a rejected animation commit and releases its capture', () => {
     const h = harness()
     h.commit.mockImplementation(() => { throw new Error('Bake the driven channel first.') })

@@ -5,6 +5,12 @@ alanı 2D'dir; bu dilim yeni bir renderer veya export profili eklemez.
 
 ## Pointer-up sahipliği
 
+Pan sonrası ilk source bırakışındaki geri sıçrama için sonraki ayrıntılı
+düzeltme ve before/after kanıtı [ortak pointer yaşam döngüsünde](pointer-gesture-lifecycle.md)
+belgelenmiştir. Native capture/listener sahipliği artık oradaki
+`PointerGestureSession`'a devredilir; bu belgedeki eski bubble-up karşılaştırması
+önceki kabulün tarihsel kaydıdır.
+
 Nesne, guide ve viewport motion key araçlarının ortak sahibi
 `src/components/canvas/interactions/EditorPointerSession.ts`'tir. Eski dinleyici
 `window` üzerinde bubble aşamasında pointer-up bekliyordu. Alt bir UI öğesi

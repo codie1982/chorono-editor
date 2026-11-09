@@ -35,6 +35,18 @@ function fixture() {
 }
 
 describe('shape Add placement gesture', () => {
+  it('recovers a missing release from the last drawn size rather than the following hover position', () => {
+    const h = fixture()
+    h.emit('pointermove', { ...sample(250, 175), buttons: 1, pointerType: 'mouse' })
+    h.emit('pointermove', { ...sample(500, 500), buttons: 0, pointerType: 'mouse' })
+    const created = h.source().layers[1]
+    expect(created.size).toEqual({ width: 200, height: 150 })
+    expect(h.history).toEqual([h.base])
+    expect(h.onClose).toHaveBeenCalledExactlyOnceWith(h.template.id)
+    h.emit('pointerup', { ...sample(600, 600), buttons: 0 })
+    expect(h.history).toHaveLength(1)
+  })
+
   it('keeps pointer-down and sub-threshold moves free of default-size geometry', () => {
     const h = fixture()
     expect(h.source()).toBe(h.base)

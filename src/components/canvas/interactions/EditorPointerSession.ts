@@ -1,18 +1,12 @@
 import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
+import { PointerGestureSession, type PointerGestureSample, type PointerGestureStart } from './PointerGestureSession'
 
 /** Minimal client-space sample shared by object and timeline-key gestures. */
-export interface EditorPointerSample {
-  pointerId: number
-  clientX: number
-  clientY: number
-  shiftKey: boolean
-  metaKey: boolean
-  ctrlKey: boolean
-}
+export interface EditorPointerSample extends PointerGestureSample {}
 
 /** Native capture owner borrowed for one gesture; never serialized. */
-export interface EditorPointerStart { pointerId: number; currentTarget: Element }
+export interface EditorPointerStart extends PointerGestureStart {}
 export interface EditorPointerStartOptions {
   startClientX: number
   startClientY: number
@@ -40,17 +34,17 @@ export interface EditorPointerSessionHost<TPreview extends { scene: ChronoScene 
  * resources; this instance borrows the baseline until close, removes listeners
  * and releases capture on every exit. A changed source/document is never replaced
  * by a stale baseline. Pointer-up is sampled synchronously before one commit.
- * Terminal window events are observed in capture phase: target/React handlers
- * may consume pointer-up while opening a selection panel. They must not strand
- * an owned transaction until implicit capture loss rolls its preview back.
+ * PointerGestureSession owns native capture, pointer identity and terminal
+ * events, shared with view-only Pan. Recovery from a missed release uses the
+ * last pressed sample, never a later hover point. This class owns only source,
+ * transaction and document policy; explicit cancellation restores its baseline.
  * Instances are mutable, single-gesture and not reusable after close.
  */
 export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene }> {
   private readonly base: ChronoScene
   private expected: ChronoScene
   private readonly document: AbortSignal
-  private pointerId?: number
-  private readonly capture?: Element
+  private readonly pointer: PointerGestureSession
   private pending?: TPreview
   private closed = false
 
@@ -61,31 +55,17 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
     const editor = host.getEditor()
     this.base = this.expected = editor.getScene()
     this.document = editor.getDocumentSignal()
-    this.pointerId = pointer?.pointerId
-    this.capture = pointer?.currentTarget
-    try { this.capture?.setPointerCapture?.(this.pointerId!) } catch { /* window listeners remain the fallback */ }
-    host.eventTarget.addEventListener('pointermove', this.onMove)
-    host.eventTarget.addEventListener('pointerup', this.onUp, true)
-    host.eventTarget.addEventListener('pointercancel', this.onCancel, true)
-    host.eventTarget.addEventListener('keydown', this.onKey)
-    host.eventTarget.addEventListener('blur', this.onBlur)
-    this.capture?.addEventListener('lostpointercapture', this.onCancel as EventListener)
+    this.pointer = new PointerGestureSession({ eventTarget: host.eventTarget,
+      move: event => this.sample(event), up: event => this.finish(event), cancel: () => this.cancel(),
+      error: error => host.warning?.(error instanceof Error ? error.message : String(error)),
+    }, pointer)
     this.document.addEventListener('abort', this.onDocumentAbort, { once: true })
   }
 
-  private readonly onMove = (event: PointerEvent) => { this.sample(event) }
-  private readonly onUp = (event: PointerEvent) => { this.finish(event) }
-  private readonly onCancel = (event: PointerEvent) => { if (this.accepts(event)) this.cancel() }
-  private readonly onBlur = () => { this.cancel() }
   private readonly onDocumentAbort = () => { this.close() }
-  private readonly onKey = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') { event.preventDefault(); this.cancel() }
-  }
 
   private accepts(event: EditorPointerSample): boolean {
-    if (this.closed) return false
-    if (this.pointerId === undefined) this.pointerId = event.pointerId
-    return event.pointerId === this.pointerId
+    return !this.closed && this.pointer.accepts(event)
   }
 
   /** Reject stale snapshots before geometry/commit. External edits survive; the
@@ -143,15 +123,8 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
   private close(): void {
     if (this.closed) return
     this.closed = true
-    const target = this.host.eventTarget
-    target.removeEventListener('pointermove', this.onMove)
-    target.removeEventListener('pointerup', this.onUp, true)
-    target.removeEventListener('pointercancel', this.onCancel, true)
-    target.removeEventListener('keydown', this.onKey)
-    target.removeEventListener('blur', this.onBlur)
-    this.capture?.removeEventListener('lostpointercapture', this.onCancel as EventListener)
     this.document.removeEventListener('abort', this.onDocumentAbort)
-    try { if (this.pointerId !== undefined) this.capture?.releasePointerCapture?.(this.pointerId) } catch { /* native capture already released */ }
+    this.pointer.dispose()
     this.host.clear()
   }
 }

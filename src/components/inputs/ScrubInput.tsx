@@ -29,8 +29,10 @@ interface Props {
  *   - A progress bar overlays the input showing the value within [min, max]
  *   - Bar persists 3s after release, then fades out
  *
- * Falls back to a normal `<input type="number">` for keyboard editing —
- * click-without-drag focuses the field as usual.
+ * Typed text is a local draft committed once on blur/Enter; untouched blur and
+ * Escape never dispatch a value. An external controlled-value change discards
+ * that draft, preserving the component's existing external-update policy.
+ * Click-without-drag focuses the decimal text field as usual.
  *
  * Hold SHIFT while dragging for 10× sensitivity; ALT for 0.1× (fine adjust).
  */
@@ -42,7 +44,24 @@ export default function ScrubInput({
   // Internal text state lets the user type "3.5" without React clobbering it
   // mid-edit. We commit on blur / Enter.
   const [text, setText] = useState<string>(String(value))
-  useEffect(() => { setText(String(value)) }, [value])
+  const dirtyRef = useRef(false)
+  const latest = useRef({ value, onChange })
+  // Invalidate a typed draft before effects as well: blur can arrive between
+  // an external value's render and its passive text-sync effect.
+  if (!Object.is(latest.current.value, value)) dirtyRef.current = false
+  latest.current = { value, onChange }
+  useEffect(() => { dirtyRef.current = false; setText(String(value)) }, [value])
+
+  /** Commit only a changed, finite typed draft. Clear ownership before invoking
+   * the controlled callback, so Enter + blur or synchronous rerenders cannot
+   * dispatch the same edit twice or overwrite a later viewport/source update. */
+  const handleBlur = () => {
+    if (!dirtyRef.current) return
+    dirtyRef.current = false
+    const parsed = parseFloat(text), current = latest.current
+    if (Number.isFinite(parsed) && parsed !== current.value) current.onChange(parsed)
+    else setText(String(current.value))
+  }
 
   // Scrubber state
   const [scrubbing, setScrubbing] = useState(false)
@@ -138,15 +157,15 @@ export default function ScrubInput({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => {
-          const parsed = parseFloat(text)
-          if (Number.isFinite(parsed)) onChange(parsed)
-          else                          setText(String(value))
-        }}
+        onChange={(e) => { dirtyRef.current = true; setText(e.target.value) }}
+        onBlur={handleBlur}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-          if (e.key === 'Escape') { setText(String(value)); (e.target as HTMLInputElement).blur() }
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') {
+            dirtyRef.current = false
+            setText(String(latest.current.value))
+            e.currentTarget.blur()
+          }
         }}
         className={`relative z-10 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
           focus:outline-none focus:border-blue-500
