@@ -4,6 +4,11 @@
 path/spline point araçlarının ilk doğruluk dilimi. Yeni motion-key çizimi,
 subtree duplicate/array genişletmesi ve soft selection ayrı plan aşamalarıdır.
 
+9 Kasım ek teslimi: [pointer-up, sabit durum çubuğu ve kompozisyon dışı
+düzenleme sözleşmesi](viewport-interaction-polish.md). Body hareketi artık
+artboard kenarında clamp edilmez; son görüntü composition yüzeyine kırpılır.
+Pointer-up/cancel ortak oturumda capture aşamasında sonlandırılır.
+
 ## Giriş noktaları ve veri akışı
 
 | Sorumluluk | Sahibi |

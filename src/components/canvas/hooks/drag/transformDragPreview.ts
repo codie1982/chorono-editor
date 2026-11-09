@@ -52,8 +52,10 @@ export function transformPreview(base: ChronoScene, targets: readonly PreparedTr
 }
 
 /** Resolve one world-space transform sample against immutable prepared roots.
- * Snapping/clamping uses the same evaluated union bounds for all roots. Parent
- * inversion and TRS/shear validation remain in the shared mathematical owner. */
+ * Snapping uses the same evaluated union bounds for all roots. Translation is
+ * deliberately not restricted to the composition rectangle: the editor's work
+ * area may contain off-artboard objects while outputs remain composition-sized.
+ * Parent inversion and TRS/shear validation stay in the mathematical owner. */
 export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPreview {
   const { base, drag, event, delta, pointerWorld, dimensions, bounds, engine } = input
   const targets = drag.targets ?? []
@@ -72,8 +74,6 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
       // Axis constraints survive object/grid snap as well as the raw pointer.
       if (drag.axisLock === 'x' || (event.shiftKey && locked.dy === 0)) dy = 0
       if (drag.axisLock === 'y' || (event.shiftKey && locked.dx === 0)) dx = 0
-      dx = clampDelta(dx, bounds.moving.x, bounds.moving.width, dimensions.width)
-      dy = clampDelta(dy, bounds.moving.y, bounds.moving.height, dimensions.height)
     }
     result = translateTransformTargets(targets, { x: dx, y: dy })
     label = `${drag.cloneMode ? drag.cloneMode === 'instance' ? '⧉ Instance   ' : '⧉ Copy   ' : ''}ΔX ${Math.round(dx)}   ΔY ${Math.round(dy)}`
@@ -109,10 +109,4 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
   }
   if (!result.ok) throw new Error(result.reason)
   return transformPreview(base, targets, new Map(result.changes.map(change => [change.id, change.transform])), guides, label)
-}
-
-/** Preserve existing off-canvas placement: a gesture may move toward the canvas
- * but never snaps a pre-existing overflow back inside on the first sample. */
-function clampDelta(delta: number, start: number, size: number, limit: number): number {
-  return Math.max(Math.min(0, -start), Math.min(Math.max(0, limit - start - size), delta))
 }

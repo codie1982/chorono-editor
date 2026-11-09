@@ -4,6 +4,10 @@
 render, seçim veya undo motoru oluşturulmaz; mevcut geometri, transform,
 keyframe ve editör komut sahipleri genişletilir. UI dili İngilizcedir.
 
+9 Kasım güncellemesi: [ortak mouse-up düzeltmesi, sabit footer, fare noktası ve
+kompozisyon dışı kesikli nesne sınırları](viewport-interaction-polish.md)
+uygulandı. Aşağıdaki ilk kabul sonuçlarına ek doğrulama o belgededir.
+
 ## Komşu ölçüleri ve sayısal düzenleme
 
 İki veya daha fazla nesne seçildiğinde yatay/dikey yakın komşuların kenar

@@ -45,6 +45,8 @@ import type {
 } from './canvas/types/canvasDragTypes'
 import { SelectionFrame } from './canvas/overlays/SelectionFrame'
 import { AffineSelectionFrame } from './canvas/overlays/AffineSelectionFrame'
+import { OffArtboardOverlay } from './canvas/overlays/OffArtboardOverlay'
+import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
 import { AnchorHandle } from './canvas/overlays/AnchorHandle'
 import { MoveAxisGizmo, ScaleAxisGizmo } from './canvas/overlays/AxisGizmos'
 import { RotateRing } from './canvas/overlays/RotateRing'
@@ -53,6 +55,7 @@ import { CanvasGuideWorkspace } from './canvas/guides/CanvasGuideWorkspace'
 import { FitMenu } from './canvas/controls/FitMenu'
 import { SnapMenu } from './canvas/controls/SnapMenu'
 import { ViewMenu } from './canvas/controls/ViewMenu'
+import { ViewportStatusBar } from './canvas/controls/ViewportStatusBar'
 import { useCanvasRenderer } from './canvas/hooks/useCanvasRenderer'
 import { usePreviewDrag } from './canvas/hooks/usePreviewDrag'
 import { useSelectionTools } from './canvas/hooks/useSelectionTools'
@@ -249,6 +252,7 @@ export default function SceneCanvas({
   // the editor-side mirror of CanvasRenderer's renderMode='preview'.
   const hideEditorUI = !!previewMode || !!isPlaying
   const [transformWarning, setTransformWarning] = useState<string | null>(null)
+  const [offArtboardDiagnostic, setOffArtboardDiagnostic] = useState('')
   const [pivotMode, setPivotMode] = useState<'selectionCenter' | 'active'>('selectionCenter')
   const [motionMode, setMotionMode] = useState<'off' | 'select' | 'add' | 'draw'>('off')
   const motionEditing = motionMode !== 'off'
@@ -529,8 +533,25 @@ export default function SceneCanvas({
       height: primary.originalLayer.size?.height ?? 24,
       axisLock, cloneMode: cloneMode ?? resolveCloneDragMode(event),
     }
-    startDrag(event)
+    // The body or an off-artboard proxy may be replaced during selection or
+    // cross back inside. Capture the persistent native canvas, not its proxy.
+    startDrag({ pointerId: event.pointerId, currentTarget: canvasRef.current ?? event.currentTarget })
   }, [scene, timeMs, overrides, editor, dragRef, startDrag, pivotMode, motionEditing, arrayEditing])
+
+  /** Outside-composition wireframes use the same root selection and native
+   * transform owner as painted bodies. Pan bubbles to the viewport; ordinary
+   * edits preserve multi-selection, parent-local animation and clone policies. */
+  const handleOffArtboardPointerDown = useCallback((id: string, event: React.PointerEvent<SVGRectElement>) => {
+    if (event.button === 1 || (panMode && event.button === 0)) return
+    if (event.button !== 0 || dragRef.current || editor.isTransactionActive() || hideEditorUI || motionEditing || arrayEditing) return
+    event.preventDefault(); event.stopPropagation()
+    const cloneMode = resolveCloneDragMode(event)
+    if (event.shiftKey && !cloneMode) { onSelectLayer(id, true); return }
+    const selected = selectedLayerIds?.has(id) ?? selectedLayerId === id
+    if (!selected) onSelectLayer(id)
+    const ids = selected && selectedLayerIds?.size ? Array.from(selectedLayerIds) : [id]
+    beginMoveForSelection(ids, id, event, null, cloneMode)
+  }, [panMode, editor, hideEditorUI, motionEditing, arrayEditing, selectedLayerIds, selectedLayerId, onSelectLayer, beginMoveForSelection])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current || editor.isTransactionActive() || motionEditing) return
@@ -998,9 +1019,11 @@ export default function SceneCanvas({
     && gizmo.frame
 
   return (
+    <div data-testid="canvas-workspace" className="flex min-h-0 flex-1 flex-col">
     <div
       ref={containerRef}
-      className={`flex-1 flex items-center justify-center bg-neutral-800 overflow-hidden relative ${
+      data-testid="canvas-viewport"
+      className={`min-h-0 flex-1 flex items-center justify-center bg-neutral-800 overflow-hidden relative ${
         panDragRef.current ? 'cursor-grabbing' : panMode ? 'cursor-grab' : ''
       }`}
       onWheel={handleWheel}
@@ -1027,7 +1050,8 @@ export default function SceneCanvas({
         }}
       >
         <div
-          className="absolute inset-6 ring-1 ring-gray-600 shadow-2xl shadow-black/80 rounded pointer-events-none"
+          className="absolute inset-6 ring-1 ring-gray-600 rounded pointer-events-none"
+          style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.28), 0 1px 4px rgba(0,0,0,0.18)' }}
         />
 
         {/* Canvas + selection overlay share the same scaled box */}
@@ -1197,6 +1221,11 @@ export default function SceneCanvas({
             }}
           />
 
+          {!hideEditorUI && !arrayEditing && !motionEditing && containerRef.current && <OffArtboardOverlay
+            scene={scene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
+            zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
+            onLayerPointerDown={handleOffArtboardPointerDown} onDiagnostics={setOffArtboardDiagnostic} />}
+
           {/* Hover preview — red outline showing which layer a click would select.
               Only rendered when a non-selected layer is under the cursor and no
               drag is in flight. Matches the layer's rotation so the rect lines
@@ -1357,7 +1386,7 @@ export default function SceneCanvas({
             if (!layer || layer.hidden) return null
             const bounds = boundsForFrame(layer)
             if (!bounds) return null
-            return <div key={id} className="absolute pointer-events-none border border-blue-400/90 box-border"
+            return <div key={id} className={`absolute pointer-events-none border border-blue-400/90 box-border ${isOffArtboardBounds(bounds, { width, height }) ? 'border-dashed' : ''}`}
               style={{ left: bounds.x * zoom, top: bounds.y * zoom, width: bounds.width * zoom, height: bounds.height * zoom }} />
           })}
 
@@ -1369,6 +1398,7 @@ export default function SceneCanvas({
               height={selectedLayer.size.height}
               zoom={zoom}
               worldMatrix={selectedWorldMatrix}
+              dashed={!!selectedWorldBounds && isOffArtboardBounds(selectedWorldBounds, { width, height })}
               onHandlePointerDown={gizmo.resize && rawSelectedLayer?.size && !multiSelectionBounds ? beginResize : undefined}
               onRotatePointerDown={gizmo.cornerRot && !multiSelectionBounds ? beginRotate : undefined}
             />
@@ -1384,6 +1414,7 @@ export default function SceneCanvas({
               anchorOffsetX={(selectedWorldPivot.x - selectedWorldBounds.x) * zoom}
               anchorOffsetY={(selectedWorldPivot.y - selectedWorldBounds.y) * zoom}
               rotationDeg={0}
+              dashed={isOffArtboardBounds(selectedWorldBounds, { width, height })}
               onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined}
             />
           )}
@@ -1393,7 +1424,7 @@ export default function SceneCanvas({
             w={multiSelectionBounds.width * zoom} h={multiSelectionBounds.height * zoom}
             anchorOffsetX={(selectedWorldPivot.x - multiSelectionBounds.x) * zoom}
             anchorOffsetY={(selectedWorldPivot.y - multiSelectionBounds.y) * zoom}
-            rotationDeg={0} onHandlePointerDown={gizmo.resize ? beginSelectionResize : undefined}
+            rotationDeg={0} dashed={isOffArtboardBounds(multiSelectionBounds, { width, height })} onHandlePointerDown={gizmo.resize ? beginSelectionResize : undefined}
             onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined} />}
 
           {/* Move-mode axis arrows — X (red) / Y (blue) / center square.
@@ -1449,18 +1480,6 @@ export default function SceneCanvas({
 
           {/* Drag-time numeric readout (position / rotation / size) */}
           {dragHud && <TransformHUD {...dragHud} />}
-          {!hideEditorUI && selectedLayer && <div data-testid="canvas-selection-summary"
-            className="absolute bottom-2 left-2 rounded bg-slate-950/90 px-2 py-1 text-[11px] text-blue-100 border border-blue-400/50 z-40">
-            {(selectedLayerIds?.size ?? 0) > 1 ? `${selectedLayerIds!.size} selected` : selectedLayer.name}
-            {' · '}{toolMode ?? 'select'}
-            {(selectedLayerIds?.size ?? 0) > 1 && <label className="ml-2">Pivot <select
-              aria-label="Selection pivot" value={pivotMode} onPointerDown={event => event.stopPropagation()}
-              onChange={event => setPivotMode(event.target.value as 'selectionCenter' | 'active')}
-              className="rounded bg-slate-800 px-1 py-0.5 text-blue-100">
-              <option value="selectionCenter">Selection center</option><option value="active">Active object</option>
-            </select></label>}
-
-          </div>}
           {!hideEditorUI && transformWarning && <div role="status"
             className="absolute top-10 left-2 right-2 rounded border border-amber-500/60 bg-slate-950/95 p-2 text-xs text-amber-100 z-50">
             {transformWarning}
@@ -1554,6 +1573,7 @@ export default function SceneCanvas({
       </div>
 
       <SelectionGapControls measurements={measurements} names={measurementNames} />
+      {!hideEditorUI && offArtboardDiagnostic && <div role="status" className="absolute bottom-14 left-3 z-30 max-w-sm rounded border border-slate-600 bg-slate-950/95 px-2 py-1 text-xs text-slate-300">{offArtboardDiagnostic}</div>}
       {(measurements.diagnostic || (measurements.plan && (measurements.plan.truncated || measurements.plan.diagnostics.length > 0))) && <div
         role="status" data-measurement-diagnostics className="absolute bottom-14 left-3 z-30 max-w-sm rounded border border-pink-500/50 bg-slate-950/95 px-2 py-1 text-xs text-pink-100">
         {measurements.diagnostic || measurements.plan?.diagnostics.join(' ')}{measurements.plan?.truncated && ' Some measurement labels are omitted. Select fewer roots to show all gaps.'}
@@ -1796,6 +1816,9 @@ export default function SceneCanvas({
           />
         )
       })()}
+    </div>
+    <ViewportStatusBar selectedName={selectedLayer?.name} count={measurementSelection.size} toolMode={toolMode}
+      pivotMode={pivotMode} onPivotModeChange={setPivotMode} mode={previewMode ? 'preview' : isPlaying ? 'playback' : 'editing'} />
     </div>
   )
 }

@@ -6,6 +6,8 @@ interface Props {
   height: number
   zoom: number
   worldMatrix: Matrix2D
+  /** Entire frame uses dashes when its geometry crosses the composition edge. */
+  dashed?: boolean
   onHandlePointerDown?: (handle: Handle) => (event: React.PointerEvent) => void
   onRotatePointerDown?: (event: React.PointerEvent) => void
 }
@@ -15,7 +17,7 @@ interface Props {
  * CSS-pixel hit sizes even through reflection/nonuniform scale. Source geometry
  * and renderer state are borrowed and never changed by this visual adapter. */
 export function AffineSelectionFrame({ width, height, zoom, worldMatrix,
-  onHandlePointerDown, onRotatePointerDown }: Props) {
+  onHandlePointerDown, onRotatePointerDown, dashed }: Props) {
   const at = (x: number, y: number) => {
     const point = worldMatrix.applyToPoint({ x, y })
     return { x: point.x * zoom, y: point.y * zoom }
@@ -31,8 +33,8 @@ export function AffineSelectionFrame({ width, height, zoom, worldMatrix,
   return <div data-testid="selection-frame" data-selection-points={JSON.stringify(points)}
     className="absolute inset-0 pointer-events-none">
     <svg className="absolute inset-0 w-full h-full overflow-visible" aria-hidden="true">
-      <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#0f172a" strokeWidth={4} strokeOpacity={0.65} />
-      <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#60a5fa" strokeWidth={2} />
+      <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#0f172a" strokeWidth={4} strokeOpacity={0.65} strokeDasharray={dashed ? '5 4' : undefined} />
+      <polygon points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#60a5fa" strokeWidth={2} strokeDasharray={dashed ? '5 4' : undefined} />
     </svg>
     {onRotatePointerDown && points.map((point, index) => {
       const length = Math.hypot(point.x - center.x, point.y - center.y) || 1

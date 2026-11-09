@@ -1,6 +1,6 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 8 Kasım 2026. **Güncel ve onaylanan sıra:**
+Tarih: 4 Kasım 2026. Güncelleme: 9 Kasım 2026. **Güncel ve onaylanan sıra:**
 önce bekleyen viewport/ortak düzenleme işleri → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
@@ -18,6 +18,10 @@ bağımsız tam 3D Modeling veya Game Engine modunu etkinleştirmez.
 seçim ve ruler/guide araçları](viewport-layout-editing.md) uygulandı.
 İlk sürüklemenin geri sıçraması ve modifier basılı mouse-up hataları V5
 kapanışında ele alındı (§12.43); ölçü/guide kabulü §12.44'tedir.
+
+**9 Kasım viewport düzeltmeleri:** [pointer-up/guide bırakma, sabit durum çubuğu,
+fare noktası, hafif gölge ve kompozisyon dışı düzenleme](viewport-interaction-polish.md)
+uygulandı (§12.45). Kalan E−1 ve tam V6 kabulü sıradaki iş olarak korunur.
 
 ## 1. Kapsam ve öncelikler
 
@@ -1841,3 +1845,24 @@ iki eksen guide ve konum/kilit doğrulandı. Kaynak/bundle kanıtı yerel artifa
 altındadır. Bu dilim tam V6/E−1 birleşik kabulü veya son genel optimizasyon
 değildir. Sırada kalan MCP/provenance/organizasyon ve Timeline Set Key/transport/
 prosedürel eğri işleri ile birleşik araç kabulü var.
+
+### 12.45. Viewport bırakma ve dış alan düzenleme — 9 Kasım 2026
+
+[Gerçek sözleşme ve bakım devri](viewport-interaction-polish.md). Nesne ve
+guide'ın ortak pointer-up/cancel sahibi capture aşamasına alındı. Hedef UI
+release'i tüketse de oturum tek commit yapar; ardından lost-capture eski
+preview'ı geri alamaz. Eski/yeni terminal listener kontrollü testinde geri
+sıçrama yeniden üretildi; trusted fareyle nesne ve guide karşılaştırması geçti.
+
+Seçim/Pivot bilgisi artboard üstünden sabit 32 px footer'a taşındı. Cetvel
+çizgileri kesişiminde sabit 12 px dekoratif point ve hafif canvas CSS gölgesi
+eklendi. Taşımanın composition clamp'i kaldırıldı; dış nesneler bounded,
+seçilebilir kesikli AABB proxy'leriyle düzenlenebilir. Final görüntü yalnız
+composition yüzeyine kırpılır; portable kaynak negatif koordinatları korur.
+
+296 dosya/2311 test, TypeScript, MCP ve production build; native polish18/18,
+Array15/15, clone14/14, viewport/motion13/13 geçti. Gerçek PNG kırpması,
+trusted ilk bırakma, dışarı taşıma ve proxy'den geri alma ayrıca doğrulandı.
+Tam V6/E−1 birleşik kabulü ve yeni genel performans benchmark'ı değildir;
+kalan ortak düzenleme, onaylanan 3D/Poly sırası ve son export/optimizasyon
+öncelikleri korunur.

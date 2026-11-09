@@ -1,5 +1,9 @@
 # E−1.6 — Viewport araçları: doğruluk, etkileşim ve yeni özellikler
 
+**9 Kasım ek teslimi:** [mouse-up/guide bırakma düzeltmesi, sabit selection
+footer, fare noktası, hafif canvas gölgesi ve dış alan düzenleme](../viewport-interaction-polish.md)
+uygulandı. Tam V6 ve kalan E−1 işleri ayrı kabul kapısıdır.
+
 **Güncel kuyruk, 8 Kasım:** V3 ve V4 native duplicate/drag-copy tamamlandı;
 [V4 gerçek destek ve sınırları](../viewport-clone-editing.md).
 V5 çoklu Array de uygulandı; [gerçek sözleşme ve kabul](../viewport-array-editing.md).

@@ -40,6 +40,9 @@ export interface EditorPointerSessionHost<TPreview extends { scene: ChronoScene 
  * resources; this instance borrows the baseline until close, removes listeners
  * and releases capture on every exit. A changed source/document is never replaced
  * by a stale baseline. Pointer-up is sampled synchronously before one commit.
+ * Terminal window events are observed in capture phase: target/React handlers
+ * may consume pointer-up while opening a selection panel. They must not strand
+ * an owned transaction until implicit capture loss rolls its preview back.
  * Instances are mutable, single-gesture and not reusable after close.
  */
 export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene }> {
@@ -62,8 +65,8 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
     this.capture = pointer?.currentTarget
     try { this.capture?.setPointerCapture?.(this.pointerId!) } catch { /* window listeners remain the fallback */ }
     host.eventTarget.addEventListener('pointermove', this.onMove)
-    host.eventTarget.addEventListener('pointerup', this.onUp)
-    host.eventTarget.addEventListener('pointercancel', this.onCancel)
+    host.eventTarget.addEventListener('pointerup', this.onUp, true)
+    host.eventTarget.addEventListener('pointercancel', this.onCancel, true)
     host.eventTarget.addEventListener('keydown', this.onKey)
     host.eventTarget.addEventListener('blur', this.onBlur)
     this.capture?.addEventListener('lostpointercapture', this.onCancel as EventListener)
@@ -142,8 +145,8 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
     this.closed = true
     const target = this.host.eventTarget
     target.removeEventListener('pointermove', this.onMove)
-    target.removeEventListener('pointerup', this.onUp)
-    target.removeEventListener('pointercancel', this.onCancel)
+    target.removeEventListener('pointerup', this.onUp, true)
+    target.removeEventListener('pointercancel', this.onCancel, true)
     target.removeEventListener('keydown', this.onKey)
     target.removeEventListener('blur', this.onBlur)
     this.capture?.removeEventListener('lostpointercapture', this.onCancel as EventListener)

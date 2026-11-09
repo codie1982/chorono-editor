@@ -12,6 +12,8 @@ interface FrameProps {
   anchorOffsetX: number
   anchorOffsetY: number
   rotationDeg: number
+  /** Dashed editor frame for geometry partly or wholly outside composition. */
+  dashed?: boolean
   /** Resize handles render only when provided (Scale + Select modes). */
   onHandlePointerDown?: (h: Handle) => (e: React.PointerEvent) => void
   /** Rotate handles render only when provided (Rotate + Select modes). */
@@ -20,7 +22,7 @@ interface FrameProps {
 
 export function SelectionFrame({
   x, y, w, h, anchorOffsetX, anchorOffsetY, rotationDeg,
-  onHandlePointerDown, onRotatePointerDown, selectionKind,
+  onHandlePointerDown, onRotatePointerDown, selectionKind, dashed,
 }: FrameProps) {
   // 8 resize handles on the frame perimeter (corners + edge midpoints)
   const handles: Array<{ key: Handle; cx: number; cy: number }> = [
@@ -54,7 +56,7 @@ export function SelectionFrame({
       }}
     >
       {/* Frame border */}
-      <div className="absolute inset-0 border-2 border-blue-400 box-border"
+      <div className={`absolute inset-0 border-2 border-blue-400 box-border ${dashed ? 'border-dashed' : ''}`}
         style={{ boxShadow: '0 0 0 1px rgba(15,23,42,0.65)' }} />
 
       {/* Rotation handles — small white circles, drawn diagonally outside corners */}

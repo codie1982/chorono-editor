@@ -91,7 +91,9 @@ export function useCanvasGuideEditing(options: Options) {
       },
       show: () => {}, commit: (_base, preview) => latest.current.editor.commitTransaction(preview.command),
       clear: () => { session.current = null }, warning: warn,
-    }, { pointerId: event.pointerId, currentTarget: event.currentTarget })
+    // A newly created/moved guide can replace its UI hit target while source
+    // previews render. The native canvas remains stable for the whole gesture.
+    }, { pointerId: event.pointerId, currentTarget: canvas })
   }, [warn])
   return { guides: read.guides, error: error || read.error, selectedId, open, setOpen, select, close,
     selected: read.guides.find(guide => guide.id === selectedId), add, update, remove, begin, reportError: warn }

@@ -28,7 +28,9 @@ export interface CanvasGuideWorkspaceProps {
  * through the work area, retain precise source positions, and never enter the
  * scene renderer/export. The guide hook owns transactions; object selection is
  * deliberately untouched by line/inspector events. Global visibility is local
- * viewport state; per-guide hidden/locked flags are portable source data. */
+ * viewport state; per-guide hidden/locked flags are portable source data.
+ * The pointer marker stays 12 CSS pixels through pan/zoom. It is decorative,
+ * hit-transparent editor chrome and is never submitted to a scene renderer. */
 export function CanvasGuideWorkspace(props: CanvasGuideWorkspaceProps) {
   const { canvasRef, containerEl, composition, zoom, pan, selectedRect, showRulers, showGuides, enabled } = props
   const editing = useCanvasGuideEditing(props)
@@ -40,6 +42,11 @@ export function CanvasGuideWorkspace(props: CanvasGuideWorkspaceProps) {
     {cursor && <div data-testid="canvas-cursor-crosshair" data-x={cursor.x} data-y={cursor.y} className="absolute inset-0 pointer-events-none z-10">
       <div className="absolute top-[18px] bottom-0 border-l border-cyan-300/35" style={{ left: sx }} />
       <div className="absolute left-[18px] right-0 border-t border-cyan-300/35" style={{ top: sy }} />
+      <svg data-testid="canvas-cursor-point" aria-hidden="true" width={12} height={12} viewBox="0 0 12 12"
+        className="absolute pointer-events-none overflow-visible" style={{ left: sx, top: sy, transform: 'translate(-50%, -50%)' }}>
+        <circle cx={6} cy={6} r={4.25} fill="#0f172a" stroke="#67e8f9" strokeWidth={1.25} />
+        <circle cx={6} cy={6} r={1.5} fill="#ecfeff" />
+      </svg>
     </div>}
     {showGuides && enabled && editing.guides.filter(guide => !guide.hidden).map(guide => {
       const vertical = guide.axis === 'v'
