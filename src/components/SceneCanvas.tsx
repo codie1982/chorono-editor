@@ -62,6 +62,8 @@ import { useSelectionTools } from './canvas/hooks/useSelectionTools'
 import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
 import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
 import { useCanvasDrag } from './canvas/hooks/useCanvasDrag'
+import { useShapePlacement } from './canvas/placement/useShapePlacement'
+import { ShapePlacementOutline } from './canvas/placement/ShapePlacementOutline'
 import { resolveCloneDragMode } from '@/lib/shortcuts/cloneDragGesture'
 import { usePathEdit } from './canvas/hooks/usePathEdit'
 import { resolveSplineEditGeometry } from './canvas/splineEditGeometry'
@@ -128,7 +130,7 @@ interface Props {
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
     | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
-    | 'spline-draw'
+    | 'spline-draw' | 'shape-draw'
   /** BL-66 — Push a tool-mode change up to the page (e.g. double-clicking a
    *  path enters pen mode so the user can immediately edit it; cancelling
    *  path pick mode returns to 'select'). */
@@ -225,6 +227,13 @@ interface Props {
   onEditMotionTiming?: (layerId: string) => void
   /** Transient bounded Array plan; source/history stays owned by the editor. */
   arrayAuthoring?: ArrayAuthoringController
+  /** Registry-created native shape template, held outside persistent source
+   * until a canvas placement commits. Repeat drawing supplies a fresh template
+   * after each commit; paths/splines keep their dedicated tools. */
+  shapePlacementLayer?: Layer | null
+  /** A committed ID selects the new shape and may rearm a fresh template;
+   * no ID means cancelled placement. Never reuse an already committed ID. */
+  onShapePlacementComplete?: (id?: string) => void
 }
 
 const PADDING   = 24
@@ -239,7 +248,7 @@ export default function SceneCanvas({
   menuHandlers, onAfterLayerCommit, buildLayerCommitCommands,
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming,
-  arrayAuthoring,
+  arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
   splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onSplinePointSelected,
 }: Props) {
@@ -257,6 +266,10 @@ export default function SceneCanvas({
   const [motionMode, setMotionMode] = useState<'off' | 'select' | 'add' | 'draw'>('off')
   const motionEditing = motionMode !== 'off'
   const arrayEditing = !!arrayAuthoring?.active
+  const placingShape = !!shapePlacementLayer && toolMode === 'shape-draw'
+  const shapePlacement = useShapePlacement({ template: shapePlacementLayer,
+    active: placingShape && !hideEditorUI && !arrayEditing, editor, canvasRef,
+    onComplete: id => onShapePlacementComplete?.(id), onWarning: setTransformWarning })
   const motionTime = selectedTimeline ? Math.max(0, Math.min(selectedTimeline.durationMs, timeMs)) : timeMs
   const motionContext = useMemo(() => motionEditing && selectedTimeline && selectedLayerId
     ? prepareTrajectoryContext(scene, selectedTimeline.id, selectedLayerId) : null,
@@ -276,7 +289,7 @@ export default function SceneCanvas({
   useEffect(() => { setMotionMode(previous => previous === 'off' ? 'off' : 'select') },
     [selectedLayerId, selectedTimeline?.id])
   useEffect(() => { setMotionMode('off') }, [hideEditorUI, motionDocumentSignal])
-  useEffect(() => { if (arrayEditing) setMotionMode('off') }, [arrayEditing])
+  useEffect(() => { if (arrayEditing || placingShape) setMotionMode('off') }, [arrayEditing, placingShape])
   useEffect(() => { onMotionEditingChange?.(motionEditing); return () => onMotionEditingChange?.(false) },
     [motionEditing, onMotionEditingChange])
 
@@ -464,7 +477,7 @@ export default function SceneCanvas({
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
-    timeMs, overrides, contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}`,
+    timeMs, overrides, contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
     onWarning: setTransformWarning,
   })
 
@@ -491,7 +504,7 @@ export default function SceneCanvas({
       const target = e.target as HTMLElement | null
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
           || target?.isContentEditable) return
-      if (previewMode || isPlaying || motionEditing || arrayEditing) return
+      if (previewMode || isPlaying || motionEditing || arrayEditing || placingShape) return
       if (!canvasOwnsPointDeletion(getShortcutContext?.() ?? 'canvas', editorRef.current.isTransactionActive())) return
       const pid = selectedSplinePointIdRef.current
       if (!pid) return
@@ -509,7 +522,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext, motionEditing, arrayEditing])
+  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext, motionEditing, arrayEditing, placingShape])
 
   /** Prepare independent selected roots once. Body and axis dragging share
    * the same evaluated baseline and parent-space conversion contract. */
@@ -554,7 +567,7 @@ export default function SceneCanvas({
   }, [panMode, editor, hideEditorUI, motionEditing, arrayEditing, selectedLayerIds, selectedLayerId, onSelectLayer, beginMoveForSelection])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (dragRef.current || editor.isTransactionActive() || motionEditing) return
+    if (dragRef.current || editor.isTransactionActive()) return
     // Middle-mouse OR pan-mode + left button → pan the view, not the layer
     if (e.button === 1 || (panMode && e.button === 0)) {
       e.preventDefault()
@@ -563,6 +576,8 @@ export default function SceneCanvas({
     }
     if (arrayEditing) { if (e.button === 0) arrayAuthoring?.close(); return }
     if (e.button !== 0) return
+    if (placingShape) { shapePlacement.begin(e); return }
+    if (motionEditing) return
 
     // BL-67 — While pick mode is active, clicks on the canvas itself (not on
     // a pickable path) cancel the operation. Path clicks are handled by the
@@ -730,7 +745,7 @@ export default function SceneCanvas({
     editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode,
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
-    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close])
+    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -958,7 +973,7 @@ export default function SceneCanvas({
   const measurementNames = useMemo(() => new Map(scene.layers.map(layer => [layer.id, layer.name])), [scene.layers])
   const measurements = useSelectionMeasurements({ scene, editor, timeMs, selectedIds: measurementSelection,
     primaryId: selectedLayerId, overrides: displayOverrides, boundsFor: boundsForFrame,
-    enabled: showMeasurements && !hideEditorUI && !motionEditing && !arrayEditing && !dragRef.current
+    enabled: showMeasurements && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape && !dragRef.current
       && toolMode !== 'pen' && toolMode !== 'spline-draw',
     buildLayerCommitCommands, onAfterLayerCommit })
 
@@ -982,7 +997,7 @@ export default function SceneCanvas({
   // BL-66 — during playback / preview ALL gizmos are suppressed (editor chrome).
   // Gating the whole object here means showFrame (depends on gizmo.frame) and
   // every axis/ring/anchor handle below collapse to false in one place.
-  const gizmo = hideEditorUI || motionEditing || arrayEditing ? {
+  const gizmo = hideEditorUI || motionEditing || arrayEditing || placingShape ? {
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
@@ -1024,9 +1039,12 @@ export default function SceneCanvas({
       ref={containerRef}
       data-testid="canvas-viewport"
       className={`min-h-0 flex-1 flex items-center justify-center bg-neutral-800 overflow-hidden relative ${
-        panDragRef.current ? 'cursor-grabbing' : panMode ? 'cursor-grab' : ''
+        panDragRef.current ? 'cursor-grabbing' : panMode ? 'cursor-grab' : placingShape ? 'cursor-crosshair' : ''
       }`}
       onWheel={handleWheel}
+      onContextMenu={event => {
+        if (placingShape) { event.preventDefault(); event.stopPropagation(); shapePlacement.cancel() }
+      }}
       onPointerDown={(e) => {
         // If the click was on the <canvas>, its own handler manages pan +
         // selection. We only fire here when the user clicks the EMPTY leaf
@@ -1036,7 +1054,11 @@ export default function SceneCanvas({
         if (e.button === 1 || (panMode && e.button === 0)) {
           e.preventDefault()
           beginPan(e)
+          return
         }
+        // Native buttons/rulers own their gestures; empty work area may start
+        // a shape beyond the composition without changing export clipping.
+        if (placingShape && !(e.target as Element).closest('button,input,select,textarea,[role="toolbar"],[role="menu"]')) shapePlacement.begin(e)
       }}
     >
       <div
@@ -1091,7 +1113,7 @@ export default function SceneCanvas({
               // BL-66 — Çift tık path layer'a girer ve pen tool'u açar.
               // Bu sayede kullanıcı menü/araç çubuğuna gitmeden ek anchor
               // ekleyip mevcut anchorları sürükleyebilir.
-              if (motionEditing || arrayEditing || previewMode) return
+              if (motionEditing || arrayEditing || placingShape || previewMode) return
               const cv = canvasRef.current
               if (!cv) return
               const rect = cv.getBoundingClientRect()
@@ -1107,6 +1129,7 @@ export default function SceneCanvas({
               }
             }}
             onContextMenu={(e) => {
+              if (placingShape) { e.preventDefault(); e.stopPropagation(); shapePlacement.cancel(); return }
               if (motionEditing || arrayEditing || previewMode) return // Motion keys own canvas editing while active.
               const cv = canvasRef.current
               if (!cv) return
@@ -1203,14 +1226,12 @@ export default function SceneCanvas({
               previewMode ? 'cursor-pointer'
               : pathPickMode ? 'cursor-crosshair'
               : toolMode === 'spline-draw' ? 'cursor-crosshair'
-              : splineHover ? 'cursor-pointer'
+              : placingShape ? 'cursor-crosshair'
+              : splineHover ? 'cursor-crosshair'
               : toolMode === 'pen' ? 'cursor-crosshair'
               : panMode ? 'cursor-grab'
-              : dragRef.current?.kind === 'move' ? 'cursor-grabbing'
-              // Default tool: 4-arrow move cursor when over a draggable
-              // layer, plain pointer over empty canvas → so the cursor
-              // tells the user whether a click would grab something.
-              : hoveredLayerId ? 'cursor-move'
+              : dragRef.current?.kind === 'move' ? 'cursor-crosshair'
+              : hoveredLayerId ? 'cursor-crosshair'
               : 'cursor-default'
             } ${panDragRef.current ? '!cursor-grabbing' : ''}`}
             style={{
@@ -1221,9 +1242,13 @@ export default function SceneCanvas({
             }}
           />
 
-          {!hideEditorUI && !arrayEditing && !motionEditing && containerRef.current && <OffArtboardOverlay
+          {shapePlacement.draft && <ShapePlacementOutline bounds={boundsForFrame(shapePlacement.draft)}
+            width={width} height={height} zoom={zoom} />}
+
+          {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
             scene={scene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
+            cursor={panDragRef.current ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
             onLayerPointerDown={handleOffArtboardPointerDown} onDiagnostics={setOffArtboardDiagnostic} />}
 
           {/* Hover preview — red outline showing which layer a click would select.
@@ -1231,7 +1256,7 @@ export default function SceneCanvas({
               drag is in flight. Matches the layer's rotation so the rect lines
               up with the actual rendered geometry. */}
           {(() => {
-            if (!hoveredLayerId || hoveredLayerId === selectedLayerId) return null
+            if (placingShape || !hoveredLayerId || hoveredLayerId === selectedLayerId) return null
             const hl = scene.layers.find((l) => l.id === hoveredLayerId)
             if (!hl || hl.hidden) return null
             const bounds = boundsForFrame(hl)
@@ -1254,7 +1279,7 @@ export default function SceneCanvas({
           {/* Motion path — trajectory the selected layer follows over time,
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
-          {selectedLayer && !hideEditorUI && !arrayEditing && (
+          {selectedLayer && !hideEditorUI && !arrayEditing && !placingShape && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1295,18 +1320,18 @@ export default function SceneCanvas({
                 setHoveredPickPathId(null)
               }
             }}
-            showMotionGuides={!hideEditorUI}
+            showMotionGuides={!hideEditorUI && !placingShape}
           />
 
           {/* BL-66 — Anchor + bezier handle visualization for the selected
               path layer. Shown whenever a path layer is selected (not just
               in pen mode) so users can see the structure they're editing. */}
-          {selectedLayer && selectedWorldMatrix && selectedLayer.type === 'path' && selectedLayer.path && !hideEditorUI && !motionEditing && !arrayEditing && (
+          {selectedLayer && selectedWorldMatrix && selectedLayer.type === 'path' && selectedLayer.path && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape && (
             <PathEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix} />
           )}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
-          {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing
+          {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
             && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
             <SplineEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
               hover={splineHover} selectedPointId={selectedSplinePointId} />
@@ -1380,7 +1405,7 @@ export default function SceneCanvas({
           )}
 
           {/* Keep secondary selections visible without adding competing handles. */}
-          {!hideEditorUI && selectedLayerIds && Array.from(selectedLayerIds).map(id => {
+          {!hideEditorUI && !placingShape && selectedLayerIds && Array.from(selectedLayerIds).map(id => {
             if (id === selectedLayerId) return null
             const layer = scene.layers.find(l => l.id === id)
             if (!layer || layer.hidden) return null
@@ -1543,7 +1568,7 @@ export default function SceneCanvas({
           pan={pan}
           containerEl={containerRef.current}
           showRulers={showRulers} showGuides={showGuides}
-          enabled={!hideEditorUI && !arrayEditing && !motionEditing}
+          enabled={!hideEditorUI && !arrayEditing && !motionEditing && !placingShape}
           onWarning={setTransformWarning}
           selectedRect={
             selectedLayer && !selectedLayer.hidden
@@ -1818,6 +1843,7 @@ export default function SceneCanvas({
       })()}
     </div>
     <ViewportStatusBar selectedName={selectedLayer?.name} count={measurementSelection.size} toolMode={toolMode}
+      placementName={placingShape ? shapePlacementLayer.name : undefined} placementSize={shapePlacement.draft?.size}
       pivotMode={pivotMode} onPivotModeChange={setPivotMode} mode={previewMode ? 'preview' : isPlaying ? 'playback' : 'editing'} />
     </div>
   )

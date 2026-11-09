@@ -7,6 +7,8 @@ export type ToolMode =
   | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
   // BL-73 — Spline drawing (drag-to-create / multi-click line)
   | 'spline-draw'
+  /** Persistent native shape placement selected through Layer → Add. */
+  | 'shape-draw'
 
 /** True for any of the four canvas-shape selection tools. */
 export function isSelectionTool(m: ToolMode): boolean {

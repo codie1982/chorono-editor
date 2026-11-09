@@ -17,6 +17,8 @@ interface Props {
   selectedIds: Set<string>
   onSelect: (id: string, shiftHeld: boolean) => void
   onAdd: (kind: string) => void
+  /** Active persistent native creation tool. Selecting its item again exits. */
+  activeAddKind?: string | null
   /** Native media pickers borrow the initiating document identity. */
   getDocumentSignal?: () => AbortSignal
   onAddImage: (file: File) => void
@@ -49,7 +51,7 @@ type DropZone = 'before' | 'after' | 'into'
 interface DropTargetState { id: string; zone: DropZone }
 
 export default function LayerPanel({
-  layers, selectedId, selectedIds, onSelect, onAdd,
+  layers, selectedId, selectedIds, onSelect, onAdd, activeAddKind,
   onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
@@ -266,7 +268,8 @@ export default function LayerPanel({
               <button
                 key={item.type}
                 onClick={() => item.available && handleAddItem(item.type)}
-                className={`ch-layer-btn ${!item.available ? 'ch-layer-btn--soon' : ''}`}
+                className={`ch-layer-btn ${!item.available ? 'ch-layer-btn--soon' : ''} ${activeAddKind === item.type ? 'ring-1 ring-blue-400 bg-blue-900/40' : ''}`}
+                aria-pressed={item.available ? activeAddKind === item.type : undefined}
                 title={item.available ? `Add ${item.label}` : `${item.label} — coming soon`}
               >
                 <ChoronoIcon name={item.icon} size={20} />

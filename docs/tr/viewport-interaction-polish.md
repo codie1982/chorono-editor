@@ -50,6 +50,11 @@ Artboard çerçevesinin CSS gölgesi hafifletildi. Gölge, nokta ve footer yaln�
 editör DOM chrome'udur; canvas renderer, ordinary scene JSON, undo veya raster
 export'a eklenmez.
 
+Sonraki yerleştirme diliminde nesne üstündeki seçim imleci `crosshair` (`+`)
+oldu. Pan ve resize/rotate handle politikaları korunur. Layer → Add temel
+şekilleri artık mouse-down/drag/up ile oluşturur; kapsam ve kaynak sahipliği
+[fareyle yerleştirme sözleşmesinde](shape-placement.md) açıklanır.
+
 ## Kompozisyon dışındaki nesneler
 
 Nesneler beyaz kompozisyonun dört kenarından dışarı taşınabilir; body drag'deki

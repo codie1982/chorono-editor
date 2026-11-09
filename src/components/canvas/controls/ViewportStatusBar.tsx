@@ -5,6 +5,8 @@ export interface ViewportStatusBarProps {
   pivotMode: 'selectionCenter' | 'active'
   onPivotModeChange: (mode: 'selectionCenter' | 'active') => void
   mode: 'editing' | 'playback' | 'preview'
+  placementName?: string
+  placementSize?: { width: number; height: number }
 }
 
 /** Normal-flow viewport footer for selection information and shared pivot
@@ -18,13 +20,17 @@ export interface ViewportStatusBarProps {
  * preserved. Rapid selection changes are not announced as a live region.
  */
 export function ViewportStatusBar({ selectedName, count, toolMode, pivotMode,
-  onPivotModeChange, mode }: ViewportStatusBarProps) {
+  onPivotModeChange, mode, placementName, placementSize }: ViewportStatusBarProps) {
   const editing = mode === 'editing'
   const summary = count > 1 ? `${count} selected` : count === 1 ? selectedName || '1 selected' : 'Select an object'
   return <footer role="group" aria-label="Viewport status" aria-live="off" data-testid="canvas-selection-summary"
     className="flex h-8 min-h-8 shrink-0 items-center gap-3 border-t border-slate-700 bg-slate-900 px-3 text-[11px] text-slate-300"
     onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
-    {editing ? <>
+    {editing && placementName ? <>
+      <span className="min-w-0 truncate text-blue-100">Place {placementName}</span>
+      <span className="truncate text-slate-400">Drag to draw again · Shift to constrain · Right-click / Esc to stop</span>
+      {placementSize && <span className="ml-auto shrink-0 tabular-nums">{Math.round(placementSize.width)} × {Math.round(placementSize.height)} px</span>}
+    </> : editing ? <>
       <span className="min-w-0 truncate text-blue-100" title={summary}>{summary}</span>
       <span className="shrink-0 capitalize text-slate-400">{(toolMode ?? 'select').replace(/-/g, ' ')}</span>
       {count > 1 && <label className="ml-auto flex shrink-0 items-center gap-2">Pivot

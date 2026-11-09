@@ -8,6 +8,7 @@ import {
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
 import { layerRegistry } from '@/lib/registry'
+import { useShapeCreationTool } from '@/components/canvas/placement/useShapeCreationTool'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
@@ -218,6 +219,7 @@ export default function BuilderPage() {
   const [splineAppendMode, setSplineAppendMode] = useState(false)
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
+  const [toolMode, setToolMode] = useState<ToolMode>('select')
   /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
   const [splinePointId, setSplinePointId] = useState<string | null>(null)
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
@@ -449,6 +451,8 @@ export default function BuilderPage() {
     setLayerSelection(previous => id == null ? createLayerSelection([])
       : shiftHeld ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))
   }, [])
+  const shapeCreation = useShapeCreationTool({ toolMode, setToolMode, onSelect: selectLayer,
+    documentSignal: editor.getDocumentSignal() })
 
   // External edits, undo and document replacement can remove selected layers.
   // Keep surviving members instead of clearing the whole selection.
@@ -515,14 +519,18 @@ export default function BuilderPage() {
   }, [handleImportFiles, editor.getDocumentSignal])
 
   // ── Layer commands ───────────────────────────────────────────────────────
-  // Layer creation is fully registry-driven: every kind looks up its
-  // LayerDefinition and calls createDefault(). Adding a new shape no longer
-  // requires touching this switch — just register a new LayerDefinition.
+  // Defaults remain registry-driven. Supported native primitives arm a
+  // persistent placement tool; dedicated path/spline/media workflows stay owned
+  // by their existing adapters rather than creating a second geometry source.
   const addLayer = useCallback((kind: string) => {
+    if (editor.isTransactionActive()) return
+    arrayAuthoring.close()
+    setPathPickMode(null)
     // BL-73 — Spline primitives are mouse-drawn, not instantly placed. Clicking
     // one enters draw mode; the canvas handles the create/append gesture.
     const splineKind = SPLINE_MENU_TO_KIND[kind]
     if (splineKind) {
+      shapeCreation.close()
       setSplineDrawKind(splineKind)
       setToolMode('spline-draw')
       return
@@ -534,6 +542,12 @@ export default function BuilderPage() {
       return
     }
     const l = def.createDefault()
+    if (shapeCreation.choose(kind, l, () => def.createDefault())) {
+      if (isPlaying) handlePlayToggle()
+      setSplineDrawKind(null)
+      return
+    }
+    shapeCreation.close()
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
     // BL-66: paths start empty — auto-switch to Pen tool so the next click
@@ -541,7 +555,8 @@ export default function BuilderPage() {
     if (kind === 'bezierPath' || kind === 'motionPath') {
       setToolMode('pen')
     }
-  }, [dispatchCommand, selectLayer])
+  }, [dispatchCommand, selectLayer, editor.isTransactionActive, arrayAuthoring.close, isPlaying, handlePlayToggle,
+    shapeCreation.choose, shapeCreation.close])
 
   // BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines.
   // Async: lazily fetches + parses the font (opentype.js) before building the
@@ -815,7 +830,10 @@ export default function BuilderPage() {
   }, [selectedLayerId, scene.layers, selectedCloneIds, editor])
 
   /** All Array entry points open the same pinned multi-root editing session. */
-  const openArrayModal = useCallback(() => { arrayAuthoring.open() }, [arrayAuthoring.open])
+  const openArrayModal = useCallback(() => {
+    if (!arrayAuthoring.open()) return
+    shapeCreation.close()
+  }, [arrayAuthoring.open, shapeCreation.close])
 
   const handleCloneApply = useCallback((params: {
     count: number
@@ -1015,9 +1033,6 @@ export default function BuilderPage() {
   const groupSelected = useCallback(() => groupLayers(selectedLayerIds.size > 0
     ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : []),
   [selectedLayerIds, selectedLayerId, groupLayers])
-
-  // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
-  const [toolMode, setToolMode] = useState<ToolMode>('select')
 
   // BL-67 — Motion path pick mode. When non-null, the next click on a
   // dashed path overlay assigns that path as the target layer's followPath
@@ -1506,6 +1521,7 @@ export default function BuilderPage() {
                     selectedIds={selectedLayerIds}
                     onSelect={selectLayer}
                     onAdd={addLayer}
+                    activeAddKind={shapeCreation.kind}
                     getDocumentSignal={editor.getDocumentSignal}
                     onAddImage={addImageLayerFromFile}
                     onAddVideo={addVideoLayerFromFile}
@@ -1603,6 +1619,8 @@ export default function BuilderPage() {
                 render: () => (
                   <SceneCanvas
                     arrayAuthoring={arrayAuthoring}
+                    shapePlacementLayer={shapeCreation.template}
+                    onShapePlacementComplete={shapeCreation.complete}
                     scene={scene}
                     editor={editor}
                     getShortcutContext={getShortcutContext}

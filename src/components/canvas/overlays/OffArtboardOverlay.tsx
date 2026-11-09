@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, type RefObject } from 'react'
+import { useEffect, useId, useMemo, type RefObject, type CSSProperties } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { LayerWorldBoundsResolver } from '@/lib/geometry/resolveLayerWorldBounds'
 import { prepareOffArtboardOutlines } from '@/lib/canvas/math/offArtboardOutlines'
@@ -15,6 +15,8 @@ export interface OffArtboardOverlayProps {
   canvasRef: RefObject<HTMLCanvasElement>
   onLayerPointerDown: (id: string, event: React.PointerEvent<SVGRectElement>) => void
   onDiagnostics?: (message: string) => void
+  /** Parent interaction policy keeps pan distinct from shape selection. */
+  cursor?: CSSProperties['cursor']
 }
 
 /** Dashed, hit-testable AABB proxies in the visible work area outside the white
@@ -54,7 +56,7 @@ export function OffArtboardOverlay(props: OffArtboardOverlayProps) {
       {paintedOutlines.map(outline => <rect key={outline.id} data-off-artboard-id={outline.id}
         x={outline.bounds.x} y={outline.bounds.y} width={Math.max(outline.bounds.width, 1 / zoom)} height={Math.max(outline.bounds.height, 1 / zoom)}
         fill="transparent" stroke={outline.selected ? '#93c5fd' : '#94a3b8'} strokeWidth={1.5} strokeDasharray="5 4" vectorEffect="non-scaling-stroke"
-        style={{ pointerEvents: 'all', cursor: 'move' }} onPointerDown={event => props.onLayerPointerDown(outline.id, event)}>
+        style={{ pointerEvents: 'all', cursor: props.cursor ?? 'crosshair' }} onPointerDown={event => props.onLayerPointerDown(outline.id, event)}>
         <title>{outline.name} · outside composition</title>
       </rect>)}
     </g>
