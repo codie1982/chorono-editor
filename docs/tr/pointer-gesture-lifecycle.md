@@ -68,7 +68,9 @@ korunur. Başka bir düğme hâlâ basılıysa da başlatıcı düğmenin bırak
 gesture'ı bitirir.
 
 Capture kurulamazsa window listener'ları fallback olarak kalır. Escape, blur,
-pointercancel ve gerçek lost-capture host'un iptal politikasına gider. Her
+pointercancel ve bağlantısı kopmuş capture hedefi host'un iptal politikasına gider.
+Bağlı hedefte capture kaybı window fallback'i açık tutar; aşağıdaki sonraki
+düzeltme önceki blanket lost-capture iptal politikasının yerini alır. Her
 terminal yol listener/capture'ı bir kez bırakır; geç up/lost-capture veya
 reentrant callback ikinci commit üretemez. Source iptali baseline'a döner,
 intervening source edit korunur; Pan iptali son görüntülenen view pozunu tutar.
@@ -136,8 +138,9 @@ git'e eklenmez. Yeni subsystem idle polling veya sürekli frame loop oluşturmaz
 Tek bir başarılı fiziksel test aralıklı hatanın çözüldüğünü göstermez. Resources
 → **Interaction** bölümündeki **Start recording** ile yerel hareket kaydı
 başlatılır. Panel kapalıyken kayıt sürer. Sorun tekrarlandıktan sonra **Stop
-recording** ve **Download JSON** kullanılır. Yenileme sekmenin kaydını sıfırlar;
-kanıt yenilemeden önce indirilmelidir. Kayıt varsayılan olarak kapalıdır.
+recording** ve **Download JSON** kullanılır. İlk kullanımda kayıt kapalıdır;
+etkinleştirilmiş kayıt ve olaylar aynı sekmenin yenilenmesinde sessionStorage
+üzerinden korunur. Depolama engellenirse bellek içi kayıt çalışmaya devam eder.
 
 Ortak kayıt sahibi ve public kullanım sözleşmesi
 [`interactions/diagnostics/README.md`](../../src/components/canvas/interactions/diagnostics/README.md)
@@ -184,3 +187,81 @@ başlangıçla birebir aynı, `validate_scene` uyarısızdır. Portable
 başlangıç yedeğiyle aynıdır. Test sonucu bildirilen aralıklı hatayı dışlamaz;
 editörde kayıt açık bırakılmıştır. Yerel screenshot/log/MCP kanıtları önceki
 `artifacts/performance/pointer-release-audit-20261109/` dizinindedir.
+
+## İlk seçimde geri dönüş: gerçek capture kaybı düzeltmesi
+
+Daha sonra alınan kullanıcı kaydı (`first-selection-lostcapture-20261109/reported-failures.json`)
+173 olay içerir; eviction yoktur. **7 nesne taşıması ve 1 çizim**, basılı hareket
+örneklerinden sonra `native:lostpointercapture` nedeniyle geri alınmıştır.
+Hepsinde beklenen source hâlâ current, belge aynı ve transaction aktiftir.
+Başarılı denemeler gerçek `native-up` ile bitmiştir. Bu veri önceki başarılı
+testlerden farklı olarak kullanıcının gerçek başarısız olay zinciridir.
+
+Eski kural capture kaybını doğrudan gesture iptali sayıyordu. Bağlı canvas'ta
+capture kaybı artık yalnız element yakalamasının kaybıdır: pinned pointer/button
+ve window capture listener'ları korunur. Yeni capture istenmez, başka bir
+elementten capture geri çalınmaz. Kayıp olayının koordinatlarıyla commit yapılmaz;
+gerçek `pointerup` veya mevcut son-basılı-örnek recovery'si beklenir. Bağlantısı
+kopmuş element, `pointercancel`, blur, Escape, source/document/scope değişimi
+eski güvenli iptal politikasını korur. Bu ayrım
+[W3C lostpointercapture sözleşmesi](https://www.w3.org/TR/pointerevents3/#the-lostpointercapture-event)
+ve mevcut window fallback sahipliğiyle uyumludur.
+
+Çizimde önceki iptal `onClose(undefined)` yoluyla Add aracını da kapatıyordu.
+Geçerli gesture artık final up'ta template ID ile tamamlanır; persistent Add
+sonraki shape için açık kalır. Bu davranış shared owner ve shape adapter
+regresyonlarında doğrulanır. `native-capture-lost` kaydı loss event'in button
+maskesini son basılı örnekten ayrı tutar; fallback ile gerçek iptal ayırt edilir.
+
+Kabul: **304 dosya / 2409 test**, TypeScript, MCP ve production build geçti.
+Aynı native browser fixture eski source override ile **14/17**, düzeltmeyle
+**17/17** geçti. `--pointer-source-ref=d0b548e` yalnız eski pointer owner'ı
+derler; manifest override Git ref'ini ve gerçek içerik hash'ini ayrı kaydeder.
+Fixture ayrıca gerçek fare sürüklemesinde canvas capture'ını isteyerek bırakır:
+eski owner nesneyi **90/90**'a döndürürken, yeni owner gerçek up sonrası
+**190/145** konumunda tek undo ile tamamlamıştır. İki koşuda da trusted
+`lostpointercapture` olayının gerçekten oluştuğu kaydedilmiştir.
+
+Yerel kullanıcı kaydı, before/after manifest ve native raporlar, trusted pointer
+kayıtları `artifacts/performance/first-selection-lostcapture-20261109/` altında
+tutulur. Fixture rapor satırları yalnız pointer-up sonrasında eklenir; gesture
+sırasında canvas rect'ini değiştiren test yerleşimi gerçek koordinat sonucunu
+bozmamalıdır. Tanı depolama adapter'ının 13 testi yenilemede opt-in durumunu,
+olay/counter sürekliliğini, boyut sınırlarını ve kapalı storage fallback'ini kapsar.
+
+### İçe alınan sahnede kalıcı çizim aracının kimlikleri
+
+Canlı kabul sırasında ikinci bir bağımsız ret yolu bulundu: process-local
+registry sayacı yeniden açılmış projedeki `rect_2` gibi kimliklere ulaşınca
+sonraki template zaten source'a ait olabiliyordu. `ShapePlacementSession`
+aynı kimliği yeniden eklemeyi doğru olarak reddediyor, fakat bu ret Add aracını
+kapatıyordu. `src/lib/editor/placement/availableShapeTemplate.ts` mevcut registry
+factory'sini güncel source kimliklerine karşı tekrar deneyerek kullanılmayan
+template verir. Yeni bir kimlik formatı veya ikinci registry oluşturulmaz;
+isimler, varsayılan geometri ve counter davranışı korunur. Hem ilk seçim hem her
+commit sonrası hazırlık bu helper'ı kullanır. React hook'un `getScene` bağımlılığı
+commit edilmiş son source'u okur; template source/history dışında kalır.
+
+Dört regresyon testi yüklü, boşluklu counter kimliklerini, ardışık üretimi,
+geometriyi ve bozuk factory davranışını kapsar. Aynı kullanıcı sahnesinde ilk
+Rectangle `rect_1`, ikinci Rectangle `rect_7` olarak üretildi: **8 → 9 → 10**
+katman; Add menüsü açık ve Rectangle etkin kaldı. İki işlem ayrı tek undo ile
+geri alındı. İlk nesne sürüklemesi yeni konumunda kaldı; sonraki basılmamış
+hareket source'u değiştirmedi. Canlı guide **747.015625 → 807.015625 px**
+taşındı ve release sonrası sabit kaldı; geçici guide temizlendi.
+
+Gerçek sayfa yenilemesinde kayıt açık durumu ve **27/300** olay korundu.
+Son indirilen `live-fixed-interactions.json` **76** olay içerir; eviction ve
+`source-cancel` yoktur. Bir nesne, iki guide işlemi ve üç shape commit'i içerir
+(shape işlemlerinden biri kimlik düzeltmesinden önceki başarılı ilk çizimdir).
+Kimlik çakışması constructor reddidir; bu yüzden source gesture iptali sayılmaz.
+Son native bundle'ın 402 source hash'i güncel dosyalarla eşleşir; 17/17 kontrol
+yeniden geçmiştir. Sonuçlar `verification.json` ve `final-after-acceptance.json`
+dosyalarında yereldir.
+
+Kullanıcının 8 katmanlı source'u test öncesiyle birebir aynı duruma getirildi;
+`validate_scene` uyarısızdır. Portable
+`projects/lostcapture-fixed-project-20261109.chorono.json` dosyasının SHA-256'sı
+test öncesi yedekle aynıdır:
+`95b7b4c40316c23a3b777d2d62ebe06035ad57b62af07966f905d828f5c4bf68`.
+Güncel uygulama localhost'ta ve tanı kaydı açık bırakılmıştır.

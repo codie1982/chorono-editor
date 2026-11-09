@@ -54,6 +54,11 @@ export interface PointerGestureHost {
  * has passed window capture before construction and cannot end its own session.
  * With no pressed movement it cancels instead of inventing a click/drag. Normal
  * up still resamples its actual coordinates, even with no preceding move.
+ * Losing element capture is not a pointer cancellation: while the borrowed
+ * element remains connected, the pinned window listeners keep ownership until
+ * an actual up/recovery or explicit cancel. A lost-capture event's button state
+ * never commits a gesture by itself. A disconnected capture target does cancel;
+ * the host still disposes/cancels on unmount, source or editing-scope changes.
  * Every terminal path removes listeners and attempts capture release once.
  */
 export class PointerGestureSession {
@@ -157,8 +162,18 @@ export class PointerGestureSession {
   private readonly onCancel = (event: PointerEvent) => {
     if (this.accepts(event)) this.cancel('pointercancel')
   }
+  /** Element capture can disappear immediately before its native up arrives.
+   * Keep the window fallback instead of rolling back a valid source preview.
+   * Explicit browser cancellation, blur, Escape and host teardown remain terminal.
+   * Never reacquire capture here: doing so could steal another native owner's
+   * capture. Foreign/late notifications cannot affect this gesture. */
   private readonly onLostCapture = (event: Event) => {
-    if (this.accepts(event as PointerEvent)) this.cancel('lostpointercapture')
+    const sample = event as PointerEvent
+    if (this.terminating || !this.accepts(sample)) return
+    const connected = this.capture?.isConnected !== false
+    this.trace?.record('native-capture-lost', { reason: connected ? 'window-fallback' : 'capture-disconnected',
+      captureConnected: connected, eventButtons: Number.isFinite(sample.buttons) ? sample.buttons : null, ...this.summary() })
+    if (!connected) this.cancel('lostpointercapture')
   }
   private readonly onBlur = () => { this.cancel('blur') }
   private readonly onKey = (event: KeyboardEvent) => {

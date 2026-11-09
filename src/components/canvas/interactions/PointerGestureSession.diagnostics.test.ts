@@ -3,13 +3,17 @@ import { PointerGestureSession } from './PointerGestureSession'
 import { interactionTrace } from './diagnostics'
 
 /** Native-shaped EventTarget input without DOM/source ownership. */
-function fixture() {
+function fixture(connected?: boolean) {
   const target = new EventTarget(), move = vi.fn(), up = vi.fn(), cancel = vi.fn()
+  const capture = new EventTarget()
+  Object.assign(capture, { isConnected: connected, setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() })
   const session = new PointerGestureSession({ eventTarget: target as unknown as Window, move, up, cancel,
-    diagnostics: { owner: 'test-pan', details: { sourceSessionId: 7 } } })
+    diagnostics: { owner: 'test-pan', details: { sourceSessionId: 7 } } },
+    connected === undefined ? undefined : { pointerId: 1, currentTarget: capture as unknown as Element })
   const emit = (type: string, x: number, buttons = 1, pointerId = 1) => target.dispatchEvent(Object.assign(new Event(type), {
     pointerId, clientX: x, clientY: 0, buttons, pointerType: 'mouse', shiftKey: false, metaKey: false, ctrlKey: false }))
-  return { session, move, up, cancel, emit }
+  const lost = (buttons = 0) => capture.dispatchEvent(Object.assign(new Event('lostpointercapture'), { pointerId: 1, buttons }))
+  return { session, move, up, cancel, emit, lost }
 }
 
 beforeEach(() => { interactionTrace.clear(); interactionTrace.setEnabled(true) })
@@ -53,5 +57,26 @@ describe('native pointer lifecycle evidence', () => {
     const record = interactionTrace.getSnapshot().records.find(item => item.event === 'native-error')!
     expect(record.details).toEqual({ reason: 'callback-error', errorType: 'Error' })
     expect(interactionTrace.exportJson()).not.toContain('Private scene information')
+  })
+
+  it('distinguishes recoverable capture loss from cancellation and records its own button state', () => {
+    const h = fixture(true); h.emit('pointermove', 20); h.lost(0)
+    const records = interactionTrace.getSnapshot().records
+    expect(records.find(item => item.event === 'native-capture-lost')?.details).toMatchObject({
+      reason: 'window-fallback', captureConnected: true, eventButtons: 0, buttons: 1, moves: 1 })
+    expect(records.some(item => item.event === 'native-cancel')).toBe(false)
+    expect(h.up).not.toHaveBeenCalled(); expect(h.cancel).not.toHaveBeenCalled()
+    h.emit('pointerup', 40, 0)
+    expect(h.up).toHaveBeenCalledOnce()
+    expect(interactionTrace.getSnapshot().records.find(item => item.event === 'native-up')?.details.clientX).toBe(40)
+  })
+
+  it('records disconnected target capture loss as a real cancellation', () => {
+    const h = fixture(false); h.emit('pointermove', 20); h.lost()
+    const records = interactionTrace.getSnapshot().records
+    expect(records.find(item => item.event === 'native-capture-lost')?.details).toMatchObject({
+      reason: 'capture-disconnected', captureConnected: false })
+    expect(h.cancel).toHaveBeenCalledExactlyOnceWith('lostpointercapture')
+    h.emit('pointerup', 40, 0); expect(h.up).not.toHaveBeenCalled()
   })
 })

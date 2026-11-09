@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import SceneCanvas from '@/components/SceneCanvas'
@@ -34,6 +34,8 @@ function Subject({ properties = false }: { properties?: boolean }) {
   const editor = useEditorState(source()), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
   const [selected, select] = useState<string | null>(properties ? 'moving' : null), [mode, setMode] = useState<ToolMode>('select')
   const ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
+  const disarmLoss = useRef<(() => void) | undefined>()
+  useEffect(() => () => disarmLoss.current?.(), [])
   useEffect(() => { snap.setEnabled(false) }, [])
   useLayoutEffect(() => { live = { editor, selected, mode, snap: snap.settings.enabled } })
   useEffect(() => {
@@ -52,7 +54,18 @@ function Subject({ properties = false }: { properties?: boolean }) {
     <button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button>
     <button onClick={() => { const viewport = host.querySelector('[data-testid="canvas-viewport"]'); assert(viewport, 'Missing viewport')
       viewport.addEventListener('pointerup', event => event.stopPropagation(), { once: true }) }}>Consume next pointer-up bubble</button>
-    <button onClick={() => select(null)}>Deselect</button></nav>
+    <button onClick={() => select(null)}>Deselect</button>
+    <button onClick={() => {
+      disarmLoss.current?.()
+      const release = (event: PointerEvent) => {
+        const element = canvas()
+        if (!element.hasPointerCapture(event.pointerId)) return
+        disarmLoss.current?.(); element.dataset.testCaptureReleased = 'true'
+        element.releasePointerCapture(event.pointerId)
+      }
+      window.addEventListener('pointermove', release, true)
+      disarmLoss.current = () => { window.removeEventListener('pointermove', release, true); disarmLoss.current = undefined }
+    }}>Release capture during next drag</button></nav>
     <output>Mode {mode} · Layers {editor.scene.layers.length} · Undo {String(editor.canUndo)} · Transaction {String(editor.isTransactionActive())}</output>
     <div style={{ display: 'flex', height: 650 }}><section data-panel="canvas" style={{ display: 'flex', position: 'relative', flex: 1, minWidth: 0 }}>
       <SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} selectedLayerId={selected} selectedLayerIds={ids}
@@ -132,6 +145,34 @@ async function ordinaryChecks(mount: (properties?: boolean) => Promise<void>) {
   check('One undo restores the source after ordinary first drag', await oneUndo(base), { layers: state().editor.getScene().layers })
 }
 
+/** Replay the reported valid-preview/capture-loss/up chain through production
+ * object and guide adapters. Capture loss itself must neither commit nor undo. */
+async function captureLossChecks(mount: (properties?: boolean) => Promise<void>) {
+  await mount(); let base = structuredClone(state().editor.getScene())
+  const from = client({ x: 130, y: 120 }), moved = client({ x: 230, y: 175 }), end = client({ x: 250, y: 190 })
+  pointer(canvas(), 'pointerdown', from); pointer(window, 'pointermove', moved); await frames()
+  const preview = structuredClone(shape()); pointer(canvas(), 'lostpointercapture', moved); await frames()
+  const afterLoss = structuredClone(shape()), retainedObject = same(shape(), preview)
+    && state().editor.isTransactionActive() && !state().editor.canUndo
+  pointer(window, 'pointermove', end); pointer(window, 'pointerup', end); await frames()
+  // Append report rows only after up: a new row above the canvas shifts its
+  // client rect and would itself change the fixed endpoint's world coordinates.
+  check('Connected capture loss retains the first selected object preview until up', retainedObject, { preview, afterLoss })
+  check('Real up after capture loss commits final object pose exactly once', near(shape().transform.x, 210)
+    && near(shape().transform.y, 160) && await oneUndo(base), { afterUndo: shape() })
+
+  await mount(); base = structuredClone(state().editor.getScene())
+  const ruler = control('Horizontal ruler'), bar = ruler.getBoundingClientRect(), initial = { x: client({ x: 160, y: 0 }).x, y: bar.top + bar.height / 2 }
+  const middle = client({ x: 280, y: 150 }), final = client({ x: 300, y: 160 })
+  pointer(ruler, 'pointerdown', initial); pointer(window, 'pointermove', middle); await frames()
+  pointer(canvas(), 'lostpointercapture', middle); await frames()
+  const retained = state().editor.isTransactionActive() && near(readSceneGuides(state().editor.getScene()).guides[0]?.position ?? NaN, 280)
+  pointer(window, 'pointermove', final); pointer(window, 'pointerup', final); await frames()
+  const guide = readSceneGuides(state().editor.getScene()).guides[0]
+  check('Guide survives connected capture loss and commits one final position', retained && near(guide?.position ?? NaN, 300)
+    && await oneUndo(base), { guide, retained })
+}
+
 async function stalePanObjectChecks(mount: (properties?: boolean) => Promise<void>) {
   await mount(); const base = structuredClone(state().editor.getScene()); await missPanRelease()
   const first = await moveObject(), firstGood = near(first.released.transform.x, 190) && near(first.released.transform.y, 145)
@@ -209,7 +250,7 @@ async function main() {
   run.onclick = async () => { run.disabled = inspect.disabled = true; checks.length = 0; document.getElementById('checks')!.textContent = ''; const start = performance.now()
     try { document.getElementById('status')!.textContent = 'Running pointer lifecycle checks…'
       await ordinaryChecks(mount); await stalePanObjectChecks(mount); await stalePanGuideChecks(mount); await foreignPointerChecks(mount)
-      await focusedInputChecks(mount); await propertyDraftChecks(mount)
+      await focusedInputChecks(mount); await propertyDraftChecks(mount); await captureLossChecks(mount)
       const passed = checks.every(check => check.passed)
       document.getElementById('status')!.textContent = `${passed ? 'PASS' : 'FAIL'} · ${checks.filter(check => check.passed).length}/${checks.length} checks`
       document.getElementById('report')!.textContent = JSON.stringify({ passed, checks, elapsedMs: performance.now() - start, dpr: devicePixelRatio, userAgent: navigator.userAgent }, null, 2)

@@ -43,7 +43,7 @@ export function InteractionDiagnosticsSection() {
     <div className={styles.scope}>
       <h3>Interaction diagnostics <span className={styles.badge}>{snapshot.enabled ? 'Recording' : 'Stopped'}</span></h3>
       <p>Record object transforms, guide moves, motion keys, shape drawing, and Pan to investigate a cancelled or reverted drag.</p>
-      <p>Off by default. Records stay in this browser tab; full scene data and media are excluded. Recording continues when this panel is closed.</p>
+      <p>Off by default. Records stay in this tab, including page reloads; full scene data and media are excluded. Recording continues when this panel is closed.</p>
     </div>
     <div className={styles.pagination} role="group" aria-label="Interaction diagnostic controls">
       <button type="button" aria-pressed={snapshot.enabled}

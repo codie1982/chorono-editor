@@ -1,8 +1,8 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { Layer } from '@/lib/types'
+import type { ChronoScene, Layer } from '@/lib/types'
 import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
-import { canPlaceShape } from '@/lib/editor/placement'
+import { availableShapeTemplate, canPlaceShape } from '@/lib/editor/placement'
 
 interface CreationState { kind: string; template: Layer; createNext: () => Layer }
 interface Options {
@@ -10,13 +10,18 @@ interface Options {
   setToolMode: Dispatch<SetStateAction<ToolMode>>
   onSelect: (id: string) => void
   documentSignal: AbortSignal
+  /** Read the current authored source at allocation, including the just-committed
+   * shape. A scene imported after page load may already use factory counter IDs. */
+  getScene: () => Pick<ChronoScene, 'layers'>
 }
 
 /** Persistent native shape-tool selection, shared by the editor and its native
  * acceptance adapter. Holds a registry factory and one unused template outside
  * source/history. Each committed gesture selects its ID and allocates a fresh
- * template for the next gesture, preserving the exact menu kind (including
- * Rounded Rect). Selecting that kind again toggles the tool off.
+ * collision-free template for the next gesture, preserving the exact menu kind
+ * (including Rounded Rect). Source IDs are checked again after each commit,
+ * so loading saved counter-based IDs cannot strand the next gesture. Selecting
+ * that kind again toggles the tool off.
  *
  * The pointer session owns preview/history and reports completion here. Cancel,
  * document abort or an explicit tool change discards only the unused template;
@@ -41,7 +46,10 @@ export function useShapeCreationTool(options: Options) {
     if (!canPlaceShape(template)) return false
     const current = latest.current
     if (current.state?.kind === kind && current.options.toolMode === 'shape-draw') close()
-    else { setState({ kind, template, createNext }); current.options.setToolMode('shape-draw') }
+    else {
+      const available = availableShapeTemplate(template, createNext, current.options.getScene().layers)
+      setState({ kind, template: available, createNext }); current.options.setToolMode('shape-draw')
+    }
     return true
   }, [close])
 
@@ -52,7 +60,8 @@ export function useShapeCreationTool(options: Options) {
     const current = latest.current
     current.options.onSelect(id)
     if (current.state && current.options.toolMode === 'shape-draw') {
-      setState({ ...current.state, template: current.state.createNext() })
+      const next = availableShapeTemplate(current.state.createNext(), current.state.createNext, current.options.getScene().layers)
+      setState({ ...current.state, template: next })
     }
   }, [close])
 

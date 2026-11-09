@@ -11,6 +11,8 @@ export interface InteractionTraceContext {
 /** One immutable local diagnostic event. `timeMs` is Unix epoch milliseconds;
  * sequence and session IDs increase across clears to preserve identity. */
 export interface InteractionTraceRecord {
+  /** Runtime boot identity scopes weak source-reference IDs after a reload. */
+  readonly bootId: string
   readonly sequence: number
   readonly sessionId: number
   readonly owner: string
@@ -33,4 +35,14 @@ export interface InteractionTraceSnapshot {
 export interface InteractionTraceSession {
   readonly id: number
   record(event: string, details?: InteractionTraceDetails): void
+}
+
+/** Pure bounded state handed to a separate persistence/conversion adapter.
+ * Counters survive Clear/reload even when no records remain. */
+export interface InteractionTraceRestoreState {
+  readonly enabled: boolean
+  readonly dropped: number
+  readonly records: readonly InteractionTraceRecord[]
+  readonly nextSequence: number
+  readonly nextSession: number
 }

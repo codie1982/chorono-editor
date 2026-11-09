@@ -17,7 +17,7 @@ function fixture() {
   const controller = new AbortController(), events = new EventTarget(), capture = new EventTarget()
   const onClose = vi.fn(), onDraft = vi.fn(), onWarning = vi.fn(), release = vi.fn()
   const history: ChronoScene[] = []
-  Object.assign(capture, { width: 1000, height: 600, setPointerCapture: vi.fn(), releasePointerCapture: release,
+  Object.assign(capture, { isConnected: true, width: 1000, height: 600, setPointerCapture: vi.fn(), releasePointerCapture: release,
     getBoundingClientRect: () => ({ left: 100, top: 50, width: 500, height: 300 }) })
   const editor = { getScene: () => source, getDocumentSignal: () => controller.signal,
     isTransactionActive: () => active,
@@ -28,13 +28,26 @@ function fixture() {
   const session = new ShapePlacementSession({ getEditor: () => editor, template, canvas: capture as unknown as HTMLCanvasElement,
     start: sample(150, 100), eventTarget: events as unknown as Window, onDraft, onClose, onWarning })
   const emit = (type: string, fields: object) => events.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), fields))
-  return { base, template, session, onClose, onDraft, onWarning, history, release, emit,
+  return { base, template, session, capture, onClose, onDraft, onWarning, history, release, emit,
     source: () => source,
     externalEdit: () => { source = { ...source, composition: { ...source.composition, width: 999 } } },
     replace: () => { source = emptyScene(); active = false; controller.abort() } }
 }
 
 describe('shape Add placement gesture', () => {
+  it('keeps a drawn shape and armed-tool completion through capture loss until real release', () => {
+    const h = fixture()
+    h.emit('pointermove', { ...sample(220, 150), buttons: 1 })
+    const preview = h.source()
+    h.capture.dispatchEvent(Object.assign(new Event('lostpointercapture'), { ...sample(220, 150), buttons: 0 }))
+    expect(h.source()).toBe(preview)
+    expect(h.history).toEqual([])
+    expect(h.onClose).not.toHaveBeenCalled()
+    h.emit('pointerup', { ...sample(250, 175), buttons: 0 })
+    expect(h.source().layers[1].size).toEqual({ width: 200, height: 150 })
+    expect(h.history).toEqual([h.base])
+    expect(h.onClose).toHaveBeenCalledExactlyOnceWith(h.template.id)
+  })
   it('recovers a missing release from the last drawn size rather than the following hover position', () => {
     const h = fixture()
     h.emit('pointermove', { ...sample(250, 175), buttons: 1, pointerType: 'mouse' })

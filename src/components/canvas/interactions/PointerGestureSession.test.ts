@@ -8,13 +8,13 @@ function sample(clientX = 20, clientY = 30, patch: Partial<PointerGestureSample>
 }
 
 /** Real EventTarget dispatch plus observable borrowed capture/listener handles. */
-function fixture(options: { noStart?: boolean; button?: number; captureThrows?: boolean } = {}) {
+function fixture(options: { noStart?: boolean; button?: number; captureThrows?: boolean; connected?: boolean } = {}) {
   const events = new EventTarget(), capture = new EventTarget()
   const add = vi.spyOn(events, 'addEventListener'), remove = vi.spyOn(events, 'removeEventListener')
   const captureAdd = vi.spyOn(capture, 'addEventListener'), captureRemove = vi.spyOn(capture, 'removeEventListener')
   const setCapture = vi.fn(() => { if (options.captureThrows) throw new Error('No native capture') })
   const release = vi.fn(), move = vi.fn(), up = vi.fn(), cancel = vi.fn(), error = vi.fn()
-  Object.assign(capture, { setPointerCapture: setCapture, releasePointerCapture: release })
+  Object.assign(capture, { setPointerCapture: setCapture, releasePointerCapture: release, isConnected: options.connected ?? true })
   const session = new PointerGestureSession({ eventTarget: events as unknown as Window, move, up, cancel, error },
     options.noStart ? undefined : { pointerId: 7, currentTarget: capture as unknown as Element,
       button: options.button, pointerType: 'mouse' })
@@ -22,7 +22,7 @@ function fixture(options: { noStart?: boolean; button?: number; captureThrows?: 
     const event = Object.assign(new Event(type, { bubbles: true, cancelable: true }), fields)
     events.dispatchEvent(event); return event
   }
-  const lost = (pointerId = 7) => capture.dispatchEvent(Object.assign(new Event('lostpointercapture'), { pointerId }))
+  const lost = (pointerId = 7, buttons = 1) => capture.dispatchEvent(Object.assign(new Event('lostpointercapture'), { pointerId, buttons }))
   return { session, events, capture, add, remove, captureAdd, captureRemove, setCapture, release, move, up, cancel, error, emit, lost }
 }
 
@@ -148,11 +148,51 @@ describe('native pointer gesture ownership', () => {
     expect(h.cancel).toHaveBeenCalledOnce()
   })
 
-  it('cancels actual lost capture, while unmount disposal stays callback-free', () => {
-    const lost = fixture(); lost.lost()
+  it('cancels disconnected capture, while unmount disposal stays callback-free', () => {
+    const lost = fixture({ connected: false }); lost.lost()
     expect(lost.cancel).toHaveBeenCalledExactlyOnceWith('lostpointercapture')
-    const unmounted = fixture(); unmounted.session.dispose(); unmounted.lost(); unmounted.emit('blur')
+    const unmounted = fixture(); unmounted.emit('pointermove', sample(50, 60)); unmounted.lost()
+    unmounted.session.dispose(); unmounted.lost(); unmounted.emit('blur'); unmounted.emit('pointerup', sample(80, 90, { buttons: 0 }))
     expect(unmounted.cancel).not.toHaveBeenCalled(); expect(unmounted.up).not.toHaveBeenCalled()
+  })
+
+  it('continues held movement after connected capture loss and commits only the actual up once', () => {
+    const h = fixture()
+    h.emit('pointermove', sample(50, 60)); h.lost()
+    expect(h.up).not.toHaveBeenCalled(); expect(h.cancel).not.toHaveBeenCalled()
+    h.emit('pointermove', sample(70, 80)); h.emit('pointerup', sample(90, 100, { buttons: 0 }))
+    expect(h.move).toHaveBeenCalledTimes(2)
+    expect(h.up).toHaveBeenCalledExactlyOnceWith(sample(90, 100, { buttons: 0 }))
+    h.lost(); h.emit('pointerup', sample(900, 900, { buttons: 0 }))
+    expect(h.up).toHaveBeenCalledOnce(); expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.remove.mock.calls).toEqual(h.add.mock.calls)
+    expect(h.captureRemove.mock.calls).toEqual(h.captureAdd.mock.calls)
+    expect(h.release).toHaveBeenCalledOnce()
+  })
+
+  it('does not infer release from lost-capture buttons=0 before the real up coordinates arrive', () => {
+    const h = fixture()
+    h.emit('pointermove', sample(50, 60)); h.lost(7, 0)
+    expect(h.up).not.toHaveBeenCalled(); expect(h.cancel).not.toHaveBeenCalled()
+    h.emit('pointerup', sample(80, 90, { buttons: 0 }))
+    expect(h.up).toHaveBeenCalledExactlyOnceWith(sample(80, 90, { buttons: 0 }))
+  })
+
+  it('recovers a missed up after capture loss using the last pressed point instead of later hover', () => {
+    const h = fixture()
+    h.emit('pointermove', sample(50, 60)); h.lost()
+    h.emit('pointermove', sample(70, 80)); h.emit('pointermove', sample(900, 900, { buttons: 0 }))
+    expect(h.up).toHaveBeenCalledExactlyOnceWith(sample(70, 80))
+    expect(h.move).toHaveBeenCalledTimes(2); expect(h.cancel).not.toHaveBeenCalled()
+  })
+
+  it.each(['pointercancel', 'blur', 'keydown'] as const)('keeps explicit %s cancellation after entering window fallback', type => {
+    const h = fixture()
+    h.emit('pointermove', sample(50, 60)); h.lost()
+    h.emit(type, type === 'keydown' ? { key: 'Escape' } : sample())
+    expect(h.cancel).toHaveBeenCalledExactlyOnceWith(type === 'keydown' ? 'escape' : type)
+    h.emit('pointerup', sample(80, 90, { buttons: 0 }))
+    expect(h.up).not.toHaveBeenCalled(); expect(h.release).toHaveBeenCalledOnce()
   })
 
   it('keeps accepts valid during up and supports reentrant host disposal/terminal events', () => {

@@ -17,7 +17,7 @@ function harness(cloneMode?: 'copy') {
   let scene: ChronoScene = base, active = true, signal = new AbortController()
   const events = new EventTarget(), capture = new EventTarget()
   const release = vi.fn(), clear = vi.fn(), warning = vi.fn(), history: ChronoScene[] = []
-  Object.assign(capture, { setPointerCapture: vi.fn(), releasePointerCapture: release })
+  Object.assign(capture, { isConnected: true, setPointerCapture: vi.fn(), releasePointerCapture: release })
   const cancel = vi.fn((options?: { preserveScene?: boolean }) => { active = false; if (!options?.preserveScene) scene = base })
   const editor = { scene: base, getScene: () => scene, getDocumentSignal: () => signal.signal,
     isTransactionActive: () => active, previewTransaction: (next: ChronoScene) => { scene = next }, cancelTransaction: cancel,
@@ -70,6 +70,7 @@ describe('canvas pointer transaction ownership', () => {
   it.each(['pointercancel', 'lostpointercapture', 'blur', 'Escape', 'unmount'])('restores our preview on %s and detaches listeners', kind => {
     const h = harness()
     h.session.sample(sample(20))
+    if (kind === 'lostpointercapture') Object.assign(h.capture, { isConnected: false })
     if (kind === 'Escape') h.emit(h.events, 'keydown', { key: 'Escape' })
     else if (kind === 'unmount') h.session.cancel()
     else h.emit(kind === 'lostpointercapture' ? h.capture : h.events, kind, sample(20))
@@ -78,6 +79,23 @@ describe('canvas pointer transaction ownership', () => {
     expect(h.clear).toHaveBeenCalledTimes(1)
     h.emit(h.events, 'pointermove', sample(100))
     expect(h.getScene()).toBe(h.base)
+  })
+
+  it('retains a valid first drag through connected capture loss and commits only at real up', () => {
+    const h = harness()
+    h.emit(h.events, 'pointermove', { ...sample(20), buttons: 1 })
+    h.emit(h.capture, 'lostpointercapture', { ...sample(20), buttons: 0 })
+    expect(h.getScene().layers[0].transform.x).toBe(20)
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.commit).not.toHaveBeenCalled()
+    h.emit(h.events, 'pointermove', { ...sample(35), buttons: 1 })
+    h.emit(h.events, 'pointerup', { ...sample(40), buttons: 0 })
+    expect(h.getScene().layers[0].transform.x).toBe(40)
+    expect(h.history).toEqual([h.base])
+    expect(h.clear).toHaveBeenCalledOnce()
+    h.emit(h.capture, 'lostpointercapture', sample(40))
+    h.emit(h.events, 'pointerup', sample(90))
+    expect(h.commit).toHaveBeenCalledOnce()
   })
 
   it('preserves an external edit when the source changes during the gesture', () => {

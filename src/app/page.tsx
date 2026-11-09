@@ -9,6 +9,7 @@ import {
 } from '@/lib/defaults'
 import { layerRegistry } from '@/lib/registry'
 import { useShapeCreationTool } from '@/components/canvas/placement/useShapeCreationTool'
+import { ensureInteractionTracePersistence } from '@/components/canvas/interactions/diagnostics'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
@@ -182,6 +183,9 @@ function makeDemoScene(): ChronoScene {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function BuilderPage() {
+  // Restore the user's same-tab diagnostic session before any authoring gesture;
+  // the adapter owns storage/timer/pagehide cleanup independently of dock panels.
+  useEffect(() => ensureInteractionTracePersistence(), [])
   // ── Active editor mode ────────────────────────────────────────────────────
   // Currently always '2danimation'. When a mode selector UI lands, this will
   // drive descriptor lookup for panels / tools / renderer.
@@ -453,7 +457,7 @@ export default function BuilderPage() {
       : shiftHeld ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))
   }, [])
   const shapeCreation = useShapeCreationTool({ toolMode, setToolMode, onSelect: selectLayer,
-    documentSignal: editor.getDocumentSignal() })
+    documentSignal: editor.getDocumentSignal(), getScene: editor.getScene })
   useEffect(() => {
     if (manualPreview || runtime.segmentState || isPlaying) shapeCreation.close()
   }, [manualPreview, runtime.segmentState, isPlaying, shapeCreation.close])

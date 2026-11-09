@@ -1,4 +1,4 @@
-import type { InteractionTraceDetails, InteractionTraceRecord, InteractionTraceSession, InteractionTraceSnapshot } from './types'
+import type { InteractionTraceDetails, InteractionTraceRecord, InteractionTraceRestoreState, InteractionTraceSession, InteractionTraceSnapshot } from './types'
 
 const EMPTY_RECORDS: readonly InteractionTraceRecord[] = Object.freeze([])
 
@@ -16,10 +16,12 @@ export class InteractionTrace {
   private readonly listeners = new Set<() => void>()
   private nextSequence = 1
   private nextSession = 1
+  private restored = false
 
   /** Capacity is a positive integer, capped at 1000. Clock injection supports
    * deterministic tests; the browser default is Date.now in epoch milliseconds. */
-  constructor(capacity = 300, private readonly clock: () => number = Date.now) {
+  constructor(capacity = 300, private readonly clock: () => number = Date.now,
+    private readonly bootId = 'memory') {
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 1000) throw new RangeError('Trace capacity must be between 1 and 1000')
     this.snapshot = Object.freeze({ enabled: false, capacity, dropped: 0, records: EMPTY_RECORDS })
   }
@@ -65,7 +67,33 @@ export class InteractionTrace {
    * calling this method does not stop collection or mutate existing evidence. */
   exportJson(): string {
     return JSON.stringify({ schemaVersion: 1, scope: 'local-editor-interactions',
-      exportedAtMs: this.clock(), ...this.snapshot }, null, 2)
+      exportedAtMs: this.clock(), currentBootId: this.bootId, ...this.snapshot }, null, 2)
+  }
+
+  /** Read only serializable state/counters. Browser storage ownership belongs
+   * to a separate adapter; no write or timer is created by this operation. */
+  getRestoreState(): InteractionTraceRestoreState {
+    return Object.freeze({ enabled: this.snapshot.enabled, dropped: this.snapshot.dropped,
+      records: this.snapshot.records, nextSequence: this.nextSequence, nextSession: this.nextSession })
+  }
+
+  /** Restore validated scalar evidence once, before this instance records or
+   * enables tracing. Active in-memory evidence always wins over a stale stored
+   * copy. The caller validates version/shape; this method re-copies/bounds values,
+   * preserves old boot IDs, and advances counters past every restored identity.
+   * It returns false rather than replacing an active or already-restored trace. */
+  restore(state: InteractionTraceRestoreState): boolean {
+    if (this.restored || this.snapshot.enabled || this.snapshot.records.length || this.nextSequence !== 1 || this.nextSession !== 1) return false
+    if (!Number.isSafeInteger(state.nextSequence) || state.nextSequence < 1 || !Number.isSafeInteger(state.nextSession) || state.nextSession < 1) return false
+    const excess = Math.max(0, state.records.length - this.snapshot.capacity)
+    const records = state.records.slice(excess).map(record => Object.freeze({ sequence: record.sequence, sessionId: record.sessionId,
+      timeMs: record.timeMs, bootId: this.label(record.bootId), owner: this.label(record.owner),
+      event: this.label(record.event), details: this.details(record.details) }))
+    this.nextSequence = Math.max(state.nextSequence, ...records.map(record => record.sequence + 1))
+    this.nextSession = Math.max(state.nextSession, ...records.map(record => record.sessionId + 1))
+    this.restored = true
+    this.publish({ ...this.snapshot, enabled: state.enabled, dropped: state.dropped + excess, records: Object.freeze(records) })
+    return true
   }
 
   /** Copy only finite scalar values; bound keys/strings/field count so callers
@@ -82,7 +110,7 @@ export class InteractionTrace {
   /** Disabled collection is a no-op even for an existing session lease. */
   private record(sessionId: number, owner: string, event: string, details?: InteractionTraceDetails): void {
     if (!this.snapshot.enabled) return
-    const record: InteractionTraceRecord = Object.freeze({ sequence: this.nextSequence++, sessionId, owner,
+    const record: InteractionTraceRecord = Object.freeze({ bootId: this.bootId, sequence: this.nextSequence++, sessionId, owner,
       event: this.label(event), timeMs: this.clock(), details: this.details(details) })
     const records = [...this.snapshot.records, record]
     const excess = Math.max(0, records.length - this.snapshot.capacity)

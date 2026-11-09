@@ -41,7 +41,8 @@ function Subject({ initial }: { initial: ChronoScene }) {
   const editor = useEditorState(initial), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
   const [selected, setSelected] = useState<string | null>(null)
   const [mode, setMode] = useState<ToolMode>('select'), ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
-  const creation = useShapeCreationTool({ toolMode: mode, setToolMode: setMode, onSelect: setSelected, documentSignal: editor.getDocumentSignal() })
+  const creation = useShapeCreationTool({ toolMode: mode, setToolMode: setMode, onSelect: setSelected,
+    documentSignal: editor.getDocumentSignal(), getScene: editor.getScene })
   const { template, kind } = creation
   useEffect(() => { snap.setEnabled(false) }, [])
   useLayoutEffect(() => { runtime = { editor, template, kind, selected, mode, snap: snap.settings.enabled } })

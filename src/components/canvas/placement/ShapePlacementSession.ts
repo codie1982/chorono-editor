@@ -31,7 +31,8 @@ export interface ShapePlacementSessionOptions {
  * create default-sized geometry for a click. Larger gestures draw in composition
  * pixels, with Shift constraining shape proportions. A final pointer-up sample
  * commits one ordinary Add command, with no default-size flash on pointer-down.
- * Escape, lost capture, document replacement or conflicting source edits follow
+ * Connected capture loss keeps the shared window fallback active. Escape,
+ * disconnected capture, document replacement or conflicting source edits follow
  * EditorPointerSession cancellation. No platform handles enter saved source.
  */
 export class ShapePlacementSession extends EditorPointerSession<PlacementPreview> {
