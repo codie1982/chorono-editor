@@ -19,7 +19,7 @@ it('opens with project-wide scope and accessible categories without inventing to
     canvases: { getSnapshot: () => ({ supported: true, canvas2dBytes: 40 * 1024 ** 2, webglBytes: 0, canvas2dCount: 1, webglCount: 0 }) },
   })
   const html = renderToStaticMarkup(createElement(ResourceMonitorPanel, { scene, assets: new Map(), audio, isPlaying: false, source }))
-  for (const text of ['40.0 MiB', 'Overview', 'Media', 'CPU / GPU', 'Surfaces', 'Browser memory', 'This is not total process RAM.']) expect(html).toContain(text)
+  for (const text of ['40.0 MiB', 'Overview', 'Media', 'CPU / GPU', 'Surfaces', 'Interaction', 'Browser memory', 'This is not total process RAM.']) expect(html).toContain(text)
   expect(html).toContain('aria-label="Resource categories"')
   expect(html).toContain('aria-pressed="true"')
   const compute = renderToStaticMarkup(createElement(ComputeResourcesSection, { snapshot: source.getSnapshot() }))

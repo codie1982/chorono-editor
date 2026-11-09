@@ -48,6 +48,8 @@ export class ShapePlacementSession extends EditorPointerSession<PlacementPreview
     super({ startClientX: options.start.clientX, startClientY: options.start.clientY, allowClick: true }, {
       getEditor: options.getEditor,
       eventTarget: options.eventTarget,
+      diagnostics: { owner: 'shape-placement', details: { layerId: options.template.id,
+        layerType: options.template.type, startWorldX: start.x, startWorldY: start.y } },
       preview: (base, sample) => {
         const useDefaultSize = Math.hypot(sample.clientX - options.start.clientX, sample.clientY - options.start.clientY) <= 3
         if (useDefaultSize && !phase.finishing) return { scene: base, layer: null, command: null }

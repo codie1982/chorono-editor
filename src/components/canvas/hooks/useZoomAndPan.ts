@@ -185,13 +185,14 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
       startPan: { ...pan },
     }
     panSessionRef.current = new PointerGestureSession({ eventTarget: window,
+      diagnostics: { owner: 'pan', details: { startPanX: pan.x, startPanY: pan.y, zoom } },
       move: handlePanMove,
       up: sample => { handlePanMove(sample); cancelPan() },
       cancel: cancelPan,
     }, { pointerId: e.pointerId, currentTarget: containerRef.current ?? e.currentTarget,
       button: e.button, pointerType: e.pointerType })
     setPanning(true)
-  }, [pan, handlePanMove, cancelPan, containerRef])
+  }, [pan, zoom, handlePanMove, cancelPan, containerRef])
 
   useEffect(() => () => {
     panSessionRef.current?.dispose()

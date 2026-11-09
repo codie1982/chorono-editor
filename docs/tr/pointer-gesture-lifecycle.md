@@ -130,3 +130,57 @@ Yerel kanıtlar `artifacts/performance/pointer-release-audit-20261109/` altında
 before/after bundle ve hash manifest'leri, `*-acceptance.json`, trusted AX/JSON
 kayıtları ve ana editör/MCP karşılaştırmasıyla tutulur. Üretilen QA çıktıları
 git'e eklenmez. Yeni subsystem idle polling veya sürekli frame loop oluşturmaz.
+
+## Aralıklı iptaller için yerel tanı kaydı
+
+Tek bir başarılı fiziksel test aralıklı hatanın çözüldüğünü göstermez. Resources
+→ **Interaction** bölümündeki **Start recording** ile yerel hareket kaydı
+başlatılır. Panel kapalıyken kayıt sürer. Sorun tekrarlandıktan sonra **Stop
+recording** ve **Download JSON** kullanılır. Yenileme sekmenin kaydını sıfırlar;
+kanıt yenilemeden önce indirilmelidir. Kayıt varsayılan olarak kapalıdır.
+
+Ortak kayıt sahibi ve public kullanım sözleşmesi
+[`interactions/diagnostics/README.md`](../../src/components/canvas/interactions/diagnostics/README.md)
+dosyasındadır. En fazla 300 olay tutulur; sahne JSON'u, medya ve undo snapshot'ı
+kopyalanmaz. Otomatik ağ aktarımı veya polling yoktur. UI mevcut export kaynak
+sahibini kullanarak JSON Blob'unu ve indirme URL'sini bırakır.
+
+Nesne, guide, motion-key, shape placement ve Pan native sahipleri işaretlidir.
+Viewport başlangıç kaydı aktif araç, seçim, pointer/button ve transaction
+durumunu tutar. Native olaylar ilk hareket, son nokta, capture ve iptal nedenini;
+source olayları ilk/final preview, commit ve guard nedenini tutar. İlk/final
+nesne preview'ında uygulanan konum ve canvas rect'i, guide'da konum ve rect
+kaydedilir. Ara hareketlerin tamamı loglanmaz. Source identity sayıları WeakMap
+üzerinden üretilir; snapshot'ı bellekte tutmaz. Konumların CSS/composition
+birimleri giriş sözleşmelerinde açıkça ayrılır.
+
+Özellikle `source-cancel.details.reason` alanında `native:lostpointercapture`,
+`native:blur`, `scope-change-or-unmount`, `source-changed`, `no-source-change`,
+`no-pointer-movement` ve `below-drag-threshold` ayrımı incelenmelidir. Başlangıç
+engellenmişse `start-rejected` veya viewport routing kaydı görülür. Başarılı
+`source-commit` sonrasında source geri dönüyorsa bu önceki gesture iptalinden
+farklı bir source yazıcısını işaret eder. Bu araç tanı sağlar; tek başına yeni
+bir aralıklı hata nedeni bulunduğu veya giderildiği iddiası değildir.
+
+Tanı eklemesinin kabulü: **302 dosya / 2382 test**, TypeScript, MCP ve Next
+production build geçti. Açık kullanıcı editöründe toplam **7 nesne / 5 guide**
+fiziksel taşıma denemesinde geri sıçrama gözlenmedi. Seçili olmayan nesneyi tek
+mouse-down ile seçip taşıma, boş seçimden başlama, özellik input'undan çıkma,
+Pan sonrası taşıma, iki yönde dikey guide ve yatay guide kapsandı. Bunların
+ilk 3 taşıması tanı kaydı eklenmeden önce, sonraki 9 taşıması kayıt açıkken
+yapıldı; geçici guide oluşturma tıklamaları taşıma sayısına dahil değildir.
+
+UI'den indirilen `interaction-live-log.json` 163 olay içerir, eviction yoktur.
+Kayıt açıkken yapılan 5 nesne ve 4 guide taşımasının `source-commit` olayları
+MCP konumlarıyla eşleşir. Ayrıca 2 guide oluşturma commit'i ve bilerek yapılan
+sürüklemesiz seçim tıklaması için bir `no-source-change` iptali vardır. Bilinen
+bu click iptali, sürükleme hatası olarak sayılmaz. Commit yeni immutable source
+ürettiği için commit olayında `expectedSourceCurrent=false` normaldir; bu alan
+tek başına `current-rejected:source-changed` anlamına gelmez.
+
+Test hareketleri ve geçici guide'lar tekil undo'larla kaldırıldı. Son MCP source
+başlangıçla birebir aynı, `validate_scene` uyarısızdır. Portable
+`projects/live-mouseup-diagnostics-restored-20261109.chorono.json` yedeğinin özeti
+başlangıç yedeğiyle aynıdır. Test sonucu bildirilen aralıklı hatayı dışlamaz;
+editörde kayıt açık bırakılmıştır. Yerel screenshot/log/MCP kanıtları önceki
+`artifacts/performance/pointer-release-audit-20261109/` dizinindedir.

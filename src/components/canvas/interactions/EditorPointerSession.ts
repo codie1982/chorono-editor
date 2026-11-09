@@ -1,6 +1,17 @@
 import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { PointerGestureSession, type PointerGestureSample, type PointerGestureStart } from './PointerGestureSession'
+import { interactionTrace, type InteractionTraceContext, type InteractionTraceDetails, type InteractionTraceSession } from './diagnostics'
+
+const sourceReferences = new WeakMap<ChronoScene, number>()
+let nextSourceReference = 1
+
+/** Numerical correlation only. Weak keys never keep source/undo snapshots alive. */
+function sourceReference(scene: ChronoScene): number {
+  let reference = sourceReferences.get(scene)
+  if (reference === undefined) { reference = nextSourceReference++; sourceReferences.set(scene, reference) }
+  return reference
+}
 
 /** Minimal client-space sample shared by object and timeline-key gestures. */
 export interface EditorPointerSample extends PointerGestureSample {}
@@ -25,6 +36,10 @@ export interface EditorPointerSessionHost<TPreview extends { scene: ChronoScene 
   commit(base: ChronoScene, preview: TPreview): void
   clear(): void
   warning?(message: string): void
+  diagnostics?: InteractionTraceContext
+  /** Optional scalar applied-geometry summary, sampled only for first/final
+   * previews while tracing. Diagnostic failures never change the gesture. */
+  previewSummary?(preview: TPreview, event: EditorPointerSample): InteractionTraceDetails
 }
 
 /**
@@ -47,6 +62,8 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
   private readonly pointer: PointerGestureSession
   private pending?: TPreview
   private closed = false
+  private readonly trace?: InteractionTraceSession
+  private samples = 0
 
   /** The caller must begin its editor transaction before construction. A pen
    * insertion may already have a provisional point in the baseline preview. */
@@ -55,14 +72,24 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
     const editor = host.getEditor()
     this.base = this.expected = editor.getScene()
     this.document = editor.getDocumentSignal()
+    this.trace = interactionTrace.begin(host.diagnostics?.owner ?? 'editor-pointer', host.diagnostics?.details)
+    this.trace?.record('source-start', { baseReference: sourceReference(this.base),
+      transactionActive: editor.isTransactionActive(), documentAborted: this.document.aborted,
+      startClientX: start.startClientX, startClientY: start.startClientY,
+      allowClick: Boolean(start.allowClick), minDragDistance: start.minDragDistance ?? 0 })
     this.pointer = new PointerGestureSession({ eventTarget: host.eventTarget,
-      move: event => this.sample(event), up: event => this.finish(event), cancel: () => this.cancel(),
+      move: event => this.sample(event), up: event => this.finish(event), cancel: reason => this.cancel(false, 'native:' + reason),
       error: error => host.warning?.(error instanceof Error ? error.message : String(error)),
+      diagnostics: { owner: (host.diagnostics?.owner ?? 'editor-pointer') + '.native',
+        details: this.trace ? { sourceSessionId: this.trace.id } : undefined },
     }, pointer)
     this.document.addEventListener('abort', this.onDocumentAbort, { once: true })
   }
 
-  private readonly onDocumentAbort = () => { this.close() }
+  private readonly onDocumentAbort = () => {
+    this.trace?.record('current-rejected', { reason: 'document-aborted', ...this.sourceState() })
+    this.close('document-aborted')
+  }
 
   private accepts(event: EditorPointerSample): boolean {
     return !this.closed && this.pointer.accepts(event)
@@ -72,10 +99,17 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
    * transaction is detached rather than rolled back over the replacement. */
   private current(): boolean {
     const editor = this.host.getEditor()
-    if (this.document.aborted || editor.getDocumentSignal() !== this.document) { this.close(); return false }
-    if (!editor.isTransactionActive()) { this.close(); return false }
+    if (this.document.aborted || editor.getDocumentSignal() !== this.document) {
+      this.trace?.record('current-rejected', { reason: 'document-changed', ...this.sourceState() })
+      this.close('document-changed'); return false
+    }
+    if (!editor.isTransactionActive()) {
+      this.trace?.record('current-rejected', { reason: 'transaction-inactive', ...this.sourceState() })
+      this.close('transaction-inactive'); return false
+    }
     if (editor.getScene() !== this.expected) {
-      this.cancel(true)
+      this.trace?.record('current-rejected', { reason: 'source-changed', ...this.sourceState() })
+      this.cancel(true, 'source-changed')
       this.host.warning?.('The scene changed during the drag. Start the edit again from the current scene.')
       return false
     }
@@ -91,7 +125,9 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
       this.host.getEditor().previewTransaction(this.pending.scene)
       this.expected = this.host.getEditor().getScene()
       this.host.show(this.pending, event)
-    } catch (error) { this.cancel(); this.host.warning?.(error instanceof Error ? error.message : String(error)) }
+      this.samples++
+      if (this.samples === 1) this.trace?.record('source-first-preview', { ...this.sourceState(), ...this.previewDetails(this.pending, event) })
+    } catch (error) { this.cancel(false, 'preview-error'); this.host.warning?.(error instanceof Error ? error.message : String(error)) }
   }
 
   /** Commit the final pointer sample once. A click/returned-to-start gesture
@@ -101,30 +137,56 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
     this.sample(event)
     if (this.closed || !this.current()) return
     try {
-      const moved = Math.hypot(event.clientX - this.start.startClientX, event.clientY - this.start.startClientY) > 1e-6
-      if (!this.pending || !this.host.hasChanges(this.pending) || (!moved && !this.start.allowClick)) { this.cancel(); return }
-      if (Math.hypot(event.clientX - this.start.startClientX, event.clientY - this.start.startClientY) < (this.start.minDragDistance ?? 0)) { this.cancel(); return }
+      const distance = Math.hypot(event.clientX - this.start.startClientX, event.clientY - this.start.startClientY)
+      const moved = distance > 1e-6
+      this.trace?.record('source-finish', { distanceCssPx: distance, samples: this.samples,
+        ...this.sourceState(), ...this.previewDetails(this.pending, event) })
+      if (!this.pending) { this.cancel(false, 'no-preview'); return }
+      if (!this.host.hasChanges(this.pending)) { this.cancel(false, 'no-source-change'); return }
+      if (!moved && !this.start.allowClick) { this.cancel(false, 'no-pointer-movement'); return }
+      if (distance < (this.start.minDragDistance ?? 0)) { this.cancel(false, 'below-drag-threshold'); return }
       this.host.commit(this.base, this.pending)
-      this.close()
-    } catch (error) { this.cancel(); this.host.warning?.(error instanceof Error ? error.message : String(error)) }
+      this.trace?.record('source-commit', { ...this.sourceState(), samples: this.samples })
+      this.close('committed')
+    } catch (error) { this.cancel(false, 'commit-error'); this.host.warning?.(error instanceof Error ? error.message : String(error)) }
   }
 
   /** Roll back only our own preview. preserveScene detaches a transaction when
    * another command has already changed the scene; document resets own cleanup. */
-  cancel(preserveScene = false): void {
+  cancel(preserveScene = false, reason = 'host-cancel'): void {
     if (this.closed) return
     const editor = this.host.getEditor()
+    this.trace?.record('source-cancel', { reason, preserveScene: preserveScene || editor.getScene() !== this.expected,
+      ...this.sourceState(), samples: this.samples })
     if (!this.document.aborted && editor.getDocumentSignal() === this.document && editor.isTransactionActive()) {
       editor.cancelTransaction({ preserveScene: preserveScene || editor.getScene() !== this.expected })
     }
-    this.close()
+    this.close(reason)
   }
 
-  private close(): void {
+  private close(reason: string): void {
     if (this.closed) return
     this.closed = true
+    this.trace?.record('source-close', { reason, samples: this.samples })
     this.document.removeEventListener('abort', this.onDocumentAbort)
     this.pointer.dispose()
     this.host.clear()
+  }
+
+  /** Capture only source identity divergence and ownership flags, never source
+   * JSON. This is called only when a diagnostic record will actually be kept. */
+  private sourceState(): InteractionTraceDetails {
+    const editor = this.host.getEditor(), current = editor.getScene()
+    return { baseReference: sourceReference(this.base), expectedReference: sourceReference(this.expected),
+      currentReference: sourceReference(current), transactionActive: editor.isTransactionActive(),
+      documentAborted: this.document.aborted, sameDocument: editor.getDocumentSignal() === this.document,
+      expectedSourceCurrent: current === this.expected }
+  }
+
+  /** Optional applied geometry is an observer, not a prerequisite for editing. */
+  private previewDetails(preview: TPreview | undefined, event: EditorPointerSample): InteractionTraceDetails {
+    if (!preview) return {}
+    try { return this.host.previewSummary?.(preview, event) ?? {} }
+    catch { return { diagnosticSummaryError: true } }
   }
 }

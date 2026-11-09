@@ -29,7 +29,7 @@ interface Options {
 export function useMotionKeyDrag(options: Options) {
   const latest = useRef(options); latest.current = options
   const session = useRef<MotionKeyDragSession | null>(null)
-  useEffect(() => () => { session.current?.cancel(); session.current = null }, [options.contextKey, options.documentSignal])
+  useEffect(() => () => { session.current?.cancel(false, 'motion-scope-change-or-unmount'); session.current = null }, [options.contextKey, options.documentSignal])
   const begin = useCallback((event: React.PointerEvent<SVGGElement>, nodes: readonly TrajectoryNode[]) => {
     const current = latest.current, canvas = current.canvasRef?.current
     if (event.button !== 0 || !canvas || !nodes.length || session.current || current.editor.isTransactionActive()) return
@@ -40,6 +40,7 @@ export function useMotionKeyDrag(options: Options) {
     current.editor.beginTransaction()
     session.current = new MotionKeyDragSession({ startClientX: event.clientX, startClientY: event.clientY }, {
       getEditor: () => latest.current.editor, eventTarget: window,
+      diagnostics: { owner: 'motion-key', details: { layerId, timelineId, count: nodes.length, contextKey: current.contextKey } },
       preview: (base, sample) => {
         const point = motionPointerWorld(canvas, sample.clientX, sample.clientY)
         let delta = applyAxisLock(point.x - origin.x, point.y - origin.y, null, sample.shiftKey)
@@ -62,5 +63,5 @@ export function useMotionKeyDrag(options: Options) {
     // the stable native canvas, never a diamond that preview may replace.
     }, { pointerId: event.pointerId, currentTarget: canvas })
   }, [])
-  return { begin, cancel: () => session.current?.cancel() }
+  return { begin, cancel: () => session.current?.cancel(false, 'motion-host-cancel') }
 }

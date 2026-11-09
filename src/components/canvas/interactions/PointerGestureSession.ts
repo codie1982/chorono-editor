@@ -1,3 +1,5 @@
+import { interactionTrace, type InteractionTraceContext, type InteractionTraceDetails, type InteractionTraceSession } from './diagnostics'
+
 /** Client-space pointer state. Missing/nonfinite `buttons` preserves legacy
  * adapters which do not report a button mask; native PointerEvents report it. */
 export interface PointerGestureSample {
@@ -34,6 +36,7 @@ export interface PointerGestureHost {
   up(sample: PointerGestureSample): void
   cancel(reason: PointerGestureCancelReason): void
   error?(error: unknown): void
+  diagnostics?: InteractionTraceContext
 }
 
 /** Owns one native pointer's listeners, button state and borrowed capture.
@@ -62,6 +65,9 @@ export class PointerGestureSession {
   private lastPressed?: PointerGestureSample
   private disposed = false
   private terminating = false
+  private readonly trace?: InteractionTraceSession
+  private moves = 0
+  private rejected = 0
 
   /** Attach listeners immediately. Failed native capture is tolerated because
    * window listeners remain the fallback; no ownership of the element is taken. */
@@ -73,6 +79,10 @@ export class PointerGestureSession {
     const button = start?.button ?? 0
     this.button = masks[button] === undefined ? 0 : button
     this.buttonMask = masks[this.button]
+    this.trace = interactionTrace.begin(host.diagnostics?.owner ?? 'native-pointer', host.diagnostics?.details)
+    this.trace?.record('native-start', { pointerId: this.pointerId ?? null,
+      pointerType: this.pointerType ?? 'unknown', button: this.button, buttonMask: this.buttonMask,
+      captureElement: Boolean(this.capture) })
     const target = host.eventTarget
     target.addEventListener('pointerdown', this.onDown, true)
     target.addEventListener('pointermove', this.onMove, true)
@@ -81,22 +91,27 @@ export class PointerGestureSession {
     target.addEventListener('blur', this.onBlur)
     target.addEventListener('keydown', this.onKey)
     this.capture?.addEventListener('lostpointercapture', this.onLostCapture)
-    try { if (this.pointerId !== undefined) this.capture?.setPointerCapture?.(this.pointerId) }
-    catch { /* Capture can fail outside the active pointer's native element. */ }
+    try {
+      if (this.pointerId !== undefined) this.capture?.setPointerCapture?.(this.pointerId)
+      this.trace?.record('native-capture', { attempted: this.pointerId !== undefined && Boolean(this.capture?.setPointerCapture) })
+    } catch { this.trace?.record('native-capture-failed', { reason: 'capture-unavailable' }) }
   }
 
   /** Check/pin identity without consuming a sample. It remains valid while a
    * terminal callback runs, unless that callback explicitly disposes the owner. */
   accepts(sample: PointerGestureSample): boolean {
-    if (this.disposed || !Number.isFinite(sample.pointerId)) return false
+    if (this.disposed) return false
+    if (!Number.isFinite(sample.pointerId)) { this.reject('invalid-pointer', sample); return false }
     if (this.pointerId === undefined) this.pointerId = sample.pointerId
-    return sample.pointerId === this.pointerId
+    if (sample.pointerId !== this.pointerId) { this.reject('foreign-pointer', sample); return false }
+    return true
   }
 
   /** Cancel once and detach, preserving the reason for the domain adapter.
    * Reentrant cancellation during another terminal callback is ignored. */
   cancel(reason: PointerGestureCancelReason): void {
     if (this.disposed || this.terminating) return
+    this.trace?.record('native-cancel', { reason, ...this.summary() })
     this.terminate(() => this.host.cancel(reason), false)
   }
 
@@ -105,6 +120,7 @@ export class PointerGestureSession {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.trace?.record('native-dispose', { reason: this.terminating ? 'terminal' : 'host-dispose', ...this.summary() })
     const target = this.host.eventTarget
     target.removeEventListener('pointerdown', this.onDown, true)
     target.removeEventListener('pointermove', this.onMove, true)
@@ -114,16 +130,18 @@ export class PointerGestureSession {
     target.removeEventListener('keydown', this.onKey)
     this.capture?.removeEventListener('lostpointercapture', this.onLostCapture)
     try { if (this.pointerId !== undefined) this.capture?.releasePointerCapture?.(this.pointerId) }
-    catch { /* Capture may have failed or already been released by the browser. */ }
+    catch { this.trace?.record('native-release-failed', { reason: 'capture-unavailable' }) }
   }
 
   private readonly onMove = (event: PointerEvent) => {
     if (this.terminating || !this.accepts(event)) return
     if (Number.isFinite(event.buttons) && (event.buttons & this.buttonMask) === 0) {
-      this.recoverRelease()
+      this.recoverRelease('released-buttons-move')
       return
     }
     this.lastPressed = this.copy(event)
+    this.moves++
+    if (this.moves === 1) this.trace?.record('native-first-move', this.summary())
     try { this.host.move(this.copy(event)) }
     catch (error) { this.report(error); this.cancel('error') }
   }
@@ -132,7 +150,7 @@ export class PointerGestureSession {
     if (this.terminating || !this.accepts(event)) return
     const previousReleased = Number.isFinite(event.buttons) && (event.buttons & this.buttonMask) === 0
     if (event.button !== this.button && !previousReleased) return
-    this.recoverRelease()
+    this.recoverRelease('new-pointer-down')
   }
 
   private readonly onUp = (event: PointerEvent) => { this.finish(event) }
@@ -150,7 +168,8 @@ export class PointerGestureSession {
   }
 
   /** A missing terminal event cannot turn the next hover/down into geometry. */
-  private recoverRelease(): void {
+  private recoverRelease(reason: string): void {
+    this.trace?.record('native-recovery', { reason, ...this.summary(), hasPressedSample: Boolean(this.lastPressed) })
     if (this.lastPressed) this.finish(this.lastPressed)
     else this.cancel('buttonsReleased')
   }
@@ -158,6 +177,8 @@ export class PointerGestureSession {
   /** Only genuine up or button-state recovery reaches this terminal dispatch. */
   private finish(sample: PointerGestureSample): void {
     if (this.terminating || !this.accepts(sample)) return
+    this.trace?.record('native-up', { ...this.summary(), clientX: sample.clientX, clientY: sample.clientY,
+      buttons: Number.isFinite(sample.buttons) ? sample.buttons! : null })
     this.terminate(() => this.host.up(this.copy(sample)), true)
   }
 
@@ -182,5 +203,21 @@ export class PointerGestureSession {
   }
 
   /** Diagnostics are optional and cannot prevent capture/listener cleanup. */
-  private report(error: unknown): void { try { this.host.error?.(error) } catch { /* Diagnostic sink failed. */ } }
+  private report(error: unknown): void {
+    this.trace?.record('native-error', { reason: 'callback-error', errorType: error instanceof Error ? error.name : typeof error })
+    try { this.host.error?.(error) } catch { /* Diagnostic sink failed. */ }
+  }
+
+  /** First foreign sample is enough for diagnosis; retain only a total thereafter. */
+  private reject(reason: string, sample: PointerGestureSample): void {
+    this.rejected++
+    if (this.rejected === 1) this.trace?.record('native-rejected', { reason, pointerId: Number.isFinite(sample.pointerId) ? sample.pointerId : null })
+  }
+
+  /** Terminal movement summary uses CSS px and retains no native event object. */
+  private summary(): InteractionTraceDetails {
+    return { moves: this.moves, rejectedSamples: this.rejected, pointerId: this.pointerId ?? null,
+      clientX: this.lastPressed?.clientX ?? null, clientY: this.lastPressed?.clientY ?? null,
+      buttons: Number.isFinite(this.lastPressed?.buttons) ? this.lastPressed!.buttons! : null }
+  }
 }

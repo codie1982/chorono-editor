@@ -9,6 +9,7 @@ import { OverviewSection } from './OverviewSection'
 import { MediaResourcesSection } from './MediaResourcesSection'
 import { ComputeResourcesSection } from './ComputeResourcesSection'
 import { SurfacePoolSection } from './SurfacePoolSection'
+import { InteractionDiagnosticsSection } from './InteractionDiagnosticsSection'
 import styles from './ResourceMonitorPanel.module.css'
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
   isPlaying: boolean
   source?: ProjectMonitorSource
 }
-const categories = ['Overview', 'Media', 'CPU / GPU', 'Surfaces'] as const
+const categories = ['Overview', 'Media', 'CPU / GPU', 'Surfaces', 'Interaction'] as const
 
 /**
  * Project diagnostics dock. Resource owners provide numeric estimates/readiness;
@@ -58,6 +59,7 @@ export default function ResourceMonitorPanel({ scene, assets, audio, isPlaying, 
     {category === 'Media' && <MediaResourcesSection snapshot={snapshot} query={mediaQuery} onQuery={changeMediaQuery} />}
     {category === 'CPU / GPU' && <ComputeResourcesSection snapshot={snapshot} />}
     {category === 'Surfaces' && <SurfacePoolSection snapshot={snapshot.pool} onClearIdle={releaseIdle} />}
+    {category === 'Interaction' && <InteractionDiagnosticsSection />}
     <p role="status" className={styles.status}>{message}</p>
     <details className={styles.details}>
       <summary>Measurement scope and limitations</summary>

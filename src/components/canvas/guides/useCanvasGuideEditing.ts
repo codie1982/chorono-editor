@@ -5,6 +5,7 @@ import { makeSceneGuidesCmd, readSceneGuides, assertCurrentSceneGuide, type Scen
 import { canvasPointerWorld } from '../interactions/canvasCoordinates'
 import { GuideDragSession } from './GuideDragSession'
 import { guideDragPosition } from './guideDragPosition'
+import { interactionTrace } from '../interactions/diagnostics'
 
 interface Options {
   scene: ChronoScene
@@ -37,9 +38,9 @@ export function useCanvasGuideEditing(options: Options) {
   const [selectedId, select] = useState<string | null>(null)
   const [open, setOpen] = useState(false), [error, setError] = useState('')
   const read = readSceneGuides(options.scene)
-  useEffect(() => () => { session.current?.cancel(); session.current = null }, [options.enabled, document])
+  useEffect(() => () => { session.current?.cancel(false, 'guide-scope-change-or-unmount'); session.current = null }, [options.enabled, document])
   const warn = useCallback((message: string) => { setError(message); latest.current.onWarning?.(message) }, [])
-  const close = useCallback(() => { session.current?.cancel(); select(null); setOpen(false); setError('') }, [])
+  const close = useCallback(() => { session.current?.cancel(false, 'guide-controls-close'); select(null); setOpen(false); setError('') }, [])
   const dispatch = useCallback((guideId: string | null, change: (guides: readonly SceneGuide[]) => readonly SceneGuide[], label: string) => {
     const current = latest.current
     if (!current.enabled || current.editor.isTransactionActive()) return false
@@ -66,20 +67,33 @@ export function useCanvasGuideEditing(options: Options) {
   }, 'Delete guide'), [dispatch])
   const begin = useCallback((axis: 'v' | 'h', event: React.PointerEvent<HTMLElement>, existing?: SceneGuide) => {
     const current = latest.current, canvas = current.canvasRef.current
-    if (!current.enabled || event.button !== 0 || !canvas || session.current || current.editor.isTransactionActive()) return
+    if (!current.enabled || event.button !== 0 || !canvas || session.current || current.editor.isTransactionActive()) {
+      interactionTrace.recordEvent('guide', 'start-rejected', { enabled: current.enabled, button: event.button,
+        canvasPresent: !!canvas, sessionActive: !!session.current, transactionActive: current.editor.isTransactionActive() })
+      return
+    }
     event.preventDefault(); event.stopPropagation(); setOpen(true); setError('')
     try {
       const source = readSceneGuides(currentGuideScene(current))
       if (source.error) throw new Error(source.error)
       if (existing) assertCurrentSceneGuide(source.guides, existing)
     } catch (failure) { warn(failure instanceof Error ? failure.message : String(failure)); return }
-    if (existing?.locked) { select(existing.id); return }
+    if (existing?.locked) { interactionTrace.recordEvent('guide', 'start-rejected', { reason: 'locked', guideId: existing.id }); select(existing.id); return }
     const origin = canvasPointerWorld(canvas, event.clientX, event.clientY)
     const id = existing?.id ?? `guide_${crypto.randomUUID()}`
     select(id)
     current.editor.beginTransaction()
+    const rect = canvas.getBoundingClientRect()
     session.current = new GuideDragSession({ startClientX: event.clientX, startClientY: event.clientY }, {
       getEditor: () => latest.current.editor, eventTarget: window,
+      diagnostics: { owner: 'guide', details: { guideId: id, axis, initialPosition: existing?.position ?? null,
+        canvasLeft: rect.left, canvasTop: rect.top, canvasWidth: rect.width, canvasHeight: rect.height } },
+      previewSummary: preview => {
+        const currentRect = canvas.getBoundingClientRect()
+        return { position: readSceneGuides(preview.scene).guides.find(guide => guide.id === id)?.position ?? null,
+          canvasLeft: currentRect.left, canvasTop: currentRect.top,
+          canvasWidth: currentRect.width, canvasHeight: currentRect.height }
+      },
       preview: (base, sample) => {
         const point = canvasPointerWorld(canvas, sample.clientX, sample.clientY)
         const position = guideDragPosition(axis, origin, point, existing?.position), guides = readSceneGuides(base)

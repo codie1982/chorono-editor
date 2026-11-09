@@ -62,6 +62,7 @@ import { useSelectionTools } from './canvas/hooks/useSelectionTools'
 import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
 import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
 import { useCanvasDrag } from './canvas/hooks/useCanvasDrag'
+import { interactionTrace } from './canvas/interactions/diagnostics'
 import { useShapePlacement } from './canvas/placement/useShapePlacement'
 import { ShapePlacementOutline } from './canvas/placement/ShapePlacementOutline'
 import { resolveCloneDragMode } from '@/lib/shortcuts/cloneDragGesture'
@@ -535,9 +536,16 @@ export default function SceneCanvas({
    * the same evaluated baseline and parent-space conversion contract. */
   const beginMoveForSelection = useCallback((ids: readonly string[], activeId: string,
     event: React.PointerEvent, axisLock: 'x' | 'y' | null = null, cloneMode?: CloneMode) => {
-    if (dragRef.current || editor.isTransactionActive() || motionEditing || arrayEditing) return
+    if (dragRef.current || editor.isTransactionActive() || motionEditing || arrayEditing) {
+      interactionTrace.recordEvent('object', 'start-rejected', { reason: 'editing-scope-busy',
+        dragActive: !!dragRef.current, transactionActive: editor.isTransactionActive(), motionEditing, arrayEditing })
+      return
+    }
     const prepared = prepareTransformTargets(scene, ids, timeMs, overrides, { activeId, pivotMode })
-    if (!prepared.ok) { setTransformWarning(prepared.reason); return }
+    if (!prepared.ok) {
+      interactionTrace.recordEvent('object', 'start-rejected', { reason: 'transform-preparation', activeId })
+      setTransformWarning(prepared.reason); return
+    }
     const primary = prepared.targets.find(target => target.id === activeId) ?? prepared.targets[0]
     if (!primary) return
     event.preventDefault()
@@ -575,6 +583,12 @@ export default function SceneCanvas({
   }, [panMode, editor, hideEditorUI, motionEditing, arrayEditing, selectedLayerIds, selectedLayerId, onSelectLayer, beginMoveForSelection, cancelPan])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // One bounded routing record per down distinguishes an ignored start from
+    // a session that actually began and was later cancelled. No scene is copied.
+    interactionTrace.recordEvent('viewport', 'pointer-down', { pointerId: e.pointerId, button: e.button,
+      buttons: e.buttons, clientX: e.clientX, clientY: e.clientY, toolMode: toolMode ?? 'select', panMode, placingShape,
+      motionEditing, arrayEditing, previewMode: !!previewMode, timeMs, selectedLayerId,
+      dragActive: !!dragRef.current, transactionActive: editor.isTransactionActive(), isTrusted: e.isTrusted })
     if (dragRef.current || editor.isTransactionActive()) return
     // Middle-mouse OR pan-mode + left button → pan the view, not the layer
     if (e.button === 1 || (panMode && e.button === 0)) {

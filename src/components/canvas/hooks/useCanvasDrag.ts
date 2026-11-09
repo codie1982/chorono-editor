@@ -17,6 +17,7 @@ import { previewGeometryDrag } from './drag/geometryDragPreview'
 import { commitCanvasDrag } from './drag/commitCanvasDrag'
 import { prepareCloneDrag, previewCloneDrag } from './drag/cloneDragPreview'
 import type { CanvasLayerChange, CanvasPointerStart } from './drag/dragTypes'
+import { interactionTrace } from '../interactions/diagnostics'
 
 interface SnapState {
   master: boolean; grid: boolean; objects: boolean
@@ -66,7 +67,7 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
   latest.current = opts
   const dragRef = useRef<ActiveDrag | null>(null)
   const sessionRef = useRef<CanvasDragSession | null>(null)
-  const cancelDrag = useCallback(() => { sessionRef.current?.cancel() }, [])
+  const cancelDrag = useCallback(() => { sessionRef.current?.cancel(false, 'host-cancel-drag') }, [])
 
   const startDrag = useCallback((pointer?: CanvasPointerStart) => {
     const drag = dragRef.current
@@ -89,6 +90,20 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         y: (drag.startClientY - initialRect.top) * initialScale.sy } : null
       sessionRef.current = new CanvasDragSession(drag, {
         getEditor: () => latest.current.editorRef.current, eventTarget: window,
+        diagnostics: { owner: `object-${drag.kind}`, details: {
+          layerId: drag.layerId, contextKey: start.contextKey ?? '', timeMs: start.timeMs ?? 0,
+          canvasLeft: initialRect?.left ?? null, canvasTop: initialRect?.top ?? null,
+          canvasWidth: initialRect?.width ?? null, canvasHeight: initialRect?.height ?? null,
+          scaleX: initialScale.sx, scaleY: initialScale.sy,
+        } },
+        previewSummary: preview => {
+          const rect = latest.current.canvasRef.current?.getBoundingClientRect(), change = preview.changes[0]
+          return { changedLayers: preview.changes.length, appliedLayerId: change?.next.id ?? null,
+            beforeX: change?.prev.transform.x ?? null, beforeY: change?.prev.transform.y ?? null,
+            appliedX: change?.next.transform.x ?? null, appliedY: change?.next.transform.y ?? null,
+            canvasLeft: rect?.left ?? null, canvasTop: rect?.top ?? null,
+            canvasWidth: rect?.width ?? null, canvasHeight: rect?.height ?? null }
+        },
         preview: (snapshot, event) => {
           const live = latest.current, scale = live.readScale(), rect = live.canvasRef.current?.getBoundingClientRect()
           const pointerWorld = { x: rect ? (event.clientX - rect.left) * scale.sx : (event.clientX - drag.startClientX) * scale.sx,
@@ -124,13 +139,19 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         warning: message => latest.current.onWarning?.(message),
       }, pointer)
     } catch (error) {
+      interactionTrace.recordEvent('object', 'start-rejected', { reason: 'preparation-error', kind: drag.kind })
       if (editor.isTransactionActive()) editor.cancelTransaction()
       dragRef.current = null
       start.onWarning?.(error instanceof Error ? error.message : String(error))
     }
   }, [])
 
-  useEffect(() => () => { sessionRef.current?.cancel() }, [opts.contextKey])
+  useEffect(() => () => {
+    if (!sessionRef.current) return
+    interactionTrace.recordEvent('object', 'scope-ended', { previousContext: opts.contextKey ?? '',
+      nextContext: latest.current.contextKey ?? '', unmountedOrSameScope: opts.contextKey === latest.current.contextKey })
+    sessionRef.current.cancel(false, 'scope-change-or-unmount')
+  }, [opts.contextKey])
   return { dragRef, startDrag, cancelDrag }
 }
 
