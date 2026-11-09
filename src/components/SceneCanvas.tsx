@@ -381,7 +381,11 @@ export default function SceneCanvas({
   // ── Pan mode (move the whole view instead of objects) ───────────────────
   // Controlled (via props) when parent provides it; otherwise self-managed.
   const [internalPanMode, setInternalPanMode] = useState(false)
-  const panMode = controlledPanMode ?? internalPanMode
+  // A newly selected creation tool owns primary-button gestures immediately,
+  // even if an embedding editor previously enabled the local Pan toggle.
+  // Clear that local state as well so exiting creation cannot revive old Pan.
+  const panMode = !placingShape && (controlledPanMode ?? internalPanMode)
+  useEffect(() => { if (placingShape) setInternalPanMode(false) }, [placingShape])
   const setPanMode = (next: boolean | ((p: boolean) => boolean)) => {
     const resolved = typeof next === 'function' ? next(panMode) : next
     if (onPanModeChange) onPanModeChange(resolved)

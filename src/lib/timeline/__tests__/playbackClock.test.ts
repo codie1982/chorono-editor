@@ -60,6 +60,20 @@ describe('playback window changes', () => {
     expect(clock.sample(200)).toBe(600)
   })
 
+  it('explicit pause remains stopped after natural end and repeated editing-tool transitions', () => {
+    const clock = new PlaybackClock(options({ maxDuration: 1000 }))
+    clock.play(0)
+    clock.sample(1100)
+    expect(clock.playing).toBe(false)
+    clock.pause(1200)
+    clock.pause(1300)
+    expect(clock.playing).toBe(false)
+    expect(clock.sample(2000)).toBe(1000)
+    clock.seek(400, 2100)
+    clock.pause(2200)
+    expect(clock.sample(3000)).toBe(400)
+  })
+
   it('normalizes invalid work areas and does not run an empty composition', () => {
     expect(options({ workAreaInMs: 6000, workAreaOutMs: 7000 })).toEqual({ durationMs: 5000, startMs: 0, endMs: 5000, wrapAtEnd: false })
     const clock = new PlaybackClock(options({ maxDuration: 0 }))

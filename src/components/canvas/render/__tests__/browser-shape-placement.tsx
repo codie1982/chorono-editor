@@ -58,7 +58,7 @@ function Subject({ initial }: { initial: ChronoScene }) {
   const add = (nextKind: string) => {
     const definition = layerRegistry.get(nextKind); if (!definition) return
     const layer = definition.createDefault()
-    if (creation.choose(nextKind, layer, () => definition.createDefault())) return
+    if (creation.choose(nextKind, layer, () => definition.createDefault())) return true
     creation.close(); editor.dispatchCommand(makeAddLayerCmd(layer)); setSelected(layer.id)
   }
   return <><nav style={{ display: 'flex', gap: 8, padding: 8 }}>
@@ -89,14 +89,22 @@ function equal(a: unknown, b: unknown, message: string) { assert(JSON.stringify(
 function close(a: number, b: number, message: string) { assert(Math.abs(a - b) < 1e-4, `${message}: ${a} != ${b}`) }
 /** Wait for real browser painting and React effects. */
 async function frames(n = 2) { for (let i = 0; i < n; i++) await new Promise(requestAnimationFrame) }
-/** Find public production buttons by exact accessible text or title. */
-function control(name: string): HTMLElement { const element = Array.from(host.querySelectorAll<HTMLElement>('button,[aria-label]')).find(item =>
+/** Find a mounted public control without opening or changing its UI. */
+function findControl(name: string): HTMLElement | undefined { return Array.from(host.querySelectorAll<HTMLElement>('button,[aria-label]')).find(item =>
   item.title === name || item.getAttribute('aria-label') === name || item.textContent?.trim() === name)
+}
+/** Find public production buttons by exact accessible text or title. */
+function control(name: string): HTMLElement { const element = findControl(name)
   assert(element, `Missing control '${name}'`); return element }
 /** Activate the real Add menu event handler. */
 async function click(name: string) { flushSync(() => control(name).click()); await frames() }
 /** Select through the actual LayerPanel category/menu UI. */
-async function arm(label = 'Rectangle') { await click('Add Layer'); await click(`Add ${label}`); assert(live().template, `Add ${label} did not arm placement`); return live().template! }
+async function arm(label = 'Rectangle') { if (!findControl(`Add ${label}`)) await click('Add Layer')
+  await click(`Add ${label}`); assert(live().template, `Add ${label} did not arm placement`); return live().template! }
+/** The persistent palette remains visible and identifies the exact active tool. */
+function assertActivePalette(label = 'Rectangle') {
+  assert(control(`Add ${label}`).getAttribute('aria-pressed') === 'true', `Add ${label} palette closed or lost active state`)
+}
 /** Read the actual native canvas backing and committed CSS box. */
 function canvas(): HTMLCanvasElement { const element = host.querySelector('canvas'); assert(element, 'Missing canvas'); return element }
 /** Map independent composition test coordinates through pan/zoom/layout. */
@@ -125,6 +133,7 @@ async function creationChecks(mount: () => Promise<void>) {
   await mount(); const before = structuredClone(live().editor.getScene()), template = await arm()
   equal(live().editor.getScene(), before, 'Arming Add mutated source'); assert(!live().editor.canUndo, 'Arming Add wrote history')
   assert(getComputedStyle(canvas()).cursor === 'crosshair', 'Armed placement cursor is not crosshair')
+  assertActivePalette()
   record('Layer Add arms crosshair placement without source/history changes', { templateId: template.id })
   pointer(canvas(), 'pointerdown', client({ x: 90, y: 70 })); await frames()
   equal(live().editor.getScene(), before, 'Pointer-down flashed default geometry into source')
@@ -133,11 +142,14 @@ async function creationChecks(mount: () => Promise<void>) {
   record('Pointer-down and tiny movement leave geometry absent until a real drag or release', { thresholdCssPx: 3 })
   pointer(window, 'pointermove', client({ x: 270, y: 180 })); await frames()
   assert(live().editor.isTransactionActive(), 'Dragging did not own a transaction'); assert(!live().editor.canUndo, 'Preview wrote history')
+  assertActivePalette()
   record('Pointer-down and drag preview do not write undo history', { transaction: true })
   pointer(window, 'pointerup', client({ x: 290, y: 190 })); await frames()
   const layer = placed(template.id), after = structuredClone(live().editor.getScene())
   close(layer.transform.x, 90, 'Placed x'); close(layer.transform.y, 70, 'Placed y'); close(layer.size!.width, 200, 'Final up width'); close(layer.size!.height, 120, 'Final up height')
   assert(!live().editor.isTransactionActive() && live().template && live().template!.id !== template.id && live().mode === 'shape-draw' && live().selected === template.id, 'Release did not finish/select/rearm a fresh shape')
+  assertActivePalette()
+  record('Add palette remains visible and active through selection, drag preview and release', { kind: live().kind })
   equal(after.layers.filter(item => item.id !== template.id), before.layers, 'Placement changed existing objects')
   const rgba = Array.from(canvas().getContext('2d')!.getImageData(180, 120, 1, 1).data)
   equal(rgba, [59, 130, 246, 255], 'New rectangle did not render at placed coordinates')
@@ -187,8 +199,9 @@ async function lifecycleChecks(mount: () => Promise<void>) {
     equal(live().editor.getScene(), before, 'Right-click changed source'); assert(!live().template && live().mode === 'select' && !live().editor.canUndo, 'Right-click did not leave drawing mode')
     record(outside ? 'Right-click in outside workspace cancels persistent drawing' : 'Right-click on canvas cancels persistent drawing', { outside })
   }
-  await mount(); const toggleSource = structuredClone(live().editor.getScene()); await arm(); await click('Add Layer'); await click('Add Rectangle')
+  await mount(); const toggleSource = structuredClone(live().editor.getScene()); await arm(); await click('Add Rectangle')
   equal(live().editor.getScene(), toggleSource, 'Same Add kind toggle changed source'); assert(!live().template && live().mode === 'select' && !live().editor.canUndo, 'Same Add kind did not toggle drawing off')
+  assert(control('Add Rectangle').getAttribute('aria-pressed') === 'false', 'Direct palette toggle did not clear active indicator')
   record('Choosing the active Add shape again toggles persistent drawing off', { kind: 'rect' })
   for (const dragging of [false, true]) {
     await mount(); const before = structuredClone(live().editor.getScene()); await arm()
@@ -216,6 +229,23 @@ async function lifecycleChecks(mount: () => Promise<void>) {
   record('An intervening source edit survives stale pointer release', { x: changed.layers[0].transform.x })
 }
 
+/** A previous uncontrolled Pan toggle must not intercept the next Add tool.
+ * Check real canvas placement and its CSS frame rather than only the cursor. */
+async function panToCreationChecks(mount: () => Promise<void>) {
+  await mount()
+  await click('Pan mode — drag the view instead of objects (middle-mouse always pans)')
+  assert(getComputedStyle(canvas()).cursor === 'grab', 'Internal Pan was not activated')
+  const template = await arm(), rect = canvas().getBoundingClientRect()
+  assertActivePalette()
+  await draw({ x: 80, y: 60 }, { x: 210, y: 160 })
+  const layer = placed(template.id), after = canvas().getBoundingClientRect()
+  close(layer.transform.x, 80, 'Pan-to-Add shape x'); close(layer.transform.y, 60, 'Pan-to-Add shape y')
+  close(layer.size!.width, 130, 'Pan-to-Add width'); close(layer.size!.height, 100, 'Pan-to-Add height')
+  close(after.x, rect.x, 'Drawing unexpectedly panned canvas x'); close(after.y, rect.y, 'Drawing unexpectedly panned canvas y')
+  assertActivePalette(); assert(!live().editor.isTransactionActive(), 'Pan-to-Add stranded transaction')
+  record('Choosing Add after internal Pan draws on the first gesture without panning', { position: layer.transform, size: layer.size })
+}
+
 /** Standalone QA retains live production controls, source state, pointer trace
  * and source/bundle manifest evidence. Connected user documents are untouched. */
 async function main() {
@@ -227,7 +257,7 @@ async function main() {
   run.onclick = async () => { run.disabled = inspect.disabled = true; checks.length = 0; document.getElementById('checks')!.textContent = ''; const start = performance.now(); let manifest: unknown
     try { document.getElementById('status')!.textContent = 'Running production placement controls…'; const data = await (await fetch('shape-placement-sources.json')).json()
       manifest = { sourceManifest: 'shape-placement-sources.json', bundleSha256: data.bundleSha256, sourceFiles: data.sources.length }
-      await creationChecks(mount); await geometryChecks(mount); await lifecycleChecks(mount)
+      await creationChecks(mount); await geometryChecks(mount); await lifecycleChecks(mount); await panToCreationChecks(mount)
       document.getElementById('status')!.textContent = `PASS · ${checks.length} checks`; document.getElementById('report')!.textContent = JSON.stringify({ passed: true, checks, manifest, elapsedMs: performance.now() - start, dpr: devicePixelRatio, userAgent: navigator.userAgent }, null, 2)
     } catch (error) { document.getElementById('status')!.textContent = 'FAIL'; document.getElementById('report')!.textContent = JSON.stringify({ passed: false, error: String(error), checks, manifest }, null, 2) }
     finally { run.disabled = inspect.disabled = false }

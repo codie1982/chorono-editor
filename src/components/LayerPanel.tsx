@@ -16,7 +16,11 @@ interface Props {
   selectedId: string | null
   selectedIds: Set<string>
   onSelect: (id: string, shiftHeld: boolean) => void
-  onAdd: (kind: string) => void
+  /** Add/activate a registry item. Return true to keep this palette open for a
+   * persistent tool (including toggling that tool off); void/false closes it.
+   * The owner decides capability and source mutation, so this UI never creates
+   * a second factory or duplicates the native-shape eligibility rules. */
+  onAdd: (kind: string) => boolean | void
   /** Active persistent native creation tool. Selecting its item again exits. */
   activeAddKind?: string | null
   /** Native media pickers borrow the initiating document identity. */
@@ -108,21 +112,26 @@ export default function LayerPanel({
     openDocumentFilePicker({ accept, getDocumentSignal, onFiles: files => handler(files[0]) })
   }
 
+  /** Media pickers close immediately; persistent native tools keep their
+   * palette available for the next shape or direct same-item toggle. */
   const handleAddItem = (type: string) => {
-    setMenuOpen(false)
     switch (type) {
       case 'image':
+        setMenuOpen(false)
         return pickFile('image/*', onAddImage)
       case 'video':
+        setMenuOpen(false)
         return pickFile('video/*', onAddVideo)
       case 'audio':
+        setMenuOpen(false)
         return pickFile('audio/*', onAddAudio)
       case 'svgImport':
+        setMenuOpen(false)
         return pickFile('.svg,image/svg+xml', file => onImportSvg?.(file))
       default:
         // All shape kinds, text, pathStroke, bezierPath, pathStroke —
         // registry-driven via page.tsx addLayer().
-        return onAdd(type)
+        setMenuOpen(onAdd(type) === true)
     }
   }
 

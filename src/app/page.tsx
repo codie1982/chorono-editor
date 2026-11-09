@@ -220,6 +220,7 @@ export default function BuilderPage() {
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
   const [toolMode, setToolMode] = useState<ToolMode>('select')
+  const [manualPreview, setManualPreview] = useState(false)
   /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
   const [splinePointId, setSplinePointId] = useState<string | null>(null)
   const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
@@ -364,7 +365,7 @@ export default function BuilderPage() {
   // ── Playback loop ────────────────────────────────────────────────────────
   const {
     currentTimeMs, isPlaying, playbackSpeed,
-    handlePlayToggle, handleSeek, setPlaybackSpeed,
+    handlePlayToggle, handlePause, handleSeek, setPlaybackSpeed,
   } = usePlayback({
     maxDuration, wrapAtEnd,
     workAreaInMs: activeWorkArea.inMs,
@@ -453,6 +454,9 @@ export default function BuilderPage() {
   }, [])
   const shapeCreation = useShapeCreationTool({ toolMode, setToolMode, onSelect: selectLayer,
     documentSignal: editor.getDocumentSignal() })
+  useEffect(() => {
+    if (manualPreview || runtime.segmentState || isPlaying) shapeCreation.close()
+  }, [manualPreview, runtime.segmentState, isPlaying, shapeCreation.close])
 
   // External edits, undo and document replacement can remove selected layers.
   // Keep surviving members instead of clearing the whole selection.
@@ -519,9 +523,10 @@ export default function BuilderPage() {
   }, [handleImportFiles, editor.getDocumentSignal])
 
   // ── Layer commands ───────────────────────────────────────────────────────
-  // Defaults remain registry-driven. Supported native primitives arm a
-  // persistent placement tool; dedicated path/spline/media workflows stay owned
-  // by their existing adapters rather than creating a second geometry source.
+  /** Activate native creation from registry defaults, or use the layer's
+   * dedicated insertion workflow. Native shapes exit runtime Preview/playback
+   * without modifying existing source and return true to keep the palette open.
+   * Shape gestures own insertion/undo; choosing a tool alone writes no history. */
   const addLayer = useCallback((kind: string) => {
     if (editor.isTransactionActive()) return
     arrayAuthoring.close()
@@ -543,9 +548,11 @@ export default function BuilderPage() {
     }
     const l = def.createDefault()
     if (shapeCreation.choose(kind, l, () => def.createDefault())) {
-      if (isPlaying) handlePlayToggle()
+      setManualPreview(false)
+      runtime.stopSegment()
+      handlePause()
       setSplineDrawKind(null)
-      return
+      return true
     }
     shapeCreation.close()
     dispatchCommand(makeAddLayerCmd(l))
@@ -555,8 +562,8 @@ export default function BuilderPage() {
     if (kind === 'bezierPath' || kind === 'motionPath') {
       setToolMode('pen')
     }
-  }, [dispatchCommand, selectLayer, editor.isTransactionActive, arrayAuthoring.close, isPlaying, handlePlayToggle,
-    shapeCreation.choose, shapeCreation.close])
+  }, [dispatchCommand, selectLayer, editor.isTransactionActive, arrayAuthoring.close, handlePause,
+    shapeCreation.choose, shapeCreation.close, runtime.stopSegment])
 
   // BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines.
   // Async: lazily fetches + parses the font (opentype.js) before building the
@@ -1080,7 +1087,6 @@ export default function BuilderPage() {
 
   // ── Manual preview-mode toggle (so user can test draggable / tappable
   //    layers without setting up segments / clicking the Preview tab) ──────
-  const [manualPreview, setManualPreview] = useState(false)
   // BL-80 — raster image export dialog visibility.
   const [showRasterExport, setShowRasterExport] = useState(false)
   // BL-84 — SVG (vector) export dialog visibility.

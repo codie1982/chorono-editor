@@ -23,6 +23,9 @@ oluşturma akışları bu araçla boyutlandırılmaz.
    Esc hem bekleyen aracı hem aktif çizimi iptal eder. Tuvalde veya etrafındaki
    çalışma alanında sağ tık çizim aracından çıkar. Layer → Add menüsünde aktif
    şekli tekrar seçmek de aracı kapatır; menü aktif şekli işaretler.
+   Native şekil seçimi, sürükleme ve commit boyunca Add paleti açık kalır;
+   aynı öğe doğrudan tekrar seçilebilir. Paletin kendi Add/close kontrolü
+   yalnız paleti kapatır; etkin çizim aracını iptal etmez.
    Açıkça başka araç seçmek o aracı
    korur; iptal callback'i seçimi zorla Select'e döndürmez.
 
@@ -89,6 +92,21 @@ araçları ve guide düzenleme devre dışıdır; çizimle yarışan gesture ba�
 Nesne üstündeki normal seçim imleci de `+` olur. Pan'ın `grab/grabbing` ve
 resize/rotate handle'larının kendi imleçleri korunur.
 
+Native shape Add komutu manuel Preview'dan ve aktif runtime segmentinden
+çıkar, varsa timeline playback'ini durdurur. Karşı yönde Preview/playback
+başlatmak bekleyen çizim aracını kapatır. Kaynak katmanları, animasyonlar ve
+playhead zamanı korunur; değişen yalnız etkileşim modudur.
+`usePlayback.handlePause()` live `PlaybackClock.pause()` kullanır: natural end
+sonrasında React `isPlaying` snapshot'ı geride kalsa da playback'i yeniden
+başlatmaz. Bu ek idempotent API, mevcut toggle/seek/speed sözleşmelerini korur.
+
+`SceneCanvas` dış Pan prop'u almadan da kullanılabilir. Önceki iç Pan toggle'ı
+shape creation'ı yutamaz: creation birincil düğme için Pan'dan önceliklidir ve
+eski iç Pan state'i temizlenir. Orta düğme ile geçici pan çalışmaya devam eder.
+`LayerPanel.onAdd` callback'i `true` döndürürse palet açık tutulur; `void/false`
+ve medya seçicileri mevcut kapanma davranışını sürdürür. Şekil uygunluğu ve
+factory çağrısı panelde kopyalanmaz; owner callback karar verir.
+
 ## Doğrulama
 
 Saf domain ve session testleri ters/negatif koordinatlar, click varsayılanları,
@@ -119,6 +137,24 @@ build kaynak/hash manifest'i, `acceptance.json`, trusted release AX kaydı ve
 görüntü git'e alınmaz. Tek kullanımlık ilk sürümün `build/` ve sürekli çizim
 sürümünün `repeat-build/` kanıtları ayrı tutulur. QA bundle otomatik kontrollerde synthetic PointerEvent
 kullanır; fiziksel fare kabulü ayrıca raporlanır.
+
+Menü/Pan düzeltmesi için native suite **21/21** geçti: önceki 19 kontrole
+seçim/preview/commit boyunca açık palet ve kontrolsüz iç Pan → Add → ilk çizim
+eklendi. Pan regresyonu katmanın konum/boyutunu ve tuval DOM rect'inin sabit
+kalmasını birlikte doğrular. Değiştirilmemiş bundle üzerinde fiziksel fare
+deneyinde `shape-draw`/`crosshair` olmasına rağmen katman sayısı 2 kaldı,
+Undo oluşmadı ve canvas rect yer değiştirdi. Bu kayıt ve yeni kabul kanıtları
+`artifacts/performance/shape-placement-menu-20261109/` altında tutulur.
+
+Aynı deney yeni bundle'da gerçek fareyle tekrarlandı: 80/70 konumunda 150×100
+şekil ilk harekette oluştu, Undo açıldı, Rectangle öğesi görünür/aktif kaldı ve
+canvas rect sabit kaldı. Production ana editörde Pan + manuel Preview → Add
+geçişi ilk şekli oluşturdu. Oynatma → Add geçişi duraklatıp ikinci şekli
+oluşturdu; açık palette aynı öğe doğrudan tekrar seçilerek çizim kapatıldı.
+Bu düzeltmenin kabulünde **298 dosya / 2337 test**, TypeScript, MCP build ve
+production build geçti. Ek clock testi natural end ve tekrarlı editing pause
+çağrılarının paused zamanı koruduğunu doğrular. `main-*.ax.txt`, `after-pan.ax.txt`,
+`acceptance.json` ve `add-palette-open.png` yerel QA kanıtlarıdır.
 
 Güncel production ana editörde trusted fareyle tek Add seçiminden sonra iki
 dikdörtgen art arda çizildi: ilk bırakıştan sonra footer `Place Rect 2`,
