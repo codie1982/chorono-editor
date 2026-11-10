@@ -1,30 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { pairEditor, pollEditor, answerEditor, disconnect, callEditorTool } from '../broker'
-import { executeEditorJob, type MCPHost } from '../editor'
-import { emptyScene } from '../../defaults'
-import type { ChronoScene } from '../../types'
-
-function fakeEditor() {
-  let scene = emptyScene(), revision = 0
-  const history: ChronoScene[] = [], future: ChronoScene[] = []
-  const host = { editor: {
-    getScene: () => scene, getRevision: () => revision, isTransactionActive: () => false,
-    dispatchCommand: (command: any) => { history.push(scene); scene = command.execute(scene); revision++; future.length = 0 },
-    undo: () => { if (history.length) { future.push(scene); scene = history.pop()!; revision++ } },
-    redo: () => { if (future.length) { history.push(scene); scene = future.pop()!; revision++ } },
-  }, assets: new Map(), selectedTimelineId: '', currentTimeMs: 0, selectTimeline: () => {}, seek: () => {}, playToggle: () => {}, setSpeed: () => {} } as unknown as MCPHost
-  const paired = pairEditor('Test editor')
-  const controller = new AbortController()
-  const pump = (async () => {
-    while (!controller.signal.aborted) {
-      const job = await pollEditor(paired.id, paired.token, controller.signal)
-      if (!job) continue
-      try { answerEditor(paired.id, paired.token, job.id, await executeEditorJob(job, host)) }
-      catch (error) { answerEditor(paired.id, paired.token, job.id, undefined, (error as Error).message) }
-    }
-  })()
-  return { paired, host, call: (name: string, args: any = {}) => callEditorTool(name, { ...args, sessionId: paired.id }), close: async () => { controller.abort(); await pump; disconnect(paired.id, paired.token) } }
-}
+import { pollEditor, callEditorTool } from '../broker'
+import { fakeEditor } from './support/fakeEditor'
 
 describe('live editor broker', () => {
   it('routes preferred aliases and legacy calls through identical retry, revision and atomic command gates', async () => {
@@ -115,9 +91,9 @@ describe('live editor broker', () => {
     try {
       const plan = await editor.call('run_script', { code: `scene.add('rect')`, dryRun: true })
       expect(editor.host.editor.getScene().layers).toHaveLength(0)
-      const applied = await editor.call('apply_script_plan', { planId: plan.planId })
+      const applied = await editor.call('apply_script_plan', { planId: plan.planId, expectedRevision: plan.revision, readToken: plan.readToken })
       expect(applied.layers[0].id).toBe(plan.layers[0].id)
-      await expect(editor.call('apply_script_plan', { planId: plan.planId })).rejects.toThrow('expired')
+      await expect(editor.call('apply_script_plan', { planId: plan.planId, expectedRevision: plan.revision, readToken: plan.readToken })).rejects.toMatchObject({ code: 'SOURCE_REVISION_CONFLICT' })
     } finally { await editor.close() }
   })
   it('rejects stale revisions and rolls back failed batches', async () => {

@@ -8,14 +8,30 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 // QuickJS sandbox; Node orchestrates the actual MCP tools and never evaluates it.
 const [directory, target = 'artifacts/validation/mcp-quality-20261110/after'] = process.argv.slice(2)
 const root = path.resolve(directory ?? ''), output = path.resolve(target)
-if (!root.startsWith('/private/tmp/chorono-q-validation-')) throw Error('Isolated source snapshot required')
+if (!/^\/private\/tmp\/chorono-(q|e11)-validation-/.test(root)) throw Error('Isolated source snapshot required')
 const client = new Client({ name: 'chorono-catalog-editor-acceptance', version: '1.0.0' })
 const stamp = Date.now(), report = { passed: false, checks: [] }
 await mkdir(output, { recursive: true })
 
 /** Bounded MCP call. Only this disposable loopback editor is addressed, and
  * every editor operation carries the explicitly selected session id. */
+const sourceSchemas = new Map(), retryAccess = new Map()
 async function call(name, args = {}, sessionId) {
+  if (!sourceSchemas.has(name)) {
+    const info = await client.callTool({name:'get_capabilities',arguments:{toolName:name}})
+    sourceSchemas.set(name, JSON.parse(info.content[0].text).tool.inputSchema.required?.includes('readToken'))
+  }
+  if (sourceSchemas.get(name) && args.readToken === undefined) {
+    let authorization = args.requestId ? retryAccess.get(args.requestId) : undefined
+    if (!authorization) {
+      const readResult = await client.callTool({name:'get_scene',arguments:sessionId ? {sessionId} : {}})
+      assert(!readResult.isError, 'Fresh read required for isolated happy-path QA')
+      const read=JSON.parse(readResult.content[0].text)
+      authorization={expectedRevision:read.revision,readToken:read.readToken}
+      if(args.requestId)retryAccess.set(args.requestId,authorization)
+    }
+    args={...authorization,...args}
+  }
   const response = await client.callTool({ name, arguments: { ...args, ...(sessionId ? { sessionId } : {}) } }, undefined, { timeout: 130000 })
   assert(!response.isError, `${name}: ${response.content.find(item => item.type === 'text')?.text}`)
   if (name === 'render_preview') return response
@@ -43,7 +59,7 @@ try {
     const title=scene.add('text');title.set({name:'Heading'});title.text='MCP CATALOG CHECK';title.pos=[70,100];title.size=[500,40];title.font({size:24,color:'#94a3b8'});
     const clock=scene.add('text');clock.set({name:'Human clock setting'});clock.text='09:05';clock.pos=[70,165];clock.size=[340,100];clock.font({size:80,weight:'700',color:'#f8fafc'});`
   const plan = await call('run_script', { code, dryRun: true }, id)
-  const built = await call('apply_script_plan', { planId: plan.planId, requestId: `q-plan-${stamp}` }, id)
+  const built = await call('apply_script_plan', { planId: plan.planId, expectedRevision:plan.revision, readToken:plan.readToken, requestId: `q-plan-${stamp}` }, id)
   assert.deepEqual(built.layers.map(layer => layer.id), plan.layers.map(layer => layer.id))
   let scene = await call('get_scene', {}, id)
   const clock = scene.scene.layers.find(layer => layer.name === 'Human clock setting')

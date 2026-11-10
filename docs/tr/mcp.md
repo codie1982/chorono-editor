@@ -1,7 +1,7 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 1.1.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
-Eski 77 araç adı çağrılabilir kalır; eski payload/çıktı davranışları korunur.
+MCP 2.0.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
+Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
 Chorono MCP, STDIO üzerinden standart MCP konuşan yerel bir sunucudur. Claude Desktop, Claude Code ve Codex aynı editör bağlantısını kullanabilir. Ayrıca bir model API anahtarı gerekmez: model istemcide çalışır, MCP editörde araçları yürütür.
@@ -118,15 +118,40 @@ Eski adlar her iki profilde de sunucuda çözümlenir; payload, çıktı ve eski
 varsayılanları korunur. Aynı retry'da araç adı, argüman ve `requestId` aynı
 kalmalıdır. Yeni ad seçmek eski belirsiz isteğin tekrarı sayılmaz. Profil
 daraltılması mevcut source revision/aktif drag/dry-run/tek undo korumalarını
-atlayan bir yol oluşturmaz; taze okuma yetkisini zorunlu kılacak E−1.1 henüz
-ayrı iştir ve bu sürümde `expectedRevision` isteğe bağlı kalır.
+atlayan bir yol oluşturmaz. **2.0.0 ile source düzenleme çağrıları bilinçli
+olarak değişmiştir:** editörü yeniden derleyip başlatın ve STDIO istemcisini yeniden
+bağlayın. Eski ad/profil zorunlu yetkilendirmeyi atlayamaz; scene JSON değişmez.
 
-`expectedRevision` ve retry `requestId`, `batch_actions` çağrısının dış
-argümanlarında bütün transaction için verilir. Alt eylemlerin içindeki ortak
-alanlar bağımsız revision kontrolü oluşturmaz. `normalize_audio_clip` native
-batch eylemi değildir (`callableInBatch:false`); varsayılan listede bulunmaz.
-Bu bağımsız kaynak-peak ölçümü için legacy katalog kullanılır; script API'si
-eşdeğer bir peak ölçümü sağlamaz.
+Her source mutasyonundan önce aynı MCP bağlantısı ve editörde `get_scene` okuyun.
+Dönen `revision` değerini `expectedRevision`, tek kullanımlık `readToken` değerini
+aynı adlı alana koyun. Token beş dakika geçerlidir; gerçek istemci bağlantısı,
+editör session, document epoch ve revision'a bağlıdır. `get_layer` gibi kısmi
+okumalar yetki vermez. İşlem başarılı olsa da sonraki yazma için yeniden okuyun.
+Çakışmada mevcut elle değişiklikleri okuyup isteği uyarlayın; eski tam sahne
+payload'una yalnızca yeni revision yazıp göndermeyin.
+
+`batch_actions` dış çağrısı tek `expectedRevision`/`readToken`/`requestId` taşır.
+Alt işlemler için `get_capabilities({toolName})` içindeki `batchInputSchema`
+kullanılır. `run_script` dry-run normal okuma token'ını tüketir; yeni plan-bound
+`readToken`, `revision` ve `planId` döndürür. `apply_script_plan` bunları kullanır,
+script yeniden çalıştırılmaz. Sonraki okumalar ayrılmış plan yetkisini bozmaz;
+araya source değişikliği veya belge değiştirme girerse plan reddedilir.
+
+Aynı bağlantıda transport tekrarında aynı araç adı, **aynı token dahil aynı
+argümanlar** ve sabit `requestId` kullanılır. Editör başına en fazla 64 sonuç
+saklanır; istemciler kimlikle ayrılır. Bağlantı yenilendiyse önce sahneyi okuyup
+sonucu kontrol edin. Token'ları sahne JSON'una, kalıcı kayda veya loglara yazmayın.
+Eksik/eski/kullanılmış okuma, document değişimi ve aktif drag durumları
+`code/message/recovery` içeren yapılandırılmış hatalar döndürür. Son browser CAS
+kontrolü, broker kabulünden sonra araya giren elle düzenlemeyi de korur.
+
+Native source komutları, script, project load, import, normalize ve undo/redo
+bu kapsamdadır. Okuma, runtime/playback, preview/export ve dosyaya kaydetme source
+yazmaz; token gerekmez. Commit yanıtı sınırlı `changeSummary` döndürür;
+`truncated:true` tam liste olmadığını belirtir. Provenance E−1.2'de ayrı iştir.
+
+`normalize_audio_clip` native batch eylemi değildir (`callableInBatch:false`);
+legacy katalogda doğrudan çağrılır. Script API eşdeğer peak ölçümü sağlamaz.
 
 Script ile sahne tasarımı için `scene.snapshot()` tam sahneyi; `layer.data` katmanın tamamını; `layer.get(path)` tek alanı bağımsız veri kopyası olarak okur. `layer.patch(partial)` iç içe ayarları birleştirir; `Layer.set` eski nesne değiştirme davranışını korur. `scene.useTimeline(id)` hem Layer.key hem clone/array animasyon kopyalarının hedefini belirler. Mevcut state machine ve etkileşim kayıtlarının CRUD metotları ile native ses klibi yardımcıları da script içinde kullanılabilir. Renk kanalları ve Vec2 interpolate edilir; metin/boolean key sınırında değişir. Çizim öncesi uygulanan animasyon verisi particle, repeater, shape, tipografi, efekt ve maskeleri kapsar. Kesin imzalar, örnekler ve sınırlar için [betikleme rehberini](scripting.md) okuyun; IO, önizleme ve kayıt ayrı MCP araçlarıdır.
 
@@ -141,9 +166,9 @@ ve waveform/noise controller'ı yönetir.
 
 - Editörde bağlantı açıkça etkinleştirilir. Yerel servis yalnızca loopback arayüzünde çalışır; Host, Origin, JSON içerik türü ve token doğrulanır. Köprü normal başlangıçta kapalıdır.
 - Scriptler QuickJS WASM içinde çalışır. Node, require, ağ, DOM ve dosya erişimi verilmez. Süre, bellek, komut, nesne ve keyframe sınırları vardır. Hata halinde sahne uygulanmaz.
-- `run_script({code,dryRun:true})`, beş dakika geçerli bir `planId` üretir. `apply_script_plan` aynı sahneyi tekrar script çalıştırmadan uygular. Üretilen nesne kimlikleri korunur.
+- `run_script({code,dryRun:true,expectedRevision,readToken})`, beş dakika geçerli `planId`, yeni plan-bound `readToken` ve `revision` üretir. `apply_script_plan` aynı sahneyi tekrar script çalıştırmadan uygular. Üretilen nesne kimlikleri korunur.
 - Mutasyonlar bir geri alma adımıdır. `batch_actions` içindeki hata tüm grubu iptal eder. Batch içine script veya dosya/köprü araçları konulamaz.
-- İstemciler aynı sekmedeki kuyruğu paylaşır. `get_scene` sonucundaki `revision` değerini sonraki çağrıya `expectedRevision` olarak verin. Elle düzenleme veya başka istemciyle çakışma sessizce üzerine yazılmaz. Yeniden denenecek mutasyonlar için sabit `requestId` kullanın; farklı içerikle aynı id reddedilir.
+- İstemciler aynı sekmedeki kuyruğu paylaşır. `get_scene` sonucundaki `revision` ve `readToken` değerlerini bir sonraki source çağrısına `expectedRevision` ve `readToken` olarak verin; her yeni yazma öncesi yeniden okuyun. Elle düzenleme veya başka istemciyle çakışma sessizce üzerine yazılmaz. Yeniden denenecek mutasyonlar için sabit `requestId` kullanın; farklı içerikle aynı id reddedilir.
 - Kaynak sahnede isteğe bağlı `editorGuides` (version 1) varsa mevcut cetvel/guide düzenini koruyun. Portable JSON bu editör verisini saklar; final render/runtime çizimine katılmaz. Scene JSON değiştirme işlemleri sürüm, benzersiz ID, eksen ve sonlu konum doğrulamasından geçer. Bu alan için yeni bir MCP authoring metodu eklenmemiştir; [viewport guide sözleşmesine](viewport-layout-editing.md) bakın.
 - Birden fazla sekme açıksa `list_sessions` ile `sessionId` seçilir. Sürükleme işlemi devam ederken MCP mutasyonları reddedilir.
 

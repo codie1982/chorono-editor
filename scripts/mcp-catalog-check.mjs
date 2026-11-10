@@ -41,6 +41,12 @@ async function inspect(profile) {
     }
     const { tools } = await client.listTools(), summary = await call({ summary: true })
     assert.equal(tools.length, profile === 'standard' ? 40 : 77)
+    assert.equal(summary.version, '2.0.0'); assert.equal(summary.sourceEditing.required, true)
+    const sourceDetail = await call({toolName:'create_layer'})
+    assert(sourceDetail.tool.inputSchema.required.includes('readToken'))
+    assert(sourceDetail.tool.inputSchema.required.includes('expectedRevision'))
+    assert(!sourceDetail.batchInputSchema.required.includes('readToken'))
+    assert(!sourceDetail.batchInputSchema.required.includes('expectedRevision'))
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length)
     assert.deepEqual(tools.map(tool => tool.name), summary.catalog.advertisedToolNames)
     assert.equal(summary.tools, undefined); assert.equal(summary.scripting, undefined)

@@ -1,6 +1,6 @@
 # MCP tool discovery and call ownership
 
-MCP protocol 1.1.0 separates **advertising** from **calling**. Public entry points
+MCP protocol 2.0.0 separates **advertising** from **calling**. Public entry points
 remain in `src/lib/mcp/catalog.ts`: `getToolCatalog(profile)`,
 `getCallableTool(name)`, `validateToolCall(name,args)` and
 `getCapabilities(profile,options)`. `ToolCatalogPolicy` supplies explicit aliases
@@ -34,7 +34,8 @@ const summary = await getCapabilities('standard', { summary: true })
 const detail = await getCapabilities('standard', { toolName: 'add_spline' })
 // detail.callableInBatch authorizes choosing a native batch shape, not source
 // access: normal validation/revision/commit checks still run for every call.
-await validateToolCall('create_layer', { kind: 'rect' })
+await validateToolCall('create_layer', { kind: 'rect',
+  expectedRevision: read.revision, readToken: read.readToken }) // read from get_scene
 ```
 
 No-option capabilities preserve their former full `tools` inventory and script
@@ -44,7 +45,7 @@ callable schema and routing metadata. These two opt-in modes are exclusive.
 inventory. Read the English/Turkish MCP guides and canonical authoring skill for
 the actual native-batch workflow and migration.
 
-This release does not enforce mandatory read leases or add authoring provenance.
+Mandatory source authorization is owned by [source/](../source/README.md): client/editor/document/revision-bound one-use reads, private broker envelopes and final browser CAS. `validateToolCall(...,{withinBatch:true})` validates only a sub-action payload after outer authorization; it is not a transport bypass. AJV validators are keyed by name and direct/batch mode. Provenance remains separate.
 It also does not change shallow replacement, timeline-only evaluation or legacy
 key identity/collision rules merely because a clearer alias is available.
 Compatibility tests cover discovery, alias schema equality, legacy behavior,

@@ -6,6 +6,8 @@ import { getAllParticlePresets } from '../particles/presets'
 import { assertOperation, LIMITS, MCP_VERSION, type ToolDefinition, type JsonObject } from './protocol'
 import { ToolCatalogIndex } from './tools/ToolCatalogIndex'
 import { implementationToolName, type ToolCatalogProfile } from './tools/ToolCatalogPolicy'
+import { assertSourceFields, isSourceMutation, SOURCE_EDITING_CAPABILITIES } from './source/ToolSourcePolicy'
+import { nativeToolArguments } from './source/NativeArguments'
 
 const string = { type: 'string' }
 const number = { type: 'number', minimum: 0 }
@@ -43,7 +45,8 @@ const extras: ToolDefinition[] = [
   extra('validate_scene', 'Validate scene structure and return runtime-export diagnostics.', {}, [], true),
 ]
 
-export const SCRIPT_HELP = `Chorono SceneAPI ${MCP_VERSION}. Scripts are synchronous authoring operations; they create editable layers/tracks rather than running every playback frame.
+export const SCRIPT_HELP = `Chorono SceneAPI ${MCP_VERSION}. The outer run_script call requires expectedRevision/readToken from get_scene. A dry run returns a NEW plan-bound readToken and revision for apply_script_plan; never rerun code to commit a plan. These authorization fields are not SceneAPI methods or scene data.
+Scripts are synchronous authoring operations; they create editable layers/tracks rather than running every playback frame.
 scene.add(kind) -> Layer; scene.get(id), scene.find(name), scene.layers; scene.remove(handle)
 scene.snapshot() returns the complete current scene as detached JSON. scene.assets/assetCollections/parameters/triggers/bindings/parameterWires/stateMachines/initialState are detached JSON getters. Editing these copies never changes the editor; use command methods. scene.setInitialState(object) replaces initialState.
 Layer: id/name/type getters; pos=[x,y], size=[w,h], opacity, rotation, scale=[x,y], fill, text, cornerRadius, blendMode
@@ -83,9 +86,10 @@ function getCatalogIndex(): Promise<ToolCatalogIndex> {
     const tools = [...actionRegistry.toMCPTools().filter(t => !special.has(t.name)).map(t => ({ ...t, annotations: { readOnlyHint: !!actionRegistry.get(t.name)?.read, openWorldHint: false } })), ...extras]
     return new ToolCatalogIndex(tools.map(t => ({ ...t, inputSchema: { ...t.inputSchema, properties: { ...t.inputSchema.properties,
       sessionId: { type: 'string', description: 'Connected editor id from list_sessions. Required when more than one editor is connected; not used by local catalog discovery.' },
-      expectedRevision: { type: 'integer', minimum: 0, description: 'Optional source revision from get_scene. Reject a conflicting edit; does not itself prove a fresh read. Playback/read operations need not change the revision.' },
+      expectedRevision: { type: 'integer', minimum: 0, description: 'Required for source changes: revision from the same get_scene read as readToken. Script plan commit uses its returned revision. Read/runtime/export calls do not require it.' },
+      readToken: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Required one-use source-read capability from get_scene in this MCP connection/editor. For apply_script_plan use the token returned by its dry run. Native batches authorize only the outer call. Never store in scene data or logs.' },
       requestId: { type: 'string', maxLength: 128, description: 'Optional retry key. Repeat the exact same tool name and arguments to reuse a bounded cached result; do not reuse for a different operation.' },
-    }, additionalProperties: false } })))
+    }, required: [...(t.inputSchema.required ?? []), ...(isSourceMutation(t.name) ? ['expectedRevision', 'readToken'] : [])], additionalProperties: false } })))
   })
 }
 
@@ -102,12 +106,26 @@ export async function getCallableTool(name: string): Promise<ToolDefinition> {
 
 const ajv = new Ajv({ strict: false, allErrors: true })
 const validators = new Map<string, ReturnType<typeof ajv.compile>>()
-export async function validateToolCall(name: string, args: JsonObject): Promise<ToolDefinition> {
+/** Validate the exact public tool name, source envelope and native workload.
+ * This does not grant access or contact an editor. `withinBatch` is exclusively
+ * for internal sub-action validation after outer authorization; transport
+ * callers must use the default. Revisions are safe integer counters, not scene
+ * coordinates. Borrowed inputs are not mutated. Throws on unknown/invalid data;
+ * returns immutable metadata. Validator caches separate direct/batch schemas.
+ */
+export async function validateToolCall(name: string, args: JsonObject, options: { withinBatch?: boolean } = {}): Promise<ToolDefinition> {
   const tool = await getCallableTool(name)
-  let validate = validators.get(name)
-  if (!validate) { validate = ajv.compile(tool.inputSchema); validators.set(name, validate) }
+  if (!options.withinBatch) assertSourceFields(name, args)
+  const cacheKey = `${name}:${options.withinBatch ? 'batch' : 'direct'}`
+  let validate = validators.get(cacheKey)
+  if (!validate) {
+    const schema = options.withinBatch ? { ...tool.inputSchema, required: (tool.inputSchema.required ?? []).filter((field: string) => !['expectedRevision', 'readToken'].includes(field)) } : tool.inputSchema
+    validate = ajv.compile(schema); validators.set(cacheKey, validate)
+  }
   if (!validate(args)) throw new Error(`Invalid arguments: ${ajv.errorsText(validate.errors)}`)
-  assertOperation(args)
+  // Source revisions are counters, not geometry/time coordinates. Their own
+  // schema/safe-integer guard applies; domain workload limits see native data.
+  assertOperation(nativeToolArguments(args))
   return tool
 }
 
@@ -119,10 +137,12 @@ export async function getCapabilities(profile: ToolCatalogProfile = 'standard', 
   if (options.toolName !== undefined) {
     if (options.summary) throw new Error('Use either summary:true or toolName, not both')
     const implementation = implementationToolName(options.toolName)
-    return { version: MCP_VERSION, ...catalog.describe(options.toolName, profile,
-      implementation !== 'run_script' && !!actionRegistry.get(implementation)?.toCommand) }
+    const callableInBatch = implementation !== 'run_script' && !!actionRegistry.get(implementation)?.toCommand
+    const result = catalog.describe(options.toolName, profile, callableInBatch)
+    return { version: MCP_VERSION, sourceEditing: SOURCE_EDITING_CAPABILITIES, ...result,
+      ...(callableInBatch ? { batchInputSchema: { ...result.tool.inputSchema, required: (result.tool.inputSchema.required ?? []).filter((field: string) => !['expectedRevision', 'readToken'].includes(field)) } } : {}) }
   }
-  const base = { version: MCP_VERSION, catalog: catalog.metadata(profile),
+  const base = { version: MCP_VERSION, catalog: catalog.metadata(profile), sourceEditing: SOURCE_EDITING_CAPABILITIES,
     particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS,
     exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
   if (options.summary) return { ...base, objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category })) }

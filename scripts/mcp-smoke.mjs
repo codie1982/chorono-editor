@@ -9,10 +9,31 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const output = path.join(root, '.chorono/smoke')
 await mkdir(output, { recursive: true })
 const client = new Client({ name: 'chorono-smoke-test', version: '1.0.0' })
-const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'dist/mcp/server.cjs')], cwd: root })
+// The SDK forwards only a small default environment. Pass the selected editor
+// URL explicitly so isolated QA never falls back to the user's port 2000.
+const transportOptions = { command: process.execPath, args: [path.join(root, 'dist/mcp/server.cjs')], cwd: root, env: { ...process.env, CHORONO_PROJECT_ROOT: root } }
+const transport = new StdioClientTransport(transportOptions)
 await client.connect(transport)
 const report = {}
+// Happy-path QA only: acquire explicit source reads for old test steps. Guard
+// rejection tests use raw client.callTool and never silently refresh stale work.
+const sourceSchemas = new Map(), retryAccess = new Map()
 const call = async (name, args = {}) => {
+  if (!sourceSchemas.has(name)) {
+    const info = await client.callTool({name:'get_capabilities',arguments:{toolName:name}})
+    sourceSchemas.set(name, JSON.parse(info.content[0].text).tool.inputSchema.required?.includes('readToken'))
+  }
+  if (sourceSchemas.get(name) && args.readToken === undefined) {
+    let authorization = args.requestId ? retryAccess.get(args.requestId) : undefined
+    if (!authorization) {
+      const readResult = await client.callTool({name:'get_scene',arguments:args.sessionId ? {sessionId:args.sessionId} : {}})
+      assert(!readResult.isError, 'Source read must succeed before happy-path QA edit')
+      const read = JSON.parse(readResult.content[0].text)
+      authorization = {expectedRevision:read.revision,readToken:read.readToken}
+      if(args.requestId)retryAccess.set(args.requestId,authorization)
+    }
+    args={...authorization,...args}
+  }
   const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 130000 })
   if (result.isError) throw new Error(`${name}: ${result.content[0]?.text}`)
   if (name === 'render_preview') return result
@@ -53,13 +74,15 @@ try {
       `
       const plan = await call('run_script', { code, dryRun: true })
       assert.equal((await call('get_scene')).scene.layers.length, 0)
-      const applied = await call('apply_script_plan', { planId: plan.planId, requestId: 'smoke-plan-' + stamp })
+      const applied = await call('apply_script_plan', { planId: plan.planId, expectedRevision:plan.revision, readToken:plan.readToken, requestId: 'smoke-plan-' + stamp })
       assert.deepEqual(applied.layers.map(l=>l.id), plan.layers.map(l=>l.id))
       report.layers = applied.layers.length
       await call('clone_timeline', { timelineId:'loop',newId:'alternate' })
       await call('update_timeline', { timelineId:'alternate',patch:{durationMs:2000,loop:false} })
       assert.equal(JSON.parse((await call('list_timelines')).content).length, 3)
       await call('delete_timeline', { timelineId:'alternate' })
+      // A previous test may have isolated another timeline in the live editor.
+      await call('control_playback',{action:'pause',timelineIds:[]})
       await call('control_runtime',{event:'next',parameters:{energy:0.8}})
       const runtime=await call('get_runtime')
       assert.equal(runtime.stateMachines[0].stateName,'Loop')
@@ -75,7 +98,8 @@ try {
       const png = preview.content.find(c=>c.type==='image')
       assert.equal(png.mimeType,'image/png')
       await writeFile(path.join(output,'preview.png'),Buffer.from(png.data,'base64'))
-      const pngFile = await readFile(path.join(root,'design-mockups/editor.png'))
+      // Reimport the actual preview; no untracked design-mockup fixture is needed.
+      const pngFile = Buffer.from(png.data,'base64')
       const imported = await call('import_asset',{name:'mcp-test-reference.png',mimeType:'image/png',data:pngFile.toString('base64')})
       await call('undo');await call('redo')
       await call('render_preview',{timeMs:1500,timelineIds:['intro'],width:320})
@@ -101,7 +125,7 @@ try {
       const safe = await call('run_script',{code:'scene.log(typeof process,typeof require,typeof fetch)'})
       assert.equal(safe.logs[0],'undefined undefined undefined')
       const revision = (await call('get_scene')).revision
-      const denied = await client.callTool({name:'run_script',arguments:{code:'while(true){}'}},undefined,{timeout:10000})
+      const denied = await client.callTool({name:'run_script',arguments:{code:'while(true){}',...(await call('get_scene').then(read=>({expectedRevision:read.revision,readToken:read.readToken})))}},undefined,{timeout:10000})
       assert(denied.isError)
       assert.equal((await call('get_scene')).revision,revision)
       report.sandboxTimeout = 'passed'
@@ -110,14 +134,14 @@ try {
       await call('load_project', {name:'mcp-demo-'+stamp})
       await call('control_playback',{action:'pause',timeMs:1500,timelineId:'intro',timelineIds:['intro']})
       const second = new Client({name:'chorono-second-client',version:'1.0.0'})
-      await second.connect(new StdioClientTransport({command:process.execPath,args:[path.join(root,'dist/mcp/server.cjs')],cwd:root}))
+      await second.connect(new StdioClientTransport(transportOptions))
       try {
         const current = await call('get_scene')
         const read = await second.callTool({name:'get_scene',arguments:{}})
         assert.equal(JSON.parse(read.content[0].text).revision,current.revision)
         const hero = current.scene.layers.find(l=>l.name==='Hero card')
-        const args = {layerId:hero.id,patch:{name:'Hero card'},expectedRevision:current.revision}
-        const results = await Promise.all([client.callTool({name:'patch_object',arguments:args}),second.callTool({name:'patch_object',arguments:args})])
+        const args = {layerId:hero.id,patch:{name:'Hero card'},expectedRevision:current.revision,readToken:current.readToken}
+        const results = await Promise.all([client.callTool({name:'patch_object',arguments:args}),second.callTool({name:'patch_object',arguments:{...args,readToken:JSON.parse(read.content[0].text).readToken}})])
         assert.equal(results.filter(r=>r.isError).length,1)
         assert(results.find(r=>r.isError).content[0].text.includes('revision conflict'))
         report.sharedTwoClients = 'passed'

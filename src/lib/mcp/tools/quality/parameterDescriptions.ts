@@ -3,8 +3,8 @@
  * layer visibility. These strings never change validation/default semantics. */
 export const parameterDescriptions: Readonly<Record<string, string>> = {
   sessionId: 'Connected editor id from list_sessions. Choose explicitly with multiple tabs; omission requires exactly one connected editor.',
-  expectedRevision: 'Optional source revision from get_scene for optimistic conflict checks, not proof of a fresh read. Runtime/read calls may ignore it.',
-  requestId: 'Optional session-scoped retry id: reuse with identical tool/arguments to retrieve the retained result; changed arguments are refused. Not durable across sessions.',
+  expectedRevision: 'Required for source changes with the matching one-use readToken: use the revision from get_scene or the dry-run plan. Runtime/read/export calls do not require it. In a batch authorize the outer call only.',
+  requestId: 'Optional client-connection/editor-scoped retry id: reuse exact name/arguments including readToken to recover a retained result. Changed arguments are refused; reconnect loses that retry scope.',
   toolName: 'Exact callable tool name whose input schema and behavior should be described. Use for advanced or compatibility tools absent from the selected discovery profile; this does not execute that tool.',
   layerId: 'Existing layer id from the current scene, not a display name or UI row index.',
   layerIds: 'Explicit existing layer ids to operate on; current UI selection and collapsed/filtered rows do not supply this list.',

@@ -49,8 +49,8 @@ describe('MCP tool definition presentation', () => {
     } })
     const result = decorateToolDefinition(input, 'batch_actions').inputSchema.properties
     expect(result.sessionId.description).toContain('multiple tabs')
-    expect(result.expectedRevision.description).toContain('not proof of a fresh read')
-    expect(result.requestId.description).toContain('Not durable across sessions')
+    expect(result.expectedRevision.description).toContain('matching one-use readToken')
+    expect(result.requestId.description).toContain('reconnect loses that retry scope')
     expect(result.actions.items.description).toContain('ordered native')
     expect(result.actions.items.properties.name.description).toContain('native authoring action')
     expect(result.actions.items.properties.arguments.description).toContain('entire ordered batch')

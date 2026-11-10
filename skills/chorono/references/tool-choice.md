@@ -1,7 +1,7 @@
 # Choose a native tool
 
 Use the tool names actually advertised by the connected MCP client. In MCP
-1.1.0 the default `standard` catalog exposes 40 common tools; older clients or
+2.0.0 the default `standard` catalog exposes 40 common tools; older clients or
 the `legacy` profile may advertise the original names. The `tools` array in
 `get_capabilities({})` remains the original compatibility inventory. For the
 current discovery surface, use `get_capabilities({summary:true})` and read
@@ -64,7 +64,7 @@ spelling of `upsert_keyframes`. Existing key upsert may replace nearby key
 metadata, so follow [collaborative-editing.md](collaborative-editing.md) when
 preserving hand-edited keys.
 
-On an uncertain retry, keep the **same tool name, arguments and requestId**.
+All canonical and historical source mutations require `expectedRevision` and the one-use `readToken` from `get_scene`; plan commit uses its dry-run token. Put these on the outer batch only; use `batchInputSchema` for sub-actions. On an uncertain retry, keep the **same tool name, arguments (including token) and requestId**.
 Switching to another spelling is not an identical retry. Catalog/profile changes
 require reconnecting the MCP client; ask the operator to select the legacy
 profile only when the workflow needs its direct tool list. Normal authoring does

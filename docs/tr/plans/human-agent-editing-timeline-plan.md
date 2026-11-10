@@ -1,10 +1,13 @@
 # E−1 — İnsan–ajan ortak düzenleme, Timeline ve Viewport kullanılabilirliği
 
-**10 Kasım MCP kalite önceliği tamamlandı:** D2 sonrasında [E−1.Q araç açıklığı ve
-uyumlu katalog sadeleştirmesi](mcp-tool-quality-plan.md) uygulandı. MCP 1.1.0
-standard 40 / legacy 77 keşfi ve dokuz uyumlu alias sunar. Sırada E−1.1 güvenli
-düzenleme ve aşağıdaki kalan işler var. Yeni zorunlu read lease bu teslimin
-parçası değildir; Glama'nın eski dış puanı ile yerel kabul ayrı ölçümlerdir.
+**10 Kasım güncel durum:** [E−1.Q katalog/şema kalitesi](mcp-tool-quality-plan.md)
+ve **E−1.1 zorunlu güncel okuma/revision** tamamlandı. MCP 2.0.0'da standard 40 /
+legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
+editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
+[Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
+[istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
+Sırada **E−1.2 provenance**, ardından aşağıdaki kalan işler var. Glama'nın eski
+dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
 [komşu mesafesi/ruler-guide araçları](../viewport-layout-editing.md) tamamlandı. Sırada
@@ -40,7 +43,7 @@ isimler/sözleşmeler capability ve şema yayımlanana kadar çağrılabilir API
 
 | Alan | Mevcut davranış | Yapılacak geliştirme |
 | --- | --- | --- |
-| Sahneyi okuma | Skill ve tool açıklaması `get_scene` ister. `expectedRevision` isteğe bağlıdır; çağıranın yeni turda gerçekten okuduğu zorunlu tutulmaz. | Her bağımsız düzenleme turunda taze okuma; source mutasyonunda zorunlu revision ve okumaya bağlı yetkilendirme. |
+| Sahneyi okuma | E−1.1 tamamlandı: her source mutasyonunda `get_scene` revision + tek kullanımlık readToken zorunlu. | E−1.2 aktör/semantik çakışma açıklığı ayrı devam eder. |
 | Eşzamanlı düzenleme | Aktif drag engeli, hazırlık başı/commit revision kontrolü, atomic batch, script snapshot ve stale plan reddi vardır. | Bu korumaları kullan; ikinci bir sahne/undo motoru kurma. |
 | Patch | `Layer.set` ve `patch_object` shallow replacement yapar. `Layer.patch` nested object merge yapar; array'ler yine değişir. | İstenen leaf/domain öğesini değiştir; mevcut semantiği sessizce değiştirmeden güvenli native deep patch ve kimlikle güncelleme ekle. |
 | Yazarlık | Layer/key/property için insan–ajan kökeni veya son değiştiren kaydı yoktur. MCP `clientName` tek başına doğrulanmış aktör kimliği değildir. | Küçük, sürümlü authoring metadata; eksik kayıt `unknown` kabul edilir. |
@@ -75,7 +78,7 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | --- | --- | --- |
 | E−1.0 — tamamlandı | Skill ve mevcut kabiliyetlerin açıklığı | Her takip turunda taze okuma kuralı; eski sahneyi yeniden üretmeme; QuickJS ile doğrulanmış sine/controller/bake örneği. Runtime enforcement değildir. |
 | E−1.Q — tamamlandı | MCP araç kalitesi ve uyumlu sadeleştirme | Typed şema/açıklama doğruluğu, standard 40 / legacy 77 katalog, dokuz uyumlu alias, hafif/tek-şema keşfi ve mevcut ortak güvenlik kontrolleri. [Gerçek kabul](mcp-tool-quality-plan.md). |
-| E−1.1 | Güvenli MCP düzenleme sözleşmesi | Okunmamış/stale source mutasyonu reddedilir; taze revision ile odaklı değişiklik tek undo olur; retry ve plan kimlikleri korunur. |
+| E−1.1 — tamamlandı | Güvenli MCP düzenleme sözleşmesi | Okunmamış/stale source mutasyonu reddedilir; taze revision ile odaklı değişiklik tek undo olur; retry ve plan kimlikleri korunur. |
 | E−1.2 | İnsan–ajan kökeni ve çakışma açıklığı | Creation ve last-writer ayrıdır; mixed/unknown durumları, undo/redo ve portable save/load korunur; runtime çıktısı editör metadata'sını taşımaz. |
 | E−1.3 | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
 | E−1.4 | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
@@ -83,19 +86,19 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | E−1.6 — sürüyor | Viewport araçları ve doğrudan authoring | Pivot/seçim/drag, ortak multi-transform, V3 key çizimi ve V4/V5 clone/array uygulandı; [transform sözleşmesi](../viewport-transform-editing.md), [Array kabulü](../viewport-array-editing.md). Komşu mesafesi/cetvel/guide araçları da uygulandı; tam V6 bekler. [V0–V6](viewport-authoring-2d-plan.md). |
 | E−1.7 | Birleşik kullanıcı akışı kabulü | Aşağıdaki insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından Export E0 başlar. |
 
-### E−1.1 — Önce oku, mevcut yapı üzerinde değiştir
+### E−1.1 — Tamamlandı: önce oku, mevcut yapı üzerinde değiştir
 
 - Seçilen editör için her yeni düzenleme turunun ilk source işlemi `get_scene`
   olur. Oturumu bulmak/capability keşfetmek bundan önce yapılabilir. Tek bir
   atomic batch içindeki her alt işlem için yeniden okuma gerekmez.
-- Source mutasyonlarında `expectedRevision` zorunlu olur. Literal “önce okudu”
-  şartını sağlamak için okumadan dönen kısa ömürlü read token önerilir: gerçek
+- Source mutasyonlarında `expectedRevision` zorunludur. Literal “önce okudu”
+  şartını sağlamak için okumadan dönen beş dakikalık, tek kullanımlık read token uygulanmıştır: gerçek
   istemci bağlantısı + editör session + document epoch + revision'a bağlıdır.
   Dahili broker snapshot'ı çağıranın okuması yerine sayılmaz.
 - Read token, bir mutasyon/batch veya ona bağlı dry-run planını yetkilendirir.
   `apply_script_plan` aynı planın ürettiği ID'lerle commit eder; araya source
   değişikliği girerse reddedilir. Planı onaylamak için script yeniden çalıştırılmaz.
-  Token'ın kendi dry-run'ını sebepsiz geçersiz kılmaması test edilir.
+  Dry-run yeni plan-bound token döndürür; ara okumalar bunu bozmaz. Commit plan token ve revision ile yapılır.
 - Final compare-and-swap, aktif drag engeli ve per-editor seri yürütme korunur.
   Request dedupe ayrıca gerçek istemci bağlantısıyla ayrılır; display name
   güvenlik/kimlik anahtarı olmaz. Timeout'ta önce aynı request'in sonucu aranır;
@@ -104,7 +107,7 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
   Source değiştiren araçlar ve undo/redo kapsamı açıkça sınıflandırılır.
 - Eski istemciye anlaşılır capability/protokol sürümü ve yapılandırılmış hata
   verilir; eksik alanları sessizce kabul eden “uyumlu” yazma yolu bırakılmaz.
-  Yeni hata adları ve token şeması uygulamada yayımlanacaktır.
+  Capability `sourceEditing`, zorunlu şema ve yapılandırılmış `code/message/recovery` yayımlanır. MCP bridge sürümü 2.0.0; scene JSON biçimi değişmez.
 - Mutasyon özeti eklenen/silinen nesne, yeniden parent etme ve değişen
   property/key alanlarını bounded biçimde bildirir. İç atomic snapshot taşıması
   yasaklanmaz; istenmeyen source değişikliği denetlenir.
@@ -116,7 +119,13 @@ açık kullanıcı talebi uygulanır. Talep gerçekten iki farklı yoruma açık
 
 Kabul: eksik/stale okuma, aynı revision'lı farklı document, iki istemci, aktif
 drag, undo/reset, retry, stale plan ve manuel child/key/path düzenlemesi
-senaryoları. Reddedilen işlem scene/history/provenance üzerinde iz bırakmaz.
+senaryoları geçti. Reddedilen işlem scene/history üzerinde iz bırakmaz; provenance
+henüz uygulanmadı. 333 test dosyası / 2.677 test, TypeScript/MCP/production
+build ve 16 CLI testi geçti. Gerçek STDIO/Chrome kabulünde saat elle 10:10'dan
+09:05'e değiştirildi; stale istek reddedildi, yeni odaklı renk değişimi saati,
+diğer nesneleri ve key verilerini korudu. Plan ID'leri, batch tek undo/redo,
+portable save/load ve token'sız JSON doğrulandı. Tarball içindeki güncel skill
+kurulumu ayrıca doğrulandı. [Ana kayıt](../production-2d-roadmap.md#1253-e11-zorunlu-okuma-ve-revision-teslimi--10-kasım-2026).
 
 ### E−1.2 — Hermes bir animasyon parametresi değil, authoring aktörüdür
 

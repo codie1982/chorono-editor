@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pairEditor, pollEditor, answerEditor, disconnect, callEditorTool } from '@/lib/mcp/broker'
+import { pairEditor, pollEditor, answerEditor, disconnect, callEditorTool,
+  openClientConnection, getClientConnection, closeClientConnection } from '@/lib/mcp/broker'
 import { getLocalToken, tokenEquals } from '@/lib/mcp/storage'
 import { LIMITS, MCP_VERSION } from '@/lib/mcp/protocol'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
+import { SourceAccessError } from '@/lib/mcp/source/SourceAccessError'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,12 +61,19 @@ export async function POST(request: NextRequest) {
       await getLocalToken()
       return NextResponse.json(pairEditor(String(body.label ?? 'Chorono editor')))
     }
-    if (body.op === 'reply') { answerEditor(body.sessionId, bearer(request), body.jobId, body.result, body.error); return NextResponse.json({ ok: true }) }
+    if (body.op === 'reply') { answerEditor(body.sessionId, bearer(request), body.jobId, body.result, body.error, body.errorData); return NextResponse.json({ ok: true }) }
     if (body.op === 'disconnect') { disconnect(body.sessionId, bearer(request)); return NextResponse.json({ ok: true }) }
     if (!tokenEquals(bearer(request), await getLocalToken())) throw new Error('MCP client not authorized')
+    if (body.op === 'connect_client') return NextResponse.json({ ...openClientConnection(String(body.clientName ?? 'MCP client'), body.protocolVersion), protocolVersion: MCP_VERSION }, { headers: { 'Cache-Control': 'no-store' } })
+    const connectionToken = request.headers.get('x-chorono-mcp-connection') ?? undefined
+    if (body.op === 'close_client') {
+      if (connectionToken) closeClientConnection(connectionToken)
+      return NextResponse.json({ ok: true })
+    }
     if (body.op !== 'call') throw new Error('Unknown MCP operation')
-    return NextResponse.json({ result: await callEditorTool(body.name, body.arguments ?? {}, body.clientName) })
+    return NextResponse.json({ result: await callEditorTool(body.name, body.arguments ?? {}, connectionToken ? getClientConnection(connectionToken) : undefined) }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
+    if (error instanceof SourceAccessError) return NextResponse.json({ error: error.toJSON() }, { status: 409, headers: { 'Cache-Control': 'no-store' } })
     return NextResponse.json({ error: (error as Error).message }, { status: 400 })
   }
 }

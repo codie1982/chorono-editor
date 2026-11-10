@@ -73,8 +73,9 @@ describe('capabilities and input boundaries', () => {
     expect(new Set(names).size).toBe(names.length)
   })
   it('rejects schema errors and excessive workload sizes', async () => {
-    await expect(validateToolCall('create_object', {})).rejects.toThrow('Invalid arguments')
-    await expect(validateToolCall('array_layer', { layerId: 'a', count: 999999999 })).rejects.toThrow()
-    await expect(validateToolCall('run_script', { code: '', extra: true })).rejects.toThrow()
+    const access = { expectedRevision: 0, readToken: 'a'.repeat(64) }
+    await expect(validateToolCall('create_object', access)).rejects.toThrow('Invalid arguments')
+    await expect(validateToolCall('array_layer', { layerId: 'a', count: 999999999, ...access })).rejects.toThrow()
+    await expect(validateToolCall('run_script', { code: '', extra: true, ...access })).rejects.toThrow()
   })
 })

@@ -3,12 +3,13 @@ import { assertTrackValues, isColorTarget } from '../animation/typedValues'
 import {measureJson} from '../format/json'
 import { assertCloneForestBudget, CLONE_WORKLOAD_LIMITS } from '../clone/CloneWorkload'
 import { assertSceneGuides } from '../geometry/guides/sceneGuideData'
+import type { SourceAuthorization } from './source/EditorSourceIdentity'
 
-export const MCP_VERSION = '1.1.0'
+export const MCP_VERSION = '2.0.0'
 export const LIMITS = { layers: CLONE_WORKLOAD_LIMITS.layers, timelines: 100, keyframes: CLONE_WORKLOAD_LIMITS.keyframes, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
 export type JsonObject = Record<string, any>
-export interface BridgeJob { id: string; method: string; args: JsonObject }
-export interface Snapshot { scene: ChronoScene; revision: number; selectedTimelineId?: string; currentTimeMs?: number }
+export interface BridgeJob { id: string; method: string; args: JsonObject; sourceAuthorization?: SourceAuthorization }
+export interface Snapshot { scene: ChronoScene; revision: number; documentEpoch: string; transactionActive: boolean; selectedTimelineId?: string; currentTimeMs?: number }
 export interface ToolDefinition { name: string; description: string; inputSchema: JsonObject; annotations?: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } }
 
 export function assertJson(value: unknown): void {

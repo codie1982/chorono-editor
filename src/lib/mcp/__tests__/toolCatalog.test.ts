@@ -22,13 +22,14 @@ describe('versioned MCP discovery and callable compatibility', () => {
   })
 
   it('aliases preserve exact argument schemas and implementation behavior boundaries', async () => {
+    const access = { expectedRevision: 0, readToken: 'a'.repeat(64) }
     for (const [name, old] of Object.entries(TOOL_ALIASES)) {
       expect((await getCallableTool(name)).inputSchema).toEqual((await getCallableTool(old)).inputSchema)
       expect(implementationToolName(name)).toBe(old)
     }
-    await expect(validateToolCall('create_layer', { kind: 'rect', patch: { name: 'Clock face' } })).resolves.toMatchObject({ name: 'create_layer' })
-    await expect(validateToolCall('create_object', { kind: 'rect', patch: { name: 'Clock face' } })).resolves.toMatchObject({ name: 'create_object' })
-    await expect(validateToolCall('create_layer', { kind: 'rect', unknown: true })).rejects.toThrow('Invalid arguments')
+    await expect(validateToolCall('create_layer', { kind: 'rect', patch: { name: 'Clock face' }, ...access })).resolves.toMatchObject({ name: 'create_layer' })
+    await expect(validateToolCall('create_object', { kind: 'rect', patch: { name: 'Clock face' }, ...access })).resolves.toMatchObject({ name: 'create_object' })
+    await expect(validateToolCall('create_layer', { kind: 'rect', unknown: true, ...access })).rejects.toThrow('Invalid arguments')
     await expect(validateToolCall('constructor', {})).rejects.toThrow('Unknown tool')
     expect(implementationToolName('constructor')).toBe('constructor')
   })
@@ -51,6 +52,13 @@ describe('versioned MCP discovery and callable compatibility', () => {
     expect(await getCapabilities('standard', { toolName: 'export_audio' })).toMatchObject({ callableInBatch: false })
     await expect(getCapabilities('standard', { toolName: 'invented' })).rejects.toThrow('Unknown tool')
     await expect(getCapabilities('standard', { summary: true, toolName: 'get_scene' })).rejects.toThrow('either')
+  })
+
+  it('validates source counters independently of geometry/time workload limits', async () => {
+    const access = { expectedRevision: 8_000_000, readToken: 'a'.repeat(64) }
+    await expect(validateToolCall('create_layer', { kind: 'rect', ...access })).resolves.toMatchObject({ name: 'create_layer' })
+    await expect(validateToolCall('update_layer', { layerId: 'rect', x: 8_000_000, ...access })).rejects.toThrow('Numeric input limit exceeded')
+    await expect(validateToolCall('create_layer', { kind: 'rect', ...access, expectedRevision: Number.MAX_SAFE_INTEGER + 1 })).rejects.toMatchObject({ code: 'EXPECTED_REVISION_REQUIRED' })
   })
 
   it('keeps discovery immutable without freezing the owning native registry', async () => {

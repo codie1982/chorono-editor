@@ -22,6 +22,11 @@ import {editorOutputResources,outputBase64,outputBlobBase64,outputUtf8,outputJso
 import {previewOutput} from './output/PreviewOutput'
 import {runtimePackageInScope} from '../export/runtime/RuntimeOutput'
 import {implementationToolName} from './tools/ToolCatalogPolicy'
+import {editorDocumentEpoch, assertEditorSourceAuthorization} from './source/EditorSourceIdentity'
+import {isSourceMutation} from './source/ToolSourcePolicy'
+import {SourceAccessError} from './source/SourceAccessError'
+import {summarizeSourceChanges} from './source/SourceChangeSummary'
+import {nativeToolArguments} from './source/NativeArguments'
 
 export interface MCPHost {
   editor: EditorStateReturn
@@ -72,21 +77,24 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
   const method = implementationToolName(requestedMethod)
   const { editor } = host
   const before = editor.getScene()
+  const revision = editor.getRevision(), documentEpoch = editorDocumentEpoch(editor)
+  const transactionActive = editor.isTransactionActive()
+  const ensureWritable = () => {
+    if (signal?.aborted) throw new Error('MCP connection closed; operation cancelled')
+    assertEditorSourceAuthorization(job.sourceAuthorization, { documentEpoch: editorDocumentEpoch(editor), revision: editor.getRevision(), transactionActive: editor.isTransactionActive() })
+    if (args.expectedRevision !== job.sourceAuthorization!.expectedRevision) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')
+  }
+  if (isSourceMutation(method)) ensureWritable()
   return assetSourcePool.withAssets(before.assets, async () => {
-    const revision = editor.getRevision()
-    const snapshot = () => ({ scene: before, revision, selectedTimelineId: host.selectedTimelineId, currentTimeMs: host.currentTimeMs })
-    const ensureWritable = () => {
-      if (signal?.aborted) throw new Error('MCP connection closed; operation cancelled')
-      if (editor.isTransactionActive()) throw new Error('Editor drag transaction is active; retry after it finishes')
-      if (args.expectedRevision !== undefined && args.expectedRevision !== editor.getRevision()) throw new Error(`Scene revision conflict: expected ${args.expectedRevision}, actual ${editor.getRevision()}`)
-    }
+    const snapshot = () => ({ scene: before, revision, documentEpoch, transactionActive, selectedTimelineId: host.selectedTimelineId, currentTimeMs: host.currentTimeMs })
     const commit = (next: ChronoScene, label: string) => {
       ensureWritable()
       if (editor.getRevision() !== revision) throw new Error('Scene changed while preparing the operation; read and retry')
       assertScene(next)
       editor.dispatchCommand({ label, execute: () => next, undo: () => before })
       if (!next.timelines.some(t => t.id === host.selectedTimelineId)) host.selectTimeline(next.timelines[0]?.id ?? '')
-      return { revision: editor.getRevision(), ...summarize(next), addedLayerIds: next.layers.filter(l => !before.layers.some(prev => prev.id === l.id)).map(l => l.id) }
+      return { revision: editor.getRevision(), ...summarize(next), changeSummary: summarizeSourceChanges(before, next),
+        addedLayerIds: next.layers.filter(l => !before.layers.some(prev => prev.id === l.id)).map(l => l.id) }
     }
     if (method === 'snapshot') return snapshot()
     if (method === 'portable_snapshot') {
@@ -95,7 +103,10 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     }
     if (method === 'apply_scene') return commit(args.scene, args.label ?? 'MCP change')
     await validateToolCall(requestedMethod, args)
-    if (method === 'undo' || method === 'redo') { ensureWritable(); editor[method](); return { revision: editor.getRevision(), ...summarize(editor.getScene()) } }
+    if (method === 'undo' || method === 'redo') {
+      ensureWritable(); editor[method](); const next = editor.getScene()
+      return { revision: editor.getRevision(), ...summarize(next), changeSummary: summarizeSourceChanges(before, next) }
+    }
     if (method === 'control_playback') {
       if (args.timelineIds) {
         if (args.timelineIds.some((id: string) => !before.timelines.some(t => t.id === id))) throw new Error('Timeline not found')
@@ -197,7 +208,7 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     const calls = method === 'batch_actions' ? args.actions : [{ name: method, arguments: args }]
     let working = before
     for (const call of calls) {
-      await validateToolCall(call.name, call.arguments)
+      await validateToolCall(call.name, call.arguments, { withinBatch: true })
       const implementation = implementationToolName(call.name)
       const action = actionRegistry.get(implementation)
       if (implementation === 'run_script' || !action?.toCommand) throw new Error(`Tool '${call.name}' cannot be used in a native batch`)
@@ -209,7 +220,7 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
         const options = call.arguments
         assertCloneBudget(working, options.layerId, implementation === 'array_layer' && options.pattern === 'grid' ? (options.rows ?? 3) * (options.columns ?? 3) : (options.count ?? (implementation === 'clone_layer' ? 1 : 10)))
       }
-      const command = action.toCommand(call.arguments, working)
+      const command = action.toCommand(nativeToolArguments(call.arguments), working)
       if (command?.label.startsWith('AI ERROR')) throw new Error(command.label)
       if (command) working = command.execute(working)
       assertScene(working)
