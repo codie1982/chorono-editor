@@ -78,6 +78,8 @@ import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { selectedBranchIds } from '@/lib/scene/hierarchy/editorLayerRows'
 import { useTimelineHierarchy } from './timeline/hooks/useTimelineHierarchy'
 import { useSelectedLayerReveal } from './layerHierarchy/useSelectedLayerReveal'
+import type { TimelineRevealRequest } from '@/lib/timeline/hierarchy/TimelineRevealRequest'
+import { LayerIndex } from '@/lib/scene/LayerIndex'
 import SubtreeOperationsToolbar from './layerHierarchy/SubtreeOperationsToolbar'
 import { FindSelectedButton, FoundSelectionNotice } from './layerHierarchy/FindSelectedControls'
 import { headerHeight, timelineKeysInBox, timelineSectionHeight } from './timeline/layout/timelineRows'
@@ -127,6 +129,7 @@ const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [
 ]
 
 interface Props {
+  revealRequest?: TimelineRevealRequest | null
   scene: ChronoScene
   editor: EditorStateReturn
   settings: TimelineSettings
@@ -175,7 +178,7 @@ export default function TimelinePanel({
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
   onEditWire, onWireRequest, revealProperty, authoring: sharedAuthoring,
-  audioControls,
+  audioControls, revealRequest,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
@@ -316,6 +319,23 @@ export default function TimelinePanel({
   }, () => !!keyboardPanelRef.current?.getClientRects().length), [jumpToAdjacentMarker, saveBookmark, jumpToBookmark])
   const hierarchy = useTimelineHierarchy({ scene, editor, timeline, trackIndex: layerTracks,
     filter: layerFilter, selectedId: selectedLayerId, selectedIds: selectedLayerIds })
+  /** Explicit Find opens selected branches and their animation rows. Ordinary
+   * layer selection only updates the shared highlight, never Timeline scroll. */
+  const findInTimeline = useCallback((ids?: readonly string[]) => {
+    const roots = ids ?? Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : [])
+    const scope = new LayerIndex(scene.layers).subtreeIds(roots)
+    hierarchy.find.find(Array.from(scope))
+    hierarchy.branches.setExpanded(roots, true)
+    setCollapsedIds(previous => new Set(Array.from(previous).filter(id => !scope.has(id))))
+    setPropFilter(null)
+  }, [scene.layers, selectedLayerId, selectedLayerIds, hierarchy.find.find, hierarchy.branches.setExpanded])
+  const appliedReveal = useRef<TimelineRevealRequest | null>(null)
+  useEffect(() => {
+    if (!revealRequest || revealRequest === appliedReveal.current || revealRequest.timelineId !== selectedTimelineId) return
+    appliedReveal.current = revealRequest
+    const ordered = revealRequest.primaryId ? [revealRequest.primaryId, ...revealRequest.layerIds.filter(id => id !== revealRequest.primaryId)] : revealRequest.layerIds
+    findInTimeline(ordered)
+  }, [revealRequest, selectedTimelineId, findInTimeline])
   const visibleLayers = useMemo(() => hierarchy.rows.map(row => row.layer), [hierarchy.rows])
 
   // Map: layerId → pin index (0,1,2…) — only set for pinned layers.
@@ -954,7 +974,8 @@ export default function TimelinePanel({
   const sectionContentRef = useRef<HTMLDivElement>(null)
   const sectionWindow = useRowWindow(sectionLayout, sectionKeys, lassoContainerRef, sectionContentRef)
 
-  useSelectedLayerReveal({ layers: scene.layers, selectedId: selectedLayerId, selectedIds: selectedLayerIds,
+  const foundIds = useMemo(() => new Set(hierarchy.find.revealIds), [hierarchy.find.revealIds])
+  useSelectedLayerReveal({ layers: scene.layers, selectedId: hierarchy.find.revealIds[0] ?? null, selectedIds: foundIds,
     setCollapsedIds: hierarchy.setCollapsedBranches, rowKeys: sectionKeys, reveal: sectionWindow.reveal,
     viewportHeight: sectionWindow.viewport.height, requestKey: `${selectedTimelineId}:${hierarchy.find.nonce}` })
 
@@ -1028,7 +1049,7 @@ export default function TimelinePanel({
 
       <div className="flex flex-wrap items-center gap-2 px-2 py-1 border-b border-gray-700 shrink-0">
         <BulkEditPolicyControl policy={authoring.collisionPolicy} onChange={authoring.setCollisionPolicy} />
-        <FindSelectedButton disabled={!selectedLayerId} onFind={hierarchy.find.find} />
+        <FindSelectedButton disabled={!selectedLayerId && !selectedLayerIds.size} onFind={() => findInTimeline()} />
         <button aria-pressed={hierarchy.selectedOnly} onClick={() => hierarchy.setSelectedOnly(value => !value)}
           className="rounded bg-gray-700 px-2 py-1 text-[10px] text-gray-200 hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">Selected branches</button>
       </div>

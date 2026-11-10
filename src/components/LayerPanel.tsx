@@ -11,8 +11,14 @@ import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
 import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { useSelectedLayerReveal } from '@/components/layerHierarchy/useSelectedLayerReveal'
+import { LayerFocusControls } from '@/components/layerHierarchy/LayerFocusControls'
 
 interface Props {
+  /** Explicit navigation; ordinary selection never requests a Timeline reveal. */
+  onShowInTimeline?: () => void
+  onIsolateSelection?: () => void
+  onExitIsolation?: () => void
+  isolationActive?: boolean
   layers: Layer[]
   selectedId: string | null
   selectedIds: Set<string>
@@ -61,6 +67,7 @@ export default function LayerPanel({
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate,
+  onShowInTimeline, onIsolateSelection, onExitIsolation, isolationActive = false,
 }: Props) {
   // ── Right-click context menu — layer rows ────────────────────────────────
   const ctxMenu = useContextMenu()
@@ -239,9 +246,12 @@ export default function LayerPanel({
   return (
     <aside className="flex flex-col h-full w-full bg-gray-900 border-r border-gray-700 select-none">
       {/* ── Header ── */}
-      <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between gap-1">
+      <div className="px-3 py-2 border-b border-gray-700 flex flex-wrap items-center justify-between gap-1">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layers</span>
         <div className="flex items-center gap-1">
+          <LayerFocusControls selected={!!selectedId || selectedIds.size > 0}
+            canIsolate={layers.some(layer => layer.type !== 'audio' && (selectedIds.has(layer.id) || !selectedIds.size && layer.id === selectedId))}
+            isolated={isolationActive} onTimeline={onShowInTimeline} onIsolate={onIsolateSelection} onExit={onExitIsolation} />
           {/* Group / Ungroup buttons now live in the top toolbar so the panel
               header stays clean. Cmd+G / Cmd+Shift+G shortcuts still work. */}
           <button

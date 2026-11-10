@@ -25,6 +25,9 @@ interface SnapState {
 }
 
 export interface UseCanvasDragOptions {
+  /** Optional editor display scope for snap candidates only. Source baselines
+   * and transform calculations use the complete committed scene. */
+  snapLayerIds?: ReadonlySet<string>
   canvasRef: RefObject<HTMLCanvasElement>
   compositionRef: { current: { width: number; height: number } }
   sceneRef: { current: ChronoScene }
@@ -83,7 +86,7 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         if (!prepared.ok) throw new Error(prepared.reason)
         drag.targets = prepared.targets
       }
-      const bounds = prepareBounds(base, drag, start.timeMs ?? 0, start.overrides)
+      const bounds = prepareBounds(base, drag, start.timeMs ?? 0, start.overrides, start.snapLayerIds)
       const clonePlan = drag.kind === 'move' && drag.cloneMode ? prepareCloneDrag(base, drag) : null
       const initialRect = start.canvasRef.current?.getBoundingClientRect(), initialScale = start.readScale()
       const initialWorld = initialRect ? { x: (drag.startClientX - initialRect.left) * initialScale.sx,
@@ -157,7 +160,7 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
 
 /** Resolve snap geometry once per gesture from its evaluated source frame. Both
  * selected subtrees and their ancestors are excluded from their own snap targets. */
-function prepareBounds(scene: ChronoScene, drag: ActiveDrag, timeMs: number, overrides?: OverrideMap): DragWorldBounds {
+function prepareBounds(scene: ChronoScene, drag: ActiveDrag, timeMs: number, overrides?: OverrideMap, snapLayerIds?: ReadonlySet<string>): DragWorldBounds {
   if (drag.kind !== 'move') return { moving: null, others: [] }
   const roots = drag.targets?.map(target => target.id) ?? drag.movingLayers.map(mover => mover.id)
   const index = new LayerIndex(scene.layers), excluded = index.subtreeIds(roots)
@@ -173,7 +176,7 @@ function prepareBounds(scene: ChronoScene, drag: ActiveDrag, timeMs: number, ove
     return value ? unionBounds(union, value) : union
   }, null)
   const others = scene.layers.flatMap(layer => {
-    if (excluded.has(layer.id)) return []
+    if (excluded.has(layer.id) || snapLayerIds && !snapLayerIds.has(layer.id)) return []
     const value = bounds(layer)
     return value ? [{ id: layer.id, ...value }] : []
   })

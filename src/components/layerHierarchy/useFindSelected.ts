@@ -9,8 +9,8 @@ export function useFindSelected(selectedId: string | null, selectedIds: Readonly
   const [revealIds, setRevealIds] = useState<readonly string[]>([])
   const [nonce, setNonce] = useState(0)
   useEffect(() => { setRevealIds([]) }, [selectedId, selectedIds])
-  const find = useCallback(() => {
-    setRevealIds(Array.from(selectedIds.size ? selectedIds : selectedId ? [selectedId] : []))
+  const find = useCallback((targetIds?: readonly string[]) => {
+    setRevealIds(Array.from(targetIds ?? (selectedIds.size ? selectedIds : selectedId ? [selectedId] : [])))
     setNonce(value => value + 1)
   }, [selectedId, selectedIds])
   const restore = useCallback(() => setRevealIds([]), [])

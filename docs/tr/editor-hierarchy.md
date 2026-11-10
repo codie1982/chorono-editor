@@ -10,8 +10,9 @@ aynıdır; yeni UI durumu scene JSON'a veya undo snapshot'larına yazılmaz.
 - Her iki panelde **Find selected**, seçili katmanların üst yollarını gösterir
   ve birincil seçime kaydırır. Filtreler, solo ve timeline üyeliği değiştirilmez.
   **Restore filters** geçici gösterimi kaldırır. Yeni seçim de istisnayı kapatır.
-- Yeni seçim/aynı nesneyi yeniden seçme, üst grupları açıp satırı bulur. Satır
-  filtre dışındaysa otomatik filtre silinmez; Find açık bir kullanıcı eylemidir.
+- Explorer/Layers kendi seçimini görünür tutar. Timeline seçimi yalnız vurgular;
+  otomatik açma/kaydırma yapmaz. Layers başlığındaki **▤ Timeline** veya Timeline
+  **Find selected**, seçili dalları ve animasyon satırlarını açık bir eylemle açar.
   Sonradan elle kaydırma/katlama, kare veya render tick'iyle geri alınmaz.
 - **Expand/Collapse subtree**, bütün seçili dalların yerel panel katlamasını
   değiştirir. Timeline'daki ilk ok alt katmanları, ikinci ok yalnız katmanın
@@ -117,3 +118,7 @@ portable round-trip sınandı. Script Explorer'ın eski güvenlik testleri de ko
 Yeni Set Key/transport/collision politikası E−1.4'tür. Bu teslim key ID/upsert
 semantiğini veya export/ikinci optimizasyon sırasını değiştirmez. Kanıt ve mevcut
 build uyarıları `artifacts/validation/editor-hierarchy-20261110/` altındadır.
+
+10 Kasım takip düzenlemesi: açık Timeline reveal ve geçici subtree isolation
+[Layer focus sözleşmesinde](layer-focus.md) tanımlıdır. E−1.3 otomatik Timeline
+reveal davranışı kullanıcının yeni tercihine göre düğmeye taşındı.

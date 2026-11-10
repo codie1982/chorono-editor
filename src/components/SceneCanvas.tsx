@@ -82,6 +82,8 @@ import type { ShortcutContext } from '@/lib/shortcuts'
 
 interface Props {
   scene: ChronoScene
+  /** Display/hit-test-only projection; commands always borrow scene as source. */
+  displayScene?: ChronoScene
   editor: EditorStateReturn
   getShortcutContext?: () => ShortcutContext
   timeMs: number
@@ -241,7 +243,7 @@ const PADDING   = 24
 const NO_MOTION_KEYS: ReadonlySet<string> = new Set()
 
 export default function SceneCanvas({
-  scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers,
+  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
@@ -296,7 +298,7 @@ export default function SceneCanvas({
 
   // Borrow aliases only for geometry queries. Editor commands continue using
   // the authored scene/ref, keeping runtime names out of history and save data.
-  const geometryScene = useMemo(() => projectFrameFonts(scene, assets.fonts), [scene, assets])
+  const geometryScene = useMemo(() => projectFrameFonts(displayScene, assets.fonts), [displayScene, assets])
   const geometryOverrides = useMemo(() => overrides && projectFrameFontOverrides(scene, overrides, assets.fonts), [scene, overrides, assets])
   const geometrySceneRef = useRef(geometryScene)
   useEffect(() => { geometrySceneRef.current = geometryScene }, [geometryScene])
@@ -481,7 +483,10 @@ export default function SceneCanvas({
   const [dragOverrides, setDragOverrides] = useState<Map<string, number>>(new Map())
 
   // ── Core transform/drag engine (move/resize/rotate/scale/anchor/path/spline) ─
+  const snapLayerIds = useMemo(() => displayScene === scene ? undefined
+    : new Set(displayScene.layers.filter(layer => !layer.hidden).map(layer => layer.id)), [displayScene, scene])
   const { dragRef, startDrag } = useCanvasDrag({
+    snapLayerIds,
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
@@ -943,7 +948,7 @@ export default function SceneCanvas({
   // ── Render canvas (scene + ghost / onion-skin overlay) ────────────────────
   useCanvasRenderer(canvasRef, {
     viewportRef: containerRef, viewportScale: zoom, viewportKey: `${zoom}:${pan.x}:${pan.y}`,
-    scene, timeMs, selectedLayerId, selectedLayerIds, assets,
+    scene: displayScene, timeMs, selectedLayerId, selectedLayerIds, assets,
     snapEnabled, snapToGridOn, gridSize,
     overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
@@ -1269,7 +1274,7 @@ export default function SceneCanvas({
             width={width} height={height} zoom={zoom} />}
 
           {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
-            scene={scene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
+            scene={displayScene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
             cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
             onLayerPointerDown={handleOffArtboardPointerDown} onDiagnostics={setOffArtboardDiagnostic} />}

@@ -2174,3 +2174,25 @@ sorumluluklara ayrıldı; legacy büyük entegrasyon dosyaları ilgili akışla 
 olarak değişti. MCP 2.1.0 / scene formatı aynı; public yayın yapılmadı.
 Sırada E−1.5 prosedürel eğriler; kutulu 3D/Poly, export ve ikinci genel optimizasyon
 sırası korunur. Soft selection ayrı sonraki tartışmadır.
+
+
+### 12.57. Layers'dan açık Timeline Find ve geçici izolasyon — 10 Kasım 2026
+
+[Layer focus sözleşmesi](layer-focus.md). Layers başlığında Timeline ve Isolate
+butonları var. Normal seçim Timeline'ı otomatik kaydırmaz; düğme mevcut dock
+panelini açar, aynı Find/subtree/virtualization yoluyla katman ve çocuk animasyon
+satırlarını gösterir. Filtre/solo/membership ve source isim/key'leri korunur.
+
+İzolasyon viewport'a ait geçici display/query projeksiyonudur. Seçili görsel
+dallar ve source çocukları, ancestor bağlamıyla birlikte ele alınır. Authored
+hidden çocuklar korunur; dış solo görünümü engellemez. Exit, o sıradaki elle
+editleri kaybetmeden tam görünümü geri getirir. Display projection pointer
+commit baseline'ı olmaz; export/MCP/undo kaynak görünürlük bayrakları değişmez.
+Yeni belge scope'u temizler; dış nesneler hit/snap adayı olmaz. Scene Explorer
+Isolate aynı owner'a bağlandı; eski doğrudan kaynak komutu sözleşmesi korunur.
+
+346 dosya / 2.755 test ve izole gerçek Layers/Timeline/Canvas kabulü: tekrarlanan
+Find/Restore, hidden/solo, kaynak edit/undo, belge değiştirme, gerçek kırmızı
+piksel ve Canvas pointer drag. Hiyerarşi kabulü yeni explicit Find tercihiyle
+sürdürülür. Kanıt `artifacts/validation/layer-focus-20261110/`. Ana çalışma sahnesi
+üzerine test yazılmaz. E−1.5 ve sonraki ana geliştirme sırası değişmez.

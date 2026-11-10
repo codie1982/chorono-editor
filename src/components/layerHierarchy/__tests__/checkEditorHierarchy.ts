@@ -25,7 +25,7 @@ export async function checkEditorHierarchy(getScene: () => ChronoScene) {
     assert(found, `Missing button ${label}`); return found
   }
   const action = async (name: string) => { document.querySelector<HTMLButtonElement>(`[data-action="${name}"]`)!.click(); await frames() }
-  const select = async (id: string) => { document.querySelector<HTMLButtonElement>(`[data-select="${id}"]`)!.click(); await frames() }
+  const select = async (id: string) => { document.querySelector<HTMLButtonElement>(`[data-select="${id}"]`)!.click(); await frames(); button(panels[1], 'Find selected').click(); await frames() }
   const click = async (root: ParentNode, label: string) => { button(root, label).click(); await frames() }
   const input = async (element: HTMLInputElement, value: string) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(element, value)
@@ -45,9 +45,11 @@ export async function checkEditorHierarchy(getScene: () => ChronoScene) {
   }
   await frames()
   const initial = JSON.stringify(getScene())
-  await check('offscreen selection and same-object reselect reveal both panels without stealing focus', async () => {
+  await check('selection preserves Timeline scroll; explicit Find reveals both panels without stealing focus', async () => {
     const control = document.querySelector<HTMLButtonElement>('[data-select="root-499"]')!; control.focus()
-    await select('root-499'); panels.forEach(panel => visible(panel, 'root-499'))
+    const oldScroll = scroll(panels[1]).scrollTop
+    control.click(); await frames(); assert(scroll(panels[1]).scrollTop === oldScroll, 'Selection scrolled Timeline implicitly')
+    await click(panels[1], 'Find selected'); panels.forEach(panel => visible(panel, 'root-499'))
     assert(document.activeElement === control, 'Selection stole focus')
     await select('root-0'); panels.forEach(panel => visible(panel, 'root-0'))
     panels.forEach(panel => { scroll(panel).scrollTop = 5000; scroll(panel).dispatchEvent(new Event('scroll')) }); await frames()
@@ -66,6 +68,11 @@ export async function checkEditorHierarchy(getScene: () => ChronoScene) {
     panels.forEach(panel => assert(header(panel, 'child')?.getAttribute('aria-level') === '3', 'Wrong shared depth'))
   })
   await check('explicit Find overrides filters reversibly without source/history edits', async () => {
+    for (const panel of panels) {
+      const restore = Array.from(panel.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent?.trim() === 'Restore filters')
+      restore?.click()
+    }
+    await frames()
     for (const panel of panels) await input(panel.querySelector<HTMLInputElement>('input[placeholder*="Search"],input[placeholder*="Filter layers"]')!, 'no-such-layer')
     panels.forEach(panel => assert(!row(panel, 'child'), 'Filter ignored'))
     for (const panel of panels) await click(panel, 'Find selected')

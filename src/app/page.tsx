@@ -51,7 +51,7 @@ import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
   makeBulkUpdateLayersCmd, makeBulkToggleFlagCmd,
-  makeIsolateLayersCmd, makeShowAllLayersCmd,
+  makeShowAllLayersCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
 import { buildViewportKeyframeCommands, type ViewportLayerChange } from '@/lib/editor/viewportKeyframes'
@@ -68,6 +68,9 @@ const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
 }
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
+import { useLayerIsolation } from '@/app/hooks/useLayerIsolation'
+import { LayerIsolationBar } from '@/components/layerHierarchy/LayerFocusControls'
+import type { TimelineRevealRequest } from '@/lib/timeline/hierarchy/TimelineRevealRequest'
 import { makeMoveLayerInTreeCmd, makeGroupSiblingLayersCmd } from '@/lib/editor/branches/HierarchyCommands'
 import { makeSetSubtreeFlagCmd } from '@/lib/editor/branches/SubtreeCommands'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
@@ -424,6 +427,23 @@ export default function BuilderPage() {
   )
 
   /** Manual transport is local and paused; work-area playback never wraps an edit. */
+  const layerFocusDocument = editor.getDocumentSignal()
+  const layerIsolation = useLayerIsolation(scene, layerFocusDocument)
+  const isolatedSelectedIds = useMemo(() => layerIsolation.scope
+    ? new Set(Array.from(selectedLayerIds).filter(id => layerIsolation.scope!.has(id))) : selectedLayerIds,
+  [layerIsolation.scope, selectedLayerIds])
+  const isolatedPrimaryId = selectedLayerId && (!layerIsolation.scope || layerIsolation.scope.has(selectedLayerId)) ? selectedLayerId : null
+  const [timelineReveal, setTimelineReveal] = useState<TimelineRevealRequest | null>(null)
+  useEffect(() => { setTimelineReveal(null) }, [selectedLayerId, selectedLayerIds, selectedTlId, layerFocusDocument])
+  /** Explicit navigation only. Restore/select the existing dock panel without
+   * rewriting source membership, changing the playhead or stealing selection. */
+  const showSelectionInTimeline = useCallback(() => {
+    if (!selectedTlId) return
+    const ids = Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : [])
+    if (!ids.length) return
+    setTimelineReveal(previous => ({ nonce: (previous?.nonce ?? 0) + 1, timelineId: selectedTlId, layerIds: ids, primaryId: selectedLayerId }))
+    dock.dispatchRestorePanel('timeline')
+  }, [selectedTlId, selectedLayerId, selectedLayerIds, dock.dispatchRestorePanel])
   const seekAuthoring = useCallback((ms: number) => { handlePause(); handleSeek(ms) }, [handlePause, handleSeek])
   const timelineAuthoring = useTimelineAuthoring({ scene, editor, timelineId: selectedTlId,
     selectedId: selectedLayerId, selectedIds: selectedLayerIds, selectedKeyIds: selectedKfIds,
@@ -1516,6 +1536,9 @@ export default function BuilderPage() {
                     selectedId={selectedLayerId}
                     selectedIds={selectedLayerIds}
                     onSelect={selectLayer}
+                    onShowInTimeline={showSelectionInTimeline}
+                    onIsolateSelection={() => layerIsolation.enter(Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : []))}
+                    onExitIsolation={layerIsolation.exit} isolationActive={layerIsolation.active}
                     onAdd={addLayer}
                     activeAddKind={shapeCreation.kind}
                     getDocumentSignal={editor.getDocumentSignal}
@@ -1587,8 +1610,8 @@ export default function BuilderPage() {
                       bulkToggleFlag: (ids, field, nextValue) => {
                         dispatchCommand(makeBulkToggleFlagCmd(ids, field, nextValue))
                       },
-                      isolate: (ids) => dispatchCommand(makeIsolateLayersCmd(ids)),
-                      showAll: () => dispatchCommand(makeShowAllLayersCmd()),
+                      isolate: (ids) => layerIsolation.enter(ids),
+                      showAll: () => layerIsolation.active ? layerIsolation.exit() : dispatchCommand(makeShowAllLayersCmd()),
                     }}
                     onFreezeSelection={() => {
                       const ids = Array.from(selectedLayerIds.size > 0
@@ -1617,16 +1640,18 @@ export default function BuilderPage() {
               {
                 id: 'canvas', title: 'Canvas',
                 render: () => (
-                  <SceneCanvas
+                  <div className="h-full min-h-0 flex flex-col">
+                    <LayerIsolationBar count={layerIsolation.roots.length} onExit={layerIsolation.exit} />
+                    <div className="flex-1 min-h-0"><SceneCanvas
                     arrayAuthoring={arrayAuthoring}
                     shapePlacementLayer={shapeCreation.template}
                     onShapePlacementComplete={shapeCreation.complete}
-                    scene={scene}
+                    scene={scene} displayScene={layerIsolation.scene}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
-                    selectedLayerId={selectedLayerId}
-                    selectedLayerIds={selectedLayerIds}
+                    selectedLayerId={isolatedPrimaryId}
+                    selectedLayerIds={isolatedSelectedIds}
                     assets={assetCache}
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
@@ -1782,7 +1807,7 @@ export default function BuilderPage() {
                         toast.success(`Baked "${repeater.name}" — ${repeater.repeater.count} layers`)
                       },
                     }}
-                  />
+                  /></div></div>
                 ),
               },
               {
@@ -1840,6 +1865,7 @@ export default function BuilderPage() {
                     <TimelinePanel
                       scene={scene}
                       authoring={timelineAuthoring}
+                      revealRequest={timelineReveal}
                       editor={editor}
                       settings={timelineSettings}
                       onSettingsChange={setTimelineSettings}

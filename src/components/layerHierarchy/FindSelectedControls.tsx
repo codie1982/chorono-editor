@@ -3,7 +3,7 @@
 /** Explicit Find action and reversible filter-exception feedback. Does not move
  * keyboard focus or alter selection/source; the panel owns rows and scrolling. */
 export function FindSelectedButton({ disabled, onFind }: { disabled: boolean; onFind: () => void }) {
-  return <button disabled={disabled} onClick={onFind} title="Show and scroll to selected layer paths without changing source or filters"
+  return <button disabled={disabled} onClick={() => onFind()} title="Show and scroll to selected layer paths without changing source or filters"
     className="shrink-0 rounded px-2 py-1 text-[10px] bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">Find selected</button>
 }
 
