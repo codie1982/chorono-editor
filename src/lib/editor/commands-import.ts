@@ -31,6 +31,7 @@ export function makeImportAssetsCmd(
 
   return {
     label: cmdLabel,
+    authoring: { mode: 'import' },
     execute(scene: ChronoScene): ChronoScene {
       const existingAssetIds = new Set(scene.assets.map(a => a.id))
       const existingLayerIds = new Set(scene.layers.map(l => l.id))
@@ -77,6 +78,7 @@ export function makeImportDocumentCmd(params: {
 
   return {
     label,
+    authoring: { mode: 'import' },
     execute(scene: ChronoScene): ChronoScene {
       const existingAssetIds = new Set(scene.assets.map(a => a.id))
       const existingLayerIds = new Set(scene.layers.map(l => l.id))

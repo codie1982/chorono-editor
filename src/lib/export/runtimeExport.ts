@@ -7,6 +7,7 @@ import type {
   Asset, Trigger, Binding, SceneParameter,
   StateMachineDefinition, ChronoSMState,
 } from '../types'
+import { withoutAuthoring } from '../editor/authoring/AuthoringConverter'
 import { bakeTrack } from '../animation/baking/bake'
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -64,6 +65,7 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
     bakeFps = 60,
     bakeTolerance = 0.005,
   } = opts
+  scene = withoutAuthoring(scene)
   const frameRate = Math.max(1, scene.composition.frameRate)
 
   return {

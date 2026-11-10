@@ -1,7 +1,7 @@
 # Choose a native tool
 
 Use the tool names actually advertised by the connected MCP client. In MCP
-2.0.0 the default `standard` catalog exposes 40 common tools; older clients or
+2.1.0 the default `standard` catalog exposes 40 common tools; older clients or
 the `legacy` profile may advertise the original names. The `tools` array in
 `get_capabilities({})` remains the original compatibility inventory. For the
 current discovery surface, use `get_capabilities({summary:true})` and read
@@ -69,3 +69,5 @@ Switching to another spelling is not an identical retry. Catalog/profile changes
 require reconnecting the MCP client; ask the operator to select the legacy
 profile only when the workflow needs its direct tool list. Normal authoring does
 not require changing local configuration.
+
+`get_scene` preserves optional source attribution in `scene.authoring`; `get_layer` adds descriptive self/subtree contribution information. Actor metadata is not a write permission. Missing provenance stays unknown.

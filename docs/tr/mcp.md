@@ -1,6 +1,6 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.0.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
 Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
@@ -148,7 +148,7 @@ kontrolü, broker kabulünden sonra araya giren elle düzenlemeyi de korur.
 Native source komutları, script, project load, import, normalize ve undo/redo
 bu kapsamdadır. Okuma, runtime/playback, preview/export ve dosyaya kaydetme source
 yazmaz; token gerekmez. Commit yanıtı sınırlı `changeSummary` döndürür;
-`truncated:true` tam liste olmadığını belirtir. Provenance E−1.2'de ayrı iştir.
+`truncated:true` tam liste olmadığını belirtir. E−1.2 attribution artık uygulanmıştır; aşağıdaki kaynak kökeni sözleşmesine bakın.
 
 `normalize_audio_clip` native batch eylemi değildir (`callableInBatch:false`);
 legacy katalogda doğrudan çağrılır. Script API eşdeğer peak ölçümü sağlamaz.
@@ -229,3 +229,21 @@ Gerçek bağlı editörde oluşturma, çoklu timeline, script izolasyonu, PNG, m
 `get_audio_state` canlı kaynakları, decode hatalarını ve metreleri okur. `render_audio_preview` en fazla 10 saniyelik gerçek WAV üretir; `export_audio` en fazla 120 saniye/24 MB stereo WAV kaydeder. Kazanç, fade, otomasyon, pan ve master ayarı aynı değerlendirme hattını kullanır. State machine sahnelerinde deterministik çıktı için `timelineIds` açık verilmelidir. PNG ve frame değerleri ses doğrulaması değildir. Runtime JSON veya görüntü dizisi karıştırılmış ses içermez; WAV ayrıca üretilmelidir.
 
 `normalize_audio_clip` kırpılmış kaynak aralığının peak seviyesini ölçerek statik kazancı ayarlar (varsayılan −1 dBFS). Kazanç otomasyonu varsa önce kaldırılmalıdır. `set_audio_master` master dB/mute ayarını projeye kaydeder. Dışa aktarım uyarıları sessiz aralığı, kazanç sınırını veya clipping'i bildirir.
+
+## Kaynak kökeni — MCP 2.1.0
+
+Optional `scene.authoring` version 1; ilk oluşturanı, son yerel değiştireni ve
+alan yazanlarını ayırır. Browser commit insan, MCP/planner commit ajan, merge
+import içeriği import olarak kaydedilir. Eksik/eski/elenmiş bilgi `unknown`
+olur; Hermès/ajan parametresinin olmaması insan kökeni kanıtlamaz. `get_layer`
+kendi katkısını ve group/spline için alt ağaç katkısını ayrı bildirir. Tam kayıtlar
+`get_scene` içindedir; adres ve alan anahtarları JSON string tuple biçimindedir.
+Kopyanın yeni oluşturucusu ile devraldığı içerik kökeni ayrıdır.
+
+Yalnız commit damgalanır. Undo/redo ve tam proje açma özgün metadata'yı geri
+getirir; portable save saklar, iki runtime exporter kök ledger'ı açıkça çıkarır.
+Kullanıcıya ait authoring/hermes animasyon verileri korunur. Kayıt sınırlıdır;
+`truncated:true` eksik kapsamı bildirir. Bu bilgi kimlik doğrulama, sahiplik veya
+istenmeyen değişiklik izni değildir. Genel key upsert semantiği değişmedi.
+2.1.0 için editör/STDIO birlikte yeniden başlatılıp bağlanır; source argümanları
+2.0.0 ile aynıdır. [Bakım sözleşmesi](../../src/lib/editor/authoring/README.md).

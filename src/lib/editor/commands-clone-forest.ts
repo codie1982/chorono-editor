@@ -84,7 +84,7 @@ export function prepareCloneForest(base: ChronoScene, options: CloneForestOption
     const createdKeyIds = new Set(Array.from(additions.values()).flatMap(tracks => tracks.flatMap(track => track.keyframes.map(key => key.id))))
     const label = `${mode === 'instance' ? 'Instance' : 'Copy'} ${roots.length} source roots (${count} ${count === 1 ? 'occurrence' : 'occurrences'})`
     if (base.triggers.length || base.stateMachines?.length) diagnostics.push('Scene triggers and state-machine graphs stay external; this operation copies layers and their selected timeline tracks.')
-    const command: CloneForestCommand = { label, diagnostics: Array.from(new Set(diagnostics)),
+    const command: CloneForestCommand = { label, authoring: { copies: occurrences.flatMap(item => item.authoringCopies) }, diagnostics: Array.from(new Set(diagnostics)),
       idMaps: occurrences.map(occurrence => ({ ...occurrence.idMap })), sourceRootIds: roots.map(root => root.id), layerMetadata: metadata,
       result: { label, createdLayerIds: Array.from(createdIds), createdTrackTargets: Array.from(createdTargets), suggestedSelection: selection },
       execute: scene => {

@@ -9,7 +9,7 @@ export const SOURCE_FAILURES = {
   SOURCE_DOCUMENT_CHANGED: 'The editor document was replaced. Read get_scene again before editing.',
   SOURCE_EDITOR_BUSY: 'Editor drag transaction is active; read get_scene after it finishes.',
   SOURCE_ACCESS_CAPACITY: 'Too many active client reads or plans. Close idle connections or wait for expiry.',
-  SOURCE_PROTOCOL_REQUIRED: 'This bridge requires MCP protocol 2.0.0. Rebuild/restart the editor and reconnect the MCP client.',
+  SOURCE_PROTOCOL_REQUIRED: 'This bridge requires MCP protocol 2.1.0. Rebuild/restart the editor and reconnect the MCP client.',
 } as const
 
 export type SourceFailureCode = keyof typeof SOURCE_FAILURES

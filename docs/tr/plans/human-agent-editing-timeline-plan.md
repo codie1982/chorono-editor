@@ -6,7 +6,7 @@ legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
 editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
 [Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
 [istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
-Sırada **E−1.2 provenance**, ardından aşağıdaki kalan işler var. Glama'nın eski
+**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** Sırada **E−1.3 sahne organizasyonu**, ardından aşağıdaki kalan işler var. Glama'nın eski
 dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
@@ -46,7 +46,7 @@ isimler/sözleşmeler capability ve şema yayımlanana kadar çağrılabilir API
 | Sahneyi okuma | E−1.1 tamamlandı: her source mutasyonunda `get_scene` revision + tek kullanımlık readToken zorunlu. | E−1.2 aktör/semantik çakışma açıklığı ayrı devam eder. |
 | Eşzamanlı düzenleme | Aktif drag engeli, hazırlık başı/commit revision kontrolü, atomic batch, script snapshot ve stale plan reddi vardır. | Bu korumaları kullan; ikinci bir sahne/undo motoru kurma. |
 | Patch | `Layer.set` ve `patch_object` shallow replacement yapar. `Layer.patch` nested object merge yapar; array'ler yine değişir. | İstenen leaf/domain öğesini değiştir; mevcut semantiği sessizce değiştirmeden güvenli native deep patch ve kimlikle güncelleme ekle. |
-| Yazarlık | Layer/key/property için insan–ajan kökeni veya son değiştiren kaydı yoktur. MCP `clientName` tek başına doğrulanmış aktör kimliği değildir. | Küçük, sürümlü authoring metadata; eksik kayıt `unknown` kabul edilir. |
+| Yazarlık | E−1.2 tamamlandı: optional `scene.authoring` v1; ayrı creation/last-writer/field/copy kökeni, mixed/unknown ve atomik history. | Etiket güvenlik/sahiplik kanıtı değildir; E−1.3 organizasyon ve E−1.4 key araçları ayrı devam eder. |
 | Key güncelleme | Script/native upsert yakın zamandaki key'i yeni ID ile değiştirebilir. Snapshot komutu authored layer değerini kullanır; varsayılan altı numeric kanal ekler. | Var olan key'in kimliğini ve belirtilmeyen easing/tangent/modifier alanlarını koru; interpolated source değerini örnekle. |
 | Set Key / kısayol | Küçük Keyframe menüsü vardır. K tuşu gerçekte sonraki key'e gider; bazı açıklamalar K ile key eklemeyi söyler. | Büyük, doğrudan Set Key eylemi; tek shortcut registry ve uyumlu açıklamalar. |
 | Toplu key | Çoklu seçim, sürükleme, easing, slide, stagger, scale ve spreadsheet vardır. Bazı yollar sınırları farklı uygular; çoklu snapshot ayrı undo'lar oluşturabilir. | Ortak zaman/çakışma politikası; tek transaction/undo; gruplu hareketin aralıklarını koruma. |
@@ -79,7 +79,7 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | E−1.0 — tamamlandı | Skill ve mevcut kabiliyetlerin açıklığı | Her takip turunda taze okuma kuralı; eski sahneyi yeniden üretmeme; QuickJS ile doğrulanmış sine/controller/bake örneği. Runtime enforcement değildir. |
 | E−1.Q — tamamlandı | MCP araç kalitesi ve uyumlu sadeleştirme | Typed şema/açıklama doğruluğu, standard 40 / legacy 77 katalog, dokuz uyumlu alias, hafif/tek-şema keşfi ve mevcut ortak güvenlik kontrolleri. [Gerçek kabul](mcp-tool-quality-plan.md). |
 | E−1.1 — tamamlandı | Güvenli MCP düzenleme sözleşmesi | Okunmamış/stale source mutasyonu reddedilir; taze revision ile odaklı değişiklik tek undo olur; retry ve plan kimlikleri korunur. |
-| E−1.2 | İnsan–ajan kökeni ve çakışma açıklığı | Creation ve last-writer ayrıdır; mixed/unknown durumları, undo/redo ve portable save/load korunur; runtime çıktısı editör metadata'sını taşımaz. |
+| E−1.2 — tamamlandı | İnsan–ajan kökeni ve çakışma açıklığı | Creation ve last-writer ayrıdır; mixed/unknown durumları, undo/redo ve portable save/load korunur; runtime çıktısı editör metadata'sını taşımaz. |
 | E−1.3 | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
 | E−1.4 | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
 | E−1.5 | Prosedürel eğri ve expression güvenilirliği | Parser/UI hataları düzelir; controller eğrisi görünür; örnekleme ve bake açık doğruluk toleransıyla çalışır. |
@@ -127,10 +127,10 @@ diğer nesneleri ve key verilerini korudu. Plan ID'leri, batch tek undo/redo,
 portable save/load ve token'sız JSON doğrulandı. Tarball içindeki güncel skill
 kurulumu ayrıca doğrulandı. [Ana kayıt](../production-2d-roadmap.md#1253-e11-zorunlu-okuma-ve-revision-teslimi--10-kasım-2026).
 
-### E−1.2 — Hermes bir animasyon parametresi değil, authoring aktörüdür
+### E−1.2 — Tamamlandı: Hermes bir animasyon parametresi değil, authoring aktörüdür
 
 `hermes: true` olmayan her şeyi insan yapımı saymak doğru değildir: eski/import
-verisi veya farklı bir ajan da olabilir. Önerilen modelde aktör türü
+verisi veya farklı bir ajan da olabilir. Uygulanan modelde aktör türü
 human/agent/import/unknown, isteğe bağlı agent adı ve request/transaction kimliği
 ayrıdır. “Hermes” agent adıdır; kullanıcıya ait animation parameter namespace'i
 bu amaçla kullanılmaz. Bu bir güvenlik kanıtı veya içerik mülkiyeti iddiası değildir.
@@ -145,10 +145,10 @@ bu amaçla kullanılmaz. Bu bir güvenlik kanıtı veya içerik mülkiyeti iddia
 - Küçük, sürümlü, seyrek bir son-yazan ledger'ı kullanılır; sınırsız işlem günlüğü,
   dense frame buffer veya kopya sahne tutulmaz. Yalnız commit edilen source
   değişiklikleri damgalanır; preview/drag'in her karesi/evaluator çıktısı değil.
-- Önerilen owner `src/lib/editor/authoring/`: aktör/adres/change-set sözleşmeleri,
+- Owner `src/lib/editor/authoring/`: aktör/adres/change-set sözleşmeleri,
   attribution ve çatışma politikası. React paneli, MCP transportu ve JSON
   converter bu sözleşmelere adapter olur; domain browser handle tutmaz.
-- Root'ta önerilen optional versioned authoring bölümü ayrı şema taşır; mevcut
+- Root'ta optional versioned `authoring` bölümü ayrı şema taşır; mevcut
   scene formatı/importlar bozulmaz. Eski kayıtlar `unknown` olarak açılır.
   Metadata sahneyle atomik undo/redo/save/load olur; history dışında hook map'inde
   tutulmaz. Undo özgün attribution'ı geri getirir; undo çağrısının audit'i ayrıdır.
@@ -162,6 +162,24 @@ bu amaçla kullanılmaz. Bu bir güvenlik kanıtı veya içerik mülkiyeti iddia
 Kabul: insanın değiştirdiği ajan key'inin yalnız value'sunu güncelleme; easing ve
 ID'nin korunması; insan child'ı olan agent group; legacy unknown; clone/import;
 tek undo/redo, portable round-trip ve iki runtime exporter'da metadata yokluğu.
+
+Uygulama: [bakım sözleşmesi](../../../src/lib/editor/authoring/README.md).
+Native command ve gesture commit tek kez damgalanır; preview/cancel/evaluator
+ve undo/redo yeni köken yazmaz. MCP/private context ve AI planner agent;
+browser edit human; merge import import; eksik/eski/elenmiş bilgi unknown olur.
+Layer/track/key/spline kimlikleri ayrı; root ledger kullanıcı animasyon
+parametrelerine karışmaz. Kayıtlar 8.000 entity / 16.000 field / 2 Mi karakter,
+private copy hints 8.000 ile sınırlıdır; eksik kapsam `truncated` ve unknown'dur.
+Tam proje load metadata'yı aynen korur; foreign merge özgün aktör iddiası yapmaz.
+Genel key upsert'in eski kimlik/çakışma semantiği değişmedi; bu E−1.4'tür.
+
+335 dosya / 2.692 test, TypeScript/MCP/production build, 16 CLI testi ve gerçek
+paket skill kurulumu geçti. İzole Chrome/STDIO'da elle 09:05, alan düzeyinde
+human/agent ayrımı, stale ret, tek undo/redo, script plan-copy, portable yeniden
+açma ve gerçek runtime artefaktında metadata yokluğu doğrulandı. Ayrıntılı kayıt
+ana yol haritası §12.54'tedir. Sırada E−1.3; export/ikinci optimizasyon sona
+alınmış sırasını korur.
+
 
 ### E−1.3 — Kompleks sahnede insanın devam edebilmesi
 

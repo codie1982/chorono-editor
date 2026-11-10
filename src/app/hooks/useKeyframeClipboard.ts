@@ -65,6 +65,7 @@ export function useKeyframeClipboard(params: Params): ClipboardReturn {
       const newId = nextKfId()
       newIds.add(newId)
       insertions.push({
+        copiedFrom: ['key', entry.timelineId, entry.target, entry.kf.id],
         timelineId: destTimelineId,
         target:     entry.target,
         kf: { ...entry.kf, id: newId, timeMs: currentTimeMs + entry.relativeMs },

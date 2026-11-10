@@ -1,3 +1,6 @@
+import { AuthoringHintCollector } from '../editor/authoring/AuthoringHints'
+import { commandAuthoringHints } from '../editor/authoring/AuthoringCommand'
+import type { AuthoringHints } from '../types/authoring'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { AssetElementMap } from '../renderer'
 import type { ChronoScene } from '../types'
@@ -87,11 +90,12 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
   if (isSourceMutation(method)) ensureWritable()
   return assetSourcePool.withAssets(before.assets, async () => {
     const snapshot = () => ({ scene: before, revision, documentEpoch, transactionActive, selectedTimelineId: host.selectedTimelineId, currentTimeMs: host.currentTimeMs })
-    const commit = (next: ChronoScene, label: string) => {
+    const commit = (next: ChronoScene, label: string, hints: AuthoringHints = {}) => {
       ensureWritable()
       if (editor.getRevision() !== revision) throw new Error('Scene changed while preparing the operation; read and retry')
       assertScene(next)
-      editor.dispatchCommand({ label, execute: () => next, undo: () => before })
+      editor.dispatchCommand({ label, execute: () => next, undo: () => before, authoring: { ...hints,
+        mode: job.sourceAuthorization?.sourceMode ?? hints.mode, stamp: job.sourceAuthorization?.authoring } })
       if (!next.timelines.some(t => t.id === host.selectedTimelineId)) host.selectTimeline(next.timelines[0]?.id ?? '')
       return { revision: editor.getRevision(), ...summarize(next), changeSummary: summarizeSourceChanges(before, next),
         addedLayerIds: next.layers.filter(l => !before.layers.some(prev => prev.id === l.id)).map(l => l.id) }
@@ -101,7 +105,7 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
       const scene=await portableSceneInScope(before,scope,signal);assertScene(scene)
       return {...snapshot(),scene}
     }
-    if (method === 'apply_scene') return commit(args.scene, args.label ?? 'MCP change')
+    if (method === 'apply_scene') return commit(args.scene, args.label ?? 'MCP change', args.authoringHints ?? {})
     await validateToolCall(requestedMethod, args)
     if (method === 'undo' || method === 'redo') {
       ensureWritable(); editor[method](); const next = editor.getScene()
@@ -207,6 +211,7 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     ensureWritable()
     const calls = method === 'batch_actions' ? args.actions : [{ name: method, arguments: args }]
     let working = before
+    const authoring = new AuthoringHintCollector()
     for (const call of calls) {
       await validateToolCall(call.name, call.arguments, { withinBatch: true })
       const implementation = implementationToolName(call.name)
@@ -222,9 +227,9 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
       }
       const command = action.toCommand(nativeToolArguments(call.arguments), working)
       if (command?.label.startsWith('AI ERROR')) throw new Error(command.label)
-      if (command) working = command.execute(working)
+      if (command) { working = command.execute(working); authoring.add(commandAuthoringHints(command)) }
       assertScene(working)
     }
-    return commit(working, method === 'batch_actions' ? 'MCP batch' : `MCP ${method}`)
+    return commit(working, method === 'batch_actions' ? 'MCP batch' : `MCP ${method}`, authoring.hints)
   })
 }

@@ -9,6 +9,7 @@ import {
 import type { CloneMetadata } from '@/lib/clone/CloneTypes'
 import { isCloneArrayCommand } from '@/lib/editor/commands-clone'
 import { AssetSourceOwner } from '@/lib/asset/sources'
+import { executeAuthoredCommand, assertAuthoringData } from '@/lib/editor/authoring'
 import { EditorDocumentLifetime } from '@/lib/editor/lifecycle/EditorDocumentLifetime'
 
 // ── Transaction ref ────────────────────────────────────────────────────────────
@@ -60,6 +61,9 @@ export interface EditorStateReturn {
  * Owns original Blob URL leases for present/past/future and the active transaction
  * base. Replacing history acquires new source sets before releasing dropped ones;
  * source handles never enter scene/history JSON. Decoded media has separate owners.
+ * Authoring attribution is stamped once on command/gesture commit, stored in
+ * the same immutable history snapshot. Preview/cancel/evaluation do not stamp;
+ * undo/redo restores the original attribution.
  * Layout setup/cleanup supports StrictMode replay through the pool's deferred
  * final release. Reset discards both history and an in-progress transaction.
  */
@@ -112,7 +116,7 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
 
   // ── Normal command dispatch ────────────────────────────────────────────────
   const dispatchCommand = useCallback((cmd: EditorCommand) => {
-    updateHistory((h) => pushHistory(h, cmd.execute(h.present)))
+    updateHistory((h) => pushHistory(h, executeAuthoredCommand(cmd, h.present)))
     // BL-59 — Clone/Array commands carry per-clone metadata. Merge it
     // into the editor-state map so "Select all instances" works.
     if (isCloneArrayCommand(cmd)) {
@@ -138,7 +142,7 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
     if (!txRef.current) { dispatchCommand(cmd); return }
     const base = txRef.current.baseScene
     txRef.current = null
-    updateHistory((h) => pushHistory({ ...h, present: base }, cmd.execute(base)))
+    updateHistory((h) => pushHistory({ ...h, present: base }, executeAuthoredCommand(cmd, base)))
     // Clone-drag commits carry per-clone metadata — merge it so instance
     // tracking ("Select all instances") works for drag-created clones too.
     if (isCloneArrayCommand(cmd)) {
@@ -162,6 +166,7 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
 
   // ── Hard reset (used by "Clear" — bypasses undo on purpose) ──────────────
   const resetScene = useCallback((next: ChronoScene) => {
+    assertAuthoringData(next.authoring)
     documentRef.current!.replace()
     txRef.current = null
     updateHistory(() => initHistory(next))

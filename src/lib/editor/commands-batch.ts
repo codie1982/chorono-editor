@@ -15,6 +15,8 @@
 // This matches the natural mental model: do A, then B → undo B first, then A.
 
 import type { ChronoScene } from '../types'
+import { AuthoringHintCollector } from './authoring/AuthoringHints'
+import { commandAuthoringHints } from './authoring/AuthoringCommand'
 import type { EditorCommand } from './commands-keyframe'
 
 export function makeBatchCmd(label: string, commands: EditorCommand[]): EditorCommand {
@@ -30,6 +32,11 @@ export function makeBatchCmd(label: string, commands: EditorCommand[]): EditorCo
 
   return {
     label,
+    get authoring() {
+      const collector = new AuthoringHintCollector()
+      commands.forEach(command => collector.add(commandAuthoringHints(command)))
+      return { ...collector.hints, ...(commands.every(command => command.authoring?.mode === 'import') ? { mode: 'import' as const } : {}) }
+    },
     execute(scene: ChronoScene): ChronoScene {
       return commands.reduce((s, cmd) => cmd.execute(s), scene)
     },

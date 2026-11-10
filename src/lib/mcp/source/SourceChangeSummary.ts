@@ -111,6 +111,6 @@ export function summarizeSourceChanges(before: ChronoScene, after: ChronoScene):
     for (const track of old.tracks) removedKeys(old.id, track.target, track.keyframes)
   }
   if (before.layers.some((layer, index) => layer.id !== after.layers[index]?.id)) append(result.changedPaths, 'layers.$order')
-  for (const key of Array.from(new Set([...Object.keys(before), ...Object.keys(after)])) as (keyof ChronoScene)[]) if (key !== 'layers' && key !== 'timelines') compare(before[key], after[key], key)
+  for (const key of Array.from(new Set([...Object.keys(before), ...Object.keys(after)])) as (keyof ChronoScene)[]) if (key !== 'layers' && key !== 'timelines' && key !== 'authoring') compare(before[key], after[key], key)
   return result
 }

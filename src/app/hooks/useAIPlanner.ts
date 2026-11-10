@@ -6,6 +6,7 @@
 // Scene mutations go through the existing EditorCommand + undo system, so
 // Cmd+Z reverses any AI change exactly like a manual edit.
 
+import { withAuthoringStamp } from '@/lib/editor/authoring'
 import { useState, useCallback } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
@@ -103,7 +104,9 @@ export function useAIPlanner({
       const exec = isCheck
         ? { commands: [], appliedLabels: [] as string[], errors: [] as string[] }
         : buildCommandsFromToolCalls(data.toolCalls ?? [], scene)
-      if (!isCheck) for (const cmd of exec.commands) dispatchCommand(cmd)
+      if (!isCheck) for (const cmd of exec.commands) dispatchCommand(withAuthoringStamp(cmd, {
+        actor: { kind: 'agent', name: 'Chorono planner' }, transactionId: globalThis.crypto?.randomUUID?.(),
+      }))
 
       setMessages((m) => {
         const next = [...m]

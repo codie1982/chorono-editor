@@ -9,7 +9,10 @@ export const SOURCE_EDITING_CAPABILITIES = Object.freeze({ version: 1, required:
   fields: ['expectedRevision', 'readToken'], tokenTtlMs: READ_ACCESS_TTL_MS, oneUse: true,
   scope: ['clientConnection', 'editorSession', 'documentEpoch', 'revision'],
   batchAuthorization: 'outer-call', dryRunAuthorization: 'returns-plan-bound-readToken',
-  legacyMutationBypass: false })
+  legacyMutationBypass: false, authoring: { version: 1, sceneField: 'authoring',
+    actors: ['human', 'agent', 'import', 'unknown'], missing: 'unknown',
+    creationSeparateFromLastWriter: true, undoRedo: 'snapshot-restore', runtime: 'omitted',
+    addressEncoding: 'JSON string tuples', recordLimit: 8000, fieldLimit: 16000, charLimit: 2097152 } })
 
 const SOURCE_EXTRAS = new Set(['run_script', 'apply_script_plan', 'batch_actions', 'load_project',
   'import_asset', 'normalize_audio_clip', 'undo', 'redo', 'apply_scene'])

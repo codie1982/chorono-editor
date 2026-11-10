@@ -1,6 +1,6 @@
 # Chorono MCP catalog and compatibility
 
-Chorono MCP 2.0.0 controls the connected editor through STDIO. The default
+Chorono MCP 2.1.0 controls the connected editor through STDIO. The default
 `standard` catalog exposes 40 common tools. All 77 original tool names remain
 callable with their existing domain payload and default semantics. Source mutations now require the authorization envelope described below. Tool
 discovery and call resolution are separate; this update does not replace the
@@ -151,8 +151,8 @@ Failures include structured `code`, `message` and `recovery`: missing/used/expir
 read, revision conflict, changed document, busy editor or disconnected client.
 Committed edits return a bounded `changeSummary` of added/removed/reparented
 layers and changed paths/keys; `truncated:true` marks an incomplete summary.
-This protects against stale writes; authoring provenance and semantic conflict
-choices remain the later E−1.2 work. Existing shallow patch/key semantics still
+This protects against stale writes; authoring provenance is now available as described below; semantic conflict
+choices still require interpreting the user’s requested scope. Existing shallow patch/key semantics still
 apply; preserve unrelated nested settings and animation metadata explicitly.
 
 ## Verification scope
@@ -162,3 +162,23 @@ shared dispatch behavior. Corrected descriptions do not establish a new Glama
 score; a new external evaluation is needed. See the
 [implementation plan](../tr/plans/mcp-tool-quality-plan.md) for the baseline and
 acceptance boundaries.
+
+## Source attribution in 2.1.0
+
+Optional `scene.authoring` version 1 persists creation, latest entity writer and
+sparse field writers separately. Browser commits are human, MCP/planner commits
+agent, merge imports import; absent legacy/evicted records mean unknown. A human
+changing an agent object does not take authorship of every child or field.
+`get_layer` includes self and group/spline subtree contribution descriptions;
+`get_scene` contains the exact JSON-tuple address/field records. Copy creation
+and inherited content origins differ. This metadata is descriptive, not identity
+authentication or permission to override another edit.
+
+Only committed changes stamp attribution. Undo/redo and complete project load
+restore exact saved attribution. Portable save preserves it; both runtime
+exporters explicitly omit the root ledger. User animation parameters named
+authoring/hermes are unchanged. No public actor setter or new animation flag
+is added. The ledger is bounded and reports `truncated` rather than inventing
+an actor for missing information. General key upsert semantics remain unchanged.
+Rebuild/restart editor and STDIO together; source arguments remain compatible
+with 2.0.0. [Maintainer contract and bounds](../../src/lib/editor/authoring/README.md).

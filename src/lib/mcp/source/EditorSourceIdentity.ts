@@ -1,7 +1,8 @@
+import type { AuthoringStamp } from '../../types/authoring'
 import { SourceAccessError } from './SourceAccessError'
 
 const identities = new WeakMap<AbortSignal, string>()
-export interface SourceAuthorization { readonly documentEpoch: string; readonly expectedRevision: number }
+export interface SourceAuthorization { readonly documentEpoch: string; readonly expectedRevision: number; readonly authoring: AuthoringStamp; readonly sourceMode?: 'restore' | 'import' }
 
 /** Reuse EditorDocumentLifetime's runtime identity, independent of scene ids or
  * serialized content. Reset/remount changes its signal; ordinary edits/undo do
@@ -19,6 +20,7 @@ export function editorDocumentEpoch(editor: { getDocumentSignal(): AbortSignal }
 export function assertEditorSourceAuthorization(authorization: SourceAuthorization | undefined,
   current: { documentEpoch: string; revision: number; transactionActive: boolean }): void {
   if (!authorization) throw new SourceAccessError('SOURCE_READ_REQUIRED')
+  if (authorization.authoring?.actor.kind !== 'agent' || !authorization.authoring.transactionId) throw new SourceAccessError('SOURCE_PROTOCOL_REQUIRED')
   if (current.transactionActive) throw new SourceAccessError('SOURCE_EDITOR_BUSY')
   if (authorization.documentEpoch !== current.documentEpoch) throw new SourceAccessError('SOURCE_DOCUMENT_CHANGED')
   if (authorization.expectedRevision !== current.revision) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')

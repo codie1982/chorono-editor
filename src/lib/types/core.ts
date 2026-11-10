@@ -727,6 +727,9 @@ export interface ChronoScene {
   /** Editor-only reference lines. Legacy scenes omit this payload; portable
    * source saves retain it while runtime/raster/vector outputs omit guides. */
   editorGuides?: import('../geometry/guides/SceneGuide').SceneGuideData
+  /** Optional sparse editor attribution. Missing legacy data means unknown;
+   * portable saves/history preserve it, runtime exporters explicitly omit it. */
+  authoring?: import('./authoring').SceneAuthoring
   initialState: Record<string, unknown>
 }
 

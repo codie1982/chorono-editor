@@ -4,6 +4,7 @@
 
 import type { ActionRegistry } from '../ActionRegistry'
 import type { ChronoScene } from '@/lib/types'
+import { describeAuthoring } from '../../editor/authoring/AuthoringQuery'
 import { evaluateTimelines } from '@/lib/evaluator'
 
 interface LayerIdParam { layerId: string }
@@ -72,6 +73,8 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
         `transform: pos=(${t.x},${t.y}) scale=(${t.scaleX},${t.scaleY}) rot=${t.rotationDeg}° anchor=(${t.anchorX},${t.anchorY})`,
         `opacity: ${l.opacity}`,
       ]
+      lines.push(`authoring (self): ${JSON.stringify(describeAuthoring(scene, ['layer', l.id]))}`)
+      if (l.type === 'group' || l.type === 'spline') lines.push(`authoring (subtree): ${JSON.stringify(describeAuthoring(scene, ['layer', l.id], true))}`)
       if (l.size) lines.push(`size: ${l.size.width}×${l.size.height}`)
       if (l.shapeKind || l.shape) lines.push(`shape: ${l.shapeKind ?? l.shape}`)
       if (l.style?.fill) lines.push(`fill: ${JSON.stringify(l.style.fill)}`)

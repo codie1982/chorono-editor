@@ -8,7 +8,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 // QuickJS sandbox; Node orchestrates the actual MCP tools and never evaluates it.
 const [directory, target = 'artifacts/validation/mcp-quality-20261110/after'] = process.argv.slice(2)
 const root = path.resolve(directory ?? ''), output = path.resolve(target)
-if (!/^\/private\/tmp\/chorono-(q|e11)-validation-/.test(root)) throw Error('Isolated source snapshot required')
+if (!/^\/private\/tmp\/chorono-(q|e11|e12)-validation-/.test(root)) throw Error('Isolated source snapshot required')
 const client = new Client({ name: 'chorono-catalog-editor-acceptance', version: '1.0.0' })
 const stamp = Date.now(), report = { passed: false, checks: [] }
 await mkdir(output, { recursive: true })

@@ -41,7 +41,8 @@ async function inspect(profile) {
     }
     const { tools } = await client.listTools(), summary = await call({ summary: true })
     assert.equal(tools.length, profile === 'standard' ? 40 : 77)
-    assert.equal(summary.version, '2.0.0'); assert.equal(summary.sourceEditing.required, true)
+    assert.equal(summary.version, '2.1.0'); assert.equal(summary.sourceEditing.required, true)
+    assert.equal(summary.sourceEditing.authoring.version, 1)
     const sourceDetail = await call({toolName:'create_layer'})
     assert(sourceDetail.tool.inputSchema.required.includes('readToken'))
     assert(sourceDetail.tool.inputSchema.required.includes('expectedRevision'))

@@ -1,3 +1,5 @@
+import { commandAuthoringHints } from '../editor/authoring/AuthoringCommand'
+import { AuthoringHintCollector } from '../editor/authoring/AuthoringHints'
 import { getQuickJS } from 'quickjs-emscripten'
 import type { ChronoScene } from '../types'
 import { createSceneAPI } from '../script/api/SceneAPI'
@@ -116,11 +118,13 @@ export async function runSafeScript(code: string, initial: ChronoScene, timeoutM
   const context = runtime.newContext()
   let scene = structuredClone(initial)
   let commands = 0
+  const authoring = new AuthoringHintCollector()
   let budgetError: Error | undefined
   const logs: string[] = []
   const api = createSceneAPI({ getScene: () => scene, applyCommand: cmd => {
     if (++commands > LIMITS.commands || Date.now() > deadline) throw budgetError = new Error('Script execution budget exceeded')
     scene = cmd.execute(scene)
+    authoring.add(commandAuthoringHints(cmd))
     if (scene.layers.length > LIMITS.layers || scene.timelines.length > LIMITS.timelines) throw new Error('Scene object limit exceeded')
     const keyframes = scene.timelines.reduce((n, tl) => n + tl.tracks.reduce((m, tr) => m + tr.keyframes.length, 0), 0)
     if (keyframes > LIMITS.keyframes) throw budgetError = new Error('Keyframe limit exceeded')
@@ -228,7 +232,7 @@ export async function runSafeScript(code: string, initial: ChronoScene, timeoutM
     if (returned && typeof returned === 'object' && 'then' in returned) throw new Error('Scripts must be synchronous')
     if (budgetError) throw budgetError
     assertScene(scene)
-    return { scene, logs, commandCount: commands }
+    return { scene, logs, commandCount: commands, authoringHints: authoring.hints }
   } finally {
     context.dispose()
     runtime.dispose()

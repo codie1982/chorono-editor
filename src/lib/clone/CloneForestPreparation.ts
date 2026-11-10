@@ -1,3 +1,4 @@
+import type { AuthoringHints } from '../types/authoring'
 import type { ChronoScene, Layer, Track } from '../types'
 import { nextKfId } from '../defaults'
 import { cloneSingleLayer } from './CloneSingleLayer'
@@ -14,6 +15,7 @@ export interface CloneForestOccurrence {
   metadata: Record<string, CloneMetadata>
   tracks: Map<string, Track[]>
   wrapperIds: Record<string, string>
+  authoringCopies: NonNullable<AuthoringHints['copies']>[number][]
 }
 
 /** Allocate one forest's serializable templates once per occurrence. Uses the
@@ -43,11 +45,18 @@ export function prepareCloneOccurrences(scene: ChronoScene, sources: readonly La
     })
     layers = layers.map(layer => remapCloneLayerReferences(layer, idMap))
     const tracks = new Map<string, Track[]>()
+    const authoringCopies: NonNullable<AuthoringHints['copies']>[number][] = []
     for (const timeline of scene.timelines) if (timelineIds.has(timeline.id)) {
       tracks.set(timeline.id, timeline.tracks.flatMap(track => {
         const target = parseTrackTarget(track.target)
-        return target?.entityType === 'layer' && idMap[target.entityId] ? [{ ...structuredClone(track),
-          target: remapTrackTarget(track.target, idMap), keyframes: track.keyframes.map(key => ({ ...structuredClone(key), id: nextKey() })) }] : []
+        if (target?.entityType !== 'layer' || !idMap[target.entityId]) return []
+        const newTarget = remapTrackTarget(track.target, idMap)
+        authoringCopies.push({ from: ['track', timeline.id, track.target], to: ['track', timeline.id, newTarget] })
+        return [{ ...structuredClone(track), target: newTarget, keyframes: track.keyframes.map(key => {
+          const id = nextKey()
+          authoringCopies.push({ from: ['key', timeline.id, track.target, key.id], to: ['key', timeline.id, newTarget, id] })
+          return { ...structuredClone(key), id }
+        }) }]
       }))
     }
     const wrapperIds: Record<string, string> = Object.create(null)
@@ -55,7 +64,7 @@ export function prepareCloneOccurrences(scene: ChronoScene, sources: readonly La
       let candidate = `${idMap[root.id]}_placement`; while (layerIds.has(candidate)) candidate += '_'
       layerIds.add(candidate); wrapperIds[root.id] = candidate
     }
-    result.push({ layers, idMap, metadata, tracks, wrapperIds })
+    result.push({ layers, idMap, metadata, tracks, wrapperIds, authoringCopies })
   }
   return result
 }

@@ -11,6 +11,8 @@ import { nextKfId } from '../defaults'
 export interface EditorCommand {
   /** Human-readable label shown in undo history (e.g. "Move Keyframe") */
   label: string
+  /** Internal commit context; ignored by pure execute/preview and restored by history. */
+  authoring?: import('../types/authoring').AuthoringHints
   execute(scene: ChronoScene): ChronoScene
   undo(scene: ChronoScene): ChronoScene
 }
@@ -115,6 +117,8 @@ export function makeBulkDeleteKfCmd(items: KfDeletion[]): EditorCommand {
 // Each paste operation is a single undo step.
 
 export interface KfInsertion {
+  /** Optional native clipboard lineage; never serialized into the key itself. */
+  copiedFrom?: import('../types/authoring').AuthoringAddress
   timelineId: string
   target: string
   kf: Keyframe
@@ -123,6 +127,7 @@ export interface KfInsertion {
 export function makePasteKfCmd(items: KfInsertion[]): EditorCommand {
   return {
     label: `Paste ${items.length} Keyframes`,
+    authoring: { copies: items.flatMap(item => item.copiedFrom ? [{ from: item.copiedFrom, to: ['key', item.timelineId, item.target, item.kf.id] as const }] : []) },
     execute: (scene) =>
       items.reduce(
         (s, it) => upsertKeyframe(s, it.timelineId, it.target, it.kf),

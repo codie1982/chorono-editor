@@ -78,7 +78,7 @@ For animation work, prefer the connected Chorono MCP tools so the result stays e
 
 - Start with `list_sessions`, `get_capabilities` and `chorono://scripting`. With multiple editors, choose a `sessionId` explicitly.
 - Read `get_scene` before every source mutation. Pass its `revision` as `expectedRevision` and one-use `readToken` (five-minute lifetime). An outer `batch_actions` call authorizes all its sub-actions. Dry-run script plans return a new plan-bound `readToken` and revision for `apply_script_plan`. Reuse exact arguments and a stable `requestId` only for a transport retry; on source conflict read again and adapt to the current work.
-- Preserve unrelated objects and animations. Give new objects meaningful names and use their returned ids in subsequent calls.
+- Preserve unrelated objects and animations. Optional `scene.authoring` v1 separates creation, latest field writers and inherited copy content. Missing records mean unknown; actor labels do not grant overwrite permission. Do not write actor flags into animation parameters or replace the editor-managed ledger. Give new objects meaningful names and use their returned ids in subsequent calls.
 - Use explicit timeline ids for multiple animations. `scene.useTimeline(id)` controls Layer.key; Timeline.key always targets that timeline.
 - Use `run_script` for procedural creation and `batch_actions` for related native changes. Script dry runs return a planId; commit that plan instead of rerunning code.
 - Never execute model-generated code through Node, eval, new Function or the legacy authoring console. MCP scripts run in the isolated QuickJS bridge.

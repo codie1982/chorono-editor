@@ -2,7 +2,7 @@
 
 Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
-tamamlanan E−1.Q ve E−1.1 MCP araç açıklığı/güvenli düzenlemeden sonra E−1.2 provenance ve kalan
+tamamlanan E−1.Q/E−1.1/E−1.2 MCP araç açıklığı/güvenli düzenleme/köken takibinden sonra E−1.3 organizasyon ve kalan
 viewport/ortak araç kabulü → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
@@ -36,7 +36,7 @@ D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, ger�
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
 hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
-E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); sırada E−1.2 provenance ve kalan ortak araç kabulü var.**
+E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); sırada E−1.3 organizasyon ve kalan ortak araç kabulü var.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -53,7 +53,8 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Kalıcı tek onay + kuyruk + gerçek alıcı ve izinli sürüm kontrolü; admin erişimli sade hata listesi/durum takibi. Public yayın ayrı. [D1](diagnostic-sharing.md), [D2 ve kabul sınırları](diagnostic-management.md). |
 | Tamamlandı — E−1.Q | MCP araç kalitesi | [Uygulama ve kabul](plans/mcp-tool-quality-plan.md): standard 40 / legacy 77, dokuz uyumlu alias, typed şema ve açıklamalar. |
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
-| Sıradaki | E−1.2, ardından kalan E−1 ve araç kabulü | Provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
+| Sıradaki | E−1.3, ardından kalan E−1 ve araç kabulü | Organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -2080,3 +2081,41 @@ checkout'a işaret etmesi beklenen `stale` sonucuydu, kullanıcı ayarı değiş
 Yeni sürüme geçişte editör ve MCP birlikte yeniden başlatılıp bağlanmalıdır;
 public yayın yapılmadı. Sırada E−1.2, sonra kalan E−1/araç kabulü; kutulu 3D/Poly
 ve son export/ikinci optimizasyon sırası değişmedi.
+
+### 12.54. E−1.2 insan–ajan kaynak kökeni teslimi — 10 Kasım 2026
+
+[Uygulama ve bakım sözleşmesi](../../src/lib/editor/authoring/README.md).
+MCP 2.1.0, optional root `scene.authoring` version 1 ile ilk oluşturma, son entity
+editi ve alan yazanlarını ayırır. İnsan/agent/import/unknown ayrımı ve mixed
+katkılar vardır; parent, child'ın kökenini sahiplenmez. Hermes yalnız agent
+etiketidir, animasyon parametresi değildir. Kaydı olmayan legacy veri unknown'dur.
+
+Mevcut command/history akışında yalnız commit damgalanır. Preview/cancel/frame
+evaluation metadata üretmez; undo/redo ve tam proje açma özgün attribution'ı
+aynen geri getirir. Native forest/legacy clone, timeline clone ve key clipboard
+ID eşlemeleri content inheritance taşır; merge import kendi kaynağını import
+olarak tanımlar. Native/sandbox/broker aynı bounded hints ve ledger sözleşmesini
+kullanır. Agent context private broker envelope'dadır; display label bir güvenlik
+veya sahiplik kanıtı değildir. Eski bağlamı olmayan bridge reddedilir.
+
+Field/key/spline adresleri stable ID tuple'larıdır. Maksimum 8.000 entity,
+16.000 field exception, 2 Mi encoded karakter; private copy hints 8.000. Tam
+kayıt elenirse fallback unknown ve `truncated:true` olur; source veri silinmez.
+Portable save saklar; iki runtime adapter ledger'ı açıkça çıkarır. Kullanıcıya
+açık authoring/hermes animasyon alanları aynen korunur. Genel key upsert
+semantiği ve ileri semantik conflict/approval politikası bu teslimde değişmedi.
+
+335 test dosyası / 2.692 test; TypeScript, MCP ve production build, 16 CLI testi,
+20 dosyalı tarball'dan skill install/check ve standard 40 / legacy 77 katalog
+kabulü geçti. Gerçek Chrome/STDIO'da saat elle 09:05 yapıldı; human field kaydı
+ve agent creation ayrı kaldı. Stale ret, taze agent renk editi, exact undo/redo,
+script dry-run/plan-copy, portable round-trip ve actual runtime artifact temizliği
+geçti. Kapsamlı smoke; medya/font/SM/PNG/export/timeout/iki istemci yollarını da
+korudu. Kanıt `artifacts/validation/authoring-provenance-20261110/` altındadır.
+
+Ana editör yerine temiz snapshot ve ayrı port 2002 kullanıldı. Doctor'daki global
+client `stale` sonucu ana checkout ayarına işaret etmesindendir; ayar değiştirilmedi.
+MCP 2.1.0 için editör/STDIO birlikte yeniden başlatılır; source argümanları 2.0
+ile aynıdır, scene formatVersion 1.x kaldı. Public yayın yapılmadı. Sırada E−1.3
+organizasyon ve kalan E−1 kabulü; kutulu 3D/Poly ve son export/ikinci genel
+optimizasyon sırası korunur.

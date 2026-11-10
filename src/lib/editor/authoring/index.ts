@@ -1,0 +1,5 @@
+export { executeAuthoredCommand, commandAuthoringHints, withAuthoringStamp } from './AuthoringCommand'
+export { attributeSourceChange, UNKNOWN_WRITER } from './Attribution'
+export { describeAuthoring, fieldAuthoring } from './AuthoringQuery'
+export { assertAuthoringData, AUTHORING_LIMITS } from './AuthoringValidation'
+export { authoringKey } from './SourceEntities'

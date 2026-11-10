@@ -15,6 +15,7 @@ import { LayerHandle, type ApiContext } from './LayerHandle'
 import { StateMachineHandle } from './StateMachineHandle'
 import { TimelineHandle } from './TimelineHandle'
 import { makeAddTimelineCmd, makeDeleteTimelineCmd } from '../../editor/commands-timeline'
+import type { AuthoringHints } from '../../types/authoring'
 import { cloneTimeline } from '../../timeline/cloneTimeline'
 import type { Composition, Timeline } from '../../types'
 import { makeAddLayerCmd, makeDeleteLayerCmd } from '../../editor/commands-layer'
@@ -216,7 +217,9 @@ export function createSceneAPI(
       if (activeTimelineId === id) activeTimelineId = undefined
     },
     cloneTimeline(id, newId) {
-      host.applyCommand(makeAddTimelineCmd(cloneTimeline(host.getScene(), id, newId)))
+      const copies: NonNullable<AuthoringHints['copies']>[number][] = []
+      const timeline = cloneTimeline(host.getScene(), id, newId, copies)
+      host.applyCommand({ ...makeAddTimelineCmd(timeline), authoring: { copies } })
       return new TimelineHandle(newId, ctx)
     },
     add(kind: string): LayerHandle {

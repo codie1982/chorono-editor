@@ -1,4 +1,4 @@
-# Source editing authorization (MCP 2.0.0)
+# Source editing authorization (MCP 2.1.0)
 
 This module owns ephemeral authority to edit authored source. It reuses the
 existing ActionRegistry, editor document lifetime, transaction/undo engine and
@@ -83,8 +83,7 @@ per category, 10,000 inspected values and bounded paths/depth. `truncated` means
 incomplete. Dense geometry arrays are field changes; key records use stable IDs
 when available. Legacy missing/duplicate IDs report truncation rather than
 failing an already-committed operation. Large source reads/plans retain existing
-protocol limits. New actor provenance, semantic conflict choices, deep native
-patching and identity-preserving general key updates remain E−1.2/E−1.4 work.
+protocol limits. Actor provenance is now owned by [editor/authoring](../../editor/authoring/README.md); the broker supplies its agent stamp through the private envelope. Semantic conflict choices, deep native patching and identity-preserving general key updates remain separate work.
 
 Tests in this directory and `../__tests__/sourceAccess.test.ts`,
 `sourceRoute.test.ts` cover identity/expiry, stale writes, manual child/key/path

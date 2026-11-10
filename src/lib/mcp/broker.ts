@@ -1,3 +1,4 @@
+import type { AuthoringHints } from '../types/authoring'
 import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import { getCapabilities, validateToolCall } from './catalog'
 import { runSafeScript } from './sandbox'
@@ -13,7 +14,7 @@ import { summarizeSourceChanges } from './source/SourceChangeSummary'
 
 interface Pending { job: BridgeJob; resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
 interface Session { id: string; token: string; label: string; seenAt: number; queue: Pending[]; pending: Map<string, Pending>; wake?: () => void; tail: Promise<unknown>; results: Map<string, { hash: string; result: Promise<any> }> }
-interface Plan { clientId: string; sessionId: string; documentEpoch: string; revision: number; scene: Snapshot['scene']; expiresAt: number; logs: string[]; commandCount: number }
+interface Plan { clientId: string; sessionId: string; documentEpoch: string; revision: number; scene: Snapshot['scene']; expiresAt: number; logs: string[]; commandCount: number; authoringHints?: AuthoringHints }
 interface BrokerState { sessions: Map<string, Session>; plans: Map<string, Plan>; reads?: ReadAccessRegistry; clients?: ClientConnections }
 const globalBroker = globalThis as typeof globalThis & { __choronoBroker?: BrokerState }
 const state: BrokerState = globalBroker.__choronoBroker ??= { sessions: new Map(), plans: new Map() }
@@ -149,7 +150,9 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
       if (name === 'get_scene') return { ...before, ...reads.issue(scope) }
       if (args.expectedRevision !== before.revision) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')
       reads.consume(args.readToken, scope, name === 'apply_script_plan' ? args.planId : undefined)
-      authorization = { documentEpoch: before.documentEpoch, expectedRevision: before.revision }
+      authorization = { documentEpoch: before.documentEpoch, expectedRevision: before.revision,
+        authoring: { actor: { kind: 'agent', name: identity.label }, transactionId: randomUUID(), ...(args.requestId ? { requestId: args.requestId } : {}) },
+        ...(name === 'load_project' ? { sourceMode: 'restore' } : name === 'import_asset' ? { sourceMode: 'import' } : {}) }
     }
     if (name === 'run_script') {
       const source = before!
@@ -165,14 +168,14 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
           ...generated, expiresAt: access.readTokenExpiresAtMs })
         return { planId, revision: source.revision, documentEpoch: source.documentEpoch, ...access, dryRun: true, ...summary }
       }
-      const applied = generated.commandCount ? await ask(session, 'apply_scene', { scene: generated.scene, expectedRevision: source.revision, label: 'MCP script' }, 30000, authorization) : { revision: source.revision }
+      const applied = generated.commandCount ? await ask(session, 'apply_scene', { scene: generated.scene, authoringHints: generated.authoringHints, expectedRevision: source.revision, label: 'MCP script' }, 30000, authorization) : { revision: source.revision }
       return { ...applied, ...summary }
     }
     if (name === 'apply_script_plan') {
       const plan = state.plans.get(args.planId)
       if (!plan || plan.sessionId !== session.id || plan.clientId !== client?.id || plan.expiresAt < Date.now()) throw new Error('Script plan expired or belongs to a different client/session')
       if (plan.documentEpoch !== before!.documentEpoch || plan.revision !== before!.revision) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')
-      const result = plan.commandCount ? await ask(session, 'apply_scene', { scene: plan.scene, expectedRevision: plan.revision, label: 'MCP script plan' }, 30000, authorization) : { revision: plan.revision }
+      const result = plan.commandCount ? await ask(session, 'apply_scene', { scene: plan.scene, authoringHints: plan.authoringHints, expectedRevision: plan.revision, label: 'MCP script plan' }, 30000, authorization) : { revision: plan.revision }
       state.plans.delete(args.planId)
       reads.revoke({ planId: args.planId })
       return { ...result, logs: plan.logs, commandCount: plan.commandCount, ...summarize(plan.scene) }
