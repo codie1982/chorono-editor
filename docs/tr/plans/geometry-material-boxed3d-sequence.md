@@ -2,7 +2,8 @@
 
 8 Kasım 2026; ara iş sadeleştirmesi 10 Kasım 2026. Kullanıcı tarafından onaylandı.
 Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi tamamlandı; sırada bekleyen
-E−1 viewport/ortak düzenleme işleri, ardından yeni özellik sırası var.
+E−1 işleri (önce [MCP araç kalitesi ve uyumlu sadeleştirme](mcp-tool-quality-plan.md),
+sonra güvenli düzenleme ve viewport/ortak araç kabulü), ardından yeni özellik sırası var.
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
 
@@ -41,7 +42,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı | V5 çoklu Array | [Gerçek uygulama ve kabul](../viewport-array-editing.md): V4 forest üzerinden dört pattern, bounded preview ve tek undo. |
 | Tamamlandı | Komşu mesafeleri, cetvel ve guide | [Gerçek uygulama ve kabul](../viewport-layout-editing.md); seçim, keyframe ve tek undo korunur. |
 | Ara iş D0–D2 tamamlandı | Sade hata özeti ve sürüm kontrolü | Kalıcı tek onay/kuyruk/gerçek alıcı ve izinli sürüm kontrolü; admin token ile sade bakım listesi. Public yayın ayrı; Interaction yerel/elle. |
-| Sıradaki | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
+| Sıradaki | E−1.Q, ardından kalan E−1 ve araç kabulü | MCP araç/isim/şema kalitesi ve legacy uyum, sonra revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |

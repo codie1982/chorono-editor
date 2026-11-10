@@ -1,5 +1,11 @@
 # E−1 — İnsan–ajan ortak düzenleme, Timeline ve Viewport kullanılabilirliği
 
+**10 Kasım MCP kalite önceliği:** D2 sonrasında [E−1.Q araç açıklığı ve
+uyumlu katalog sadeleştirmesi](mcp-tool-quality-plan.md) uygulanır; ardından
+E−1.1 güvenli düzenleme ve aşağıdaki kalan sıra devam eder. Glama'nın 65 araçlık
+eski değerlendirmesi ile güncel 77 araçlık yerel katalog ayrı ölçümlerdir.
+Bu ek plan runtime adlarını değiştirmez; önerilen adlar henüz API değildir.
+
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
 [komşu mesafesi/ruler-guide araçları](../viewport-layout-editing.md) tamamlandı. Sırada
 kalan ortak düzenleme ve birleşik araç kabulü var. Sonraki ürün sırası
@@ -68,6 +74,7 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | Sıra | Teslim | Tamamlanma koşulu |
 | --- | --- | --- |
 | E−1.0 — tamamlandı | Skill ve mevcut kabiliyetlerin açıklığı | Her takip turunda taze okuma kuralı; eski sahneyi yeniden üretmeme; QuickJS ile doğrulanmış sine/controller/bake örneği. Runtime enforcement değildir. |
+| E−1.Q — sıradaki | MCP araç kalitesi ve uyumlu sadeleştirme | Gerçek şema/açıklama hataları; ana araç/isim ayrımı, legacy adaptör ve sürümlü keşif geçişi; güvenlik E−1.1 ile ortak. [İnceleme ve kabul](mcp-tool-quality-plan.md). |
 | E−1.1 | Güvenli MCP düzenleme sözleşmesi | Okunmamış/stale source mutasyonu reddedilir; taze revision ile odaklı değişiklik tek undo olur; retry ve plan kimlikleri korunur. |
 | E−1.2 | İnsan–ajan kökeni ve çakışma açıklığı | Creation ve last-writer ayrıdır; mixed/unknown durumları, undo/redo ve portable save/load korunur; runtime çıktısı editör metadata'sını taşımaz. |
 | E−1.3 | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |

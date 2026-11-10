@@ -2,7 +2,8 @@
 
 Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
-kalan E−1 viewport/ortak düzenleme işleri → dar entegrasyon sözleşmeleri →
+kalan E−1 işleri (önce MCP araç açıklığı/uyumlu sadeleştirme E−1.Q, sonra
+güvenli düzenleme ve viewport/ortak araç kabulü) → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
 ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
@@ -34,7 +35,8 @@ kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabil
 D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, gerçek alıcı
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
-hosting/yayın ayrıdır. **Sırada kalan E−1 ortak düzenleme ve araç kabulü var.**
+hosting/yayın ayrıdır. **Sırada E−1.Q MCP araç kalitesi, ardından E−1.1 güvenli
+düzenleme ve kalan ortak araç kabulü var.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -49,7 +51,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
 | Tamamlandı — D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Kalıcı tek onay + kuyruk + gerçek alıcı ve izinli sürüm kontrolü; admin erişimli sade hata listesi/durum takibi. Public yayın ayrı. [D1](diagnostic-sharing.md), [D2 ve kabul sınırları](diagnostic-management.md). |
-| Sıradaki | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Sıradaki | E−1.Q MCP araç kalitesi, ardından kalan E−1 ve araç kabulü | [Katalog/isim/şema incelemesi](plans/mcp-tool-quality-plan.md), sonra MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -2010,3 +2012,18 @@ Public hosting/yayın yapılmadı. D2 uygulaması ve yerel kabul tamamlandı;
 **sırada kalan E−1 MCP/provenance/organizasyon, Set Key/transport/prosedürel
 eğri ve birleşik araç kabulü var**. Kutulu 3D/Poly sırası ve son export/ikinci
 optimizasyon öncelikleri korunur.
+
+### 12.51. Glama MCP araç kalite incelemesi ve E−1.Q önceliği — 10 Kasım 2026
+
+[Somut araç aileleri, geçiş önerileri ve kabul planı](plans/mcp-tool-quality-plan.md).
+Glama'nın 7 Kasım tarihli 65 araç raporu C / 2,7 gösteriyor; en düşük başlıklar
+araç sayısı ve işlev ayrımı. D2 doğrulama bundle'ına yalnız SDK `tools/list`
+çağrısıyla yerel katalogda 77 benzersiz araç doğrulandı. Örtüşen genel/uzman
+yaratma, okuma, patch ve key düzenleme yolları ile yanlış/eksik şema açıklamaları
+tespit edildi. Yeni adlar, katalog profili veya legacy adaptör henüz uygulanmadı.
+
+Kullanıcı yönlendirmesiyle **E−1.Q → E−1.1 → kalan E−1** sırası geçerlidir:
+önce şema/açıklama doğruluğu, sonra ana araç/isim ve geriye uyumlu keşif geçişi;
+güvenli okuma/revision kontrolü bütün canonical/legacy yollarda ortak olur.
+Bu tur yalnız inceleme ve plan güncellemesidir; runtime/test sonucu veya yeni
+Glama skoru iddia edilmez. Kutulu 3D/Poly ve son export/optimizasyon sırası korunur.
