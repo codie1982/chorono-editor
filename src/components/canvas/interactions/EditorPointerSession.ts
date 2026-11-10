@@ -2,6 +2,7 @@ import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { PointerGestureSession, type PointerGestureSample, type PointerGestureStart } from './PointerGestureSession'
 import { interactionTrace, type InteractionTraceContext, type InteractionTraceDetails, type InteractionTraceSession } from './diagnostics'
+import { reportViewportFailure } from '@/lib/diagnostics/browser/failureSignals'
 
 const sourceReferences = new WeakMap<ChronoScene, number>()
 let nextSourceReference = 1
@@ -127,7 +128,10 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
       this.host.show(this.pending, event)
       this.samples++
       if (this.samples === 1) this.trace?.record('source-first-preview', { ...this.sourceState(), ...this.previewDetails(this.pending, event) })
-    } catch (error) { this.cancel(false, 'preview-error'); this.host.warning?.(error instanceof Error ? error.message : String(error)) }
+    } catch (error) {
+      reportViewportFailure(this.host.diagnostics?.owner, 'preview')
+      this.cancel(false, 'preview-error'); this.host.warning?.(error instanceof Error ? error.message : String(error))
+    }
   }
 
   /** Commit the final pointer sample once. A click/returned-to-start gesture
@@ -148,7 +152,10 @@ export abstract class EditorPointerSession<TPreview extends { scene: ChronoScene
       this.host.commit(this.base, this.pending)
       this.trace?.record('source-commit', { ...this.sourceState(), samples: this.samples })
       this.close('committed')
-    } catch (error) { this.cancel(false, 'commit-error'); this.host.warning?.(error instanceof Error ? error.message : String(error)) }
+    } catch (error) {
+      reportViewportFailure(this.host.diagnostics?.owner, 'commit')
+      this.cancel(false, 'commit-error'); this.host.warning?.(error instanceof Error ? error.message : String(error))
+    }
   }
 
   /** Roll back only our own preview. preserveScene detaches a transaction when

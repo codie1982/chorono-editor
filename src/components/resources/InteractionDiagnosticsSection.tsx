@@ -5,6 +5,7 @@ import { downloadOutput, editorOutputResources } from '@/lib/export/resources'
 import { utf8ByteLength } from '@/lib/format/json'
 import { MetricList } from './MetricList'
 import styles from './ResourceMonitorPanel.module.css'
+import { DiagnosticSharingSection } from './diagnostics/DiagnosticSharingSection'
 
 const subscribe = (listener: () => void) => interactionTrace.subscribe(listener)
 const getSnapshot = () => interactionTrace.getSnapshot()
@@ -58,5 +59,6 @@ export function InteractionDiagnosticsSection() {
     ]} />
     <p>Start recording, reproduce the first-drag problem, then stop recording and download the log. A successful release does not rule out an intermittent failure.</p>
     {error && <p role="alert">{error}</p>}
+    <DiagnosticSharingSection />
   </section>
 }

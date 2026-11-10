@@ -2,12 +2,12 @@
 
 10 Kasım 2026. Kullanıcının “hata içinde boğulmayalım” düzeltmesiyle ilk kapsam
 küçültüldü. **D0–D2 ara işi**, kalan E−1 öncesindedir. D0 kısa özet/sürüm
-altyapısı tamamlandı; D1 kalıcı onay/kuyruk/alıcı servis ve D2 bakım listesi/
-sürüm kontrolü henüz uygulanmadı.
+altyapısı ve D1 kalıcı onay/kuyruk/alıcı servis/sürüm kontrolü tamamlandı.
+D2 sade bakım listesi bekliyor. [Gerçek D1 sözleşmesi](../diagnostic-sharing.md).
 
 ## Kullanıcıya sunulacak davranış
 
-Tek **Share error reports** seçeneği, varsayılan kapalı. Kullanıcı açıkça izin
+Tek **Share error reports and check for updates** seçeneği, varsayılan kapalı. Kullanıcı açıkça izin
 verirse yalnız beklenmeyen uygulama hatalarının kısa özetleri gönderilir.
 İzni kapatmak yeni toplamayı/gönderimi durdurur ve bekleyen özetleri temizler.
 
@@ -79,10 +79,10 @@ log ayarları da doğrulanır; tam anonimlik garantisi verilmez.
 ## D1 alıcı sunucu
 
 İstemci kuyruğu tek başına D1 teslimi değildir. **Sunucu tarafı da D1'e alındı:**
-önerilen `POST /v1/diagnostic-reports` alıcısı, rapor/schema/16 KiB doğrulaması,
+gerçek `POST /api/diagnostics/reports` alıcısı, rapor/schema/16 KiB doğrulaması,
 reportId ile tekilleştirme, ayrı hata deposu, günlük sayaç ve otomatik saklama
 süresi temizliği. Yeniden gönderilen batch sayaçları ikinci kez artırmaz.
-Bu yol henüz çalışan bir public API değildir.
+Bu yol yerelde uygulanıp doğrulandı; internete yayınlanmış public servis değildir.
 
 Yerel geliştirmede gerçek alıcı implementasyonu entegrasyon testinde çalışır;
 mock başarılı sayılması tek başına sunucu kabulü değildir. Kullanıcılar için
@@ -93,7 +93,8 @@ servisin geçici erişilemez olması saklanmış tercihi silmez veya yeniden sor
 
 ## Sürüm kontrolü ve kodla uyum
 
-Sürüm kontrolü ayrı bir ayardır: Check now ve isteğe bağlı günde bir kontrol.
+Son kullanıcı isteğiyle sürüm kontrolü **aynı paylaşım onayına** bağlandı:
+Check now ve izinlilerde günde bir otomatik kontrol. Onay yokken ikisi de kapalı.
 Yeni sürüm ve release notları gösterilir; otomatik kurulum bu iş değildir.
 Uygulama paket sürümü/build bilgisi kullanılır; `MCP_VERSION` ve raw MCP status
 uygulama sürümü veya paylaşım verisi olarak kullanılmaz.
@@ -109,8 +110,8 @@ eklenmez. UTF-8 boyut yardımcıları yeniden kullanılır; scene/undo'ya log ya
 | Dilim | İlk teslim |
 | --- | --- |
 | **D0 — tamamlandı** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. [Gerçek sözleşme](../../../src/lib/diagnostics/README.md). |
-| **D1 — sıradaki** | İlk açılışta bir kez onay, localStorage'da kalıcı tercih; özet kuyruğu ve gerçek alıcı sunucu API'si/deposu/tekilleştirme. Yapılandırılmış servisle uçtan uca gönderim; mevcut yerel kayıt korunur. |
-| **D2** | Sade bakım/hata listesi, sürüm kontrolü ve birleşik kabul. |
+| **D1 — tamamlandı, yerel kabul** | İlk açılışta bir kez onay, kalıcı tercih; özet kuyruğu ve gerçek alıcı API/depo/tekilleştirme. Aynı izinle sürüm kontrolü. [Uygulama ve yayın sınırları](../diagnostic-sharing.md). |
+| **D2 — sıradaki** | Sade bakım/hata listesi ve birleşik kabul. Public hosting/yayın gerçek hedefe göre ayrıca yapılandırılır. |
 
 Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma, sekme/tarayıcı yeniden
 açma ve olağan güncellemede tercihin korunması/yeniden sorulmaması; servis yokken
@@ -128,8 +129,9 @@ build `local` olur. `src/lib/diagnostics` yalnız açıkça verilen sabit hata
 noktalarını kabul eder, günlük 20 grupta tekilleştirir ve temizlenmiş immutable
 rapor üretir. Sayım ve rapor dönüşümü ayrı; reportId üretimi, count delta/retry
 ve izin/gönderim D1'e aittir. Gün değişince önceki bellek grupları bırakılır;
-bu store henüz kalıcı kuyruk değildir. Herhangi bir aktif collector, UI onayı,
-ağ çağrısı veya mevcut Interaction geçmişinin aktarımı eklenmedi.
+bu store kalıcı kuyruk değildir. Bu paragraf D0 sınırını anlatır; D1'de ayrı
+izinli browser owner, kalıcı kuyruk ve gerçek API eklendi. Yerel Interaction
+geçmişi yine aktarılmaz; varsayılan uzak paylaşım kapalıdır.
 
 [Mevcut yerel kayıt sözleşmesi](../../../src/components/canvas/interactions/diagnostics/README.md)
 ve [pointer kabulü](../pointer-gesture-lifecycle.md) uygulama dayanaklarıdır.

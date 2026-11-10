@@ -10,6 +10,8 @@ import {
 import { layerRegistry } from '@/lib/registry'
 import { useShapeCreationTool } from '@/components/canvas/placement/useShapeCreationTool'
 import { ensureInteractionTracePersistence } from '@/components/canvas/interactions/diagnostics'
+import { acquireDiagnosticSharing } from '@/lib/diagnostics/browser/sharing'
+import { DiagnosticConsentPrompt } from '@/components/resources/diagnostics/DiagnosticConsentPrompt'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
 import { usePlayback }         from './hooks/usePlayback'
@@ -194,6 +196,7 @@ export default function BuilderPage() {
 
   // ── Central scene state with history + transactions ──────────────────────
   const editor = useEditorState(makeDemoScene())
+  useEffect(() => acquireDiagnosticSharing(() => !editor.isTransactionActive()), [editor.isTransactionActive])
   const {
     scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo,
     layerMetaById, getSiblingsInArray,
@@ -1324,6 +1327,8 @@ export default function BuilderPage() {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
+
+      <DiagnosticConsentPrompt visible={!welcome.isOpen} />
 
       <ImportActivityBar activeCount={importActiveCount} settlingCount={importSettlingCount}
         label={importLabel} progress={importProgress} onCancel={cancelImports} />

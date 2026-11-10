@@ -5,11 +5,11 @@ import path from 'node:path'
 
 /** Shared standalone QA preparation. Inputs/digests are captured once here for
  * audio and source-lifetime checks; this adds no application route/injection. */
-export async function prepareNativeCheck({ entry, output, name, title, metadata = {}, plugins = [], format = 'iife', development = false }) {
+export async function prepareNativeCheck({ entry, output, name, title, metadata = {}, plugins = [], defines = {}, format = 'iife', development = false }) {
   await mkdir(output, { recursive: true })
   const result = await build({ entryPoints: [entry], bundle: true, platform: 'browser', target: 'es2022',
     minify: true, jsx: 'automatic', tsconfig: 'tsconfig.json', metafile: true, plugins, format,
-    define: { 'process.env.NODE_ENV': JSON.stringify(development ? 'development' : 'production') }, outfile: path.join(output, `${name}.js`) })
+    define: { 'process.env.NODE_ENV': JSON.stringify(development ? 'development' : 'production'), ...defines }, outfile: path.join(output, `${name}.js`) })
   const digest = bytes => createHash('sha256').update(bytes).digest('hex'), sources = []
   for (const file of Object.keys(result.metafile.inputs).sort()) sources.push({ path: file, sha256: digest(await readFile(file)) })
   const css = await readFile(path.join(output, `${name}.css`)).catch(error => { if (error.code === 'ENOENT') return null; throw error })

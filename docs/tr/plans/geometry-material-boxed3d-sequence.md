@@ -12,9 +12,9 @@ uygulandı. Genel 3D/Poly sırasından önce kalan ortak düzenleme/araç kabul�
 **Sadeleştirilen ara öncelik:** [kullanıcı onaylı hata özetleri ve sürüm
 kontrolü](diagnostics-consent-version-plan.md). D0–D2; yalnız beklenmeyen hataları
 tekilleştirip tekrar sayısıyla gösterir. Ayrıntılı Interaction yerelde elle açılır,
-uzak olay akışı ilk kapsama girmez. D0 özet/sürüm altyapısı tamamlandı;
-sırada D1 kalıcı ilk açılış onayı, kuyruk ve gerçek alıcı sunucu vardır.
-D2 sade bakım listesi/sürüm kontrolüdür; her açılışta yeniden onay sorulmaz.
+uzak olay akışı ilk kapsama girmez. D0 ve D1 tamamlandı: kalıcı onay, kuyruk,
+gerçek alıcı API/depo ve aynı izinle sürüm kontrolü yerelde doğrulandı.
+D2 sade bakım listesidir; public servis yayını ayrıdır. [D1 sözleşmesi](../diagnostic-sharing.md).
 
 ## Erteleme sınırı
 
@@ -38,7 +38,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı | V4 subtree duplicate / drag-copy | [Uygulama ve kabul](../viewport-clone-editing.md); native Copy/Instance destek sınırları açık. |
 | Tamamlandı | V5 çoklu Array | [Gerçek uygulama ve kabul](../viewport-array-editing.md): V4 forest üzerinden dört pattern, bounded preview ve tek undo. |
 | Tamamlandı | Komşu mesafeleri, cetvel ve guide | [Gerçek uygulama ve kabul](../viewport-layout-editing.md); seçim, keyframe ve tek undo korunur. |
-| Ara iş D0 tamamlandı; D1 sıradaki | Sade hata özeti ve sürüm kontrolü | Özet/sürüm temeli hazır; D1 kalıcı tek onay/kuyruk/gerçek alıcı API ve depo. D2 bakım listesi/sürüm kontrolü. Ayrıntılı Interaction yerel/elle. |
+| Ara iş D0/D1 tamamlandı; D2 sıradaki | Sade hata özeti ve sürüm kontrolü | Kalıcı tek onay/kuyruk/gerçek alıcı API/depo ve izinli sürüm kontrolü hazır. D2 sade bakım listesi. Public yayın ayrı; Interaction yerel/elle. |
 | Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
