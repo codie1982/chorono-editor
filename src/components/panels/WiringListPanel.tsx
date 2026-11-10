@@ -13,6 +13,7 @@ import { formatParameterRef, isWireBroken } from '@/lib/wiring/helpers'
 
 interface Props {
   scene: ChronoScene
+  wireErrors?: ReadonlyMap<string, string>
   editor: EditorStateReturn
   /** Open a wire in the editor modal. */
   onEditWire:   (wire: ParameterWire) => void
@@ -21,7 +22,7 @@ interface Props {
 }
 
 export default function WiringListPanel({
-  scene, editor, onEditWire, onCreateWire,
+  scene, editor, onEditWire, onCreateWire, wireErrors,
 }: Props) {
   const wires = scene.parameterWires ?? []
 
@@ -64,7 +65,7 @@ export default function WiringListPanel({
             <WireCard
               key={wire.id}
               wire={wire}
-              scene={scene}
+              scene={scene} error={wireErrors?.get(wire.id)}
               editor={editor}
               onEdit={() => onEditWire(wire)}
             />
@@ -80,12 +81,13 @@ export default function WiringListPanel({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WireCard({
-  wire, scene, editor, onEdit,
+  wire, scene, editor, onEdit, error,
 }: {
   wire: ParameterWire
   scene: ChronoScene
   editor: EditorStateReturn
   onEdit: () => void
+  error?: string
 }) {
   const broken = isWireBroken(wire, scene)
   const sourceLabel = formatParameterRef(wire.source, scene)
@@ -138,6 +140,7 @@ function WireCard({
         </div>
       </div>
 
+      {error && <p role="status" className="text-[10px] text-red-300 my-1">{error}</p>}
       {/* Source → Target labels */}
       <div className="space-y-0.5 text-[11px] font-mono">
         <div className="flex items-baseline gap-1.5">

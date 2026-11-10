@@ -29,7 +29,7 @@ import {
   type ParamValueMap,
 } from '@/lib/runtime/paramResolver'
 import { evaluateBindings } from '@/lib/runtime/bindingEvaluator'
-import { evaluateParameterWires } from '@/lib/runtime/parameterWireEvaluator'
+import { evaluateParameterWiresVerbose } from '@/lib/runtime/parameterWireEvaluator'
 import {
   evaluateTriggers,
   type RuntimeEvent, type ResolvedAction,
@@ -50,6 +50,9 @@ import {
 export interface FrameEvalResult {
   /** Final OverrideMap to be passed into the renderer. */
   overrides:    OverrideMap
+  /** Same immutable input frame used to resolve wire sources; before wire output. */
+  wireSourceOverrides?: OverrideMap
+  wireErrors?: ReadonlyMap<string, string>
   /** Resolved parameter values used during this frame. */
   paramValues:  ParamValueMap
   /** Any events that fired this frame — useful for debugging. */
@@ -235,8 +238,8 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     const bindingOverrides = evaluateBindings(scene.bindings, paramOverrides, paramValues, scene)
     // BL-05: Apply expression-based parameter wires after linear bindings so
     // expression wires can read values produced by the simpler binding system.
-    const wireOverrides    = evaluateParameterWires(scene.parameterWires, bindingOverrides, paramValues, scene)
-    const overrides = mergeOverrides(wireOverrides) // wireOverrides already wraps everything
+    const wireEvaluation   = evaluateParameterWiresVerbose(scene.parameterWires, bindingOverrides, paramValues, scene)
+    const overrides = mergeOverrides(wireEvaluation.overrides) // wireOverrides already wraps everything
 
     // ── Build new snapshot ────────────────────────────────────────────────
     const activeTimelineId = smActiveTimelineId
@@ -277,7 +280,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     prevSnapshotRef.current = nextSnapshot
 
     return {
-      overrides,
+      overrides, wireSourceOverrides: bindingOverrides, wireErrors: wireEvaluation.errors,
       paramValues,
       events:  allEvents,
       actions,

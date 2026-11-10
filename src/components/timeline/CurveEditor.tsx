@@ -5,11 +5,13 @@ import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import type { ChronoScene, Track, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
-  pickTrackColor, unionValueRange, buildCurvePath,
+  pickTrackColor, buildCurvePath,
   buildCurvePathSegments, hasNonConstantOutOfRange,
   msToX, valueToY, pickTimeTickMs, pickValueTick, formatTickValue,
   type CurveViewport, type ValueRange,
 } from '@/lib/timeline/curveMath'
+import TrackBakeDialog from './baking/TrackBakeDialog'
+import { curveSignalPreview } from '@/lib/timeline/curveSignalPreview'
 import { useCurveDrag } from './hooks/useCurveDrag'
 import { useBezierHandleDrag } from './hooks/useBezierHandleDrag'
 import { insertCurveKeyframe, makeReplaceCurveKeysCmd, makeCurveKeyframeChangesCmd } from '@/lib/timeline/curveEditing'
@@ -84,7 +86,7 @@ export default function CurveEditor({
     if (!timeline) return []
     return buildTimelineLayerRows(scene.layers, timeline, { selectedOnly: true,
       selectedId: selectedLayerId, selectedIds: selectedLayerIds }).rows
-      .flatMap(row => row.tracks).filter(track => track.keyframes.length > 0 && isScalarNumericTrack(track))
+      .flatMap(row => row.tracks).filter(track => (track.keyframes.length > 0 || track.controller && track.controller.type !== 'keyframe') && isScalarNumericTrack(track))
   }, [timeline, scene.layers, selectedLayerId, selectedLayerIds])
   const layerNames = useMemo(() => new Map(scene.layers.map(item => [item.id, item.name])), [scene.layers])
 
@@ -107,22 +109,8 @@ export default function CurveEditor({
   // become visually comparable at the same height.
   const [normalizeMode, setNormalizeMode] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [bakeTarget, setBakeTarget] = useState<string | null>(null)
   const [frozenRanges, setFrozenRanges] = useState<{ range: ValueRange; tracks: Map<string, ValueRange>; normalized: boolean } | null>(null)
-
-  const perTrackRanges = useMemo((): Map<string, ValueRange> => {
-    const m = new Map<string, ValueRange>()
-    for (const t of visibleTracks) {
-      const vals = t.keyframes
-        .map((k) => k.value)
-        .filter((v): v is number => typeof v === 'number')
-      if (vals.length === 0) { m.set(t.target, { min: -1, max: 1 }); continue }
-      const lo = Math.min(...vals)
-      const hi = Math.max(...vals)
-      const pad = (hi - lo) * 0.1 || 0.5
-      m.set(t.target, { min: lo - pad, max: hi + pad })
-    }
-    return m
-  }, [visibleTracks])
 
   // ── Hover state — shows kf metadata in the status bar ────────────────────
   const [hoveredKf, setHoveredKf] = useState<{
@@ -177,9 +165,11 @@ export default function CurveEditor({
     setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null)
   }, [duration])
 
+  const signalPreview = useMemo(() => curveSignalPreview(visibleTracks, viewStartMs, viewEndMs), [visibleTracks, viewStartMs, viewEndMs])
+  const perTrackRanges = signalPreview.ranges
   const range: ValueRange = useMemo(
-    () => frozenRanges?.range ?? valueRangeOverride ?? unionValueRange(visibleTracks) ?? { min: -1, max: 1 },
-    [frozenRanges, valueRangeOverride, visibleTracks],
+    () => frozenRanges?.range ?? valueRangeOverride ?? signalPreview.range,
+    [frozenRanges, valueRangeOverride, signalPreview],
   )
 
   const plotW = Math.max(1, size.w - LEFT_GUTTER - 8)
@@ -666,8 +656,8 @@ export default function CurveEditor({
             const oorAfter  = oor?.after  ?? 'constant'
             const hasOor = oorBefore !== 'constant' || oorAfter !== 'constant'
             return (
+              <span key={t.target} className="inline-flex items-center shrink-0">
               <button
-                key={t.target}
                 onClick={(e) => {
                   // Shift+click → toggle isolation (BL-40); plain click → hide/show.
                   if (e.shiftKey) {
@@ -690,6 +680,7 @@ export default function CurveEditor({
               >
                 <span style={{ color }}>■</span>
                 <span className="ml-1 text-gray-300">{label}</span>
+                {t.controller && t.controller.type !== 'keyframe' && <span className="ml-1 text-sky-300">{t.controller.type}</span>}
                 {isIso && <span className="ml-1 text-blue-400 text-[8px]">SOLO</span>}
                 {hasOor && (
                   <span
@@ -702,6 +693,9 @@ export default function CurveEditor({
                   </span>
                 )}
               </button>
+              <button onClick={() => setBakeTarget(t.target)} aria-label={`Bake ${label}`} title="Preview and convert this signal to editable keys"
+                disabled={editor.isTransactionActive?.()} className="px-1 text-[10px] text-amber-300 rounded hover:bg-gray-800 focus-visible:outline disabled:opacity-40">Bake…</button>
+              </span>
             )
           })}
         </div>
@@ -897,7 +891,7 @@ export default function CurveEditor({
               }
             }
             return (
-              <g key={t.target}>
+              <g key={t.target} data-curve-target={t.target}>
                 <path
                   d={d}
                   fill="none" stroke="transparent"
@@ -1201,6 +1195,9 @@ export default function CurveEditor({
         )}
       </svg>
       </div>
+
+      {bakeTarget && <TrackBakeDialog key={`${timeline.id}:${bakeTarget}`} scene={scene} editor={editor} timelineId={timeline.id} target={bakeTarget} onClose={() => setBakeTarget(null)} />}
+      {!!signalPreview.diagnostics.size && <p role="status" className="text-[10px] text-red-300 px-2">{Array.from(signalPreview.diagnostics.values()).slice(0, 3).join(' ')}</p>}
 
       {/* Inline value-edit input (kf double-click) ─────────────────────────
           Positioned absolutely over the SVG using the kf's pixel coords.

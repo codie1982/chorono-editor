@@ -3,8 +3,8 @@
 // Input control for a single expression string ("map(s, 0, 1, 0, 360)" etc.)
 // with live parse-error display and a sample evaluation against a probe value.
 
-import { useState, useEffect, useMemo } from 'react'
-import { safeEvaluate, parseExpression } from '@/lib/core/expression/expressionEvaluator'
+import { useState, useRef, useId, useEffect, useMemo } from 'react'
+import { inspectExpression } from '@/lib/core/expression/expressionEvaluator'
 
 interface Props {
   expression: string
@@ -26,44 +26,46 @@ const HELP_FUNCTIONS = [
   '+ - * / % ^',
 ]
 
+/** Edit one scalar expression against an actual source probe. A valid, fresh
+ * draft commits once on Enter/blur; Escape cancels without triggering blur
+ * commit. External changes never overwrite a focused draft. No source writes
+ * happen here except the caller-owned onCommit callback. */
 export default function ExpressionEditor({
   expression, sourceValue, onCommit, compact = false,
 }: Props) {
   const [draft, setDraft] = useState(expression)
+  const focused = useRef(false), cancelled = useRef(false), baseline = useRef(expression)
+  const errorId = useId()
 
   // Sync external changes (e.g. another panel edited the wire) into the input
   // without trampling on whatever the user is currently typing — we only
-  // accept the prop when it differs AND we're not focused. The simplest
-  // approximation: reset whenever the prop changes between renders.
-  useEffect(() => { setDraft(expression) }, [expression])
+  // accept it when not focused. A focused draft checks its original prop at
+  // commit so a concurrent edit cannot be overwritten by an old input.
+  useEffect(() => { if (!focused.current) setDraft(expression) }, [expression])
 
   // Parse + (optionally) evaluate against sourceValue for the preview row.
   const { error, previewValue } = useMemo(() => {
-    try {
-      parseExpression(draft)
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e), previewValue: null as number | null }
-    }
-    if (typeof sourceValue === 'number') {
-      const v = safeEvaluate(draft, { s: sourceValue })
-      return { error: null, previewValue: v }
-    }
-    return { error: null, previewValue: null as number | null }
+    if (typeof sourceValue !== 'number' || !Number.isFinite(sourceValue)) return { error: 'Source has no finite numeric value; expression is unchanged.', previewValue: null }
+    const result = inspectExpression(draft, { s: sourceValue, source: sourceValue })
+    return { error: result.error, previewValue: result.value }
   }, [draft, sourceValue])
 
   function commitIfChanged() {
-    if (draft !== expression) onCommit(draft)
+    if (cancelled.current || error || baseline.current !== expression) return
+    if (draft !== expression) { cancelled.current = true; onCommit(draft) }
   }
 
   return (
     <div className="flex flex-col gap-1">
       <input
+        aria-label="Expression" aria-invalid={!!error} aria-describedby={errorId}
         value={draft}
+        onFocus={() => { focused.current = true; cancelled.current = false; baseline.current = expression }}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commitIfChanged}
+        onBlur={() => { commitIfChanged(); focused.current = false }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') { (e.target as HTMLInputElement).blur() }
-          if (e.key === 'Escape') { setDraft(expression); (e.target as HTMLInputElement).blur() }
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).blur() }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelled.current = true; setDraft(expression); (e.target as HTMLInputElement).blur() }
         }}
         placeholder="e.g. map(s, 0, 1, 0, 360)"
         spellCheck={false}
@@ -72,14 +74,13 @@ export default function ExpressionEditor({
         }`}
       />
 
+      {(error || focused.current && baseline.current !== expression) && <div id={errorId} role="alert" className="text-[10px] text-red-300">
+        {error ?? 'Expression changed elsewhere. Press Escape to restore the current source.'}
+      </div>}
+
       {!compact && (
         <>
-          {error ? (
-            <div className="text-[10px] text-red-400 px-1" title={error}>
-              {/* Strip "Parse error: " prefix for a cleaner display */}
-              {error.replace(/^Parse error:\s*/, '')}
-            </div>
-          ) : sourceValue != null ? (
+          {error ? null : sourceValue != null ? (
             <div className="text-[10px] text-gray-400 px-1 flex items-center gap-1">
               <span className="text-gray-500">s =</span>
               <span className="text-amber-300 font-mono">{formatNum(sourceValue)}</span>

@@ -1974,6 +1974,7 @@ export default function BuilderPage() {
                   <WiringListPanel
                     scene={scene}
                     editor={editor}
+                    wireErrors={frame.wireErrors}
                     onEditWire={wireModal.openForEdit}
                     onCreateWire={wireModal.openNew}
                   />
@@ -2202,6 +2203,7 @@ export default function BuilderPage() {
         <WireParameterModal
           scene={scene}
           editor={editor}
+          sourceOverrides={frame.wireSourceOverrides} paramValues={frame.paramValues}
           existingWire={wireModal.editWire}
           preFilledTarget={wireModal.newTarget}
           onClose={wireModal.close}

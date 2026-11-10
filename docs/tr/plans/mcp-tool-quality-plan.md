@@ -5,8 +5,8 @@
 şemalar/açıklamalar ve hafif/tek-şema keşfi var. Eski 77 ad çağrılabilir kalır.
 [Gerçek kullanım ve geçiş](../../en/mcp.md),
 [modül sahipliği](../../../src/lib/mcp/tools/README.md).
-E−1.1 güvenli okuma/revision sözleşmesi de MCP 2.0.0 ile tamamlandı. E−1.2 köken takibi de MCP 2.1.0 ile tamamlandı. E−1.3 ortak editör hiyerarşisi de tamamlandı; E−1.4 Set Key/transport da tamamlandı; sırada E−1.5 ve kalan ortak
-düzenleme işleri var. Mevcut revision/drag/undo/retry kontrolleri bütün adlarda
+E−1.1 güvenli okuma/revision sözleşmesi de MCP 2.0.0 ile tamamlandı. E−1.2 köken takibi de MCP 2.1.0 ile tamamlandı. E−1.3 ortak editör hiyerarşisi de tamamlandı; E−1.4 Set Key/transport ve E−1.5 zorunlu eğri/Wire/bake dilimi de tamamlandı;
+sırada kalan viewport/birleşik araç kabulü var. [E−1.5 sözleşmesi](../procedural-authoring.md). Mevcut revision/drag/undo/retry kontrolleri bütün adlarda
 ortaktır; zorunlu read lease veya provenance bu teslimde uygulanmış sayılmaz.
 
 ## Doğrulanan başlangıç

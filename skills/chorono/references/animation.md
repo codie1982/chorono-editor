@@ -21,8 +21,7 @@ hero.fill = '#152442';
 hero.cornerRadius = 48;
 intro.key(hero,'opacity',0,0,'easeOut').key(hero,'opacity',600,1);
 intro.key(hero,'transform.y',0,280,'easeOut').key(hero,'transform.y',1000,200);
-// key() includes the layer in this timeline; the controller ignores its value.
-idle.key(hero,'transform.y',0,200);
+// A layer track also includes its owner in explicit timeline membership.
 idle.track('layers.'+hero.id+'.transform.y',{
   controller:{type:'waveform',waveform:{
     shape:'sine',amplitude:100,frequency:1/Math.PI,phase:0,offset:200,duty:0.5
@@ -40,7 +39,7 @@ When timelines affect the same property, inspect the combined result instead of 
 
 The `idle` controller above evaluates `y = 200 + 100 * sin(2 * tSec)`, where `tSec` is that timeline's local time in seconds. Its period is π seconds, matching the loop duration. Key times and `durationMs` use milliseconds; waveform `frequency` uses cycles per second (Hz), and `phase` and trigonometric inputs use radians. Setting `frequency:2` would mean two complete cycles per second.
 
-Controllers ignore stored key values. `Timeline.key` records layer membership; `Timeline.track` alone does not. The current curve display derives its range from stored keys, so bake when you need an editable sampled curve:
+Controllers ignore stored key values. `Timeline.track` now records an existing layer owner in explicit membership as `Timeline.key` does. Curve Editor displays zero-key numeric controllers with evaluated ranges and bounded graph samples; these display samples never become source keys. Use **Bake… → Preview bake → Apply bake** when you need editable keys:
 
 ```js
 const idle = scene.timeline('idle');
@@ -49,9 +48,9 @@ if (!hero) throw new Error('Hero card not found');
 idle.bake('layers.'+hero.id+'.transform.y',60,0);
 ```
 
-This replaces the controller with linear keys sampled over the full timeline at 60 fps; tolerance `0` disables simplification. It approximates the sine between samples and preserves the original through undo. To generate other sampled formulas, use synchronous loops and `Timeline.key`, computing values with ordinary JavaScript such as `Math.sin(2 * timeMs / 1000)`.
+This replaces the signal with linear keys over the full timeline at 60 fps; tolerance `0` disables simplification. Optional fourth argument `{startMs,endMs}` selects a local-ms window; native `bake_track` exposes those optional fields too. Existing keys outside the window and unrelated track metadata stay, but controller/OOR/modifiers/time remapping are removed globally. Outside the window the remaining keys/constant endpoints drive the channel. Undo restores original source and membership. FPS must be positive up to 240, tolerance 0..1, and at most 20,000 samples are allowed. Tolerance bounds normalized vertical simplification error at sampled times; between-sample accuracy depends on FPS. Preview reports sample and midpoint errors, not guaranteed continuous equality. To generate other sampled formulas, use synchronous loops and `Timeline.key`, computing values with ordinary JavaScript such as `Math.sin(2 * timeMs / 1000)`.
 
-The `sine` **modifier** uses normalized time within each keyframe segment, with frequency in cycles per segment; it is different from the waveform controller's clock. A single-key track has no advancing segment time. Parameter-wire expressions receive `source` (alias `s`), not `t` or `x`; write `sin(2 * source)` with explicit multiplication. Arbitrary time-expression controllers and per-frame script callbacks are not available.
+The `sine` **modifier** uses normalized time within each keyframe segment, with frequency in cycles per segment; it is different from the waveform controller's clock. A single-key track has no advancing segment time. Parameter-wire expressions receive `source` (alias `s`), not `t` or `x`; write `sin(2 * source)` with explicit multiplication. Both aliases use the current pre-wire evaluated source (then static/default fallback), not a guessed zero. Empty/invalid/non-finite inputs and cycles keep the target's pre-wire value with diagnostics. Expressions do not iterate feedback or read other outputs from the same wire pass. Numeric layer sources retain their scalar type; numeric-string/boolean coercion remains available for scene parameters. Arithmetic needs no whitespace; `1e-3` works. Power is right-associative and binds before unary sign: `-2^2` is `-4`; use `(-2)^2` for `4`. Text is limited to 4096 chars, 1024 tokens/nodes and 64 nesting levels; functions require their documented arity. Unknown names, division/domain errors and non-finite intermediates fail explicitly. Arbitrary time-expression controllers and per-frame script callbacks are not available.
 
 ## Tracks and easing
 
@@ -60,7 +59,7 @@ The `sine` **modifier** uses normalized time within each keyframe segment, with 
 - For `Timeline.key(layer,property,...)` pass a layer-local property such as `transform.x`. Track-editing methods take full targets such as `layers.<id>.transform.x`.
 - `scene.cloneTimeline(id,newId)` duplicates an animation without cloning the objects. Its keyframes receive fresh ids so edits stay independent. Read the cloned timeline before referring to individual keys. It also duplicates existing tracks; remove or replace tracks that should not be inherited.
 - For a narrow native key edit use advertised `upsert_keyframes` (`set_keyframes` in legacy clients). `update_timeline` is also advertised. Advanced `update_track`, `remove_track`, `add_modifier`, `clone_timeline`, `delete_timeline` and `bake_track` can be discovered with `get_capabilities({toolName:...})` and used in `batch_actions` when marked `callableInBatch`. Read [tool-choice.md](tool-choice.md); schema discovery does not register a new direct tool in the client.
-- Track patches support out-of-range behavior, easing/time-warp/multiplier curves and procedural controllers. Discover their schema rather than guessing nested keys. Use `bake_track` or `timeline.bake(target,fps,tolerance)` when the output needs sampled keyframes.
+- Track patches support out-of-range behavior, easing/time-warp/multiplier curves and procedural controllers. Discover their schema rather than guessing nested keys. Use `bake_track` or `timeline.bake(target,fps,tolerance,{startMs?,endMs?})` when the output needs sampled keyframes.
 
 ## Procedural objects, paths and particles
 

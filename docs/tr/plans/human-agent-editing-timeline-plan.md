@@ -6,7 +6,7 @@ legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
 editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
 [Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
 [istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
-**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport da tamamlandı**; sırada **E−1.5 prosedürel eğriler**, ardından aşağıdaki kalan işler var. Glama'nın eski
+**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı**; sırada **kalan viewport ve birleşik araç kabulü (V6/E−1.7)** var. [E−1.5 sözleşmesi](../procedural-authoring.md). Glama'nın eski
 dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
@@ -51,8 +51,8 @@ isimler/sözleşmeler capability ve şema yayımlanana kadar çağrılabilir API
 | Set Key / kısayol | Küçük Keyframe menüsü vardır. K tuşu gerçekte sonraki key'e gider; bazı açıklamalar K ile key eklemeyi söyler. | Büyük, doğrudan Set Key eylemi; tek shortcut registry ve uyumlu açıklamalar. |
 | Toplu key | Çoklu seçim, sürükleme, easing, slide, stagger, scale ve spreadsheet vardır. Bazı yollar sınırları farklı uygular; çoklu snapshot ayrı undo'lar oluşturabilir. | Ortak zaman/çakışma politikası; tek transaction/undo; gruplu hareketin aralıklarını koruma. |
 | Sahne düzeni | Scene Explorer query/bulk/subtree ve indexed hierarchy vardır. Ana Timeline düz layer listesi kullanır. | Mevcut hiyerarşiyi ve sanallaştırmayı Timeline'a taşı; yeni paralel ağaç üretme. |
-| Prosedürel eğri | Script ile key örnekleme, waveform controller ve numeric bake vardır. Serbest zaman ifadesi controller'ı yoktur. Sıfır key'li controller eğrisi Curve Editor'da görünmeyebilir. | Önce mevcut yolları güvenilir ve görünür yap; genel expression controller ayrı, sınırlı bir genişletmedir. |
-| Wire ifadesi | Değişkenler `source`/`s`'dir; `time`/`t` kendiliğinden bulunmaz. Numeric tokenizer işaretleri fazla geniş kabul eder. | Whitespace'ten bağımsız grammar, finite sonuç, aynı parser/runtime doğrulaması ve açık hata. |
+| Prosedürel eğri | Script ile key örnekleme, waveform controller ve numeric bake vardır. Serbest zaman ifadesi controller'ı yoktur. E−1.5 ile sıfır key'li controller Curve Editor'da bounded graph/range ile görünür. | Önce mevcut yolları güvenilir ve görünür yap; genel expression controller ayrı, sınırlı bir genişletmedir. |
+| Wire ifadesi | Değişkenler `source`/`s`'dir; `time`/`t` kendiliğinden bulunmaz. E−1.5 ile işaret/exponent, arity ve finite sonuç doğrulanır. | Whitespace'ten bağımsız grammar, finite sonuç, aynı parser/runtime doğrulaması ve açık hata. |
 | Viewport araçları | Pivot, selection frame, point/key drag, clone ve array vardır; multi-transform, timeline bağlamı ve gesture/shortcut yollarında tutarsızlıklar bulundu. | Önce mevcut araçların doğruluk/etkileşim kabulü; sonra viewport'ta key çizme, ortak subtree duplicate ve etkileşimli çoklu array. [Ayrı inceleme ve plan](viewport-authoring-2d-plan.md). |
 
 İlgili sahipler:
@@ -82,9 +82,10 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | E−1.2 — tamamlandı | İnsan–ajan kökeni ve çakışma açıklığı | Creation ve last-writer ayrıdır; mixed/unknown durumları, undo/redo ve portable save/load korunur; runtime çıktısı editör metadata'sını taşımaz. |
 | E−1.3 — tamamlandı | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
 | E−1.4 — tamamlandı | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
-| E−1.5 | Prosedürel eğri ve expression güvenilirliği | Parser/UI hataları düzelir; controller eğrisi görünür; örnekleme ve bake açık doğruluk toleransıyla çalışır. |
+| E−1.5 — zorunlu 1–4 tamamlandı | Prosedürel eğri ve expression güvenilirliği | Parser/UI hataları düzelir; controller eğrisi görünür; örnekleme ve bake açık doğruluk toleransıyla çalışır. |
 | E−1.6 — sürüyor | Viewport araçları ve doğrudan authoring | Pivot/seçim/drag, ortak multi-transform, V3 key çizimi ve V4/V5 clone/array uygulandı; [transform sözleşmesi](../viewport-transform-editing.md), [Array kabulü](../viewport-array-editing.md). Komşu mesafesi/cetvel/guide araçları da uygulandı; tam V6 bekler. [V0–V6](viewport-authoring-2d-plan.md). |
-| E−1.7 | Birleşik kullanıcı akışı kabulü | Aşağıdaki insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından Export E0 başlar. |
+| E−1.7 | Birleşik kullanıcı akışı kabulü | Aşağıdaki insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından onaylanan kutulu 3D/Poly sırası başlar. Tam Export E0 ve ikinci
+genel optimizasyon yeni özelliklerden sonra kalır. |
 
 ### E−1.1 — Tamamlandı: önce oku, mevcut yapı üzerinde değiştir
 
@@ -220,7 +221,7 @@ eşliği. İlgili belgeler: [subtree işlemleri](../editor-subtree-operations.md
 E−1.4 key API güncellemesi ID, tangent ve atlanan easing’i korur; protokol 2.1.0
 ve scene formatı değişmedi. İnsan düzenlemeleri, exact history ve portable kayıt
 korunur. Kanıt: `artifacts/validation/timeline-authoring-20261110/`.
-Sırada E−1.5; kutulu 3D/Poly ve export/ikinci optimizasyonun son sırası korunur.
+E−1.5 zorunlu dilimi de tamamlandı; sırada kalan birleşik araç kabulü var. Kutulu 3D/Poly ve export/ikinci optimizasyonun son sırası korunur.
 
 **Önce ortak authoring sözleşmesi, sonra butonlar.** Mevcut property registry,
 keyframe helper, batch command ve shortcut registry genişletilir.
@@ -273,7 +274,12 @@ sessizce bozulmaması; typed keyset; 50 layer tek undo; key ID/easing korunması
 membership nedeniyle görünür track; zaman/sınır/collision edge case'leri;
 klavye/focus ve gerçek Timeline/Curve Editor çıktısı.
 
-### E−1.5 — `sin(2x)` ve prosedürel eğriler
+### E−1.5 — `sin(2x)` ve prosedürel eğriler — zorunlu 1–4 tamamlandı
+
+[Uygulanan sözleşme, giriş noktaları ve doğrulama](../procedural-authoring.md).
+Parser/evaluator ortaklaştırıldı; actual-source Wire preview/hata/çevrim, sıfır-key
+graph/membership ve bounded Preview/Apply/Cancel bake çalışır. Aşağıdaki 1–4
+tamamlandı; serbest zaman formülü controller'ı (5) ayrı isteğe bağlı teslimdir.
 
 `x` saniye cinsinden geçen zaman ise `sin(2x)` **bugün iki yolla üretilebilir**:
 
@@ -293,7 +299,7 @@ değişkenine bağlıdır; standalone `sin(2x)` örtük çarpma/zaman değişken
 Key segment'inin localT'sini kullanan `sine` modifier, saniye tabanlı waveform
 ile aynı değildir; tek key'li modifier örneği hareket garantisi vermez.
 
-Geliştirme sırası:
+Zorunlu dilimin uygulanan sırası:
 
 1. Numeric tokenizer'ın işaret/exponent ayrımını düzelt: `2+3` ve `2 + 3` aynı
    sonucu vermeli; `1e-3`, unary eksi, precedence/power, eksik argüman, bilinmeyen
@@ -376,9 +382,9 @@ zamanlarda `<0,02 px` hatayı denetler. Bu kabul E−1.0 içindir; henüz yazıl
 runtime/UI korumalarının kabulü değildir. MCP/Next runtime build'i bu yalnız
 doküman/skill/test değişikliğinde çalıştırılmadı.
 
-Parser sorunu ayrıca mevcut kaynak üzerinde tekrarlandı: `2+3 → 2`,
-`2 + 3 → 5`, `1e-3+2 → 0,001`. Bunlar açık hata kanıtıdır; bu tur parser
-düzeltilmedi. E−1.5'te bu örnekler doğru sonuç bekleyen regresyonlara dönüşür.
+Tarihsel E−1.0 incelemesinde parser sorunu tekrarlandı: `2+3 → 2`,
+`2 + 3 → 5`, `1e-3+2 → 0,001`. Bunlar başlangıç hata kanıtıdır; E−1.5 ile düzeltildi ve doğru sonuç bekleyen
+regresyonlar artık geçer.
 
 ### Uygulama notu — viewport V3
 

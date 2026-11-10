@@ -2196,3 +2196,38 @@ Find/Restore, hidden/solo, kaynak edit/undo, belge değiştirme, gerçek kırmı
 piksel ve Canvas pointer drag. Hiyerarşi kabulü yeni explicit Find tercihiyle
 sürdürülür. Kanıt `artifacts/validation/layer-focus-20261110/`. Ana çalışma sahnesi
 üzerine test yazılmaz. E−1.5 ve sonraki ana geliştirme sırası değişmez.
+
+
+### 12.58. E−1.5 prosedürel eğri, Wire ve bake — 10 Kasım 2026
+
+[Gerçek sözleşme ve bakım rehberi](procedural-authoring.md). Zorunlu 1–4 dilimi
+tamamlandı: whitespace/exponent/unary/power/arity/finite sınırları ortak parser'da
+düzeltildi; Wire UI/playback actual pre-wire kaynağı ve aynı hata/clamp/çevrim
+kurallarını kullanır. Hatalı sonuç yazılmaz; target input değerini korur. Typed
+text layer değerleri sayıya çevrilmez; eski scene-parameter scalar dönüşümü korunur.
+
+Sıfır-key waveform/noise Curve Editor'da bounded graph ve evaluated range ile
+görünür; `Timeline.track` owner membership'i aynı undo'ya ekler. Native/script/UI
+bake ortak sayısal pipeline kullanır. Aralık/FPS/tolerans, Preview/Apply/Cancel,
+sample/midpoint hata raporu, revision/gesture engeli ve tek undo vardır. Exact-time
+ID/metadata ve pencere dışındaki authored key'ler korunur; kaldırılan track
+processor dışarıda da çalışmaz. Bu etki panelde açıkça görünür. Sampling sürekli
+eşitlik garantisi değildir; serbest zaman ifadesi controller'ı ayrı opsiyonel iştir.
+
+351 test dosyası / 2.818 test, TypeScript, MCP ve production build, 16 CLI testi
+geçti. 20 dosyalı gerçek tarball'ın canonical skill byte'ları ve dört Codex/Claude
+proje install/check sonucu doğrulandı. Production build'de mevcut JSON version
+import ve eski Browserslist verisi uyarıları sürer; derleme başarılıdır.
+
+İzole gerçek Chrome kabulü 7/7: zero-key görünümü, bake preview/iptal, editable
+Apply/exact undo/redo/portable, stale ret, actual-source Wire hata/valid commit,
+cycle fallback ve inline Enter/Escape. Aynı sampler'ın playback ile sorting,
+warp/modifier/OOR eşliği ve gerçek QuickJS doküman örnekleri de doğrulandı.
+Kanıt `artifacts/validation/procedural-authoring-20261110/` altındadır.
+
+Ana port 2000 editörüne dokunulmadı. İlgisiz pan/cursor WIP'si ayrı tutularak
+temiz snapshot ve port 2017 fixture kullanıldı. Legacy büyük entegrasyon
+dosyaları ilgili adapter'la sınırlı değişti; yeni sorumluluklar küçük owning
+modüllerdedir. MCP 2.1.0 / scene formatı korunur; public yayın yapılmadı.
+Sırada kalan viewport ve birleşik araç kabulü V6/E−1.7 vardır. Ardından onaylanan
+kutulu 3D/Poly sırası; tam export ve ikinci genel optimizasyon en sonda kalır.

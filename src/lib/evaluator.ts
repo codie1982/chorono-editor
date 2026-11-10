@@ -5,6 +5,7 @@ import { sampleBezier } from './animation/timeWarp/sampler'
 import { sampleController } from './animation/controllers/sample'
 import { sampleCubicBezier } from './animation/bezierEasing'
 import { interpolateAnimatableValues, isColorTarget, isVec2, isScalarNumericTrack } from './animation/typedValues'
+import { compareKeyTime } from './timeline/authoring/keyTimePolicy'
 
 // ── Easing functions ──────────────────────────────────────────────────────────
 const easeIn    = (t: number) => t * t * t
@@ -56,15 +57,23 @@ function interpolateKeyframes(kfA: Keyframe, kfB: Keyframe, timeMs: number, targ
   return interpolateAnimatableValues(kfA.value, kfB.value, easedT, target)
 }
 
-/** Return the evaluated value for a single track at timeMs, or null if no keyframes.
- *  Honors track.outOfRange (BL-45) by remapping timeMs into the keyframe range
- *  according to the track's before/after behavior (cycle/loop/pingPong/etc.). */
+/** Evaluate a track at timeline-local milliseconds, without mutating source.
+ * Numeric procedural controllers need no keys; an empty keyframe track returns
+ * null. Applies the existing controller/keyframe, range, warp and modifier
+ * pipeline. Typed values retain their interpolation/hold semantics. */
 export function evaluateTrack(track: Track, timeMs: number): AnimatableValue | null {
+  return evaluateTrackPrepared(track, timeMs)
+}
+
+/** One authoritative signal pipeline; prepared samplers avoid rechecking the
+ * same immutable keys on every numerical probe. Normal callers retain the
+ * existing validation/sort behavior for independently supplied tracks. */
+function evaluateTrackPrepared(track: Track, timeMs: number, prepared?: { keys: Track['keyframes']; scalar: boolean }): AnimatableValue | null {
   // BL-50: procedural controllers bypass the keyframe path entirely. Out-of-
   // range (cycle/loop/pingPong) still pre-warps timeMs so a noise/waveform
   // controller can naturally loop or ping-pong if the user wants. Track
   // modifiers + multiplier curve still wrap the procedural output below.
-  if (track.controller && track.controller.type !== 'keyframe' && isScalarNumericTrack(track)) {
+  if (track.controller && track.controller.type !== 'keyframe' && (prepared?.scalar ?? isScalarNumericTrack(track))) {
     const ctrl = track.controller
     // For procedural controllers we don't have a kf range, so OOR is applied
     // against the timeline-derived range hint when the user explicitly set
@@ -97,11 +106,11 @@ export function evaluateTrack(track: Track, timeMs: number): AnimatableValue | n
   }
   // Keyframes are stored sorted; skip the copy + sort when already in order
   // (the common case — saves a lot of garbage for hot-path evaluation).
-  let kfs = track.keyframes
+  let kfs = prepared?.keys ?? track.keyframes
   if (kfs.length === 0) return null
-  for (let i = 1; i < kfs.length; i++) {
+  for (let i = 1; !prepared && i < kfs.length; i++) {
     if (kfs[i - 1].timeMs > kfs[i].timeMs) {
-      kfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
+      kfs = [...track.keyframes].sort(compareKeyTime)
       break
     }
   }
@@ -222,6 +231,20 @@ export type OverrideMap = Map<string, AnimatableValue>
 export function evaluateNumericTrack(track: Track, timeMs: number): number | null {
   const value = evaluateTrack(track, timeMs)
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** Borrow an immutable track for a bounded sampling job. Sorting and scalar
+ * validation happen once; each probe uses the identical evaluator pipeline.
+ * Returned closure owns only its sorted key array and must be dropped when
+ * source changes. Do not mutate the borrowed track/controller while sampling.
+ * This is not a global cache and never writes synthetic keys into source. */
+export function createNumericTrackSampler(track: Track): (timeMs: number) => number | null {
+  const prepared = { keys: [...track.keyframes].sort(compareKeyTime), scalar: isScalarNumericTrack(track) }
+  return timeMs => {
+    if (!Number.isFinite(timeMs) || !prepared.scalar) return null
+    const value = evaluateTrackPrepared(track, timeMs, prepared)
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
 }
 
 /**

@@ -36,7 +36,7 @@ import {
 } from '@/lib/editor/commands-layer'
 import {
   makeSetOutOfRangeCmd, makeAddCurveModifierCmd, nextModifierId,
-  makeSetTrackControllerCmd, makeBakeTrackToKeyframesCmd,
+  makeSetTrackControllerCmd,
 } from '@/lib/editor/commands-track'
 import { defaultParametersFor } from '@/lib/types'
 import type { CurveModifier, CurveModifierType, TrackController } from '@/lib/types'
@@ -78,6 +78,7 @@ import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { selectedBranchIds } from '@/lib/scene/hierarchy/editorLayerRows'
 import { useTimelineHierarchy } from './timeline/hooks/useTimelineHierarchy'
 import { useSelectedLayerReveal } from './layerHierarchy/useSelectedLayerReveal'
+import TrackBakeDialog from './timeline/baking/TrackBakeDialog'
 import type { TimelineRevealRequest } from '@/lib/timeline/hierarchy/TimelineRevealRequest'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import SubtreeOperationsToolbar from './layerHierarchy/SubtreeOperationsToolbar'
@@ -227,6 +228,7 @@ export default function TimelinePanel({
     catch (error) { editor.cancelTransaction(); authoringToast.warning('Key edit cancelled', { detail: (error as Error).message }); return false }
   }, [editor.commitTransaction, editor.dispatchCommand, editor.cancelTransaction])
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
+  const [bakeTarget, setBakeTarget] = useState<string | null>(null)
   // ── Layer filter (BL-38) — substring match on layer name + tracked properties
   const [layerFilter, setLayerFilter] = useState('')
 
@@ -817,7 +819,7 @@ export default function TimelinePanel({
   // BL-11: Marker right-click target — set by MarkerOverlay's onContextMenu.
   const [ctxMarker, setCtxMarker] = useState<{ markerId: string } | null>(null)
 
-  useEffect(() => { setEditingKf(null); setStaggerModalOpen(false); setKeySheetOpen(false); setCtxKf(null); setCtxTrackArea(null) }, [selectedTimelineId])
+  useEffect(() => { setBakeTarget(null); setEditingKf(null); setStaggerModalOpen(false); setKeySheetOpen(false); setCtxKf(null); setCtxTrackArea(null) }, [selectedTimelineId])
 
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -990,6 +992,7 @@ export default function TimelinePanel({
       onDragLeave={onTrackAreaDragLeave}
       onDrop={onTrackAreaDrop}
     >
+      {bakeTarget && selectedTimelineId && <TrackBakeDialog key={`${selectedTimelineId}:${bakeTarget}`} scene={scene} editor={editor} timelineId={selectedTimelineId} target={bakeTarget} onClose={() => setBakeTarget(null)} />}
       <TimelineToolbar
         timelines={scene.timelines}
         selectedTimelineId={selectedTimelineId}
@@ -1844,12 +1847,7 @@ export default function TimelinePanel({
           items.push({
             kind: 'action', label: 'Bake Track to Keyframes',
             shortcut: undefined, disabled: !supportsScalar,
-            onSelect: () => {
-              dispatchCommand(makeBakeTrackToKeyframesCmd(
-                selectedTimelineId, track.target, track,
-                { startMs: 0, endMs: duration, fps: 60, tolerance: 0.005 },
-              ))
-            },
+            onSelect: () => setBakeTarget(track.target),
           })
         }
         if (layerIdOnTrack && propertyPath && (onEditWire || onWireRequest)) {

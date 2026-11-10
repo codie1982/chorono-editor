@@ -81,11 +81,16 @@ interface Token {
   value: string
 }
 
+/** Tokenize decimal/scientific numbers without consuming binary signs. Signs
+ * belong to an exponent only immediately after e/E. Text/token budgets bound
+ * parsing work; literals must be finite IEEE-754 numbers. */
 function tokenize(expr: string): Token[] {
+  if (expr.length > 4096) throw new SyntaxError('Expression exceeds 4096 characters')
   const tokens: Token[] = []
   let i = 0
 
   while (i < expr.length) {
+    if (tokens.length >= 1024) throw new SyntaxError('Expression exceeds 1024 tokens')
     const ch = expr[i]
 
     // Whitespace
@@ -96,11 +101,9 @@ function tokenize(expr: string): Token[] {
 
     // Number (including decimals and scientific notation)
     if (/[0-9.]/.test(ch)) {
-      let num = ''
-      while (i < expr.length && /[0-9.eE+-]/.test(expr[i])) {
-        num += expr[i]
-        i++
-      }
+      const num = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(expr.slice(i))?.[0]
+      if (!num || !Number.isFinite(Number(num))) throw new SyntaxError(`Invalid finite number at position ${i}`)
+      i += num.length
       tokens.push({ type: 'number', value: num })
       continue
     }
@@ -150,9 +153,13 @@ function tokenize(expr: string): Token[] {
 
 // ── Parser (Recursive Descent) ─────────────────────────────────────────────────
 
+/** Bounded recursive-descent parser. Power is right-associative and binds
+ * tighter than unary sign: -2^2 = -(2^2), while 2^-2 is supported. No state is
+ * shared between parses. Tokens are borrowed for this parser's lifetime. */
 class Parser {
-  tokens: Token[]
-  current = 0
+  private readonly tokens: Token[]
+  private current = 0
+  private depth = 0
 
   constructor(tokens: Token[]) {
     this.tokens = tokens
@@ -187,6 +194,8 @@ class Parser {
   }
 
   private parseBinaryExpression(minPrec: number): ExpressionAST {
+    if (++this.depth > 64) throw new SyntaxError('Expression nesting exceeds 64 levels')
+    try {
     let left = this.parseUnaryExpression()
 
     while (this.peek().type === 'operator') {
@@ -196,7 +205,7 @@ class Parser {
       if (prec < minPrec) break
 
       this.advance()
-      const right = this.parseBinaryExpression(prec + 1)
+      const right = this.parseBinaryExpression(op === '^' ? prec : prec + 1)
 
       left = {
         type: 'BinaryExpression',
@@ -207,12 +216,13 @@ class Parser {
     }
 
     return left
+    } finally { this.depth-- }
   }
 
   private parseUnaryExpression(): ExpressionAST {
     if (this.peek().type === 'operator' && '+-'.includes(this.peek().value)) {
       const op = this.advance().value
-      const arg = this.parseUnaryExpression()
+      const arg = this.parseBinaryExpression(3)
       return {
         type: 'UnaryExpression',
         operator: op,
@@ -231,7 +241,7 @@ class Parser {
       this.advance()
       return {
         type: 'Literal',
-        value: parseFloat(token.value),
+        value: Number(token.value),
       }
     }
 
@@ -298,17 +308,31 @@ class Parser {
 
 // ── Evaluator ──────────────────────────────────────────────────────────────────
 
+/** Evaluate a parsed AST against own finite numeric context values. Function
+ * arity, safe-name ownership, 64-level depth and 1024-node budget are enforced.
+ * Every intermediate/result must be finite; failures throw with a reason.
+ * Trigonometric arguments are radians; other units belong to the caller. */
 export function evaluateExpression(
   ast: ExpressionAST,
   context: Record<string, number>
 ): number {
+  let remaining = 1024
+  /** All recursive paths share one bounded budget; malformed/cyclic external
+   * ASTs fail explicitly rather than overflowing or returning non-finite data. */
+  function visit(ast: ExpressionAST, depth = 0): number {
+    if (!ast || --remaining < 0 || depth > 64) throw new Error('Expression evaluation limit exceeded')
+    const result = evaluateNode(ast, depth)
+    if (!Number.isFinite(result)) throw new Error('Expression result must be a finite number')
+    return result
+  }
+  function evaluateNode(ast: ExpressionAST, depth: number): number {
   switch (ast.type) {
     case 'Literal':
       return ast.value ?? 0
 
     case 'Identifier': {
       const name = ast.name ?? 's'
-      if (!(name in context)) {
+      if (!Object.prototype.hasOwnProperty.call(context, name)) {
         throw new Error(`Undefined variable: ${name}`)
       }
       return context[name]
@@ -316,23 +340,25 @@ export function evaluateExpression(
 
     case 'CallExpression': {
       const funcName = ast.name as SafeFunctionName
-      if (!(funcName in SAFE_FUNCTIONS)) {
+      if (!Object.prototype.hasOwnProperty.call(SAFE_FUNCTIONS, funcName)) {
         throw new Error(`Unknown function: ${funcName}`)
       }
 
       const func = SAFE_FUNCTIONS[funcName] as SafeFunctionValue
-      const args = (ast.arguments ?? []).map((arg) => evaluateExpression(arg, context))
+      const args = (ast.arguments ?? []).map((arg) => visit(arg, depth + 1))
+      const variadic = funcName === 'min' || funcName === 'max'
+      if (variadic ? args.length < 1 : args.length !== func.length) throw new Error(`${funcName} expects ${variadic ? 'at least 1' : func.length} arguments`)
 
       try {
-        return (func as any)(...args)
+        return (func as (...values: number[]) => number)(...args)
       } catch (err) {
         throw new Error(`Error in function ${funcName}: ${err}`)
       }
     }
 
     case 'BinaryExpression': {
-      const left = evaluateExpression(ast.left!, context)
-      const right = evaluateExpression(ast.right!, context)
+      const left = visit(ast.left!, depth + 1)
+      const right = visit(ast.right!, depth + 1)
       const op = ast.operator
 
       switch (op) {
@@ -355,7 +381,7 @@ export function evaluateExpression(
     }
 
     case 'UnaryExpression': {
-      const arg = evaluateExpression(ast.argument!, context)
+      const arg = visit(ast.argument!, depth + 1)
       switch (ast.operator) {
         case '+':
           return arg
@@ -369,12 +395,15 @@ export function evaluateExpression(
     default:
       throw new Error(`Unknown AST node type`)
   }
+  }
+  return visit(ast)
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-/** Parse an expression string into an AST.
- *  Throws on syntax error or invalid identifiers. */
+/** Parse bounded numeric syntax into a fresh AST. Unknown variables/function
+ * names and arity are checked against context during evaluation, not guessed
+ * here. No implicit multiplication or implicit time variable is supported. */
 export function parseExpression(expr: string): ExpressionAST {
   try {
     const tokens = tokenize(expr)
@@ -402,4 +431,12 @@ export function safeEvaluate(expr: string, context: Record<string, number>): num
   } catch {
     return null
   }
+}
+
+/** Shared UI/runtime validation result. Unknown variables/functions, wrong
+ * arity, arithmetic/domain errors and non-finite values carry a useful reason.
+ * No fallback value is fabricated. Context units belong to the caller. */
+export function inspectExpression(expr: string, context: Record<string, number>): { value: number | null; error: string | null } {
+  try { return { value: evaluate(expr, context), error: null } }
+  catch (error) { return { value: null, error: error instanceof Error ? error.message : String(error) } }
 }

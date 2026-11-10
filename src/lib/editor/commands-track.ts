@@ -4,6 +4,7 @@ import type { ChronoScene, Track, Keyframe } from '../types/core'
 import type { EditorCommand } from './commands-keyframe'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 import type { CurveModifier } from '../animation/modifiers/types'
+import { isScalarNumericTrack } from '../animation/typedValues'
 
 /** Update a track's out-of-range behavior settings.
  *  @param timelineId - Timeline containing the track
@@ -219,34 +220,54 @@ export function makeUpdateTrackCurvesCmd(
 // original for undo. Use to "freeze" a noise/modifier-heavy track when
 // you want a deterministic kf list you can edit by hand.
 
-import { bakeTrack } from '../animation/baking/bake'
+import { bakeTrack, validateBakeOptions } from '../animation/baking/bake'
 import type { BakeOptions } from '../animation/baking/bake'
 
+/** Prepare a bounded numeric bake and return one undoable source replacement.
+ * The selected window becomes linear keys; outside authored keys and unrelated
+ * metadata survive. Signal processors are removed from the whole track. */
 export function makeBakeTrackToKeyframesCmd(
   timelineId: string,
   target:     string,
   prevTrack:  Track,
   options:    BakeOptions,
 ): EditorCommand {
-  const baked = bakeTrack(prevTrack, options)
+  const baked = bakeTrack(prevTrack, { ...options, keyIdPrefix: timelineId })
+  return makeApplyTrackBakeCmd(timelineId, target, prevTrack, baked, options)
+}
+
+/** Apply one already-reviewed numeric conversion. Stale track data or invalid
+ * timeline bounds reject before publishing; unrelated source edits survive.
+ * Prepared IDs/payload remain stable across execute/undo/redo. Source equality
+ * is structural because script handles expose detached tracks. */
+export function makeApplyTrackBakeCmd(timelineId: string, target: string, prevTrack: Track, baked: Track, options: BakeOptions): EditorCommand {
+  let before: import('../types').Timeline | undefined
   return {
     label: `Bake Track to Keyframes (${baked.keyframes.length} kfs)`,
-    execute: (scene) => ({
+    execute: (scene) => {
+      validateBakeOptions(options)
+      const timeline = scene.timelines.find(item => item.id === timelineId)
+      const live = timeline?.tracks.find(track => track.target === target)
+      if (!timeline || !live || JSON.stringify(live) !== JSON.stringify(prevTrack)) throw new Error('Track changed. Preview the current source before baking.')
+      if (baked.target !== target || !isScalarNumericTrack(baked)) throw new Error('The prepared bake must belong to this numeric source track.')
+      if (options.endMs > timeline.durationMs || options.startMs < 0 || options.signal?.aborted) throw new Error('Bake range is outside this timeline, or the operation was cancelled.')
+      before = timeline
+      const layerId = /^layers\.([^.]+)\./.exec(target)?.[1]
+      return {
       ...scene,
       timelines: scene.timelines.map((tl) =>
         tl.id !== timelineId ? tl : {
           ...tl,
+          ...(layerId && tl.layerIds ? { layerIds: Array.from(new Set([...tl.layerIds, layerId])) } : {}),
           tracks: tl.tracks.map((tr) => tr.target !== target ? tr : baked),
         }
       ),
-    }),
+      }
+    },
     undo: (scene) => ({
       ...scene,
       timelines: scene.timelines.map((tl) =>
-        tl.id !== timelineId ? tl : {
-          ...tl,
-          tracks: tl.tracks.map((tr) => tr.target !== target ? tr : prevTrack),
-        }
+        tl.id === timelineId && before ? before : tl
       ),
     }),
   }
