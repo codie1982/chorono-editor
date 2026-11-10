@@ -2231,3 +2231,20 @@ dosyaları ilgili adapter'la sınırlı değişti; yeni sorumluluklar küçük o
 modüllerdedir. MCP 2.1.0 / scene formatı korunur; public yayın yapılmadı.
 Sırada kalan viewport ve birleşik araç kabulü V6/E−1.7 vardır. Ardından onaylanan
 kutulu 3D/Poly sırası; tam export ve ikinci genel optimizasyon en sonda kalır.
+
+
+### 12.59. Input alanlarında expression planı — 10 Kasım 2026
+
+Kullanıcı isteğiyle [E−1.5A input expression](plans/input-expression-plan.md)
+plana eklendi. Sıra: ortak numeric input/fx/çift tıklama ve formülün saklanması →
+kalıcı property expression, çoklu kaynak ve açık zaman bağlamı → boolean/koşullar →
+renk/vektör/metin/select ve bütün input adapter'ları → V6/E−1.7 birleşik kabul.
+Ardından onaylı kutulu 3D/Poly sırası devam eder. Export ve ikinci optimizasyonun
+son sırası korunur. Canvas Slider/Switch/Checkbox/Input bileşenleri aynı
+altyapıyla bileşen kütüphanesi aşamasına bağlandı.
+
+Düz değer/saklanan formül ayrımı, hesaplanan sonuç preview, Enter/Escape,
+Convert to value, tek undo, stale ret, typed/birim doğrulaması, driver çakışması,
+clone/Array referansları ve portable/runtime/bake kabulü plan kapsamındadır.
+Bu kayıt plan değişikliğidir; yeni runtime/API desteği teslim edildiği anlamına
+gelmez. Uygulanan E−1.5'in mevcut kabul sonuçları korunur.

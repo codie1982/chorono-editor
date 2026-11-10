@@ -3,7 +3,7 @@
 8 Kasım 2026; ara iş sadeleştirmesi 10 Kasım 2026. Kullanıcı tarafından onaylandı.
 Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi tamamlandı.
 E−1.Q [MCP araç kalitesi ve uyumlu sadeleştirme](mcp-tool-quality-plan.md) de
-tamamlandı. E−1.1 zorunlu okuma/revision ve E−1.2 kaynak kökeni de tamamlandı; E−1.3 ortak hiyerarşi de tamamlandı; E−1.4 Set Key/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı; sırada kalan viewport/ortak araç kabulü,
+tamamlandı. E−1.1 zorunlu okuma/revision ve E−1.2 kaynak kökeni de tamamlandı; E−1.3 ortak hiyerarşi de tamamlandı; E−1.4 Set Key/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı; sırada [E−1.5A input expression](input-expression-plan.md), ardından kalan viewport/ortak araç kabulü,
 ardından yeni özellik sırası var.
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
@@ -49,14 +49,15 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline source tree, Find, tam subtree flag/undo, çoklu dal filtreleri ve güvenli UI reparent. [Sözleşme](../editor-hierarchy.md). |
 | Tamamlandı — E−1.4 | Set Key/toplu key/transport | Typed keyset, source örnekleme, ID/easing koruma, tek undo ve ortak çakışma/zaman politikası. [Sözleşme](../timeline-authoring.md). |
 | Tamamlandı — E−1.5 | Prosedürel eğri/Wire/bake | Zorunlu 1–4; [gerçek sözleşme](../procedural-authoring.md). Serbest zaman ifadesi controller'ı ayrı. |
-| Sıradaki | Kalan E−1 ve araç kabulü | V6/E−1.7 birleşik kullanıcı akışı ve aynı 512 MiB büyük sahne regresyonu. |
+| Sıradaki — E−1.5A | Input'larda düz değer ve expression | Ortak numeric giriş/fx/çift tıklama, kalıcı formül; çoklu kaynak/zaman ve typed sonuçlar, tüm field adapter'ları. [Plan](input-expression-plan.md). |
+| Ardından | Kalan E−1 ve araç kabulü | E−1.5A dahil V6/E−1.7 birleşik kullanıcı akışı ve aynı 512 MiB büyük sahne regresyonu. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
 | 4 | Poly görünümü | UV, vertex color, basit 2D material ve dokulu/deforme triangle çizimi; texture transform ve UV düzenleyicisi. |
 | 5 | Kutulu 3D ileri düzenleme | Bir kutuda birden çok model, kamera animasyonu, malzeme kontrolleri, imported skeleton/clip/morph oynatma ve elle pose düzeltme. Yeni rig üretme/weight painting/IK ayrı artımlı dilimlerdir. |
 | 6 | Yeni katmanların ortak araç adapter kabulü | Tamamlanan clone/array/ortak düzenleme sözleşmeleri Poly ve kutulu 3D için de doğrulanır; ikinci clone algoritması yazılmaz. |
-| 7 | Bileşen kütüphanesi ve karakter | Source component/local clock, 2D karakter rig/sprite/state-machine; yeniden kullanılabilir üretim kontrolleri. |
+| 7 | Bileşen kütüphanesi ve karakter | Source component/local clock, 2D karakter rig/sprite/state-machine; ortak parametre/expression'a bağlı Canvas Slider/Switch/Checkbox/Input bileşenleri ve yeniden kullanılabilir üretim kontrolleri. |
 | 8 | Fizik ve kırılma | Sabit adım/core, collision/force fields/bake; Poly kaynaklı Voronoi kırılma, particle entegrasyonu. |
 | 9 | Kumaş | Poly rest mesh + UV + pin/collision/gravity/wind, elle düzeltme ve bake. |
 | 10 | Blob, sıvı ve akışkan | Değişken topolojili Blob Surface, solver/contour/mesh adapter'ları ve bake. Sabit Poly vertex/UV kimliği kendiliğinden korunmuş sayılmaz. |

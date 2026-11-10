@@ -6,7 +6,7 @@ legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
 editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
 [Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
 [istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
-**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı**; sırada **kalan viewport ve birleşik araç kabulü (V6/E−1.7)** var. [E−1.5 sözleşmesi](../procedural-authoring.md). Glama'nın eski
+**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı**; kullanıcının yeni isteğiyle sıraya **[E−1.5A input expression](input-expression-plan.md)** eklendi. Ardından **kalan viewport ve birleşik araç kabulü (V6/E−1.7)** var. [E−1.5 sözleşmesi](../procedural-authoring.md). Glama'nın eski
 dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
@@ -83,9 +83,9 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | E−1.3 — tamamlandı | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
 | E−1.4 — tamamlandı | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
 | E−1.5 — zorunlu 1–4 tamamlandı | Prosedürel eğri ve expression güvenilirliği | Parser/UI hataları düzelir; controller eğrisi görünür; örnekleme ve bake açık doğruluk toleransıyla çalışır. |
+| E−1.5A — sıradaki | Input'larda düz değer / kalıcı expression | Ortak numeric giriş, çift tıklama/fx, saklanan formül ve sonuç preview; ardından çoklu kaynak/zaman, boolean/typed sonuç ve bütün input adapter'ları. [Ayrıntılı plan](input-expression-plan.md). |
 | E−1.6 — sürüyor | Viewport araçları ve doğrudan authoring | Pivot/seçim/drag, ortak multi-transform, V3 key çizimi ve V4/V5 clone/array uygulandı; [transform sözleşmesi](../viewport-transform-editing.md), [Array kabulü](../viewport-array-editing.md). Komşu mesafesi/cetvel/guide araçları da uygulandı; tam V6 bekler. [V0–V6](viewport-authoring-2d-plan.md). |
-| E−1.7 | Birleşik kullanıcı akışı kabulü | Aşağıdaki insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından onaylanan kutulu 3D/Poly sırası başlar. Tam Export E0 ve ikinci
-genel optimizasyon yeni özelliklerden sonra kalır. |
+| E−1.7 | Birleşik kullanıcı akışı kabulü | Input expression dahil insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından onaylanan kutulu 3D/Poly sırası başlar. Tam Export E0 ve ikinci genel optimizasyon yeni özelliklerden sonra kalır. |
 
 ### E−1.1 — Tamamlandı: önce oku, mevcut yapı üzerinde değiştir
 
@@ -221,7 +221,9 @@ eşliği. İlgili belgeler: [subtree işlemleri](../editor-subtree-operations.md
 E−1.4 key API güncellemesi ID, tangent ve atlanan easing’i korur; protokol 2.1.0
 ve scene formatı değişmedi. İnsan düzenlemeleri, exact history ve portable kayıt
 korunur. Kanıt: `artifacts/validation/timeline-authoring-20261110/`.
-E−1.5 zorunlu dilimi de tamamlandı; sırada kalan birleşik araç kabulü var. Kutulu 3D/Poly ve export/ikinci optimizasyonun son sırası korunur.
+E−1.5 zorunlu dilimi de tamamlandı; yeni input expression teslimi E−1.5A, kalan
+birleşik araç kabulünden önce gelir. Kutulu 3D/Poly ve export/ikinci optimizasyonun
+son sırası korunur.
 
 **Önce ortak authoring sözleşmesi, sonra butonlar.** Mevcut property registry,
 keyframe helper, batch command ve shortcut registry genişletilir.
@@ -319,6 +321,11 @@ Zorunlu dilimin uygulanan sırası:
    Bounded değerlendirme, izinli fonksiyonlar, hata/fallback, bake ve player/export
    parity olmadan “expression desteklendi” denmez. Mevcut sine yolu bu genel
    dilin tamamlanmasını beklemez; E0 öncesi zorunlu ilk teslim 1–4'tür.
+
+10 Kasım ek kararı: input'ta kalıcı expression, çoklu kaynak ve açık zaman
+bağlamı [E−1.5A](input-expression-plan.md) ile planlandı. Bu yeni teslim,
+tamamlanan E−1.5'in kabulünü değiştirmez; V6/E−1.7 öncesine gelir. Ortak scalar
+altyapıdan sonra boolean/renk/vektör/metin ve diğer field adapter'ları tamamlanır.
 
 Kabul: sahne/script/controller numeric eşliği, whitespace ve exponent parser
 testleri, UI hata testi, sıfır-key eğrisinin görünürlüğü, bake sonrası düzenleme
