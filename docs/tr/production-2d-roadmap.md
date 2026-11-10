@@ -1,6 +1,6 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 9 Kasım 2026. **Güncel ve onaylanan sıra:**
+Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
 önce kullanıcı onaylı tanı servisi/sürüm kontrolü ara işi → kalan viewport/ortak
 düzenleme işleri → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
@@ -22,12 +22,13 @@ kapanışında ele alındı (§12.43); ölçü/guide kabulü §12.44'tedir.
 
 **9 Kasım viewport düzeltmeleri:** [pointer-up/guide bırakma, sabit durum çubuğu,
 fare noktası, hafif gölge ve kompozisyon dışı düzenleme](viewport-interaction-polish.md)
-uygulandı (§12.45). Kalan E−1 ve tam V6 kabulü D0–D5 ara işi sonrasında korunur.
+uygulandı (§12.45). Kalan E−1 ve tam V6 kabulü D0–D2 ara işi sonrasında korunur.
 
-**9 Kasım yeni ara iş:** [kullanıcı onaylı hata/Interaction raporları ve sürüm
+**10 Kasım sadeleştirilen ara iş:** [kullanıcı onaylı hata özetleri ve sürüm
 kontrolü](plans/diagnostics-consent-version-plan.md), kalan E−1 işinden önce
-**D0–D5** olarak planlandı (§12.46). Yerel kayıt izni uzak paylaşım izni değildir;
-ham JSON gönderilmez. Otomatik paylaşım/sürüm kontrolü ayrı ve varsayılan kapalıdır.
+**D0–D2** olarak planlandı (§12.46). Yalnız beklenmeyen hatalar tekilleştirilip
+tekrar sayısıyla gösterilir; ayrıntılı Interaction kaydı elle açılan yerel araçtır.
+Otomatik hata paylaşımı/sürüm kontrolü ayrı ve varsayılan kapalıdır.
 Bu servis henüz uygulanmadı. Son [capture kaybı, kalıcı tanı kaydı ve ardışık
 shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğrulandı.
 
@@ -39,7 +40,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
-| Sıradaki — ara iş D0–D5 | Kullanıcı onaylı tanı raporları ve sürüm kontrolü | Temizlenmiş Interaction/hata DTO'su, ayrı onaylar, bounded queue/retry, merkezi collector/retention, release manifest ve gerçek ağ/izin kabulü. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
+| Sıradaki — ara iş D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Yalnız gerçek hata, aynı hataya tek satır/tekrar sayısı, tek temizlenmiş örnek; tek paylaşım onayı ve sınırlı özet kuyruğu. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
 | Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
@@ -71,7 +72,7 @@ kullanıcının isteğine göre en son tartışılacak ayrı konudur. Önceden y
 flowchart TD
     V4[Subtree duplicate / drag-copy] --> V5[Çoklu Array]
     V5 --> LAYOUT[Komşu mesafesi / cetvel / guide]
-    LAYOUT --> DIAG[Onaylı tanı raporları / sürüm kontrolü D0–D5]
+    LAYOUT --> DIAG[Sade hata özeti / sürüm kontrolü D0–D2]
     DIAG --> H[Kalan ortak düzenleme ve araç kabulü]
     H --> I[Dar source / time / resource sözleşmeleri]
     I --> B[Kutulu 3D ilk sürüm]
@@ -120,7 +121,7 @@ Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; 
 
 [Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5 ve komşu mesafesi/cetvel/guide tamamlandı; önce D0–D5 onaylı tanı/sürüm ara işi, sonra kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
+Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5 ve komşu mesafesi/cetvel/guide tamamlandı; önce D0–D2 sade hata özeti/sürüm ara işi, sonra kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
@@ -1879,6 +1880,9 @@ kalan ortak düzenleme, onaylanan 3D/Poly sırası ve son export/optimizasyon
 
 ### 12.46. Kullanıcı onaylı tanı servisi ve sürüm kontrolü planlandı — 9 Kasım 2026
 
+Bu ilk kapsam tarihsel kayıttır; 10 Kasım kullanıcı düzeltmesiyle §12.47'deki
+sade D0–D2 kapsamı geçerlidir. Ayrıntılı uzak Interaction raporları ertelendi.
+
 [D0–D5 ayrıntılı plan](plans/diagnostics-consent-version-plan.md) kalan E−1
 işlerinin önüne ara iş olarak eklendi. Mevcut yerel Interaction kaydı ve son
 [pointer lifecycle düzeltmeleri](pointer-gesture-lifecycle.md) temel alınır;
@@ -1898,3 +1902,14 @@ dahil etmeme ve çoklu sekme tekilleştirmesi planın kabul koşuludur. Collecto
 adresi/işletmeci/saklama politikası yayın sırasında somutlaştırılır. Servis
 gönderimi bugün açılmadı; bu tur yalnız dokümantasyon değişikliği olduğu için
 uygulama testleri/build tekrar çalıştırılmadı ve açık editör yenilenmedi.
+
+### 12.47. Hata kalabalığını önleyen sade kapsam — 10 Kasım 2026
+
+Kullanıcı geri bildirimiyle ara iş **D0–D2** olarak küçültüldü. Yalnız beklenmeyen
+uygulama hataları; aynı sürüm/kod/modül/sabit noktaya tek satır, günlük tekrar
+sayısı ve bir temizlenmiş örnek. Bakım listesi Yeni/İnceleniyor/Düzeltildi;
+her tekrarda yeni issue/bildirim yok. Ayrıntılı Interaction elle açılan yerel
+araç olarak kalır; uzak olay penceresi ilk sürüme dahil değildir. Tek paylaşım
+onayı, sınırlı kuyruk ve ayrı sürüm kontrolü korunur.
+[Güncel kapsam](plans/diagnostics-consent-version-plan.md) §12.46'daki geniş
+planın yerini alır. Bu tur yalnız doküman değişti; runtime/test/build değişmedi.
