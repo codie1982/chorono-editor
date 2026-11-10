@@ -1602,7 +1602,7 @@ export default function SceneCanvas({
       )}
 
       {/* Top-right controls: View + Snap dropdowns (SVGator-style) */}
-      <div className="absolute top-3 right-3 flex items-center gap-2 select-none z-30">
+      <div data-viewport-cursor-block className="absolute top-3 right-3 flex items-center gap-2 select-none z-30">
         <ViewMenu
           showRulers={showRulers}     onToggleRulers={() => setShowRulers((v) => !v)}
           gridInFront={gridInFront}   onToggleGridFront={() => setGridInFront((v) => !v)}
@@ -1630,7 +1630,7 @@ export default function SceneCanvas({
       <ViewportPerformanceOverlay />
 
       {/* Bottom-right controls: zoom pill */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-2 select-none">
+      <div data-viewport-cursor-block className="absolute bottom-3 right-3 z-30 flex items-center gap-2 select-none">
         {/* Zoom + pan pill */}
         <div className="flex items-center gap-1 bg-gray-900/90 border border-gray-700
                         rounded px-2 py-1 text-xs font-mono text-gray-300">

@@ -24,7 +24,7 @@ const source={getSnapshot:()=>({
 export default function ViewportPerformanceOverlay(){
   const [snapshot,setSnapshot]=useState<ReturnType<typeof source.getSnapshot>|null>(null)
   useEffect(()=>observeResourceMonitor(source,document,setSnapshot),[])
-  return <div role="group" aria-label="Viewport performance" aria-live="off"
+  return <div data-viewport-cursor-block role="group" aria-label="Viewport performance" aria-live="off"
     title="Last measured viewport drawing duration, including onion skin. Heap: last sampled JavaScript heap estimate, refreshed after viewport redraws; not total RAM. This indicator is excluded from exports."
     className="absolute top-10 left-7 z-20 max-w-[calc(100%-2.5rem)] truncate pointer-events-none select-none rounded border border-gray-700 bg-gray-900/90 px-2 py-1 text-[10px] leading-4 font-mono tabular-nums text-gray-300">
     Last draw {snapshot?.drawMs==null?'—':`${snapshot.drawMs.toFixed(1)} ms`} <span className="text-gray-500">·</span> Heap {snapshot?.heap==null?'—':formatBytes(snapshot.heap)}

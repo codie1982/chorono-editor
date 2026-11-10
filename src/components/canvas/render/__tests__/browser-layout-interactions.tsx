@@ -301,6 +301,26 @@ async function cursorCheck(mount: (source?: Fixture) => Promise<void>) {
   flushSync(() => canvas().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 1, buttons: 4, clientX: start.x, clientY: start.y })))
   pointer(window, 'pointermove', end, 4); pointer(window, 'pointerup', end, 0); await frames(); aligned(); await inspect()
   const viewport = host.querySelector('[data-testid="canvas-viewport"]'); assert(viewport, 'Missing viewport leave boundary.')
+  const absent = (message: string) => assert(!host.querySelector('[data-testid="canvas-cursor-point"]') &&
+    !host.querySelector('[data-testid="canvas-cursor-crosshair"]') && !host.querySelector('[data-testid="ruler-cursor-x"]') &&
+    !host.querySelector('[data-testid="ruler-cursor-y"]'), message)
+  for (const chrome of [titled('Zoom in (Cmd+scroll)'), control('Horizontal ruler'), control('Vertical ruler'),
+    host.querySelector('[aria-label="Viewport performance"]')]) {
+    assert(chrome, 'Missing viewport cursor exclusion target.')
+    const r = chrome.getBoundingClientRect(), center = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    // Capture may keep naming canvas even while the physical point is over UI.
+    pointer(canvas(), 'pointermove', center, 0); await frames()
+    absent('Cursor marker or ruler tracking survived a viewport control/HUD hover.')
+    await inspect()
+  }
+  const viewportRect = viewport.getBoundingClientRect()
+  pointer(canvas(), 'pointermove', { x: viewportRect.right + 5, y: viewportRect.top + 100 }, 0); await frames()
+  absent('A captured pointer sample outside viewport retained cursor chrome.')
+  await inspect()
+  window.dispatchEvent(new Event('blur')); await frames()
+  absent('Viewport cursor survived window blur.')
+  await inspect()
+  record('Cursor and ruler tracking reject control/HUD/outside samples, clear on blur and recover on work-area re-entry', { captureRetargetingChecked: true })
   pointer(canvas(), 'pointermove', clientPoint({ x: 245, y: 180 }), 0)
   pointer(viewport, 'pointerleave', clientPoint({ x: -1000, y: -1000 }), 0); await frames()
   assert(!host.querySelector('[data-testid="canvas-cursor-point"]') && !host.querySelector('[data-testid="canvas-cursor-crosshair"]'), 'Mouse point survived viewport leave or a pending pointer callback.')
