@@ -1,4 +1,6 @@
 'use client'
+import { BulkEditPolicyControl } from './authoring/BulkEditPolicyControl'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import type { ChronoScene, Track, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -32,6 +34,8 @@ interface Props {
   scene:              ChronoScene
   editor:             EditorStateReturn
   selectedLayerId:    string | null
+  collisionPolicy?: KeyCollisionPolicy
+  onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
   selectedLayerIds?:  ReadonlySet<string>
   selectedTimelineId: string | null
   currentTimeMs:      number
@@ -60,8 +64,11 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
  */
 export default function CurveEditor({
   scene, editor, selectedLayerId, selectedLayerIds, selectedTimelineId,
-  currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes,
+  currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes, collisionPolicy, onCollisionPolicyChange,
 }: Props) {
+  const [localPolicy, setLocalPolicy] = useState<KeyCollisionPolicy>('reject')
+  const bulkPolicy = collisionPolicy ?? localPolicy
+  const setBulkPolicy = onCollisionPolicyChange ?? setLocalPolicy
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef       = useRef<SVGSVGElement>(null)
   /** Live ResizeObserver — held across re-renders so a single observer
@@ -415,7 +422,7 @@ export default function CurveEditor({
   }
   const releaseRanges = () => setFrozenRanges(null)
   const drag = useCurveDrag({
-    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal,
+    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal, collisionPolicy: bulkPolicy,
     onDragStart: freezeRanges, onDragEnd: releaseRanges, onWarning: setNotice,
   })
   const bezierDrag = useBezierHandleDrag({
@@ -641,6 +648,7 @@ export default function CurveEditor({
             disabled={visibleTracks.length === 0}
           >All</ToolbarBtn>
 
+          <BulkEditPolicyControl policy={bulkPolicy} onChange={setBulkPolicy} />
           <span className="w-px h-4 bg-gray-700 mx-1.5 shrink-0" />
 
           <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mr-1 shrink-0">
@@ -1339,8 +1347,8 @@ export default function CurveEditor({
               if (selectedKfIds.has(k.id)) refs.push({ kfId: k.id, target: tr.target, timelineId: selectedTimelineId! })
             }
           }
-          const cmd = makeMirrorTimingCmd(scene, refs)
-          if (cmd) editor.dispatchCommand(cmd)
+          const cmd = makeMirrorTimingCmd(scene, refs, { collisionPolicy: bulkPolicy })
+          if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         } : undefined,
         reverseValues: selectedKfIds.size > 1 ? () => {
           const refs: KfValueRef[] = []
@@ -1350,7 +1358,7 @@ export default function CurveEditor({
             }
           }
           const cmd = makeReverseValuesCmd(scene, refs)
-          if (cmd) editor.dispatchCommand(cmd)
+          if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         } : undefined,
         setTangentMode: (k, mode) => {
           const prev = k.tangentMode
@@ -1390,7 +1398,7 @@ export default function CurveEditor({
           const kfB = sorted[idx + 1]
           if (!kfB) return
           const cmd = makeFlattenSegmentCmd(scene, tl.id, ctxData.trackTarget, seg.id, kfB.id)
-          if (cmd) editor.dispatchCommand(cmd)
+          if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         },
       })
     }

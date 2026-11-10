@@ -60,8 +60,9 @@ native command. The rename does not introduce a new deep-patch operation.
 
 Names do not change semantics: legacy `add_keyframes` still has its own target
 addressing and timeline auto-create behavior; it is not an interchangeable
-spelling of `upsert_keyframes`. Existing key upsert may replace nearby key
-metadata, so follow [collaborative-editing.md](collaborative-editing.md) when
+spelling of `upsert_keyframes`. Exact-time upsert preserves IDs and omitted curve metadata; nearby fractional
+keys stay separate. Legacy add_keyframes retains its easeInOut insertion default;
+structured upsert defaults new keys to linear. Follow [collaborative-editing.md](collaborative-editing.md) when
 preserving hand-edited keys.
 
 All canonical and historical source mutations require `expectedRevision` and the one-use `readToken` from `get_scene`; plan commit uses its dry-run token. Put these on the outer batch only; use `batchInputSchema` for sub-actions. On an uncertain retry, keep the **same tool name, arguments (including token) and requestId**.

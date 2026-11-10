@@ -77,9 +77,11 @@ bindings, parameter wiring and runtime inputs, unlike the timeline-only helper.
 
 Original `add_keyframes` keeps its target-path addressing and timeline
 auto-create behavior. It is not an input-compatible spelling of
-`upsert_keyframes`. Existing key upsert can replace nearby key metadata; this
-catalog update is not the later identity-preserving key-edit feature. Read the
-affected keys and preserve unrelated data.
+`upsert_keyframes`. E−1.4 exact-time upsert preserves existing key IDs, tangents,
+segment settings and unspecified easing. Explicit easing replaces easing; new
+keys default to linear. Equality is `1e-6 ms`, so nearby fractional keys remain
+separate; ambiguous coincident keys are rejected. Read affected keys and preserve
+unrelated data. This does not bake driven channels or expose UI Set Key as a tool.
 
 For full effects, masks, particle or spline data, read the `get_scene` snapshot
 or script `layer.data` before replacing nested fields. The `get_layer` summary

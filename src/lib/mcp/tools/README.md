@@ -47,6 +47,6 @@ the actual native-batch workflow and migration.
 
 Mandatory source authorization is owned by [source/](../source/README.md): client/editor/document/revision-bound one-use reads, private broker envelopes and final browser CAS. `validateToolCall(...,{withinBatch:true})` validates only a sub-action payload after outer authorization; it is not a transport bypass. AJV validators are keyed by name and direct/batch mode. Provenance remains separate.
 It also does not change shallow replacement, timeline-only evaluation or legacy
-key identity/collision rules merely because a clearer alias is available.
+key identity/collision rules merely because a clearer alias is available. E−1.4 separately implements exact-time identity/easing preservation in the common source upsert; the catalog documents that actual behavior.
 Compatibility tests cover discovery, alias schema equality, legacy behavior,
 dedupe, stale revisions, atomic failure/undo and typed input/clearing cases.

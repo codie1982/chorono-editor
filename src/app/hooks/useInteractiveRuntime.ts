@@ -100,8 +100,10 @@ export interface InteractiveRuntimeReturn {
   /** Subscribe to lifecycle / trigger events (Android-bridge style). */
   onEvent: (listener: (event: RuntimeEvent) => void) => () => void
 
-  /** Per-frame pipeline. Call from the render loop with the global time. */
-  evaluateFrame: (globalTimeMs: number) => FrameEvalResult
+  /** Per-frame pipeline with global ms. An optional editor-only local override
+   * holds a paused timeline at its terminal pose without loop remapping. Segment
+   * preview takes priority; omitted override preserves runtime/player callers. */
+  evaluateFrame: (globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null) => FrameEvalResult
   /** Monotonic counter that increments every animation frame while a
    *  segment is actively playing. Consumers add it to `useMemo` deps to
    *  force re-evaluation on each frame without polling. Retains its last value
@@ -177,7 +179,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
   const prevSnapshotRef = useRef<PlaybackSnapshot>(emptySnapshot())
 
   // ── Per-frame evaluation ───────────────────────────────────────────────
-  const evaluateFrame = useCallback((globalTimeMs: number): FrameEvalResult => {
+  const evaluateFrame = useCallback((globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null): FrameEvalResult => {
     acknowledge()
     const paramValues = readValues()
     // Drain before the SM/trigger passes. Feedback emitted by either pass stays
@@ -188,7 +190,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     const seg = segmentRef.current
     const externalTime: ExternalTimelineTime | null = seg
       ? { timelineId: seg.timelineId, localTimeMs: computeSegmentTime(seg, performance.now()) }
-      : null
+      : authoringOverride ?? null
 
     // ── State machine pass (BL-09) ────────────────────────────────────────
     // When machines exist, the SM owns its state timelines: forward incoming

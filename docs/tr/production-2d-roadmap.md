@@ -2146,3 +2146,31 @@ Ana port 2000 editörü ve ilgisiz pan/cursor çalışma değişiklikleri koruna
 clean snapshot'ta sınandı. Kanıt `artifacts/validation/editor-hierarchy-20261110/`.
 MCP 2.1.0 ve scene formatı değişmedi; public yayın yapılmadı. Sırada E−1.4;
 kutulu 3D/Poly, son export ve ikinci optimizasyon sırası korunur.
+
+
+### 12.56. E−1.4 Set Key, toplu key ve Timeline transport — 10 Kasım 2026
+
+[Uygulanan sözleşme ve bakım rehberi](timeline-authoring.md). Görünür büyük Set Key,
+All/Transform/Animated/Selected keyset, typed source interpolasyonu ve driven kanal
+review/Cancel eklendi. Tek komut seçili katmanların key ve üyeliğini yazar; manual
+ID/easing/tangent, source isimleri ve attribution korunur. Script/native aynı
+zamandaki update ID ve belirtilmeyen easing'i korur; ±1 ms silme kaldırıldı.
+
+Move/slide/scale/stagger/paste/mirror/align/spreadsheet ortak atomik sınır/collision
+politikasını kullanır: default reject, explicit overwrite, grup aralığını koruma,
+fractional ms ve exact undo. Reddedilen gesture baseline'a döner. Timeline/Curve/Dope
+aynı tercihi kullanır. K Set Key; comma/period key, Home/End sınır, Shift+Home/End
+ilk/son key ve görünür frame transport tek registry/keyboard scope'una bağlandı.
+Paused local end frame loop/work area nedeniyle başa sarmaz; playing local zaman
+mevcut evaluator ile çözülür. Özel eski shortcut ataması sessizce ezilmez.
+
+345 dosya / 2.751 test, MCP ve production build geçti. İzole gerçek Chrome'da
+51 katmanlı Canvas/Timeline/Curve kabulü 10/10: 50 katman tek undo, manual 09:05,
+review/cancel, collision/overwrite, fractional sheet, paste, rejected transaction,
+loop terminal pose ve native keyboard sahipliği. Ana editör kaynağına yazılmadı;
+ilgisiz pan/cursor çalışma değişiklikleri clean snapshot testinden ayrıldı.
+Kanıt `artifacts/validation/timeline-authoring-20261110/`. Yeni modüller küçük
+sorumluluklara ayrıldı; legacy büyük entegrasyon dosyaları ilgili akışla sınırlı
+olarak değişti. MCP 2.1.0 / scene formatı aynı; public yayın yapılmadı.
+Sırada E−1.5 prosedürel eğriler; kutulu 3D/Poly, export ve ikinci genel optimizasyon
+sırası korunur. Soft selection ayrı sonraki tartışmadır.

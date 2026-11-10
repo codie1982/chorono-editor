@@ -65,6 +65,8 @@ Timeline isimleri animasyonları sıraya koymaz. Kesintisiz film için tek maste
 
 Kare değerlendirmesi animasyon değerlerini çizimden önce katman verisine uygular. Shape parametreleri, tipografi, efektler, maskeler, repeater ve particle ayarları bu akışa dahildir. Değerler gerçek özellik şemasına uymalıdır; rastgele alan ismi yazmak yeni bir çizim özelliği oluşturmaz.
 
+Aynı zamandaki key güncellemesi mevcut ID, tangent, segment ayarları ve belirtilmeyen easing’i korur; easing değiştirmek için açıkça verin. Yeni key varsayılanı linear’dır. Eşitlik `1e-6 ms`; yakın fractional key’ler ayrı kalır, belirsiz çakışık key’ler reddedilir. Ara değeri örnekleyerek key eklemek bütün nonlinear segmenti aynen koruma sözü vermez. Driven controller/binding için explicit bake/düzenleme akışını kullanın.
+
 Sayılar easing ile; renk alanları kanallar üzerinden; Vec2 değerleri bileşenleri üzerinden interpolate edilir. Diğer metin ve boolean değerleri keyframe sınırında değişir. Controller/modifier'lar sayısaldır. Mevcut path/spline noktaları ve handle'ları aynı topoloji korunarak sayısal koordinat yollarıyla hareket ettirilebilir; bütün geometri nesnesini veya topolojiyi keyframe ile değiştiren genel morph sistemi yoktur.
 
 Easing başlangıç keyframe'ine aittir: `linear`, `hold`, `easeIn`, `easeOut`, `easeInOut` veya `{type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}`.

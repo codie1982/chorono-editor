@@ -3,6 +3,8 @@ import { useEffect } from 'react'
 import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
 import { shortcutRegistry } from '@/lib/shortcuts'
 import type { ShortcutContext } from '@/lib/shortcuts'
+import { scopedShortcutAction } from '@/lib/shortcuts/scopedActions'
+import type { TimelineNavigation } from '@/lib/timeline/authoring/timelineNavigation'
 import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 
 /** Timeline property addressed by the P/S/R/T shortcut family. */
@@ -35,6 +37,8 @@ interface Handlers {
   /** Timeline context — add/remove a keyframe for a property at the playhead. */
   onTimelineToggleKeyframe?: (prop: TimelineProperty) => void
   /** Timeline context — jump to previous / next keyframe (J / K). */
+  onSetKey?: () => void
+  onTimelineNavigate?: (intent: TimelineNavigation, frames?: number) => void
   onTimelinePrevKeyframe?: () => void
   onTimelineNextKeyframe?: () => void
   /** Returns the active editor panel's context. Drives which binding
@@ -81,7 +85,7 @@ export function useKeyboard(handlers: Handlers) {
     onCloneQuick, onOpenArrayModal,
     onToolChange,
     onTimelineShowProperty, onTimelineToggleKeyframe,
-    onTimelinePrevKeyframe, onTimelineNextKeyframe,
+    onTimelinePrevKeyframe, onTimelineNextKeyframe, onSetKey, onTimelineNavigate,
     getContext,
     isTransactionActive,
     frameRate: _frameRate = 60,
@@ -127,8 +131,14 @@ export function useKeyboard(handlers: Handlers) {
       'timeline.keyframe.scale':    () => onTimelineToggleKeyframe?.('scale'),
       'timeline.keyframe.rotation': () => onTimelineToggleKeyframe?.('rotation'),
       'timeline.keyframe.opacity':  () => onTimelineToggleKeyframe?.('opacity'),
-      'timeline.nav.prevKeyframe':  () => onTimelinePrevKeyframe?.(),
-      'timeline.nav.nextKeyframe':  () => onTimelineNextKeyframe?.(),
+      'timeline.keyframe.set': onSetKey,
+      'timeline.nav.prevKeyframeLegacy': onTimelineNavigate ? () => onTimelineNavigate('previousKey') : onTimelinePrevKeyframe,
+      'timeline.nav.start': onTimelineNavigate ? () => onTimelineNavigate('start') : undefined,
+      'timeline.nav.end': onTimelineNavigate ? () => onTimelineNavigate('end') : undefined,
+      'timeline.nav.firstKey': onTimelineNavigate ? () => onTimelineNavigate('firstKey') : undefined,
+      'timeline.nav.lastKey': onTimelineNavigate ? () => onTimelineNavigate('lastKey') : undefined,
+      'timeline.nav.prevKeyframe': onTimelineNavigate ? () => onTimelineNavigate('previousKey') : onTimelinePrevKeyframe,
+      'timeline.nav.nextKeyframe': onTimelineNavigate ? () => onTimelineNavigate('nextKey') : onTimelineNextKeyframe,
     }
     // Canvas tool shortcuts → onToolChange.
     for (const [id, mode] of Object.entries(TOOL_BY_ID)) {
@@ -150,11 +160,16 @@ export function useKeyboard(handlers: Handlers) {
       if (!id) return
       // A menu/dialog may own focus through a portal while a canvas node is
       // still the event target. Do not move source objects behind that scope.
-      if (id.startsWith('canvas.nudge.')
-          && hasVisibleKeyboardScope()) return
-      const action = actions[id]
+      if (hasVisibleKeyboardScope()) return
+      // Native focused buttons own Space/Enter activation (for example Play).
+      if (target.tagName === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return
+      const frameDirection = id.startsWith('global.playback.stepBack') ? 'previousFrame' : 'nextFrame'
+      const action = context === 'timeline' && id.startsWith('global.playback.step') && onTimelineNavigate
+        ? () => onTimelineNavigate(frameDirection, id.endsWith('10') ? 10 : 1)
+        : actions[id] ?? scopedShortcutAction(id)
       if (!action) return
       e.preventDefault()
+      if (e.repeat && id === 'timeline.keyframe.set') return
       if (isTransactionActive?.()) return
       action()
     }
@@ -171,7 +186,7 @@ export function useKeyboard(handlers: Handlers) {
     onCloneQuick, onOpenArrayModal,
     onToolChange,
     onTimelineShowProperty, onTimelineToggleKeyframe,
-    onTimelinePrevKeyframe, onTimelineNextKeyframe,
+    onTimelinePrevKeyframe, onTimelineNextKeyframe, onSetKey, onTimelineNavigate,
     getContext,
     isTransactionActive,
   ])

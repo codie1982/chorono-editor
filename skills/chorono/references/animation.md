@@ -55,6 +55,7 @@ The `sine` **modifier** uses normalized time within each keyframe segment, with 
 
 ## Tracks and easing
 
+- Exact-time `Layer.key` / `Timeline.key` and native `upsert_keyframes` updates preserve the existing key ID, tangents and segment settings. Omit easing to preserve it; provide easing explicitly to replace it. New keys default to linear. Equality uses a tiny `1e-6 ms` tolerance, not a ±1 ms deletion window: a nearby fractional key stays separate. Ambiguous coincident source keys are rejected; read their IDs and resolve them explicitly. These are source-channel edits, not automatic controller/binding baking.
 - Easing belongs to the **starting** keyframe of a segment. Supported names include `linear`, `hold`, `easeIn`, `easeOut`, `easeInOut`. A custom curve is `{type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}`.
 - For `Timeline.key(layer,property,...)` pass a layer-local property such as `transform.x`. Track-editing methods take full targets such as `layers.<id>.transform.x`.
 - `scene.cloneTimeline(id,newId)` duplicates an animation without cloning the objects. Its keyframes receive fresh ids so edits stay independent. Read the cloned timeline before referring to individual keys. It also duplicates existing tracks; remove or replace tracks that should not be inherited.

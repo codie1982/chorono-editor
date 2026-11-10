@@ -1,3 +1,4 @@
+import { applyKeyframeBatch, type KeyframeBatchOptions } from './authoring/keyframeBatch'
 import type { ChronoScene, Keyframe, Track, EasingDefinition } from '../types'
 import type { EditorCommand } from '../editor/commands-keyframe'
 import type { BezierTuple } from '../animation/timeWarp/types'
@@ -31,10 +32,11 @@ export function applyCurveKeyframeChanges(scene: ChronoScene, timelineId: string
 }
 
 /** Both drag axes (and duplication) commit together as one reversible edit. */
-export function makeCurveKeyframeChangesCmd(base: ChronoScene, timelineId: string, changes: CurveKeyframeChange[]): EditorCommand {
+export function makeCurveKeyframeChangesCmd(base: ChronoScene, timelineId: string, changes: CurveKeyframeChange[], options: KeyframeBatchOptions = {}): EditorCommand {
   const targets = new Set(changes.map(change => change.target))
   const before = base.timelines.find(timeline => timeline.id === timelineId)?.tracks.filter(track => targets.has(track.target)) ?? []
-  const after = applyCurveKeyframeChanges(base, timelineId, changes).timelines.find(timeline => timeline.id === timelineId)?.tracks ?? []
+  const timed = validateCurveTiming(base, timelineId, changes, options)
+  const after = applyCurveKeyframeChanges(timed, timelineId, changes.filter(change => !change.duplicate).concat(changes.filter(change => change.duplicate).map(change => ({ ...change, duplicate: false })))).timelines.find(timeline => timeline.id === timelineId)?.tracks ?? []
   const replace = (scene: ChronoScene, snapshots: Track[]) => ({ ...scene, timelines: scene.timelines.map(timeline => timeline.id !== timelineId ? timeline : {
     ...timeline, tracks: timeline.tracks.map(track => {
       if (!targets.has(track.target)) return track
@@ -43,19 +45,27 @@ export function makeCurveKeyframeChangesCmd(base: ChronoScene, timelineId: strin
     }),
   }) })
   return { label: changes.some(change => change.duplicate) ? 'Duplicate Curve Keyframes' : 'Edit Curve Keyframes',
-    execute: scene => replace(scene, after), undo: scene => replace(scene, before) }
+    execute: scene => {
+      validateCurveTiming(scene, timelineId, changes, options)
+      return replace(scene, after)
+    }, undo: scene => replace(scene, before) }
 }
 
-/** A colliding drag must not overwrite another key or persist duplicate times. */
-export function curveChangesCollide(base: ChronoScene, timelineId: string, changes: CurveKeyframeChange[]): boolean {
-  const timeline = base.timelines.find(item => item.id === timelineId)
-  if (!timeline) return true
-  return changes.some(change => {
-    const edits = changes.filter(item => item.target === change.target)
-    const movedIds = new Set(edits.filter(item => !item.duplicate).map(item => item.keyframe.id))
-    const others = timeline.tracks.find(track => track.target === change.target)?.keyframes.filter(key => !movedIds.has(key.id)) ?? []
-    return [...others, ...edits.map(item => item.keyframe)].some(key => key.id !== change.keyframe.id && Math.abs(key.timeMs - change.keyframe.timeMs) <= 1)
-  })
+/** Validate curve timing with the same simultaneous source-edit policy as
+ * Timeline/Dope Sheet, including explicit overwrite and finite local bounds. */
+export function curveChangesCollide(base: ChronoScene, timelineId: string, changes: CurveKeyframeChange[], options: KeyframeBatchOptions = {}): boolean {
+  try { validateCurveTiming(base, timelineId, changes, options); return false } catch { return true }
+}
+
+/** Value edits preserve full key payload; this adapter validates time/identity
+ * without applying those values to another channel or dimension. */
+function validateCurveTiming(base: ChronoScene, timelineId: string, changes: CurveKeyframeChange[], options: KeyframeBatchOptions): ChronoScene {
+  const tracks = new Map(base.timelines.find(timeline => timeline.id === timelineId)?.tracks.map(track => [track.target, track]))
+  return applyKeyframeBatch(base, {
+    moves: changes.filter(change => !change.duplicate).map(change => ({ timelineId, target: change.target,
+      kfId: change.keyframe.id, fromMs: tracks.get(change.target)?.keyframes.find(key => key.id === change.keyframe.id)?.timeMs ?? NaN, toMs: change.keyframe.timeMs })),
+    insertions: changes.filter(change => change.duplicate).map(change => ({ timelineId, target: change.target, kf: change.keyframe })),
+  }, options)
 }
 
 /** Use the captured track viewport and pointer delta, preserving the grab offset. */

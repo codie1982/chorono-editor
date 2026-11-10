@@ -100,8 +100,11 @@ Yeni adların hepsi varsayılan doğrudan listede değildir; uzman şeması üze
 batch desteği kontrol edilir. `get_scene` revision/bağlamlı ana okuma yoludur;
 eski `get_scene_json` yalnız JSON döndürmeye devam eder. `add_keyframes` eski
 target adresi ve timeline auto-create davranışını korur; `upsert_keyframes`
-ile aynı input değildir. Mevcut key ID/easing değiştirme sınırlamaları sürer;
-bu ad düzenlemesi E−1.4'ün kimlik koruyan key edit teslimi değildir.
+ile aynı input değildir. E−1.4 ile aynı zamandaki upsert mevcut key ID, tangent,
+segment ayarları ve belirtilmeyen easing'i korur. Explicit easing onu değiştirir;
+yeni key varsayılanı linear'dır. Eşitlik toleransı `1e-6 ms`; yakın fractional
+key'ler ayrı kalır, belirsiz çakışık key'ler reddedilir. Bu işlem driven kanalı
+bake etmez; editördeki Set Key ayrı bir MCP aracı değildir.
 
 Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
 `get_scene` snapshot'ını veya script `layer.data` kaydını okuyun. `get_layer`

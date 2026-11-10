@@ -4,14 +4,14 @@
 // the ScriptHost so they get batched into one undo step.
 
 import type {
-  Layer, Keyframe, AnimatableValue, EasingType, EasingDefinition,
+  Layer, Keyframe, AnimatableValue, EasingType, EasingDefinition, ChronoScene,
   FontWeight, FontStyle, TextAlign, ShapeParams, DragConfig, DragAxis,
 } from '../../types'
 import type { ParticleEmitterData } from '../../particles/types'
 import type { ScriptHost } from '../types'
 import type { EditorCommand } from '../../editor/commands-keyframe'
 import { makeUpdateLayerCmd } from '../../editor/commands-layer'
-import { upsertKeyframe, removeKf, ensureLayerInTimeline } from '../../timeline/keyframeOps'
+import { upsertKeyframe, ensureLayerInTimeline } from '../../timeline/keyframeOps'
 import { nextKfId } from '../../defaults'
 import { copyScriptData, mergeScriptData, readScriptPath, type DeepPartial } from './scriptData'
 import { dbToGain } from '../../audio/audioClip'
@@ -330,12 +330,15 @@ export class LayerHandle {
   /**
    * Add a keyframe: handle.key('opacity', 600, 1, 'easeInOut').
    * `prop` is the dot-path within the layer (e.g. 'opacity', 'transform.x').
-   * `easing` is optional (default 'linear'); invalid values fall back to 'linear'.
-   * Writes to the scene's first timeline.
+   * Writes to the explicitly active timeline, otherwise the first timeline.
+   * New keys default to linear easing. An exact-time update preserves identity,
+   * tangents and existing easing unless easing is explicitly supplied; nearby
+   * keys remain separate. The command owns an exact source snapshot for undo,
+   * including any timeline creation, membership and duration extension.
    */
-  key(prop: string, timeMs: number, value: AnimatableValue, easing: EasingType | EasingDefinition = 'linear'): this {
+  key(prop: string, timeMs: number, value: AnimatableValue, easing?: EasingType | EasingDefinition): this {
     if (!Number.isFinite(timeMs) || timeMs < 0) throw new Error('Keyframe time must be a non-negative finite number')
-    const easingDef: EasingDefinition = typeof easing === 'object' ? structuredClone(easing) : { type: VALID_EASINGS.has(easing) ? easing : 'linear' }
+    const easingDef: EasingDefinition = typeof easing === 'object' ? structuredClone(easing) : { type: easing && VALID_EASINGS.has(easing) ? easing : 'linear' }
     // Fall back to a deterministic 'main' timeline so key() works even when no
     // timeline was created yet (BL-78 ordering fix: previously this threw and
     // aborted the whole script — common when the AI orders run_script before
@@ -349,9 +352,11 @@ export class LayerHandle {
       easing: easingDef,
     }
     // Ensure timeline AND track exist before upsert (mirrors autoKeyframe.ts).
+    let before: ChronoScene | undefined
     const cmd: EditorCommand = {
       label: 'Script Keyframe',
       execute: (scene) => {
+        before = scene
         let s = scene
         // 1. Ensure the timeline exists (auto-create a sensible default).
         if (!s.timelines.some((t) => t.id === timelineId)) {
@@ -390,10 +395,10 @@ export class LayerHandle {
         // 3. Ensure the layer shows in the dope sheet (B4).
         s = ensureLayerInTimeline(s, timelineId, this.id)
         // 4. Upsert the keyframe.
-        const next = upsertKeyframe(s, timelineId, target, kf)
+        const next = upsertKeyframe(s, timelineId, target, kf, { updateEasing: easing !== undefined })
         return { ...next, composition: { ...next.composition, durationMs: Math.max(next.composition.durationMs, timeMs) } }
       },
-      undo: (scene) => removeKf(scene, timelineId, target, kf.id),
+      undo: (scene) => before ? { ...scene, timelines: before.timelines, composition: before.composition } : scene,
     }
     this.ctx.host.applyCommand(cmd)
     return this

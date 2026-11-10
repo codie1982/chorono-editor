@@ -6,7 +6,7 @@ legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
 editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
 [Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
 [istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
-**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** Sırada **E−1.4 Set Key/toplu Timeline/transport**, ardından aşağıdaki kalan işler var. Glama'nın eski
+**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport da tamamlandı**; sırada **E−1.5 prosedürel eğriler**, ardından aşağıdaki kalan işler var. Glama'nın eski
 dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
@@ -80,8 +80,8 @@ dokümanı ve örnekler gerçek capability ile birlikte güncellenir.
 | E−1.Q — tamamlandı | MCP araç kalitesi ve uyumlu sadeleştirme | Typed şema/açıklama doğruluğu, standard 40 / legacy 77 katalog, dokuz uyumlu alias, hafif/tek-şema keşfi ve mevcut ortak güvenlik kontrolleri. [Gerçek kabul](mcp-tool-quality-plan.md). |
 | E−1.1 — tamamlandı | Güvenli MCP düzenleme sözleşmesi | Okunmamış/stale source mutasyonu reddedilir; taze revision ile odaklı değişiklik tek undo olur; retry ve plan kimlikleri korunur. |
 | E−1.2 — tamamlandı | İnsan–ajan kökeni ve çakışma açıklığı | Creation ve last-writer ayrıdır; mixed/unknown durumları, undo/redo ve portable save/load korunur; runtime çıktısı editör metadata'sını taşımaz. |
-| E−1.3 | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
-| E−1.4 | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
+| E−1.3 — tamamlandı | Düzenlenebilir sahne organizasyonu | Anlamlı isim/parent yapısı; Explorer ve Timeline'da aynı alt ağaç; filtre/sanallaştırma toplu işlemin kapsamını değiştirmez. |
+| E−1.4 — tamamlandı | Güvenli Set Key, toplu key ve transport | Registry tabanlı keyset, source-channel örnekleme, kimliği koruyan güncelleme, tek undo; büyük Set Key ve tutarlı frame/key/start/end gezinmesi. |
 | E−1.5 | Prosedürel eğri ve expression güvenilirliği | Parser/UI hataları düzelir; controller eğrisi görünür; örnekleme ve bake açık doğruluk toleransıyla çalışır. |
 | E−1.6 — sürüyor | Viewport araçları ve doğrudan authoring | Pivot/seçim/drag, ortak multi-transform, V3 key çizimi ve V4/V5 clone/array uygulandı; [transform sözleşmesi](../viewport-transform-editing.md), [Array kabulü](../viewport-array-editing.md). Komşu mesafesi/cetvel/guide araçları da uygulandı; tam V6 bekler. [V0–V6](viewport-authoring-2d-plan.md). |
 | E−1.7 | Birleşik kullanıcı akışı kabulü | Aşağıdaki insan–ajan devam senaryosu, gerçek viewport etkileşimi ve büyük sahne regresyonu geçer; ardından Export E0 başlar. |
@@ -213,7 +213,14 @@ Kabul: büyük iç içe sahnede search + reveal + subtree eylemi + undo; gizli/k
 çocukların kapsamı, preserve-world reparent kısıtları; portable ID/hiyerarşi
 eşliği. İlgili belgeler: [subtree işlemleri](../editor-subtree-operations.md).
 
-### E−1.4 — Set Key ve toplu Timeline işlemleri
+### E−1.4 — Set Key ve toplu Timeline işlemleri — Tamamlandı
+
+[Uygulanan davranış, modül sahipliği, kısayollar ve sınırlar](../timeline-authoring.md).
+345 dosya / 2.751 test ve izole gerçek Canvas/Timeline/Curve UI kabulü 10/10 geçti.
+E−1.4 key API güncellemesi ID, tangent ve atlanan easing’i korur; protokol 2.1.0
+ve scene formatı değişmedi. İnsan düzenlemeleri, exact history ve portable kayıt
+korunur. Kanıt: `artifacts/validation/timeline-authoring-20261110/`.
+Sırada E−1.5; kutulu 3D/Poly ve export/ikinci optimizasyonun son sırası korunur.
 
 **Önce ortak authoring sözleşmesi, sonra butonlar.** Mevcut property registry,
 keyframe helper, batch command ve shortcut registry genişletilir.

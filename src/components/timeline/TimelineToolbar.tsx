@@ -1,4 +1,7 @@
 'use client'
+import { SetKeyControls } from './authoring/SetKeyControls'
+import { TimelineTransport } from './authoring/TimelineTransport'
+import type { TimelineAuthoringControls } from './authoring/useTimelineAuthoring'
 import { useState, useRef, useCallback } from 'react'
 import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -6,6 +9,7 @@ import TimelineGhostControl from './TimelineGhostControl'
 import { useClickOutside } from './hooks/useClickOutside'
 
 interface Props {
+  authoring: TimelineAuthoringControls
   timelines: Timeline[]
   selectedTimelineId: string | null
   selectedTimeline: Timeline | null
@@ -62,7 +66,7 @@ const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2]
  */
 export default function TimelineToolbar(props: Props) {
   const {
-    timelines, selectedTimelineId, selectedTimeline,
+    authoring, timelines, selectedTimelineId, selectedTimeline,
     currentTimeMs, duration, isPlaying, zoomFactor, playbackSpeed,
     timelineMode, autoKeyMode, onAutoKeyModeChange, hasSelectedLayer,
     onPlayToggle, onPrevKeyframe, onNextKeyframe,
@@ -96,10 +100,11 @@ export default function TimelineToolbar(props: Props) {
   }, [onPlayToggle])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
+    <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
 
       <div className="relative" ref={playRef}>
         <button
+          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) onPlayToggle() } }}
           onPointerDown={onPlayPointerDown}
           onPointerUp={onPlayPointerUp}
           onPointerLeave={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null } }}
@@ -141,19 +146,8 @@ export default function TimelineToolbar(props: Props) {
         )}
       </div>
 
-      {/* Jump to previous / next keyframe */}
-      <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">
-        <button
-          onClick={onPrevKeyframe}
-          className="px-1.5 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white font-mono"
-          title="Previous keyframe (,)"
-        >◀◆</button>
-        <button
-          onClick={onNextKeyframe}
-          className="px-1.5 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white font-mono border-l border-gray-600"
-          title="Next keyframe (.)"
-        >◆▶</button>
-      </div>
+      <TimelineTransport onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
+      <SetKeyControls controls={authoring} />
 
       <span className="text-xs font-mono text-gray-400 w-24">
         {Math.round(currentTimeMs)} / {duration} ms
@@ -193,7 +187,7 @@ export default function TimelineToolbar(props: Props) {
                      disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed
                      flex items-center gap-1"
         >
-          ◆ Keyframe ▾
+          Key channels ▾
         </button>
         {kfMenuOpen && hasSelectedLayer && (
           <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded shadow-xl

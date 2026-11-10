@@ -1,4 +1,5 @@
 'use client'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useMemo } from 'react'
 import type { ChronoScene, Timeline, TimelineSettings } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -8,6 +9,8 @@ import DopeSheetGrid from './DopeSheetGrid'
 import type { DopeSheetUIState } from './types'
 
 interface Props {
+  collisionPolicy?: KeyCollisionPolicy
+  onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
   scene: ChronoScene
   selectedTimeline: Timeline
   editor: EditorStateReturn

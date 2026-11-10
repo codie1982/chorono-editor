@@ -65,6 +65,8 @@ Use `scene.add(kind)` with a kind from capabilities. Handles provide `pos`, `siz
 
 Frame evaluation applies animated layer properties before rendering. This includes shape parameters, typography, effects, masks, repeater configuration and particle configuration. Values must fit the actual property schema. A property must exist in the renderer/model; an arbitrary property name does not create a new rendering feature.
 
+Exact-time key updates preserve the existing ID, tangents, segment settings and omitted easing; supply easing explicitly to change it. New keys default to linear. Equality uses `1e-6 ms`; neighbouring fractional keys remain separate and ambiguous coincident keys are rejected. Inserting a sampled value does not promise to preserve an entire nonlinear segment. Driven controllers/bindings require their explicit bake/edit workflow.
+
 Numeric values interpolate with easing. Color properties interpolate color channels; ordinary strings and booleans change at key boundaries. Vec2 values interpolate their components. Numeric controllers and modifiers remain numeric. Use scalar coordinate paths to animate existing path/spline points and handles while preserving topology; arbitrary whole-object/topology morphing is not supported.
 
 Easing belongs to the starting keyframe: `linear`, `hold`, `easeIn`, `easeOut`, `easeInOut`, or `{type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}`.

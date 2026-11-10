@@ -14,6 +14,9 @@ import { acquireDiagnosticSharing } from '@/lib/diagnostics/browser/sharing'
 import { DiagnosticConsentPrompt } from '@/components/resources/diagnostics/DiagnosticConsentPrompt'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
+import { useTimelineAuthoring } from '@/components/timeline/authoring/useTimelineAuthoring'
+import { sameKeyTime } from '@/lib/timeline/authoring/keyTimePolicy'
+import { authoringTime } from '@/lib/timeline/authoring/timelineNavigation'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
 import type { TimelineProperty } from './hooks/useKeyboard'
@@ -412,12 +415,19 @@ export default function BuilderPage() {
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
   const frame = useMemo(
-    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs)),
+    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs, !isPlaying && !manualPreview && selectedTlId && scene.timelines.some(item => item.id === selectedTlId)
+      ? { timelineId: selectedTlId, localTimeMs: authoringTime(scene.timelines.find(item => item.id === selectedTlId)!, currentTimeMs) } : null)),
     // We deliberately include paramValues so slider edits cause a re-eval.
     // One revision includes segment/test playback and queued events while paused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, playbackScene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.frameRevision],
+    [scene, playbackScene, currentTimeMs, isPlaying, manualPreview, selectedTlId, runtime.paramValues, runtime.segmentState, runtime.frameRevision],
   )
+
+  /** Manual transport is local and paused; work-area playback never wraps an edit. */
+  const seekAuthoring = useCallback((ms: number) => { handlePause(); handleSeek(ms) }, [handlePause, handleSeek])
+  const timelineAuthoring = useTimelineAuthoring({ scene, editor, timelineId: selectedTlId,
+    selectedId: selectedLayerId, selectedIds: selectedLayerIds, selectedKeyIds: selectedKfIds,
+    currentTimeMs, isPlaying, timeBasis: 'global', enabled: !manualPreview && !runtime.segmentState, onSeek: seekAuthoring })
 
   // Video properties use the same evaluated frame as the canvas and audio.
   useVideoPlaybackSync({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides: frame.overrides })
@@ -995,16 +1005,16 @@ export default function BuilderPage() {
       )
     }
     if (toKey.length === 0) return
-    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, toKey))
-  }, [selectedTlId, currentTimeMs, dispatchCommand, isAutoKeyActive, scene.timelines])
+    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, timelineAuthoring.localTimeMs, toKey))
+  }, [selectedTlId, timelineAuthoring.localTimeMs, dispatchCommand, isAutoKeyActive, scene.timelines])
 
   /** Compose viewport keys with its source-layer commands in one transaction.
    * Read the synchronous current scene so a fast final pointer sample never
    * keys a stale React render; unchanged animated channels remain untouched. */
   const viewportKeyCommands = useCallback((changes: readonly ViewportLayerChange[]) =>
     buildViewportKeyframeCommands(editor.getScene(), changes, {
-      timelineId: selectedTlId, timeMs: currentTimeMs, autoKeyframe: isAutoKeyActive(),
-    }), [editor.getScene, selectedTlId, currentTimeMs, isAutoKeyActive])
+      timelineId: selectedTlId, timeMs: timelineAuthoring.localTimeMs, autoKeyframe: isAutoKeyActive(),
+    }), [editor.getScene, selectedTlId, timelineAuthoring.localTimeMs, isAutoKeyActive])
 
   const updateLayer = useCallback((next: Layer) => {
     const prev = scene.layers.find((l) => l.id === next.id)
@@ -1024,17 +1034,7 @@ export default function BuilderPage() {
   // Used by the canvas right-click "Animate ▶" submenu — snapshots the
   // current value of one property into a fresh keyframe on the active
   // timeline. If no timeline exists yet, this is a no-op.
-  const keyframeSelectedLayers = useCallback((properties: string[]) => {
-    if (!selectedTlId || properties.length === 0) return
-    const ids = selectedLayerIds.size > 0
-      ? Array.from(selectedLayerIds)
-      : (selectedLayerId ? [selectedLayerId] : [])
-    for (const id of ids) {
-      const layer = scene.layers.find((l) => l.id === id)
-      if (!layer) continue
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, layer, currentTimeMs, properties))
-    }
-  }, [scene.layers, selectedLayerIds, selectedLayerId, selectedTlId, currentTimeMs, dispatchCommand])
+  const keyframeSelectedLayers = useCallback((properties: string[]) => timelineAuthoring.setKey(properties), [timelineAuthoring.setKey])
 
   // ── Group / Ungroup (Cmd+G / Cmd+Shift+G) ────────────────────────────────
   /** Group the explicit context-menu scope without waiting for a selection
@@ -1150,7 +1150,9 @@ export default function BuilderPage() {
   // ── Keyframe clipboard (Cmd+C / Cmd+V) ──────────────────────────────────
   const clipboard = useKeyframeClipboard({
     scene, selectedKfIds, selectedTimelineId: selectedTlId,
-    currentTimeMs, dispatchCommand,
+    currentTimeMs: timelineAuthoring.localTimeMs, dispatchCommand,
+    collisionPolicy: timelineAuthoring.collisionPolicy,
+    onError: message => toast.warning('Paste cancelled', { detail: message }),
   })
 
   // ── BL-56 Timeline Ghost / Onion-Skin (page-level state so SceneCanvas
@@ -1188,27 +1190,19 @@ export default function BuilderPage() {
   // Alt+P/S/R/T — add a keyframe for the property at the playhead, or remove it
   // if one already sits there (toggle). Mirrors AE's keyframe-stopwatch click.
   const toggleTimelineKeyframe = useCallback((prop: TimelineProperty) => {
-    if (!selectedLayerId) return
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    const tl = scene.timelines.find((t) => t.id === selectedTlId)
-    if (!layer || !tl) return
-    const paths = TIMELINE_PROP_PATHS[prop]
-    const TOL = 1 // ms — treat a keyframe within 1ms of the playhead as "here"
+    const source = editor.getScene(), active = source.timelines.find(item => item.id === selectedTlId)
+    if (!active || editor.isTransactionActive()) return
+    const ids = selectedLayerIds.size ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : []
+    const paths = TIMELINE_PROP_PATHS[prop], at = timelineAuthoring.localTimeMs
     const existing: KfDeletion[] = []
-    let allKeyed = true
-    for (const path of paths) {
-      const target = `layers.${layer.id}.${path}`
-      const track = tl.tracks.find((t) => t.target === target)
-      const kf = track?.keyframes.find((k) => Math.abs(k.timeMs - currentTimeMs) <= TOL)
-      if (kf) existing.push({ timelineId: tl.id, target, kf })
-      else allKeyed = false
+    for (const id of ids) for (const path of paths) {
+      const target = `layers.${id}.${path}`, keys = active.tracks.find(track => track.target === target)?.keyframes
+      const key = keys?.find(item => sameKeyTime(item.timeMs, at))
+      if (key) existing.push({ timelineId: active.id, target, kf: key })
     }
-    if (allKeyed && existing.length > 0) {
-      dispatchCommand(makeBulkDeleteKfCmd(existing)) // toggle OFF
-    } else {
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(tl.id, layer, currentTimeMs, paths)) // toggle ON
-    }
-  }, [selectedLayerId, scene.layers, scene.timelines, selectedTlId, currentTimeMs, dispatchCommand, TIMELINE_PROP_PATHS])
+    if (ids.length && existing.length === ids.length * paths.length) dispatchCommand(makeBulkDeleteKfCmd(existing))
+    else timelineAuthoring.setKey(paths)
+  }, [editor.getScene, editor.isTransactionActive, selectedTlId, selectedLayerIds, selectedLayerId, timelineAuthoring.localTimeMs, timelineAuthoring.setKey, dispatchCommand, TIMELINE_PROP_PATHS])
 
   // P/S/R/T/U — reveal a property in the timeline (filters track rows to that
   // property; 'all' shows only animated tracks). The nonce makes each press
@@ -1219,25 +1213,8 @@ export default function BuilderPage() {
     setRevealProperty((prev) => ({ prop, nonce: (prev?.nonce ?? 0) + 1 }))
   }, [])
 
-  // J / K — seek to the previous / next keyframe time across the selected
-  // layer's tracks on the active timeline.
-  const seekToKeyframe = useCallback((direction: 'prev' | 'next') => {
-    if (!selectedLayerId) return
-    const tl = scene.timelines.find((t) => t.id === selectedTlId)
-    if (!tl) return
-    const prefix = `layers.${selectedLayerId}.`
-    const times = new Set<number>()
-    for (const track of tl.tracks) {
-      if (!track.target.startsWith(prefix)) continue
-      for (const kf of track.keyframes) times.add(kf.timeMs)
-    }
-    if (times.size === 0) return
-    const sorted = Array.from(times).sort((a, b) => a - b)
-    const next = direction === 'next'
-      ? sorted.find((t) => t > currentTimeMs + 0.5)
-      : [...sorted].reverse().find((t) => t < currentTimeMs - 0.5)
-    if (next !== undefined) handleSeek(next)
-  }, [selectedLayerId, scene.timelines, selectedTlId, currentTimeMs, handleSeek])
+  // Central transport uses the selected branches on the active timeline.
+  const seekToKeyframe = useCallback((direction: 'prev' | 'next') => timelineAuthoring.navigate(direction === 'prev' ? 'previousKey' : 'nextKey'), [timelineAuthoring.navigate])
 
   /** Move the complete selected root set in composition pixels. The same
    * source/key command as pointer authoring preserves displayed pose and emits
@@ -1247,18 +1224,20 @@ export default function BuilderPage() {
     const ids = selectedLayerIds.size ? selectedLayerIds : new Set(selectedLayerId ? [selectedLayerId] : [])
     try {
       const command = buildViewportNudgeCommand(editor.getScene(), ids, { x: dx, y: dy }, {
-        timelineId: selectedTlId, timeMs: currentTimeMs, autoKeyframe: isAutoKeyActive(), overrides: frame.overrides,
+        timelineId: selectedTlId, timeMs: timelineAuthoring.localTimeMs, autoKeyframe: isAutoKeyActive(), overrides: frame.overrides,
       })
       if (command) dispatchCommand(command)
     } catch (error) {
       toast.warning('Cannot move selection', { detail: error instanceof Error ? error.message : String(error) })
     }
   }, [motionKeyEditing, isPlaying, manualPreview, runtime.segmentState, editor.isTransactionActive, editor.getScene,
-    selectedLayerIds, selectedLayerId, selectedTlId, currentTimeMs, isAutoKeyActive, frame.overrides, dispatchCommand])
+    selectedLayerIds, selectedLayerId, selectedTlId, timelineAuthoring.localTimeMs, isAutoKeyActive, frame.overrides, dispatchCommand])
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
     isTransactionActive: editor.isTransactionActive,
+    onSetKey: () => timelineAuthoring.setKey(),
+    onTimelineNavigate: timelineAuthoring.navigate,
     onUndo: undo,
     onRedo: redo,
     onPlayToggle: handlePlayToggle,
@@ -1860,6 +1839,7 @@ export default function BuilderPage() {
                   <div className="h-full bg-gray-900 overflow-hidden" data-panel="timeline">
                     <TimelinePanel
                       scene={scene}
+                      authoring={timelineAuthoring}
                       editor={editor}
                       settings={timelineSettings}
                       onSettingsChange={setTimelineSettings}
@@ -1867,10 +1847,10 @@ export default function BuilderPage() {
                       selectedLayerIds={selectedLayerIds}
                       selectedTimelineId={selectedTlId}
                       selectedKfIds={selectedKfIds}
-                      currentTimeMs={currentTimeMs}
+                      currentTimeMs={timelineAuthoring.localTimeMs}
                       isPlaying={isPlaying}
                       playbackSpeed={playbackSpeed}
-                      onTimeChange={handleSeek}
+                      onTimeChange={seekAuthoring}
                       onPlayToggle={handlePlayToggle}
                       onSelectTimeline={id => { setMCPTimelineIds(null); selectTimeline(id) }}
                       onSelectKeyframes={setSelectedKfIds}
@@ -1901,12 +1881,14 @@ export default function BuilderPage() {
                   <div className="h-full min-h-0 overflow-hidden" data-panel="curveEditor">
                   <CurveEditor
                     scene={scene}
+                    collisionPolicy={timelineAuthoring.collisionPolicy}
+                    onCollisionPolicyChange={timelineAuthoring.setCollisionPolicy}
                     editor={editor}
                     selectedLayerId={selectedLayerId}
                     selectedLayerIds={selectedLayerIds}
                     selectedTimelineId={selectedTlId}
-                    currentTimeMs={currentTimeMs}
-                    onTimeChange={handleSeek}
+                    currentTimeMs={timelineAuthoring.localTimeMs}
+                    onTimeChange={seekAuthoring}
                     selectedKfIds={selectedKfIds}
                     onSelectKeyframes={setSelectedKfIds}
                   />
@@ -1919,6 +1901,8 @@ export default function BuilderPage() {
                   <div className="h-full min-h-0 overflow-hidden" data-panel="dopeSheet">
                   <DopeSheetPanel
                     scene={scene}
+                    collisionPolicy={timelineAuthoring.collisionPolicy}
+                    onCollisionPolicyChange={timelineAuthoring.setCollisionPolicy}
                     editor={editor}
                     settings={timelineSettings}
                     onSettingsChange={setTimelineSettings}
@@ -1926,9 +1910,9 @@ export default function BuilderPage() {
                     selectedLayerIds={selectedLayerIds}
                     selectedTimelineId={selectedTlId}
                     selectedKfIds={selectedKfIds}
-                    currentTimeMs={currentTimeMs}
+                    currentTimeMs={timelineAuthoring.localTimeMs}
                     isPlaying={isPlaying}
-                    onTimeChange={handleSeek}
+                    onTimeChange={seekAuthoring}
                     onSelectKeyframes={setSelectedKfIds}
                     onSelectLayer={selectLayer}
                   />

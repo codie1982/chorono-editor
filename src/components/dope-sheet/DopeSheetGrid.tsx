@@ -1,8 +1,11 @@
 'use client'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChronoScene, Timeline, TimelineSettings } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useDopeSheetKeyDrag } from '@/app/hooks/useDopeSheetKeyDrag'
+import { updateKfTimeMs } from '@/lib/timeline/keyframeOps'
+import { toast } from '@/lib/toast/toast'
 import { makeBulkMoveKfCmd } from '@/lib/editor/commands-keyframe'
 import { dopeSheetTickStep, keysInDopeSheetBox, selectDopeSheetKeys } from '@/lib/dope-sheet/rows'
 import DopeSheetHierarchy from './DopeSheetHierarchy'
@@ -14,6 +17,8 @@ import { DOPE_SHEET_LABEL_WIDTH as LABEL_WIDTH, DOPE_SHEET_ROW_HEIGHT as ROW_HEI
   DOPE_SHEET_RULER_HEIGHT as RULER_HEIGHT, type DopeSheetRow, type DopeSheetUIState } from './types'
 
 interface Props {
+  collisionPolicy?: KeyCollisionPolicy
+  onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
   scene: ChronoScene
   selectedTimeline: Timeline
   editor: EditorStateReturn
@@ -74,9 +79,13 @@ export default function DopeSheetGrid(props: Props) {
     pixelsPerMs, gridStepMs, enabled: !props.isPlaying,
     onDragStart: () => { baseSceneRef.current = editor.getScene(); editor.beginTransaction() },
     onDragMove: update => {
-      if (baseSceneRef.current) editor.previewTransaction(makeBulkMoveKfCmd(update.moves).execute(baseSceneRef.current))
+      if (baseSceneRef.current) editor.previewTransaction(update.moves.reduce((source, move) => updateKfTimeMs(source, move.timelineId, move.target, move.kfId, move.toMs), baseSceneRef.current))
     },
-    onDragEnd: moves => { editor.commitTransaction(makeBulkMoveKfCmd(moves)); baseSceneRef.current = null },
+    onDragEnd: moves => {
+      try { editor.commitTransaction(makeBulkMoveKfCmd(moves, { collisionPolicy: props.collisionPolicy })) }
+      catch (error) { editor.cancelTransaction(); toast.warning('Key drag cancelled', { detail: (error as Error).message }) }
+      baseSceneRef.current = null
+    },
     onCancel: () => { editor.cancelTransaction(); baseSceneRef.current = null },
   })
 

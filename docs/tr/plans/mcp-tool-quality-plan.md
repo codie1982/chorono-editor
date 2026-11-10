@@ -5,7 +5,7 @@
 şemalar/açıklamalar ve hafif/tek-şema keşfi var. Eski 77 ad çağrılabilir kalır.
 [Gerçek kullanım ve geçiş](../../en/mcp.md),
 [modül sahipliği](../../../src/lib/mcp/tools/README.md).
-E−1.1 güvenli okuma/revision sözleşmesi de MCP 2.0.0 ile tamamlandı. E−1.2 köken takibi de MCP 2.1.0 ile tamamlandı. E−1.3 ortak editör hiyerarşisi de tamamlandı; sırada E−1.4 Set Key/transport ve kalan ortak
+E−1.1 güvenli okuma/revision sözleşmesi de MCP 2.0.0 ile tamamlandı. E−1.2 köken takibi de MCP 2.1.0 ile tamamlandı. E−1.3 ortak editör hiyerarşisi de tamamlandı; E−1.4 Set Key/transport da tamamlandı; sırada E−1.5 ve kalan ortak
 düzenleme işleri var. Mevcut revision/drag/undo/retry kontrolleri bütün adlarda
 ortaktır; zorunlu read lease veya provenance bu teslimde uygulanmış sayılmaz.
 
@@ -141,7 +141,7 @@ Canonical adlar `create_layer`, `get_layer`, `get_timeline`, `upsert_keyframes`,
 `replace_layer_fields`, `evaluate_timeline_values` ve üç açık state-machine
 adıdır. Alias yalnız aynı payload/sonuçlu mevcut uygulamaya yönlenir. Deep patch
 eklenmedi; get_layer biçimlendirilmiş alt kümedir, tam nested kaynak değildir.
-Native/script key ID ve easing koruma geliştirmeleri sonraki E−1.4 kapsamındadır.
+Native/script key ID ve easing koruma E−1.4 ile tamamlandı; [gerçek sözleşme](../timeline-authoring.md).
 
 MCP ölçümleri: standard 40 araç/440 açıklamalı property; legacy 77 araç/1.103
 açıklamalı property; iki profilde eksik property açıklaması sıfır. Baseline ile

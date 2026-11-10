@@ -141,8 +141,17 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   const commitTransaction = useCallback((cmd: EditorCommand) => {
     if (!txRef.current) { dispatchCommand(cmd); return }
     const base = txRef.current.baseScene
+    // Validation may reject a whole key edit. Restore its baseline before
+    // propagating the diagnostic; no preview or partial attribution survives.
+    let next: ChronoScene
+    try { next = executeAuthoredCommand(cmd, base) }
+    catch (error) {
+      txRef.current = null
+      updateHistory(h => ({ ...h, present: base }))
+      throw error
+    }
     txRef.current = null
-    updateHistory((h) => pushHistory({ ...h, present: base }, executeAuthoredCommand(cmd, base)))
+    updateHistory((h) => pushHistory({ ...h, present: base }, next))
     // Clone-drag commits carry per-clone metadata — merge it so instance
     // tracking ("Select all instances") works for drag-created clones too.
     if (isCloneArrayCommand(cmd)) {

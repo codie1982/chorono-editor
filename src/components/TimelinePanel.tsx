@@ -4,12 +4,18 @@ import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
   TimelineSegment, TimelineMarker,
 } from '@/lib/types'
-import { evaluateTrack } from '@/lib/evaluator'
+import { prepareSetKey } from '@/lib/timeline/authoring/setKey'
+import { applyKeyframeBatch } from '@/lib/timeline/authoring/keyframeBatch'
+import { registerScopedActions } from '@/lib/shortcuts/scopedActions'
+import { useTimelineAuthoring, type TimelineAuthoringControls } from './timeline/authoring/useTimelineAuthoring'
+import { BulkEditPolicyControl } from './timeline/authoring/BulkEditPolicyControl'
+import { SetKeyReview } from './timeline/authoring/SetKeyControls'
+import { toast as authoringToast } from '@/lib/toast/toast'
 import { isScalarNumericTrack } from '@/lib/animation/typedValues'
 import { newTimeline, nextKfId, newTimelineSegment, newMarker } from '@/lib/defaults'
 import {
-  makeAddKfCmd, makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
-  makeKeyframeLayerSnapshotCmd, makeUpdateKfValueCmd, makeMoveKfCmd,
+  makeDeleteKfCmd, makeUpdateEasingCmd, makeBulkMoveKfCmd,
+  makeUpdateKfValueCmd, makePasteKfCmd,
   makeMirrorTimingCmd, makeAlignToFrameCmd, makeBulkDeleteKfCmd,
   makeStaggerKeysCmd, makeScaleKeysCmd,
   type KfDeletion, type KfMove, type StaggerKfItem, type ScaleKfItem,
@@ -155,6 +161,7 @@ interface Props {
   /** After Effects-style property reveal (P/S/R/T/U). The `nonce` makes each
    *  keypress distinct so repeated presses re-fire (and toggle the filter). */
   revealProperty?: { prop: 'position' | 'scale' | 'rotation' | 'opacity' | 'all'; nonce: number } | null
+  authoring?: TimelineAuthoringControls
   audioControls?: React.ReactNode
 }
 
@@ -167,7 +174,7 @@ export default function TimelinePanel({
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
-  onEditWire, onWireRequest, revealProperty,
+  onEditWire, onWireRequest, revealProperty, authoring: sharedAuthoring,
   audioControls,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
@@ -208,6 +215,14 @@ export default function TimelinePanel({
   } | null>(null)
 
   // ── Per-layer expand state (default: all layers expanded) ────────────────
+  const localAuthoring = useTimelineAuthoring({ scene, editor, timelineId: selectedTimelineId, selectedId: selectedLayerId,
+    selectedIds: selectedLayerIds, selectedKeyIds: selectedKfIds, currentTimeMs, isPlaying, onSeek: onTimeChange })
+  const authoring = sharedAuthoring ?? localAuthoring
+  /** Native UI errors stay visible; a rejected gesture restores its baseline. */
+  const commitKeys = useCallback((command: import('@/lib/editor/commands-keyframe').EditorCommand, gesture = false) => {
+    try { if (gesture) editor.commitTransaction(command); else editor.dispatchCommand(command); return true }
+    catch (error) { editor.cancelTransaction(); authoringToast.warning('Key edit cancelled', { detail: (error as Error).message }); return false }
+  }, [editor.commitTransaction, editor.dispatchCommand, editor.cancelTransaction])
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
   // ── Layer filter (BL-38) — substring match on layer name + tracked properties
   const [layerFilter, setLayerFilter] = useState('')
@@ -276,7 +291,7 @@ export default function TimelinePanel({
   // BL-11: [ / ] = jump to previous / next marker (no modifier — quick nav).
   // Scoped to when the timeline panel itself is hovered so it doesn't fight
   // with other panels' shortcuts. Skips when typing in inputs.
-  const [timelineHovered, setTimelineHovered] = useState(false)
+  const keyboardPanelRef = useRef<HTMLDivElement>(null)
 
   // BL-11: jump to nearest marker in a direction. Uses currentTimeMs as anchor;
   // no markers → no-op. Wrap-around could be added later if requested.
@@ -292,44 +307,13 @@ export default function TimelinePanel({
 
   // Jump the playhead to the previous/next keyframe. Uses the selected layer's
   // keyframes when one is selected, otherwise every keyframe on the timeline.
-  const jumpToAdjacentKeyframe = useCallback((direction: 'prev' | 'next') => {
-    if (!timeline) return
-    const tracks = selectedLayerId
-      ? timeline.tracks.filter((t) => t.target.startsWith(`layers.${selectedLayerId}.`))
-      : timeline.tracks
-    const times = Array.from(new Set(tracks.flatMap((t) => t.keyframes.map((k) => k.timeMs))))
-      .sort((a, b) => a - b)
-    if (times.length === 0) return
-    const target = direction === 'prev'
-      ? [...times].reverse().find((t) => t < currentTimeMs - 0.5)
-      : times.find((t) => t > currentTimeMs + 0.5)
-    if (target != null) onTimeChange(Math.max(0, Math.min(duration, target)))
-  }, [timeline, selectedLayerId, currentTimeMs, duration, onTimeChange])
-
-  useEffect(() => {
-    if (!timelineHovered) return
-    const onKey = (e: KeyboardEvent) => {
-      const tgt = e.target as HTMLElement | null
-      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
-      const meta = e.metaKey || e.ctrlKey
-      if (meta && (e.key === 'b' || e.key === 'B')) {
-        e.preventDefault(); saveBookmark(); return
-      }
-      if (meta && /^[1-9]$/.test(e.key)) {
-        e.preventDefault(); jumpToBookmark(parseInt(e.key, 10) - 1); return
-      }
-      // BL-11: marker navigation — plain [ / ] (no modifier).
-      if (!meta && !e.altKey && !e.shiftKey) {
-        if (e.key === '[') { e.preventDefault(); jumpToAdjacentMarker('prev'); return }
-        if (e.key === ']') { e.preventDefault(); jumpToAdjacentMarker('next'); return }
-        // Keyframe navigation — plain , / .
-        if (e.key === ',') { e.preventDefault(); jumpToAdjacentKeyframe('prev'); return }
-        if (e.key === '.') { e.preventDefault(); jumpToAdjacentKeyframe('next'); return }
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker, jumpToAdjacentKeyframe])
+  // Commands retain local UI state, but the sole keyboard listener is useKeyboard.
+  useEffect(() => registerScopedActions({
+    'timeline.marker.previous': () => jumpToAdjacentMarker('prev'),
+    'timeline.marker.next': () => jumpToAdjacentMarker('next'),
+    'timeline.bookmark.save': saveBookmark,
+    ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`timeline.bookmark.${i + 1}`, () => jumpToBookmark(i)])),
+  }, () => !!keyboardPanelRef.current?.getClientRects().length), [jumpToAdjacentMarker, saveBookmark, jumpToBookmark])
   const hierarchy = useTimelineHierarchy({ scene, editor, timeline, trackIndex: layerTracks,
     filter: layerFilter, selectedId: selectedLayerId, selectedIds: selectedLayerIds })
   const visibleLayers = useMemo(() => hierarchy.rows.map(row => row.layer), [hierarchy.rows])
@@ -374,12 +358,11 @@ export default function TimelinePanel({
       }
       previewTransaction(nextScene)
     },
-    onCommit: (moves) => commitTransaction(makeBulkMoveKfCmd(
+    onCommit: (moves) => commitKeys(makeBulkMoveKfCmd(
       moves.map((m) => ({
         kfId: m.kfId, target: m.trackTarget, timelineId: m.timelineId,
         fromMs: m.fromMs, toMs: m.toMs,
-      })),
-    )),
+      })), { collisionPolicy: authoring.collisionPolicy }), true),
     onCancel: cancelTransaction,
     // A click (no drag) routes here; selectKf toggles selection + seeks.
     onLoneClick: (kfId, shiftHeld) => selectKf(kfId, shiftHeld),
@@ -408,8 +391,8 @@ export default function TimelinePanel({
   // ── Track / keyframe ops ─────────────────────────────────────────────────
   const addTrack = useCallback((layerId: string, propPath: string, firstKeyMs?: number) => {
     if (!selectedTimelineId) return
-    dispatchCommand(makeAddAnimationCmd(selectedTimelineId, layerId, propPath, firstKeyMs))
-  }, [selectedTimelineId, dispatchCommand])
+    commitKeys(makeAddAnimationCmd(selectedTimelineId, layerId, propPath, firstKeyMs))
+  }, [selectedTimelineId, commitKeys])
 
   const removeTrack = useCallback((trackTarget: string) => {
     if (!selectedTimelineId || !timeline) return
@@ -439,15 +422,13 @@ export default function TimelinePanel({
     const [, layerId, propPath] = m
     const layer = scene.layers.find((l) => l.id === layerId)
     if (!layer) return
-    const defaultVal = readLayerPropAsNumber(layer, propPath)
-    const existingVal = evaluateTrack(track, ms) ?? defaultVal ?? 0
-
-    const kf: Keyframe = {
-      id: nextKfId(), timeMs: Math.max(0, Math.min(duration, ms)), value: existingVal,
-      easing: { type: 'easeOut' },
-    }
-    dispatchCommand(makeAddKfCmd(selectedTimelineId, trackTarget, kf))
-  }, [scene.layers, timeline, selectedTimelineId, duration, dispatchCommand])
+    try {
+      const plan = prepareSetKey(editor.getScene(), { timelineId: selectedTimelineId, layerIds: [layerId], timeMs: ms,
+        keyset: 'selected', selectedTargets: new Set([trackTarget]) })
+      if (plan.diagnostics.length) authoringToast.warning('Key not added', { detail: plan.diagnostics.map(item => item.reason).join(' ') })
+      else if (plan.command) commitKeys(plan.command)
+    } catch (error) { authoringToast.warning('Key not added', { detail: (error as Error).message }) }
+  }, [editor.getScene, timeline, scene.layers, selectedTimelineId, commitKeys])
 
   const addKeyframeAtPlayhead = useCallback((trackTarget: string) => {
     addKeyframeAtTime(trackTarget, currentTimeMs)
@@ -546,17 +527,7 @@ export default function TimelinePanel({
     }, [selectedTimelineId, selectedKfIds, scene, onSelectKeyframes, drag])
 
   // ── Keyframe a chosen subset of properties on the selected layer(s) ──────
-  const keyframeSelectedLayers = useCallback((properties: string[]) => {
-    if (!selectedTimelineId || properties.length === 0) return
-    const ids = selectedLayerIds.size > 0
-      ? Array.from(selectedLayerIds)
-      : (selectedLayerId ? [selectedLayerId] : [])
-    for (const id of ids) {
-      const layer = scene.layers.find((l) => l.id === id)
-      if (!layer) continue
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTimelineId, layer, currentTimeMs, properties))
-    }
-  }, [scene.layers, selectedLayerId, selectedLayerIds, selectedTimelineId, currentTimeMs, dispatchCommand])
+  const keyframeSelectedLayers = useCallback((properties: string[]) => authoring.setKey(properties), [authoring.setKey])
 
   // ── TrackToolBar handlers ────────────────────────────────────────────────
   const selectAllKfs = useCallback(() => {
@@ -598,7 +569,7 @@ export default function TimelinePanel({
       execute: (s) => updates.reduce((sc, u) => updateKfEasing(sc, tlId, u.target, u.kfId, toEasing), s),
       undo:    (s) => updates.reduce((sc, u) => updateKfEasing(sc, tlId, u.target, u.kfId, u.fromEasing), s),
     })
-  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
+  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand, commitKeys, authoring.collisionPolicy])
 
   // BL-07: Spreadsheet rows derived from the current selection. Cheap derivation
   // — recomputed only when the selection or timeline changes.
@@ -656,9 +627,9 @@ export default function TimelinePanel({
       }
     }
     if (items.length >= 2) {
-      dispatchCommand(makeScaleKeysCmd(items, pivotMs, scaleFactor))
+      commitKeys(makeScaleKeysCmd(items, pivotMs, scaleFactor, { collisionPolicy: authoring.collisionPolicy }), true)
     }
-  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand])
+  }, [timeline, selectedTimelineId, selectedKfIds, dispatchCommand, commitKeys, authoring.collisionPolicy])
 
   // BL-07: Build the StaggerKeysModal's preview list from the current selection.
   // Items are passed in selection-order; the modal sorts by time for indexing.
@@ -693,8 +664,8 @@ export default function TimelinePanel({
       fromMs:     it.fromMs,
       index:      idx,
     }))
-    dispatchCommand(makeStaggerKeysCmd(items, offsetMs, direction))
-  }, [staggerSelectionItems, selectedTimelineId, dispatchCommand])
+    commitKeys(makeStaggerKeysCmd(items, offsetMs, direction, { collisionPolicy: authoring.collisionPolicy }))
+  }, [staggerSelectionItems, selectedTimelineId, commitKeys, authoring.collisionPolicy])
 
   // BL-11: Marker handlers — Cmd/Ctrl+click on ruler drops one, drag moves
   // it, [/] keys navigate between them. All mutations route through the
@@ -780,7 +751,7 @@ export default function TimelinePanel({
     for (const track of timeline.tracks) {
       for (const kf of track.keyframes) {
         if (!selectedKfIds.has(kf.id)) continue
-        const toMs = Math.max(0, Math.min(duration, kf.timeMs + deltaMs))
+        const toMs = kf.timeMs + deltaMs
         if (toMs === kf.timeMs) continue
         moves.push({
           timelineId: selectedTimelineId,
@@ -791,8 +762,8 @@ export default function TimelinePanel({
         })
       }
     }
-    if (moves.length > 0) dispatchCommand(makeBulkMoveKfCmd(moves))
-  }, [timeline, selectedTimelineId, selectedKfIds, duration, dispatchCommand])
+    if (moves.length > 0) commitKeys(makeBulkMoveKfCmd(moves, { collisionPolicy: authoring.collisionPolicy }))
+  }, [timeline, selectedTimelineId, selectedKfIds, duration, commitKeys, authoring.collisionPolicy])
 
   // ── Right-click context menu + inline kf value editor ───────────────────
   // Single shared menu for keyframe right-clicks (we can extend to property
@@ -825,6 +796,8 @@ export default function TimelinePanel({
 
   // BL-11: Marker right-click target — set by MarkerOverlay's onContextMenu.
   const [ctxMarker, setCtxMarker] = useState<{ markerId: string } | null>(null)
+
+  useEffect(() => { setEditingKf(null); setStaggerModalOpen(false); setKeySheetOpen(false); setCtxKf(null); setCtxTrackArea(null) }, [selectedTimelineId])
 
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -991,8 +964,7 @@ export default function TimelinePanel({
     <div
       className={`flex flex-col h-full bg-gray-900 relative overflow-hidden ${isDragOver ? 'ring-2 ring-blue-500/60 ring-inset' : ''}`}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => setTimelineHovered(true)}
-      onMouseLeave={() => setTimelineHovered(false)}
+      ref={keyboardPanelRef}
       onDragOver={onTrackAreaDragOver}
       onDragLeave={onTrackAreaDragLeave}
       onDrop={onTrackAreaDrop}
@@ -1018,8 +990,9 @@ export default function TimelinePanel({
         })}
         hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
-        onPrevKeyframe={() => jumpToAdjacentKeyframe('prev')}
-        onNextKeyframe={() => jumpToAdjacentKeyframe('next')}
+        authoring={authoring}
+        onPrevKeyframe={() => authoring.navigate('previousKey')}
+        onNextKeyframe={() => authoring.navigate('nextKey')}
         onSelectTimeline={onSelectTimeline}
         onAddTimeline={addTimeline}
         onDeleteTimeline={deleteTimeline}
@@ -1040,6 +1013,7 @@ export default function TimelinePanel({
       />
 
       {audioControls}
+      <SetKeyReview controls={authoring} />
       <TrackToolBar
         hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
         selectedCount={selectedKfIds.size}
@@ -1053,6 +1027,7 @@ export default function TimelinePanel({
       />
 
       <div className="flex flex-wrap items-center gap-2 px-2 py-1 border-b border-gray-700 shrink-0">
+        <BulkEditPolicyControl policy={authoring.collisionPolicy} onChange={authoring.setCollisionPolicy} />
         <FindSelectedButton disabled={!selectedLayerId} onFind={hierarchy.find.find} />
         <button aria-pressed={hierarchy.selectedOnly} onClick={() => hierarchy.setSelectedOnly(value => !value)}
           className="rounded bg-gray-700 px-2 py-1 text-[10px] text-gray-200 hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">Selected branches</button>
@@ -1140,7 +1115,7 @@ export default function TimelinePanel({
           )}
           {/* BL-07: Scale Handles overlay — only when 2+ kfs span a real range */}
           {selectionTimeBounds && (
-            <ScaleHandlesOverlay
+            <ScaleHandlesOverlay key={selectedTimelineId} onBegin={beginTransaction} onCancel={cancelTransaction}
               minMs={selectionTimeBounds.minMs}
               maxMs={selectionTimeBounds.maxMs}
               msToScreenPx={vp.msToScreenPx}
@@ -1425,20 +1400,13 @@ export default function TimelinePanel({
 
         const close = () => setEditingKf(null)
         const commit = () => {
-          const nextTime  = Number(editingKf.draftTime)
-          const nextValue = Number(editingKf.draftValue)
-          if (Number.isFinite(nextValue) && nextValue !== kf.value) {
-            dispatchCommand(makeUpdateKfValueCmd(
-              selectedTimelineId, editingKf.trackTarget, kf.id, kf.value, nextValue,
-            ))
-          }
-          if (Number.isFinite(nextTime) && Math.round(nextTime) !== Math.round(kf.timeMs)) {
-            const clamped = Math.max(0, Math.min(duration, Math.round(nextTime)))
-            dispatchCommand(makeBulkMoveKfCmd([{
-              kfId: kf.id, target: editingKf.trackTarget, timelineId: selectedTimelineId!,
-              fromMs: kf.timeMs, toMs: clamped,
-            }]))
-          }
+          const nextTime = Number(editingKf.draftTime), nextValue = Number(editingKf.draftValue)
+          if (!Number.isFinite(nextTime) || !Number.isFinite(nextValue)) { authoringToast.warning('Enter finite time and value.'); return }
+          const base = editor.getScene(), target = editingKf.trackTarget, id = kf.id, timelineId = selectedTimelineId
+          commitKeys({ label: 'Edit key time and value', execute(source) {
+            const moved = nextTime === kf.timeMs ? source : applyKeyframeBatch(source, { moves: [{ timelineId, target, kfId: id, fromMs: kf.timeMs, toMs: nextTime }] }, { collisionPolicy: authoring.collisionPolicy })
+            return makeUpdateKfValueCmd(timelineId, target, id, kf.value, nextValue).execute(moved)
+          }, undo: () => base })
           close()
         }
         const setInEasing = (type: EasingType) => {
@@ -1501,16 +1469,16 @@ export default function TimelinePanel({
           deleteKf: () => dispatchCommand(makeDeleteKfCmd(selectedTimelineId, ctxKf.trackTarget, kf)),
           duplicateKf: (k) => {
             const clone = { ...k, id: nextKfId(), timeMs: k.timeMs + Math.max(100, frameMs) }
-            dispatchCommand(makeAddKfCmd(selectedTimelineId, ctxKf.trackTarget, clone))
-            onSelectKeyframes(new Set([clone.id]))
+            if (commitKeys(makePasteKfCmd([{ timelineId: selectedTimelineId, target: ctxKf.trackTarget, kf: clone,
+              copiedFrom: ['key', selectedTimelineId, ctxKf.trackTarget, k.id] }], { collisionPolicy: authoring.collisionPolicy }))) onSelectKeyframes(new Set([clone.id]))
           },
           alignToFrame: frameMs > 0 ? () => {
-            const cmd = makeAlignToFrameCmd(scene, operatingItems, scene.composition.frameRate)
-            if (cmd) dispatchCommand(cmd)
+            const cmd = makeAlignToFrameCmd(scene, operatingItems, scene.composition.frameRate, { collisionPolicy: authoring.collisionPolicy })
+            if (cmd) commitKeys(cmd)
           } : undefined,
           mirrorTiming: operatingItems.length > 1 ? () => {
-            const cmd = makeMirrorTimingCmd(scene, operatingItems)
-            if (cmd) dispatchCommand(cmd)
+            const cmd = makeMirrorTimingCmd(scene, operatingItems, { collisionPolicy: authoring.collisionPolicy })
+            if (cmd) commitKeys(cmd)
           } : undefined,
           setTangentMode: (k, mode) => {
             const prevKf = k
@@ -1598,7 +1566,7 @@ export default function TimelinePanel({
                 scene.composition.durationMs,
                 (orig) => cloneLayerForDuplicate(orig),
               )
-              if (cmd) dispatchCommand(cmd)
+              if (cmd) commitKeys(cmd)
             },
           },
           { kind: 'separator' as const },
@@ -1911,7 +1879,7 @@ export default function TimelinePanel({
                 const track = timeline.tracks.find((t) => t.keyframes.some((k) => k.id === kfId))
                 return track ? [{ kfId, target: track.target, timelineId: selectedTimelineId }] : []
               })
-              const cmd = makeAlignToFrameCmd(scene, operatingItems, scene.composition.frameRate)
+              const cmd = makeAlignToFrameCmd(scene, operatingItems, scene.composition.frameRate, { collisionPolicy: authoring.collisionPolicy })
               if (cmd) dispatchCommand(cmd)
             }}
             className="px-2 py-0.5 rounded bg-yellow-900/40 hover:bg-yellow-800/60
@@ -1943,7 +1911,7 @@ export default function TimelinePanel({
         <KeyframeSpreadsheet
           rows={spreadsheetRows}
           onUpdateTime={(kfId, target, fromMs, toMs) =>
-            dispatchCommand(makeMoveKfCmd(selectedTimelineId, target, kfId, fromMs, toMs))
+            commitKeys(makeBulkMoveKfCmd([{ timelineId: selectedTimelineId, target, kfId, fromMs, toMs }], { collisionPolicy: authoring.collisionPolicy }))
           }
           onUpdateValue={(kfId, target, fromValue, toValue) =>
             dispatchCommand(makeUpdateKfValueCmd(selectedTimelineId, target, kfId, fromValue, toValue))
@@ -2044,17 +2012,6 @@ function collectGroupSnapshots(
     }
   }
   return out
-}
-
-function readLayerPropAsNumber(layer: Layer, prop: string): number | undefined {
-  const parts = prop.split('.')
-  let cur: unknown = layer
-  for (const p of parts) {
-    if (cur && typeof cur === 'object' && p in (cur as Record<string, unknown>)) {
-      cur = (cur as Record<string, unknown>)[p]
-    } else { return undefined }
-  }
-  return typeof cur === 'number' ? cur : undefined
 }
 
 // ── KeyframeEditWindow ─────────────────────────────────────────────────────

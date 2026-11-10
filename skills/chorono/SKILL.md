@@ -32,6 +32,8 @@ For code-driven scene design, read the complete scene with `scene.snapshot()`, a
 
 Use the domain handles for structured edits: `layer.particles` validates emitter/preset/life/modifier settings, `layer.spline` preserves native topology and locks, and `scene.explorer` queries and edits the actual hierarchy. Use returned element/group ids. Instance domain data is readable; modify its source explicitly. These APIs operate on editable scene data and do not control ephemeral panel selection/collapse state.
 
+When updating an existing key at the same time, omit easing unless changing it is intended. Native upsert and script key updates preserve its ID and unspecified curve metadata; nearby fractional keys remain independent. Read [animation.md](references/animation.md) for exact-time and driven-channel limits. The editor's Set Key keysets are UI controls, not an additional MCP tool.
+
 ## Preview, refine and deliver
 
 Inspect actual `render_preview` images at meaningful timestamps: before and after a reveal, peak movement, transitions and the loop boundary as applicable. Check text fit, contrast, occlusion and timing. `evaluate_frame` proves numeric values, not visual quality. Fix visible problems before delivery.

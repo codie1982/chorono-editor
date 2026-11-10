@@ -77,6 +77,16 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'timeline.keyframe.opacity',  label: 'Add/Remove Opacity Keyframe',  contexts: ['timeline'], binding: { type: 'keyboard', key: 't', alt: true } },
 
   // ── Timeline — navigation ────────────────────────────────────────────────
-  { id: 'timeline.nav.prevKeyframe', label: 'Previous Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: 'j' } },
-  { id: 'timeline.nav.nextKeyframe', label: 'Next Keyframe',     contexts: ['timeline'], binding: { type: 'keyboard', key: 'k' } },
+  { id: 'timeline.nav.prevKeyframe', label: 'Previous Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: ',' } },
+  { id: 'timeline.nav.nextKeyframe', label: 'Next Keyframe',     contexts: ['timeline'], binding: { type: 'keyboard', key: '.' } },
+  { id: 'timeline.keyframe.set', label: 'Set Key', contexts: ['timeline', 'canvas'], binding: { type: 'keyboard', key: 'k' }, description: 'Set the active keyset for all selected layers in one undo' },
+  { id: 'timeline.nav.prevKeyframeLegacy', label: 'Previous Keyframe (legacy J)', contexts: ['timeline'], binding: { type: 'keyboard', key: 'j' } },
+  { id: 'timeline.nav.start', label: 'Timeline Start', contexts: ['timeline'], binding: { type: 'keyboard', key: 'home' } },
+  { id: 'timeline.nav.end', label: 'Timeline End', contexts: ['timeline'], binding: { type: 'keyboard', key: 'end' } },
+  { id: 'timeline.nav.firstKey', label: 'First Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: 'home', shift: true } },
+  { id: 'timeline.nav.lastKey', label: 'Last Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: 'end', shift: true } },
+  { id: 'timeline.marker.previous', label: 'Previous Marker', contexts: ['timeline'], binding: { type: 'keyboard', key: '[' } },
+  { id: 'timeline.marker.next', label: 'Next Marker', contexts: ['timeline'], binding: { type: 'keyboard', key: ']' } },
+  { id: 'timeline.bookmark.save', label: 'Save Timeline Bookmark', contexts: ['timeline'], binding: { type: 'keyboard', key: 'b', meta: true } },
+  ...Array.from({ length: 9 }, (_, i) => ({ id: `timeline.bookmark.${i + 1}`, label: `Timeline Bookmark ${i + 1}`, contexts: ['timeline'] as import('./ShortcutDefinition').ShortcutContext[], binding: { type: 'keyboard' as const, key: String(i + 1), meta: true } })),
 ]

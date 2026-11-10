@@ -7,7 +7,7 @@
 // Used as a docked drawer below the TimelinePanel — toggleable from the
 // TrackToolBar's "⊞ Sheet" button.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { EasingType } from '@/lib/types'
 
 const EASING_TYPES: EasingType[] = [
@@ -40,18 +40,20 @@ interface Props {
 export default function KeyframeSpreadsheet({
   rows, onUpdateTime, onUpdateValue, onUpdateEasing, onDelete, onClose,
 }: Props) {
+  const cancelled = useRef(false)
   const [editing, setEditing] = useState<{ kfId: string; field: 'time' | 'value'; draft: string } | null>(null)
 
   function startEdit(kfId: string, field: 'time' | 'value', initial: string) {
+    cancelled.current = false
     setEditing({ kfId, field, draft: initial })
   }
 
   function commitEdit(row: KeyframeSheetRow) {
-    if (!editing || editing.kfId !== row.kfId) return
+    if (cancelled.current || !editing || editing.kfId !== row.kfId) return
     const num = parseFloat(editing.draft)
     if (!Number.isFinite(num)) { setEditing(null); return }
     if (editing.field === 'time' && num !== row.timeMs) {
-      onUpdateTime(row.kfId, row.trackTarget, row.timeMs, Math.max(0, num))
+      onUpdateTime(row.kfId, row.trackTarget, row.timeMs, num)
     }
     if (editing.field === 'value' && row.value !== null && num !== row.value) {
       onUpdateValue(row.kfId, row.trackTarget, row.value, num)
@@ -108,7 +110,7 @@ export default function KeyframeSpreadsheet({
                           onBlur={() => commitEdit(row)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') commitEdit(row)
-                            if (e.key === 'Escape') setEditing(null)
+                            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelled.current = true; setEditing(null) }
                           }}
                           className="w-20 bg-gray-800 border border-cyan-700 rounded px-1 py-0.5 text-right text-cyan-200 outline-none"
                         />
@@ -134,7 +136,7 @@ export default function KeyframeSpreadsheet({
                           onBlur={() => commitEdit(row)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') commitEdit(row)
-                            if (e.key === 'Escape') setEditing(null)
+                            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelled.current = true; setEditing(null) }
                           }}
                           className="w-24 bg-gray-800 border border-cyan-700 rounded px-1 py-0.5 text-right text-cyan-200 outline-none"
                         />

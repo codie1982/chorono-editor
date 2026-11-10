@@ -97,7 +97,7 @@ function ensureTrack(
 // ── Registration ──────────────────────────────────────────────────────────────
 
 /** Register the legacy auto-creating key action with a typed input schema.
- * Its numeric-string coercion, easeInOut default, near-time key replacement and
+ * Its numeric-string coercion, easeInOut insertion default, exact-time update and
  * single undo command remain compatible; color/text/vector families follow the
  * same validation/evaluation helpers as modern scene commits. */
 export function registerKeyframeActions(reg: ActionRegistry): void {
@@ -105,7 +105,7 @@ export function registerKeyframeActions(reg: ActionRegistry): void {
     id: 'keyframe.addBatch',
     toolName: 'add_keyframes',
     description:
-`Upsert keys on a target path using the legacy auto-create timeline/track workflow; creates one undoable editor command. Use an explicit existing timeline when preserving its settings. Existing key IDs can be replaced by this legacy command.
+`Upsert keys on a target path using the legacy auto-create timeline/track workflow; creates one undoable editor command. Use an explicit existing timeline when preserving its settings. Exact-time updates preserve key IDs, tangents and unspecified easing; nearby fractional keys remain separate. New keys retain the legacy easeInOut default.
 
 TRACK TARGET FORMAT: "layers.{layerId}.{property}"
 
@@ -181,8 +181,8 @@ EXAMPLES:
           let next = ensureTimeline(s, p.timelineId, maxTimeMs)
           next     = ensureTrack(next, p.timelineId, p.target)
           if (layerId) next = ensureLayerInTimeline(next, p.timelineId, layerId)
-          for (const kf of kfs) {
-            next = upsertKeyframe(next, p.timelineId, p.target, kf)
+          for (const [index, kf] of Array.from(kfs.entries())) {
+            next = upsertKeyframe(next, p.timelineId, p.target, kf, { updateEasing: p.keyframes[index].easing !== undefined })
           }
           return next
         },
