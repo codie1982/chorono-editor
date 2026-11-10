@@ -2,8 +2,10 @@
 
 10 Kasım 2026. Kullanıcının “hata içinde boğulmayalım” düzeltmesiyle ilk kapsam
 küçültüldü. **D0–D2 ara işi**, kalan E−1 öncesindedir. D0 kısa özet/sürüm
-altyapısı ve D1 kalıcı onay/kuyruk/alıcı servis/sürüm kontrolü tamamlandı.
-D2 sade bakım listesi bekliyor. [Gerçek D1 sözleşmesi](../diagnostic-sharing.md).
+altyapısı, D1 kalıcı onay/kuyruk/alıcı servis/sürüm kontrolü ve D2 sade bakım
+listesi tamamlandı. Sırada kalan E−1 ortak düzenleme/araç kabulü var.
+[Gerçek D1 sözleşmesi](../diagnostic-sharing.md),
+[D2 uygulaması ve kabul sınırları](../diagnostic-management.md).
 
 ## Kullanıcıya sunulacak davranış
 
@@ -111,7 +113,8 @@ eklenmez. UTF-8 boyut yardımcıları yeniden kullanılır; scene/undo'ya log ya
 | --- | --- |
 | **D0 — tamamlandı** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. [Gerçek sözleşme](../../../src/lib/diagnostics/README.md). |
 | **D1 — tamamlandı, yerel kabul** | İlk açılışta bir kez onay, kalıcı tercih; özet kuyruğu ve gerçek alıcı API/depo/tekilleştirme. Aynı izinle sürüm kontrolü. [Uygulama ve yayın sınırları](../diagnostic-sharing.md). |
-| **D2 — sıradaki** | Sade bakım/hata listesi ve birleşik kabul. Public hosting/yayın gerçek hedefe göre ayrıca yapılandırılır. |
+| **D2 — tamamlandı** | `/diagnostics`, yalnız admin Bearer token ile liste/durum API'si; günler arası tek satır/tekrar sayısı, New / Investigating / Fixed ve revision CAS. 323 dosya/2.631 test, TypeScript/MCP/production build geçti. Gerçek kabulün güncel durumu [D2 belgesinde](../diagnostic-management.md); public hosting ayrı. |
+| **Sıradaki** | Kalan E−1: MCP revision/provenance/organizasyon, Set Key/transport/prosedürel eğri ve birleşik araç kabulü. |
 
 Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma, sekme/tarayıcı yeniden
 açma ve olağan güncellemede tercihin korunması/yeniden sorulmaması; servis yokken
@@ -132,6 +135,15 @@ ve izin/gönderim D1'e aittir. Gün değişince önceki bellek grupları bırak�
 bu store kalıcı kuyruk değildir. Bu paragraf D0 sınırını anlatır; D1'de ayrı
 izinli browser owner, kalıcı kuyruk ve gerçek API eklendi. Yerel Interaction
 geçmişi yine aktarılmaz; varsayılan uzak paylaşım kapalıdır.
+
+D2 uygulaması: browser-safe yönetim sözleşmesi `src/lib/diagnostics/management`,
+HTTP/auth adaptörü `src/server/diagnostics/management`, sayfa `/diagnostics`.
+Server-only `CHORONO_DIAGNOSTICS_ADMIN_TOKEN` ve bellekte tutulan işletmeci
+kimliği, D1'in kalıcı paylaşım onayından ayrıdır; onay yönetim erişimi sağlamaz.
+Kimlik UTC gününü içermez; farklı build/noktalar ayrı, saklanan günlük sayılar
+tek satırdır. Status manuel kalır, yeni rapor Fixed'i yeniden açmaz. Private
+dosya V2, ağ raporu V1'dir; V1→V2 geçişi/retention ve eski zaman verisinin
+sınırı [gerçek D2 sözleşmesinde](../diagnostic-management.md) açıklanır.
 
 [Mevcut yerel kayıt sözleşmesi](../../../src/components/canvas/interactions/diagnostics/README.md)
 ve [pointer kabulü](../pointer-gesture-lifecycle.md) uygulama dayanaklarıdır.

@@ -3,6 +3,13 @@
 10 Kasım 2026. D1 kodu ve yerel uçtan uca kabul tamamlandı. Public servis
 yayını/hosting adresi bu teslimde kurulmadı. Varsayılan yapılandırma kapalıdır.
 
+**D2 eklendi:** ayrı [hata yönetimi sayfası ve bakım sözleşmesi](diagnostic-management.md)
+alıcıdaki `/diagnostics` yolundadır. Aynı hatalar saklanan günler boyunca tek
+satırda sayılır; New / Investigating / Fixed durumu kalıcıdır. Bu sayfa yalnız
+server-only `CHORONO_DIAGNOSTICS_ADMIN_TOKEN` ile yetkilendirilir. İşletmecinin
+sayfada verdiği token yalnız bellektedir; D1'in aşağıdaki kalıcı kullanıcı onayı
+yönetim yetkisi vermez. Public rapor/sürüm API'lerinin wire schema'sı değişmedi.
+
 ## Kullanıcı davranışı
 
 Yapılandırılmış editörde ilk kullanılabilir girişte tek soru gösterilir:
@@ -65,6 +72,14 @@ Alıcı runtime'ında `CHORONO_DIAGNOSTICS_ENABLED=1`,
 Opsiyonel `CHORONO_DIAGNOSTICS_LATEST_VERSION` / `CHORONO_DIAGNOSTICS_RELEASE_NOTES_URL`
 sürüm cevabını sağlar. Kökteki paket sürümü ile MCP protokolü ayrıdır.
 
+D2 için runtime'a `CHORONO_DIAGNOSTICS_ADMIN_TOKEN` eklenir; `NEXT_PUBLIC_`
+değeri değildir. D1 alıcısı kapalıyken aynı depodaki hatalar yönetilebilir.
+Private disk schema'sı V1'den V2'ye ilk başarılı işlemde dönüştürülür; receipt,
+count ve TTL korunur. V1'de son receipt zamanı yoktur; eski ilk/son görülme
+`expiresAtMs - 90 gün` ile yaklaşık başlangıç olarak gösterilir. V1/V2 writer
+aynı depoda birlikte çalıştırılmaz; [geçiş sınırları](diagnostic-management.md)
+güncellemeden önce incelenir.
+
 Depo private0700 klasör/0600 atomik dosya ve local filesystem lock kullanır.
 Tek host/local disk sözleşmesidir; çok host için transactional DB adapter gerekir.
 Kalmış crash lock güvenle çalınmaz; aktif writer olmadığı doğrulanarak işletmeci
@@ -74,6 +89,12 @@ günlük toplam90 gün saklanır; çalışan sunucuda saatlik ve işlem sırası
 temizliği vardır. Duran/serverless servis için harici cleanup/managed TTL gerekir.
 
 ## Doğrulama ve bakım devri
+
+D2 HEAD + feature patch snapshot'ında **323 test dosyası / 2.631 test**,
+TypeScript, MCP ve production build geçti; ilgisiz workspace WIP hariçtir.
+Gerçek HTTP/Chrome, reload/restart ve mobil kabul de geçti; ayrıntı/kanıtlar
+[yönetim belgesindedir](diagnostic-management.md#sahiplik-ve-doğrulama).
+Aşağıdaki tamamlanmış D1 kabulü ayrı tarihsel kayıttır.
 
 **318 test dosyası / 2.563 test**, TypeScript, MCP ve Next production build geçti.
 Gerçek Chrome QA origin'i4346, kullanıcı sahnesinden ve izin deposundan ayrıdır.

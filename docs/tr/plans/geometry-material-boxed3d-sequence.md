@@ -1,8 +1,8 @@
 # Poly, materyal ve kutulu 3D için güncel geliştirme sırası
 
 8 Kasım 2026; ara iş sadeleştirmesi 10 Kasım 2026. Kullanıcı tarafından onaylandı.
-Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi, sonra bekleyen viewport/ortak
-düzenleme işleri tamamlanır; ardından yeni özellik sırası uygulanır.
+Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi tamamlandı; sırada bekleyen
+E−1 viewport/ortak düzenleme işleri, ardından yeni özellik sırası var.
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
 
@@ -14,7 +14,9 @@ kontrolü](diagnostics-consent-version-plan.md). D0–D2; yalnız beklenmeyen ha
 tekilleştirip tekrar sayısıyla gösterir. Ayrıntılı Interaction yerelde elle açılır,
 uzak olay akışı ilk kapsama girmez. D0 ve D1 tamamlandı: kalıcı onay, kuyruk,
 gerçek alıcı API/depo ve aynı izinle sürüm kontrolü yerelde doğrulandı.
-D2 sade bakım listesidir; public servis yayını ayrıdır. [D1 sözleşmesi](../diagnostic-sharing.md).
+D2 sade bakım listesi de uygulandı: token ile `/diagnostics`, günler arası tek
+satır/tekrar ve kalıcı New / Investigating / Fixed. Public servis yayını ayrıdır.
+[D1 sözleşmesi](../diagnostic-sharing.md), [D2 ve kabul durumu](../diagnostic-management.md).
 
 ## Erteleme sınırı
 
@@ -38,8 +40,8 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı | V4 subtree duplicate / drag-copy | [Uygulama ve kabul](../viewport-clone-editing.md); native Copy/Instance destek sınırları açık. |
 | Tamamlandı | V5 çoklu Array | [Gerçek uygulama ve kabul](../viewport-array-editing.md): V4 forest üzerinden dört pattern, bounded preview ve tek undo. |
 | Tamamlandı | Komşu mesafeleri, cetvel ve guide | [Gerçek uygulama ve kabul](../viewport-layout-editing.md); seçim, keyframe ve tek undo korunur. |
-| Ara iş D0/D1 tamamlandı; D2 sıradaki | Sade hata özeti ve sürüm kontrolü | Kalıcı tek onay/kuyruk/gerçek alıcı API/depo ve izinli sürüm kontrolü hazır. D2 sade bakım listesi. Public yayın ayrı; Interaction yerel/elle. |
-| Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
+| Ara iş D0–D2 tamamlandı | Sade hata özeti ve sürüm kontrolü | Kalıcı tek onay/kuyruk/gerçek alıcı ve izinli sürüm kontrolü; admin token ile sade bakım listesi. Public yayın ayrı; Interaction yerel/elle. |
+| Sıradaki | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
@@ -55,8 +57,8 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | 13 | Bütün ürün için ikinci optimizasyon ve birleşik kabul | Four Seasons + dokulu Poly + 3D/rig + cloth/Blob/fluid + export fixture'ları; CPU/heap/RSS/GPU/asset/job plateau, görüntü eşliği ve sınır bütçeleri. |
 
 V3 viewport position key authoring, V4 native clone ve V5 forest Array tamamlandı.
-Komşu mesafesi/ruler-guide araçları da tamamlandı; D0–D2 ara işinden sonra yeni
-3D/Poly bloğundan önce kalan ortak düzenleme/araç kabulü de tamamlanır. Soft selection/connected-loop konuşması
+Komşu mesafesi/ruler-guide araçları ve D0–D2 ara işi de tamamlandı. Yeni
+3D/Poly bloğundan önce kalan E−1 ortak düzenleme/araç kabulü tamamlanır. Soft selection/connected-loop konuşması
 kullanıcının önceki isteğine göre en son tartışılacak ayrı başlıktır.
 
 ## Poly, UV ve basit materyal

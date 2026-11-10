@@ -1,8 +1,8 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
 Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
-önce kullanıcı onaylı tanı servisi/sürüm kontrolü ara işi → kalan viewport/ortak
-düzenleme işleri → dar entegrasyon sözleşmeleri →
+tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
+kalan E−1 viewport/ortak düzenleme işleri → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
 ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
@@ -31,10 +31,12 @@ tekrar sayısıyla gösterilir; ayrıntılı Interaction kaydı elle açılan ye
 Son kullanıcı isteğiyle hata paylaşımı ve sürüm kontrolü aynı, varsayılan kapalı onaya bağlıdır.
 Hata paylaşımı için ilk çalıştırmada bir kez onay sorulur; tercih saklanır,
 kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabilir.
-D0 ve D1 tamamlandı (§12.48–49): kalıcı ilk açılış onayı, kuyruk, gerçek alıcı
-API/depo ve aynı izinle sürüm kontrolü. Yerel kabul geçti; public hosting/yayın
-ayrıdır. Sırada D2 sade bakım listesi var. Tercih localStorage'da saklanır;
-her açılışta veya olağan güncellemede tekrar sorulmaz.
+D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, gerçek alıcı
+API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
+kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
+hosting/yayın ayrıdır. **Sırada kalan E−1 ortak düzenleme ve araç kabulü var.**
+Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
+tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
 shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğrulandı.
 
@@ -46,8 +48,8 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
-| Ara iş D0/D1 tamamlandı; D2 sıradaki | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Kalıcı tek onay + kuyruk + gerçek alıcı API/depo ve izinli sürüm kontrolü yerelde doğrulandı. D2 sade bakım listesi; public yayın ayrı. [Gerçek sözleşme](diagnostic-sharing.md). |
-| Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Tamamlandı — D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Kalıcı tek onay + kuyruk + gerçek alıcı ve izinli sürüm kontrolü; admin erişimli sade hata listesi/durum takibi. Public yayın ayrı. [D1](diagnostic-sharing.md), [D2 ve kabul sınırları](diagnostic-management.md). |
+| Sıradaki | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -127,7 +129,7 @@ Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; 
 
 [Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5 ve komşu mesafesi/cetvel/guide tamamlandı; önce D0–D2 sade hata özeti/sürüm ara işi, sonra kalan ortak düzenleme tamamlanır; ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
+Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5, komşu mesafesi/cetvel/guide ve D0–D2 sade hata özeti/sürüm ara işi tamamlandı; sırada kalan E−1 ortak düzenleme var. Ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
@@ -1973,3 +1975,38 @@ alanında; kontrol/HUD/cetvel/panel ve viewport dışında görünmez. Fiziksel
 hit-test pointer capture'ı da kapsar; layout/guide kabulü19/19. Açık sahne
 portable yedeklendi; başka CUA oturumunca kullanılan kullanıcı sekmesi
 yenilenmedi. Testler izole fixture'larda yapıldı. D2 sade bakım listesi sıradadır.
+
+### 12.50. D2 sade hata yönetimi, tek satır tekrar ve kalıcı durum — 10 Kasım 2026
+
+[Gerçek girişler, yönetim ayarları ve bakım devri](diagnostic-management.md).
+`/diagnostics` sayfası New / Investigating / Fixed durumlarını, tekrar sayısını,
+sürüm ve son görülmeyi sunar; durum/sürüm filtresi, sıralama, sayfalama ve elle
+Refresh vardır. Aynı release/build/channel/kod/modül/sabit hata noktası UTC
+günlerinden bağımsız tek satırdır. Sayaç kişi sayısı veya tüm zamanlar toplamı
+değil, saklanan günlük grupların occurrence toplamıdır. Unclassified satırlar
+aynı kök neden olarak etiketlenmez.
+
+`GET/PATCH /api/diagnostics/issues` yalnız server-only
+`CHORONO_DIAGNOSTICS_ADMIN_TOKEN` Bearer kimliğiyle çalışır. D1'in kalıcı
+paylaşım izni yönetim erişimi sağlamaz; işletmeci token'ı yalnız sayfa belleğinde
+tutulur, URL/storage/cookie'ye girmez. Login/filter nesilleri ve abort geç yanıtı
+reddeder; bir satırda tek CAS güncellemesi vardır. Eski revision 409 sonrası
+listeyi yeniler. Yeni rapor/duplicate manuel durumu sıfırlamaz; Fixed otomatik
+yeniden açılmaz. Auth/origin/body/response/admission sınırları ayrıdır.
+
+Private dosya V2, D1 ağ raporu V1'dir. V1 receipt/count/TTL korunarak okunur;
+ilk başarılı işlem V2 yazar. Eski son receipt saati bulunmadığından migration
+ilk/son zamanı expiry eksi 90 gün olarak alır; geçmiş son olay saati geri
+kazanılamaz. V1/V2 writer aynı depoda birlikte çalıştırılmaz. Triage günlük
+gruplarla aynı atomik lock'tadır ve son retained grup silinince temizlenir.
+
+Yalnız HEAD + D2 patch snapshot'ında **323 dosya / 2.631 test**, TypeScript,
+MCP ve production build geçti; ilgisiz WIP koşuya alınmadı. Gerçek HTTP ilk 7,
+sunucu restart sonrası son 6 kontrol geçti. Chrome giriş/geçersiz token,
+durum/filtre/sort/Refresh, reload/restart sonrası kalıcılık ve ingestion kapalı
+yönetim doğrulandı. 375 px sayfada dış taşma yok; tablo kendi klavye odaklı
+kaydırma alanındadır. Kanıtlar `artifacts/validation/diagnostics-d2-20261110/`.
+Public hosting/yayın yapılmadı. D2 uygulaması ve yerel kabul tamamlandı;
+**sırada kalan E−1 MCP/provenance/organizasyon, Set Key/transport/prosedürel
+eğri ve birleşik araç kabulü var**. Kutulu 3D/Poly sırası ve son export/ikinci
+optimizasyon öncelikleri korunur.

@@ -9,6 +9,15 @@ export interface ReceiverConfiguration {
   readonly allowedOrigins: readonly string[]
 }
 
+/** Resolve the shared private depot path independently of ingest/CORS enablement.
+ * Management may inspect a paused receiver's data. Invalid explicit paths fail
+ * closed; the returned fallback is never used when valid is false. */
+export function diagnosticDirectoryConfiguration(environment: Readonly<Record<string, string | undefined>> = process.env): { readonly directory: string; readonly valid: boolean } {
+  const source = environment.CHORONO_DIAGNOSTICS_DIR
+  const valid = source === undefined || Boolean(source.trim() && source.length <= 4096 && !source.includes('\0'))
+  return Object.freeze({ directory: path.resolve(source?.trim() || path.join(process.cwd(), '.chorono', 'diagnostics')), valid })
+}
+
 /** Resolve explicit deployment configuration only. No wildcard CORS, account,
  * network discovery or raw environment value is sent to clients. Public traffic
  * requires HTTPS; loopback HTTP is supported for local development/acceptance. */
@@ -16,17 +25,17 @@ export function receiverConfiguration(environment: Readonly<Record<string, strin
   const values = (environment.CHORONO_DIAGNOSTICS_ALLOWED_ORIGINS ?? '').split(',').map(value => value.trim()).filter(Boolean)
   let valid = values.length > 0 && values.length <= 20
   const allowedOrigins: string[] = []
-  const directory = environment.CHORONO_DIAGNOSTICS_DIR
-  if (directory !== undefined && (!directory.trim() || directory.length > 4096 || directory.includes('\0'))) valid = false
+  const directory = diagnosticDirectoryConfiguration(environment)
+  if (!directory.valid) valid = false
   for (const value of values) {
     try {
       const url = new URL(value)
-      if (value.length > 256 || value !== url.origin || url.username || url.password || !safeProtocol(url)) valid = false
+      if (value.length > 256 || value !== url.origin || url.username || url.password || !diagnosticTransportAllowed(url)) valid = false
       else allowedOrigins.push(url.origin)
     } catch { valid = false }
   }
   return Object.freeze({ enabled: environment.CHORONO_DIAGNOSTICS_ENABLED === '1', valid,
-    directory: path.resolve(directory?.trim() || path.join(process.cwd(), '.chorono', 'diagnostics')),
+    directory: directory.directory,
     allowedOrigins: Object.freeze(allowedOrigins) })
 }
 
@@ -47,7 +56,8 @@ export function diagnosticRelease(environment: Readonly<Record<string, string | 
   return { version, notesUrl: url.href }
 }
 
-/** Exact protocol boundary shared by trusted config validation. */
-function safeProtocol(url: URL): boolean {
+/** Transport boundary shared by public ingest configuration and private admin
+ * requests: HTTPS remotely, with HTTP allowed only on explicit loopback hosts. */
+export function diagnosticTransportAllowed(url: URL): boolean {
   return url.protocol === 'https:' || url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
 }

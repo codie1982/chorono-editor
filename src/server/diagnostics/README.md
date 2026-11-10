@@ -1,4 +1,4 @@
-# Diagnostic receiver (D1)
+# Diagnostic receiver and issue management (D1–D2)
 
 Actual Node/Next entries:
 
@@ -7,9 +7,13 @@ Actual Node/Next entries:
 - `GET /api/diagnostics/version`: trusted current release metadata, no client
   current-version query or tracking ID. Unconfigured release returns204.
 - `OPTIONS /api/diagnostics/version`: same origin/header constraints.
+- `GET /api/diagnostics/issues`: authenticated, bounded issue aggregates.
+- `PATCH /api/diagnostics/issues`: authenticated revision-checked triage.
+- `/diagnostics`: operator UI; no data is requested before explicit Connect.
 
-Disabled by default. No read/list reports endpoint exists. Project/account/JWT
-middleware and MongoDB scene collections are deliberately not used.
+Disabled by default. No public read/list reports endpoint exists. D2 exposes
+only code-only aggregates behind a separate server-only admin credential.
+Project/account/JWT middleware and MongoDB scene collections are not used.
 
 ## Configuration
 
@@ -20,6 +24,8 @@ CHORONO_DIAGNOSTICS_DIR=/absolute/private/diagnostic-depot
 # Optional release data for consented version checking:
 CHORONO_DIAGNOSTICS_LATEST_VERSION=0.2.1
 CHORONO_DIAGNOSTICS_RELEASE_NOTES_URL=https://example.com/releases/v0.2.1
+# Optional private management, independent of ingestion enablement:
+CHORONO_DIAGNOSTICS_ADMIN_TOKEN='<32-256-random-nonspace-ASCII-characters>'
 ```
 
 The default directory is `.chorono/diagnostics`. Allowed origins are an explicit
@@ -38,6 +44,13 @@ marker is **not authentication or proof of human consent**. D1's browser owner
 must enforce persistent permission and cookies/referrer policy before any call.
 CORS controls browsers, not hostile direct clients; the finite global ingress
 gate and deployment network controls provide separate admission bounds.
+
+D2 uses `Authorization: Bearer ...`, never the public policy marker, and only
+from the receiver's own origin. Admin config is server-only, never `NEXT_PUBLIC_`.
+The UI holds the operator token in memory until disconnect/unmount/reload; this
+is independent of D1's persistent end-user consent. Ingestion may be paused
+while management remains available. See [management API](management/README.md)
+and [operator setup, semantics and handoff](../../../docs/tr/diagnostic-management.md).
 
 ## Persistence, idempotency and failure
 
@@ -60,7 +73,8 @@ This adapter supports **one host, a local filesystem with atomic rename/fsync**.
 Shared/network filesystems and multi-host replicas require a transactional
 database adapter before deployment; do not share this directory across hosts.
 
-On-disk state is capped at16MiB,10,000 live receipts and10,000 daily groups.
+On-disk state is capped at16MiB,10,000 live receipts,10,000 daily groups and at
+most10,000 issue/triage identities.
 Capacity returns503 rather than dropping live dedup identities or silently
 double-counting later retries. Ingress is capped at120 admitted starts/minute
 and4 concurrent body/IO operations per process; a rejected request gets429 with
@@ -80,6 +94,30 @@ body, IP, UA, message/stack, authored project, media, object/path or account dat
 Corrupted/oversized state fails closed, never resets existing counts silently.
 Public errors contain only fixed categories, not exception messages or paths.
 
+## Issue projection and disk migration
+
+`src/lib/diagnostics/management` is the browser-safe public DTO/repository
+contract. `issueProjection.ts` aggregates retained groups by exact version,
+build, channel, error code, module and static failure site, excluding UTC day.
+Counts saturate at `MAX_SAFE_INTEGER`; they are occurrences, not users or
+all-time totals. New/Investigating/Fixed is separate durable manual triage.
+Ingestion never resets that status or automatically reopens Fixed. Revision
+changes only on manual transitions; stale status updates fail409. Listing and
+triage use the same `FileStateStore` transaction lock as report ingestion.
+Status counts are version-filtered issue counts before the status filter;
+`total` includes both filters, while row counts represent occurrences.
+
+The private disk schema is now2; public `DiagnosticReport` wire schema stays1.
+`depotCodec` reads legacy v1 preserving receipts, counts and expiry, then writes
+v2 on the first successful transaction. Legacy records lack last-receipt time:
+both first/last are conservatively derived from original expiry minus90days,
+not reconstructed event times. Fresh reports update actual last receipt time.
+Manual status starts New/revision0. Triage expires with its final daily group.
+
+Stop old writers and back up the private depot before upgrading. Do not run
+v1/v2 writers on the same depot; old writers reject v2 rather than erase triage.
+Rollback requires a separate compatible backup, not an older writer on v2 state.
+
 ## Public contracts and checks
 
 Shared `validateDiagnosticReport(input)` rejects unknown top-level/sample fields
@@ -90,5 +128,10 @@ components do not mutate source scenes, local Interaction logs or client consent
 Tests run the actual Next POST against temporary real file storage, reopen the
 repository, concurrently submit deltas/duplicates, verify ID conflicts, private
 permissions, TTL pruning, state corruption/caps, ingress/CORS/policy/byte limits,
-and disabled/unconfigured/valid release routes. Root orchestrates full repository
-tests/build and real HTTP/browser acceptance; no route is published by this file.
+and disabled/unconfigured/valid release routes. D2 adds aggregation, migration,
+triage persistence/CAS, TTL, authenticated HTTP and client session-race checks.
+The feature-only HEAD+D2 snapshot passed323 files/2,631 tests, TypeScript,
+MCP and production build; unrelated workspace WIP was excluded from that run.
+Real HTTP and Chrome acceptance, reload/restart persistence, paused ingestion
+and375px responsive behavior passed. Evidence:
+`artifacts/validation/diagnostics-d2-20261110`. No public service was deployed.

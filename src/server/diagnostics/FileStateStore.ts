@@ -66,7 +66,7 @@ export class FileStateStore {
     let file
     try { file = await open(path.join(this.root, 'state.json'), constants.O_RDONLY | constants.O_NOFOLLOW) }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { schemaVersion: 1, receipts: [], groups: [] }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { schemaVersion: 2, receipts: [], groups: [], triage: [] }
       throw error
     }
     try {
