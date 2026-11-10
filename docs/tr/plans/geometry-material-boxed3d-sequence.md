@@ -12,7 +12,8 @@ uygulandı. Genel 3D/Poly sırasından önce kalan ortak düzenleme/araç kabul�
 **Sadeleştirilen ara öncelik:** [kullanıcı onaylı hata özetleri ve sürüm
 kontrolü](diagnostics-consent-version-plan.md). D0–D2; yalnız beklenmeyen hataları
 tekilleştirip tekrar sayısıyla gösterir. Ayrıntılı Interaction yerelde elle açılır,
-uzak olay akışı ilk kapsama girmez. Henüz uygulanmadı.
+uzak olay akışı ilk kapsama girmez. D0 özet/sürüm altyapısı tamamlandı;
+sırada D1 ilk açılış onayı ve kuyruk vardır, servis D2'dedir.
 
 ## Erteleme sınırı
 
@@ -36,7 +37,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı | V4 subtree duplicate / drag-copy | [Uygulama ve kabul](../viewport-clone-editing.md); native Copy/Instance destek sınırları açık. |
 | Tamamlandı | V5 çoklu Array | [Gerçek uygulama ve kabul](../viewport-array-editing.md): V4 forest üzerinden dört pattern, bounded preview ve tek undo. |
 | Tamamlandı | Komşu mesafeleri, cetvel ve guide | [Gerçek uygulama ve kabul](../viewport-layout-editing.md); seçim, keyframe ve tek undo korunur. |
-| Sıradaki — ara iş | D0–D2 sade hata özeti ve sürüm kontrolü | Tek paylaşım onayı; aynı hataya tek satır, tekrar sayısı ve bir temizlenmiş örnek. Ayrıntılı Interaction yerel/elle; servis ve sürüm kontrolü kabulü. |
+| Ara iş D0 tamamlandı; D1 sıradaki | Sade hata özeti ve sürüm kontrolü | Özet/sürüm/tekilleştirme temeli hazır; ilk açılış onayı/kuyruk, ardından servis. Ayrıntılı Interaction yerel/elle. |
 | Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |

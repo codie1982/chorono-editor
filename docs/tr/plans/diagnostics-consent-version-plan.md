@@ -1,8 +1,8 @@
 # Sade hata özeti ve sürüm kontrolü
 
 10 Kasım 2026. Kullanıcının “hata içinde boğulmayalım” düzeltmesiyle ilk kapsam
-küçültüldü. **D0–D2 ara işi**, kalan E−1 öncesindedir. Bu bir geliştirme planıdır;
-otomatik gönderim ve servis henüz uygulanmadı.
+küçültüldü. **D0–D2 ara işi**, kalan E−1 öncesindedir. D0 kısa özet/sürüm
+altyapısı tamamlandı; D1 ilk açılış onayı/kuyruk ve D2 servis henüz uygulanmadı.
 
 ## Kullanıcıya sunulacak davranış
 
@@ -83,8 +83,8 @@ eklenmez. UTF-8 boyut yardımcıları yeniden kullanılır; scene/undo'ya log ya
 
 | Dilim | İlk teslim |
 | --- | --- |
-| **D0** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. |
-| **D1** | İlk çalıştırmada tek seferlik onay, saklanan tercih ve ayarlardan kapatma; bounded özet kuyruğu, yerel mock collector; mevcut yerel kayıt korunur. |
+| **D0 — tamamlandı** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. [Gerçek sözleşme](../../../src/lib/diagnostics/README.md). |
+| **D1 — sıradaki** | İlk çalıştırmada tek seferlik onay, saklanan tercih ve ayarlardan kapatma; bounded özet kuyruğu, yerel mock collector; mevcut yerel kayıt korunur. |
 | **D2** | Gerçek servis/saklama ve sade hata listesi, sürüm kontrolü, uçtan uca kabul. |
 
 Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma ve yeniden açmada tercihin
@@ -95,8 +95,13 @@ TTL/revoke/çoklu sekme source'u etkilemez. Mevcut first-drag/guide/creation ve
 tek undo davranışı korunur. Uygulamada repo testleri, MCP/build ve gerçek
 mock-servis tarayıcı kontrolü çalışır; build öncesi Next durdurulur.
 
-Bu tur yalnız plan sadeleştirildi; kod değişmedi, test/build tekrarlanmadı,
-açık editör yenilenmedi ve veri gönderilmedi.
+D0 uygulaması: `src/lib/version` uygulama paket sürümünü kullanır; varsayılan
+build `local` olur. `src/lib/diagnostics` yalnız açıkça verilen sabit hata
+noktalarını kabul eder, günlük 20 grupta tekilleştirir ve temizlenmiş immutable
+rapor üretir. Sayım ve rapor dönüşümü ayrı; reportId üretimi, count delta/retry
+ve izin/gönderim D1'e aittir. Gün değişince önceki bellek grupları bırakılır;
+bu store henüz kalıcı kuyruk değildir. Herhangi bir aktif collector, UI onayı,
+ağ çağrısı veya mevcut Interaction geçmişinin aktarımı eklenmedi.
 
 [Mevcut yerel kayıt sözleşmesi](../../../src/components/canvas/interactions/diagnostics/README.md)
 ve [pointer kabulü](../pointer-gesture-lifecycle.md) uygulama dayanaklarıdır.

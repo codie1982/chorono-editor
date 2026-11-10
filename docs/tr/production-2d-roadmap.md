@@ -31,7 +31,8 @@ tekrar sayısıyla gösterilir; ayrıntılı Interaction kaydı elle açılan ye
 Otomatik hata paylaşımı/sürüm kontrolü ayrı ve varsayılan kapalıdır.
 Hata paylaşımı için ilk çalıştırmada bir kez onay sorulur; tercih saklanır,
 kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabilir.
-Bu servis henüz uygulanmadı. Son [capture kaybı, kalıcı tanı kaydı ve ardışık
+D0 özet/sürüm altyapısı tamamlandı (§12.48); sırada D1 ilk açılış onayı/kuyruk var.
+Servis henüz uygulanmadı. Son [capture kaybı, kalıcı tanı kaydı ve ardışık
 shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğrulandı.
 
 ## 1. Kapsam ve öncelikler
@@ -42,7 +43,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
-| Sıradaki — ara iş D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | İlk çalıştırmada bir kez onay ve saklanan tercih; düzenli anonim özet, aynı hataya tek satır/tekrar sayısı, bir temizlenmiş örnek. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
+| Ara iş D0 tamamlandı; D1 sıradaki | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Özet/sürüm/tekilleştirme altyapısı hazır; ilk açılış onayı, kuyruk ve servis bekliyor. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
 | Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
@@ -1915,3 +1916,31 @@ araç olarak kalır; uzak olay penceresi ilk sürüme dahil değildir. Tek payla
 onayı, sınırlı kuyruk ve ayrı sürüm kontrolü korunur.
 [Güncel kapsam](plans/diagnostics-consent-version-plan.md) §12.46'daki geniş
 planın yerini alır. Bu tur yalnız doküman değişti; runtime/test/build değişmedi.
+
+### 12.48. D0 kısa hata özeti ve uygulama sürümü altyapısı — 10 Kasım 2026
+
+[D0 gerçek sözleşmesi ve kullanım örneği](../../src/lib/diagnostics/README.md),
+[build bilgisi](../../src/lib/version/README.md). `src/lib/diagnostics` açıkça
+verilen sabit hata noktasını allowlist ile temizler; sürüm/build/modül/hata
+noktasına göre günlük en çok 20 grupta sayar. Aynı hatanın 1.000 tekrarı tek
+grupta 1.000 sayımı verir; farklı noktalar ayrıdır. Sayaçlar 1.000.000'da
+doyar; taşan grup verileri tutulmadan overflow sayılır. UTC gün geçişi, geçersiz/
+geri giden saat, frozen snapshot ve tek kod örneği sözleşmeleri testlidir.
+
+`src/lib/version` authoritative kök `package.json` sürümünü kullanır. Resmi
+yayın konfigürasyonu yoksa build/channel `local`; yerel yol/Git/kurulum bilgisi
+keşfedilmez. MCP protokolü ve schema sürümü ayrı kalır. Rapor yeniden allowlist
+ile kurulup mevcut `measureJson` üzerinden 16 KiB sınırına alınır. Native Error,
+message/stack, sahne/kimlik/koordinat veya ayrıntılı Interaction JSON'u tutulmaz.
+Rapor üretmek yeni occurrence saymaz; sabit count delta/reportId/retry D1'indir.
+
+Yeni subsystem'de **aktif collector, singleton store, timer, browser hook,
+storage, onay UI'si veya network yoktur**. Günlük in-memory store kalıcı kuyruk
+değildir; rollover öncesi count delta devri D1'de yapılacaktır. Mevcut pointer,
+Interaction ve scene/undo yolları değiştirilmedi. MCP API/skill değişimi yoktur.
+
+**308 dosya / 2.475 test** geçti; yeni D0/version kapsamı **4 dosya / 66 test**.
+TypeScript, MCP build ve Next production build geçti. Next derlemeden önce
+durduruldu ve ardından yerel sunucu yeniden başlatıldı. UI/render değişikliği
+olmadığı için görsel parity koşusu yapılmadı. D0 tamamlandı; sırada **D1 ilk
+çalıştırmada tek onay, saklanan tercih ve bütçeli özet kuyruğu** var.
