@@ -21,6 +21,7 @@ import {acquirePortableScene,portableSceneInScope} from '../export/portable'
 import {editorOutputResources,outputBase64,outputBlobBase64,outputUtf8,outputJson,type OutputScope} from '../export/resources'
 import {previewOutput} from './output/PreviewOutput'
 import {runtimePackageInScope} from '../export/runtime/RuntimeOutput'
+import {implementationToolName} from './tools/ToolCatalogPolicy'
 
 export interface MCPHost {
   editor: EditorStateReturn
@@ -67,7 +68,8 @@ export async function executeEditorJob(job:BridgeJob,host:MCPHost,signal?:AbortS
  * Mutation semantics, revision checks and serialized protocol remain unchanged. */
 export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, scope:OutputScope,signal?: AbortSignal): Promise<any> {
   await bootstrapMCPActions()
-  const { method, args } = job
+  const { method: requestedMethod, args } = job
+  const method = implementationToolName(requestedMethod)
   const { editor } = host
   const before = editor.getScene()
   return assetSourcePool.withAssets(before.assets, async () => {
@@ -92,7 +94,7 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
       return {...snapshot(),scene}
     }
     if (method === 'apply_scene') return commit(args.scene, args.label ?? 'MCP change')
-    await validateToolCall(method, args)
+    await validateToolCall(requestedMethod, args)
     if (method === 'undo' || method === 'redo') { ensureWritable(); editor[method](); return { revision: editor.getRevision(), ...summarize(editor.getScene()) } }
     if (method === 'control_playback') {
       if (args.timelineIds) {
@@ -196,15 +198,16 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     let working = before
     for (const call of calls) {
       await validateToolCall(call.name, call.arguments)
-      const action = actionRegistry.get(call.name)
-      if (call.name === 'run_script' || !action?.toCommand) throw new Error(`Tool '${call.name}' cannot be used in a native batch`)
-      if (call.name === 'bake_track') {
+      const implementation = implementationToolName(call.name)
+      const action = actionRegistry.get(implementation)
+      if (implementation === 'run_script' || !action?.toCommand) throw new Error(`Tool '${call.name}' cannot be used in a native batch`)
+      if (implementation === 'bake_track') {
         const tl = working.timelines.find(t => t.id === call.arguments.timelineId)
         if (tl && tl.durationMs * (call.arguments.fps ?? 60) / 1000 > LIMITS.keyframes) throw new Error('Bake sample limit exceeded')
       }
-      if (call.name === 'clone_layer' || call.name === 'array_layer') {
+      if (implementation === 'clone_layer' || implementation === 'array_layer') {
         const options = call.arguments
-        assertCloneBudget(working, options.layerId, call.name === 'array_layer' && options.pattern === 'grid' ? (options.rows ?? 3) * (options.columns ?? 3) : (options.count ?? (call.name === 'clone_layer' ? 1 : 10)))
+        assertCloneBudget(working, options.layerId, implementation === 'array_layer' && options.pattern === 'grid' ? (options.rows ?? 3) * (options.columns ?? 3) : (options.count ?? (implementation === 'clone_layer' ? 1 : 10)))
       }
       const command = action.toCommand(call.arguments, working)
       if (command?.label.startsWith('AI ERROR')) throw new Error(command.label)

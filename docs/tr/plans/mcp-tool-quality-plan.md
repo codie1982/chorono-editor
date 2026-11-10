@@ -1,10 +1,13 @@
 # E−1.Q — MCP araç açıklığı, şema doğruluğu ve uyumlu sadeleştirme
 
-10 Kasım 2026. Kullanıcının Glama geri bildirimi üzerine kaynak ve gerçek
-`tools/list` incelemesi yapıldı. Bu belge **plan ve inceleme sonucudur**; yeni
-araç adları, profil veya migration API'si henüz uygulanmış değildir.
-Uygulama sırası D0–D2 → **E−1.Q** → E−1.1 ve kalan ortak düzenleme işleridir.
-Güvenli okuma/revision sözleşmesi ile katalog geçişi aynı sınırları kullanır.
+10 Kasım 2026. **E−1.Q uygulandı ve yerel kabulü tamamlandı.** MCP protokolü
+1.1.0; standard 40 / legacy 77 keşif profili, dokuz uyumlu alias, doğru typed
+şemalar/açıklamalar ve hafif/tek-şema keşfi var. Eski 77 ad çağrılabilir kalır.
+[Gerçek kullanım ve geçiş](../../en/mcp.md),
+[modül sahipliği](../../../src/lib/mcp/tools/README.md).
+Sırada E−1.1 güvenli okuma sözleşmesinin runtime zorunluluğu ve kalan ortak
+düzenleme işleri var. Mevcut revision/drag/undo/retry kontrolleri bütün adlarda
+ortaktır; zorunlu read lease veya provenance bu teslimde uygulanmış sayılmaz.
 
 ## Doğrulanan başlangıç
 
@@ -37,9 +40,10 @@ Mevcut ActionRegistry/domain komutları kullanılır; paralel sahne, undo veya
 ikinci şema/komut motoru kurulmaz. Transport kataloğu için ayrı sunum/adaptör
 sorumluluğu, editörün dahili eylem kimliklerini değiştirmeyi gerektirmez.
 
-## Somut örtüşmeler ve isim adayları
+## İlk incelemede saptanan örtüşmeler ve isim adayları
 
-Aşağıdakiler **öneridir**. İki aracın aynı konuya dokunması aynı semantiğe
+Aşağıdaki tablo ilk inceleme önerilerini kaydeder; gerçek uygulanan adlar ve
+sınırlar üstte bağlı kullanım belgesindedir. İki aracın aynı konuya dokunması aynı semantiğe
 sahip olduğu anlamına gelmez; yeni ad seçilmeden önce input/output, varsayılan,
 zaman, retry ve mutation davranışı karşılaştırılır.
 
@@ -59,7 +63,7 @@ güncelle `upsert_`; silme ailesi tutarlı olmalı. İsim için sırf bütün ar
 yeniden adlandırma yapılmaz. Açıklama ilk cümlede amacı, ardından seçim kuralı,
 yan etki/undo, girdi birimi/koordinat, sonuç ve önemli sınırı anlatır.
 
-## Uygulama dilimleri
+## Uygulama planı ve kabul koşulları
 
 ### Q1 — Gerçek sözleşme hatalarını düzelt
 
@@ -130,3 +134,29 @@ Bu dilim mevcut insan–ajan işinin önüne alınan MCP kalite kontrolüdür.
 [E−1 planı](human-agent-editing-timeline-plan.md) ve
 [3D/Poly teslim sırası](geometry-material-boxed3d-sequence.md) korunur;
 export/final kalite ve ikinci genel optimizasyon sona taşınmış durumdadır.
+
+## Teslim ve doğrulama — 10 Kasım 2026
+
+Canonical adlar `create_layer`, `get_layer`, `get_timeline`, `upsert_keyframes`,
+`replace_layer_fields`, `evaluate_timeline_values` ve üç açık state-machine
+adıdır. Alias yalnız aynı payload/sonuçlu mevcut uygulamaya yönlenir. Deep patch
+eklenmedi; get_layer biçimlendirilmiş alt kümedir, tam nested kaynak değildir.
+Native/script key ID ve easing koruma geliştirmeleri sonraki E−1.4 kapsamındadır.
+
+MCP ölçümleri: standard 40 araç/440 açıklamalı property; legacy 77 araç/1.103
+açıklamalı property; iki profilde eksik property açıklaması sıfır. Baseline ile
+sayımın veri kümesi değiştiğinden bu oran TDQS puanı olarak yorumlanmaz.
+summary yaklaşık 4 KiB, tam uyumluluk capabilities yaklaşık 326 KiB; mevcut
+tam yanıt uyumu korunurken hafif keşif ayrı açık seçenek olmuştur.
+
+İlgisiz viewport WIP dışlanmış kaynak snapshot'ında 327 dosya / **2.655 test**,
+TypeScript, MCP ve production build; CLI'nin 16 testi, CLI build/pack ve gerçek
+tarball'dan skill kur/check kabulü geçti. Son belge/açıklama düzeltmeleri ilgili
+hedef test/derleme ve paket kabulünden geçirildi. Gerçek STDIO iki profil,
+dokuz alias şema eşliği ve capabilities modlarını doğruladı. İzole Chrome
+editöründe renk değişirken 09:05 korunması, native spline + alias key batch,
+tek undo/redo, retry, değerlendirme, PNG ve portable save/load geçti.
+Kanıtlar `artifacts/validation/mcp-quality-20261110/after/` altındadır.
+
+Ana kullanıcı sahnesi test için kullanılmadı. Public yayın veya yeni Glama
+puanlaması yapılmadı; yerel kalite kabulü dış puan artışı olarak sunulmaz.

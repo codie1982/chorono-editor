@@ -31,6 +31,11 @@ export class ModifierRegistry {
     return this.byType.get(type)
   }
 
+  /** Snapshot registered plugins in insertion order. The returned array is
+   * caller-owned; plugin definitions are borrowed and must not be mutated.
+   * Schema adapters can discover parameter defaults without a second type list. */
+  getAll(): readonly ModifierPlugin[] { return Array.from(this.byType.values()) }
+
   clear(): void { this.byType.clear() }
 }
 

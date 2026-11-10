@@ -2,8 +2,8 @@
 
 Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
-kalan E−1 işleri (önce MCP araç açıklığı/uyumlu sadeleştirme E−1.Q, sonra
-güvenli düzenleme ve viewport/ortak araç kabulü) → dar entegrasyon sözleşmeleri →
+tamamlanan E−1.Q MCP araç açıklığından sonra E−1.1 güvenli düzenleme ve kalan
+viewport/ortak araç kabulü → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
 ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
@@ -35,8 +35,8 @@ kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabil
 D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, gerçek alıcı
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
-hosting/yayın ayrıdır. **Sırada E−1.Q MCP araç kalitesi, ardından E−1.1 güvenli
-düzenleme ve kalan ortak araç kabulü var.**
+hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
+sırada E−1.1 güvenli düzenleme ve kalan ortak araç kabulü var.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -51,7 +51,8 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
 | Tamamlandı — D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Kalıcı tek onay + kuyruk + gerçek alıcı ve izinli sürüm kontrolü; admin erişimli sade hata listesi/durum takibi. Public yayın ayrı. [D1](diagnostic-sharing.md), [D2 ve kabul sınırları](diagnostic-management.md). |
-| Sıradaki | E−1.Q MCP araç kalitesi, ardından kalan E−1 ve araç kabulü | [Katalog/isim/şema incelemesi](plans/mcp-tool-quality-plan.md), sonra MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Tamamlandı — E−1.Q | MCP araç kalitesi | [Uygulama ve kabul](plans/mcp-tool-quality-plan.md): standard 40 / legacy 77, dokuz uyumlu alias, typed şema ve açıklamalar. |
+| Sıradaki | E−1.1, ardından kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -83,7 +84,8 @@ flowchart TD
     V4[Subtree duplicate / drag-copy] --> V5[Çoklu Array]
     V5 --> LAYOUT[Komşu mesafesi / cetvel / guide]
     LAYOUT --> DIAG[Sade hata özeti / sürüm kontrolü D0–D2]
-    DIAG --> H[Kalan ortak düzenleme ve araç kabulü]
+    DIAG --> Q[MCP araç kalitesi E−1.Q]
+    Q --> H[Kalan ortak düzenleme ve araç kabulü]
     H --> I[Dar source / time / resource sözleşmeleri]
     I --> B[Kutulu 3D ilk sürüm]
     B --> G[Poly 2D]
@@ -2027,3 +2029,20 @@ Kullanıcı yönlendirmesiyle **E−1.Q → E−1.1 → kalan E−1** sırası g
 güvenli okuma/revision kontrolü bütün canonical/legacy yollarda ortak olur.
 Bu tur yalnız inceleme ve plan güncellemesidir; runtime/test sonucu veya yeni
 Glama skoru iddia edilmez. Kutulu 3D/Poly ve son export/optimizasyon sırası korunur.
+
+### 12.52. E−1.Q MCP katalog ve şema kalitesi teslimi — 10 Kasım 2026
+
+[Gerçek kullanım/geçiş](../en/mcp.md), [kabul ve sınırlar](plans/mcp-tool-quality-plan.md).
+MCP 1.1.0 standard 40 araçla keşif açar; legacy profil eski 77 adı listeler.
+Eski adlar her profilde çağrılabilir; dokuz canonical alias aynı native uygulama,
+payload ve sonuç semantiğini kullanır. Tek-şema/hafif capabilities, gerçek typed
+key değerleri, registry'den payload açıklamaları ve yan etki ipuçları eklendi.
+Get-layer alt kümesi, shallow replacement ve legacy key kimliği sınırları açık.
+
+327 test dosyası/2.655 test; TypeScript/MCP/production build, 16 CLI testi ve
+tarball skill kabulü geçti. Gerçek STDIO ve izole Chrome'da eski/yeni çağrı,
+native batch/tek undo, retry, 09:05 korunması, PNG/portable round-trip doğrulandı.
+Son açıklama/skill düzeltmeleri ayrıca hedef doğrulamadan geçirildi.
+Public yayın veya yeni Glama puanı yok. Sırada E−1.1 zorunlu taze okuma ve
+revision sözleşmesi var; sonraki provenance/organizasyon/Timeline/viewport
+kabulü, kutulu 3D/Poly ve son export/optimizasyon sırası değişmez.

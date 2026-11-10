@@ -1,5 +1,9 @@
 # Claude ve Codex için Chorono MCP
 
+MCP 1.1.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
+Eski 77 araç adı çağrılabilir kalır; eski payload/çıktı davranışları korunur.
+Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
+
 Chorono MCP, STDIO üzerinden standart MCP konuşan yerel bir sunucudur. Claude Desktop, Claude Code ve Codex aynı editör bağlantısını kullanabilir. Ayrıca bir model API anahtarı gerekmez: model istemcide çalışır, MCP editörde araçları yürütür.
 
 ## Kurulum
@@ -38,25 +42,100 @@ Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin vey
 
 Claude Code ve Codex için araç kullanım iş akışları ayrıca `skills/` altında dağıtılır. Skill kurulum CLI'si, yerel deneme ve npm paketleme için [skill rehberini](skills.md) okuyun. Skill kurulumu bu MCP bağlantısının yerine geçmez.
 
-Sunucu orijinal ActionRegistry araçlarını otomatik yayımlar. Bunlar katman/kompozisyon/keyframe/timeline oluşturma, clone ve array, path ve spline, motion path, trim, particle emitter, parametre, trigger, binding, wiring, interactivity ve state machine araçlarını kapsar.
-
-Ek araçlar:
+Sunucu aynı ActionRegistry/domain komutlarını kullanır. Varsayılan STDIO
+`tools/list` yüzeyi sık kullanılan 40 aracı gösterir; uzman eylemler tekil şema
+keşfi ve `batch_actions` ile kullanılabilir. Bu ayrım katman/kompozisyon,
+keyframe/timeline, clone/array, spline/path, particle ve state-machine
+kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları kullanır:
 
 | Alan | Araçlar |
 | --- | --- |
-| Keşif | `list_sessions`, `get_capabilities`, `get_scene`, `list_timelines`, `validate_scene` |
-| Nesneler | `create_object`, `patch_object`, `group_layers`, `ungroup_layer`, `import_asset` |
-| Çoklu animasyon | `update_timeline`, `clone_timeline`, `delete_timeline`, `set_keyframes`, `update_track`, `remove_track` |
-| İleri hareket | `add_modifier`, `bake_track`, `configure_particles`, `edit_entity` |
+| Keşif | `list_sessions`, `get_capabilities`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
+| Nesneler | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
+| Animasyon | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Script | `run_script`, `apply_script_plan`, `batch_actions` |
 | İzleme | `render_preview`, `evaluate_frame`, `control_playback`, `control_runtime`, `get_runtime`, `undo`, `redo` |
 | Dosyalar | `save_project`, `list_projects`, `load_project`, `export_runtime`, `export_svg`, `export_sequence` |
+| Ses | `get_audio_state`, `render_audio_preview`, `export_audio` |
 
-`get_capabilities`, gerçek katman türlerini, özellik şemalarını, parçacık presetlerini, araç giriş şemalarını ve script API'sini döndürür. `chorono://scripting`, `chorono://capabilities`, `chorono://sessions` MCP kaynakları ve `animate_scene` istemi de vardır.
+### Keşif ve uzman araçlar
+
+İlk keşifte `get_capabilities({summary:true})` kullanın. Bu hafif yanıt sürüm,
+katalog metadatası, tür adları, preset'ler, limitler ve çıktı kapsamını verir;
+bütün araç/özellik şemalarını ve script yardımını taşımaz. Authoring için
+`chorono://scripting` kaynağını okuyun. Tek bir native şema gerektiğinde
+`get_capabilities({toolName:'configure_particles'})` isteyin; `toolName` ve
+`summary:true` aynı çağrıda kullanılmaz.
+
+Tek araç sonucu tam şemayı, implementation/canonical adı, yayımlanma bilgisini
+ve `callableInBatch` değerini verir. Değer true ise adı ve argümanları
+`batch_actions` içine koyun. Keşif istemcinin araç listesine dinamik araç eklemez.
+Salt okuma, dosya ve playback/runtime taşıma araçları mutasyon batch'ine giremez.
+`add_spline`, `configure_particles`, `update_track`, `bake_track` ve native ses
+klibi düzenlemeleri bu uzman mutasyon yolunu kullanabilir; scriptte aynı domain
+işlemleri de vardır.
+
+`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` eski 77 aracın
+uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
+Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
+`catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
+alias girdileri `{name,implementationName}` biçimindedir. `chorono://capabilities`
+ve `chorono://sessions` kaynakları ile `animate_scene` istemi de vardır.
+
+### Adlar ve geriye uyum
+
+| Tercih edilen ad | Eski implementation adı | Korunan anlam |
+| --- | --- | --- |
+| `create_layer` | `create_object` | Registry `kind` ve isteğe bağlı Layer patch'i. |
+| `get_layer` | `describe_layer` | Tek katmanın biçimlendirilmiş özeti; tam nested model değildir. |
+| `get_timeline` | `describe_timeline` | Tek timeline'ın track/key ayrıntıları. |
+| `upsert_keyframes` | `set_keyframes` | Açık timeline/layer/property adresinde key ekle/güncelle; tüm track'i değiştirmez. |
+| `replace_layer_fields` | `patch_object` | Verilen nested nesneyi tümüyle değiştiren shallow işlem. Deep merge değildir. |
+| `evaluate_timeline_values` | `evaluate_at_time` | Yalnız timeline değerlendirmesi; `evaluate_frame` ile aynı kapsam değildir. |
+| `create_state_machine_state` | `add_sm_state` | State ekleme. |
+| `create_state_machine_transition` | `add_sm_transition` | Transition ekleme. |
+| `set_state_machine_initial_state` | `set_initial_state` | Makinenin ilk state'ini seçme. |
+
+Yeni adların hepsi varsayılan doğrudan listede değildir; uzman şeması üzerinden
+batch desteği kontrol edilir. `get_scene` revision/bağlamlı ana okuma yoludur;
+eski `get_scene_json` yalnız JSON döndürmeye devam eder. `add_keyframes` eski
+target adresi ve timeline auto-create davranışını korur; `upsert_keyframes`
+ile aynı input değildir. Mevcut key ID/easing değiştirme sınırlamaları sürer;
+bu ad düzenlemesi E−1.4'ün kimlik koruyan key edit teslimi değildir.
+
+Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
+`get_scene` snapshot'ını veya script `layer.data` kaydını okuyun. `get_layer`
+özeti bu nested verinin tümünü içermez; ondan tam bir kayıt yeniden kurulmaz.
+
+Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
+`CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
+`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı yayımlar; `standard`
+varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
+değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
+bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.
+
+Eski adlar her iki profilde de sunucuda çözümlenir; payload, çıktı ve eski
+varsayılanları korunur. Aynı retry'da araç adı, argüman ve `requestId` aynı
+kalmalıdır. Yeni ad seçmek eski belirsiz isteğin tekrarı sayılmaz. Profil
+daraltılması mevcut source revision/aktif drag/dry-run/tek undo korumalarını
+atlayan bir yol oluşturmaz; taze okuma yetkisini zorunlu kılacak E−1.1 henüz
+ayrı iştir ve bu sürümde `expectedRevision` isteğe bağlı kalır.
+
+`expectedRevision` ve retry `requestId`, `batch_actions` çağrısının dış
+argümanlarında bütün transaction için verilir. Alt eylemlerin içindeki ortak
+alanlar bağımsız revision kontrolü oluşturmaz. `normalize_audio_clip` native
+batch eylemi değildir (`callableInBatch:false`); varsayılan listede bulunmaz.
+Bu bağımsız kaynak-peak ölçümü için legacy katalog kullanılır; script API'si
+eşdeğer bir peak ölçümü sağlamaz.
 
 Script ile sahne tasarımı için `scene.snapshot()` tam sahneyi; `layer.data` katmanın tamamını; `layer.get(path)` tek alanı bağımsız veri kopyası olarak okur. `layer.patch(partial)` iç içe ayarları birleştirir; `Layer.set` eski nesne değiştirme davranışını korur. `scene.useTimeline(id)` hem Layer.key hem clone/array animasyon kopyalarının hedefini belirler. Mevcut state machine ve etkileşim kayıtlarının CRUD metotları ile native ses klibi yardımcıları da script içinde kullanılabilir. Renk kanalları ve Vec2 interpolate edilir; metin/boolean key sınırında değişir. Çizim öncesi uygulanan animasyon verisi particle, repeater, shape, tipografi, efekt ve maskeleri kapsar. Kesin imzalar, örnekler ve sınırlar için [betikleme rehberini](scripting.md) okuyun; IO, önizleme ve kayıt ayrı MCP araçlarıdır.
 
-`patch_object` ile Layer modelinin effects, masks, typography, geometry, repeater ve diğer alanlarına erişilir. İç içe nesneler değiştirilir; kısmi iç içe güncellemelerde mevcut alanları koruyun. `update_track` easing/timeWarp/multiplier eğrilerini, outOfRange davranışını, modifier listesini ve waveform/noise controller'ı yönetir.
+`replace_layer_fields` (eski `patch_object`) ile Layer modelinin effects, masks,
+typography, geometry, repeater ve diğer alanlarına erişilir. İç içe nesneler
+değiştirilir; kısmi iç içe güncellemelerde mevcut alanları koruyun. Recursive
+merge için script `layer.patch` kullanın. Uzman `update_track`
+easing/timeWarp/multiplier eğrilerini, outOfRange davranışını, modifier listesini
+ve waveform/noise controller'ı yönetir.
 
 ## Güvenli ve tutarlı düzenleme
 

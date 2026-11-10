@@ -67,7 +67,7 @@ describe('isolated authoring', () => {
 
 describe('capabilities and input boundaries', () => {
   it('exposes native and extended tools without duplicate names', async () => {
-    const names = (await getToolCatalog()).map(t => t.name)
+    const names = (await getToolCatalog('legacy')).map(t => t.name)
     expect(names.length).toBeGreaterThanOrEqual(60)
     for (const name of ['add_layer','create_object','array_layer','add_spline','create_state_machine','add_parameter_wire','set_keyframes','update_track','add_modifier','clone_timeline','run_script','render_preview','save_project','control_runtime']) expect(names).toContain(name)
     expect(new Set(names).size).toBe(names.length)

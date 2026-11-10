@@ -10,6 +10,8 @@ interface LayerIdParam { layerId: string }
 interface TimelineIdParam { timelineId: string }
 interface EvalParam { timeMs: number; target?: string }
 
+/** Register source-only reads used by AI/MCP adapters. Reads return the legacy
+ * text/JSON representation without mutating scene, transport or media assets. */
 export function registerIntrospectActions(reg: ActionRegistry): void {
   // ── list_layers ─────────────────────────────────────────────────────────────
   reg.register({
@@ -37,10 +39,10 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
     toolName: 'list_assets',
     description:
       'List uploaded media assets (image/video/audio) with their ids. Use to find a ' +
-      'valid assetId before add_layer type=image/video/audio. AI cannot upload files.',
+      'valid assetId before creating media layers. To add new file content through MCP, use import_asset with base64 data; this list does not import media or fetch URLs.',
     parameters: { type: 'object', properties: {} },
     read: (_params, scene: ChronoScene) => {
-      if (scene.assets.length === 0) return 'Scene has no assets. The user must upload media first.'
+      if (scene.assets.length === 0) return 'Scene has no assets. Import file content with import_asset through MCP, or upload media in the editor.'
       return scene.assets
         .map((a) => {
           const dim = a.width && a.height ? ` ${a.width}×${a.height}` : ''

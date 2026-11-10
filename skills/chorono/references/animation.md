@@ -58,7 +58,7 @@ The `sine` **modifier** uses normalized time within each keyframe segment, with 
 - Easing belongs to the **starting** keyframe of a segment. Supported names include `linear`, `hold`, `easeIn`, `easeOut`, `easeInOut`. A custom curve is `{type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}`.
 - For `Timeline.key(layer,property,...)` pass a layer-local property such as `transform.x`. Track-editing methods take full targets such as `layers.<id>.transform.x`.
 - `scene.cloneTimeline(id,newId)` duplicates an animation without cloning the objects. Its keyframes receive fresh ids so edits stay independent. Read the cloned timeline before referring to individual keys. It also duplicates existing tracks; remove or replace tracks that should not be inherited.
-- Native tools include `set_keyframes`, `update_track`, `remove_track`, `add_modifier`, `clone_timeline`, `update_timeline` and `delete_timeline`. Discover exact input schemas before calling them.
+- For a narrow native key edit use advertised `upsert_keyframes` (`set_keyframes` in legacy clients). `update_timeline` is also advertised. Advanced `update_track`, `remove_track`, `add_modifier`, `clone_timeline`, `delete_timeline` and `bake_track` can be discovered with `get_capabilities({toolName:...})` and used in `batch_actions` when marked `callableInBatch`. Read [tool-choice.md](tool-choice.md); schema discovery does not register a new direct tool in the client.
 - Track patches support out-of-range behavior, easing/time-warp/multiplier curves and procedural controllers. Discover their schema rather than guessing nested keys. Use `bake_track` or `timeline.bake(target,fps,tolerance)` when the output needs sampled keyframes.
 
 ## Procedural objects, paths and particles

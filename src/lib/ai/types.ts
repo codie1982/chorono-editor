@@ -70,8 +70,11 @@ export interface AIUIMessage {
 
 // ── Tool definitions (provider-agnostic schema, translated per-provider) ──────
 
+/** JSON Schema field shared by AI providers and the MCP ActionRegistry adapter.
+ * A union may omit type and declare anyOf; existing single-type descriptions
+ * remain unchanged. Runtime domain validation remains authoritative. */
 export interface AIToolProperty {
-  type: string
+  type?: string
   description?: string
   enum?: string[]
   minimum?: number
@@ -80,6 +83,10 @@ export interface AIToolProperty {
   properties?: Record<string, AIToolProperty>
   required?: string[]
   default?: unknown
+  anyOf?: readonly AIToolProperty[]
+  minItems?: number
+  maxItems?: number
+  additionalProperties?: boolean | AIToolProperty
 }
 
 export interface AITool {

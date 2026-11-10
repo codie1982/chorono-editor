@@ -19,9 +19,9 @@ export function registerTimelineActions(reg: ActionRegistry): void {
     id: 'timeline.create',
     toolName: 'create_timeline',
     description:
-      'Create an animation timeline. You MUST create a timeline before calling ' +
-      'add_keyframes. Set a meaningful id (e.g. "intro", "loop_anim") — you will ' +
-      'reference it in add_keyframes.',
+      'Create an animation timeline with an explicit id and duration. Reference ' +
+      'this id when adding keys. Legacy add_keyframes can auto-create a missing ' +
+      'timeline; create explicitly when its playback or loop settings matter.',
     parameters: {
       type: 'object',
       required: ['id', 'durationMs'],

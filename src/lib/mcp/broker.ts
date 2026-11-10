@@ -3,6 +3,7 @@ import { getCapabilities, validateToolCall } from './catalog'
 import { runSafeScript } from './sandbox'
 import { assertScene, summarize, type BridgeJob, type JsonObject, type Snapshot } from './protocol'
 import { tokenEquals, writeArtifact, listProjects, loadProject, audit } from './storage'
+import { implementationToolName } from './tools/ToolCatalogPolicy'
 
 interface Pending { job: BridgeJob; resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
 interface Session { id: string; token: string; label: string; seenAt: number; queue: Pending[]; pending: Map<string, Pending>; wake?: () => void; tail: Promise<unknown>; results: Map<string, { hash: string; result: Promise<any> }> }
@@ -90,13 +91,18 @@ function chooseSession(id?: string) {
   return Array.from(state.sessions.values())[0]
 }
 
-export async function callEditorTool(name: string, args: JsonObject, clientName = 'MCP client') {
-  await validateToolCall(name, args)
+/** Validate the requested transport name, then execute its existing native
+ * implementation. Retry identity retains the exact requested name: changing an
+ * alias is a different request, even when the underlying command is identical.
+ * Aliases share all revision, transaction, plan and audit gates below. */
+export async function callEditorTool(requestedName: string, args: JsonObject, clientName = 'MCP client') {
+  await validateToolCall(requestedName, args)
+  const name = implementationToolName(requestedName)
   if (name === 'list_sessions') return { sessions: listSessions() }
-  if (name === 'get_capabilities') return getCapabilities()
+  if (name === 'get_capabilities') return getCapabilities('standard', args)
   if (name === 'list_projects') return { projects: await listProjects() }
   const session = chooseSession(args.sessionId)
-  const hash = createHash('sha256').update(JSON.stringify({ name, args })).digest('hex')
+  const hash = createHash('sha256').update(JSON.stringify({ name: requestedName, args })).digest('hex')
   if (args.requestId && session.results.has(args.requestId)) {
     const cached = session.results.get(args.requestId)!
     if (cached.hash !== hash) throw new Error('requestId was already used with different arguments')
@@ -155,10 +161,10 @@ export async function callEditorTool(name: string, args: JsonObject, clientName 
   }
   try {
     const value = await result
-    await audit({ client: clientName.slice(0, 80), sessionId: session.id, tool: name, revision: value?.revision, ok: true }).catch(() => {})
+    await audit({ client: clientName.slice(0, 80), sessionId: session.id, tool: requestedName, revision: value?.revision, ok: true }).catch(() => {})
     return value
   } catch (error) {
-    await audit({ client: clientName.slice(0, 80), sessionId: session.id, tool: name, ok: false }).catch(() => {})
+    await audit({ client: clientName.slice(0, 80), sessionId: session.id, tool: requestedName, ok: false }).catch(() => {})
     throw error
   }
 }

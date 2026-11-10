@@ -4,6 +4,8 @@ import { bootstrapMCPActions } from './actions'
 import { layerRegistry } from '../registry'
 import { getAllParticlePresets } from '../particles/presets'
 import { assertOperation, LIMITS, MCP_VERSION, type ToolDefinition, type JsonObject } from './protocol'
+import { ToolCatalogIndex } from './tools/ToolCatalogIndex'
+import { implementationToolName, type ToolCatalogProfile } from './tools/ToolCatalogPolicy'
 
 const string = { type: 'string' }
 const number = { type: 'number', minimum: 0 }
@@ -12,7 +14,10 @@ const object = { type: 'object' }
 const extra = (name: string, description: string, properties: JsonObject = {}, required: string[] = [], readOnly = false): ToolDefinition => ({ name, description, inputSchema: { type: 'object', properties, required }, annotations: { readOnlyHint: readOnly, openWorldHint: false } })
 const extras: ToolDefinition[] = [
   extra('list_sessions', 'List explicitly connected Chorono editor tabs. Use sessionId when several tabs are open.', {}, [], true),
-  extra('get_capabilities', 'Discover all tools, object kinds, particle presets, limits and the exact script API.', {}, [], true),
+  extra('get_capabilities', 'Discover tools, object kinds, particle presets and limits. Use summary:true for lightweight discovery, toolName for one exact callable schema, or no options for the full compatibility inventory and script API.', {
+    summary: { type: 'boolean', description: 'When true, omit large tool schemas, property groups and script help. Cannot combine true with toolName.' },
+    toolName: { type: 'string', description: 'Exact canonical or historical tool name. Returns its schema and whether it can be used inside batch_actions; no editor operation runs.' },
+  }, [], true),
   extra('get_scene', 'Read the live editor scene plus revision, selected timeline and playhead. Read before editing existing work.', {}, [], true),
   extra('run_script', 'Execute synchronous JavaScript in isolated QuickJS. Only scene API is available; no Node, DOM, fetch, imports or filesystem. All edits are atomic. dryRun returns a planId which apply_script_plan commits without rerunning code.', { code: { type: 'string', maxLength: LIMITS.scriptBytes }, dryRun: boolean }, ['code']),
   extra('apply_script_plan', 'Commit a previously prepared script plan exactly once, retaining generated object ids. Refuses a stale scene revision.', { planId: string }, ['planId']),
@@ -69,19 +74,36 @@ const loop=scene.cloneTimeline('intro','loop'); loop.set({loop:true});
 loop.modifier('layers.'+ball.id+'.transform.y',{type:'sine',parameters:{amplitude:30,frequency:1}});
 `
 
-let catalogPromise: Promise<ToolDefinition[]> | undefined
-export function getToolCatalog(): Promise<ToolDefinition[]> {
+let catalogPromise: Promise<ToolCatalogIndex> | undefined
+/** Compose the authoritative metadata index once; concrete commands still
+ * belong to ActionRegistry. Both advertised and historical calls use it. */
+function getCatalogIndex(): Promise<ToolCatalogIndex> {
   return catalogPromise ??= bootstrapMCPActions().then(() => {
     const special = new Set(extras.map(t => t.name))
-    return [...actionRegistry.toMCPTools().filter(t => !special.has(t.name)).map(t => ({ ...t, annotations: { readOnlyHint: !!actionRegistry.get(t.name)?.read, openWorldHint: false } })), ...extras].map(t => ({ ...t, inputSchema: { ...t.inputSchema, properties: { ...t.inputSchema.properties, sessionId: string, expectedRevision: { type: 'integer', minimum: 0 }, requestId: { type: 'string', maxLength: 128 } }, additionalProperties: false } }))
+    const tools = [...actionRegistry.toMCPTools().filter(t => !special.has(t.name)).map(t => ({ ...t, annotations: { readOnlyHint: !!actionRegistry.get(t.name)?.read, openWorldHint: false } })), ...extras]
+    return new ToolCatalogIndex(tools.map(t => ({ ...t, inputSchema: { ...t.inputSchema, properties: { ...t.inputSchema.properties,
+      sessionId: { type: 'string', description: 'Connected editor id from list_sessions. Required when more than one editor is connected; not used by local catalog discovery.' },
+      expectedRevision: { type: 'integer', minimum: 0, description: 'Optional source revision from get_scene. Reject a conflicting edit; does not itself prove a fresh read. Playback/read operations need not change the revision.' },
+      requestId: { type: 'string', maxLength: 128, description: 'Optional retry key. Repeat the exact same tool name and arguments to reuse a bounded cached result; do not reuse for a different operation.' },
+    }, additionalProperties: false } })))
   })
+}
+
+/** Standard discovery is focused; legacy lists every pre-1.1 name. Call
+ * validation is deliberately independent from this presentation choice. */
+export async function getToolCatalog(profile: ToolCatalogProfile = 'standard'): Promise<ToolDefinition[]> {
+  return (await getCatalogIndex()).list(profile)
+}
+
+/** Resolve a callable schema, including non-advertised historical names. */
+export async function getCallableTool(name: string): Promise<ToolDefinition> {
+  return (await getCatalogIndex()).get(name)
 }
 
 const ajv = new Ajv({ strict: false, allErrors: true })
 const validators = new Map<string, ReturnType<typeof ajv.compile>>()
 export async function validateToolCall(name: string, args: JsonObject): Promise<ToolDefinition> {
-  const tool = (await getToolCatalog()).find(t => t.name === name)
-  if (!tool) throw new Error(`Unknown tool '${name}'`)
+  const tool = await getCallableTool(name)
   let validate = validators.get(name)
   if (!validate) { validate = ajv.compile(tool.inputSchema); validators.set(name, validate) }
   if (!validate(args)) throw new Error(`Invalid arguments: ${ajv.errorsText(validate.errors)}`)
@@ -89,6 +111,21 @@ export async function validateToolCall(name: string, args: JsonObject): Promise<
   return tool
 }
 
-export async function getCapabilities() {
-  return { version: MCP_VERSION, tools: await getToolCatalog(), objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category, properties: d.getPropertyGroups(d.createDefault()) })), particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS, scripting: SCRIPT_HELP, exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
+/** Metadata-only discovery. The no-option response preserves its historical
+ * tools inventory and scripting fields; summary and single-tool modes are
+ * opt-in, bounded alternatives. They never contact a live editor or mutate it. */
+export async function getCapabilities(profile: ToolCatalogProfile = 'standard', options: { summary?: boolean; toolName?: string } = {}) {
+  const catalog = await getCatalogIndex()
+  if (options.toolName !== undefined) {
+    if (options.summary) throw new Error('Use either summary:true or toolName, not both')
+    const implementation = implementationToolName(options.toolName)
+    return { version: MCP_VERSION, ...catalog.describe(options.toolName, profile,
+      implementation !== 'run_script' && !!actionRegistry.get(implementation)?.toCommand) }
+  }
+  const base = { version: MCP_VERSION, catalog: catalog.metadata(profile),
+    particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS,
+    exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
+  if (options.summary) return { ...base, objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category })) }
+  return { ...base, tools: catalog.list('legacy'),
+    objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category, properties: d.getPropertyGroups(d.createDefault()) })), scripting: SCRIPT_HELP }
 }

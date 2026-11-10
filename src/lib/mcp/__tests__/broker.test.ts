@@ -27,6 +27,37 @@ function fakeEditor() {
 }
 
 describe('live editor broker', () => {
+  it('routes preferred aliases and legacy calls through identical retry, revision and atomic command gates', async () => {
+    const editor = fakeEditor()
+    try {
+      const created = await editor.call('create_layer', { kind: 'rect', patch: { name: 'Human clock at 09:05' }, requestId: 'canonical-create' })
+      const repeated = await editor.call('create_layer', { kind: 'rect', patch: { name: 'Human clock at 09:05' }, requestId: 'canonical-create' })
+      expect(repeated).toEqual(created)
+      const id = created.addedLayerIds[0]
+      await expect(editor.call('create_object', { kind: 'rect', patch: { name: 'Human clock at 09:05' }, requestId: 'canonical-create' })).rejects.toThrow('different arguments')
+      await expect(editor.call('replace_layer_fields', { layerId: id, patch: { opacity: .2 }, expectedRevision: 0 })).rejects.toThrow('revision conflict')
+      expect(await editor.call('get_layer', { layerId: id })).toEqual(await editor.call('describe_layer', { layerId: id }))
+      const before = structuredClone(editor.host.editor.getScene())
+      await editor.call('batch_actions', { actions: [
+        { name: 'create_timeline', arguments: { id: 'intro', durationMs: 1000 } },
+        { name: 'upsert_keyframes', arguments: { timelineId: 'intro', layerId: id, property: 'opacity', keyframes: [{ timeMs: 0, value: 0 }, { timeMs: 1000, value: 1 }] } },
+      ] })
+      expect(editor.host.editor.getScene().layers[0].name).toBe('Human clock at 09:05')
+      expect(editor.host.editor.getScene().timelines[0].tracks[0].keyframes).toHaveLength(2)
+      expect(await editor.call('get_timeline', { timelineId: 'intro' })).toEqual(await editor.call('describe_timeline', { timelineId: 'intro' }))
+      expect(await editor.call('evaluate_timeline_values', { timeMs: 500 })).toEqual(await editor.call('evaluate_at_time', { timeMs: 500 }))
+      await editor.call('undo')
+      expect(editor.host.editor.getScene()).toEqual(before)
+      await expect(editor.call('batch_actions', { actions: [
+        { name: 'create_layer', arguments: { kind: 'circle' } },
+        { name: 'replace_layer_fields', arguments: { layerId: 'missing', patch: { opacity: 0 } } },
+      ] })).rejects.toThrow('not found')
+      expect(editor.host.editor.getScene()).toEqual(before)
+      await expect(editor.call('batch_actions', { actions: [
+        { name: 'get_layer', arguments: { layerId: id } },
+      ] })).rejects.toThrow('cannot be used in a native batch')
+    } finally { await editor.close() }
+  })
   it('edits timeline-owned audio through the native tools with one undo per clip operation', async () => {
     const editor = fakeEditor()
     try {

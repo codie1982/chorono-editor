@@ -21,9 +21,10 @@ const call = async (name, args = {}) => {
 try {
   report.tools = (await client.listTools()).tools.length
   report.resources = (await client.listResources()).resources.length
-  const capabilities = await call('get_capabilities')
+  const capabilities = await call('get_capabilities', { summary: true })
   report.objectKinds = capabilities.objectKinds.length
-  assert(report.tools >= 60)
+  assert.equal(report.tools, capabilities.catalog.advertisedToolNames.length)
+  assert(report.tools > 0)
   const { sessions } = await call('list_sessions')
   report.connectedEditors = sessions.length
   if (process.argv.includes('--write')) {
