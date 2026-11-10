@@ -4,7 +4,8 @@ Public entry: `src/lib/diagnostics/index.ts`. Application build metadata belongs
 to the separate public `src/lib/version` entry. This foundation has **no active
 collector, singleton, browser hook, persistence, queue, consent UI or transport**.
 Importing it cannot enable local tracing or share any information. D1 will own
-first-run permission and delivery; D2 owns the real service/update integration.
+first-run persistent permission, delivery and the real receiver service; D2 owns
+the maintenance view and update integration.
 
 ## Data flow and contracts
 

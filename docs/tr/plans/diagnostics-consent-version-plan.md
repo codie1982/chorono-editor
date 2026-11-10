@@ -2,7 +2,8 @@
 
 10 Kasım 2026. Kullanıcının “hata içinde boğulmayalım” düzeltmesiyle ilk kapsam
 küçültüldü. **D0–D2 ara işi**, kalan E−1 öncesindedir. D0 kısa özet/sürüm
-altyapısı tamamlandı; D1 ilk açılış onayı/kuyruk ve D2 servis henüz uygulanmadı.
+altyapısı tamamlandı; D1 kalıcı onay/kuyruk/alıcı servis ve D2 bakım listesi/
+sürüm kontrolü henüz uygulanmadı.
 
 ## Kullanıcıya sunulacak davranış
 
@@ -19,6 +20,15 @@ Yanıt bu tarayıcıda saklanır; red veya pencereyi kapatma sonrası her açıl
 yeniden sorulmaz. Yanıt verilmemesi onay değildir. Mevcut kullanıcıya özellik
 ilk geldiğinde aynı soru bir kez gösterilir. Tercih Resources ayarından
 değiştirilebilir; kabul yalnız bundan sonraki anonim hata özetlerini kapsar.
+
+Tercih **localStorage'da**, aynı tarayıcı/profil ve uygulama origin'i için
+saklanır; Interaction kaydının sessionStorage'ından ayrıdır. Sekmeyi/tarayıcıyı
+kapatıp açmak veya olağan sürüm güncellemesi yeniden soru çıkarmamalıdır.
+`allowed`, `denied` ve `dismissed` durumları ayrılır; yalnız `allowed` gönderim
+iznidir. İzin sonradan kapatılınca `denied` kaydedilir; sonraki açılışta tekrar
+sorulmaz. Yeni profil veya tarayıcı verilerinin silinmesi ilk kullanım sayılır.
+Depolama çalışmıyorsa otomatik gönderim kapalı kalır. Veri kapsamı veya servis
+hedefi gerçekten değişirse yeni izin gerekir; her uygulama sürümü değişimi değil.
 
 Her mouse hareketi, seçim, başarılı işlem veya normal iptal raporlanmaz.
 Escape, boş tıklama, eşik altı hareket, normal blur ve her `source-cancel`
@@ -66,6 +76,21 @@ ve referrer'sız gönderim; ayrı hata deposu ve otomatik silme gerekir. Öneril
 saklama: tek örnek 7 gün, günlük sayaçlar 90 gün. Ağda IP görünürlüğü ve hosting
 log ayarları da doğrulanır; tam anonimlik garantisi verilmez.
 
+## D1 alıcı sunucu
+
+İstemci kuyruğu tek başına D1 teslimi değildir. **Sunucu tarafı da D1'e alındı:**
+önerilen `POST /v1/diagnostic-reports` alıcısı, rapor/schema/16 KiB doğrulaması,
+reportId ile tekilleştirme, ayrı hata deposu, günlük sayaç ve otomatik saklama
+süresi temizliği. Yeniden gönderilen batch sayaçları ikinci kez artırmaz.
+Bu yol henüz çalışan bir public API değildir.
+
+Yerel geliştirmede gerçek alıcı implementasyonu entegrasyon testinde çalışır;
+mock başarılı sayılması tek başına sunucu kabulü değildir. Kullanıcılar için
+merkezi sunucunun adresi/hosting'i henüz belirlenmedi. Yayın hedefi ve saklama
+politikası hazır olmadan uzak gönderim veya ilk açılış paylaşım daveti açılmaz.
+Alıcı hazır ve adresi yapılandırılmışken ilk açılış onayı bir kez gösterilir;
+servisin geçici erişilemez olması saklanmış tercihi silmez veya yeniden sormaz.
+
 ## Sürüm kontrolü ve kodla uyum
 
 Sürüm kontrolü ayrı bir ayardır: Check now ve isteğe bağlı günde bir kontrol.
@@ -84,11 +109,14 @@ eklenmez. UTF-8 boyut yardımcıları yeniden kullanılır; scene/undo'ya log ya
 | Dilim | İlk teslim |
 | --- | --- |
 | **D0 — tamamlandı** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. [Gerçek sözleşme](../../../src/lib/diagnostics/README.md). |
-| **D1 — sıradaki** | İlk çalıştırmada tek seferlik onay, saklanan tercih ve ayarlardan kapatma; bounded özet kuyruğu, yerel mock collector; mevcut yerel kayıt korunur. |
-| **D2** | Gerçek servis/saklama ve sade hata listesi, sürüm kontrolü, uçtan uca kabul. |
+| **D1 — sıradaki** | İlk açılışta bir kez onay, localStorage'da kalıcı tercih; özet kuyruğu ve gerçek alıcı sunucu API'si/deposu/tekilleştirme. Yapılandırılmış servisle uçtan uca gönderim; mevcut yerel kayıt korunur. |
+| **D2** | Sade bakım/hata listesi, sürüm kontrolü ve birleşik kabul. |
 
-Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma ve yeniden açmada tercihin
-korunması; izin öncesi sıfır request; normal işlemlerden sıfır hata raporu; aynı
+Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma, sekme/tarayıcı yeniden
+açma ve olağan güncellemede tercihin korunması/yeniden sorulmaması; servis yokken
+gönderim başlamaması, servis kesintisinde yeniden onay istenmemesi; gerçek alıcıya
+kaydet/ACK/retry/dedup/TTL kabulü; izin öncesi sıfır request; normal işlemlerden
+sıfır hata raporu; aynı
 hatanın 1.000 tekrarında tek grup ve doğru sayaç; farklı sabit hata noktaları
 ayrı; retry sayacı şişirmez; hassas canary alanları dışarı çıkmaz; offline/limit/
 TTL/revoke/çoklu sekme source'u etkilemez. Mevcut first-drag/guide/creation ve

@@ -31,7 +31,9 @@ tekrar sayısıyla gösterilir; ayrıntılı Interaction kaydı elle açılan ye
 Otomatik hata paylaşımı/sürüm kontrolü ayrı ve varsayılan kapalıdır.
 Hata paylaşımı için ilk çalıştırmada bir kez onay sorulur; tercih saklanır,
 kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabilir.
-D0 özet/sürüm altyapısı tamamlandı (§12.48); sırada D1 ilk açılış onayı/kuyruk var.
+D0 özet/sürüm altyapısı tamamlandı (§12.48); sırada D1 kalıcı ilk açılış onayı,
+kuyruk ve gerçek alıcı sunucu var. Tercih localStorage'da saklanır; her açılışta
+veya olağan güncellemede tekrar sorulmaz.
 Servis henüz uygulanmadı. Son [capture kaybı, kalıcı tanı kaydı ve ardışık
 shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğrulandı.
 
@@ -43,7 +45,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
-| Ara iş D0 tamamlandı; D1 sıradaki | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Özet/sürüm/tekilleştirme altyapısı hazır; ilk açılış onayı, kuyruk ve servis bekliyor. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
+| Ara iş D0 tamamlandı; D1 sıradaki | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Özet/sürüm temeli hazır; D1 kalıcı tek onay + kuyruk + gerçek alıcı API/depo. D2 bakım listesi/sürüm kontrolü. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
 | Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
