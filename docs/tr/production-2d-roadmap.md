@@ -29,6 +29,8 @@ kontrolü](plans/diagnostics-consent-version-plan.md), kalan E−1 işinden önc
 **D0–D2** olarak planlandı (§12.46). Yalnız beklenmeyen hatalar tekilleştirilip
 tekrar sayısıyla gösterilir; ayrıntılı Interaction kaydı elle açılan yerel araçtır.
 Otomatik hata paylaşımı/sürüm kontrolü ayrı ve varsayılan kapalıdır.
+Hata paylaşımı için ilk çalıştırmada bir kez onay sorulur; tercih saklanır,
+kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabilir.
 Bu servis henüz uygulanmadı. Son [capture kaybı, kalıcı tanı kaydı ve ardışık
 shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğrulandı.
 
@@ -40,7 +42,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — V4 | Subtree duplicate / drag-copy | [Gerçek sözleşme](viewport-clone-editing.md): ortak clone yolu, kök normalizasyonu, internal referanslar, bütün ilgili timeline'lar ve tek undo; destek sınırları belgede. |
 | Tamamlandı — V5 | Çoklu Array | [Gerçek sözleşme](viewport-array-editing.md): dört pattern, forest, animasyon, bounded preview, Apply/Cancel ve tek undo. |
 | Tamamlandı | Komşu mesafesi ve ruler/guide araçları | [Gerçek sözleşme](viewport-layout-editing.md): seçimi koruyan sayısal boşluk, yakın yatay/dikey komşular, kalıcı guide, cursor ve snap. |
-| Sıradaki — ara iş D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | Yalnız gerçek hata, aynı hataya tek satır/tekrar sayısı, tek temizlenmiş örnek; tek paylaşım onayı ve sınırlı özet kuyruğu. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
+| Sıradaki — ara iş D0–D2 | Kullanıcı onaylı hata özetleri ve sürüm kontrolü | İlk çalıştırmada bir kez onay ve saklanan tercih; düzenli anonim özet, aynı hataya tek satır/tekrar sayısı, bir temizlenmiş örnek. Ayrıntılı Interaction yerel/elle. [Ayrıntı](plans/diagnostics-consent-version-plan.md). |
 | Ara işten sonra | Kalan E−1 ve araç kabulü | MCP revision/provenance/organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |

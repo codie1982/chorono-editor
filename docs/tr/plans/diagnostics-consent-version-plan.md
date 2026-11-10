@@ -10,6 +10,16 @@ Tek **Share error reports** seçeneği, varsayılan kapalı. Kullanıcı açık�
 verirse yalnız beklenmeyen uygulama hatalarının kısa özetleri gönderilir.
 İzni kapatmak yeni toplamayı/gönderimi durdurur ve bekleyen özetleri temizler.
 
+**İlk çalıştırmada tek seferlik onay** gösterilir: “Anonim hata özetlerinin
+Chorono sunucusuna düzenli gönderilmesine izin veriyor musun?” Kısa açıklamada
+sürüm/hata kodu/tekrar sayısının paylaşılacağı, proje içeriğinin gönderilmeyeceği,
+servis hedefi ve dolu kuyruk için 5 dakikalık gönderim aralığı belirtilir.
+UI seçenekleri **Allow** / **Don't send** olur; önceden seçili onay yoktur.
+Yanıt bu tarayıcıda saklanır; red veya pencereyi kapatma sonrası her açılışta
+yeniden sorulmaz. Yanıt verilmemesi onay değildir. Mevcut kullanıcıya özellik
+ilk geldiğinde aynı soru bir kez gösterilir. Tercih Resources ayarından
+değiştirilebilir; kabul yalnız bundan sonraki anonim hata özetlerini kapsar.
+
 Her mouse hareketi, seçim, başarılı işlem veya normal iptal raporlanmaz.
 Escape, boş tıklama, eşik altı hareket, normal blur ve her `source-cancel`
 otomatik olarak hata sayılmaz. Kataloglanmış commit/işlem başarısızlığı,
@@ -74,10 +84,11 @@ eklenmez. UTF-8 boyut yardımcıları yeniden kullanılır; scene/undo'ya log ya
 | Dilim | İlk teslim |
 | --- | --- |
 | **D0** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. |
-| **D1** | Tek paylaşım onayı, bounded özet kuyruğu, yerel mock collector; mevcut yerel kayıt korunur. |
+| **D1** | İlk çalıştırmada tek seferlik onay, saklanan tercih ve ayarlardan kapatma; bounded özet kuyruğu, yerel mock collector; mevcut yerel kayıt korunur. |
 | **D2** | Gerçek servis/saklama ve sade hata listesi, sürüm kontrolü, uçtan uca kabul. |
 
-Kabul: izin öncesi sıfır request; normal işlemlerden sıfır hata raporu; aynı
+Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma ve yeniden açmada tercihin
+korunması; izin öncesi sıfır request; normal işlemlerden sıfır hata raporu; aynı
 hatanın 1.000 tekrarında tek grup ve doğru sayaç; farklı sabit hata noktaları
 ayrı; retry sayacı şişirmez; hassas canary alanları dışarı çıkmaz; offline/limit/
 TTL/revoke/çoklu sekme source'u etkilemez. Mevcut first-drag/guide/creation ve
