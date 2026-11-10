@@ -1,5 +1,12 @@
 # Editör Solo kapsamı ve alt ağaç işlemleri
 
+**10 Kasım, E−1.3 güncellemesi:** [Ortak hiyerarşi uygulaması](editor-hierarchy.md)
+Timeline ve Explorer için aynı projeksiyon, Find selected, ayrı branch/property
+katlama, çoklu dal filtreleri ve tek undo'lu visibility/lock/solo/freeze eylemleri
+getirir. Ortak adaptör `components/layerHierarchy/useLayerBranches.ts`, source
+komutları `lib/editor/branches/` altındadır; eski Explorer yolları uyumluluk
+adaptörüdür. Aşağıdaki OPT31 teslim kaydı tarihsel başlangıçtır.
+
 8 Kasım 2026, OPT31. Bu değişiklik sahne verisini azaltmaz; Solo açık bir üst
 grubun düzenlenebilir alt ağacını Timeline ve Scene Explorer'da korur.
 

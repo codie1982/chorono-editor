@@ -1,6 +1,6 @@
 'use client'
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
-import type { ChronoScene, Track, Layer, Keyframe } from '@/lib/types'
+import type { ChronoScene, Track, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   pickTrackColor, unionValueRange, buildCurvePath,
@@ -19,6 +19,8 @@ import {
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { TangentMode } from '@/lib/types'
 import { nextKfId } from '@/lib/defaults'
+import { buildTimelineLayerRows } from '@/lib/timeline/hierarchy/timelineLayerRows'
+import { parseTrackTarget } from '@/lib/timeline/TrackTargetParser'
 import { isScalarNumericTrack } from '@/lib/animation/typedValues'
 import ContextMenu, { useContextMenu, type MenuItem } from '@/components/ui/ContextMenu'
 import type { EasingType } from '@/lib/types'
@@ -30,6 +32,7 @@ interface Props {
   scene:              ChronoScene
   editor:             EditorStateReturn
   selectedLayerId:    string | null
+  selectedLayerIds?:  ReadonlySet<string>
   selectedTimelineId: string | null
   currentTimeMs:      number
   onTimeChange:       (ms: number) => void
@@ -45,7 +48,7 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
 /**
  * 3ds Max / After Effects-style curve editor.
  *
- * Shows every animated property of the selected layer as a colour-coded
+ * Shows numeric properties of the union of selected layer subtrees as a colour-coded
  * curve on a shared time × value plot. Click anywhere on the plot to seek;
  * drag a keyframe node to retime (X) or revalue (Y) it in real time. Bezier
  * tangent handles edit custom easing directly. Built-in easing types
@@ -56,7 +59,7 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
  * have a meaningful value axis. Add a key in the timeline panel first.
  */
 export default function CurveEditor({
-  scene, editor, selectedLayerId, selectedTimelineId,
+  scene, editor, selectedLayerId, selectedLayerIds, selectedTimelineId,
   currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -69,25 +72,16 @@ export default function CurveEditor({
   const layer    = scene.layers.find((l) => l.id === selectedLayerId) ?? null
   const duration = timeline?.durationMs ?? scene.composition.durationMs
 
-  // ── Track set: every numeric track on the selected layer ─────────────────
-  //
-  // TODO(big-feature): "Show in Curve Editor" pin set.
-  //   Today the Curve Editor's track set is implicit from the selected
-  //   layer. A v2 model would let the user PIN specific tracks across any
-  //   layers (a `visiblePropertyIds` set in editor state), so they can
-  //   tune e.g. "Logo.opacity + Card.x" together without changing selection.
-  //   Implementation: lift the visible-track set out of this component
-  //   into useEditorState / useTrackViewState; replace the layer-driven
-  //   `tracks` filter with a Set-driven lookup.
+  // Shared eligibility and union of selected source branches, not just primary.
   const tracks: Track[] = useMemo(() => {
-    if (!timeline || !layer) return []
-    const prefix = `layers.${layer.id}.`
-    return timeline.tracks.filter((t) =>
-      t.target.startsWith(prefix) &&
-      t.keyframes.length > 0 &&
-      isScalarNumericTrack(t),
-    )
-  }, [timeline, layer])
+    if (!timeline) return []
+    return buildTimelineLayerRows(scene.layers, timeline, { selectedOnly: true,
+      selectedId: selectedLayerId, selectedIds: selectedLayerIds }).rows
+      .flatMap(row => row.tracks).filter(track => track.keyframes.length > 0 && isScalarNumericTrack(track))
+  }, [timeline, scene.layers, selectedLayerId, selectedLayerIds])
+  const layerNames = useMemo(() => new Map(scene.layers.map(item => [item.id, item.name])), [scene.layers])
+
+  const multipleOwners = useMemo(() => new Set(tracks.map(track => parseTrackTarget(track.target)?.entityId)).size > 1, [tracks])
 
   // ── Per-track visibility toggle (3ds Max-style: click curve name to hide) ─
   const [hidden, setHidden] = useState<Set<string>>(new Set())
@@ -436,7 +430,7 @@ export default function CurveEditor({
   useEffect(() => {
     drag.cancel()
     bezierDrag.cancel()
-  }, [selectedTimelineId, selectedLayerId, drag.cancel, bezierDrag.cancel])
+  }, [selectedTimelineId, selectedLayerId, selectedLayerIds, drag.cancel, bezierDrag.cancel])
 
   // ── Plot drag — three modes selected by modifier at pointerdown ──────────
   //
@@ -593,14 +587,14 @@ export default function CurveEditor({
   const valueTicks = niceTickArray(range.min,  range.max,  valueTick)
 
   // ── Empty states ──────────────────────────────────────────────────────────
-  if (!layer) return (
+  if (!layer && !selectedLayerIds?.size) return (
     <Empty msg="Select a layer to inspect its animation curves." />
   )
   if (!timeline) return (
     <Empty msg="No timeline selected." />
   )
   if (tracks.length === 0) return (
-    <Empty msg={`"${layer.name}" has no animated numeric properties yet.`} />
+    <Empty msg={`"${layer?.name ?? 'Selection'}" has no animated numeric properties yet.`} />
   )
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -656,7 +650,8 @@ export default function CurveEditor({
             const color = pickTrackColor(t.target, i)
             const isHidden = hidden.has(t.target)
             const isIso    = isolatedTrack === t.target
-            const label = t.target.replace(`layers.${layer.id}.`, '')
+            const owner = parseTrackTarget(t.target)
+            const label = owner ? multipleOwners ? `${layerNames.get(owner.entityId) ?? owner.entityId} · ${owner.propertyPath}` : owner.propertyPath : t.target
             // BL-45: OOR badge — shown only if before/after has any non-constant mode
             const oor = t.outOfRange
             const oorBefore = oor?.before ?? 'constant'

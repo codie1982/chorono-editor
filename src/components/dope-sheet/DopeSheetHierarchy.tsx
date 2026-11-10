@@ -7,9 +7,10 @@ import { WindowedRows } from '@/components/virtualization/WindowedRows'
 interface Props {
   rows: DopeSheetRow[]
   selectedLayerId: string | null
+  selectedLayerIds?: ReadonlySet<string>
   collapsedNodeIds: Set<string>
   onToggleExpand: (nodeId: string) => void
-  onSelectLayer: (id: string | null) => void
+  onSelectLayer: (id: string | null, additive?: boolean) => void
   layout: RowLayout
   indices: readonly number[]
 }
@@ -21,7 +22,7 @@ export default function DopeSheetHierarchy(props: Props) {
       renderRow={(index, attributes) => <div {...attributes}><TrackNodeRow
       node={props.rows[index].node} isExpanded={!props.collapsedNodeIds.has(props.rows[index].node.id)}
       onToggleExpand={props.onToggleExpand} onSelectLayer={props.onSelectLayer}
-      selectedLayerId={props.selectedLayerId}
+      selectedLayerId={props.selectedLayerId} selectedLayerIds={props.selectedLayerIds}
     /></div>} />
   </div>
 }

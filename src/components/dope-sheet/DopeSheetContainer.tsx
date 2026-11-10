@@ -13,10 +13,11 @@ interface Props {
   editor: EditorStateReturn
   settings: TimelineSettings
   selectedLayerId: string | null
+  selectedLayerIds?: ReadonlySet<string>
   selectedKfIds: Set<string>
   onToggleExpand: (nodeId: string) => void
   onSelectKeyframes: (kfIds: Set<string>) => void
-  onSelectLayer: (id: string | null) => void
+  onSelectLayer: (id: string | null, additive?: boolean) => void
   currentTimeMs: number
   isPlaying: boolean
   onTimeChange: (ms: number) => void
@@ -27,8 +28,8 @@ export default function DopeSheetContainer(props: Props) {
   const { scene, selectedTimeline, uiState, selectedLayerId } = props
   const rows = useMemo(() => flattenDopeSheetRows(buildHierarchy(
     scene, selectedTimeline, uiState.filterAnimatedOnly, uiState.filterSelectedObjectOnly,
-    uiState.filterText, selectedLayerId,
-  ), selectedTimeline, uiState.collapsedNodeIds), [scene, selectedTimeline, uiState, selectedLayerId])
+    uiState.filterText, selectedLayerId, props.selectedLayerIds,
+  ), selectedTimeline, uiState.collapsedNodeIds), [scene, selectedTimeline, uiState, selectedLayerId, props.selectedLayerIds])
 
   return <div className="dope-sheet-container">
     <DopeSheetGrid {...props} rows={rows} />

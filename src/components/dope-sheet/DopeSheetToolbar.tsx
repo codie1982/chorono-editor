@@ -51,7 +51,7 @@ export default function DopeSheetToolbar({
           aria-pressed={uiState.filterSelectedObjectOnly}
           className={`toolbar-btn ${uiState.filterSelectedObjectOnly ? 'active' : ''}`}
           onClick={toggleSelectedOnly}
-          title="Show only selected layer"
+          title="Show the union of selected layers and their source descendants"
         >
           Selected Only
         </button>

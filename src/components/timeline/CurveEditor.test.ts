@@ -71,3 +71,20 @@ describe('Curve Editor selection layout', () => {
     expect(html).not.toContain('text.value')
   })
 })
+
+
+describe('Curve Editor shared branch selection', () => {
+  it('includes numeric keys from both selected branches while excluding an ancestor own keys and unrelated source', () => {
+    const scene = emptyScene()
+    scene.layers = ['parent', 'a', 'b', 'other'].map(id => ({ ...newRectLayer(), id, name: id, ...(id === 'a' ? { parentId: 'parent' } : {}) }))
+    scene.timelines = [{ id: 'union', durationMs: 1000, autoplay: false, loop: false, tracks: scene.layers.map(layer => ({
+      target: `layers.${layer.id}.transform.x`, keyframes: [{ id: `${layer.id}-key`, timeMs: 0, value: 10, easing: { type: 'linear' } }],
+    })) }]
+    const html = renderToStaticMarkup(createElement(CurveEditor, { scene, editor: {} as EditorStateReturn,
+      selectedLayerId: 'a', selectedLayerIds: new Set(['a', 'b']), selectedTimelineId: 'union', currentTimeMs: 0,
+      onTimeChange() {}, selectedKfIds: new Set<string>(), onSelectKeyframes() {} }))
+    expect(html).toContain('a · transform.x'); expect(html).toContain('b · transform.x')
+    expect(html).not.toContain('parent · transform.x'); expect(html).not.toContain('other · transform.x')
+    expect(html).toContain('data-curve-key-id="a-key"'); expect(html).toContain('data-curve-key-id="b-key"')
+  })
+})

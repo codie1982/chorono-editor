@@ -20,9 +20,10 @@ interface Props {
   settings: TimelineSettings
   rows: DopeSheetRow[]
   selectedLayerId: string | null
+  selectedLayerIds?: ReadonlySet<string>
   selectedKfIds: Set<string>
   onToggleExpand: (nodeId: string) => void
-  onSelectLayer: (id: string | null) => void
+  onSelectLayer: (id: string | null, additive?: boolean) => void
   onSelectKeyframes: (ids: Set<string>) => void
   currentTimeMs: number
   isPlaying: boolean
@@ -207,7 +208,7 @@ export default function DopeSheetGrid(props: Props) {
       </div>
       <div className="dope-sheet-rows" ref={rowsRef}>
         <div className="dope-sheet-labels" style={{ width: LABEL_WIDTH }}>
-          <DopeSheetHierarchy rows={props.rows} selectedLayerId={props.selectedLayerId}
+          <DopeSheetHierarchy rows={props.rows} selectedLayerId={props.selectedLayerId} selectedLayerIds={props.selectedLayerIds}
             layout={layout} indices={windowed.indices}
             collapsedNodeIds={props.uiState.collapsedNodeIds} onToggleExpand={props.onToggleExpand}
             onSelectLayer={props.onSelectLayer} />

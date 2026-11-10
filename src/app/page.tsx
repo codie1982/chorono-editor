@@ -65,6 +65,8 @@ const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
 }
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
+import { makeMoveLayerInTreeCmd, makeGroupSiblingLayersCmd } from '@/lib/editor/branches/HierarchyCommands'
+import { makeSetSubtreeFlagCmd } from '@/lib/editor/branches/SubtreeCommands'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
@@ -735,11 +737,11 @@ export default function BuilderPage() {
     newParentId: string | undefined,
     toIndex:     number,
   ) => {
-    import('@/lib/editor/commands-layer').then(({ makeMoveLayerToCmdWithSnapshot }) => {
-      const cmd = makeMoveLayerToCmdWithSnapshot(scene, draggedId, newParentId, toIndex)
-      if (cmd) dispatchCommand(cmd)
-    })
-  }, [scene, dispatchCommand])
+    try {
+      const command = makeMoveLayerInTreeCmd(editor.getScene(), draggedId, newParentId, toIndex)
+      if (command) dispatchCommand(command)
+    } catch (error) { toast.error('Cannot move layer', { detail: (error as Error).message }) }
+  }, [editor.getScene, dispatchCommand])
 
   const groupLayersByDrop = useCallback(async (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return
@@ -758,12 +760,12 @@ export default function BuilderPage() {
       return
     }
 
-    // Both are leaves → wrap them in a fresh group via the existing command.
-    const { makeGroupCmd } = await import('@/lib/editor/commands-group')
-    const cmd = makeGroupCmd([draggedId, targetId])
-    dispatchCommand(cmd)
-    selectLayer(cmd.groupId)
-  }, [scene.layers, dispatchCommand, moveLayerInTree, selectLayer])
+    // Identity grouping preserves sibling animation; other parents need conversion.
+    try {
+      const command = makeGroupSiblingLayersCmd(editor.getScene(), [draggedId, targetId])
+      if (command) { dispatchCommand(command); selectLayer(command.groupId) }
+    } catch (error) { toast.error('Cannot group layers', { detail: (error as Error).message }) }
+  }, [scene.layers, editor.getScene, dispatchCommand, moveLayerInTree, selectLayer])
 
   /**
    * Stagger: apply the same preset to every selected layer, offsetting each
@@ -1039,11 +1041,11 @@ export default function BuilderPage() {
    * render; the created group becomes the only selected layer atomically. */
   const groupLayers = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return
-    const { makeGroupCmd } = await import('@/lib/editor/commands-group')
-    const cmd = makeGroupCmd(ids)
-    dispatchCommand(cmd)
-    selectLayer(cmd.groupId)
-  }, [dispatchCommand, selectLayer])
+    try {
+      const command = makeGroupSiblingLayersCmd(editor.getScene(), ids)
+      if (command) { dispatchCommand(command); selectLayer(command.groupId) }
+    } catch (error) { toast.error('Cannot group layers', { detail: (error as Error).message }) }
+  }, [editor.getScene, dispatchCommand, selectLayer])
   const groupSelected = useCallback(() => groupLayers(selectedLayerIds.size > 0
     ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : []),
   [selectedLayerIds, selectedLayerId, groupLayers])
@@ -1579,6 +1581,10 @@ export default function BuilderPage() {
                     onToggleFlag={toggleLayerFlag}
                     onMoveInTree={moveLayerInTree}
                     onGroupWith={groupLayersByDrop}
+                    onSetSubtreeFlag={(roots, field, value) => {
+                      const command = makeSetSubtreeFlagCmd(editor.getScene(), roots, field, value)
+                      if (command) dispatchCommand(command)
+                    }}
                     onClearSelection={() => selectLayer(null)}
                     contextHandlers={{
                       // Rename re-uses the inline editor — selecting the
@@ -1897,6 +1903,7 @@ export default function BuilderPage() {
                     scene={scene}
                     editor={editor}
                     selectedLayerId={selectedLayerId}
+                    selectedLayerIds={selectedLayerIds}
                     selectedTimelineId={selectedTlId}
                     currentTimeMs={currentTimeMs}
                     onTimeChange={handleSeek}
@@ -1916,6 +1923,7 @@ export default function BuilderPage() {
                     settings={timelineSettings}
                     onSettingsChange={setTimelineSettings}
                     selectedLayerId={selectedLayerId}
+                    selectedLayerIds={selectedLayerIds}
                     selectedTimelineId={selectedTlId}
                     selectedKfIds={selectedKfIds}
                     currentTimeMs={currentTimeMs}

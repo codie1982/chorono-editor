@@ -69,7 +69,11 @@ import { LayerTrackIndex } from '@/lib/timeline/LayerTrackIndex'
 import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { useRowWindow } from '@/components/virtualization/useRowWindow'
-import { editorSoloScope } from '@/lib/scene/visibility/editorSoloScope'
+import { selectedBranchIds } from '@/lib/scene/hierarchy/editorLayerRows'
+import { useTimelineHierarchy } from './timeline/hooks/useTimelineHierarchy'
+import { useSelectedLayerReveal } from './layerHierarchy/useSelectedLayerReveal'
+import SubtreeOperationsToolbar from './layerHierarchy/SubtreeOperationsToolbar'
+import { FindSelectedButton, FoundSelectionNotice } from './layerHierarchy/FindSelectedControls'
 import { headerHeight, timelineKeysInBox, timelineSectionHeight } from './timeline/layout/timelineRows'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
@@ -218,14 +222,13 @@ export default function TimelinePanel({
     lastRevealNonce.current = revealProperty.nonce
     // Press the same property twice → clear (toggle off).
     setPropFilter((prev) => (prev === revealProperty.prop ? null : revealProperty.prop))
-    // Make sure the selected layer is expanded so its tracks are visible.
-    if (selectedLayerId) {
-      setCollapsedIds((prev) => {
-        if (!prev.has(selectedLayerId)) return prev
-        const n = new Set(prev); n.delete(selectedLayerId); return n
-      })
-    }
-  }, [revealProperty, selectedLayerId])
+    // Reveal properties for every selected branch, including collapsed children.
+    const ids = selectedBranchIds(scene.layers, selectedLayerId, selectedLayerIds)
+    setCollapsedIds(previous => {
+      if (!Array.from(ids).some(id => previous.has(id))) return previous
+      const next = new Set(previous); ids.forEach(id => next.delete(id)); return next
+    })
+  }, [revealProperty, selectedLayerId, selectedLayerIds, scene.layers])
 
   const PROP_SUFFIXES: Record<'position' | 'scale' | 'rotation' | 'opacity', string[]> = {
     position: ['.transform.x', '.transform.y'],
@@ -327,48 +330,27 @@ export default function TimelinePanel({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [timelineHovered, saveBookmark, jumpToBookmark, jumpToAdjacentMarker, jumpToAdjacentKeyframe])
-  const visibleLayers = useMemo(() => {
-    const q = layerFilter.trim().toLowerCase()
-    // Step 1: solo subtrees; a group's tracks need not belong to this timeline.
-    const soloScope = editorSoloScope(scene.layers)
-    let next = scene.layers.filter(layer => !soloScope || soloScope.has(layer.id))
-    next = next.filter(layer => layer.type !== 'audio' || !layer.audio?.timelineId || layer.audio.timelineId === selectedTimelineId)
-    // Step 2: timeline opt-in filter — when layerIds is set, only show those layers.
-    if (timeline?.layerIds !== undefined) {
-      const idSet = new Set(timeline.layerIds)
-      next = next.filter((l) => idSet.has(l.id) || (l.type === 'audio' && !l.audio?.timelineId))
-    }
-    // Step 3: text filter
-    if (q) {
-      next = next.filter((l) => {
-        if (l.name.toLowerCase().includes(q)) return true
-        if (l.type.toLowerCase().includes(q)) return true
-        const tracks = layerTracks.forLayer(l.id)
-        return tracks.some((t) => t.target.toLowerCase().includes(q))
-      })
-    }
-    // Step 4: pinned to the top, preserve original order within each group.
-    const pinned   = next.filter((l) =>  l.pinned)
-    const unpinned = next.filter((l) => !l.pinned)
-    return [...pinned, ...unpinned]
-  }, [scene.layers, layerFilter, timeline, selectedTimelineId, layerTracks])
+  const hierarchy = useTimelineHierarchy({ scene, editor, timeline, trackIndex: layerTracks,
+    filter: layerFilter, selectedId: selectedLayerId, selectedIds: selectedLayerIds })
+  const visibleLayers = useMemo(() => hierarchy.rows.map(row => row.layer), [hierarchy.rows])
 
   // Map: layerId → pin index (0,1,2…) — only set for pinned layers.
   const pinIndexFor = useMemo(() => {
     const m = new Map<string, number>()
     let i = 0
-    for (const l of visibleLayers) { if (l.pinned) { m.set(l.id, i); i++ } }
+    for (const row of hierarchy.rows) { const l = row.layer; if (l.pinned && row.depth === 0) { m.set(l.id, i); i++ } }
     return m
-  }, [visibleLayers])
+  }, [hierarchy.rows])
   const pinTopFor = useMemo(() => {
     const tops = new Map<string, number>()
     let top = 0
-    for (const layer of visibleLayers) if (layer.pinned) {
+    for (const row of hierarchy.rows) if (row.layer.pinned && row.depth === 0) {
+      const layer = row.layer
       tops.set(layer.id, top)
       top += layer.type === 'audio' ? 64 : 32
     }
     return tops
-  }, [visibleLayers])
+  }, [hierarchy.rows])
   const toggleLayerExpand = useCallback((id: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev)
@@ -924,10 +906,11 @@ export default function TimelinePanel({
       previewMs: drag.previewMs, msToX: vp.msToScreenPx,
       headerTop: index => {
         const row = sectionRows[index], top = sectionLayout.top(index) + sectionWindow.viewport.offset
-        return row.layer.pinned ? Math.min(Math.max(top, el.scrollTop + (pinTopFor.get(row.layer.id) ?? 0)),
+        return pinTopFor.has(row.layer.id) ? Math.min(Math.max(top, el.scrollTop + (pinTopFor.get(row.layer.id) ?? 0)),
           sectionLayout.top(index + 1) + sectionWindow.viewport.offset - headerHeight(row.layer)) : top
       },
       audioKeys: layer => {
+        if (!hierarchy.eligible.has(layer.id)) return []
         const window = resolveAudioClipWindow(layer, assetById.get(layer.audio?.assetId ?? '')?.durationMs, duration)
         const track = (tracksByTimeline.get(layer.audio?.timelineId ?? selectedTimelineId ?? '')?.forLayer(layer.id) ?? [])
           .find(item => item.target === `layers.${layer.id}.audio.volume`)
@@ -984,19 +967,23 @@ export default function TimelinePanel({
   )
 
   // Helper: tracks belonging to a layer
-  const tracksForLayer = useMemo(() => new Map(visibleLayers.map(layer => {
-    const base = layerTracks.forLayer(layer.id)
+  const tracksForLayer = useMemo(() => new Map(hierarchy.rows.map(row => {
+    const layer = row.layer, base = row.tracks
     const tracks = !propFilter ? base : propFilter === 'all' ? base.filter(track => track.keyframes.length > 0)
       : base.filter(track => PROP_SUFFIXES[propFilter].some(suffix => track.target.endsWith(suffix)))
     return [layer.id, tracks] as const
-  })), [visibleLayers, layerTracks, propFilter])
-  const sectionRows = useMemo(() => visibleLayers.map(layer => ({ layer,
-    tracks: tracksForLayer.get(layer.id) ?? [], expanded: !collapsedIds.has(layer.id) })), [visibleLayers, tracksForLayer, collapsedIds])
+  })), [hierarchy.rows, propFilter])
+  const sectionRows = useMemo(() => hierarchy.rows.map(row => ({ ...row,
+    tracks: tracksForLayer.get(row.layer.id) ?? [], expanded: row.showTracks && !collapsedIds.has(row.layer.id) })), [hierarchy.rows, tracksForLayer, collapsedIds])
   const sectionKeys = useMemo(() => sectionRows.map(row => row.layer.id), [sectionRows])
   const sectionLayout = useMemo(() => new RowLayout(sectionRows.map(row => timelineSectionHeight(row, settings.timelineMode === 'curve'))),
     [sectionRows, settings.timelineMode])
   const sectionContentRef = useRef<HTMLDivElement>(null)
   const sectionWindow = useRowWindow(sectionLayout, sectionKeys, lassoContainerRef, sectionContentRef)
+
+  useSelectedLayerReveal({ layers: scene.layers, selectedId: selectedLayerId, selectedIds: selectedLayerIds,
+    setCollapsedIds: hierarchy.setCollapsedBranches, rowKeys: sectionKeys, reveal: sectionWindow.reveal,
+    viewportHeight: sectionWindow.viewport.height, requestKey: `${selectedTimelineId}:${hierarchy.find.nonce}` })
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1064,6 +1051,18 @@ export default function TimelinePanel({
         onOpenStaggerModal={() => setStaggerModalOpen(true)}
         onOpenKeySpreadsheet={() => setKeySheetOpen((o) => !o)}
       />
+
+      <div className="flex flex-wrap items-center gap-2 px-2 py-1 border-b border-gray-700 shrink-0">
+        <FindSelectedButton disabled={!selectedLayerId} onFind={hierarchy.find.find} />
+        <button aria-pressed={hierarchy.selectedOnly} onClick={() => hierarchy.setSelectedOnly(value => !value)}
+          className="rounded bg-gray-700 px-2 py-1 text-[10px] text-gray-200 hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">Selected branches</button>
+      </div>
+      {hierarchy.find.revealIds.length > 0 && <FoundSelectionNotice onRestore={hierarchy.find.restore} />}
+      {hierarchy.branches.roots.length > 0 && <SubtreeOperationsToolbar selectedCount={hierarchy.branches.roots.length}
+        affectedCount={hierarchy.branches.ids.size} hasChildren={hierarchy.branches.hasChildren} counts={hierarchy.branches.counts}
+        canSetFlag={() => true} onExpand={() => hierarchy.branches.setExpanded(hierarchy.branches.roots, true)}
+        onCollapse={() => hierarchy.branches.setExpanded(hierarchy.branches.roots, false)}
+        onSetFlag={(field, value) => hierarchy.branches.setFlag(hierarchy.branches.roots, field, value)} />}
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
       <div className="flex border-b border-gray-700 shrink-0">
@@ -1272,10 +1271,10 @@ export default function TimelinePanel({
           </div>
         )}
 
-        <div ref={sectionContentRef}>
+        <div ref={sectionContentRef} role="tree" aria-label="Timeline layer hierarchy">
         <WindowedRows layout={sectionLayout} indices={sectionWindow.indices} rowKey={index => sectionKeys[index]}
           renderRow={(index, attributes) => {
-          const { layer, tracks, expanded } = sectionRows[index]
+          const { layer, tracks, expanded, depth, hasChildren, timelineEligible, showTracks } = sectionRows[index]
           return (
           <LayerTimelineSection
             attributes={attributes}
@@ -1283,6 +1282,14 @@ export default function TimelinePanel({
             layer={layer}
             tracks={tracks}
             expanded={expanded}
+            depth={depth} hasChildren={hasChildren} childrenExpanded={!hierarchy.collapsedBranches.has(layer.id)}
+            contextOnly={!timelineEligible} propertiesAvailable={showTracks}
+            onToggleChildren={() => hierarchy.toggleBranch(layer.id)}
+            onNavigate={direction => {
+              if (direction === 'parent') sectionWindow.focusKey(layer.parentId ?? '')
+              else if (direction === 'child') { if (sectionRows[index + 1]?.depth > depth) sectionWindow.focus(index + 1) }
+              else sectionWindow.focus(index + (direction === 'up' ? -1 : 1))
+            }}
             graphMode={settings.timelineMode === 'curve'}
             isPrimary={selectedLayerId === layer.id}
             isInSet={selectedLayerIds.has(layer.id)}

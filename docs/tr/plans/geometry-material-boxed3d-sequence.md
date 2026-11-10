@@ -3,7 +3,7 @@
 8 Kasım 2026; ara iş sadeleştirmesi 10 Kasım 2026. Kullanıcı tarafından onaylandı.
 Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi tamamlandı.
 E−1.Q [MCP araç kalitesi ve uyumlu sadeleştirme](mcp-tool-quality-plan.md) de
-tamamlandı. E−1.1 zorunlu okuma/revision ve E−1.2 kaynak kökeni de tamamlandı; sırada E−1.3 organizasyon ve kalan viewport/ortak araç kabulü,
+tamamlandı. E−1.1 zorunlu okuma/revision ve E−1.2 kaynak kökeni de tamamlandı; E−1.3 ortak hiyerarşi de tamamlandı; sırada E−1.4 Set Key/transport ve kalan viewport/ortak araç kabulü,
 ardından yeni özellik sırası var.
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
@@ -46,7 +46,8 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı — E−1.Q | MCP araç/isim/şema kalitesi | MCP 1.1.0 standard 40 / legacy 77 katalog ve uyumlu alias/keşif; eski çağrılar korunur. |
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; tek kullanımlık bağlantı/belge/revision token, son browser CAS, plan/batch/retry korumaları. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, undo/redo/save/load ve runtime temizliği. |
-| Sıradaki | E−1.3, ardından kalan E−1 ve araç kabulü | Organizasyon, Set Key/transport/procedural eğri, V6/E−1.7. |
+| Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline source tree, Find, tam subtree flag/undo, çoklu dal filtreleri ve güvenli UI reparent. [Sözleşme](../editor-hierarchy.md). |
+| Sıradaki | E−1.4, ardından kalan E−1 ve araç kabulü | Set Key/toplu key/transport, prosedürel eğri ve V6/E−1.7. |
 | 1 | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, frame hazırlığı, capability ve kaynak sahipliği; bütün export motorunu önceden yazmak gerekmez. |
 | 2 | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |

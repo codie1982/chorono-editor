@@ -15,13 +15,14 @@ interface Props {
   settings: TimelineSettings
   onSettingsChange: (next: TimelineSettings) => void
   selectedLayerId: string | null
+  selectedLayerIds?: ReadonlySet<string>
   selectedTimelineId: string | null
   selectedKfIds: Set<string>
   currentTimeMs: number
   isPlaying: boolean
   onTimeChange: (ms: number) => void
   onSelectKeyframes: (next: Set<string>) => void
-  onSelectLayer: (id: string | null) => void
+  onSelectLayer: (id: string | null, additive?: boolean) => void
 }
 
 export default function DopeSheetPanel({
@@ -30,6 +31,7 @@ export default function DopeSheetPanel({
   settings,
   onSettingsChange,
   selectedLayerId,
+  selectedLayerIds,
   selectedTimelineId,
   selectedKfIds,
   currentTimeMs,
@@ -89,6 +91,7 @@ export default function DopeSheetPanel({
         editor={editor}
         settings={settings}
         selectedLayerId={selectedLayerId}
+        selectedLayerIds={selectedLayerIds}
         selectedKfIds={selectedKfIds}
         onToggleExpand={toggleNodeExpand}
         onSelectKeyframes={onSelectKeyframes}

@@ -2,7 +2,7 @@
 
 Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
-tamamlanan E−1.Q/E−1.1/E−1.2 MCP araç açıklığı/güvenli düzenleme/köken takibinden sonra E−1.3 organizasyon ve kalan
+tamamlanan E−1.Q/E−1.1/E−1.2/E−1.3 MCP açıklığı/güvenli düzenleme/köken/ortak hiyerarşiden sonra E−1.4 Set Key/transport ve kalan
 viewport/ortak araç kabulü → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
@@ -36,7 +36,7 @@ D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, ger�
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
 hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
-E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); sırada E−1.3 organizasyon ve kalan ortak araç kabulü var.**
+E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); sırada E−1.4 Set Key/transport ve kalan ortak araç kabulü var.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -54,7 +54,8 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — E−1.Q | MCP araç kalitesi | [Uygulama ve kabul](plans/mcp-tool-quality-plan.md): standard 40 / legacy 77, dokuz uyumlu alias, typed şema ve açıklamalar. |
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
-| Sıradaki | E−1.3, ardından kalan E−1 ve araç kabulü | Organizasyon, Set Key/transport/procedural eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline tek source tree, Find, subtree flags/undo, çoklu dal filtreleri ve güvenli UI reparent. |
+| Sıradaki | E−1.4, ardından kalan E−1 ve araç kabulü | Set Key/toplu key/transport, prosedürel eğri; V6/E−1.7 etkileşim doğrulaması. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -2119,3 +2120,29 @@ MCP 2.1.0 için editör/STDIO birlikte yeniden başlatılır; source argümanlar
 ile aynıdır, scene formatVersion 1.x kaldı. Public yayın yapılmadı. Sırada E−1.3
 organizasyon ve kalan E−1 kabulü; kutulu 3D/Poly ve son export/ikinci genel
 optimizasyon sırası korunur.
+
+
+### 12.55. E−1.3 ortak hiyerarşi ve alt ağaç akışı — 10 Kasım 2026
+
+[Gerçek UI/domain sözleşmesi](editor-hierarchy.md). LayerIndex üzerinde ortak
+parent-first Explorer/Timeline projeksiyonu, ayrı child/property collapse,
+filtre/solo/üyeliği yazmadan açık Find ve Restore filters eklendi. Kaynakta gizli,
+kapalı veya filtre dışı çocukları da içeren show/hide/lock/solo/freeze eylemleri
+iki panelde aynı komutla, tek undo ile çalışır. Timeline/Dope/Curve seçili dal
+union kullanır; ancestor'ın seçilmemiş key'leri filtreye sızmaz. Kaydırma ve
+keyboard navigation mevcut virtualization üzerinden gider; yeni polling yoktur.
+
+UI hierarchy move, script Explorer'ın static-world/shear/singular kontrollerini
+ortaklaştırır. Animated/locked/frozen zincir reddedilir, uygun static root ve
+alt çocuk animasyonları world konumu korunarak taşınır. Sibling grouping identity
+kalır; düşük seviyeli/script local-space sözleşmeleri korunur. İnsan isimleri,
+key değerleri/easing/ID'leri ve attribution verisi otomatik yeniden yazılmaz.
+
+339 dosya / 2.713 test, TypeScript, MCP ve production build geçti. 5.000 derinlik,
+malformed view, union, üyelik/audio, karma bayraklar, exact undo/redo/portable ve
+world matrix eşliği test edildi. İzole Chrome'da 505 katmanlı gerçek panel kabulü
+8/8 geçti; hızlı keyboard geçişindeki ertelenmiş odak sorunu da yakalanıp giderildi.
+Ana port 2000 editörü ve ilgisiz pan/cursor çalışma değişiklikleri korunarak
+clean snapshot'ta sınandı. Kanıt `artifacts/validation/editor-hierarchy-20261110/`.
+MCP 2.1.0 ve scene formatı değişmedi; public yayın yapılmadı. Sırada E−1.4;
+kutulu 3D/Poly, son export ve ikinci optimizasyon sırası korunur.

@@ -10,6 +10,7 @@ import { buildLegacyLayerRows } from '@/lib/sceneExplorer/legacyLayerRows'
 import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
 import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
+import { useSelectedLayerReveal } from '@/components/layerHierarchy/useSelectedLayerReveal'
 
 interface Props {
   layers: Layer[]
@@ -101,6 +102,8 @@ export default function LayerPanel({
   const rowKeys = useMemo(() => rows.map(row => row.layer.id), [rows])
   const listRef = useRef<HTMLUListElement>(null)
   const windowed = useRowWindow(layout, rowKeys, listRef)
+  useSelectedLayerReveal({ layers, selectedId, selectedIds, setCollapsedIds: setCollapsedGroups,
+    rowKeys, reveal: windowed.reveal, viewportHeight: windowed.viewport.height })
   const toggleCollapsed = (id: string) => setCollapsedGroups(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)

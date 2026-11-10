@@ -6,7 +6,7 @@ legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
 editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
 [Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
 [istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
-**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** Sırada **E−1.3 sahne organizasyonu**, ardından aşağıdaki kalan işler var. Glama'nın eski
+**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** Sırada **E−1.4 Set Key/toplu Timeline/transport**, ardından aşağıdaki kalan işler var. Glama'nın eski
 dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
@@ -181,7 +181,15 @@ ana yol haritası §12.54'tedir. Sırada E−1.3; export/ikinci optimizasyon son
 alınmış sırasını korur.
 
 
-### E−1.3 — Kompleks sahnede insanın devam edebilmesi
+### E−1.3 — Kompleks sahnede insanın devam edebilmesi — Tamamlandı
+
+10 Kasım uygulaması: [ortak hiyerarşi ve güvenli UI akışı](../editor-hierarchy.md).
+Explorer/Timeline tek parent-first projection; branch/property collapse ayrı,
+Find reversible, visibility/lock/solo/freeze tam source subtree ve tek undo.
+Timeline/Dope/Curve çoklu dal union; static-world reparent ve sibling grouping
+korumaları UI'da da mevcut. İnsan isim/parent/key verileri otomatik yeniden
+yazılmaz. 339 dosya / 2.713 test ve izole gerçek panel kabulü geçti.
+
 
 - Yeni üretimde semantik gruplar: örneğin `Clock / Face`, `Clock / Hands`,
   `Labels`; rolü açıklayan layer/track isimleri. Her primitive için gereksiz group

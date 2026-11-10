@@ -318,7 +318,7 @@ export function makeTrimLayerCmd(
 
 // ── Toggle layer flag (locked / hidden / solo / pinned) ───────────────────────
 
-export type LayerToggleField = 'locked' | 'hidden' | 'solo' | 'pinned'
+export type LayerToggleField = 'locked' | 'hidden' | 'solo' | 'pinned' | 'frozen'
 
 export function makeToggleLayerCmd(
   layerId: string,
