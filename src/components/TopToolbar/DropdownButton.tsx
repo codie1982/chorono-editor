@@ -113,7 +113,7 @@ export default function DropdownButton({ label, sections, status, primaryAction 
           className="block w-full min-h-9 px-3 py-2 text-left text-xs text-gray-100 hover:bg-blue-700 focus:bg-blue-700 focus:outline-none disabled:text-gray-500 disabled:hover:bg-transparent"
           onClick={() => { setOpen(false); trigger.current?.focus(); item.onSelect() }}>{item.label}</button>)}
       </div>)}
-      {status && <p className="mx-3 mt-2 border-t border-gray-700 pt-2 pb-1 text-[11px] leading-relaxed text-gray-400" role="status">{status}</p>}
+      {status && <p className="mx-3 mt-2 border-t border-gray-700 pt-2 pb-1 text-[11px] leading-relaxed text-gray-400 whitespace-pre-line break-words" role="status">{status}</p>}
     </div>, document.body)}
   </div>
 }

@@ -8,10 +8,13 @@ import {
 } from '@/lib/editor/history'
 import type { CloneMetadata } from '@/lib/clone/CloneTypes'
 import { isCloneArrayCommand } from '@/lib/editor/commands-clone'
-import { AssetSourceOwner } from '@/lib/asset/sources'
+import { AssetSourceOwner, assetSourcePool } from '@/lib/asset/sources'
 import { executeAuthoredCommand, assertAuthoringData } from '@/lib/editor/authoring'
 import { EditorDocumentLifetime } from '@/lib/editor/lifecycle/EditorDocumentLifetime'
 import { CommittedScene } from '@/lib/editor/persistence/recovery/CommittedScene'
+import { CommittedSnapshot } from '@/lib/editor/persistence/recovery/CommittedSnapshot'
+import { HISTORY_POLICY, type HistoryBudgetResult } from '@/lib/editor/history/historyBudget'
+import { prepareHistory } from '@/lib/editor/history/HistoryGraph'
 
 // ── Transaction ref ────────────────────────────────────────────────────────────
 // A transaction lets a drag op preview many intermediate scenes without each
@@ -25,6 +28,8 @@ interface Transaction {
 export interface EditorStateReturn {
   scene: ChronoScene
   committedScene: ChronoScene
+  committedHistory: HistoryState
+  historyBudget: Omit<HistoryBudgetResult, 'history'>
   canUndo: boolean
   canRedo: boolean
   getScene: () => ChronoScene
@@ -32,6 +37,8 @@ export interface EditorStateReturn {
   getCommittedScene: () => ChronoScene
   /** Synchronous commit/reset/undo/redo notifications; no preview/evaluation events. */
   subscribeCommitted: (listener: (scene: ChronoScene) => void) => () => void
+  getCommittedHistory: () => HistoryState
+  subscribeHistory: (listener: (history: HistoryState) => void) => () => void
   getRevision: () => number
   /** Runtime identity: resets abort old async work; edits and undo preserve it. */
   getDocumentSignal: () => AbortSignal
@@ -45,6 +52,8 @@ export interface EditorStateReturn {
   redo: () => void
   /** Replace the entire scene without history (use sparingly — e.g. Clear). */
   resetScene: (scene: ChronoScene) => void
+  /** Replace the document with validated saved history; transaction previews are discarded. */
+  resetHistory: (history: HistoryState) => void
   /**
    * BL-59 — Editor-level metadata map for Clone & Array System.
    * Keys are layer ids; values describe the clone relationship to the
@@ -73,13 +82,20 @@ export interface EditorStateReturn {
  * Layout setup/cleanup supports StrictMode replay through the pool's deferred
  * final release. Reset discards both history and an in-progress transaction.
  */
-export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
-  const [history, setHistory] = useState<HistoryState>(() => initHistory(initialScene))
+export function useEditorState(initialScene: ChronoScene, restoredHistory?: HistoryState): EditorStateReturn {
+  const policy = { ...HISTORY_POLICY, assetBytes: (asset: ChronoScene['assets'][number]) => asset.url.startsWith('blob:')
+    ? assetSourcePool.getSourceBytes(asset.url) ?? asset.metadata?.filesize ?? HISTORY_POLICY.maxBytes : 0 }
+  const budgetRef = useRef<HistoryBudgetResult>()
+  const [history, setHistory] = useState<HistoryState>(() => {
+    budgetRef.current = prepareHistory(restoredHistory ?? initHistory(initialScene), policy); return budgetRef.current.history
+  })
   const txRef = useRef<Transaction | null>(null)
   const historyRef = useRef(history)
   const revisionRef = useRef(0)
   const committed = useRef<CommittedScene>()
-  if (!committed.current) committed.current = new CommittedScene(initialScene)
+  if (!committed.current) committed.current = new CommittedScene(history.present)
+  const committedHistory = useRef<CommittedSnapshot<HistoryState>>()
+  if (!committedHistory.current) committedHistory.current = new CommittedSnapshot(history)
   const documentRef = useRef<EditorDocumentLifetime | null>(null)
   if (!documentRef.current) documentRef.current = new EditorDocumentLifetime()
   const sourcesRef = useRef<AssetSourceOwner | null>(null)
@@ -102,12 +118,15 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   const updateHistory = useCallback((update: (prev: HistoryState) => HistoryState) => {
     const prev = historyRef.current
     let next = prev
-    try { next = update(prev) } finally { syncSources(next) }
-    if (next === prev) { if (!txRef.current) committed.current!.publish(next.present); return }
+    try {
+      next = update(prev)
+      if (!txRef.current && next !== prev) { budgetRef.current = prepareHistory(next, policy); next = budgetRef.current.history }
+    } finally { syncSources(next) }
+    if (next === prev) { if (!txRef.current) { committed.current!.publish(next.present); committedHistory.current!.publish(next) }; return }
     historyRef.current = next
     revisionRef.current++
     setHistory(next)
-    if (!txRef.current) committed.current!.publish(next.present)
+    if (!txRef.current) { committed.current!.publish(next.present); committedHistory.current!.publish(next) }
   }, [syncSources])
   const getScene = useCallback(() => historyRef.current.present, [])
   const getRevision = useCallback(() => revisionRef.current, [])
@@ -191,6 +210,14 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
     setLayerMetaById({})
   }, [updateHistory])
 
+  /** Adopt data-only history, never execute saved commands. The owning project
+   * converter validates source/graph structure before invoking this boundary. */
+  const resetHistory = useCallback((next: HistoryState) => {
+    for (const value of [next.present, ...next.past, ...next.future]) assertAuthoringData(value.authoring)
+    documentRef.current!.replace(); txRef.current = null
+    updateHistory(() => next); setLayerMetaById({})
+  }, [updateHistory])
+
   // ── BL-59 helpers ──────────────────────────────────────────────────────────
   const getSiblingsInArray = useCallback((layerId: string): string[] => {
     const meta = layerMetaById[layerId]
@@ -207,10 +234,14 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
 
   return {
     scene, committedScene: committed.current.getScene(), canUndo, canRedo, getScene, getCommittedScene: committed.current.getScene,
-    subscribeCommitted: committed.current.subscribe, getRevision, getDocumentSignal, isTransactionActive,
+    subscribeCommitted: committed.current.subscribe, committedHistory: committedHistory.current.getSnapshot(),
+    getCommittedHistory: committedHistory.current.getSnapshot, subscribeHistory: committedHistory.current.subscribe,
+    historyBudget: { estimatedBytes: budgetRef.current!.estimatedBytes, retainedSteps: budgetRef.current!.retainedSteps,
+      droppedSteps: budgetRef.current!.droppedSteps, presentExceedsBudget: budgetRef.current!.presentExceedsBudget },
+    getRevision, getDocumentSignal, isTransactionActive,
     dispatchCommand,
     beginTransaction, previewTransaction, commitTransaction, cancelTransaction,
-    undo, redo, resetScene,
+    undo, redo, resetScene, resetHistory,
     layerMetaById,
     getSiblingsInArray,
     clearLayerMeta,

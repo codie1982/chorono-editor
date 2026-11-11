@@ -8,6 +8,8 @@ import {legacyRuntimeInScope} from '../runtime/LegacyRuntimeOutput'
 import {svgInScope} from '../vector/SVGOutput'
 import type {ResourceLease} from '../../resources/residency'
 import type {SceneTextKind,SceneTextOptions,TextOutputResult,TextDownloadResult} from './types'
+import { historyAssets } from '../../editor/session/SessionProject'
+import { sessionProjectInScope } from '../../editor/session/SessionProjectOutput'
 
 export interface TextOutputExecution{signal?:AbortSignal;resources?:OutputResources}
 const TEXT_BYTES=64*1024**2
@@ -16,16 +18,17 @@ const TEXT_BYTES=64*1024**2
  * Queued preparation pins the borrowed source assets. Inner serialization and
  * conversion share the output allocator; returned text is valid only while its
  * result pin lives. UI should show a bounded preview, not clone/split all lines.
- * This preserves all existing format/schema and external source URL policies. */
+ * Source-only callers preserve their format and URL policies; an explicit
+ * editor-json session delegates portable history to SessionProjectOutput. */
 export function acquireSceneText(scene:ChronoScene,kind:SceneTextKind,options:SceneTextOptions={},execution:TextOutputExecution={}):Promise<ResourceLease<TextOutputResult>>{
-  return assetSourcePool.withAssets(scene.assets,()=>(execution.resources??editorOutputResources).run((scope,signal)=>sceneTextInScope(scene,kind,scope,signal,options),execution))
+  return assetSourcePool.withAssets(options.session?historyAssets(options.session.history):scene.assets,()=>(execution.resources??editorOutputResources).run((scope,signal)=>sceneTextInScope(scene,kind,scope,signal,options),execution))
 }
 
 /** Download preparation avoids retaining the final full text beside its native
  * Blob after construction. Blob copy is admitted while text remains pinned;
  * native Blob internals are opaque. Handoff/download retains its own result pin. */
 export function acquireTextDownload(scene:ChronoScene,kind:SceneTextKind,options:SceneTextOptions={},execution:TextOutputExecution={}):Promise<ResourceLease<TextDownloadResult>>{
-  return assetSourcePool.withAssets(scene.assets,()=>(execution.resources??editorOutputResources).run(async(scope,signal)=>{
+  return assetSourcePool.withAssets(options.session?historyAssets(options.session.history):scene.assets,()=>(execution.resources??editorOutputResources).run(async(scope,signal)=>{
     const temporary=scope.child()
     try{
       const text=await sceneTextInScope(scene,kind,temporary,signal,options)
@@ -52,7 +55,8 @@ export async function sceneTextInScope(scene:ChronoScene,kind:SceneTextKind,scop
   const temporary=scope.child()
   try{
     const value=kind==='runtime-json'?runtimePackageInScope(scene,temporary)
-      :kind==='legacy-runtime-json'?legacyRuntimeInScope(scene,temporary,options.runtime):scene
+      :kind==='legacy-runtime-json'?legacyRuntimeInScope(scene,temporary,options.runtime)
+      :options.session?await sessionProjectInScope(options.session.history,options.session.sessionId,temporary,signal):scene
     const text=outputJson(scope,value,{maxBytes:TEXT_BYTES,maxChars:TEXT_BYTES,space:2})
     const warnings=kind==='runtime-json'&&'warnings' in value?
       scope.own(Math.max(1,value.warnings.reduce((sum,warning)=>sum+warning.message.length*2+64,0)),()=>value.warnings.map(warning=>warning.message)).value:[]

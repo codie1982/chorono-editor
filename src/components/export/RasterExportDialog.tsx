@@ -1,4 +1,5 @@
 'use client'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
@@ -40,6 +41,7 @@ const SCALES = [1, 2, 3, 4] as const
 export default function RasterExportDialog({
   scene, assets, timeMs, onClose, onExported, onError,documentSignal,
 }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const [format,      setFormat]      = useState<RasterFormat>('png')
   const [scale,       setScale]       = useState<number>(1)
   const [transparent, setTransparent] = useState(false)
@@ -63,8 +65,9 @@ export default function RasterExportDialog({
         quality: quality / 100,
       },{signal}),lease=>{
       const result=lease.value
-      downloadOutput(lease,value=>value.blob,result.filename)
-      onExported?.(result.filename, result.warnings)
+      const filename=sessionFilename(result.filename)
+      downloadOutput(lease,value=>value.blob,filename)
+      onExported?.(filename, result.warnings)
       onClose()
     },onError)
   }

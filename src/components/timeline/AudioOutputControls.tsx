@@ -1,4 +1,5 @@
 'use client'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useEffect, useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import { dbToGain, gainToDb } from '@/lib/audio/audioClip'
@@ -17,6 +18,7 @@ interface Props {
   documentSignal?:AbortSignal
 }
 export default function AudioOutputControls({ scene, timelineId, onMasterChange, onMasterMute, getState, subscribeMeter,documentSignal }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const volume = scene.composition.audioVolume ?? 1
   const [draft, setDraft] = useState(volume > 0 ? gainToDb(volume).toFixed(1) : '-60')
   const [peak, setPeak] = useState<number | null>(null)
@@ -45,7 +47,7 @@ export default function AudioOutputControls({ scene, timelineId, onMasterChange,
     await operation.run(signal=>acquireAudioMix(scene,{durationMs,timelineIds:timelineId?[timelineId]:undefined},{signal}),lease=>{
       const rendered=lease.value
       const blob=editorOutputResources.own(rendered.bytes.byteLength,()=>new Blob([rendered.bytes],{type:rendered.mimeType}),()=>{})
-      try{downloadOutput(blob,value=>value,`${scene.composition.id||'audio'}-${timelineId||'mix'}.wav`)}finally{blob.release()}
+      try{downloadOutput(blob,value=>value,sessionFilename(`${scene.composition.id||'audio'}-${timelineId||'mix'}.wav`))}finally{blob.release()}
       if (rendered.warnings.length) toast.warning('Audio exported', { detail: rendered.warnings.join(' ') })
       else toast.success('WAV audio exported')
     },message=>toast.error('Audio export failed',{detail:message}))

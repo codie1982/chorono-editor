@@ -15,8 +15,8 @@
   veya **Local save failed / Retry** görünür. Yerel kayıt sunucuya gönderilmez.
 - Sürükleme/Array önizlemeleri kaydedilmez. Commit, belge açma/yeni belge,
   Undo ve Redo güncel kurtarma kaynağını değiştirir. İptal edilen hareket yenilemede
-  geri gelmez. Açık oturumdaki Undo/Redo çalışır; geçmiş yığını yeniden açılışta
-  taşınmaz. Playhead/seçim, clone yardımcı metadata'sı ve runtime önbellekleri bu
+  geri gelmez. Undo/Redo yığınları yeniden açılışta aynı sırayla geri gelir. Yeni bir
+  düzenleme, açık oturumdaki gibi bekleyen Redo dalını temizler. Playhead/seçim, clone yardımcı metadata'sı ve runtime önbellekleri bu
   kurtarma kaydının parçası değildir. Aktif timeline ilk mevcut timeline olur.
 - Küçük, kendi içinde yeterli sahne için senkron kurtarma journal'ı, son commit
   ile arka plan yazması arasındaki yenileme aralığını kapatır. Büyük veya Blob
@@ -35,9 +35,11 @@
 ## Sahiplik ve veri akışı
 
 1. `src/app/hooks/useEditorState.ts`, `CommittedScene` aracılığıyla
-   `getCommittedScene`, `committedScene` ve `subscribeCommitted` sağlar. Bildirim
+   `getCommittedScene`, `committedScene` ve `subscribeCommitted` sağlar.
+   Geçmiş sahibi ayrıca `getCommittedHistory`, `committedHistory`,
+   `subscribeHistory` ve atomik `resetHistory` sunar. Bildirim
    başarılı değişikliğin sonunda, React render'ını beklemeden eşzamanlıdır.
-2. `useSceneSessionRecovery` bu bildirime abone olur; `SceneSessionRecovery`
+2. `useSceneSessionRecovery` geçmiş bildirimine abone olur; `SceneSessionRecovery`
    senkron journal ve mevcut `SceneAutoSaveCoordinator` ile tek aktif + tek son
    bekleyen snapshot'ı yönetir. Debounce 250 ms, sürekli değişiklik için en geç
    1000 ms; sonlu retry ve source pin sahipliği ortak koordinatörden gelir.
@@ -59,15 +61,16 @@
    Sınır kapanınca DB bağlantısı, transaction'lar ve browser lock bırakılır;
    hook kapanınca timer/subscriber/lifecycle listener'ları temizlenir.
 
-Kaynak formatı değişmedi. Kurtarma zarfı v1; scene JSON, tab ID, sequence,
-timestamp ve Blob URL manifesti içerir. Scene/undo içine DB, DOM, timer,
+Kaynak formatı değişmedi. Kurtarma zarfı v2; kaynak JSON, mantıksal sessionId, özel sekme slotId,
+sequence, timestamp, Blob URL manifesti ve sürümlü geçmiş grafiği içerir.
+Eski v1 kayıtları kaynak korunarak okunur; geçmişleri boş başlar. Scene/undo içine DB, DOM, timer,
 controller, renderer veya decoded-media nesnesi yazılmaz. `sceneSourceData`,
 portable export ve kurtarmanın ortak runtime ayıklama görünümüdür.
 
 Örnek abonelik (kaydı UI bileşeninden elle çoğaltmayın):
 
 ```ts
-const stop = editor.subscribeCommitted(scene => recovery.request(scene))
+const stop = editor.subscribeHistory(history => recovery.requestHistory(history))
 // source değiştirme örneği: editor.dispatchCommand(command)
 // bileşen kapanırken:
 stop()
@@ -100,3 +103,53 @@ Kabul sayfası ayrı origin/veritabanı kullanır; gerçek kullanıcı sahnesine
 MCP oturumuna bağlanmaz. `Run storage checks` native atomiklik/abort/medya
 temizliği sınırlarını test eder. Son kontrolde gerçek editörün önce/sonra
 JSON'ları eşit karşılaştırılır; yerel medyanın taze Blob URL'si farkı beklenir.
+
+## Oturum kimliği, dosyalar ve bellek sınırı
+
+`src/lib/editor/session` mantıksal proje kimliğini ve taşınabilir zarfı;
+`src/lib/editor/history` ise salt kaynak görünümünü, bütçeyi ve grafiği yönetir.
+`SessionOutputProvider` UI/export sınırında kimliği sağlar. Yeni belge UUID alır;
+dosyadan açılan çalışma dosyanın sessionId'sini benimser. Aynı projenin iki
+sekmesi aynı mantıksal kimliği korur, bağımsız özel slotlara yazar.
+
+- IDB anahtarı `sessionId__slotId`; sessionStorage bu anahtarı ve özel slotu
+  tutar. localStorage'da `chorono.sessions.v1.<sessionId>` manifesti ve küçük
+  kaynak/geçmiş için sınırlı journal bulunur. Büyük kaynak ve medya IDB'dedir;
+  localStorage'a büyük proje kopyaları yazılmaz.
+- İndirilen JSON ve diğer kullanıcı çıktıları `__session_<sessionId>` eki taşır.
+  Kaynak JSON'un üst düzey `editorSession` v1 alanı kimlik, geçmiş grafiği ve
+  gerekirse tarihsel medya tablosunu içerir. Alan normal sahneden ve Undo
+  snapshot'larından ayrılır; tekrar kaydetmede iç içe geçmiş oluşturmaz.
+  Runtime/SDK protokolleri değişmez. JSON inspector/Copy yalnızca kaynak gösterir;
+  **Save Scene JSON** oturum/geçmiş içeren taşınabilir dosyayı yazar.
+- Seçilen klasörde `sessions/<sessionId>/scene.json` ve aynı dizinde zaman damgalı
+  sürümler yazılır. Alt dizin sağlamayan host adapter'ı sessionId'li düz ad kullanır.
+- Geçmiş toplam 50 Undo+Redo adımı, yaklaşık 64 MiB paylaşılan kaynak ve
+  300.000 ziyaret düğümüyle sınırlıdır. En yakın kesintisiz adımlar tutulur;
+  önce uzak adımlar düşer. Güncel kaynak tek başına sınırı aşsa bile korunur.
+  Bunlar işlem RAM'i ölçümü değildir; decoded medya/DOM/GPU önbellekleri ayrı
+  bütçelere aittir. Bilinen Blob baytları bir kez sayılır.
+- DAG codec'i güncel kaynağın değişmeyen alt ağaçlarına referans verir; değişmiş
+  tarihsel düğümleri ve uzun metinleri paylaşır. Grafik 16 MiB ile sınırlıdır.
+  Aynı sınırlama canlı ve kalıcı geçmişe uygulanır. JSON her frame'de değil,
+  commit/restore sınırında hazırlanır. Küçük acil journal daha dar grafik sınırı
+  kullanabilir; bu durumda tam IDB yazması bitmeden güvenli ayrılma bildirilmez.
+- Mevcut sahneden silinmiş ama Undo/Redo'da gereken yerel medya da korunur.
+  IDB orijinal Blob'u, taşınabilir dosya bir kez gömülen veri URL'sini saklar.
+  Hata/sınır aşımı dosya açmayı/yazmayı atomik olarak reddeder; başarısız açma
+  mevcut çalışmayı veya kimliğini değiştirmez.
+
+Minimal dosya akışı (React bağlamı kimliği senkron benimser):
+
+```ts
+const opened = readSessionProject(parseSceneJson(json))
+identity.adopt(opened.sessionId ?? crypto.randomUUID())
+editor.resetHistory(opened.history)
+// Dosya output işi: acquireSceneText(history.present, 'editor-json',
+//   { session: { sessionId: identity.id, history } })
+```
+
+İlk açılış fallback'i `demo/createChoronoDemo.ts` içindeki 800×450, altı saniyelik
+yerel şekil/yazı demosudur. Marka, tipografi, hareket ve timeline grupları ayrı
+düzenlenir; ilk kare görünürdür, Play ile oynatılır. Dış asset/font istemez.
+Kurtarılmış çalışma varsa bu örnek üretilmez ve kullanıcının sahnesi değiştirilmez.

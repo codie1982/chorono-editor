@@ -42,6 +42,9 @@ import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
 import ProjectMenu from '@/components/TopToolbar/ProjectMenu'
+import { SessionOutputProvider, useSessionIdentity } from '@/components/editorSession/SessionOutputContext'
+import { createChoronoDemo } from '@/lib/editor/demo/createChoronoDemo'
+import { readSessionProject } from '@/lib/editor/session/SessionProject'
 import { EditorSessionBoundary } from '@/components/editorSession/EditorSessionBoundary'
 import { LocalRecoveryStatus } from '@/components/editorSession/LocalRecoveryStatus'
 import { useSceneSessionRecovery } from './hooks/useSceneSessionRecovery'
@@ -142,63 +145,8 @@ import '@/lib/modes/bootstrap'
 import { modeRegistry } from '@/lib/modes'
 import type { EditorMode } from '@/lib/core/EditorMode'
 
-// ── Demo scene shown on first load ────────────────────────────────────────────
-
-function makeDemoScene(): ChronoScene {
-  const s = emptyScene()
-
-  const card: Layer = {
-    id: 'card', name: 'Card', type: 'shape', shape: 'rect',
-    transform: { x: 40, y: 60, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 140, anchorY: 60 },
-    opacity: 0,
-    style: { fill: { type: 'solid', color: '#3B82F6' }, cornerRadius: 16 },
-    size: { width: 280, height: 120 },
-  }
-  const label: Layer = {
-    id: 'label', name: 'Label', type: 'text',
-    // Anchor at the visual centre of "Chorono" @22px (rough text bbox)
-    transform: { x: 130, y: 128, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 42, anchorY: 13 },
-    opacity: 0,
-    // BL-72: text layers carry a measured `size` so the SelectionFrame renders
-    // and tracks the glyphs. Edits re-measure via PropertiesPanel.updateText.
-    size: { width: 84, height: 26 },
-    text: { value: 'Chorono', fontSize: 22, color: '#FFFFFF' },
-  }
-  s.layers = [card, label]
-
-  const tl = newTimeline()
-  Object.assign(tl, { id: 'intro', durationMs: 600, autoplay: true, layerIds: ['card', 'label'] })
-  tl.tracks = [
-    {
-      target: 'layers.card.opacity',
-      keyframes: [
-        { id: 'k1', timeMs: 0,   value: 0, easing: { type: 'easeOut' as const } },
-        { id: 'k2', timeMs: 600, value: 1, easing: { type: 'linear'  as const } },
-      ],
-    },
-    {
-      target: 'layers.card.transform.y',
-      keyframes: [
-        { id: 'k3', timeMs: 0,   value: 90, easing: { type: 'easeOut' as const } },
-        { id: 'k4', timeMs: 600, value: 60, easing: { type: 'linear'  as const } },
-      ],
-    },
-    {
-      target: 'layers.label.opacity',
-      keyframes: [
-        { id: 'k5', timeMs: 200, value: 0, easing: { type: 'easeOut' as const } },
-        { id: 'k6', timeMs: 600, value: 1, easing: { type: 'linear'  as const } },
-      ],
-    },
-  ]
-  s.timelines = [tl]
-  return s
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function BuilderPage() {
-  return <EditorSessionBoundary>{session => <BuilderWorkspace session={session} />}</EditorSessionBoundary>
+  return <EditorSessionBoundary>{session => <SessionOutputProvider sessionId={session.id}><BuilderWorkspace session={session} /></SessionOutputProvider>}</EditorSessionBoundary>
 }
 
 /** Source/editor owners mount only after the local recovery barrier completes. */
@@ -213,8 +161,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const modeDescriptor = modeRegistry.get(currentMode)
 
   // ── Central scene state with history + transactions ──────────────────────
-  const [initialScene] = useState(() => session.scene ?? makeDemoScene())
-  const editor = useEditorState(initialScene)
+  const [initialScene] = useState(() => session.scene ?? createChoronoDemo())
+  const sessionIdentity = useSessionIdentity()!
+  const editor = useEditorState(initialScene, session.history)
   const recovery = useSceneSessionRecovery(editor, session)
   useEffect(() => acquireDiagnosticSharing(() => !editor.isTransactionActive()), [editor.isTransactionActive])
   const {
@@ -225,10 +174,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
-  //  - {name}.json          → "current" file, overwritten on change (500ms)
-  //  - {name}_TIMESTAMP.json → version snapshots (every 10 min + manual)
+  //  - sessions/<sessionId>/{name}.json → committed current + bounded history
+  //  - same directory: {name}_TIMESTAMP.json → 10 min + manual versions
   // No server / MongoDB / Git — pure browser file output.
   const fileVersioning = useFileVersioning(editor.committedScene, {
+    sessionId: sessionIdentity.id, history: editor.committedHistory,
     documentSignal:editor.getDocumentSignal(),
     interval_ms: 500,
     fallback_ms: 10000,
@@ -1132,30 +1082,33 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [showSequenceExport, setShowSequenceExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
-  const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(scene,importDocument)
+  const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(editor.committedScene,importDocument,editor.getCommittedHistory)
 
   const openSceneJson = useCallback(() => {
     openDocumentFilePicker({ accept: '.json,application/json', getDocumentSignal: editor.getDocumentSignal,
       onFiles: files => { void openSceneFile(files[0], parsed => {
-        resetScene(parsed)
+        const project = readSessionProject(parsed)
+        sessionIdentity.adopt(project.sessionId ?? crypto.randomUUID())
+        editor.resetHistory(project.history)
         selectLayer(null)
         handleSeek(0)
         setSelectedTl(parsed.timelines[0]?.id ?? '')
         welcome.close()
         toast.success(`Loaded scene from ${files[0].name}`)
       }, error => welcome.setError(`Could not open project: ${error.message}`)) } })
-  }, [editor.getDocumentSignal, openSceneFile, resetScene, selectLayer, handleSeek, welcome.close, welcome.setError])
+  }, [editor.getDocumentSignal, openSceneFile, editor.resetHistory, sessionIdentity.adopt, selectLayer, handleSeek, welcome.close, welcome.setError])
 
   const newScene = useCallback((settings?: WelcomeProjectSettings): boolean => {
     if ((editor.getRevision() > 0 || session.restored) && !confirm('Start a new project? This replaces the current workspace. Save Scene JSON if you want to keep a separate copy.')) return false
     const next = settings ? createWelcomeProject(settings) : emptyScene()
+    sessionIdentity.adopt(crypto.randomUUID())
     resetScene(next)
     selectLayer(null)
     handleSeek(0)
     setSelectedTl(next.timelines[0]?.id ?? '')
     welcome.close()
     return true
-  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close, session.restored])
+  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close, session.restored, sessionIdentity.adopt])
 
   const ungroupSelected = useCallback(async () => {
     if (!selectedLayerId) return
@@ -1443,8 +1396,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         </span>
 
         {/* File versioning: choose folder + auto-save + timestamped snapshots */}
-        <LocalRecoveryStatus status={recovery} />
+        <LocalRecoveryStatus status={recovery} sessionId={sessionIdentity.id} history={editor.committedHistory} budget={editor.historyBudget} />
         <ProjectMenu
+          sessionInfo={{id:sessionIdentity.id,undo:editor.committedHistory.past.length,redo:editor.committedHistory.future.length}}
           mounted={fileVersioning.mounted}
           state={fileVersioning.state}
           directoryName={fileVersioning.directoryName}
@@ -2051,7 +2005,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         error={welcome.error} onCreate={newScene} onOpenProject={openSceneJson} onContinue={welcome.close}
       />}
 
-      {showJson && <JsonModal scene={scene} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
+      {showJson && <JsonModal scene={scene} onSaveProject={saveSceneJson} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
 
       {/* ── Composition Preset Modal ───────────────────────────────── */}
       {showCompModal && (

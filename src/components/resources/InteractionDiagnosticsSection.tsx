@@ -1,4 +1,5 @@
 'use client'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState, useSyncExternalStore } from 'react'
 import { interactionTrace } from '@/components/canvas/interactions/diagnostics'
 import { downloadOutput, editorOutputResources } from '@/lib/export/resources'
@@ -17,6 +18,7 @@ const terminalEvents = new Set(['source-commit', 'source-cancel', 'current-rejec
  * scene/history. It displays only the latest terminal result; exported JSON
  * retains the bounded correlated lifecycle records for investigation. */
 export function InteractionDiagnosticsSection() {
+  const sessionFilename=useSessionOutputFilename()
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const [error, setError] = useState('')
   const terminal = [...snapshot.records].reverse().find(record => terminalEvents.has(record.event))
@@ -33,7 +35,7 @@ export function InteractionDiagnosticsSection() {
       const json = interactionTrace.exportJson()
       const blob = editorOutputResources.own(Math.max(1, utf8ByteLength(json)),
         () => new Blob([json], { type: 'application/json' }), () => {})
-      try { downloadOutput(blob, value => value, 'chorono-interaction-diagnostics.json') }
+      try { downloadOutput(blob, value => value, sessionFilename('chorono-interaction-diagnostics.json')) }
       finally { blob.release() }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'The diagnostic log could not be downloaded.')

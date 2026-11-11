@@ -8,6 +8,7 @@ export interface ProjectMenuProps {
   lastSavedAt: Date | null; snapshotCount: number; isSupported: boolean
   onPickDirectory: () => void; onSaveSnapshot: () => void
   onSaveSceneJson: () => void; onCopySceneJson: () => void; onInspectJson: () => void
+  sessionInfo?: { id: string; undo: number; redo: number }
 }
 
 /** Project persistence/inspection UI. Replaces the standalone folder/version
@@ -22,10 +23,11 @@ export default function ProjectMenu(props: ProjectMenuProps) {
   const status = !props.mounted ? 'Checking automatic saving…'
     : !canVersion ? 'Automatic folder saving is unavailable in this browser. Use Save Scene JSON.'
     : props.state === 'error' ? `Save failed${props.directoryName ? ` · ${props.directoryName}` : ''}. Choose a folder or try saving a version again.`
-    : !hasDirectory ? 'Choose a folder to enable automatic saving and timestamped versions.'
+    : !hasDirectory ? 'Choose a folder for session files and timestamped versions.'
     : props.state === 'saving' ? `Saving… · ${props.directoryName}`
     : `${props.directoryName}${props.lastSavedAt ? ` · Saved ${props.lastSavedAt.toLocaleTimeString()}` : ''} · ${props.snapshotCount} versions`
-  return <DropdownButton label="Project" status={status} sections={[
+  const sessionStatus=props.sessionInfo?`\nSession: ${props.sessionInfo.id}\nUndo: ${props.sessionInfo.undo} · Redo: ${props.sessionInfo.redo}`:''
+  return <DropdownButton label="Project" status={status+sessionStatus} sections={[
     { label: 'Save', items: [action('Save Scene JSON', props.onSaveSceneJson),
       action(hasDirectory ? 'Change Save Folder…' : 'Choose Save Folder…', props.onPickDirectory, !canVersion),
       action('Save Version', props.onSaveSnapshot, !canVersion || !hasDirectory || props.state === 'saving')] },

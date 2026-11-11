@@ -6,6 +6,10 @@ import { editorOutputResources, outputJson, type OutputResources } from '../../.
 import { BoundedBinaryReader } from '../../../resources/io'
 import type { SessionCheckpoint } from './SessionCheckpoint'
 import type { SessionCheckpointStore } from './IndexedDbSessionStore'
+import { initHistory, type HistoryState } from '../../history'
+import { encodeHistory, decodeHistory } from '../../history/HistoryGraph'
+import { HistorySourceView } from '../../history/HistorySourceView'
+import { historyAssets } from '../../session/SessionProject'
 
 /** Count cached and new encoded media together; a saved checkpoint must also
  * fit the restore policy. Empty files are valid source bytes, not image quality. */
@@ -22,13 +26,15 @@ function mediaBytes(total: number, size: number): number {
  * Source leases outlive queued work and native IO; failures leave old data.
  */
 export async function saveSessionCheckpoint(scene: ChronoScene, metadata: Omit<SessionCheckpoint, 'json' | 'assetUrls'>,
-  store: SessionCheckpointStore, signal?: AbortSignal, resources: OutputResources = editorOutputResources): Promise<void> {
-  await assetSourcePool.withAssets(scene.assets, async () => {
+  store: SessionCheckpointStore, signal?: AbortSignal, resources: OutputResources = editorOutputResources, history?: HistoryState): Promise<void> {
+  const allAssets = history ? historyAssets(history) : scene.assets
+  await assetSourcePool.withAssets(allAssets, async () => {
     const result = await resources.run(async (scope, active) => {
-      const view = sceneSourceData(scene)
-      if (view.assets.length > 500) throw new RangeError('Local recovery supports up to 500 media assets. Save Scene JSON before leaving.')
+      const view = history ? new HistorySourceView().get(scene) : sceneSourceData(scene)
+      if (allAssets.length > 500) throw new RangeError('Local recovery supports up to 500 media assets. Save Scene JSON before leaving.')
       const text = outputJson(scope, view, { maxChars: 32 * 1024 ** 2, maxBytes: 64 * 1024 ** 2 })
-      const urls = Array.from(new Set(view.assets.map(asset => asset.url).filter(url => url.startsWith('blob:'))))
+      const graph = history ? encodeHistory(history) : undefined
+      const urls = Array.from(new Set(allAssets.map(asset => asset.url).filter(url => url.startsWith('blob:'))))
       const blobs = new Map<string, Blob>(), reader = new BoundedBinaryReader({ maxBytes: 64 * 1024 ** 2, budget: scope.budget })
       let bytes = 0
       for (const url of urls) {
@@ -46,7 +52,7 @@ export async function saveSessionCheckpoint(scene: ChronoScene, metadata: Omit<S
         } finally { input.release() }
       }
       scope.check(active)
-      await store.write({ ...metadata, json: text.value, assetUrls: urls }, blobs, active)
+      await store.write({ ...metadata, ...(graph ? { version: 2, history: graph } : {}), json: text.value, assetUrls: urls }, blobs, active)
     }, { signal })
     result.release()
   })
@@ -57,13 +63,15 @@ export async function saveSessionCheckpoint(scene: ChronoScene, metadata: Omit<S
  * The caller releases creator leases after editor adoption, or on cancellation.
  * A partial/failed restore releases every newly created URL and changes no UI.
  */
-export async function restoreSessionCheckpoint(record: SessionCheckpoint, store: SessionCheckpointStore): Promise<{ scene: ChronoScene; release(): void }> {
+export async function restoreSessionCheckpoint(record: SessionCheckpoint, store: SessionCheckpointStore): Promise<{ scene: ChronoScene; history: HistoryState; warning?: string; release(): void }> {
   const scene = parseSceneJson(record.json, true), leases: { release(): void }[] = [], urls = new Map<string, string>()
+  let history = initHistory(scene), warning: string | undefined
+  if (record.history) try { history = decodeHistory(scene, record.history) } catch (error) { warning = `History could not be restored: ${(error as Error).message}` }
   let bytes = 0
   try {
-    for (const asset of scene.assets) {
+    const assets = historyAssets(history), originals = assets.map(asset => ({ asset, url: asset.url }))
+    for (const { asset, url: old } of originals) {
       if (!asset.url.startsWith('blob:')) continue
-      const old = asset.url
       if (!urls.has(old)) {
         const blob = await store.readAsset(record.id, old)
         if (!blob) throw new Error('Recovery media is missing. The saved checkpoint was kept; open your project file to recover it.')
@@ -72,6 +80,10 @@ export async function restoreSessionCheckpoint(record: SessionCheckpoint, store:
       }
       asset.url = urls.get(old)!; asset.runtime = { objectUrl: asset.url }
     }
-    return { scene, release: () => leases.forEach(lease => lease.release()) }
+    // Shared URLs may occur in distinct descriptors across Undo/Redo snapshots.
+    for (const value of [history.present, ...history.past, ...history.future]) for (const asset of value.assets) {
+      if (urls.has(asset.url)) { asset.url = urls.get(asset.url)!; asset.runtime = { objectUrl: asset.url } }
+    }
+    return { scene: history.present, history, warning, release: () => leases.forEach(lease => lease.release()) }
   } catch (error) { leases.forEach(lease => lease.release()); throw error }
 }

@@ -4,6 +4,8 @@ import type { EditorStateReturn } from './useEditorState'
 import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
 import { SceneSessionRecovery, type RecoveryStatus } from '@/lib/editor/persistence/recovery/SceneSessionRecovery'
 import { saveSessionCheckpoint } from '@/lib/editor/persistence/recovery/SessionCheckpointIO'
+import { useSessionIdentity } from '@/components/editorSession/SessionOutputContext'
+import { TAB_KEY } from '@/lib/editor/persistence/recovery/SessionCheckpoint'
 
 /** React/lifecycle adapter. Subscribes before pointer interaction, synchronously
  * journals committed edits and delegates bounded async IO. Actual unsaved large
@@ -13,16 +15,19 @@ import { saveSessionCheckpoint } from '@/lib/editor/persistence/recovery/Session
  * its coordinator. StrictMode cleanup never writes a default scene.
  */
 export function useSceneSessionRecovery(editor: EditorStateReturn, session: BrowserRecoverySession) {
+  const identity = useSessionIdentity()
   const [status, setStatus] = useState<RecoveryStatus>({ state: session.warning ? 'error' : session.restored ? 'saved' : 'idle', safeToLeave: true, error: session.warning })
   const owner = useRef<SceneSessionRecovery>()
   useLayoutEffect(() => {
     let active = true
-    const recovery = new SceneSessionRecovery({ id: session.id, sequence: session.sequence, storage: session.storage,
-      save: (scene, metadata, signal) => saveSessionCheckpoint(scene, metadata, session.store, signal),
+    const recovery = new SceneSessionRecovery({ id: session.id, slotId: session.slotId, getSessionId: identity?.getId,
+      sequence: session.sequence, storage: session.storage,
+      onCheckpoint: metadata => { try { sessionStorage.setItem(TAB_KEY, metadata.id) } catch { /* IDB/latest fallback remains. */ } },
+      save: (scene, metadata, signal, history) => saveSessionCheckpoint(scene, metadata, session.store, signal, undefined, history),
       onStatus: next => { if (active) setStatus(next) },
     })
     owner.current = recovery
-    const unsubscribe = editor.subscribeCommitted(scene => recovery.request(scene))
+    const unsubscribe = editor.subscribeHistory(history => recovery.requestHistory(history))
     session.release()
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (recovery.safeToLeave) return
@@ -35,6 +40,6 @@ export function useSceneSessionRecovery(editor: EditorStateReturn, session: Brow
     document.addEventListener('visibilitychange', hidden)
     return () => { active = false; unsubscribe(); recovery.dispose(); owner.current = undefined
       window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', hidden) }
-  }, [editor.subscribeCommitted, session])
-  return { ...status, retry: () => { owner.current?.request(editor.getCommittedScene()); owner.current?.flush() } }
+  }, [editor.subscribeHistory, session, identity?.getId])
+  return { ...status, retry: () => { owner.current?.requestHistory(editor.getCommittedHistory()); owner.current?.flush() } }
 }

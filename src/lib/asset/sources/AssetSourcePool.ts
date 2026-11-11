@@ -3,7 +3,7 @@ import type { Asset } from '../../types'
 /** Source leases protect original URL lifetime, not decoded pixel/PCM residency.
  * Release is idempotent. No DOM, source data or URL list is exposed by a lease. */
 export interface AssetSourceLease { release(): void }
-interface Source { url: string; refs: number; owned: boolean; pending: boolean; failed: boolean; creatorRelease?: () => void }
+interface Source { url: string; refs: number; owned: boolean; pending: boolean; failed: boolean; bytes?: number; creatorRelease?: () => void }
 interface AssetSet { wanted: ReadonlyMap<string, boolean>; consumers: number; lease?: AssetSourceLease }
 /** Platform operations must match native Blob URL identity/lifetime. defer must
  * enqueue a microtask-equivalent callback, never call it inline. */
@@ -39,10 +39,15 @@ export class AssetSourcePool {
     const url = this.api.create(blob)
     const lease = this.retain(new Map([[url, true]]))
     const source = this.sources.get(url)!
+    source.bytes = blob.size
     const release = () => { if (source.creatorRelease === release) source.creatorRelease = undefined; lease.release() }
     source.creatorRelease = release
     return { url, release }
   }
+
+  /** Known original encoded Blob size, never decoded pixels or driver memory.
+   * Borrowed/legacy URLs may be unknown; callers choose a conservative policy. */
+  getSourceBytes(url: string): number | undefined { return this.sources.get(url)?.bytes }
 
   /** Retain unique blob URLs in asset.url and runtime.objectUrl. The runtime
    * field explicitly denotes application-owned ephemeral storage; ordinary

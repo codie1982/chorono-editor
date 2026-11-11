@@ -1,4 +1,5 @@
 'use client'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
@@ -33,6 +34,7 @@ const SCALES = [1, 2, 3, 4] as const
  * the chosen fps and downloads them as a ZIP. Progress is shown per frame.
  */
 export default function SequenceExportDialog({ scene, assets, onClose, onExported, onError,documentSignal }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const [format, setFormat]           = useState<RasterFormat>('png')
   const [fps, setFps]                 = useState(scene.composition.frameRate || 30)
   const [scale, setScale]             = useState(1)
@@ -52,8 +54,9 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
         {signal},report,
       ),lease=>{
       const result=lease.value
-      downloadOutput(lease,value=>value.blob,result.filename)
-      onExported?.(result.filename, result.frameCount, result.warnings)
+      const filename=sessionFilename(result.filename)
+      downloadOutput(lease,value=>value.blob,filename)
+      onExported?.(filename, result.frameCount, result.warnings)
       onClose()
     },onError)
   }

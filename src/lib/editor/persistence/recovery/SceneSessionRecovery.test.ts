@@ -1,3 +1,5 @@
+import type { ChronoScene } from '../../../types'
+import type { HistoryState } from '../../history'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { emptyScene, newRectLayer } from '../../../defaults'
 import { SceneSessionRecovery, type RecoveryStatus } from './SceneSessionRecovery'
@@ -35,7 +37,7 @@ describe('local editor recovery', () => {
     expect(source.assets[0].runtime).toBeDefined()
   })
   it('refuses corrupt and future-version envelopes', () => {
-    expect(decodeCheckpoint({ ...metadata, version: 2, json: '{}', assetUrls: [] })).toBeNull()
+    expect(decodeCheckpoint({ ...metadata, version: 3, json: '{}', assetUrls: [] })).toBeNull()
     expect(decodeCheckpoint({ ...metadata, sequence: -1, json: '{}', assetUrls: [] })).toBeNull()
     expect(() => decodeCheckpoint({ ...metadata, json: '{}', assetUrls: [] })).toThrow(/scene/)
   })
@@ -81,6 +83,28 @@ describe('local editor recovery', () => {
     const owner = new SceneSessionRecovery({ id: 'tab', storage: storage(), save: async () => { throw new RangeError('IDB denied') }, onStatus: status => states.push(status) })
     owner.request(scene(8)); await vi.advanceTimersByTimeAsync(250)
     expect(owner.safeToLeave).toBe(true); expect(states.at(-1)?.state).toBe('saved'); owner.dispose()
+  })
+  it('saves changed Undo/Redo stacks even when the present source identity is unchanged', async () => {
+    vi.useFakeTimers(); const current = scene(5), target = storage(), save = vi.fn(async (_scene: ChronoScene, _metadata: unknown, _signal: AbortSignal, _history?: HistoryState) => {})
+    const owner = new SceneSessionRecovery({ id: 'project', slotId: 'slot', storage: target, save, onStatus: () => {} })
+    owner.requestHistory({ present: current, past: [], future: [] }); await vi.advanceTimersByTimeAsync(250)
+    const next = { present: current, past: [current], future: [] }
+    owner.requestHistory(next); await vi.advanceTimersByTimeAsync(250)
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(save.mock.calls.at(-1)?.[3]).toBe(next)
+    expect(JSON.parse(target.values.get('chorono.sessions.v1.project')!).checkpointKey).toBe('project__slot')
+    owner.dispose()
+  })
+  it('keeps a partial journal guarded until complete history is durable, then removes it', async () => {
+    vi.useFakeTimers(); const target = storage(), pending = gate(), current = scene(4), older = scene(1)
+    older.layers[0].name = 'x'.repeat(180000)
+    const owner = new SceneSessionRecovery({ id: 'project', slotId: 'slot', storage: { ...target, getItem: key => target.values.get(key) ?? null, removeItem: key => { target.values.delete(key) } }, save: () => pending.promise, onStatus: () => {} })
+    owner.requestHistory({ present: current, past: [older], future: [] })
+    expect(owner.safeToLeave).toBe(false)
+    expect(JSON.parse(target.values.get(JOURNAL_PREFIX + 'project__slot')!).history.past).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(250); pending.resolve(); await vi.advanceTimersByTimeAsync(0)
+    expect(owner.safeToLeave).toBe(true); expect(target.values.has(JOURNAL_PREFIX + 'project__slot')).toBe(false)
+    owner.dispose()
   })
   it('committed source subscribers are synchronous, independently releasable and cannot break editing', () => {
     const a = scene(0), b = scene(5), source = new CommittedScene(a), observer = vi.fn()

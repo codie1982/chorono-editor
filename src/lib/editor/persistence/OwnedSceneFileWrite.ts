@@ -1,5 +1,7 @@
 import type {ChronoScene} from '../../types'
 import {OutputScope,OutputResources,outputJson} from '../../export/resources'
+import type { HistoryState } from '../history'
+import { sessionProjectInScope } from '../session/SessionProjectOutput'
 
 /** Minimal native writable port. close commits; abort discards a partial write.
  * Implementations must settle actual IO, not an abort/timeout race. */
@@ -28,10 +30,11 @@ export class OwnedSceneFileWrite{
    * borrowed; caller pins its assets throughout queue/IO. signal is observed at
    * phase boundaries. Abort during a non-abortable write keeps all backing until
    * write settles, then aborts instead of committing a stale document. */
-  async write(scene:ChronoScene,open:()=>Promise<SceneWritable>,signal:AbortSignal):Promise<void>{
+  async write(scene:ChronoScene,open:()=>Promise<SceneWritable>,signal:AbortSignal,session?:{sessionId:string;history:HistoryState}):Promise<void>{
     try{
       this.text.check(signal)
-      const json=outputJson(this.text,scene,{space:2,maxChars:64*1024**2,maxBytes:64*1024**2})
+      const value=session?await sessionProjectInScope(session.history,session.sessionId,this.text,signal):scene
+      const json=outputJson(this.text,value,{space:2,maxChars:64*1024**2,maxBytes:64*1024**2})
       this.writable=await open();this.text.check(signal)
       await this.writable.write(json.value);this.text.check(signal)
       await this.writable.close();this.finish()

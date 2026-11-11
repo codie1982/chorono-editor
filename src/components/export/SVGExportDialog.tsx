@@ -1,4 +1,5 @@
 'use client'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import {downloadOutput} from '@/lib/export/resources'
@@ -22,6 +23,7 @@ interface Props {
  * composition colour or transparent (common for logos / icons).
  */
 export default function SVGExportDialog({ scene, timeMs, onClose, onExported, onError,documentSignal }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const [transparent, setTransparent] = useState(true)
   const [animated, setAnimated] = useState(false)
   const operation=useOutputOperation(documentSignal),{busy,cancelling}=operation
@@ -32,8 +34,9 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
         animated,
       }},{signal}),lease=>{
       const result=lease.value
-      downloadOutput(lease,value=>value.blob,result.filename)
-      onExported?.(result.filename, Array.from(result.warnings))
+      const filename=sessionFilename(result.filename)
+      downloadOutput(lease,value=>value.blob,filename)
+      onExported?.(filename, Array.from(result.warnings))
       onClose()
     },onError)
 
