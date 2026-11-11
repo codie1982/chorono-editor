@@ -1,8 +1,9 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 10 Kasım 2026. **Güncel ve onaylanan sıra:**
+Tarih: 4 Kasım 2026. Güncelleme: 11 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
-tamamlanan E−1.Q/E−1.1/E−1.2/E−1.3 MCP açıklığı/güvenli düzenleme/köken/ortak hiyerarşiden sonra E−1.4 Set Key/transport ve kalan
+tamamlanan E−1.Q/E−1.1/E−1.2/E−1.3 MCP açıklığı/güvenli düzenleme/köken/ortak hiyerarşi, E−1.4 Set Key/transport ve
+E−1.5 prosedürel eğri/bake sonrasında E−1.5A input expression ve kalan
 viewport/ortak araç kabulü → dar entegrasyon sözleşmeleri →
 kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
@@ -10,6 +11,11 @@ kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon �
 [Ayrıntılı sıra ve bağımlılık sınırları](plans/geometry-material-boxed3d-sequence.md)
 bu sıranın uygulama rehberidir. Önceki sıra kayıtları §12'de tarihsel kanıttır;
 güncel iş kuyruğu bu bölüm ve bağlantılı sıra belgesidir.
+
+**11 Kasım sonraki faz kaydı:** [CFX — ileri katman/kompozisyon/efekt, video
+kurgu, yerel tracking ve 3D compositing](plans/advanced-compositing-tracking-plan.md)
+mevcut serinin son optimizasyon ve birleşik kabulünden **sonraki ayrı faza**
+eklenmiştir. Mevcut sıra ve sıradaki E−1.5A değişmez; CFX yeni bir ara iş değildir.
 
 Genel optimizasyonun ilk kabulü §12.37'de, viewport V1/V2 §12.40'ta ve V3
 position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
@@ -36,7 +42,7 @@ D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, ger�
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
 hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
-E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); sırada E−1.4 Set Key/transport ve kalan ortak araç kabulü var.**
+E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake (§12.58) tamamlandı. Sırada E−1.5A input expression (§12.59), ardından kalan ortak araç kabulü var.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -55,7 +61,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
 | Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline tek source tree, Find, subtree flags/undo, çoklu dal filtreleri ve güvenli UI reparent. |
-| Sıradaki | E−1.4, ardından kalan E−1 ve araç kabulü | Set Key/toplu key/transport, prosedürel eğri; V6/E−1.7 etkileşim doğrulaması. |
+| Sıradaki | E−1.5A, ardından kalan E−1 ve araç kabulü | Kalıcı input expression; ardından V6/E−1.7 etkileşim doğrulaması. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -69,6 +75,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Sona taşındı 1 | Export tutarlılığı ve yüksek kaliteli final render | Yeni türlerin parity/capability'si; hedef çözünürlükte redraw, sampling/preview; ardından ileri renk/backend/FP16. |
 | Sona taşındı 2 | Çoklu format ve üretim otomasyonu | Ekran oranları/codec desteği, queue, data-driven üretim, audio-driven hareket ve kelime zamanlı altyazı. |
 | En son | İkinci genel optimizasyon, ileri profiler ve birleşik kabul | Four Seasons + yeni Poly/3D/rig/cloth/Blob/fluid/export alanlarında CPU/bellek/GPU/job ve görüntü eşliği. |
+| Mevcut seriden sonraki ayrı faz — CFX | İleri katman/kompozisyon/efekt, maske, video kurgu, yerel tracking ve 3D compositing | [CFX1–CFX11](plans/advanced-compositing-tracking-plan.md); mevcut kapıları veya sıradaki işi bloke etmez, kendi regresyon/çıktı kabulü gerekir. |
 
 Tam export/refactor ve kapsamlı son optimizasyon ertelenir; her yeni feature'ın
 kaynak bütçesi, acquire/release/dispose, cache invalidation, kaydet/aç/undo/clone,
@@ -104,6 +111,7 @@ flowchart TD
     T --> E[Export parity ve final kalite]
     E --> M[Çoklu format / otomasyon]
     M --> O[Bütün alanlarda ikinci optimizasyon / birleşik kabul]
+    O -. Mevcut seri kabulünden sonraki ayrı faz .-> F[CFX: katman / maske / efekt / tracking / compositing]
 ```
 
 Bu diyagram teslim sırasını ve önemli geometri bağımlılıklarını gösterir;
@@ -2272,3 +2280,30 @@ fixture'ı ve açık editör dahil dokuz menü/çizim kabulü geçti. Mevcut bui
 `artifacts/validation/toolbar-spline-20261111/` altında; port 2000 editörü yeni
 build ile yeniden başlatılır. Test çizimleri kullanıcının projesine eklenmez.
 E−1.5A ve onaylı ana geliştirme sırası değişmez.
+
+
+### 12.61. Sonraki faz: katman araçları, efekt, tracking ve compositing — 11 Kasım 2026
+
+Kullanıcı, AE benzeri katman sütunları, ayrıntılı kompozisyon penceresi, efekt
+blokları/Adjustment Layer, gelişmiş maskeleme, temel video kurgu, CPU'da yerel
+motion tracking ve 2D içindeki katmanlı 3D compositing konularını ana plana
+**ileriki faz olarak** eklemeyi onayladı. [CFX ayrıntılı planı](plans/advanced-compositing-tracking-plan.md)
+mevcut serinin ikinci optimizasyon/birleşik kabulünden sonra konumlanır.
+E−1.5A ve onaylı kutulu 3D/Poly/üretim sırası değişmez.
+
+İleri fazın kendi sırası: maske doğruluğu → ortak katman sütunları → kompozisyon
+ayarları → efekt katalog/blok → gelişmiş maske authoring → Adjustment Layer →
+temel video kurgu → yerel tek/çift nokta takibi ve stabilizasyon → planar
+tracking/Corner Pin → ortak kameralı 3D compositing → araştırma kapılı 3D kamera
+çözümü. Mevcut efekt/medya/3D, job/resource ve bake sözleşmeleri paylaşılır.
+
+Elle düzeltme/sabit kare, güvenilirlik ve takip kaybı, kaynak PTS/trim/koordinat
+dönüşümü, bounded CPU worker/cache, stale/cancel, sessionId/Undo/Redo, portable
+kayıt ve açık export fallback her ilgili teslimin kabulündedir. Kamera takibi
+nesne pose takibi veya tam ortam mesh'i sayılmaz; bağımsız 3D kutular arasında
+ortak depth varsayılmaz. Tam 3D Modeling/Game Engine veya ayrı Video Editor
+modu açılmaz; native AE/FxFactory eklenti uyumluluğu vaat edilmez.
+
+Bu değişiklik yalnız plan kaydıdır; özellik uygulanmadı, canlı editör/sahne
+değiştirilmedi. Bağlantılar ve sıra tutarlılığı denetlendi; uygulama testleri
+bu dokümantasyon değişikliği için yeniden çalıştırılmadı.

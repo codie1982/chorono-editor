@@ -64,11 +64,27 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | 11 | Export tutarlılığı ve final kalite | Yeni türler dahil canonical değerlendirme/parity, hedef çözünürlük, efekt/maskeler, renk/örnekleme; desteklenmeyen vektör/runtime hedeflerde açık bake/fallback. |
 | 12 | Çoklu format ve üretim otomasyonu | Gerçek destek/capability üzerinden çıktı profilleri ve işler. |
 | 13 | Bütün ürün için ikinci optimizasyon ve birleşik kabul | Four Seasons + dokulu Poly + 3D/rig + cloth/Blob/fluid + export fixture'ları; CPU/heap/RSS/GPU/asset/job plateau, görüntü eşliği ve sınır bütçeleri. |
+| Mevcut 1–13 serisi kabulünden sonra — ileri faz CFX | Katman kontrolleri, kompozisyon/efekt/maske, video kurgu, yerel tracking ve katmanlı 3D compositing | [CFX1–CFX11](advanced-compositing-tracking-plan.md); ayrı sonraki ürün fazı, mevcut serinin yeni önkoşulu değildir. |
 
 V3 viewport position key authoring, V4 native clone ve V5 forest Array tamamlandı.
 Komşu mesafesi/ruler-guide araçları ve D0–D2 ara işi de tamamlandı. Yeni
 3D/Poly bloğundan önce kalan E−1 ortak düzenleme/araç kabulü tamamlanır. Soft selection/connected-loop konuşması
 kullanıcının önceki isteğine göre en son tartışılacak ayrı başlıktır.
+
+## Sonraki faz kaydı — 11 Kasım 2026
+
+Kullanıcının mevcut iş akışını koruma kararıyla [CFX planı](advanced-compositing-tracking-plan.md)
+mevcut serinin 13. adımı tamamlandıktan sonraya eklendi. E−1.5A sıradaki iş
+olarak kalır. CFX; maske doğruluğu → katman sütunları → kompozisyon ayarları →
+efekt blokları → gelişmiş maske → Adjustment Layer → video clip akışı →
+yerel tek/çift nokta ve stabilizasyon → planar/Corner Pin → ortak kameralı
+3D compositing → 3D kamera çözümü sırasını izler.
+
+CFX10, bu belgede planlanan kutulu 3D çekirdeğini yeniden kullanır; ilk kutulu
+3D teslimine tracking/kamera çözümü önkoşulu eklemez. Yeni özellikler kendi
+bounded kaynak, görüntü, portable/undo ve çıktı kabulünden geçer. Tam bağımsız
+3D çalışma alanı açılmaz. Mevcut serinin son optimizasyonu CFX'in otomatik
+kabulü sayılmaz.
 
 ## Poly, UV ve basit materyal
 
