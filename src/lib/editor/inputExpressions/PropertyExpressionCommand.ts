@@ -3,19 +3,21 @@ import type { EditorCommand } from '../commands-keyframe'
 import type { PropertyExpression } from '../../expression/properties/PropertyExpression'
 import { assertScenePropertyExpressions } from '../../expression/properties/PropertyExpression'
 import { evaluateSceneFrame, type SceneFrameOptions } from '../../runtime/evaluateSceneFrame'
-import { makeNumericExpressionCommand, numericExpressionBlock, numericExpressionConstraints } from './NumericExpressionCommand'
+import { makeNumericExpressionCommand, numericExpressionBlock } from './NumericExpressionCommand'
 import { writePropertyPath } from '../../scene/properties/writePropertyPath'
 import { syncTextLayerSize } from '../../text/measureText'
+import { propertyExpressionConstraints, type ScalarExpressionType } from '../../expression/properties/PropertyExpressionCapability'
 
 export interface ExpressionReviewFrame { timeMs: number; options?: SceneFrameOptions }
 
 /** Exact immutable source CAS and editor ownership guard, shared by Set,
  * Remove/Convert and bake. No command replays an old field over a changed scene. */
-export function propertyExpressionTarget(scene: ChronoScene, expected: ChronoScene, layerId: string, path: string): Layer {
+export function propertyExpressionTarget(scene: ChronoScene, expected: ChronoScene, layerId: string, path: string, kind?: ScalarExpressionType): Layer {
   if (scene !== expected) throw new Error('Source changed. Review the current source before applying this expression draft.')
   const layer = scene.layers.find(item => item.id === layerId)
   if (!layer) throw new Error('The target layer no longer exists.')
-  numericExpressionConstraints(layer, path)
+  if (layer.locked || layer.frozen || layer.instanceOf) throw new Error('Unlock this layer; edit live instances at their source or detach first.')
+  propertyExpressionConstraints(layer, path, kind ?? layer.propertyExpressions?.fields[path]?.resultType ?? 'number')
   return layer
 }
 
@@ -28,8 +30,8 @@ export function makeSetPropertyExpressionCmd(expected: ChronoScene, layerId: str
   review: ExpressionReviewFrame = { timeMs: 0 }, replaceConstant = false): EditorCommand {
   const source = structuredClone(definition)
   return { label: 'Set live property expression', execute(scene) {
-    const layer = propertyExpressionTarget(scene, expected, layerId, path)
-    const blocked = numericExpressionBlock(scene, layer, path, true)
+    const layer = propertyExpressionTarget(scene, expected, layerId, path, source.resultType)
+    const blocked = numericExpressionBlock(scene, layer, path, true, source.resultType)
     if (blocked) throw new Error(blocked)
     if (layer.inputExpressions?.fields[path] && !replaceConstant) throw new Error('Explicitly replace the saved constant formula before adding a live driver.')
     const staticFields = { ...layer.inputExpressions?.fields }; delete staticFields[path]
@@ -54,7 +56,7 @@ export function makeRemovePropertyExpressionCmd(expected: ChronoScene, layerId: 
     if (review) {
       const key = 'layers.' + layerId + '.' + path, frame = evaluateSceneFrame(scene, review.timeMs, review.options)
       const error = frame.expressionErrors.get(key) ?? frame.expressionErrors.get('scene'), value = frame.overrides.get(key)
-      if (error || typeof value !== 'number' || !Number.isFinite(value)) throw new Error(error ?? 'Expression has no valid value to convert.')
+      if (error || typeof value !== layer.propertyExpressions!.fields[path].resultType || typeof value === 'number' && !Number.isFinite(value)) throw new Error(error ?? 'Expression has no valid value to convert.')
       layer = writePropertyPath(layer, path, value, true)
     }
     const fields = { ...layer.propertyExpressions!.fields }; delete fields[path]

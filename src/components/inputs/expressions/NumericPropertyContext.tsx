@@ -12,7 +12,9 @@ export interface NumericPropertyInput extends Host { path: string; label: string
 const HostContext = createContext<Host | null>(null)
 const FieldContext = createContext<{ path: string; label: string } | null>(null)
 
-/** Inspector composition boundary. Source getter is synchronous, independent of
+/** Shared numeric/boolean inspector composition boundary. Historical Numeric
+ * export names remain compatible while boolean adapters borrow the same host.
+ * Source getter is synchronous, independent of
  * React renders; private fixture hosts may fall back to their latest source ref.
  * One selected-layer lookup is shared by all fields. No global state,
  * subscriptions, polling or per-input evaluation loops. */
@@ -32,7 +34,7 @@ export function NumericPropertyProvider({ scene, layerId, dispatch, getScene, is
 export function NumericPropertyScope({ path, label, children }: { path: string; label: string; children: ReactNode }) {
   return <FieldContext.Provider value={{ path, label }}>{children}</FieldContext.Provider>
 }
-/** Resolve an explicitly registered field; unscoped legacy numeric inputs keep
+/** Resolve an explicitly registered scalar field; unscoped legacy inputs keep
  * their original value-only API until their owning A4 adapter is migrated. */
 export function useNumericPropertyInput(path?: string, label?: string): NumericPropertyInput | null {
   const host = useContext(HostContext), field = useContext(FieldContext), target = path ?? field?.path

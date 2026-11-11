@@ -32,12 +32,14 @@ interface Props {
   /** Items not type-compatible with `expectedType` are greyed-out but still
    *  visible (helps users learn what's available). When omitted, no greying. */
   expectedType?: ParameterValueType
+  /** Exact types for strict expression inputs, without legacy Wire coercion. */
+  acceptedValueTypes?: readonly ParameterValueType[]
   /** Accent color (matches Source vs. Target column tinting in the modal). */
   accentClass?: string
 }
 
 export default function SourceParameterPicker({
-  scene, value, onChange, excludeRef, expectedType,
+  scene, value, onChange, excludeRef, expectedType, acceptedValueTypes,
   accentClass = 'text-sky-300',
 }: Props) {
   const [search, setSearch] = useState('')
@@ -120,7 +122,7 @@ export default function SourceParameterPicker({
                   hint={`(${ref.valueType})`}
                   isSelected={value && paramRefKey(value) === paramRefKey(ref)}
                   isExcluded={excludeKey != null && excludeKey === paramRefKey(ref)}
-                  isCompatible={!expectedType || areTypesCompatible(ref.valueType, expectedType)}
+                  isCompatible={acceptedValueTypes ? acceptedValueTypes.includes(ref.valueType) : !expectedType || areTypesCompatible(ref.valueType, expectedType)}
                   onPick={onChange}
                   accentClass={accentClass}
                 />
@@ -156,7 +158,7 @@ export default function SourceParameterPicker({
                       hint={`(${ref.valueType})`}
                       isSelected={value && paramRefKey(value) === paramRefKey(ref)}
                       isExcluded={excludeKey != null && excludeKey === paramRefKey(ref)}
-                      isCompatible={!expectedType || areTypesCompatible(ref.valueType, expectedType)}
+                      isCompatible={acceptedValueTypes ? acceptedValueTypes.includes(ref.valueType) : !expectedType || areTypesCompatible(ref.valueType, expectedType)}
                       onPick={onChange}
                       indent
                       accentClass={accentClass}

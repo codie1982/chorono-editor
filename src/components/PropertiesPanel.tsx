@@ -13,6 +13,7 @@ import {
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
+import { BooleanInput } from '@/components/inputs/BooleanInput'
 import { NumericPropertyProvider, NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
 import type { NumericPropertyFrame } from '@/components/inputs/expressions/NumericPropertyContext'
 import type { ExternalTimelineTime } from '@/lib/evaluator'
@@ -1301,18 +1302,8 @@ export default function PropertiesPanel({
                 </Field>
 
                 <Row2>
-                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                    <input type="checkbox" checked={!!layer.text.uppercase}
-                      onChange={(e) => updateText({ uppercase: e.target.checked })}
-                      className="accent-blue-500" />
-                    Uppercase
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                    <input type="checkbox" checked={!!layer.text.underline}
-                      onChange={(e) => updateText({ underline: e.target.checked })}
-                      className="accent-blue-500" />
-                    Underline
-                  </label>
+                  <BooleanInput propertyPath="text.uppercase" label="Uppercase" value={!!layer.text.uppercase} onChange={value => updateText({ uppercase: value })} />
+                  <BooleanInput propertyPath="text.underline" label="Underline" value={!!layer.text.underline} onChange={value => updateText({ underline: value })} />
                 </Row2>
               </Section>
             )}

@@ -1,6 +1,7 @@
 import type { ChronoScene, Layer } from '../../types'
 import type { EditorCommand } from '../commands-keyframe'
 import { numericPropertyConstraints } from '../../expression/properties/NumericPropertyCapability'
+import { propertyExpressionConstraints, type ScalarExpressionType } from '../../expression/properties/PropertyExpressionCapability'
 import { readPropertyPath } from '../../scene/properties/readPropertyPath'
 import { writePropertyPath } from '../../scene/properties/writePropertyPath'
 import { drivenChannelReason } from '../../timeline/authoring/keyableChannels'
@@ -18,8 +19,11 @@ export function numericExpressionConstraints(layer: Layer, path: string): Numeri
 /** Report existing animation/binding/path ownership instead of silently replacing
  * it with a constant expression. All timelines are considered, including muted
  * or currently inactive ones. A1 does not remove or bake existing drivers. */
-export function numericExpressionBlock(scene: ChronoScene, layer: Layer, path: string, ignorePropertyExpression = false): string | null {
-  try { numericExpressionConstraints(layer, path) } catch (error) { return (error as Error).message }
+export function numericExpressionBlock(scene: ChronoScene, layer: Layer, path: string, ignorePropertyExpression = false, resultType: ScalarExpressionType = 'number'): string | null {
+  try {
+    if (layer.locked || layer.frozen || layer.instanceOf) throw new Error('Unlock this layer; edit live instances at their source or detach first.')
+    propertyExpressionConstraints(layer, path, resultType)
+  } catch (error) { return (error as Error).message }
   const target = `layers.${layer.id}.${path}`
   if (scene.timelines.some(timeline => timeline.tracks.some(track => track.target === target && (track.keyframes.length || track.controller)))) return 'This channel is animated. Keep its keys; use a different field or an explicit bake workflow.'
   return drivenChannelReason(scene, layer, path, undefined, { ignorePropertyExpression })

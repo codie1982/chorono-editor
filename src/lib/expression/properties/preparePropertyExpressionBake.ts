@@ -30,6 +30,7 @@ export function preparePropertyExpressionBake(scene: ChronoScene, layerId: strin
   options: BakeOptions, parameterValues?: ParamValueMap): PreparedPropertyExpressionBake {
   const count = validateBakeOptions(options), layer = scene.layers.find(item => item.id === layerId)
   if (!layer?.propertyExpressions?.fields[path]) throw new Error('The target has no live expression to bake.')
+  if (layer.propertyExpressions.fields[path].resultType !== 'number') throw new Error('This bake adapter supports numeric results only; convert the boolean to a value or use typed discrete keys.')
   if (options.endMs > scene.composition.durationMs) throw new Error('Bake range must be inside the composition.')
   const sampling = propertyExpressionScope(scene, { layerId, propertyPath: path, valueType: 'number' })
   const definitions = sampling.layers.flatMap(item => Object.values(item.propertyExpressions?.fields ?? {}))

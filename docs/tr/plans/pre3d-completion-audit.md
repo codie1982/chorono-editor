@@ -8,8 +8,8 @@ kapsamı veya teslim koşullarını azaltmaz. 3D öncesi kapılar aşağıda ayr
 | Kapı | Gerekli kanıt | Durum |
 | --- | --- | --- |
 | A1 | Formül/değer, fx, undo/portable, gerçek input kabulü | `b223981`; uygulandı |
-| A2 | Named stable refs, local clock, cycle/fallback, ortak frame, clone/remap, runtime/bake, UI ve kaynak bütçesi | Uygulandı; kabul kaydı aşağıda |
-| A3 | Gerçek boolean, karşılaştırma/mantık/koşul ve kısa devre; eski Wire preset uyumu | Bekliyor |
+| A2 | Named stable refs, local clock, cycle/fallback, ortak frame, clone/remap, runtime/bake, UI ve kaynak bütçesi | `e5551a6`; uygulandı |
+| A3 | Gerçek boolean, karşılaştırma/mantık/koşul ve kısa devre; eski Wire preset uyumu | Uygulandı; kabul kaydı aşağıda |
 | A4 | Sayı/açı/yüzde, renk/vektör/metin/select; Array/audio/spline/key/guide/parametre/efekt/config input kapsam matrisi ve adapter testleri | Bekliyor |
 | A5 | Pointer/klavye, eski veri, driver/Undo/portable/player/raster ve Four Seasons 512 MiB kabulü | Bekliyor |
 | V6 / E−1.7 | Native viewport birleşik akışı, 09:05 elle düzenleme → ajan devamı, büyük sahne/regresyon | Bekliyor |
@@ -39,3 +39,21 @@ kontrol edildi. Bake 73 sample → 18 key; tek Undo canlı tarifi geri getirir.
 Canlı width değişiminde çizim, picking ve seçim çerçevesinin aynı 100 px sınırı
 kullandığı doğrulandı. UI kanıtı: `artifacts/validation/property-expression-a2-20261111/`.
 Bu sayılar A3–A5 veya Four Seasons kabulünü kapsamaz.
+
+## A3 uygulama ve kabul
+
+Tek bounded parser/interpreter number/boolean dilini paylaşır. Eski numeric
+API number sözleşmesini tutar; koşul/mantık short-circuit ve actual boolean
+kullanır. Wire preset ve kaydedilmiş numeric ternary uyumluluğu adapter'dadır.
+Properties/Schema checkbox fx, typed refs/defaults, Convert, session/Undo,
+SDK/raster/static SVG ve text selection geometry doğrulandı.
+[Gerçek alanlar, yaşam döngüsü ve sınırlar](../boolean-expressions.md).
+
+Çalışma alanı: 364 dosyada 2.937 test; MCP ve production build geçti. Canonical
+skill/şema örnekleri gerçek QuickJS'de ayrıca sınandı. UI'da 0/500 ms case
+değişimi, boolean source, invalid number reddi, reload/history ve tek Undo
+görüldü. Kullanıcının test sekmesindeki sonraki elle düzenlemeleri korunarak
+son kanıt ayrı origin'de alındı: `artifacts/validation/property-expression-a3-20261111/`.
+A4 lifecycle/input matrisi, typed discrete bake ve A5/V6 kabulü hâlâ bekler.
+Diğer çalışma değişikliklerinden ayrılmış temiz commit snapshot'ında 364 dosya,
+2.936 test ve TypeScript geçti. CLI build ile 16 CLI testi de geçti.

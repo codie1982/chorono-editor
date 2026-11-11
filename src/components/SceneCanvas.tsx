@@ -8,7 +8,7 @@ import { projectFrameFonts, projectFrameFontOverrides } from '@/lib/render/media
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
-import { materializeLayerOverrides } from '@/lib/render/materializeOverrides'
+import { selectionGeometry } from './canvas/overlays/selectionGeometry'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import { drivenChannelReason } from '@/lib/timeline/authoring/keyableChannels'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
@@ -990,8 +990,12 @@ export default function SceneCanvas({
   }, [overrides, scene, timeMs, dragOverrides])
   // Only visual geometry is projected. Gesture commands continue to borrow the
   // authored layer, so drawing a live size never stamps that size into source.
-  const selectedFrameLayer = useMemo(() => selectedLayer
-    ? materializeLayerOverrides(selectedLayer, displayOverrides) : null, [selectedLayer, displayOverrides])
+  const frameGeometryOverrides = useMemo(() => projectFrameFontOverrides(scene, displayOverrides, assets.fonts), [scene, displayOverrides, assets])
+  const selectedFrameLayer = useMemo(() => {
+    const source = geometryScene.layers.find(layer => layer.id === selectedLayerId)
+    const visual = source?.instanceOf ? resolveInstanceLayer(source, geometryScene.layers) : source
+    return visual ? selectionGeometry(visual, frameGeometryOverrides, scene.assets) : null
+  }, [geometryScene, selectedLayerId, frameGeometryOverrides, scene.assets])
   // Selection frame anchor: prefer live display transform but keep the
   // static fallback so empty paths / unconfigured followPath layers still
   // get a sensible gizmo origin.
@@ -1003,7 +1007,7 @@ export default function SceneCanvas({
   // scope lazy instead of materializing/indexing every layer just to discard
   // the resolver. Visible rulers still need their selected extents in playback.
   const boundsForFrame = useMemo(() => createLayerWorldBoundsResolver(geometryScene, timeMs,
-    projectFrameFontOverrides(scene, displayOverrides, assets.fonts), { deferPreparation: true }), [scene, geometryScene, timeMs, displayOverrides, assets])
+    frameGeometryOverrides, { deferPreparation: true }), [geometryScene, timeMs, frameGeometryOverrides])
   const selectedWorldBounds = useMemo(() => rawSelectedLayer && (!hideEditorUI || showRulers)
     ? boundsForFrame(rawSelectedLayer)
     : null, [rawSelectedLayer, boundsForFrame, hideEditorUI, showRulers])

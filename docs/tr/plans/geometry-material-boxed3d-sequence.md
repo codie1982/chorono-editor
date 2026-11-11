@@ -5,8 +5,8 @@
 E−1.Q [MCP araç kalitesi ve uyumlu sadeleştirme](mcp-tool-quality-plan.md) de
 tamamlandı. E−1.1 zorunlu okuma/revision ve E−1.2 kaynak kökeni de tamamlandı; E−1.3 ortak hiyerarşi de tamamlandı; E−1.4 Set Key/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı; sırada [E−1.5A input expression](input-expression-plan.md), ardından kalan viewport/ortak araç kabulü,
 ardından yeni özellik sırası var.
-11 Kasım ilerleme: input expression A1 ve A2 tamamlandı; sırada A3 boolean/koşul,
-A4 field adapter'ları, A5 ve ortak araç kabulü var. [Kapı/kabul kaydı](pre3d-completion-audit.md).
+11 Kasım ilerleme: input expression A1–A3 tamamlandı; sırada A4 field
+adapter'ları, A5 ve ortak araç kabulü var. [Kapı/kabul kaydı](pre3d-completion-audit.md).
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
 

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useNumericPropertyInput } from './expressions/NumericPropertyContext'
-import { NumericFormulaEditor } from './expressions/NumericFormulaEditor'
+import { PropertyFormulaEditor } from './expressions/PropertyFormulaEditor'
 import { inspectNumericLiteral, numericInputExpression } from '@/lib/editor/inputExpressions/NumericInputExpression'
 
 interface Props {
@@ -219,7 +219,7 @@ export default function ScrubInput({
       {!live && saved && saved.value !== value && <p className="mt-1 text-[11px] text-amber-300">Source changed; formula was not reapplied.</p>}
       {liveError && <p role="alert" className="mt-1 text-[11px] text-amber-300">{liveError}</p>}
       {error && <p role="alert" className="mt-1 text-[11px] text-amber-300">{error}</p>}
-      {formulaEditor && formulaEditor.target === propertyKey && property && <NumericFormulaEditor key={propertyKey} input={property} limits={{ min, max }} initialFormula={formulaEditor.formula} onClose={() => setFormulaEditor(null)} />}
+      {formulaEditor && formulaEditor.target === propertyKey && property && <PropertyFormulaEditor key={propertyKey} input={property} limits={{ min, max }} initialFormula={formulaEditor.formula} onClose={() => setFormulaEditor(null)} />}
       {/* Progress bar overlay — z-0 so it sits BEHIND the text */}
       {barVisible && (
         <div

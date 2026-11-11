@@ -222,6 +222,8 @@ function buildPath(layer: Layer, ctx: BuildCtx, xform: string, opacity: string):
   return `<path d="${d}"${style}${xform}${opacity}/>`
 }
 
+/** Emit the materialized frame's text case/decoration and numeric style using
+ * escaped SVG attributes/content. Local coordinates and font size are in px. */
 function buildText(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
   const t = layer.text
   if (!t) return ''
@@ -236,6 +238,7 @@ function buildText(layer: Layer, ctx: BuildCtx, xform: string, opacity: string):
   if (t.fontFamily)              attrs.push(`font-family="${escapeXml(t.fontFamily)}"`)
   if (t.fontWeight)              attrs.push(`font-weight="${t.fontWeight}"`)
   if (t.fontStyle)              attrs.push(`font-style="${t.fontStyle}"`)
+  if (t.underline)              attrs.push('text-decoration="underline"')
   if (anchor !== 'start')        attrs.push(`text-anchor="${anchor}"`)
   if (t.letterSpacing)           attrs.push(`letter-spacing="${num(t.letterSpacing, ctx.precision)}"`)
   if (t.stroke && t.stroke.width > 0) {

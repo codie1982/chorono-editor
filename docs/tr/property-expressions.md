@@ -2,7 +2,8 @@
 
 11 Kasım 2026. A2; source'ta saklanan, açık timeline saatinde hesaplanan
 sayısal özellik driver'ıdır. A1 sabit formülleri ve eski dosyalar korunur.
-A3 boolean/koşul, A4 diğer türler/adapter'lar ve A5 birleşik kabul ayrıca kalır.
+[A3 boolean/koşul eklendi](boolean-expressions.md); A4 diğer türler/adapter'lar
+ve A5 birleşik kabul ayrıca kalır. Bu belge A2 numeric sözleşmesini açıklar.
 Bu teslim 3D geliştirmesini başlatmaz.
 
 ## Kullanım

@@ -3,9 +3,7 @@
 // a whitelist-safe expression like "map(source, 0, 1, 0, 360)", writes the
 // computed value to the override map.
 //
-// Parsing is cached per (wireId, expression) — the AST is reused while the
-// expression text stays the same. Re-parsing happens automatically when a
-// user edits the expression because the cache key includes the expression.
+// Parsing uses the shared bounded formula-text cache; no wire/scene is retained.
 //
 // One immutable pre-wire input frame; no iterative feedback. Cyclic/dependent
 // wires retain their input value with a diagnostic instead of arbitrary feedback.
@@ -90,7 +88,7 @@ export function evaluateParameterWiresVerbose(
       continue
     }
 
-    let result: number
+    let result: number | boolean
     try {
       result = evaluateWireExpression(wire, sourceVal)
     } catch (error) {
@@ -99,7 +97,7 @@ export function evaluateParameterWiresVerbose(
       continue
     }
 
-    if (!Number.isFinite(result)) {
+    if (typeof result !== 'boolean' && !Number.isFinite(result)) {
       runtimeErrorIds.add(wire.id)
       continue
     }

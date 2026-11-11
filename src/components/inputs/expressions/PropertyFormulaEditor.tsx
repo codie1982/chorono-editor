@@ -10,37 +10,37 @@ import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import { ExpressionSourcesEditor } from './ExpressionSourcesEditor'
 import { PropertyExpressionBakePanel } from './PropertyExpressionBakePanel'
 
-/** Source-bound constant/live numeric draft editor. Apply/Convert alone commit;
+/** Source-bound scalar draft editor sharing numeric and boolean modal behavior. Apply/Convert alone commit;
  * preview uses the production driver graph with a captured explicit playhead.
  * Stale source retains text but requires review; target replacement unmounts the
  * draft. Native modal owns focus and restores it without committing blur text. */
-export function NumericFormulaEditor({ input, limits, initialFormula, onClose }: { initialFormula?: string; input: NumericPropertyInput; limits: NumericConstraints; onClose(): void }) {
+export function PropertyFormulaEditor({ input, limits, initialFormula, kind = 'number', onClose }: { kind?: 'number' | 'boolean'; initialFormula?: string; input: NumericPropertyInput; limits: NumericConstraints; onClose(): void }) {
   const initial = useRef(input.getScene()), [expected, setExpected] = useState(initial.current)
   const layer = expected.layers.find(item => item.id === input.layerId)
   const saved = layer && numericInputExpression(layer, input.path), live = layer?.propertyExpressions?.fields[input.path]
-  const [mode, setMode] = useState<'constant' | 'live'>(live ? 'live' : 'constant')
-  const [formula, setFormula] = useState(initialFormula ?? live?.formula ?? saved?.formula ?? String((layer && readPropertyPath(layer, input.path)) ?? 0))
+  const [mode, setMode] = useState<'constant' | 'live'>(live || kind === 'boolean' ? 'live' : 'constant')
+  const [formula, setFormula] = useState(initialFormula ?? live?.formula ?? saved?.formula ?? String((layer && readPropertyPath(layer, input.path)) ?? (kind === 'boolean' ? false : 0)))
   const [timelineId, setTimelineId] = useState(live?.timelineId ?? input.timelineId ?? expected.timelines[0]?.id ?? '')
   const [sources, setSources] = useState(live?.sources ?? {})
   const [baking, setBaking] = useState(false)
   const reviewClock = useRef({ timeMs: input.timeMs, externalTime: input.externalTime })
   const [error, setError] = useState(''), dialog = useRef<HTMLDialogElement>(null), heading = useId()
   let constraints = limits
-  try { if (layer) { const rule = numericExpressionConstraints(layer, input.path); constraints = { min: Math.max(rule.min ?? -Infinity, limits.min ?? -Infinity), max: Math.min(rule.max ?? Infinity, limits.max ?? Infinity) } } } catch { /* Capability reason is shown below. */ }
+  try { if (layer && kind === 'number') { const rule = numericExpressionConstraints(layer, input.path); constraints = { min: Math.max(rule.min ?? -Infinity, limits.min ?? -Infinity), max: Math.min(rule.max ?? Infinity, limits.max ?? Infinity) } } } catch { /* Capability reason is shown below. */ }
   const review = { timeMs: reviewClock.current.timeMs, options: { externalTime: reviewClock.current.externalTime, paramValues: input.frame?.paramValues } }
-  const definition = { resultType: 'number' as const, formula, timelineId, sources,
+  const definition = { resultType: kind, formula, timelineId, sources,
     ...(Number.isFinite(constraints.min) ? { min: constraints.min } : {}), ...(Number.isFinite(constraints.max) ? { max: constraints.max } : {}),
     ...(live?.timeOffsetMs === undefined ? {} : { timeOffsetMs: live.timeOffsetMs }) }
-  let result = inspectNumericFormula(formula, constraints)
+  let result: { value: number | boolean | null; error: string | null } = inspectNumericFormula(formula, constraints)
   if (mode === 'live') {
     try {
       const candidate = makeSetPropertyExpressionCmd(expected, input.layerId, input.path, definition, review, true).execute(expected)
       const frame = evaluateSceneFrame(candidate, review.timeMs, review.options), value = frame.overrides.get('layers.' + input.layerId + '.' + input.path)
-      result = typeof value === 'number' ? { value, error: null } : { value: null, error: 'No numeric preview value.' }
+      result = typeof value === 'number' || typeof value === 'boolean' ? { value, error: null } : { value: null, error: 'No scalar preview value.' }
     } catch (failure) { result = { value: null, error: (failure as Error).message } }
   }
   const stale = input.getScene() !== expected
-  const blocked = !layer ? 'The target layer no longer exists.' : numericExpressionBlock(expected, layer, input.path, !!live)
+  const blocked = !layer ? 'The target layer no longer exists.' : numericExpressionBlock(expected, layer, input.path, !!live, kind)
   const activeGesture = input.isTransactionActive?.() ?? false
   const savedDraft = live && mode === 'live' && formula === live.formula && timelineId === live.timelineId && JSON.stringify(sources) === JSON.stringify(live.sources)
   useEffect(() => {
@@ -64,7 +64,7 @@ export function NumericFormulaEditor({ input, limits, initialFormula, onClose }:
     <h2 id={heading} className="text-sm font-semibold">Expression · {input.label}</h2>
     <label className="my-3 flex items-center justify-between gap-2 text-xs">Evaluation
       <select aria-label="Expression evaluation mode" value={mode} onChange={event => setMode(event.target.value as 'constant' | 'live')} className="rounded border border-gray-600 bg-gray-950 p-1">
-        <option value="constant">When applied</option><option value="live">Live on timeline</option>
+        {kind === 'number' && <option value="constant">When applied</option>}<option value="live">Live on timeline</option>
       </select>
     </label>
     <p className="my-2 text-xs text-gray-400">{mode === 'live' ? 'timeMs / timeSec / timeNormalized use the chosen timeline clock.' : 'Evaluated when applied.'} pi/e available · trig uses radians.</p>
@@ -81,8 +81,9 @@ export function NumericFormulaEditor({ input, limits, initialFormula, onClose }:
     </label>
     <output className="block text-sm" aria-live="polite">{result.error ?? `Result: ${result.value}`}</output>
     {mode === 'live' && <><p className="mt-1 text-xs text-gray-400">Preview at {review.timeMs} ms · authored value stays as fallback.</p><ExpressionSourcesEditor scene={expected} sources={sources} onChange={setSources} /></>}
-    {savedDraft && <button type="button" onClick={() => setBaking(value => !value)} className="mt-3 text-xs underline">{baking ? 'Close bake review' : 'Bake to keyframes…'}</button>}
-    {savedDraft && baking && <PropertyExpressionBakePanel input={input} source={expected} onApplied={onClose} />}
+    {savedDraft && kind === 'number' && <button type="button" onClick={() => setBaking(value => !value)} className="mt-3 text-xs underline">{baking ? 'Close bake review' : 'Bake to keyframes…'}</button>}
+    {savedDraft && kind === 'number' && baking && <PropertyExpressionBakePanel input={input} source={expected} onApplied={onClose} />}
+    {kind === 'boolean' && <p className="mt-2 text-xs text-gray-400">Returns true/false. Use comparisons, &amp;&amp;, ||, ! and if(test, a, b). Convert captures this frame; numeric bake is unavailable for boolean output.</p>}
     {blocked && <p className="mt-2 text-xs text-amber-300">{blocked}</p>}
     {(stale || error) && <p role="alert" className="mt-2 text-xs text-amber-300">{error || 'Source changed. Review its current value before applying this draft.'}</p>}
     {activeGesture && <p className="mt-2 text-xs text-amber-300">Finish the active gesture first.</p>}

@@ -3,12 +3,14 @@ import { computeLocalTime, type ExternalTimelineTime, type OverrideMap } from '.
 import type { ParamValueMap } from '../../runtime/paramResolver'
 import { evaluateParameterWiresVerbose, type WireEvaluationResult } from '../../runtime/parameterWireEvaluator'
 import { paramRefKey } from '../../wiring/helpers'
-import { readReferencedValue, readWireSource } from '../../wiring/WireSource'
+import { readWireSource } from '../../wiring/WireSource'
+import { readPropertyExpressionSource } from './PropertyExpressionSources'
 import { evaluateWireExpression } from '../../wiring/WireExpression'
 import { expressionPrograms } from '../../core/expression/ExpressionProgramCache'
-import { evaluateExpression } from '../../core/expression/expressionEvaluator'
+import { evaluateTypedExpression, type ExpressionScalar } from '../../core/expression/expressionEvaluator'
 import { checkNumericResult } from '../../core/expression/NumericResult'
-import { numericPropertyConstraints } from './NumericPropertyCapability'
+import { propertyExpressionConstraints } from './PropertyExpressionCapability'
+import { interpolateAnimatableValues } from '../../animation/typedValues'
 import { EXPRESSION_CONSTANTS } from './PropertyExpression'
 import { preparePropertyExpressionPlan, type PropertyExpressionEntry, type PropertyExpressionPlan } from './PropertyExpressionPlan'
 import { readPropertyPath } from '../../scene/properties/readPropertyPath'
@@ -52,7 +54,7 @@ export class PropertyExpressionEvaluator {
     const brokenWireIds = new Set<string>(), runtimeErrorIds = new Set<string>(), cycleWireIds = new Set<string>()
     const failed = new Set<string>()
     let next = before
-    const put = (key: string, value: number) => { if (next === before) next = new Map(before); next.set(key, value) }
+    const put = (key: string, value: ExpressionScalar) => { if (next === before) next = new Map(before); next.set(key, value) }
     const wireError = (wire: ParameterWire, message: string, broken = false) => {
       errors.set(wire.id, message); (broken ? brokenWireIds : runtimeErrorIds).add(wire.id)
     }
@@ -83,25 +85,27 @@ export class PropertyExpressionEvaluator {
         const local = clock.timelineTimes?.get(timeline.id) ?? (clock.externalTime?.timelineId === timeline.id ? clock.externalTime.localTimeMs : computeLocalTime(timeline, clock.globalTimeMs))
         if (!Number.isFinite(local)) throw new Error('Expression local clock must be finite.')
         const timeMs = Math.max(0, Math.min(timeline.durationMs, local - (entry.definition.timeOffsetMs ?? 0)))
-        const context: Record<string, number> = { ...EXPRESSION_CONSTANTS, timeMs, timeSec: timeMs / 1000, timeNormalized: timeline.durationMs > 0 ? timeMs / timeline.durationMs : 0 }
+        const context: Record<string, ExpressionScalar> = { ...EXPRESSION_CONSTANTS, timeMs, timeSec: timeMs / 1000, timeNormalized: timeline.durationMs > 0 ? timeMs / timeline.durationMs : 0 }
         for (const [name, ref] of Object.entries(entry.definition.sources)) {
-          if (failed.has(paramRefKey(ref))) throw new Error('A source driver failed; keeping the pre-driver value.')
-          const value = readReferencedValue(ref, next, params, plan.resolvedIndex!)
-          if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('Source ' + name + ' has no finite numeric value.')
-          Object.defineProperty(context, name, { value, enumerable: true })
+          Object.defineProperty(context, name, { enumerable: true, get() {
+            if (failed.has(paramRefKey(ref))) throw new Error('A source driver failed; keeping the pre-driver value.')
+            return readPropertyExpressionSource(ref, next, params, plan.resolvedIndex!)
+          } })
         }
         const program = expressionPrograms.get(entry.definition.formula)
         if (!program.ast) throw new Error(program.error ?? 'Invalid expression')
-        const schema = numericPropertyConstraints(entry.layer, entry.path)
-        const result = checkNumericResult(evaluateExpression(program.ast, context), {
+        const schema = propertyExpressionConstraints(entry.layer, entry.path, entry.definition.resultType)
+        const output = evaluateTypedExpression(program.ast, context)
+        if (typeof output !== entry.definition.resultType) throw new Error('Expression must return ' + entry.definition.resultType + '; scalar coercion is disabled.')
+        const result = entry.definition.resultType === 'boolean' ? { value: output, error: null } : checkNumericResult(output as number, {
           min: Math.max(schema.min ?? -Infinity, entry.definition.min ?? -Infinity), max: Math.min(schema.max ?? Infinity, entry.definition.max ?? Infinity),
         })
         if (result.error) throw new Error(result.error)
         let value = result.value!
         if (weight < 1) {
-          const fallback = before.get(key) ?? readPropertyPath(entry.layer, entry.path)
-          if (typeof fallback !== 'number' || !Number.isFinite(fallback)) throw new Error('Expression blending needs a finite authored fallback.')
-          value = fallback + (value - fallback) * weight
+          const fallback = before.get(key) ?? readPropertyPath(entry.layer, entry.path) ?? schema.defaultValue
+          if (typeof fallback !== entry.definition.resultType || typeof fallback === 'number' && !Number.isFinite(fallback)) throw new Error('Expression blending needs a matching typed authored fallback.')
+          value = interpolateAnimatableValues(fallback as ExpressionScalar, value, weight, key) as ExpressionScalar
         }
         put(key, value); failed.delete(key)
       } catch (error) { expressionErrors.set(key, message(error)); failed.add(key) }

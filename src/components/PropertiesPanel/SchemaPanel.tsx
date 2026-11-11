@@ -15,6 +15,7 @@ import type { Layer } from '@/lib/types'
 import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
 import ScrubInput from '@/components/inputs/ScrubInput'
+import { BooleanInput } from '@/components/inputs/BooleanInput'
 import { NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
 import { readPropertyPath } from '@/lib/scene/properties/readPropertyPath'
 import { writePropertyPath } from '@/lib/scene/properties/writePropertyPath'
@@ -91,16 +92,7 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
   // Booleans: render with a horizontal label so they sit nicely in a 2-col grid
   if (schema.valueType === 'boolean') {
     return (
-      <label className="col-span-2 flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={!!value}
-          onChange={(e) => onChange(e.target.checked)}
-          className="accent-blue-500"
-        />
-        {schema.label}
-        {schema.help && <span className="text-[10px] text-gray-600">— {schema.help}</span>}
-      </label>
+      <BooleanInput propertyPath={schema.path} label={schema.label} help={schema.help} value={!!value} onChange={onChange} />
     )
   }
 

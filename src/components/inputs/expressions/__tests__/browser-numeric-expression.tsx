@@ -11,7 +11,7 @@ import { useEditorState } from '@/app/hooks/useEditorState'
 import { useSceneSessionRecovery } from '@/app/hooks/useSceneSessionRecovery'
 import { useAssetCache } from '@/app/hooks/useAssetCache'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
-import { emptyScene, newRectLayer } from '@/lib/defaults'
+import { emptyScene, newRectLayer, newTextLayer } from '@/lib/defaults'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { sceneSourceData } from '@/lib/format/scene/sceneSourceData'
 import { makeSessionProject, readSessionProject } from '@/lib/editor/session/SessionProject'
@@ -60,6 +60,12 @@ function Host({ session }: { session: BrowserRecoverySession }) {
       <button onClick={() => setProject(JSON.stringify(makeSessionProject(editor.getCommittedHistory(), identity.id)))}>Prepare project</button>
       <button onClick={() => { const opened = readSessionProject(parseSceneJson(project)); identity.adopt(opened.sessionId!); editor.resetHistory(opened.history) }}>Open project</button>
       <button onClick={() => { identity.adopt(crypto.randomUUID()); editor.resetScene(fixture()) }}>Reset test document</button>
+      <button onClick={() => {
+        const source = fixture(), text = newTextLayer()
+        source.layers.push({ ...text, id: 'label', name: 'Editable label', transform: { ...text.transform, x: 40, y: 210 }, text: { ...text.text!, color: '#111827' } })
+        source.parameters.push({ id: 'gate', name: 'Gate', type: 'boolean', defaultValue: true })
+        identity.adopt(crypto.randomUUID()); editor.resetScene(source); select('label'); setTimeMs(0)
+      }}>Boolean test document</button>
     </nav>
     <label className="my-2 flex gap-2 text-xs">Playhead ms<input aria-label="Playhead ms" type="range" min="0" max="1000" step="100" value={timeMs} onChange={event => setTimeMs(Number(event.target.value))} />{timeMs}</label>
     <button className="my-2 text-xs" onClick={() => { const source = editor.getScene(), command = makeCloneForestCmd(source, { sourceIds: [selected], offsets: { [selected]: { x: 30, y: 20 } } }); editor.dispatchCommand(command); select(command.idMaps[0][selected]) }}>Copy selection</button>

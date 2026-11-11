@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { runSafeScript } from '../sandbox'
 import { fakeEditor } from './support/fakeEditor'
-import { emptyScene, newRectLayer } from '../../defaults'
+import { emptyScene, newRectLayer, newTextLayer } from '../../defaults'
 import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
 import { getCapabilities } from '../catalog'
 
@@ -14,6 +14,17 @@ function fixture() {
 }
 
 describe('MCP property-expression source contract', () => {
+  it('authors exact boolean source/results through QuickJS without replacing unrelated manual keys', async () => {
+    const scene = fixture(), text = { ...newTextLayer(), id: 'label' }
+    scene.layers.push(text); scene.parameters = [{ id: 'gate', name: 'Gate', type: 'boolean', defaultValue: true }]
+    const markdown = await readFile('docs/tr/boolean-expressions.md', 'utf8')
+    const script = /```js\n([\s\S]*?)```/.exec(markdown)![1]
+    const result = await runSafeScript(script, scene)
+    expect(evaluateSceneFrame(result.scene, 500).overrides.get('layers.label.text.uppercase')).toBe(true)
+    expect(result.scene.timelines[0].tracks).toEqual(scene.timelines[0].tracks)
+    const capabilities = await getCapabilities('standard', { summary: true })
+    expect((capabilities as any).propertyExpressions.resultTypes).toEqual(['number', 'boolean'])
+  })
   it('runs the documented example in QuickJS and keeps manual source/keys', async () => {
     const markdown = await readFile('docs/tr/property-expressions.md', 'utf8')
     const script = /```js\n([\s\S]*?)```/.exec(markdown)![1], scene = fixture()

@@ -41,7 +41,7 @@ referansları, boolean/JS/property erişimi bu A1 bağlamında desteklenmez.
 - `src/components/inputs/expressions/NumericPropertyContext.tsx`: inspector'dan
   açık layer/path/label ve senkron source/transaction getter'ı taşır. Bir layer
   lookup bütün input'larca paylaşılır; DOM'dan kaynak yolu tahmin edilmez.
-- `NumericFormulaEditor.tsx` ve `ScrubInput.tsx`: yerel taslak, native modal focus,
+- `PropertyFormulaEditor.tsx` ve `ScrubInput.tsx`: yerel taslak, native modal focus,
   Enter/Escape, preview ve fx/düz değer geçişi. Hedef değişince eski taslak kapanır.
 - `src/lib/scene/properties/writePropertyPath.ts`: SchemaPanel'ın özel writer'ı
   yerine ortak immutable yazma; array topolojisi ve eski source referansları
