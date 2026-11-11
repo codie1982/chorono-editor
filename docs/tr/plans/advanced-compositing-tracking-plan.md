@@ -33,7 +33,8 @@ içinde 3D compositing planlanır; ayrı Video Editor modu bu belgeyle açılmaz
 | CFX4 | Effects & Presets ve efekt blokları | Mevcut EffectRegistry/effectsChain genişletilir. Arama/kategori/önizleme, enable/bypass, sıralama, reset, kopyalama, preset ve Timeline/input expression bağlantısı. |
 | CFX5 | Gelişmiş maske authoring | CFX1–2 üzerinde viewport'ta maske çiz/düzenle, maskeyi tek göster, expansion, Alpha/Luma ve ters matte, maskeye özel animasyon kontrolleri. |
 | CFX6 | Adjustment Layer | CFX4–5 üzerinde altındaki tanımlı kompoziti etkileyen katman; grup sınırı, alpha, maske, efekt sırası ve tampon sahipliği açık olur. Normal group efektinin kopyası sayılmaz. |
-| CFX7 | Temel video kurgu akışı | Video clip split/trim/ripple, görüntü–ses bağlantısı, kaynak önizleme ve sınırlı geçişler; kesin kaynak zamanı, portable medya ve desteklenen raster/video çıktısında doğrulama. |
+| CFX7 | Çoklu video, bütçeli kare cache ve temel kurgu | Bağımsız clip saatleriyle aynı viewport/composite içinde çoklu video; bayt bütçeli decode/kare/texture cache, proxy ve kaynak zaman doğruluğu; split/trim/ripple, görüntü–ses bağlantısı ve desteklenen çıktıda doğrulama. |
+| CFX7K | Chroma key, kenar temizleme ve despill | CFX4–5 ve CFX7 üzerinde renk seçimi/tolerance/softness, matte black/white, grow/shrink/feather, koruma maskesi ve spill bastırma. Kaynak/matte/composite preview; ortak renk/alpha ve GPU/CPU çıktı kabulü. |
 | CFX8 | Yerel tek/çift nokta takibi, düzeltme ve stabilizasyon | CFX7'nin kaynak/kare saatini kullanır. CPU worker analizi, güvenilirlik/kayıp işareti, ileri/geri/tek kare, elle sabitleme, hedef bağlama ve bake. |
 | CFX9 | Düzlemsel tracking ve Corner Pin | CFX8'in iş/medya sahipliği üzerinde homography/perspektif dönüşümü; yeterli güvenilir eşleşme, düzlem sınırı, dört köşe düzenleme ve perspektifli render adapter'ı. |
 | CFX10 | Katmanlı 3D compositing | Daha önce tamamlanan kutulu 3D çekirdeğini yeniden kullanır. Aynı grupta ortak kamera/derinlik; 2D düzlemler ve modeller, Timeline, mask/holdout ve 2D kompozitleme. Yeni bağımsız 3D motor oluşturulmaz. |
@@ -113,6 +114,36 @@ tracking çözülmez; kaynak/ayar değişimi ilgili sonucu stale yapar.
   Undo/Redo kurtarma ve kaynak değişiminde stale bildirimi uçtan uca çalışır.
   Raster/video çıktısı bake edilmiş sonucu aynı zamanlardan değerlendirir;
   desteklenmeyen SVG/Lottie/runtime yolunda sessiz kayıp olmaz.
+
+### 4.1. Çoklu video ve keying — 11 Kasım ek kullanıcı onayı
+
+Bu genişleme CFX7/CFX7K kapsamındadır; E−1.5A, ilk kutulu 3D obje ve mevcut
+seri öncelikleri değişmez. CFX7K'den sonraki tracking/compositing kimlikleri
+korunur. Aynı dosyadan farklı zamanları oynatan klipler bağımsız saat kullanır;
+kliplerden birini seek etmek diğerini değiştirmez. Katman sırası/transform/
+opacity/blend ve maskelerle üst üste video birleştirilir.
+
+Cache kaynak kimliği/sürümü, PTS, çözünürlük ve gerekiyorsa işlem ayarlarıyla
+anahtarlanır. Decode kuyruğu ve playhead çevresi prefetch bayt bütçesiyle
+sınırlıdır. Zaman/görünürlük bağımlılıklarına göre gerek duymayan akış durur;
+sesi veya maske kaynağı gereken bir video yalnız ekran dışında diye atılmaz.
+Kullanılmayan VideoFrame/decoder/texture gerçek tüketicisi bırakınca kapatılır;
+scrub/iptal/source değişimi geç sonuçları reddeder. Tüm video decode edilip
+RAM'e alınmaz. Native decoder/sürücü belleği managed toplamıyla karıştırılmaz.
+
+Keyer yerel GPU shader adayıdır; CPU fallback capability ve performansı ayrı
+doğrulanır. Tolerance ve softness ile alpha çıkarma, matte düzeltme, kenar
+işleme ve despill ayrı tanımlanır. Efekt sırası, premultiplied alpha ve renk
+uzayı açık olur; parametre değişimi ilgili cache'i invalid eder. Kaynak dosya
+yıkıcı değiştirilmez. Keylight benzeri kullanım hedeflenir; native Keylight
+eklentisi veya aynı algoritma/kaliteye otomatik uyumluluk iddiası yoktur.
+
+Kabul: 2/4 eşzamanlı klip, aynı kaynaktan farklı trim/seek, maskeli ve sesli
+ekran dışı klip, uzun scrub/loop ve tekrar aç/kapatta bounded bellek; keyer
+için yeşil/mavi perde, benzer foreground renkleri, kısmi alpha/saç/motion blur,
+koruma maskesi, koyu/açık arka planda kenar ve despill karşılaştırması.
+Viewport/final raster/video zaman ve görüntü eşliği, keyframe/preset/undo,
+portable/session ve açık fallback kontrolleri bu teslimin parçasıdır.
 
 ## 5. 3D compositing ve kamera çözümü sınırları
 

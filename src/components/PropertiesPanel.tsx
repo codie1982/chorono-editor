@@ -13,6 +13,7 @@ import {
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
+import { NumericPropertyProvider, NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
 import ColorInput  from '@/components/inputs/ColorInput'
 import GradientInput from '@/components/inputs/GradientInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
@@ -78,6 +79,9 @@ interface Props {
   onEditWire?: (wire: ParameterWire) => void
   currentTimeMs?: number
   selectedTimelineId?: string | null
+  /** Synchronous source/gesture guards for property formula drafts. */
+  getScene?: () => ChronoScene
+  isTransactionActive?: () => boolean
   onNormalizeAudio?: (layerId: string) => void | Promise<void>
 }
 
@@ -209,7 +213,7 @@ function WireableField({
             {boundParam.type}
           </span>
         </button>
-      ) : children}
+      ) : <NumericPropertyScope path={propertyPath} label={label}>{children}</NumericPropertyScope>}
 
       {paramOpen && canParam && (
         <div
@@ -314,10 +318,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function NumInput({ value, onChange, min, max, step = 1 }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number
+function NumInput({ value, onChange, min, max, step = 1, propertyPath, fieldLabel }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; propertyPath?: string; fieldLabel?: string
 }) {
-  return <ScrubInput value={value} onChange={onChange} min={min} max={max} step={step} />
+  return <ScrubInput value={value} onChange={onChange} min={min} max={max} step={step} propertyPath={propertyPath} fieldLabel={fieldLabel} />
 }
 
 
@@ -361,7 +365,7 @@ export default function PropertiesPanel({
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
   dispatchCommand,
-  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio,
+  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio, getScene, isTransactionActive,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
   // every WireableField call. `parameters` is shared too; `acceptedTypes`
@@ -406,6 +410,7 @@ export default function PropertiesPanel({
   }
 
   return (
+    <NumericPropertyProvider scene={scene} layerId={layer?.id} dispatch={dispatchCommand} getScene={getScene} isTransactionActive={isTransactionActive}>
     <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
       <div className="px-3 py-2 border-b border-gray-700 shrink-0">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -562,7 +567,7 @@ export default function PropertiesPanel({
                   acceptedTypes={['number']} parameters={parameters}
                   onBind={(id) => bindParam('transform.anchorX', id)}
                 >
-                  <NumInput value={layer.transform.anchorX}
+                  <NumInput propertyPath="transform.anchorX" fieldLabel="Anchor X" value={layer.transform.anchorX}
                     onChange={(v) => updateTransform('anchorX', v)} />
                 </ParamBindButton>
                 <ParamBindButton
@@ -570,7 +575,7 @@ export default function PropertiesPanel({
                   acceptedTypes={['number']} parameters={parameters}
                   onBind={(id) => bindParam('transform.anchorY', id)}
                 >
-                  <NumInput value={layer.transform.anchorY}
+                  <NumInput propertyPath="transform.anchorY" fieldLabel="Anchor Y" value={layer.transform.anchorY}
                     onChange={(v) => updateTransform('anchorY', v)} />
                 </ParamBindButton>
               </Row2>
@@ -597,6 +602,7 @@ export default function PropertiesPanel({
                   <span className="text-xs text-gray-400 w-8 text-right">
                     {(layer.opacity * 100).toFixed(0)}%
                   </span>
+                  <div className="w-24"><NumInput value={layer.opacity} min={0} max={1} step={0.01} onChange={value => update({ opacity: value })} /></div>
                 </div>
               </WireableField>
               <Field label="Blend Mode">
@@ -632,11 +638,11 @@ export default function PropertiesPanel({
               <Section title="Shape">
                 <Row2>
                   <Field label="Width">
-                    <NumInput value={layer.size.width} min={1}
+                    <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
                   </Field>
                   <Field label="Height">
-                    <NumInput value={layer.size.height} min={1}
+                    <NumInput propertyPath="size.height" fieldLabel="Height" value={layer.size.height} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
@@ -1372,11 +1378,11 @@ export default function PropertiesPanel({
               <Section title="Image">
                 <Row2>
                   <Field label="Width">
-                    <NumInput value={layer.size.width} min={1}
+                    <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
                   </Field>
                   <Field label="Height">
-                    <NumInput value={layer.size.height} min={1}
+                    <NumInput propertyPath="size.height" fieldLabel="Height" value={layer.size.height} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
@@ -1402,11 +1408,11 @@ export default function PropertiesPanel({
               <Section title="Video">
                 <Row2>
                   <Field label="Width">
-                    <NumInput value={layer.size.width} min={1}
+                    <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
                   </Field>
                   <Field label="Height">
-                    <NumInput value={layer.size.height} min={1}
+                    <NumInput propertyPath="size.height" fieldLabel="Height" value={layer.size.height} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
@@ -2136,6 +2142,7 @@ export default function PropertiesPanel({
         )}
       </div>
     </aside>
+    </NumericPropertyProvider>
   )
 }
 

@@ -1,5 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { useNumericPropertyInput } from './expressions/NumericPropertyContext'
+import { NumericFormulaEditor } from './expressions/NumericFormulaEditor'
+import { inspectNumericLiteral, numericInputExpression } from '@/lib/editor/inputExpressions/NumericInputExpression'
 
 interface Props {
   value:     number
@@ -19,6 +22,9 @@ interface Props {
   /** Disable the scrub-drag behaviour but keep keyboard editing. */
   disableScrub?: boolean
   title?: string
+  /** Explicit owning numeric source path; schema scopes may supply it instead. */
+  propertyPath?: string
+  fieldLabel?: string
 }
 
 /**
@@ -32,6 +38,9 @@ interface Props {
  * Typed text is a local draft committed once on blur/Enter; untouched blur and
  * Escape never dispatch a value. An external controlled-value change discards
  * that draft, preserving the component's existing external-update policy.
+ * Registered numeric fields expose fx/double-click for a saved constant formula;
+ * a saved recipe makes the literal read-only until explicit Convert to value.
+ * Full-string/bounds errors keep the draft and previous source unchanged.
  * Click-without-drag focuses the decimal text field as usual.
  *
  * Hold SHIFT while dragging for 10× sensitivity; ALT for 0.1× (fine adjust).
@@ -39,8 +48,16 @@ interface Props {
 export default function ScrubInput({
   value, onChange, min, max, step = 1,
   sensitivity, className = '',
-  placeholder, disableScrub, title,
+  placeholder, disableScrub, title, propertyPath, fieldLabel,
 }: Props) {
+  const property = useNumericPropertyInput(propertyPath, fieldLabel)
+  const owner = property?.layer
+  const saved = owner && property ? numericInputExpression(owner, property.path) : undefined
+  const propertyKey = property ? JSON.stringify([property.layerId, property.path]) : ''
+  const [formulaEditor, setFormulaEditor] = useState<{ target: string; formula?: string } | null>(null)
+  // A selection/path change closes the old draft instead of retargeting it.
+  useEffect(() => { setFormulaEditor(null) }, [propertyKey])
+  const [error, setError] = useState('')
   // Internal text state lets the user type "3.5" without React clobbering it
   // mid-edit. We commit on blur / Enter.
   const [text, setText] = useState<string>(String(value))
@@ -50,7 +67,15 @@ export default function ScrubInput({
   // an external value's render and its passive text-sync effect.
   if (!Object.is(latest.current.value, value)) dirtyRef.current = false
   latest.current = { value, onChange }
-  useEffect(() => { dirtyRef.current = false; setText(String(value)) }, [value])
+  useEffect(() => { dirtyRef.current = false; setText(String(value)); setError('') }, [value])
+
+  /** Open only this source field, carrying any uncommitted/invalid typed draft.
+   * Clear blur ownership before native modal focus moves away from the input. */
+  const openFormula = () => {
+    if (!property) return
+    setFormulaEditor({ target: propertyKey, formula: dirtyRef.current || error ? text : undefined })
+    dirtyRef.current = false; setText(String(value)); setError('')
+  }
 
   /** Commit only a changed, finite typed draft. Clear ownership before invoking
    * the controlled callback, so Enter + blur or synchronous rerenders cannot
@@ -58,9 +83,10 @@ export default function ScrubInput({
   const handleBlur = () => {
     if (!dirtyRef.current) return
     dirtyRef.current = false
-    const parsed = parseFloat(text), current = latest.current
-    if (Number.isFinite(parsed) && parsed !== current.value) current.onChange(parsed)
-    else setText(String(current.value))
+    const result = inspectNumericLiteral(text, { min, max }), current = latest.current
+    setError(result.error ?? '')
+    if (result.value !== null && result.value !== current.value) current.onChange(result.value)
+    else if (!result.error) setText(String(current.value))
   }
 
   // Scrubber state
@@ -72,7 +98,7 @@ export default function ScrubInput({
 
   // ── Drag math ──────────────────────────────────────────────────────────
   const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
-    if (disableScrub || e.button !== 0) return
+    if (disableScrub || saved || e.button !== 0) return
     // If the input already has focus, don't start a scrub — let user edit text.
     if (document.activeElement === e.currentTarget) return
 
@@ -150,6 +176,14 @@ export default function ScrubInput({
       <input
         type="text"
         inputMode="decimal"
+        aria-label={property?.label ?? fieldLabel}
+        readOnly={!!saved}
+        aria-invalid={!!error}
+        onDoubleClick={event => {
+          if (!property) return
+          event.preventDefault(); event.stopPropagation()
+          openFormula()
+        }}
         value={text}
         placeholder={placeholder}
         title={title ?? 'Drag horizontally to scrub · Shift = 10× · Alt = 0.1×'}
@@ -157,11 +191,12 @@ export default function ScrubInput({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onChange={(e) => { dirtyRef.current = true; setText(e.target.value) }}
+        onChange={(e) => { dirtyRef.current = true; setText(e.target.value); setError('') }}
         onBlur={handleBlur}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); e.currentTarget.blur() }
           if (e.key === 'Escape') {
+            e.preventDefault(); e.stopPropagation(); setError('')
             dirtyRef.current = false
             setText(String(latest.current.value))
             e.currentTarget.blur()
@@ -170,9 +205,15 @@ export default function ScrubInput({
         className={`relative z-10 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
           focus:outline-none focus:border-blue-500
           ${scrubbing ? 'cursor-ew-resize select-none' : 'cursor-ew-resize'}
-          ${className}`}
+          ${property ? 'pr-8' : ''} ${saved ? 'text-violet-200' : ''} ${className}`}
         style={{ touchAction: 'none' }}
       />
+      {property && <button type="button" aria-label={`Edit expression for ${property.label}`} title={saved ? `Saved formula: ${saved.formula}` : 'Edit a saved constant numeric formula'}
+        onMouseDown={event => event.preventDefault()} onClick={event => { event.preventDefault(); event.stopPropagation(); openFormula() }}
+        className={`absolute right-0 top-0 z-20 h-7 w-8 rounded-r text-xs focus-visible:outline focus-visible:outline-blue-400 ${saved ? 'text-violet-200 bg-violet-900/50' : 'text-gray-400 hover:bg-gray-700'}`}>fx</button>}
+      {saved && saved.value !== value && <p className="mt-1 text-[11px] text-amber-300">Source changed; formula was not reapplied.</p>}
+      {error && <p role="alert" className="mt-1 text-[11px] text-amber-300">{error}</p>}
+      {formulaEditor && formulaEditor.target === propertyKey && property && <NumericFormulaEditor key={propertyKey} input={property} limits={{ min, max }} initialFormula={formulaEditor.formula} onClose={() => setFormulaEditor(null)} />}
       {/* Progress bar overlay — z-0 so it sits BEHIND the text */}
       {barVisible && (
         <div

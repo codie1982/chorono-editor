@@ -1736,6 +1736,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
                     <PropertiesPanel
+                      getScene={editor.getScene}
+                      isTransactionActive={editor.isTransactionActive}
                       layer={selectedLayer}
                       currentTimeMs={currentTimeMs}
                       selectedTimelineId={selectedTlId}

@@ -61,7 +61,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
 | Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline tek source tree, Find, subtree flags/undo, çoklu dal filtreleri ve güvenli UI reparent. |
-| Sıradaki | E−1.5A, ardından kalan E−1 ve araç kabulü | Kalıcı input expression; ardından V6/E−1.7 etkileşim doğrulaması. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
+| Devam ediyor — sırada A2 | E−1.5A, ardından kalan E−1 ve araç kabulü | [A1 sabit numeric input formülleri](input-expressions.md) uygulandı; sırada canlı zaman/kaynak bağlamı A2, sonra A3–A5 ve V6/E−1.7. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
@@ -2307,3 +2307,38 @@ modu açılmaz; native AE/FxFactory eklenti uyumluluğu vaat edilmez.
 Bu değişiklik yalnız plan kaydıdır; özellik uygulanmadı, canlı editör/sahne
 değiştirilmedi. Bağlantılar ve sıra tutarlılığı denetlendi; uygulama testleri
 bu dokümantasyon değişikliği için yeniden çalıştırılmadı.
+
+
+### 12.62. CFX çoklu video ve chroma key genişlemesi — 11 Kasım 2026
+
+Kullanıcı onayıyla [CFX7/CFX7K](plans/advanced-compositing-tracking-plan.md)
+kapsamına çoklu video viewport/composite, bağımsız klip saatleri, bellek bütçeli
+kare/texture cache, chroma key, matte/kenar temizleme ve despill eklendi.
+Küçük decode/prefetch kuyrukları, kaynak PTS, proxy/final ayrımı ve maskeler
+korunur; bütün video RAM'e decode edilmez. Kaynak/matte/composite preview ve
+renk/alpha eşliği kabul koşuludur. Bu genişleme sonraki CFX fazında kalır;
+mevcut iş sırası ve ilk 3D obje ekleme önceliği değişmez. Uygulama başlatılmadı.
+
+### 12.63. E−1.5A / A1 — kayıtlı sabit numeric formüller — 11 Kasım 2026
+
+[A1 uygulama sözleşmesi](input-expressions.md): kayıtlı Properties/Schema numeric
+alanlarında fx/çift tıklama, bounded parser preview, finite/birim/sınır doğrulaması,
+Enter/Escape ve tek atomik komut uygulandı. Formül + hesaplanan source sayı
+portable JSON/recovery/history'de korunur; Undo/Redo, bağımsız clone ve iki runtime
+export yolu doğrulandı. Runtime editor tarifini çıkarıp sayıyı taşır.
+
+Sahne değişince taslak korunarak Apply engellenir; güncel source incelemesi
+gerekir. Seçilen hedef değişince eski taslak başka nesneye taşınmaz. Bütün
+timeline'lardaki key/controller, Wire/binding/path driver ve elle source
+değişiklikleri sessizce ezilmez. Convert o anki source sayıyı tutar. Yeni
+per-frame evaluator, input başına timer veya cache eklenmedi.
+
+Gerçek inspector/renderer/session recovery kabulü ayrı browser origin'inde
+fx, çift tıklama, strict literal, hata/iptal, Enter+blur tek commit, stale source,
+hedef değişimi, key koruma ve project/reload/Undo/Redo akışlarını doğruladı.
+Kullanıcının açık sahnesi değiştirilmedi. Kapsam tüm input'lar değildir:
+özel ses/Array/key/guide/renk alanlarının adapter'ları A4'te kalır.
+
+**Sırada A2:** açık timeline-local zaman ve adlandırılmış kaynak bağlamı,
+dependency/cycle/fallback, dinamik değerlendirme ve runtime/bake sözleşmesi;
+ardından A3–A5. E−1.5A'nın bütünü, V6/E−1.7 ve ilk kutulu 3D sırası korunur.

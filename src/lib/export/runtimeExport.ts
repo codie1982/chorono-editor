@@ -113,7 +113,7 @@ function stripLayerMeta(layer: Layer): Layer {
   // runtime should treat the layer as fully selectable + opaque).
   const {
     locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c,
-    frozen: _f,
+    frozen: _f, inputExpressions: _inputExpressions,
     ...rest
   } = layer
   return rest

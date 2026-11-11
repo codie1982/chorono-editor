@@ -1,7 +1,9 @@
 # Input alanlarında değer ve expression düzenleme
 
-10 Kasım 2026. Kullanıcının onayıyla **E−1.5A** olarak plana eklendi; henüz
-uygulanmadı. Tamamlanan E−1.5 parser/Wire/graph/bake altyapısını genişletir.
+10 Kasım 2026. Kullanıcının onayıyla **E−1.5A** olarak plana eklendi.
+11 Kasım: **A1 sabit sayısal formül dilimi uygulandı**; [gerçek kapsam ve
+sözleşme](../input-expressions.md). A2–A5 henüz uygulanmadı. Tamamlanan
+E−1.5 parser/Wire/graph/bake altyapısını genişletir.
 Önce bu teslim, ardından kalan viewport ve birleşik kullanıcı kabulü V6/E−1.7,
 sonra [kutulu 3D/Poly sırası](geometry-material-boxed3d-sequence.md) gelir.
 Export ve ikinci genel optimizasyon son aşamalarda kalır.
@@ -28,7 +30,8 @@ hesaplanan sonuç, beklenen tür/birim ve hata aynı yerde gösterilir.
 
 Tek seferlik hesap, yalnız sonucunu kaydeden açık bir seçenek olabilir. Kalıcı
 expression modunun formülü sessizce silip yalnız sayıyı saklaması kabul edilmez.
-Bu metindeki UI adları ve örnekler planlanan davranıştır; mevcut API değildir.
+Bu metnin A2–A5 UI/API tanımları planlanan davranıştır; mevcut capability değildir.
+Uygulanan A1, formülü ve sonucunu saklar, yalnız Apply anında hesaplar.
 
 ## Mevcut kod ve ortaklaştırılacak sahipler
 
@@ -57,7 +60,7 @@ Schema'nın field capability bilgisi hangi modların desteklendiğini bildirir.
 
 | Sıra | Geliştirme | Kabul sınırı |
 | --- | --- | --- |
-| A1 | Ortak numeric input ve expression düzenleme | Properties/Schema/Scrub girişleri; sayı, açı, yüzde; fx/çift tıklama, preview, hata, Enter/Escape, tek undo. Formül ve sonuç ayrımı ilk kalıcı dilimde tamamlanır. |
+| A1 — uygulandı | Ortak numeric input ve sabit formül düzenleme | Kayıtlı Properties/Schema/Scrub kaynak alanları; sayı, açı, yüzde; fx/çift tıklama, preview, hata, Enter/Escape, tek undo. Formül ve finite source sonucu birlikte saklanır; per-frame driver değildir. Kalan özel input'lar A4'tür. |
 | A2 | Kalıcı özellik expression'ı ve bağlam | Versioned source tanımı, stable hedef/kaynak referansları, adlandırılmış çoklu kaynak, açık timeline-local `timeMs`/`timeSec`/normalized time; ortak bağımlılık/çevrim/fallback, save/load/clone ve runtime/bake adapter'ları. |
 | A3 | Boolean ve koşullu ifadeler | Karşılaştırmalar, mantıksal işlemler ve koşullu seçim; operand/sonuç türleri, kısa devre ve hata davranışı tanımlanır. Checkbox/switch alanları actual boolean sonuç alır. Mevcut uyumsuz Boolean Wire preset'leri de düzeltilir. |
 | A4 | Diğer türler ve bütün input adapter'ları | Renk, vektör, metin ve select için typed sonuç; Array/ses/spline/key/guide/parametre/efekt ve kalan formlar aynı düzenleme sözleşmesine taşınır. Destek matrisi capability ve testlerle kapanır. |

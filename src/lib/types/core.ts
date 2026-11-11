@@ -295,6 +295,8 @@ export interface Layer {
   /** Pivot for rotation/scale — set once in PropertiesPanel, NOT keyframed */
   transform: Transform
   opacity: number
+  /** Constant numeric input recipes (editor-only); computed source values stay numeric. */
+  inputExpressions?: import('../editor/inputExpressions/NumericInputExpression').NumericInputExpressions
   /** Canvas composite operation. Default 'source-over'. */
   blendMode?: GlobalCompositeOperation
 
