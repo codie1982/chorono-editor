@@ -1,6 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer } from '../types'
 import type { Matrix2D } from '../geometry/Matrix2D'
-import { evaluateTimelines } from '../evaluator'
 import { createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
 import { offsetCloneRange, offsetCloneTrack } from '../clone/CloneForestTiming'
 import type { ArrayForestPreview } from './ArrayForestTypes'
@@ -40,7 +40,7 @@ export function buildArrayForestPreview(base: ChronoScene, roots: readonly Layer
     const delta = occurrence.placement.timeOffsetMs ?? 0
     if (delta !== lastDelta) {
       lastDelta = delta; lastScene = arrayPreviewScene(base, ids, delta, duplicateAnimation)
-      lastBounds = createLayerWorldBoundsResolver(lastScene, timeMs, evaluateTimelines(lastScene.timelines, timeMs))
+      lastBounds = createLayerWorldBoundsResolver(lastScene, timeMs, evaluateSceneFrame(lastScene, timeMs).overrides)
     }
     const scene = lastScene!, bounds = lastBounds!
     for (const root of roots) {

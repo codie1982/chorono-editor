@@ -44,6 +44,11 @@ export function prepareCloneOccurrences(scene: ChronoScene, sources: readonly La
       return item.clonedLayer
     })
     layers = layers.map(layer => remapCloneLayerReferences(layer, idMap))
+    layers = layers.map(layer => {
+      if (!layer.propertyExpressions) return layer
+      const fields = Object.fromEntries(Object.entries(layer.propertyExpressions.fields).filter(([, definition]) => timelineIds.has(definition.timelineId)))
+      return { ...layer, propertyExpressions: Object.keys(fields).length ? { version: 1, fields } : undefined }
+    })
     const tracks = new Map<string, Track[]>()
     const authoringCopies: NonNullable<AuthoringHints['copies']>[number][] = []
     for (const timeline of scene.timelines) if (timelineIds.has(timeline.id)) {

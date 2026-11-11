@@ -14,6 +14,8 @@ import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import { NumericPropertyProvider, NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
+import type { NumericPropertyFrame } from '@/components/inputs/expressions/NumericPropertyContext'
+import type { ExternalTimelineTime } from '@/lib/evaluator'
 import ColorInput  from '@/components/inputs/ColorInput'
 import GradientInput from '@/components/inputs/GradientInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
@@ -82,6 +84,8 @@ interface Props {
   /** Synchronous source/gesture guards for property formula drafts. */
   getScene?: () => ChronoScene
   isTransactionActive?: () => boolean
+  expressionFrame?: NumericPropertyFrame
+  expressionExternalTime?: ExternalTimelineTime | null
   onNormalizeAudio?: (layerId: string) => void | Promise<void>
 }
 
@@ -365,7 +369,7 @@ export default function PropertiesPanel({
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
   dispatchCommand,
-  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio, getScene, isTransactionActive,
+  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio, getScene, isTransactionActive, expressionFrame, expressionExternalTime,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
   // every WireableField call. `parameters` is shared too; `acceptedTypes`
@@ -410,7 +414,7 @@ export default function PropertiesPanel({
   }
 
   return (
-    <NumericPropertyProvider scene={scene} layerId={layer?.id} dispatch={dispatchCommand} getScene={getScene} isTransactionActive={isTransactionActive}>
+    <NumericPropertyProvider scene={scene} layerId={layer?.id} dispatch={dispatchCommand} getScene={getScene} isTransactionActive={isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTimelineId ?? undefined} frame={expressionFrame} externalTime={expressionExternalTime}>
     <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
       <div className="px-3 py-2 border-b border-gray-700 shrink-0">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">

@@ -70,7 +70,7 @@ yaşar ve kapanınca bırakılır; sahne/geçmiş mevcut kaynak bütçelerinin s
 Renderer, player ve raster çıktı sayısal source'u kullanır. İki runtime export
 yolu editor tarifini çıkarır ve hesaplanan sayıyı taşır; bu bir formül runtime
 API'si değildir. MCP/script'e yeni bir public metot eklenmedi. Dinamik expression
-capability, dependency graph ve runtime/bake sözleşmesi A2'de ayrıca geliştirilecek.
+capability, dependency graph ve runtime/bake sözleşmesi [A2'de ayrıca geliştirildi](property-expressions.md).
 
 ## Doğrulama ve sınırlar
 

@@ -10,6 +10,7 @@
 import type { ChronoScene, Layer } from '../types'
 import type { RuntimeValidationResult, RuntimeError, RuntimeWarning } from '../types/runtime'
 import { SceneTraversal } from '../scene/SceneTraversal'
+import { assertScenePropertyExpressions } from '../expression/properties/PropertyExpression'
 
 export interface ValidatorOptions {
   /** Warn if scene has more than this many layers. Default 500. */
@@ -22,6 +23,9 @@ export class RuntimeValidator {
   validate(scene: ChronoScene): RuntimeValidationResult {
     const errors:   RuntimeError[]   = []
     const warnings: RuntimeWarning[] = []
+    try { assertScenePropertyExpressions(scene) } catch (error) {
+      errors.push({ code: 'INVALID_EXPRESSION', message: error instanceof Error ? error.message : String(error) })
+    }
 
     // ── Composition sanity ──────────────────────────────────────────────────
     if (!scene.composition || scene.composition.width <= 0 || scene.composition.height <= 0) {
@@ -37,6 +41,10 @@ export class RuntimeValidator {
     // ── Asset references ────────────────────────────────────────────────────
     const assetIds = new Set(scene.assets.map(a => a.id))
     for (const layer of scene.layers) {
+      if (Object.keys(layer.propertyExpressions?.fields ?? {}).length) warnings.push({
+        code: 'REQUIRES_LIVE_EXPRESSIONS', layerId: layer.id,
+        message: 'Live property expressions require the current Chorono Web runtime. Bake to keyframes for basic/native players or animated SVG.',
+      })
       const refs: { kind: string; id?: string }[] = [
         { kind: 'image', id: layer.image?.assetId },
         { kind: 'video', id: layer.video?.assetId },

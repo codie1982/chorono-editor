@@ -1,5 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, Transform } from '@/lib/types'
-import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
+import { type OverrideMap } from '@/lib/evaluator'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
@@ -52,6 +53,7 @@ function transformMatrix(transform: Readonly<Transform>): Matrix2D {
 function hasTransformDriver(scene: ChronoScene, layer: Layer): boolean {
   const transformPath = (path: string | undefined) => path?.startsWith('transform.')
   return !!(layer.followPath || layer.motionPath
+    || Object.keys(layer.propertyExpressions?.fields ?? {}).some(transformPath)
     || Object.keys(layer.paramBindings ?? {}).some(transformPath)
     || scene.bindings.some(binding => binding.target.type === 'layerProperty'
       && binding.target.layerId === layer.id && transformPath(binding.target.property))
@@ -90,7 +92,7 @@ export function prepareTransformTargets(
   const selection = resolveSelectionRoots(scene.layers, selected, index)
   if (!selection.ok) return selection
   const { roots, ancestors } = selection
-  const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   const worldFor = createLayerWorldMatrixResolver(scene, timeMs, frame, index)
   const targets: PreparedTransformTarget[] = []
   for (const layer of roots) {

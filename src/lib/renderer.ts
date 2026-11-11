@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from './runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor, Asset } from './types'
 import { buildPathOnCanvas } from './geometry/PathCommand'
 import { splineToPathDefinition } from './spline/splineToPath'
@@ -773,7 +774,7 @@ export function renderScene(
   const grid = opts.grid
 
   const { width, height, backgroundColor } = scene.composition
-  const overrides = opts.overrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const overrides = opts.overrides ?? evaluateSceneFrame(scene, timeMs).overrides
 
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = backgroundColor
@@ -875,7 +876,7 @@ export function hitTestLayersAt(
 ): string[] {
   // Hit-test the same frame the canvas displays (timeline isolation, state
   // machines and parameter bindings may replace the normal timeline values).
-  const overrides = frameOverrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const overrides = frameOverrides ?? evaluateSceneFrame(scene, timeMs).overrides
   // Query the same typed/instance text values as drawing. Ready aliases may be
   // projected by the caller; ordinary source metrics use the explicit asset scope.
   scene = materializeRenderScene(scene, overrides)

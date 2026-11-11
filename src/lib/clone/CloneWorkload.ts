@@ -1,5 +1,6 @@
 import type { ChronoScene } from '../types'
 import { parseTrackTarget } from '../timeline/TrackTargetParser'
+import { MAX_PROPERTY_EXPRESSIONS } from '../expression/properties/PropertyExpression'
 
 /** Shared source-expansion limits for editor and MCP clone/array admission.
  * They bound source layer/key counts, not process RAM or GPU allocation. */
@@ -29,6 +30,12 @@ export function assertCloneForestBudget(scene: ChronoScene, sourceIds: ReadonlyS
       || !Number.isSafeInteger(extra) || extra < 0
       || !Number.isSafeInteger(extraTotal) || extraTotal < 0) throw new Error('Clone count limit exceeded')
   const existing = new Set(scene.layers.map(layer => layer.id))
+  let live = 0, copiedLive = 0
+  for (const layer of scene.layers) for (const definition of Object.values(layer.propertyExpressions?.fields ?? {})) {
+    live++
+    if (sourceIds.has(layer.id) && (!options.timelineIds || options.timelineIds.has(definition.timelineId))) copiedLive++
+  }
+  if (live + copiedLive * count > MAX_PROPERTY_EXPRESSIONS) throw new Error('Expanded clone/array exceeds the 512 live-expression budget; bake or reduce the count.')
   if (!sourceIds.size || Array.from(sourceIds).some(id => !existing.has(id))) throw new Error('Clone source no longer exists')
   let totalKeys = 0, copiedKeys = 0
   for (const timeline of scene.timelines) for (const track of timeline.tracks) {

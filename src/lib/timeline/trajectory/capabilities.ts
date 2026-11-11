@@ -56,6 +56,7 @@ export function prepareTrajectoryContext(scene: ChronoScene, timelineId: string,
     if (item.motionPath) add({ code: 'inline-motion-path', message: 'Edit or explicitly convert the inline SVG motion source; position keys cannot replace its output.', layerId: item.id })
     const isTransform = (path?: string) => path?.startsWith('transform.') || path?.startsWith('followPath.') || path === 'motionPath.offset'
     if (Object.keys(item.paramBindings ?? {}).some(isTransform)
+        || Object.keys(item.propertyExpressions?.fields ?? {}).some(isTransform)
         || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === item.id && isTransform(binding.target.property))
         || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === item.id && isTransform(wire.target.propertyPath))) {
       add({ code: 'driven-transform', message: 'Bake or remove the transform binding before editing its source position keys.', layerId: item.id })

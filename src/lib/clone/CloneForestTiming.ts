@@ -27,5 +27,9 @@ export function offsetCloneRange(layer: Layer, deltaMs: number, durationMs: numb
   if ([startMs, endMs].some(value => value !== undefined && (!Number.isFinite(value) || value < 0 || value > durationMs))) {
     throw new Error('Array time offset exceeds the composition clip range; copied clips are never trimmed.')
   }
-  return { ...layer, ...(startMs !== undefined ? { startMs } : {}), ...(endMs !== undefined ? { endMs } : {}) }
+  const propertyExpressions = layer.propertyExpressions ? { version: 1 as const, fields: Object.fromEntries(
+    Object.entries(layer.propertyExpressions.fields).map(([path, definition]) => [path, { ...definition, timeOffsetMs: (definition.timeOffsetMs ?? 0) + deltaMs }]),
+  ) } : undefined
+  return { ...layer, ...(startMs !== undefined ? { startMs } : {}), ...(endMs !== undefined ? { endMs } : {}),
+    ...(propertyExpressions ? { propertyExpressions } : {}) }
 }

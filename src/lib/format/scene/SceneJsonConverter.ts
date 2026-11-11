@@ -1,4 +1,5 @@
 import { assertNumericInputExpressions } from '../../editor/inputExpressions/NumericInputExpression'
+import { assertScenePropertyExpressions } from '../../expression/properties/PropertyExpression'
 import type { ChronoScene } from '../../types'
 import { assertAuthoringData } from '../../editor/authoring/AuthoringValidation'
 import { assertSceneGuides } from '../../geometry/guides/sceneGuideData'
@@ -27,6 +28,7 @@ export function parseSceneJson(text: string, complete = false): ChronoScene {
     ? 'Not a complete Chorono scene: expected version 1.x, composition, layers, assets, timelines, parameters, bindings and triggers.'
     : 'Not a valid Chorono scene: expected version 1.x, a composition object and a layers array.')
   scene.layers.forEach(assertNumericInputExpressions)
+  assertScenePropertyExpressions(scene)
   assertSceneGuides(scene.editorGuides)
   assertAuthoringData(scene.authoring)
   return scene

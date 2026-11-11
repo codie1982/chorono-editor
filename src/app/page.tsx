@@ -374,13 +374,15 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
+  const expressionAuthoringClock = useMemo(() => !isPlaying && !manualPreview && selectedTlId && scene.timelines.some(item => item.id === selectedTlId)
+    ? { timelineId: selectedTlId, localTimeMs: authoringTime(scene.timelines.find(item => item.id === selectedTlId)!, currentTimeMs) } : null,
+    [isPlaying, manualPreview, selectedTlId, scene.timelines, currentTimeMs])
   const frame = useMemo(
-    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs, !isPlaying && !manualPreview && selectedTlId && scene.timelines.some(item => item.id === selectedTlId)
-      ? { timelineId: selectedTlId, localTimeMs: authoringTime(scene.timelines.find(item => item.id === selectedTlId)!, currentTimeMs) } : null)),
+    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs, expressionAuthoringClock)),
     // We deliberately include paramValues so slider edits cause a re-eval.
     // One revision includes segment/test playback and queued events while paused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, playbackScene, currentTimeMs, isPlaying, manualPreview, selectedTlId, runtime.paramValues, runtime.segmentState, runtime.frameRevision],
+    [scene, playbackScene, currentTimeMs, isPlaying, manualPreview, selectedTlId, runtime.paramValues, runtime.segmentState, runtime.frameRevision, expressionAuthoringClock],
   )
 
   /** Manual transport is local and paused; work-area playback never wraps an edit. */
@@ -1736,6 +1738,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
                     <PropertiesPanel
+                      expressionFrame={frame}
+                      expressionExternalTime={expressionAuthoringClock}
                       getScene={editor.getScene}
                       isTransactionActive={editor.isTransactionActive}
                       layer={selectedLayer}

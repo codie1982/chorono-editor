@@ -13,48 +13,19 @@
 import type { ParameterWire, ChronoScene } from '../types'
 import type { OverrideMap } from '../evaluator'
 import type { ParamValueMap } from './paramResolver'
-import { parseExpression, evaluateExpression } from '../core/expression/expressionEvaluator'
-import type { ExpressionAST } from '../core/expression/expressionEvaluator'
+import { expressionPrograms } from '../core/expression/ExpressionProgramCache'
+import { evaluateWireExpression } from '../wiring/WireExpression'
 import { paramRefKey } from '../wiring/helpers'
 import { readWireSource } from '../wiring/WireSource'
 export { readWireSource } from '../wiring/WireSource'
-import { blockedWireIds, clampWireValue } from '../wiring/WireValidation'
+import { blockedWireIds } from '../wiring/WireValidation'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AST cache — survives re-render cycles via module-scope Map
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface CacheEntry {
-  expression: string
-  ast: ExpressionAST | null
-  /** Last error message, if parsing failed. */
-  error: string | null
-}
-
-const astCache = new Map<string, CacheEntry>()
-
-function getOrParseAst(wireId: string, expression: string): CacheEntry {
-  const cached = astCache.get(wireId)
-  if (cached && cached.expression === expression) return cached
-
-  let ast: ExpressionAST | null = null
-  let error: string | null = null
-  try {
-    ast = parseExpression(expression)
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e)
-  }
-
-  const entry: CacheEntry = { expression, ast, error }
-  if (astCache.size >= 512 && !astCache.has(wireId)) astCache.delete(astCache.keys().next().value!)
-  astCache.set(wireId, entry)
-  return entry
-}
-
-/** Clear the AST cache. Tests + scene reload should call this. */
-export function clearParameterWireCache(): void {
-  astCache.clear()
-}
+/** Release shared bounded programs; no scene or context is retained. */
+export function clearParameterWireCache(): void { expressionPrograms.clear() }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -119,15 +90,9 @@ export function evaluateParameterWiresVerbose(
       continue
     }
 
-    const cached = getOrParseAst(wire.id, wire.expression)
-    if (!cached.ast) {
-      runtimeErrorIds.add(wire.id); errors.set(wire.id, cached.error ?? 'Invalid expression')
-      continue
-    }
-
     let result: number
     try {
-      result = clampWireValue(evaluateExpression(cached.ast, { source: sourceVal, s: sourceVal }), wire.clamp)
+      result = evaluateWireExpression(wire, sourceVal)
     } catch (error) {
       errors.set(wire.id, error instanceof Error ? error.message : String(error))
       runtimeErrorIds.add(wire.id)

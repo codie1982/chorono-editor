@@ -35,14 +35,20 @@ export function validateBakeOptions(opts: BakeOptions): number {
  * finite scalar; an invalid sample rejects the whole conversion. Caller owns
  * the returned array. Source is never mutated, even on cancellation/failure. */
 export function sampleTrackDense(track: Track, opts: BakeOptions): Sample[] {
-  const intervals = validateBakeOptions(opts)
   if (!isScalarNumericTrack(track)) throw new Error('Baking supports scalar numeric tracks only; color, vector and discrete tracks must retain their typed keys.')
-  const sample = createNumericTrackSampler(track)
+  return sampleNumericSignal(createNumericTrackSampler(track), opts)
+}
+
+/** Sample an explicit finite numeric signal using the same bounded exact-end
+ * schedule as track baking. The callback is a trusted domain sampler, never
+ * generated code; buffers are caller-owned and cancellation is synchronous. */
+export function sampleNumericSignal(sample: (timeMs: number) => number | null, opts: BakeOptions): Sample[] {
+  const intervals = validateBakeOptions(opts)
   return Array.from({ length: intervals + 1 }, (_, index) => {
     if (opts.signal?.aborted) throw new Error('Bake cancelled')
     const timeMs = index === intervals ? opts.endMs : Math.min(opts.endMs, opts.startMs + index * 1000 / opts.fps)
     const value = sample(timeMs)
-    if (value === null) throw new Error(`Track has no finite numeric value at ${timeMs} ms.`)
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Track has no finite numeric value at ${timeMs} ms.`)
     return { timeMs, value }
   })
 }
@@ -98,9 +104,17 @@ export interface BakeReport {
  * interpolation/sampling error separately; neither proves continuous equality
  * or catches every aliased/discontinuous/high-frequency signal. No source edit. */
 export function prepareBake(track: Track, opts: BakeOptions): { track: Track; report: BakeReport } {
-  const raw = sampleTrackDense(track, opts), keys = keysFromSamples(track, raw, opts)
+  if (!isScalarNumericTrack(track)) throw new Error('Baking supports scalar numeric tracks only; color, vector and discrete tracks must retain their typed keys.')
+  return prepareNumericSignalBake(track, opts, createNumericTrackSampler(track))
+}
+
+/** Shared scalar conversion/quality measurement for a prepared track or live
+ * scene-property sampler. Sampling, stable IDs, simplification and midpoint
+ * reporting have one implementation. No dense frames are persisted. */
+export function prepareNumericSignalBake(track: Track, opts: BakeOptions, sourceSample: (timeMs: number) => number | null): { track: Track; report: BakeReport } {
+  const raw = sampleNumericSignal(sourceSample, opts), keys = keysFromSamples(track, raw, opts)
   const baked = replaceSignal(track, keys, opts)
-  const sourceSample = createNumericTrackSampler(track), bakedSample = createNumericTrackSampler(baked)
+  const bakedSample = createNumericTrackSampler(baked)
   let min = Infinity, max = -Infinity, maxSampleError = 0, maxMidpointError = 0
   for (let i = 0; i < raw.length; i++) {
     if (opts.signal?.aborted) throw new Error('Bake cancelled')

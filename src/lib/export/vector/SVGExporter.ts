@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 // ── SVGExporter ───────────────────────────────────────────────────────────────
 //
 // BL-84 — exports a scene frame to a static SVG document. Shapes and paths are
@@ -64,6 +65,7 @@ const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
  * Invalid/oversized geometry, cycles and unsupported precision reject before
  * dense conversion. Unsupported layer kinds retain their existing warnings. */
 export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGExportResult {
+  if (opts.animated && scene.layers.some(layer => Object.keys(layer.propertyExpressions?.fields ?? {}).length)) throw new Error('Animated SVG cannot evaluate live property expressions. Bake to keyframes or use raster output; a static SVG supports the selected frame.')
   measureJson(scene,{maxBytes:96*1024**2})
   const limits=resolveSvgOutputLimits(opts.limits)
   const { composition } = scene
@@ -72,7 +74,7 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
   if(!Number.isInteger(precision)||precision<0||precision>12||!Number.isFinite(timeMs))throw new RangeError('Invalid SVG time/precision.')
   const warnings: string[] = []
   const gradients = new GradientRegistry()
-  const overrides = evaluateTimelines(scene.timelines, timeMs)
+  const overrides = evaluateSceneFrame(scene, timeMs).overrides
   scene = materializeRenderScene(scene, overrides)
   preflightSvgOutput(scene,opts.animated??false,limits)
 

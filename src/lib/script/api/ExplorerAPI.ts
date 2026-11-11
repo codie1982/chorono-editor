@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, Transform } from '../../types'
 import type { ApiContext } from './LayerHandle'
 import { copyScriptData } from './scriptData'
@@ -9,7 +10,6 @@ import { assertStaticTransform, localTransform } from '../../editor/branches/Wor
 import { Matrix2D } from '../../geometry/Matrix2D'
 import { resolveLayerWorldMatrix } from '../../geometry/resolveLayerWorldMatrix'
 import { createLayerWorldBoundsResolver } from '../../geometry/resolveLayerWorldBounds'
-import { evaluateTimelines } from '../../evaluator'
 
 export interface ExplorerReadOptions { timelineId?: string; timeMs?: number }
 export interface ExplorerQuery extends ExplorerReadOptions {
@@ -103,7 +103,7 @@ export class ExplorerAPI {
     const timelineId = options.timelineId ?? this.ctx.resolveTimelineId()
     if (options.timelineId !== undefined && !scene.timelines.some(timeline => timeline.id === options.timelineId)) throw new Error('Explorer timeline was not found.')
     const timelines = scene.timelines.filter(timeline => timeline.id === timelineId)
-    const bounds = createLayerWorldBoundsResolver(scene, timeMs, evaluateTimelines(timelines, timeMs))
+    const bounds = createLayerWorldBoundsResolver(scene, timeMs, evaluateSceneFrame({ ...scene, timelines }, timeMs).overrides)
     const makeNode = (id: string, data = false): ExplorerNode => {
       const layer = requireLayer(index, id), ancestorIds = index.ancestors.get(id)!
       const ancestors = ancestorIds.map(id => index.byId.get(id)!)

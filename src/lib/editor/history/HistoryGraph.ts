@@ -1,4 +1,5 @@
 import { assertNumericInputExpressions } from '../inputExpressions/NumericInputExpression'
+import { assertScenePropertyExpressions } from '../../expression/properties/PropertyExpression'
 import type { ChronoScene } from '../../types'
 import type { HistoryState } from '../history'
 import { isChoronoScene } from '../../format/scene/SceneJsonConverter'
@@ -160,6 +161,7 @@ export function decodeHistory(present: ChronoScene, input: unknown): HistoryStat
     // every shared snapshot through another JSON parse.
     if (!isChoronoScene(result, true)) throw new Error('Invalid historical scene.')
     result.layers.forEach(assertNumericInputExpressions)
+    assertScenePropertyExpressions(result)
     assertAuthoringData(result.authoring); assertSceneGuides(result.editorGuides)
     return result
   }

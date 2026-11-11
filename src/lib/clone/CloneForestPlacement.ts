@@ -6,6 +6,7 @@ import { parseTrackTarget } from '../timeline/TrackTargetParser'
  * Procedural output, modifiers and multiplier curves do not; use an explicit
  * placement parent rather than changing controller inputs or double-adding. */
 export function needsClonePlacementGroup(scene: ChronoScene, root: Layer): boolean {
+  if (Object.keys(root.propertyExpressions?.fields ?? {}).some(path => path.startsWith('transform.'))) return true
   if (root.motionPath || root.followPath || Object.keys(root.paramBindings ?? {}).some(key => key.startsWith('transform.'))) return true
   return scene.timelines.some(timeline => timeline.tracks.some(track => {
     const target = parseTrackTarget(track.target)

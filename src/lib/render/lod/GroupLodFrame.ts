@@ -36,7 +36,8 @@ export class GroupLodFrame {
     if (root?.type === 'group') {
       const targets = new Set(['scaleX', 'scaleY', 'rotationDeg', 'anchorX', 'anchorY']
         .map(property => `layers.${root.id}.transform.${property}`))
-      if (root.motionPath || root.followPath || source.timelines.some(t => t.tracks.some(track => targets.has(track.target)))) {
+      if (root.motionPath || root.followPath || Object.keys(root.propertyExpressions?.fields ?? {}).some(path => targets.has('layers.' + root.id + '.' + path))
+          || source.timelines.some(t => t.tracks.some(track => targets.has(track.target)))) {
         cache.clear(); return
       }
     }

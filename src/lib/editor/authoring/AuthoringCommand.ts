@@ -4,6 +4,8 @@ import type { EditorCommand } from '../commands-keyframe'
 import { attributeSourceChange } from './Attribution'
 import { authoringKey, indexSourceEntities } from './SourceEntities'
 import { AuthoringHintCollector } from './AuthoringHints'
+import { assertScenePropertyExpressions } from '../../expression/properties/PropertyExpression'
+import { assertNumericInputExpressions } from '../inputExpressions/NumericInputExpression'
 
 /** Attach a trusted adapter's context without losing subtype results or lazy
  * copy hints populated by execute. The original command is not mutated. */
@@ -48,6 +50,8 @@ function expandedHints(before: ChronoScene, next: ChronoScene, hints: AuthoringH
  */
 export function executeAuthoredCommand(command: EditorCommand, before: ChronoScene, fallback?: AuthoringStamp): ChronoScene {
   const next = command.execute(before), hints = commandAuthoringHints(command)
+  assertScenePropertyExpressions(next)
+  next.layers.forEach(assertNumericInputExpressions)
   const stamp: AuthoringStamp = hints.stamp ?? fallback ?? { actor: { kind: 'human' }, transactionId: globalThis.crypto?.randomUUID?.() }
   return attributeSourceChange(before, next, stamp, expandedHints(before, next, hints))
 }

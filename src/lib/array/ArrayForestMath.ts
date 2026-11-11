@@ -1,5 +1,5 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer } from '../types'
-import { evaluateTimelines } from '../evaluator'
 import { Matrix2D } from '../geometry/Matrix2D'
 import { createLayerWorldMatrixResolver } from '../geometry/resolveLayerWorldMatrix'
 import { prepareTransformTargets } from '../canvas/math/preparedTransforms'
@@ -30,7 +30,7 @@ export function solveArrayForest(scene: ChronoScene, roots: readonly Layer[], op
     anchorX: 0, anchorY: 0, rotationDeg: 0, scaleX: 1, scaleY: 1 }, opacity: 1 }
   let providers: Layer[] = []
   if (options.settings.pattern === 'path') {
-    const source = index.get(options.settings.pathLayerId), frame = evaluateTimelines(scene.timelines, options.timeMs)
+    const source = index.get(options.settings.pathLayerId), frame = evaluateSceneFrame(scene, options.timeMs).overrides
     if (!source || source.type !== 'path' || !source.path) throw new Error('Choose an existing path layer with at least two anchors.')
     const materialized = materializeLayerOverrides(source, frame)
     const worldFor = createLayerWorldMatrixResolver(scene, options.timeMs, frame, index)

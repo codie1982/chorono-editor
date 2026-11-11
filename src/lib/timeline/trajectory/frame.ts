@@ -1,5 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene } from '@/lib/types'
-import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
+import { type OverrideMap } from '@/lib/evaluator'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
@@ -13,7 +14,7 @@ import type { TrajectoryContext, TrajectoryPoint, TrajectorySample } from './typ
 export function evaluateTrajectoryFrame(scene: ChronoScene, timelineId: string, localTimeMs: number): OverrideMap {
   if (!Number.isFinite(localTimeMs) || localTimeMs < 0) throw new RangeError('Trajectory time must be finite and non-negative.')
   if (!scene.timelines.some(timeline => timeline.id === timelineId)) throw new Error('Trajectory timeline no longer exists.')
-  return evaluateTimelines(scene.timelines, localTimeMs, { timelineId, localTimeMs })
+  return evaluateSceneFrame(scene, localTimeMs, { externalTime: { timelineId, localTimeMs } }).overrides
 }
 
 /** Project the rendered anchor at this key/sample's own local time. Ordinary

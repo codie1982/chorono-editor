@@ -1,5 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, ShapeKind, ShapeParams } from '@/lib/types'
-import { evaluateTimelines, getLayerValue, type OverrideMap } from '@/lib/evaluator'
+import { getLayerValue, type OverrideMap } from '@/lib/evaluator'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { bezierPathToPathDefinition } from '@/lib/path/bezierToPathDefinition'
 import { computeSplineBounds } from '@/lib/spline/geometry/computeSplineBounds'
@@ -86,7 +87,7 @@ export function createLayerWorldBoundsResolver(
     let prepared: LayerWorldBoundsResolver | undefined
     return layer => (prepared ??= createLayerWorldBoundsResolver(scene, timeMs, overrides))(layer)
   }
-  const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   scene = materializeRenderScene(scene, frame)
   const layerIndex = new LayerIndex(scene.layers)
   const memo = new Map<string, PathBounds | null>()

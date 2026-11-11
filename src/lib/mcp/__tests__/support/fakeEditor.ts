@@ -19,7 +19,7 @@ export function fakeEditor(label = 'MCP tester') {
   const host = { editor: {
     getScene: () => scene, getRevision: () => revision, getDocumentSignal: () => document.signal,
     isTransactionActive: () => transactionActive,
-    dispatchCommand: (command: any) => { history.push(scene); scene = executeAuthoredCommand(command, scene); revision++; future.length = 0 },
+    dispatchCommand: (command: any) => { const next = executeAuthoredCommand(command, scene); history.push(scene); scene = next; revision++; future.length = 0 },
     undo: () => { if (history.length) { future.push(scene); scene = history.pop()!; revision++ } },
     redo: () => { if (future.length) { history.push(scene); scene = future.pop()!; revision++ } },
   }, assets: new Map(), selectedTimelineId: '', currentTimeMs: 0, selectTimeline: () => {}, seek: () => {}, playToggle: () => {}, setSpeed: () => {} } as unknown as MCPHost

@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 // ── renderMotionBlurAccumulated ───────────────────────────────────────────────────
 //
 // After Effects-style accumulation motion blur (GPU). Replaces the sharp layer
@@ -15,7 +16,7 @@
 
 import type { Layer, ChronoScene } from '@/lib/types'
 import type { OverrideMap } from '@/lib/evaluator'
-import { evaluateTimelines, getLayerValue } from '@/lib/evaluator'
+import { getLayerValue } from '@/lib/evaluator'
 import type { ParamValueMap } from './RenderContext'
 import type { AssetElementMap } from '@/lib/renderer'
 import type { CanvasRenderer } from './CanvasRenderer'
@@ -46,7 +47,7 @@ export function renderMotionBlurAccumulated(
 
   // ── Velocity gate (same as the trail renderer) ──────────────────────────
   const prevTimeMs    = Math.max(0, timeMs - intervalMs)
-  const prevOverrides = evaluateTimelines(scene.timelines, prevTimeMs)
+  const prevOverrides = evaluateSceneFrame(scene, prevTimeMs, { paramValues }).overrides
   const curX  = getLayerValue(overrides,     layer.id, 'transform.x', layer.transform.x)
   const curY  = getLayerValue(overrides,     layer.id, 'transform.y', layer.transform.y)
   const prevX = getLayerValue(prevOverrides, layer.id, 'transform.x', layer.transform.x)
@@ -77,7 +78,7 @@ export function renderMotionBlurAccumulated(
     for (let k = 0; k < sampleCount; k++) {
       const t = sampleCount > 1 ? k / (sampleCount - 1) : 0
       const sampleTimeMs    = Math.max(0, timeMs - shutterMs * t)
-      const sampleOverrides = evaluateTimelines(scene.timelines, sampleTimeMs)
+      const sampleOverrides = evaluateSceneFrame(scene, sampleTimeMs, { paramValues }).overrides
 
       sctx.setTransform(1, 0, 0, 1, 0, 0)
       sctx.clearRect(0, 0, compW, compH)

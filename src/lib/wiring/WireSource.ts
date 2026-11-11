@@ -3,6 +3,7 @@ import type { OverrideMap } from '../evaluator'
 import type { ParamValueMap } from '../runtime/paramResolver'
 import { readPropertyPath } from '../scene/properties/readPropertyPath'
 import { paramRefKey } from './helpers'
+import type { LayerLookup } from '../scene/LayerIndex'
 
 /** Legacy scene-parameter coercion: finite numbers, boolean 0/1 and non-empty
  * numeric strings. Layer animation values retain their typed scalar gate. */
@@ -19,12 +20,21 @@ function numericSource(value: unknown): number | null {
  * Shared by runtime and editor preview; aliases/expressions belong
  * to the evaluator. Modifier sources require an actual evaluated override.
  * Borrows all inputs; unsafe/missing own-property paths fail with null. */
-export function readWireSource(source: ParameterRef, overrides: OverrideMap, params: ParamValueMap, layers: readonly Layer[]): number | null {
+export function readWireSource(source: ParameterRef, overrides: OverrideMap, params: ParamValueMap, layers: readonly Layer[] | LayerLookup): number | null {
   if (!source.layerId) return numericSource(params.get(source.propertyPath))
+  const value = readReferencedValue(source, overrides, params, layers)
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** Borrow an exact typed referenced value. Overrides win; absent modifier
+ * outputs stay missing. The lookup adapter avoids repeated full scene scans
+ * for compiled expression graphs. No boolean/string coercion occurs here. */
+export function readReferencedValue(source: ParameterRef, overrides: OverrideMap, params: ParamValueMap, layers: readonly Layer[] | LayerLookup): unknown {
   const key = paramRefKey(source)
-  if (overrides.has(key)) { const value = overrides.get(key); return typeof value === 'number' && Number.isFinite(value) ? value : null }
-  if (source.modifierId) return null
-  const layer = layers.find(item => item.id === source.layerId)
-  if (!layer) return null
-  try { const value = readPropertyPath(layer, source.propertyPath); return typeof value === 'number' && Number.isFinite(value) ? value : null } catch { return null }
+  if (overrides.has(key)) return overrides.get(key)
+  if (!source.layerId) return params.get(source.propertyPath)
+  if (source.modifierId) return undefined
+  const layer = 'get' in layers ? layers.get(source.layerId) : layers.find(item => item.id === source.layerId)
+  if (!layer) return undefined
+  try { return readPropertyPath(layer, source.propertyPath) } catch { return undefined }
 }

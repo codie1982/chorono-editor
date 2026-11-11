@@ -1,10 +1,10 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer } from '@/lib/types'
 import type { OverrideMap } from '@/lib/evaluator'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { transformSplineData } from '@/lib/spline/geometry/transformSplineData'
 import { computeSplineWorldBounds } from '@/lib/spline/geometry/computeSplineWorldBounds'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
-import { evaluateTimelines } from '@/lib/evaluator'
 
 /** Root spline translations are world translations; keep snapping on the visual box. */
 export function resolveSplineMoveBounds(
@@ -13,7 +13,7 @@ export function resolveSplineMoveBounds(
   if (layer.type !== 'spline' || layer.parentId) return null
   const bounds = computeSplineWorldBounds(layer, scene, timeMs, overrides)
   if (!bounds) return null
-  const display = resolveDisplayTransform(layer, scene, timeMs, overrides ?? evaluateTimelines(scene.timelines, timeMs))
+  const display = resolveDisplayTransform(layer, scene, timeMs, overrides ?? evaluateSceneFrame(scene, timeMs).overrides)
   return {
     width: bounds.width,
     height: bounds.height,

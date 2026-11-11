@@ -5,6 +5,8 @@ import { assertCloneForestBudget, CLONE_WORKLOAD_LIMITS } from '../clone/CloneWo
 import { assertSceneGuides } from '../geometry/guides/sceneGuideData'
 import { assertAuthoringData } from '../editor/authoring/AuthoringValidation'
 import type { SourceAuthorization } from './source/EditorSourceIdentity'
+import { assertScenePropertyExpressions } from '../expression/properties/PropertyExpression'
+import { assertNumericInputExpressions } from '../editor/inputExpressions/NumericInputExpression'
 
 export const MCP_VERSION = '2.1.0'
 export const LIMITS = { layers: CLONE_WORKLOAD_LIMITS.layers, timelines: 100, keyframes: CLONE_WORKLOAD_LIMITS.keyframes, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
@@ -37,6 +39,8 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
   if (!String(scene.formatVersion).startsWith('1.')) throw new Error('Unsupported scene version')
   assertSceneGuides(scene.editorGuides)
   assertAuthoringData(scene.authoring)
+  assertScenePropertyExpressions(scene)
+  scene.layers.forEach(assertNumericInputExpressions)
   const comp = scene.composition
   if (comp.audioVolume !== undefined && (!Number.isFinite(comp.audioVolume) || comp.audioVolume < 0 || comp.audioVolume > 4)) throw new Error('Invalid master audio gain')
   if (comp.audioMuted !== undefined && typeof comp.audioMuted !== 'boolean') throw new Error('Invalid master audio mute')

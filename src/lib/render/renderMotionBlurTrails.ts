@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 // ── renderMotionBlurTrails ────────────────────────────────────────────────────
 //
 // Renders N low-opacity copies of a layer at past time positions to create a
@@ -35,7 +36,7 @@ export function renderMotionBlurTrails(
 
   // Compute velocity to decide whether to show trails
   const prevTimeMs     = Math.max(0, timeMs - intervalMs)
-  const prevOverrides  = evaluateTimelines(scene.timelines, prevTimeMs)
+  const prevOverrides  = evaluateSceneFrame(scene, prevTimeMs, { paramValues }).overrides
   const curX  = getLayerValue(overrides,     layer.id, 'transform.x', layer.transform.x)
   const curY  = getLayerValue(overrides,     layer.id, 'transform.y', layer.transform.y)
   const prevX = getLayerValue(prevOverrides, layer.id, 'transform.x', layer.transform.x)
@@ -49,7 +50,7 @@ export function renderMotionBlurTrails(
   // Render farthest trail first so nearest renders on top
   for (let i = trailCount; i >= 1; i--) {
     const trailTimeMs    = Math.max(0, timeMs - i * intervalMs)
-    const trailOverrides = evaluateTimelines(scene.timelines, trailTimeMs)
+    const trailOverrides = evaluateSceneFrame(scene, trailTimeMs, { paramValues }).overrides
     // Linear fade: nearest trail = maxOpacity, farthest ≈ maxOpacity/trailCount
     const trailOpacity   = maxOpacity * (1 - (i - 1) / trailCount)
 

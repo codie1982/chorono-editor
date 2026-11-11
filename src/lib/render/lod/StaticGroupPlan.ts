@@ -40,7 +40,12 @@ export class StaticGroupPlan {
       }
     }
     overrides.forEach((_, key) => { const match = /^layers\.([^.]+)\./.exec(key); if (match) { this.overridden.add(match[1]); this.classifyTransform(key, match[1]) } })
-    for (const layer of source.layers) if (layer.instanceOf) this.instances.add(layer.id)
+    for (const layer of source.layers) {
+      if (layer.instanceOf) this.instances.add(layer.id)
+      if (layer.propertyExpressions) for (const path of Object.keys(layer.propertyExpressions.fields)) {
+        this.animated.add(layer.id); this.classifyTransform('layers.' + layer.id + '.' + path, layer.id)
+      }
+    }
     for (const id of Array.from(selected)) {
       let item = index.get(id)
       while (item && !this.protected.has(item.id)) {

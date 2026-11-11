@@ -1,4 +1,5 @@
 import type { Layer } from '../types'
+import { remapPropertyExpressions } from '../expression/properties/remapPropertyExpressions'
 
 /** Remap typed layer references within a cloned forest. Inputs are borrowed;
  * only records containing a remapped field are copied. References outside the
@@ -8,6 +9,7 @@ export function remapCloneLayerReferences(layer: Layer, ids: Readonly<Record<str
   const ref = (id: string) => ids[id] ?? id
   const area = layer.particleEmitter?.emitter.area
   return { ...layer,
+    ...(layer.propertyExpressions ? { propertyExpressions: remapPropertyExpressions(layer.propertyExpressions, ids) } : {}),
     ...(layer.parentId ? { parentId: ref(layer.parentId) } : {}),
     ...(layer.followPath ? { followPath: { ...layer.followPath, pathLayerId: ref(layer.followPath.pathLayerId) } } : {}),
     ...(layer.masks ? { masks: layer.masks.map(mask => ({ ...mask, maskLayerId: ref(mask.maskLayerId) })) } : {}),

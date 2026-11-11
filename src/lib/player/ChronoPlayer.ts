@@ -26,11 +26,10 @@ import {
   StateMachineRuntime, blendOverrides, type ParamLookup,
 } from '@/lib/statemachine'
 import {
-  buildParamValues, applyParamBindingsToOverrides,
+  buildParamValues,
   type ParamValueMap,
 } from '@/lib/runtime/paramResolver'
-import { evaluateBindings } from '@/lib/runtime/bindingEvaluator'
-import { evaluateParameterWires } from '@/lib/runtime/parameterWireEvaluator'
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import {
   evaluateTriggers,
   type RuntimeEvent, type ResolvedAction,
@@ -56,6 +55,9 @@ export interface ChronoPlayerOptions {
 }
 
 export interface FrameResult {
+  /** Present when a live formula fails; authored/pre-driver fallback remains. */
+  expressionErrors?: ReadonlyMap<string, string>
+  wireErrors?: ReadonlyMap<string, string>
   overrides: OverrideMap
   paramValues: ParamValueMap
   events: RuntimeEvent[]
@@ -66,6 +68,13 @@ export interface FrameResult {
 const now = (): number =>
   (typeof performance !== 'undefined' ? performance.now() : Date.now())
 
+/** Framework-free playback/session orchestrator. The host supplies media and
+ * an adapter; this instance disposes replaced/removed adapters and owns its playback clock, event queues and SM
+ * runtimes. tick delegates property evaluation to the same deterministic frame
+ * service as the editor/renderers; expressions never create a second clock.
+ * stop/destroy terminate scheduled playback through the existing lifecycle.
+ * This pre-existing large orchestration class remains an incremental migration
+ * exception; numerical/property policies live in their dedicated services. */
 export class ChronoPlayer {
   private _scene: ChronoScene
   private _assets: AssetElementMap
@@ -219,10 +228,12 @@ export class ChronoPlayer {
 
     const getParam: ParamLookup = (name) => paramValues.get(name)
     let baseOverrides: OverrideMap
+    let timelineWeights: ReadonlyMap<string, number> | undefined
     let smActiveTimelineId: string | null = null
 
     if (this._smRuntimes.size > 0) {
       const smRes = this._tickStateMachines(globalTimeMs, getParam, wallMs)
+      timelineWeights = smRes.timelineWeights
       const nonSm = scene.timelines.filter((t) => !smRes.ownedTimelineIds.has(t.id))
       baseOverrides = mergeOverrides(evaluateTimelines(nonSm, globalTimeMs, externalTime), smRes.overrides)
 
@@ -241,10 +252,8 @@ export class ChronoPlayer {
       baseOverrides = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
     }
 
-    const paramOverrides   = applyParamBindingsToOverrides(scene.layers, paramValues, baseOverrides)
-    const bindingOverrides = evaluateBindings(scene.bindings, paramOverrides, paramValues, scene)
-    const wireOverrides    = evaluateParameterWires(scene.parameterWires, bindingOverrides, paramValues, scene)
-    const overrides = mergeOverrides(wireOverrides)
+    const driverFrame = evaluateSceneFrame(scene, globalTimeMs, { baseOverrides, paramValues, externalTime, timelineWeights })
+    const overrides = driverFrame.overrides
 
     const activeTimelineId = smActiveTimelineId
       ?? scene.timelines.find((t) => t.autoplay)?.id
@@ -278,17 +287,19 @@ export class ChronoPlayer {
       this._adapter.render({ scene, timeMs: globalTimeMs, overrides, paramValues, assets: this._assets })
     }
 
-    return { overrides, paramValues, events: allEvents, actions, segmentState: this._segment }
+    return { overrides, paramValues, events: allEvents, actions, segmentState: this._segment,
+      ...(driverFrame.expressionErrors.size ? { expressionErrors: driverFrame.expressionErrors } : {}),
+      ...(driverFrame.errors.size ? { wireErrors: driverFrame.errors } : {}) }
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
 
   /** Port of useSMRuntime.tickFrame — no React, same blend logic. */
   private _tickStateMachines(globalTimeMs: number, getParam: ParamLookup, wallMs: number): {
-    overrides: OverrideMap; ownedTimelineIds: Set<string>; actions: SMAction[]
+    overrides: OverrideMap; ownedTimelineIds: Set<string>; timelineWeights: ReadonlyMap<string, number>; actions: SMAction[]
   } {
     const scene = this._scene
-    const owned = new Set<string>()
+    const owned = new Set<string>(), timelineWeights = new Map<string, number>()
     const actions: SMAction[] = []
     const contributions: OverrideMap[] = []
 
@@ -301,7 +312,7 @@ export class ChronoPlayer {
     }
 
     this._smRuntimes.forEach((rt) => {
-      rt.sm.states.forEach((s) => owned.add(s.timelineId))
+      rt.sm.states.forEach((s) => { owned.add(s.timelineId); timelineWeights.set(s.timelineId, 0) })
 
       for (const e of smEvents) {
         if (e.smId && e.smId !== rt.sm.id) continue
@@ -313,12 +324,14 @@ export class ChronoPlayer {
 
       const blend = rt.getBlend(wallMs)
       if (blend) {
+        timelineWeights.set(blend.fromTimelineId, 1 - blend.alpha); timelineWeights.set(blend.toTimelineId, blend.alpha)
         const fromTl = scene.timelines.find((t) => t.id === blend.fromTimelineId)
         const toTl   = scene.timelines.find((t) => t.id === blend.toTimelineId)
         const fromOv = fromTl ? evaluateTimelines([fromTl], globalTimeMs) : new Map<string, number>()
         const toOv   = toTl   ? evaluateTimelines([toTl],   globalTimeMs) : new Map<string, number>()
         contributions.push(blendOverrides(fromOv, toOv, blend.alpha))
       } else if (rt.activeTimelineId) {
+        timelineWeights.set(rt.activeTimelineId, 1)
         const tl = scene.timelines.find((t) => t.id === rt.activeTimelineId)
         if (tl) contributions.push(evaluateTimelines([tl], globalTimeMs))
       }
@@ -326,7 +339,7 @@ export class ChronoPlayer {
 
     return {
       overrides: contributions.length ? mergeOverrides(...contributions) : new Map<string, number>(),
-      ownedTimelineIds: owned,
+      ownedTimelineIds: owned, timelineWeights,
       actions,
     }
   }

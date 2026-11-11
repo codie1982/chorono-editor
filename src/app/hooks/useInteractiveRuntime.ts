@@ -24,12 +24,8 @@ import { useSMRuntime } from './useSMRuntime'
 import { useRuntimeFrameSignal } from './runtime/useRuntimeFrameSignal'
 import { useRuntimeParameters } from './runtime/useRuntimeParameters'
 import type { ParamLookup } from '@/lib/statemachine'
-import {
-  applyParamBindingsToOverrides,
-  type ParamValueMap,
-} from '@/lib/runtime/paramResolver'
-import { evaluateBindings } from '@/lib/runtime/bindingEvaluator'
-import { evaluateParameterWiresVerbose } from '@/lib/runtime/parameterWireEvaluator'
+import type { ParamValueMap } from '@/lib/runtime/paramResolver'
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import {
   evaluateTriggers,
   type RuntimeEvent, type ResolvedAction,
@@ -53,6 +49,7 @@ export interface FrameEvalResult {
   /** Same immutable input frame used to resolve wire sources; before wire output. */
   wireSourceOverrides?: OverrideMap
   wireErrors?: ReadonlyMap<string, string>
+  expressionErrors?: ReadonlyMap<string, string>
   /** Resolved parameter values used during this frame. */
   paramValues:  ParamValueMap
   /** Any events that fired this frame — useful for debugging. */
@@ -202,6 +199,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     const getParam: ParamLookup = (name) => paramValues.get(name)
     const wallMs = performance.now()
     let baseOverrides: OverrideMap
+    let timelineWeights: ReadonlyMap<string, number> | undefined
     let smActiveTimelineId: string | null = null
 
     if (sm.hasSM) {
@@ -212,6 +210,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
       }
 
       const smRes = sm.tickFrame(globalTimeMs, getParam, wallMs)
+      timelineWeights = smRes.timelineWeights
       const nonSmTimelines = scene.timelines.filter((t) => !smRes.ownedTimelineIds.has(t.id))
       const nonSmOverrides = evaluateTimelines(nonSmTimelines, globalTimeMs, externalTime)
       baseOverrides = mergeOverrides(nonSmOverrides, smRes.overrides)
@@ -234,12 +233,9 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
       baseOverrides = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
     }
 
-    const paramOverrides   = applyParamBindingsToOverrides(scene.layers, paramValues, baseOverrides)
-    const bindingOverrides = evaluateBindings(scene.bindings, paramOverrides, paramValues, scene)
-    // BL-05: Apply expression-based parameter wires after linear bindings so
-    // expression wires can read values produced by the simpler binding system.
-    const wireEvaluation   = evaluateParameterWiresVerbose(scene.parameterWires, bindingOverrides, paramValues, scene)
-    const overrides = mergeOverrides(wireEvaluation.overrides) // wireOverrides already wraps everything
+    const wireEvaluation = evaluateSceneFrame(scene, globalTimeMs, { baseOverrides, paramValues, externalTime, timelineWeights })
+    const bindingOverrides = wireEvaluation.wireSourceOverrides
+    const overrides = wireEvaluation.overrides
 
     // ── Build new snapshot ────────────────────────────────────────────────
     const activeTimelineId = smActiveTimelineId
@@ -280,7 +276,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     prevSnapshotRef.current = nextSnapshot
 
     return {
-      overrides, wireSourceOverrides: bindingOverrides, wireErrors: wireEvaluation.errors,
+      overrides, wireSourceOverrides: bindingOverrides, wireErrors: wireEvaluation.errors, expressionErrors: wireEvaluation.expressionErrors,
       paramValues,
       events:  allEvents,
       actions,

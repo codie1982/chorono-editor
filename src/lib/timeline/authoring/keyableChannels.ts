@@ -54,7 +54,8 @@ export function keyableChannels(layer: Layer, tracks: readonly Track[], mode: Ke
 
 /** Report driven inputs rather than writing an evaluated effect back to source.
  * A supported explicit Bake/Convert stays a separate user operation. */
-export function drivenChannelReason(scene: ChronoScene, layer: Layer, path: string, track?: Track): string | null {
+export function drivenChannelReason(scene: ChronoScene, layer: Layer, path: string, track?: Track, options: { ignorePropertyExpression?: boolean } = {}): string | null {
+  if (!options.ignorePropertyExpression && layer.propertyExpressions?.fields[path]) return 'A live expression drives this input; bake or explicitly convert it first.'
   if (track?.controller && track.controller.type !== 'keyframe') return 'Procedural controller: bake or convert it first.'
   if (track?.easeCurve || track?.timeWarp || track?.multiplierCurve || track?.modifiers?.some(item => item.enabled)
     || track?.keyframes.some(key => key.segmentModifiers?.some(item => item.enabled))) return 'Modifiers/time remapping: bake this channel first.'

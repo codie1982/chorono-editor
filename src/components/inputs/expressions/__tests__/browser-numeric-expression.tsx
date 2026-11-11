@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@/lib/modes/bootstrap'
 import PropertiesPanel from '@/components/PropertiesPanel'
@@ -16,12 +16,15 @@ import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { sceneSourceData } from '@/lib/format/scene/sceneSourceData'
 import { makeSessionProject, readSessionProject } from '@/lib/editor/session/SessionProject'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
+import { makeCloneForestCmd } from '@/lib/editor/commands-clone-forest'
 import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
 
 /** Isolated source/data origin. Tests production state, inspector, schema,
  * renderer and local recovery without mutating an editor/MCP user session. */
 function fixture() {
   const scene = emptyScene(), layer = { ...newRectLayer(), id: 'hero', name: 'Editable card' }
+  scene.parameters = [{ id: 'amount', name: 'Amount', type: 'number', defaultValue: 80 }]
   scene.layers = [layer, { ...newRectLayer(), id: 'other', name: 'Other object', transform: { ...layer.transform, x: 280 } }]
   scene.composition.width = 500; scene.composition.height = 300
   scene.timelines = [{ id: 'animation', durationMs: 1000, autoplay: false, loop: false, tracks: [{ target: 'layers.hero.transform.x', keyframes: [{ id: 'manual-key', timeMs: 0, value: 40, easing: { type: 'linear' } }] }] }]
@@ -31,9 +34,10 @@ function fixture() {
  * commands; no private window test handles or synthetic DOM event dispatch. */
 function Host({ session }: { session: BrowserRecoverySession }) {
   const editor = useEditorState(session.scene ?? fixture(), session.history), recovery = useSceneSessionRecovery(editor, session)
-  const [schema, setSchema] = useState(false), [selected, select] = useState('hero'), [project, setProject] = useState('')
+  const [timeMs, setTimeMs] = useState(0), [schema, setSchema] = useState(false), [selected, select] = useState('hero'), [project, setProject] = useState('')
   const identity = useSessionIdentity()!, scene = editor.scene, layer = scene.layers.find(item => item.id === selected)!
   const assets = useAssetCache(scene.assets), snap = useSnapSettings()
+  const frame = useMemo(() => evaluateSceneFrame(scene, timeMs, { externalTime: { timelineId: 'animation', localTimeMs: timeMs } }), [scene, timeMs])
   const update = (next: typeof layer) => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, next, layer))
   useEffect(() => {
     const concurrent = (event: KeyboardEvent) => {
@@ -46,7 +50,7 @@ function Host({ session }: { session: BrowserRecoverySession }) {
     return () => window.removeEventListener('keydown', concurrent, true)
   }, [editor.getScene, editor.dispatchCommand])
   return <main className="min-h-screen bg-gray-950 p-3 text-gray-100">
-    <h1>Numeric input expression acceptance</h1><p className="text-xs text-gray-400">F8 edits the source; F9 changes selection, including while a formula dialog is open.</p>
+    <h1>Live property expression acceptance</h1><p className="text-xs text-gray-400">F8 edits the source; F9 changes selection, including while a formula dialog is open.</p>
     <output id="counts">{JSON.stringify({ undo: editor.getCommittedHistory().past.length, redo: editor.getCommittedHistory().future.length, recovery: recovery.state, sessionId: identity.id })}</output>
     <nav className="my-3 flex gap-4 text-xs">
       <button onClick={editor.undo} disabled={!editor.canUndo}>Undo</button><button onClick={editor.redo} disabled={!editor.canRedo}>Redo</button>
@@ -57,19 +61,22 @@ function Host({ session }: { session: BrowserRecoverySession }) {
       <button onClick={() => { const opened = readSessionProject(parseSceneJson(project)); identity.adopt(opened.sessionId!); editor.resetHistory(opened.history) }}>Open project</button>
       <button onClick={() => { identity.adopt(crypto.randomUUID()); editor.resetScene(fixture()) }}>Reset test document</button>
     </nav>
+    <label className="my-2 flex gap-2 text-xs">Playhead ms<input aria-label="Playhead ms" type="range" min="0" max="1000" step="100" value={timeMs} onChange={event => setTimeMs(Number(event.target.value))} />{timeMs}</label>
+    <button className="my-2 text-xs" onClick={() => { const source = editor.getScene(), command = makeCloneForestCmd(source, { sourceIds: [selected], offsets: { [selected]: { x: 30, y: 20 } } }); editor.dispatchCommand(command); select(command.idMaps[0][selected]) }}>Copy selection</button>
+    <output id="frame" className="block text-xs">{JSON.stringify(Object.fromEntries(frame.overrides))}</output>
     <div className="flex h-[620px] gap-4">
-      <div className="flex min-w-0 flex-1"><SceneCanvas scene={scene} editor={editor} assets={assets} snap={snap} timeMs={0} selectedLayerId={selected} onSelectLayer={id => { if (id) select(id) }} /></div>
+      <div className="flex min-w-0 flex-1"><SceneCanvas scene={scene} editor={editor} assets={assets} snap={snap} timeMs={timeMs} overrides={frame.overrides} paramValues={frame.paramValues} selectedLayerId={selected} onSelectLayer={id => { if (id) select(id) }} /></div>
       <div className="flex w-[420px] flex-col overflow-auto border border-gray-700">
-        {schema ? <NumericPropertyProvider scene={scene} layerId={layer.id} dispatch={editor.dispatchCommand} getScene={editor.getScene} isTransactionActive={editor.isTransactionActive}>
+        {schema ? <NumericPropertyProvider scene={scene} layerId={layer.id} dispatch={editor.dispatchCommand} getScene={editor.getScene} isTransactionActive={editor.isTransactionActive} timeMs={timeMs} timelineId="animation" frame={frame}>
           <SchemaPanel layer={layer} onLayerChange={update} />
         </NumericPropertyProvider> : <PropertiesPanel layer={layer} composition={scene.composition} scene={scene} allLayers={scene.layers} dispatchCommand={editor.dispatchCommand}
-          getScene={editor.getScene} isTransactionActive={editor.isTransactionActive} onLayerChange={update} onCompositionChange={() => {}} />}
+          getScene={editor.getScene} isTransactionActive={editor.isTransactionActive} currentTimeMs={timeMs} selectedTimelineId="animation" expressionFrame={frame} onLayerChange={update} onCompositionChange={() => {}} />}
       </div>
     </div>
     <label className="block text-xs">Project JSON<textarea aria-label="Project JSON" value={project} onChange={event => setProject(event.target.value)} className="h-14 w-full bg-gray-900" /></label>
     <pre id="source" className="whitespace-pre-wrap text-xs">{JSON.stringify(sceneSourceData(scene))}</pre>
   </main>
 }
-createRoot(document.getElementById('app')!).render(<StrictMode><EditorSessionBoundary databaseName="chorono-numeric-expression-acceptance">{session =>
+createRoot(document.getElementById('app')!).render(<StrictMode><EditorSessionBoundary databaseName="chorono-property-expression-acceptance">{session =>
   <SessionOutputProvider sessionId={session.id}><Host session={session} /></SessionOutputProvider>
 }</EditorSessionBoundary></StrictMode>)

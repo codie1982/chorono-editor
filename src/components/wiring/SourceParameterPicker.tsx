@@ -42,7 +42,7 @@ export default function SourceParameterPicker({
 }: Props) {
   const [search, setSearch] = useState('')
   // Layers collapsed by default — saves vertical space for big scenes.
-  const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(new Set())
+  const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(() => new Set(scene.layers.map(layer => layer.id)))
   const [paramsCollapsed, setParamsCollapsed] = useState(false)
 
   const excludeKey = excludeRef ? paramRefKey(excludeRef) : null

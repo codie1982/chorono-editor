@@ -53,6 +53,11 @@ export default function ScrubInput({
   const property = useNumericPropertyInput(propertyPath, fieldLabel)
   const owner = property?.layer
   const saved = owner && property ? numericInputExpression(owner, property.path) : undefined
+  const live = owner && property ? owner.propertyExpressions?.fields[property.path] : undefined
+  const frameKey = property ? 'layers.' + property.layerId + '.' + property.path : ''
+  const evaluated = live && property?.frame?.overrides.get(frameKey)
+  const shownValue = typeof evaluated === 'number' ? evaluated : value
+  const liveError = live && (property?.frame?.expressionErrors?.get(frameKey) ?? property?.frame?.expressionErrors?.get('scene'))
   const propertyKey = property ? JSON.stringify([property.layerId, property.path]) : ''
   const [formulaEditor, setFormulaEditor] = useState<{ target: string; formula?: string } | null>(null)
   // A selection/path change closes the old draft instead of retargeting it.
@@ -60,21 +65,21 @@ export default function ScrubInput({
   const [error, setError] = useState('')
   // Internal text state lets the user type "3.5" without React clobbering it
   // mid-edit. We commit on blur / Enter.
-  const [text, setText] = useState<string>(String(value))
+  const [text, setText] = useState<string>(String(shownValue))
   const dirtyRef = useRef(false)
-  const latest = useRef({ value, onChange })
+  const latest = useRef({ value: shownValue, onChange })
   // Invalidate a typed draft before effects as well: blur can arrive between
   // an external value's render and its passive text-sync effect.
-  if (!Object.is(latest.current.value, value)) dirtyRef.current = false
-  latest.current = { value, onChange }
-  useEffect(() => { dirtyRef.current = false; setText(String(value)); setError('') }, [value])
+  if (!Object.is(latest.current.value, shownValue)) dirtyRef.current = false
+  latest.current = { value: shownValue, onChange }
+  useEffect(() => { dirtyRef.current = false; setText(String(shownValue)); setError('') }, [shownValue])
 
   /** Open only this source field, carrying any uncommitted/invalid typed draft.
    * Clear blur ownership before native modal focus moves away from the input. */
   const openFormula = () => {
     if (!property) return
     setFormulaEditor({ target: propertyKey, formula: dirtyRef.current || error ? text : undefined })
-    dirtyRef.current = false; setText(String(value)); setError('')
+    dirtyRef.current = false; setText(String(shownValue)); setError('')
   }
 
   /** Commit only a changed, finite typed draft. Clear ownership before invoking
@@ -98,7 +103,7 @@ export default function ScrubInput({
 
   // ── Drag math ──────────────────────────────────────────────────────────
   const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
-    if (disableScrub || saved || e.button !== 0) return
+    if (disableScrub || saved || live || e.button !== 0) return
     // If the input already has focus, don't start a scrub — let user edit text.
     if (document.activeElement === e.currentTarget) return
 
@@ -177,8 +182,8 @@ export default function ScrubInput({
         type="text"
         inputMode="decimal"
         aria-label={property?.label ?? fieldLabel}
-        readOnly={!!saved}
-        aria-invalid={!!error}
+        readOnly={!!saved || !!live}
+        aria-invalid={!!error || !!liveError}
         onDoubleClick={event => {
           if (!property) return
           event.preventDefault(); event.stopPropagation()
@@ -205,13 +210,14 @@ export default function ScrubInput({
         className={`relative z-10 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
           focus:outline-none focus:border-blue-500
           ${scrubbing ? 'cursor-ew-resize select-none' : 'cursor-ew-resize'}
-          ${property ? 'pr-8' : ''} ${saved ? 'text-violet-200' : ''} ${className}`}
+          ${property ? 'pr-8' : ''} ${saved || live ? 'text-violet-200' : ''} ${className}`}
         style={{ touchAction: 'none' }}
       />
-      {property && <button type="button" aria-label={`Edit expression for ${property.label}`} title={saved ? `Saved formula: ${saved.formula}` : 'Edit a saved constant numeric formula'}
+      {property && <button type="button" aria-label={`Edit expression for ${property.label}`} title={live ? `Live formula: ${live.formula}` : saved ? `Saved formula: ${saved.formula}` : 'Edit a numeric formula'}
         onMouseDown={event => event.preventDefault()} onClick={event => { event.preventDefault(); event.stopPropagation(); openFormula() }}
-        className={`absolute right-0 top-0 z-20 h-7 w-8 rounded-r text-xs focus-visible:outline focus-visible:outline-blue-400 ${saved ? 'text-violet-200 bg-violet-900/50' : 'text-gray-400 hover:bg-gray-700'}`}>fx</button>}
-      {saved && saved.value !== value && <p className="mt-1 text-[11px] text-amber-300">Source changed; formula was not reapplied.</p>}
+        className={`absolute right-0 top-0 z-20 h-7 w-8 rounded-r text-xs focus-visible:outline focus-visible:outline-blue-400 ${saved || live ? 'text-violet-200 bg-violet-900/50' : 'text-gray-400 hover:bg-gray-700'}`}>fx</button>}
+      {!live && saved && saved.value !== value && <p className="mt-1 text-[11px] text-amber-300">Source changed; formula was not reapplied.</p>}
+      {liveError && <p role="alert" className="mt-1 text-[11px] text-amber-300">{liveError}</p>}
       {error && <p role="alert" className="mt-1 text-[11px] text-amber-300">{error}</p>}
       {formulaEditor && formulaEditor.target === propertyKey && property && <NumericFormulaEditor key={propertyKey} input={property} limits={{ min, max }} initialFormula={formulaEditor.formula} onClose={() => setFormulaEditor(null)} />}
       {/* Progress bar overlay — z-0 so it sits BEHIND the text */}

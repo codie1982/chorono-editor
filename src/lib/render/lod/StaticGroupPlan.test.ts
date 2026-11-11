@@ -47,6 +47,15 @@ it('clears the previous weak scene owner on immutable edits/undo or project repl
   cache.beginScene({ ...scene }); expect(cache.count()).toBe(0)
 })
 
+it('keeps declared live descendants dynamic even while their fallback produces no override', () => {
+  const { scene, group, children } = fixture()
+  children[0].propertyExpressions = { version: 1, fields: { 'size.width': { resultType: 'number', formula: '100+timeSec', timelineId: 'motion', sources: {} } } }
+  expect(plan(scene).get(group, context)).toBeNull()
+  children[0].propertyExpressions = undefined
+  group.propertyExpressions = { version: 1, fields: { 'transform.scaleX': { resultType: 'number', formula: '1+timeSec', timelineId: 'motion', sources: {} } } }
+  expect(plan(scene).allowsProjection(group, { e: 0, f: 0 })).toBe(false)
+})
+
 it('bounds exact version work and refuses cyclic or oversized runtime data', async () => {
   const { boundedContentVersion } = await import('./boundedContentVersion')
   const value = { colors: ['#fff', 'quote"\\', '🌿'], width: 30 }

@@ -8,6 +8,9 @@ import { projectFrameFonts, projectFrameFontOverrides } from '@/lib/render/media
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
+import { materializeLayerOverrides } from '@/lib/render/materializeOverrides'
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
+import { drivenChannelReason } from '@/lib/timeline/authoring/keyableChannels'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
@@ -793,6 +796,8 @@ export default function SceneCanvas({
       setTransformWarning('Edit animated size channels on the timeline before resizing the source geometry.')
       return
     }
+    const sizeDriver = ['size.width', 'size.height'].map(path => drivenChannelReason(scene, layer, path)).find(Boolean)
+    if (sizeDriver) { setTransformWarning(sizeDriver); return }
     if (Math.abs(target.worldMatrix.determinant()) < 1e-9) {
       setTransformWarning('This layer is scaled to zero. Restore its scale before resizing.')
       return
@@ -828,7 +833,7 @@ export default function SceneCanvas({
       return
     }
     setTransformWarning(null)
-    const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+    const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
     const parentWorld = resolveParentWorldMatrix(layer, scene, timeMs, frame)
     if (Math.abs(parentWorld.determinant()) < 1e-9) return
     const displayTransform = { ...layer.transform, ...resolveDisplayTransform(layer, scene, timeMs, frame) }
@@ -976,13 +981,17 @@ export default function SceneCanvas({
   // when no overrides apply. `dragOverrides` ensures the frame moves
   // smoothly mid-drag (preview transactions don't update overrides).
   const displayOverrides = useMemo(() => {
-    const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+    const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
     if (dragOverrides.size === 0) return frame
     const merged: OverrideMap = new Map()
     frame.forEach((v, k) => merged.set(k, v))
     dragOverrides.forEach((v, k) => merged.set(k, v))
     return merged
-  }, [overrides, scene.timelines, timeMs, dragOverrides])
+  }, [overrides, scene, timeMs, dragOverrides])
+  // Only visual geometry is projected. Gesture commands continue to borrow the
+  // authored layer, so drawing a live size never stamps that size into source.
+  const selectedFrameLayer = useMemo(() => selectedLayer
+    ? materializeLayerOverrides(selectedLayer, displayOverrides) : null, [selectedLayer, displayOverrides])
   // Selection frame anchor: prefer live display transform but keep the
   // static fallback so empty paths / unconfigured followPath layers still
   // get a sensible gizmo origin.
@@ -1040,8 +1049,8 @@ export default function SceneCanvas({
     axisScale: toolMode === 'scale',
     anchor:    toolMode === 'anchor',
   }
-  const actualWorldPivot = selectedWorldMatrix && selectedLayer
-    ? selectedWorldMatrix.applyToPoint({ x: selectedLayer.transform.anchorX, y: selectedLayer.transform.anchorY })
+  const actualWorldPivot = selectedWorldMatrix && selectedFrameLayer
+    ? selectedWorldMatrix.applyToPoint({ x: selectedFrameLayer.transform.anchorX, y: selectedFrameLayer.transform.anchorY })
     : { x: 0, y: 0 }
   const multiPreparation = useMemo(() => !hideEditorUI && selectedLayerIds && selectedLayerIds.size > 1
     ? prepareTransformTargets(scene, selectedLayerIds, timeMs, displayOverrides,
@@ -1460,10 +1469,10 @@ export default function SceneCanvas({
 
           <SelectionMeasurementsOverlay measurements={measurements} zoom={zoom} names={measurementNames} />
 
-          {showFrame && !usesWorldFrame && selectedLayer.size && selectedWorldMatrix && (
+          {showFrame && !usesWorldFrame && selectedFrameLayer?.size && selectedWorldMatrix && (
             <AffineSelectionFrame
-              width={selectedLayer.size.width}
-              height={selectedLayer.size.height}
+              width={selectedFrameLayer.size.width}
+              height={selectedFrameLayer.size.height}
               zoom={zoom}
               worldMatrix={selectedWorldMatrix}
               dashed={!!selectedWorldBounds && isOffArtboardBounds(selectedWorldBounds, { width, height })}

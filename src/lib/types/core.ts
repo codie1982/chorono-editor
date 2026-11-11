@@ -297,6 +297,8 @@ export interface Layer {
   opacity: number
   /** Constant numeric input recipes (editor-only); computed source values stay numeric. */
   inputExpressions?: import('../editor/inputExpressions/NumericInputExpression').NumericInputExpressions
+  /** Live source drivers; outputs and compiled programs remain runtime-only. */
+  propertyExpressions?: import('../expression/properties/PropertyExpression').PropertyExpressions
   /** Canvas composite operation. Default 'source-over'. */
   blendMode?: GlobalCompositeOperation
 

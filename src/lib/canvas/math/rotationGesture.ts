@@ -1,5 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer } from '@/lib/types'
-import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
+import { type OverrideMap } from '@/lib/evaluator'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
@@ -25,7 +26,7 @@ export function resolveParentWorldMatrix(
 export function beginRotationGesture(
   layer: Layer, scene: ChronoScene, timeMs: number, pointer: Point, overrides?: OverrideMap,
 ): RotationGesture | null {
-  const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   const parentWorld = resolveParentWorldMatrix(layer, scene, timeMs, frame)
   if (Math.abs(parentWorld.determinant()) < 1e-9) return null
   const worldToParent = parentWorld.invert()

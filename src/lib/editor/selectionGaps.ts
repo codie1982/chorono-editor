@@ -1,5 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene } from '../types'
-import { evaluateTimelines, type OverrideMap } from '../evaluator'
+import { type OverrideMap } from '../evaluator'
 import { createLayerWorldBoundsResolver, type LayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
 import { selectionNeighbors, type SelectionNeighborItem } from '../geometry/layout/selectionNeighbors'
 import type { PathBounds } from '../geometry/computePathBounds'
@@ -75,7 +76,7 @@ export function prepareSelectionGaps(scene: ChronoScene, ids: Iterable<string>, 
     diagnostics.push(`Select at most ${SELECTION_GAP_LIMITS.roots} independent roots to measure exact neighbors.`)
     truncated = true
   } else if (rootIds.length > 1) {
-    const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+    const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
     const boundsFor = options.boundsFor ?? createLayerWorldBoundsResolver(scene, timeMs, frame)
     const worldFor = createLayerWorldMatrixResolver(scene, timeMs, frame, index)
     const items: SelectionNeighborItem[] = []
