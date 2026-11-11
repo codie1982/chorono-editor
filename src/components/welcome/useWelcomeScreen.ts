@@ -8,8 +8,10 @@ const STARTUP_KEY = 'chorono.welcome.showOnStartup'
  * Owns welcome visibility and one bounded browser preference, outside scene
  * JSON/history. Scene contents and file handles are never copied into storage.
  * Reads only after hydration; blocked storage falls back to showing welcome.
+ * A recovered workspace opens directly; the stored startup preference and the
+ * explicit menu action remain available for new/empty sessions.
  */
-export function useWelcomeScreen() {
+export function useWelcomeScreen(recoveredSession = false) {
   const [isOpen, setOpen] = useState(false)
   const [showOnStartup, setShowOnStartup] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -18,8 +20,8 @@ export function useWelcomeScreen() {
     let show = true
     try { show = localStorage.getItem(STARTUP_KEY) !== 'false' } catch { /* Browser storage can be disabled. */ }
     setShowOnStartup(show)
-    setOpen(show)
-  }, [])
+    setOpen(show && !recoveredSession)
+  }, [recoveredSession])
 
   /** Opens the existing workspace's welcome view without replacing any scene data. */
   const open = useCallback(() => { setError(null); setOpen(true) }, [])

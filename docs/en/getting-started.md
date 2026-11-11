@@ -257,6 +257,6 @@ Shortcuts are context-aware: the same key can do different things depending on w
 
 **Check the Properties Panel tabs.** The Properties Panel has multiple tabs — look for tabs like Transform, Appearance, Effects, and Interact. Many settings are in tabs that are easy to overlook at first.
 
-**Save often.** Chorono auto-saves your work to browser storage, but use **File > Save** regularly and keep a local backup for important projects.
+**Local recovery.** Completed edits are saved in this browser and restored on reload at the same address. The Project area shows the local save status. Use **Project > Save Scene JSON** for a portable project backup; **Choose Save Folder** additionally enables file versions. See the [recovery contract](../tr/session-recovery.md) for storage limits and lifecycle details.
 
 **Learn the easing shortcuts.** Right-click any keyframe to set its easing curve. The **Easy Ease** (default) works for most natural motion. Explore Bezier easing in the curve editor for precise control.

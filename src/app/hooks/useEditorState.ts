@@ -11,6 +11,7 @@ import { isCloneArrayCommand } from '@/lib/editor/commands-clone'
 import { AssetSourceOwner } from '@/lib/asset/sources'
 import { executeAuthoredCommand, assertAuthoringData } from '@/lib/editor/authoring'
 import { EditorDocumentLifetime } from '@/lib/editor/lifecycle/EditorDocumentLifetime'
+import { CommittedScene } from '@/lib/editor/persistence/recovery/CommittedScene'
 
 // ── Transaction ref ────────────────────────────────────────────────────────────
 // A transaction lets a drag op preview many intermediate scenes without each
@@ -23,9 +24,14 @@ interface Transaction {
 
 export interface EditorStateReturn {
   scene: ChronoScene
+  committedScene: ChronoScene
   canUndo: boolean
   canRedo: boolean
   getScene: () => ChronoScene
+  /** Last committed source, excluding an active gesture's preview. */
+  getCommittedScene: () => ChronoScene
+  /** Synchronous commit/reset/undo/redo notifications; no preview/evaluation events. */
+  subscribeCommitted: (listener: (scene: ChronoScene) => void) => () => void
   getRevision: () => number
   /** Runtime identity: resets abort old async work; edits and undo preserve it. */
   getDocumentSignal: () => AbortSignal
@@ -72,6 +78,8 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   const txRef = useRef<Transaction | null>(null)
   const historyRef = useRef(history)
   const revisionRef = useRef(0)
+  const committed = useRef<CommittedScene>()
+  if (!committed.current) committed.current = new CommittedScene(initialScene)
   const documentRef = useRef<EditorDocumentLifetime | null>(null)
   if (!documentRef.current) documentRef.current = new EditorDocumentLifetime()
   const sourcesRef = useRef<AssetSourceOwner | null>(null)
@@ -95,10 +103,11 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
     const prev = historyRef.current
     let next = prev
     try { next = update(prev) } finally { syncSources(next) }
-    if (next === prev) return
+    if (next === prev) { if (!txRef.current) committed.current!.publish(next.present); return }
     historyRef.current = next
     revisionRef.current++
     setHistory(next)
+    if (!txRef.current) committed.current!.publish(next.present)
   }, [syncSources])
   const getScene = useCallback(() => historyRef.current.present, [])
   const getRevision = useCallback(() => revisionRef.current, [])
@@ -197,7 +206,8 @@ export function useEditorState(initialScene: ChronoScene): EditorStateReturn {
   }, [])
 
   return {
-    scene, canUndo, canRedo, getScene, getRevision, getDocumentSignal, isTransactionActive,
+    scene, committedScene: committed.current.getScene(), canUndo, canRedo, getScene, getCommittedScene: committed.current.getScene,
+    subscribeCommitted: committed.current.subscribe, getRevision, getDocumentSignal, isTransactionActive,
     dispatchCommand,
     beginTransaction, previewTransaction, commitTransaction, cancelTransaction,
     undo, redo, resetScene,

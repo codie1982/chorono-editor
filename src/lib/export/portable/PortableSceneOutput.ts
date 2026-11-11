@@ -5,6 +5,7 @@ import {assetSourcePool} from '../../asset/sources'
 import {OutputResources,editorOutputResources,type OutputScope} from '../resources'
 import {outputBase64} from '../resources/OutputEncoding'
 import type {ResourceLease} from '../../resources/residency'
+import {sceneSourceData} from '../../format/scene/sceneSourceData'
 
 const SCENE_CHARS=32*1024**2,ASSET_BYTES=16*1024**2
 
@@ -25,9 +26,7 @@ export async function portableSceneInScope(scene:ChronoScene,scope:OutputScope,s
     if(scene.assets.length>500)throw new RangeError('Portable scene asset limit exceeded.')
     const view=scope.child()
     try{
-      const source=view.own(Math.max(1,scene.assets.length*256+256),()=>({...scene,assets:scene.assets.map(asset=>{
-        const {runtime:omitted,...plain}=asset;void omitted;return plain
-      })}))
+      const source=view.own(Math.max(1,scene.assets.length*256+256),()=>sceneSourceData(scene))
       const measured=measureJson(source.value,{maxChars:SCENE_CHARS,maxBytes:SCENE_CHARS*3})
       const copy=scope.own(Math.max(1,measured.chars*2+measured.nodes*64),()=>structuredClone(source.value)).value
       view.dispose()

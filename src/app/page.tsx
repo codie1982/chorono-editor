@@ -42,6 +42,10 @@ import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
 import ProjectMenu from '@/components/TopToolbar/ProjectMenu'
+import { EditorSessionBoundary } from '@/components/editorSession/EditorSessionBoundary'
+import { LocalRecoveryStatus } from '@/components/editorSession/LocalRecoveryStatus'
+import { useSceneSessionRecovery } from './hooks/useSceneSessionRecovery'
+import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
 import ExportMenu from '@/components/TopToolbar/ExportMenu'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
 import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
@@ -194,6 +198,11 @@ function makeDemoScene(): ChronoScene {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function BuilderPage() {
+  return <EditorSessionBoundary>{session => <BuilderWorkspace session={session} />}</EditorSessionBoundary>
+}
+
+/** Source/editor owners mount only after the local recovery barrier completes. */
+function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   // Restore the user's same-tab diagnostic session before any authoring gesture;
   // the adapter owns storage/timer/pagehide cleanup independently of dock panels.
   useEffect(() => ensureInteractionTracePersistence(), [])
@@ -204,20 +213,22 @@ export default function BuilderPage() {
   const modeDescriptor = modeRegistry.get(currentMode)
 
   // ── Central scene state with history + transactions ──────────────────────
-  const editor = useEditorState(makeDemoScene())
+  const [initialScene] = useState(() => session.scene ?? makeDemoScene())
+  const editor = useEditorState(initialScene)
+  const recovery = useSceneSessionRecovery(editor, session)
   useEffect(() => acquireDiagnosticSharing(() => !editor.isTransactionActive()), [editor.isTransactionActive])
   const {
     scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo,
     layerMetaById, getSiblingsInArray,
   } = editor
-  const welcome = useWelcomeScreen()
+  const welcome = useWelcomeScreen(session.restored)
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
   //  - {name}.json          → "current" file, overwritten on change (500ms)
   //  - {name}_TIMESTAMP.json → version snapshots (every 10 min + manual)
   // No server / MongoDB / Git — pure browser file output.
-  const fileVersioning = useFileVersioning(scene, {
+  const fileVersioning = useFileVersioning(editor.committedScene, {
     documentSignal:editor.getDocumentSignal(),
     interval_ms: 500,
     fallback_ms: 10000,
@@ -226,7 +237,7 @@ export default function BuilderPage() {
   })
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
-  const [layerSelection, setLayerSelection] = useState(() => createLayerSelection(['card'], 'card'))
+  const [layerSelection, setLayerSelection] = useState(() => createLayerSelection(scene.layers[0] ? [scene.layers[0].id] : [], scene.layers[0]?.id ?? null))
   const selectedLayerId = layerSelection.primaryId
   // Legacy panel props accept Set; lend them a copy rather than mutable state.
   const selectedLayerIds = useMemo(() => new Set(layerSelection.selectedIds), [layerSelection.selectedIds])
@@ -236,7 +247,7 @@ export default function BuilderPage() {
   const [manualPreview, setManualPreview] = useState(false)
   /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
   const [splinePointId, setSplinePointId] = useState<string | null>(null)
-  const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
+  const [selectedTlId,     setSelectedTl]    = useState<string>(scene.timelines[0]?.id ?? '')
   const [showJson,        setShowJson]      = useState(false)
   const [showCompModal,   setShowCompModal] = useState(false)
   // BL-05: WireParameterModal state — opened by PropertiesPanel 🔗, WiringListPanel, etc.
@@ -1136,7 +1147,7 @@ export default function BuilderPage() {
   }, [editor.getDocumentSignal, openSceneFile, resetScene, selectLayer, handleSeek, welcome.close, welcome.setError])
 
   const newScene = useCallback((settings?: WelcomeProjectSettings): boolean => {
-    if (editor.getRevision() > 0 && !confirm('Start a new project? Unsaved changes will be lost.')) return false
+    if ((editor.getRevision() > 0 || session.restored) && !confirm('Start a new project? This replaces the current workspace. Save Scene JSON if you want to keep a separate copy.')) return false
     const next = settings ? createWelcomeProject(settings) : emptyScene()
     resetScene(next)
     selectLayer(null)
@@ -1144,7 +1155,7 @@ export default function BuilderPage() {
     setSelectedTl(next.timelines[0]?.id ?? '')
     welcome.close()
     return true
-  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close])
+  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close, session.restored])
 
   const ungroupSelected = useCallback(async () => {
     if (!selectedLayerId) return
@@ -1432,6 +1443,7 @@ export default function BuilderPage() {
         </span>
 
         {/* File versioning: choose folder + auto-save + timestamped snapshots */}
+        <LocalRecoveryStatus status={recovery} />
         <ProjectMenu
           mounted={fileVersioning.mounted}
           state={fileVersioning.state}
