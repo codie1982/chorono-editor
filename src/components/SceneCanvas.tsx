@@ -60,6 +60,7 @@ import { useCanvasRenderer } from './canvas/hooks/useCanvasRenderer'
 import { usePreviewDrag } from './canvas/hooks/usePreviewDrag'
 import { useSelectionTools } from './canvas/hooks/useSelectionTools'
 import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
+import { splineContinuation } from '@/lib/spline'
 import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
 import { useCanvasDrag } from './canvas/hooks/useCanvasDrag'
 import { interactionTrace } from './canvas/interactions/diagnostics'
@@ -144,6 +145,8 @@ interface Props {
   splineAppendTargetId?: string | null
   /** BL-73 — Called after a spline draw commits (page resets draw mode). */
   onSplineDrawCommit?: () => void
+  /** Enter line drawing into this spline, or null for a new layer. */
+  onDrawSplineLine?: (layerId: string | null) => void
   /** BL-73 Sprint 5 — mirrors the selected spline point id up to the page so
    *  the properties panel can show a point editor. */
   onSplinePointSelected?: (pointId: string | null) => void
@@ -253,7 +256,7 @@ export default function SceneCanvas({
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming,
   arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
-  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onSplinePointSelected,
+  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -500,10 +503,10 @@ export default function SceneCanvas({
 
 
   // ── BL-73 Spline drawing tools (box-drag primitives + multi-click line) ──
-  const { splinePreview, onSplineDrawPointerDown } = useSplineDrawing({
+  const { splinePreview, onSplineDrawPointerDown, onSplineDrawContextMenu } = useSplineDrawing({
     canvasRef, compositionRef, sceneRef, editorRef,
     toolMode, splineDrawKind, splineAppendTargetId, onSplineDrawCommit,
-    onSelectLayer, setDragHud, timeMs, overrides,
+    onSelectLayer, setDragHud, timeMs, overrides, continuationPointId: selectedSplinePointId, onWarning: setTransformWarning,
   })
 
   // BL-73 Sprint 4 — clear point selection when the layer selection changes.
@@ -1061,6 +1064,15 @@ export default function SceneCanvas({
     !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.frozen && !selectedLayer.hidden
     && gizmo.frame
 
+  /** Drawing actions follow the current spline selection; no permanent toolbar mode switch. */
+  const splineDrawItems = (layer?: Layer | null): import('./ui/ContextMenu').MenuItem[] => !onDrawSplineLine ? [] : [
+    ...(layer?.spline && !layer.locked && !layer.frozen && !layer.hidden ? [{ kind: 'action' as const,
+      label: splineContinuation(layer.spline, selectedSplinePointId) ? 'Continue spline' : 'Add line to spline',
+      onSelect: () => onDrawSplineLine(layer.id) }] : []),
+    { kind: 'action', label: 'Draw new spline line', onSelect: () => onDrawSplineLine(null) },
+    { kind: 'separator' },
+  ]
+
   return (
     <div data-testid="canvas-workspace" className="flex min-h-0 flex-1 flex-col">
     <div
@@ -1072,6 +1084,7 @@ export default function SceneCanvas({
       onWheel={handleWheel}
       onContextMenu={event => {
         if (placingShape) { event.preventDefault(); event.stopPropagation(); shapePlacement.cancel() }
+        else if (onSplineDrawContextMenu()) { event.preventDefault(); event.stopPropagation() }
       }}
       onPointerDown={(e) => {
         // If the click was on the <canvas>, its own handler manages pan +
@@ -1158,6 +1171,7 @@ export default function SceneCanvas({
             }}
             onContextMenu={(e) => {
               if (placingShape) { e.preventDefault(); e.stopPropagation(); shapePlacement.cancel(); return }
+              if (onSplineDrawContextMenu()) { e.preventDefault(); e.stopPropagation(); return }
               if (motionEditing || arrayEditing || previewMode) return // Motion keys own canvas editing while active.
               const cv = canvasRef.current
               if (!cv) return
@@ -1307,7 +1321,8 @@ export default function SceneCanvas({
           {/* Motion path — trajectory the selected layer follows over time,
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
-          {selectedLayer && !hideEditorUI && !arrayEditing && !placingShape && (
+          {selectedLayer && !selectedLayer.hidden && (!selectedLayerIds || selectedLayerIds.has(selectedLayer.id))
+            && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1781,6 +1796,7 @@ export default function SceneCanvas({
           canPaste:   menuHandlers?.canPaste   ?? false,
           handlers,
         })
+        items.unshift(...splineDrawItems(target))
         return (
           <ContextMenu
             x={ctxMenu.state!.x}
@@ -1796,6 +1812,7 @@ export default function SceneCanvas({
         const hasSel = !!selectedLayerId
         const close  = emptyCanvasCtx.close
         const items: import('./ui/ContextMenu').MenuItem[] = [
+          ...splineDrawItems(selectedLayer),
           { kind: 'action', label: 'Fit to View',   shortcut: 'F',   onSelect: () => { fitAll();         close() } },
           { kind: 'action', label: 'Fit Width',                       onSelect: () => { fitWidth();       close() } },
           { kind: 'action', label: 'Fit Height',                      onSelect: () => { fitHeight();      close() } },
@@ -1860,6 +1877,7 @@ export default function SceneCanvas({
             { kind: 'action', label: 'Reverse Direction', onSelect: () => mutate(s => reverseContour(s, target.id)) },
           ]
         }
+        items.unshift(...splineDrawItems(layer))
         return (
           <ContextMenu
             x={splineCtx.state!.x}

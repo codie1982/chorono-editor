@@ -21,7 +21,7 @@
 | **Runtime çekirdeği** — `guard.ts` / `resolver.ts` / `blend.ts` / `StateMachineRuntime.ts` (saf, React'siz) | ✅ |
 | **React entegrasyonu** — `useSMRuntime` + `useInteractiveRuntime` SM-aware `evaluateFrame` | ✅ |
 | **Editör UI** — SVG node-graph, drag-to-connect, detay editörleri, Test Modu + blend progress | ✅ |
-| **Toolbar** — `[● Animation][◇ SM]` sub-mod + `Cmd+Shift+M` | ✅ |
+| **Dock navigation** — Canvas / State Machine sekmeleri + `Cmd+Shift+M`; üstteki tekrar eden seçici 11 Kasım'da kaldırıldı. [UI sözleşmesi](toolbar-and-spline-editing.md). | ✅ |
 | **Export** — `RuntimeScene.stateMachines` (editor x/y stripli) | ✅ |
 
 ## Mevcut durum — ne eksik

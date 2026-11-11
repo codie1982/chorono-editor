@@ -1,5 +1,10 @@
 # State Machine — UI Tasarımı & Ekran Konumlanması
 
+**11 Kasım 2026:** Üstteki Animation/SM seçicisi kaldırıldı; Canvas / State
+Machine dock sekmeleri ve `Cmd+Shift+M` kullanılır. Aşağıdaki toolbar çizimleri
+ilk tasarımı gösterir; güncel [araç çubuğu sözleşmesi](toolbar-and-spline-editing.md)
+bunların yerini alır.
+
 > Tarih: 2026-05-19 (güncellendi: 2026-05-19)
 > Bağlı: BL-09 (Sprint 3 — Editör UI)
 > Durum: Tasarım Kesinleşti

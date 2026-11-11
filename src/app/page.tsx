@@ -41,7 +41,8 @@ import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGho
 import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
-import { FileVersioningControl } from '@/components/FileVersioningControl'
+import ProjectMenu from '@/components/TopToolbar/ProjectMenu'
+import ExportMenu from '@/components/TopToolbar/ExportMenu'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
 import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
 import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
@@ -229,9 +230,6 @@ export default function BuilderPage() {
   const selectedLayerId = layerSelection.primaryId
   // Legacy panel props accept Set; lend them a copy rather than mutable state.
   const selectedLayerIds = useMemo(() => new Set(layerSelection.selectedIds), [layerSelection.selectedIds])
-  /** BL-73 — when true, spline primitives append to the selected spline layer
-   *  instead of starting a new one (3ds Max "Start New Shape" off). */
-  const [splineAppendMode, setSplineAppendMode] = useState(false)
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
   const [toolMode, setToolMode] = useState<ToolMode>('select')
@@ -266,9 +264,7 @@ export default function BuilderPage() {
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
   // The State Machine panel shares the canvas leaf as a tab. The toolbar
   // toggle (and Cmd+Shift+M) just switches the active tab — no separate "mode"
-  // system. `smModeActive` reflects whichever leaf currently hosts the panel.
-  const smLeaf = findLeafOfPanel(dock.layout, 'stateMachine')
-  const smModeActive = !!smLeaf && smLeaf.panels[smLeaf.activeIndex] === 'stateMachine'
+  // system. Dock tabs own navigation; this callback preserves the shortcut.
   const toggleSMMode = useCallback(() => {
     const leaf = findLeafOfPanel(dock.layout, 'stateMachine')
     if (!leaf) return
@@ -575,6 +571,7 @@ export default function BuilderPage() {
     const splineKind = SPLINE_MENU_TO_KIND[kind]
     if (splineKind) {
       shapeCreation.close()
+      setManualPreview(false); runtime.stopSegment(); handlePause()
       setSplineDrawKind(splineKind)
       setToolMode('spline-draw')
       return
@@ -1374,42 +1371,6 @@ export default function BuilderPage() {
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
-        {/* ── Animation / State-Machine sub-mod (BL-09) ──────────────────── */}
-        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Toggle State Machine view (Cmd+Shift+M)">
-          <button
-            onClick={() => { if (smModeActive) toggleSMMode() }}
-            className={`px-2 py-1 text-xs rounded ${!smModeActive ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ● Animation
-          </button>
-          <button
-            onClick={() => { if (!smModeActive) toggleSMMode() }}
-            className={`px-2 py-1 text-xs rounded ${smModeActive ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ◇ SM
-          </button>
-        </div>
-
-        {/* ── Spline creation mode (BL-73) ───────────────────────────────── */}
-        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Spline: start a new layer, or append the next spline primitive into the selected spline layer">
-          <button
-            onClick={() => setSplineAppendMode(false)}
-            className={`px-2 py-1 text-xs rounded ${!splineAppendMode ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ↳ New Spline
-          </button>
-          <button
-            onClick={() => setSplineAppendMode(true)}
-            disabled={selectedLayer?.type !== 'spline'}
-            title={selectedLayer?.type !== 'spline' ? 'Select a spline layer to enable append mode' : 'Append next spline primitive into selected layer'}
-            className={`px-2 py-1 text-xs rounded disabled:opacity-40 disabled:cursor-not-allowed ${splineAppendMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ⊕ Append
-          </button>
-        </div>
-
-        <div className="w-px h-6 bg-gray-700 mx-1" />
-
         <span className="text-blue-400 text-base">🎬</span>
         <span className="font-semibold text-xs text-gray-100">Chorono</span>
 
@@ -1471,7 +1432,7 @@ export default function BuilderPage() {
         </span>
 
         {/* File versioning: choose folder + auto-save + timestamped snapshots */}
-        <FileVersioningControl
+        <ProjectMenu
           mounted={fileVersioning.mounted}
           state={fileVersioning.state}
           directoryName={fileVersioning.directoryName}
@@ -1480,6 +1441,9 @@ export default function BuilderPage() {
           isSupported={fileVersioning.isSupported}
           onPickDirectory={fileVersioning.pickDirectory}
           onSaveSnapshot={fileVersioning.saveSnapshotNow}
+          onSaveSceneJson={saveSceneJson}
+          onCopySceneJson={copySceneJson}
+          onInspectJson={() => setShowJson(true)}
         />
 
         {/* Preview Mode toggle — when ON, draggable/tappable layers respond
@@ -1497,29 +1461,9 @@ export default function BuilderPage() {
           {manualPreview ? <>⏹ Exit Preview</> : <>▶ Preview</>}
         </button>
 
-        {/* Panel registry is created below — passed here via context/props */}
-        {/* Primary export — rest live inside FileMenu */}
-        <button
-          onClick={() => dock.dispatchRestorePanel('resourceMonitor')}
-          title="Open Resources & Performance"
-          className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
-        >
-          Resources
-        </button>
-        <button
-          onClick={() => setShowJson(true)}
-          title="Inspect raw scene JSON"
-          className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium"
-        >
-          {'{ }'} JSON
-        </button>
-        <button
-          onClick={exportRuntimeJson}
-          title="Validate scene + emit lean runtime JSON for Android/iOS/Web players"
-          className="px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-        >
-          ⤓ Runtime
-        </button>
+        <ExportMenu onExportRuntime={exportRuntimeJson} onExportImage={() => setShowRasterExport(true)}
+          onExportSvg={() => setShowSvgExport(true)} onExportSequence={() => setShowSequenceExport(true)}
+          onExportHtml={exportSceneHtml} />
       </header>
 
       {/* ── Dockable work area ─────────────────────────────────────── */}
@@ -1697,8 +1641,13 @@ export default function BuilderPage() {
                     onToolModeChange={setToolMode}
                     splineDrawKind={splineDrawKind}
                     splineAppendTargetId={
-                      splineAppendMode && selectedLayer?.type === 'spline' ? selectedLayerId : null
+                      selectedLayer?.type === 'spline' ? selectedLayerId : null
                     }
+                    onDrawSplineLine={targetId => {
+                      if (editor.isTransactionActive()) return
+                      shapeCreation.close(); setManualPreview(false); runtime.stopSegment(); handlePause()
+                      selectLayer(targetId); setSplineDrawKind('line'); setToolMode('spline-draw')
+                    }}
                     onSplineDrawCommit={() => { setSplineDrawKind(null); setToolMode('select') }}
                     onSplinePointSelected={setSplinePointId}
                     snap={snap}

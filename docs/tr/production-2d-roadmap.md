@@ -2248,3 +2248,27 @@ Convert to value, tek undo, stale ret, typed/birim doğrulaması, driver çakı�
 clone/Array referansları ve portable/runtime/bake kabulü plan kapsamındadır.
 Bu kayıt plan değişikliğidir; yeni runtime/API desteği teslim edildiği anlamına
 gelmez. Uygulanan E−1.5'in mevcut kabul sonuçları korunur.
+
+
+### 12.60. Üst araç çubuğu ve spline çizimi — 11 Kasım 2026
+
+[Güncel UI ve bakım sözleşmesi](toolbar-and-spline-editing.md). Ayrı Resources,
+JSON, Runtime ve klasör düğmeleri yerine Project/Export açılır menüleri vardır;
+Preview doğrudan erişilebilir. Resources dock/Menu View üzerinden açılır.
+Animation/SM üst seçicisi ve kalıcı New Spline/Append seçicisi kaldırıldı;
+Canvas/State Machine dock sekmeleri ile mevcut kısayol korunur. Motion Keys
+geçerli seçili nesneye bağlıdır; boş seçimde veya çizim sırasında gösterilmez.
+
+Sağ tıkla Continue spline / Add line to spline / Draw new spline line seçilir.
+Açık uçtan tıklayarak devam ve kesikli mouse preview, Enter/sağ tıkla tek commit,
+Escape iptali ve source/document/time revision koruması vardır. Mevcut nokta ve
+segment ID'leri, world/local yerleşim ve animasyonlar korunur; exact undo/redo
+doğrulandı. İki ayrı spline katmanını yıkıcı biçimde Attach etme bu akışa dahil
+değildir; kullanıcının önerdiği mevcut spline üzerinde devam seçeneği uygulanır.
+
+352 dosya / 2.822 çalışma ağacı testi; ilgisiz WIP'den ayrılan temiz kaynakta
+352 dosya / 2.821 test ve TypeScript geçti. MCP/production build, gerçek Chrome
+fixture'ı ve açık editör dahil dokuz menü/çizim kabulü geçti. Mevcut build uyarıları sürer. Kanıt
+`artifacts/validation/toolbar-spline-20261111/` altında; port 2000 editörü yeni
+build ile yeniden başlatılır. Test çizimleri kullanıcının projesine eklenmez.
+E−1.5A ve onaylı ana geliştirme sırası değişmez.
