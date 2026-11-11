@@ -1586,7 +1586,7 @@ export default function BuilderPage() {
                 render: () => (
                   <div className="h-full min-h-0 flex flex-col">
                     <LayerIsolationBar count={layerIsolation.roots.length} onExit={layerIsolation.exit} />
-                    <div className="flex-1 min-h-0"><SceneCanvas
+                    <div className="flex flex-1 min-h-0 min-w-0"><SceneCanvas
                     arrayAuthoring={arrayAuthoring}
                     shapePlacementLayer={shapeCreation.template}
                     onShapePlacementComplete={shapeCreation.complete}

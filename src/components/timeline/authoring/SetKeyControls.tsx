@@ -2,22 +2,37 @@
 import { shortcutRegistry } from '@/lib/shortcuts'
 import type { TimelineAuthoringControls } from './useTimelineAuthoring'
 import type { KeysetMode } from '@/lib/timeline/authoring/keyableChannels'
+import DropdownButton from '@/components/TopToolbar/DropdownButton'
 
-/** Visible primary authoring command and explicit keyset. Source scope is shown
- * beside the button; an absent shortcut never advertises an unavailable K. */
+const KEYSETS: readonly { value: KeysetMode; label: string }[] = [
+  { value: 'all', label: 'All supported channels' }, { value: 'transform', label: 'Transform + opacity' },
+  { value: 'animated', label: 'Existing animated channels' }, { value: 'selected', label: 'Selected key channels' },
+]
+const PRESETS = [
+  { label: 'Position (X, Y)', paths: ['transform.x', 'transform.y'] },
+  { label: 'Scale (X, Y)', paths: ['transform.scaleX', 'transform.scaleY'] },
+  { label: 'Rotation', paths: ['transform.rotationDeg'] }, { label: 'Opacity', paths: ['opacity'] },
+  { label: 'Transform (all)', paths: ['transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY', 'transform.rotationDeg'] },
+  { label: 'All (transform + opacity)', paths: ['opacity', 'transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY', 'transform.rotationDeg'] },
+]
+
+/** One authoring control: click sets the current keyset, hold opens options.
+ * Choosing a keyset only changes UI state; a channel preset writes keys through
+ * the same guarded authoring owner as the main action and shortcut. Options
+ * also open with ArrowDown/Up, Shift+F10 or right-click. No duplicated command.
+ */
 export function SetKeyControls({ controls }: { controls: TimelineAuthoringControls }) {
   const key = shortcutRegistry.displayString('timeline.keyframe.set')
+  const keyset = KEYSETS.find(item => item.value === controls.keyset)!.label
   return <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Set Key">
-    <button onClick={() => controls.setKey()} disabled={controls.disabled || !controls.selectedCount}
-      title={`Set keys for the selected layers${key ? ` (${key})` : ''}`}
-      className="px-3 py-1.5 text-xs font-semibold rounded bg-amber-500 text-gray-950 hover:bg-amber-400 disabled:bg-gray-700 disabled:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
-      ◆ Set Key{key && <span className="ml-2 text-[10px] opacity-70">{key}</span>}
-    </button>
-    <select aria-label="Set Key channels" value={controls.keyset} onChange={event => controls.setKeyset(event.target.value as KeysetMode)}
-      className="max-w-[145px] bg-gray-800 border border-gray-600 text-gray-200 rounded px-1 py-1 text-[10px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">
-      <option value="all">All supported channels</option><option value="transform">Transform + opacity</option>
-      <option value="animated">Existing animated channels</option><option value="selected">Selected key channels</option>
-    </select>
+    <DropdownButton label="◆ Set Key" primaryAction={{ onSelect: () => controls.setKey(), disabled: controls.disabled || !controls.selectedCount,
+      title: `Set keys${key ? ` (${key})` : ''} · ${keyset}. Hold for channels; ArrowDown or right-click opens options.`,
+      className: 'px-3 py-1.5 whitespace-nowrap text-xs font-semibold rounded bg-amber-500 text-gray-950 hover:bg-amber-400 active:bg-amber-300 disabled:bg-gray-700 disabled:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white',
+    }} sections={[
+      { label: 'Keyset for click / shortcut', items: KEYSETS.map(item => ({ kind: 'action', label: `${item.value === controls.keyset ? '✓ ' : ''}${item.label}`,
+        onSelect: () => controls.setKeyset(item.value) })) },
+      { label: 'Set keys now', items: PRESETS.map(preset => ({ kind: 'action', label: preset.label, onSelect: () => controls.setKey(preset.paths) })) },
+    ]} status={`Current keyset: ${keyset}`} />
   </div>
 }
 

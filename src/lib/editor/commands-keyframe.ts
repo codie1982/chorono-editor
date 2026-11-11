@@ -4,7 +4,7 @@
 
 import type { ChronoScene, Keyframe, Layer, Track, EasingDefinition, AnimatableValue } from '../types'
 import {
-  removeKf, updateKfValue, updateKfEasing, upsertKeyframe,
+  updateKfValue, updateKfEasing, upsertKeyframe,
 } from '../timeline/keyframeOps'
 import { prepareSetKey } from '../timeline/authoring/setKey'
 import { makeKeyframeBatchCmd, type KeyframeBatchOptions } from '../timeline/authoring/keyframeBatch'
@@ -79,19 +79,32 @@ export interface KfDeletion {
   kf: Keyframe
 }
 
-/** Delete by stable identity, never by inferred time. Snapshot restoration
- * preserves even legacy coincident keys and their complete payloads on undo. */
+/** Delete by stable identity, never by inferred time. Grouped timeline/target
+ * lookups filter each affected track once: O(items + scene tracks + affected
+ * keys), rather than cloning the scene for every deletion. Unaffected tracks
+ * retain references; empty tracks keep controllers/modifiers/settings.
+ * Snapshot restoration preserves legacy coincident keys and all metadata. */
 export function makeBulkDeleteKfCmd(items: KfDeletion[]): EditorCommand {
   let before = new Map<string, Track[]>()
-  const ids = new Set(items.map(item => item.timelineId))
+  const groups = new Map<string, Map<string, Set<string>>>()
+  for (const item of items) {
+    let targets = groups.get(item.timelineId)
+    if (!targets) { targets = new Map(); groups.set(item.timelineId, targets) }
+    let keys = targets.get(item.target)
+    if (!keys) { keys = new Set(); targets.set(item.target, keys) }
+    keys.add(item.kf.id)
+  }
   return {
     label: `Delete ${items.length} Keyframes`,
     execute: (scene) => {
-      before = new Map(scene.timelines.filter(timeline => ids.has(timeline.id)).map(timeline => [timeline.id, timeline.tracks]))
-      return items.reduce(
-        (s, it) => removeKf(s, it.timelineId, it.target, it.kf.id),
-        scene,
-      )
+      before = new Map(scene.timelines.filter(timeline => groups.has(timeline.id)).map(timeline => [timeline.id, timeline.tracks]))
+      return { ...scene, timelines: scene.timelines.map(timeline => {
+        const targets = groups.get(timeline.id)
+        return targets ? { ...timeline, tracks: timeline.tracks.map(track => {
+          const keys = targets.get(track.target)
+          return keys ? { ...track, keyframes: track.keyframes.filter(key => !keys.has(key.id)) } : track
+        }) } : timeline
+      }) }
     },
     undo: scene => ({ ...scene, timelines: scene.timelines.map(timeline => before.has(timeline.id)
       ? { ...timeline, tracks: before.get(timeline.id)! } : timeline) }),

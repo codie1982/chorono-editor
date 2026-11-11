@@ -106,6 +106,7 @@ function Host() {
       </section>
     </div>
     {dialog && <div role="dialog" aria-modal="true" className="fixed inset-0 bg-gray-900/95 z-50 p-20"><p>Dialog owns keyboard</p><button onClick={() => setDialog(false)}>Close dialog</button></div>}
+    <pre id="source" hidden>{JSON.stringify(scene)}</pre>
     <pre id="authoring-report" className="text-xs whitespace-pre-wrap">{report}</pre><ToastContainer />
   </main>
 }

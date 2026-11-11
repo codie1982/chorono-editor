@@ -1,6 +1,6 @@
 # Set Key ve Timeline authoring — E−1.4
 
-10 Kasım 2026. Bu belge uygulanan editör davranışını ve bakım sınırlarını tanımlar.
+11 Kasım 2026. Bu belge uygulanan editör davranışını ve bakım sınırlarını tanımlar.
 
 ## Kullanım
 
@@ -9,6 +9,22 @@ ile key ekler. Varsayılan **All supported channels**; **Transform + opacity**,
 **Existing animated channels** ve **Selected key channels** daha dar keyset'lerdir.
 Son seçenek seçili key'lerin kanallarını kullanır. Bir parent seçmek otomatik
 olarak bütün çocukların her alanını key'lemez; Set Key açık katman seçimini kullanır.
+
+**Set Key** üzerinde kısa tıklama key ekler. **400 ms uzun basma** kanal menüsünü
+açar; bırakmak ayrıca key eklemez. Menüye sağ tık, **ArrowDown/ArrowUp** veya
+**Shift+F10** ile de erişilir. Keyset seçimi yalnızca sonraki tıklama/K davranışını
+ayarlar; **Set keys now** bölümündeki Position, Scale, Rotation, Opacity ve
+Transform hazır seçimleri doğrudan key ekler. Ayrı Key channels düğmesi ve
+keyset seçim alanı kaldırıldı. Menü dock dışında açılır, ekranın alt kenarında
+üst tarafa döner; Escape odağı düğmeye geri verir.
+
+Timeline nesne listesindeki **sağ tık → Clear all keyframes**, yalnızca aktif
+timeline'da o katmanın key'lerini temizler. Parametre satırında aynı komut yalnız
+o kanalı temizler. Alt katmanlar, diğer timeline'lar, statik değerler, kanal
+controller/modifier ayarları ve timeline üyeliği korunur. Kilitli/dondurulmuş
+parent zinciri engellenir; işlem tek Undo/Redo ile bütünüyle geri alınır/yinelenir.
+Bu işlem bir procedural controller veya wire'ı devre dışı bırakmaz.
+
 
 Sayısal değer, renk, metin, boolean ve typed Vec2 desteklenir. Eksik optional
 payload, bütün geometri/topoloji ve kaynak kimlikleri üretilmez/key'lenmez.

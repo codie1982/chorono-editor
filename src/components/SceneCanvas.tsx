@@ -1074,7 +1074,7 @@ export default function SceneCanvas({
   ]
 
   return (
-    <div data-testid="canvas-workspace" className="flex min-h-0 flex-1 flex-col">
+    <div data-testid="canvas-workspace" className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
     <div
       ref={containerRef}
       data-testid="canvas-viewport"

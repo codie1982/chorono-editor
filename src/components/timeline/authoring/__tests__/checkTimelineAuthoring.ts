@@ -26,8 +26,11 @@ export async function checkTimelineAuthoring(editor: EditorStateReturn) {
   }
   const action = async (name: string) => { document.querySelector<HTMLButtonElement>(`[data-action="${name}"]`)!.click(); await frames() }
   const choose = async (value: string) => {
-    const select = panel.querySelector<HTMLSelectElement>('select[aria-label="Set Key channels"]')!
-    select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); await frames()
+    const trigger = panel.querySelector<HTMLButtonElement>('[aria-label="Set Key"] button')!
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })); await frames()
+    const labels: Record<string, string> = { all: 'All supported channels', transform: 'Transform + opacity', animated: 'Existing animated channels', selected: 'Selected key channels' }
+    const option = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')).find(item => item.textContent?.replace(/^✓ /, '') === labels[value])!
+    assert(option, 'Keyset option missing'); option.click(); await frames()
   }
   const setKey = async () => {
     const button = panel.querySelector<HTMLButtonElement>('[aria-label="Set Key"] button')!

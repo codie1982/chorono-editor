@@ -5,6 +5,7 @@ import type {
   TimelineSegment, TimelineMarker,
 } from '@/lib/types'
 import { prepareSetKey } from '@/lib/timeline/authoring/setKey'
+import { prepareClearKeyframes, type ClearKeyScope } from '@/lib/timeline/authoring/clearKeyframes'
 import { applyKeyframeBatch } from '@/lib/timeline/authoring/keyframeBatch'
 import { registerScopedActions } from '@/lib/shortcuts/scopedActions'
 import { useTimelineAuthoring, type TimelineAuthoringControls } from './timeline/authoring/useTimelineAuthoring'
@@ -416,6 +417,13 @@ export default function TimelinePanel({
     commitKeys(makeAddAnimationCmd(selectedTimelineId, layerId, propPath, firstKeyMs))
   }, [selectedTimelineId, commitKeys])
 
+  /** Re-read committed source at activation; selection cleanup is UI-only. */
+  const clearKeys = useCallback((scope: ClearKeyScope) => {
+    if (!selectedTimelineId || editor.isTransactionActive()) return
+    const plan = prepareClearKeyframes(editor.getScene(), selectedTimelineId, scope)
+    if (plan.command && commitKeys(plan.command)) onSelectKeyframes(new Set(Array.from(selectedKfIds).filter(id => !plan.keyIds.has(id))))
+  }, [editor, selectedTimelineId, commitKeys, selectedKfIds, onSelectKeyframes])
+
   const removeTrack = useCallback((trackTarget: string) => {
     if (!selectedTimelineId || !timeline) return
     const trackSnapshot = timeline.tracks.find((t) => t.target === trackTarget)
@@ -549,7 +557,6 @@ export default function TimelinePanel({
     }, [selectedTimelineId, selectedKfIds, scene, onSelectKeyframes, drag])
 
   // ── Keyframe a chosen subset of properties on the selected layer(s) ──────
-  const keyframeSelectedLayers = useCallback((properties: string[]) => authoring.setKey(properties), [authoring.setKey])
 
   // ── TrackToolBar handlers ────────────────────────────────────────────────
   const selectAllKfs = useCallback(() => {
@@ -1012,7 +1019,6 @@ export default function TimelinePanel({
           // dynamically in page.tsx's autoKeyChangedProps, not via this flag.
           autoKeyframe: mode === 'auto',
         })}
-        hasSelectedLayer={selectedLayerIds.size > 0 || selectedLayerId != null}
         onPlayToggle={onPlayToggle}
         authoring={authoring}
         onPrevKeyframe={() => authoring.navigate('previousKey')}
@@ -1026,7 +1032,6 @@ export default function TimelinePanel({
         onTimelineFieldChange={updateTlField}
         onPlaybackSpeedChange={onPlaybackSpeedChange}
         onModeChange={(mode) => onSettingsChange({ ...settings, timelineMode: mode })}
-        onKeyframeProperties={keyframeSelectedLayers}
         ghostSettings={ghostSettings}
         selectedLayerIds={selectedLayerIds}
         onGhostUpdate={onGhostUpdate}
@@ -1531,6 +1536,7 @@ export default function TimelinePanel({
       {ctxMenu.isOpen && ctxLayerBar && (() => {
         const layer = scene.layers.find((l) => l.id === ctxLayerBar.layerId)
         if (!layer) { ctxMenu.close(); return null }
+        const clearPlan = selectedTimelineId ? prepareClearKeyframes(scene, selectedTimelineId, { kind: 'layer', layerId: layer.id }) : null
         const splitMs = currentTimeMs
         const audioRange = layer.type === 'audio' ? resolveAudioClipWindow(layer,
           scene.assets.find(asset => asset.id === layer.audio?.assetId)?.durationMs, duration) : null
@@ -1554,6 +1560,9 @@ export default function TimelinePanel({
           propsByGroup.set(p.group, arr)
         }
         const items = [
+          { kind: 'action' as const, label: 'Clear all keyframes', disabled: !clearPlan?.command || editor.isTransactionActive(),
+            shortcut: undefined, onSelect: () => clearKeys({ kind: 'layer', layerId: layer.id }) },
+          { kind: 'separator' as const },
           {
             kind: 'submenu' as const,
             label: '+ Add Animation',
@@ -1773,7 +1782,11 @@ export default function TimelinePanel({
           : null
 
         type Item = Parameters<typeof ContextMenu>[0]['items'][number]
+        const clearPlan = prepareClearKeyframes(scene, selectedTimelineId, { kind: 'track', target: track.target })
         const items: Item[] = [
+          { kind: 'action', label: 'Clear all keyframes', disabled: !clearPlan.command || editor.isTransactionActive(),
+            onSelect: () => clearKeys({ kind: 'track', target: track.target }) },
+          { kind: 'separator' },
           buildOutOfRangeSubmenu(track.outOfRange, (next) => {
             dispatchCommand(
               makeSetOutOfRangeCmd(selectedTimelineId, track.target, track.outOfRange, next),

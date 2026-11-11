@@ -9,6 +9,7 @@ import { useSnapSettings } from '@/app/hooks/useSnapSettings'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { emptyScene, newSplineLayerFromData, newTimeline } from '@/lib/defaults'
 import { createPolylineSpline } from '@/lib/spline'
+import { LayerIsolationBar } from '../../layerHierarchy/LayerFocusControls'
 import type { ToolMode } from '../ToolGroup'
 
 /** Real toolbar/Canvas integration on a synthetic source, without autosave,
@@ -29,6 +30,7 @@ function Host() {
   const [action, setAction] = useState('None'), [calls, setCalls] = useState(0)
   const choose = (name: string) => () => { setAction(name); setCalls(value => value + 1) }
   const [supported, setSupported] = useState(true)
+  const [hostHeight, setHostHeight] = useState(600), [blockHost, setBlockHost] = useState(false), [isolated, setIsolated] = useState(false)
   return <main className="min-h-screen bg-gray-950 text-gray-100 p-4">
     <header className="flex items-center gap-2 mb-4">
       <h1 className="mr-auto">Toolbar and spline interaction acceptance</h1>
@@ -39,6 +41,9 @@ function Host() {
       <ExportMenu onExportRuntime={choose('Runtime')} onExportImage={choose('Image')} onExportSvg={choose('SVG')} onExportSequence={choose('Sequence')} onExportHtml={choose('HTML')} />
     </header>
     <div className="flex gap-3 mb-3">
+      <button onClick={() => setHostHeight(height => height === 600 ? 360 : 600)}>Resize Canvas host</button>
+      <button onClick={() => setBlockHost(value => !value)}>Toggle block host</button>
+      <button onClick={() => setIsolated(value => !value)}>Toggle isolation bar</button>
       <button onClick={() => setSelected(null)}>Clear selection</button>
       <button onClick={() => setSelected('spline')}>Select spline</button>
       <button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button>
@@ -46,12 +51,17 @@ function Host() {
       <button onClick={() => { const layer = editor.getScene().layers[0]; editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { name: `${layer.name} edited` }, layer)) }}>External edit</button>
     </div>
     <p role="status">Last action: {action} · Calls: {calls} · Tool: {mode}</p>
-    <div className="flex h-[600px] border border-gray-700 mt-2">
+    <div data-testid="canvas-layout-host" style={{ height: hostHeight }} className="flex min-h-0 border border-gray-700 mt-2">
+      <div className="h-full min-h-0 flex flex-1 flex-col">
+        <LayerIsolationBar count={isolated ? 1 : 0} onExit={() => setIsolated(false)} />
+        <div className={`${blockHost ? '' : 'flex'} flex-1 min-h-0 min-w-0`}>
       <SceneCanvas scene={scene} editor={editor} timeMs={0} selectedLayerId={selected}
         selectedLayerIds={new Set(selected ? [selected] : [])} assets={assets} onSelectLayer={id => setSelected(id)}
         selectedTimeline={scene.timelines[0]} toolMode={mode} onToolModeChange={setMode} snap={snap}
         splineDrawKind={mode === 'spline-draw' ? 'line' : null} splineAppendTargetId={selected}
         onDrawSplineLine={id => { setSelected(id); setMode('spline-draw') }} onSplineDrawCommit={() => setMode('select')} />
+        </div>
+      </div>
     </div>
     <pre id="source" className="text-xs whitespace-pre-wrap mt-4">{JSON.stringify(scene, null, 2)}</pre>
   </main>

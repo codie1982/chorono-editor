@@ -21,7 +21,6 @@ interface Props {
   timelineMode: TimelineMode
   autoKeyMode: AutoKeyMode
   onAutoKeyModeChange: (mode: AutoKeyMode) => void
-  hasSelectedLayer: boolean
   onPlayToggle: () => void
   /** Jump the playhead to the previous / next keyframe. */
   onPrevKeyframe: () => void
@@ -35,8 +34,6 @@ interface Props {
   onTimelineFieldChange: <K extends keyof Timeline>(key: K, val: Timeline[K]) => void
   onPlaybackSpeedChange: (s: number) => void
   onModeChange: (mode: TimelineMode) => void
-  /** Snapshot a subset of properties for the selected layer at the playhead. */
-  onKeyframeProperties: (properties: string[]) => void
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview) */
   ghostSettings: TimelineGhostSettings
   selectedLayerIds: Set<string>
@@ -49,15 +46,6 @@ interface Props {
   workAreaActive?: boolean
 }
 
-const KEYFRAME_PRESETS: Array<{ label: string; props: string[] }> = [
-  { label: 'Position (X, Y)',         props: ['transform.x', 'transform.y'] },
-  { label: 'Scale (X, Y)',            props: ['transform.scaleX', 'transform.scaleY'] },
-  { label: 'Rotation',                props: ['transform.rotationDeg'] },
-  { label: 'Opacity',                 props: ['opacity'] },
-  { label: 'Transform (all)',         props: ['transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY', 'transform.rotationDeg'] },
-  { label: 'All (transform + opacity)', props: ['opacity', 'transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY', 'transform.rotationDeg'] },
-]
-
 const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2]
 
 /**
@@ -68,21 +56,16 @@ export default function TimelineToolbar(props: Props) {
   const {
     authoring, timelines, selectedTimelineId, selectedTimeline,
     currentTimeMs, duration, isPlaying, zoomFactor, playbackSpeed,
-    timelineMode, autoKeyMode, onAutoKeyModeChange, hasSelectedLayer,
+    timelineMode, autoKeyMode, onAutoKeyModeChange,
     onPlayToggle, onPrevKeyframe, onNextKeyframe,
     onSelectTimeline, onAddTimeline, onDeleteTimeline,
     getTimelineDeleteReason,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
-    onModeChange, onKeyframeProperties,
+    onModeChange,
     ghostSettings, selectedLayerIds,
     onGhostUpdate, onGhostToggle, onGhostPreset,
     onToggleWorkArea, workAreaActive,
   } = props
-
-  // ── Keyframe dropdown ───────────────────────────────────────────────────
-  const [kfMenuOpen, setKfMenuOpen] = useState(false)
-  const kfRef = useRef<HTMLDivElement>(null)
-  useClickOutside(kfRef, kfMenuOpen, () => setKfMenuOpen(false))
 
   // ── Play-type dropdown (long-press the Play button) ──────────────────────
   const [playMenuOpen, setPlayMenuOpen] = useState(false)
@@ -175,37 +158,6 @@ export default function TimelineToolbar(props: Props) {
             <span className="mr-0.5">{m.dot}</span>{m.label}
           </button>
         ))}
-      </div>
-
-      {/* Keyframe dropdown — pick which property subset to snapshot */}
-      <div ref={kfRef} className="relative">
-        <button
-          onClick={() => setKfMenuOpen((o) => !o)}
-          disabled={!hasSelectedLayer}
-          title="Keyframe properties of selected layer at playhead"
-          className="px-2 py-1 text-xs rounded bg-yellow-600 hover:bg-yellow-500 text-white font-mono
-                     disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed
-                     flex items-center gap-1"
-        >
-          Key channels ▾
-        </button>
-        {kfMenuOpen && hasSelectedLayer && (
-          <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded shadow-xl
-                          z-50 min-w-[180px] py-1">
-            {KEYFRAME_PRESETS.map((p) => (
-              <button
-                key={p.label}
-                onClick={() => { onKeyframeProperties(p.props); setKfMenuOpen(false) }}
-                className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700
-                           flex items-center gap-2"
-              >
-                <span className="text-yellow-400">◆</span>
-                <span className="flex-1">{p.label}</span>
-                <span className="text-[9px] font-mono text-gray-500">{p.props.length}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Playback speed */}

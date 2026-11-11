@@ -186,7 +186,8 @@ export default function LayerTimelineSection({
             e.stopPropagation()
             onToggleFlag('solo')
           }}
-          title="Click: select · Double-click: solo (isolate)"
+          onContextMenu={!contextOnly && onLayerBarContextMenu ? event => onLayerBarContextMenu(layer.id, event) : undefined}
+          title="Click: select · Double-click: solo (isolate) · Right-click: layer actions"
         >
           <div className="flex items-center gap-1.5 w-full min-w-0">
           {/* Color label stripe — left edge of the row */}
