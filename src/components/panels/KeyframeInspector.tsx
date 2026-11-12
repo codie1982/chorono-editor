@@ -1,10 +1,14 @@
 'use client'
-import { useState, useMemo, useEffect } from 'react'
+import { useMemo } from 'react'
 import type { ChronoScene, Keyframe, EasingType, EasingDefinition } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   makeMoveKfCmd, makeUpdateKfValueCmd, makeUpdateEasingCmd, makeDeleteKfCmd,
 } from '@/lib/editor/commands-keyframe'
+import ScrubInput from '../inputs/ScrubInput'
+import { CalculationButton } from '../inputs/expressions/CalculationButton'
+import { expressionValueType } from '@/lib/core/expression/ExpressionValue'
+import { isColorTarget } from '@/lib/animation/typedValues'
 import BezierEditor from '../timeline/BezierEditor'
 import { resolveSelectedKeyframes } from '@/lib/timeline/keyframeSelection'
 import { makeBatchCmd } from '@/lib/editor/commands-batch'
@@ -71,34 +75,14 @@ function SingleKfInspector({ entry, editor }: { entry: ResolvedKf; editor: Edito
   const { kf, timelineId, trackTarget } = entry
   const easingType = kf.easing?.type ?? 'linear'
 
-  // Local draft for value / time inputs so typing doesn't trigger a command on each keystroke.
-  const [timeDraft,  setTimeDraft]  = useState<string>(String(kf.timeMs))
-  const [valueDraft, setValueDraft] = useState<string>(
-    typeof kf.value === 'number' ? String(kf.value) : String(kf.value),
-  )
-
-  // Refresh the inspector after curve drags and undo, including the same key.
-  useEffect(() => {
-    setTimeDraft(String(kf.timeMs))
-  }, [kf.id, kf.timeMs])
-  useEffect(() => {
-    setValueDraft(typeof kf.value === 'number' ? String(kf.value) : String(kf.value))
-  }, [kf.id, kf.value])
-
-  const commitTime = () => {
-    const raw = Number(timeDraft)
-    const duration = editor.getScene().timelines.find((tl) => tl.id === timelineId)?.durationMs ?? Infinity
+  /** Literal and calculate-once writes share native key commands. The original
+   * key ID/value is preserved for exact Undo; no controller or recipe is added. */
+  const commitTime = (raw: number) => {
+    const duration = editor.getScene().timelines.find(tl => tl.id === timelineId)?.durationMs ?? Infinity
     const ms = Math.max(0, Math.min(duration, raw))
-    if (!Number.isFinite(ms) || ms === kf.timeMs) { setTimeDraft(String(kf.timeMs)); return }
-    editor.dispatchCommand(makeMoveKfCmd(timelineId, trackTarget, kf.id, kf.timeMs, ms))
+    if (Number.isFinite(ms) && ms !== kf.timeMs) editor.dispatchCommand(makeMoveKfCmd(timelineId, trackTarget, kf.id, kf.timeMs, ms))
   }
-  const commitValue = () => {
-    if (typeof kf.value !== 'number') return  // only number editing here for now
-    const v = Number(valueDraft)
-    if (!Number.isFinite(v) || v === kf.value) { setValueDraft(String(kf.value)); return }
-    editor.dispatchCommand(makeUpdateKfValueCmd(timelineId, trackTarget, kf.id, kf.value, v))
-  }
-
+  const kind = isColorTarget(trackTarget) ? 'color' : expressionValueType(kf.value)
   const updateEasing = (next: EasingDefinition) => {
     editor.dispatchCommand(makeUpdateEasingCmd(timelineId, trackTarget, kf.id, kf.easing, next))
   }
@@ -112,26 +96,15 @@ function SingleKfInspector({ entry, editor }: { entry: ResolvedKf; editor: Edito
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-0.5">
           <span className="text-[10px] text-gray-500 uppercase">Time (ms)</span>
-          <input
-            type="number"
-            value={timeDraft}
-            onChange={(e) => setTimeDraft(e.target.value)}
-            onBlur={commitTime}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-            className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500"
-          />
+          <ScrubInput disableScrub key={kf.id + ':time'} fieldLabel="Key time (ms)" value={kf.timeMs} min={0}
+            onChange={commitTime} />
         </label>
         <label className="flex flex-col gap-0.5">
           <span className="text-[10px] text-gray-500 uppercase">Value</span>
-          <input
-            type={typeof kf.value === 'number' ? 'number' : 'text'}
-            value={valueDraft}
-            onChange={(e) => setValueDraft(e.target.value)}
-            onBlur={commitValue}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-            disabled={typeof kf.value !== 'number'}
-            className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-blue-500 disabled:opacity-50"
-          />
+          {typeof kf.value === 'number' ? <ScrubInput disableScrub key={kf.id + ':value'} fieldLabel="Key value" value={kf.value}
+            onChange={value => editor.dispatchCommand(makeUpdateKfValueCmd(timelineId, trackTarget, kf.id, kf.value, value))} />
+            : <div className="flex items-center gap-1"><output className="truncate">{JSON.stringify(kf.value)}</output>{kind && <CalculationButton key={kf.id} label="Key value" kind={kind} value={kf.value}
+              onResult={value => editor.dispatchCommand(makeUpdateKfValueCmd(timelineId, trackTarget, kf.id, kf.value, value))} />}</div>}
         </label>
       </div>
 

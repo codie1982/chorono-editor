@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useNumericPropertyInput } from './expressions/NumericPropertyContext'
+import { CalculationButton } from './expressions/CalculationButton'
 import { PropertyFormulaEditor } from './expressions/PropertyFormulaEditor'
 import { inspectNumericLiteral, numericInputExpression } from '@/lib/editor/inputExpressions/NumericInputExpression'
+import { numericPropertyConstraints } from '@/lib/expression/properties/NumericPropertyCapability'
 
 interface Props {
   value:     number
@@ -21,6 +23,7 @@ interface Props {
   placeholder?: string
   /** Disable the scrub-drag behaviour but keep keyboard editing. */
   disableScrub?: boolean
+  disabled?: boolean
   title?: string
   /** Explicit owning numeric source path; schema scopes may supply it instead. */
   propertyPath?: string
@@ -48,9 +51,11 @@ interface Props {
 export default function ScrubInput({
   value, onChange, min, max, step = 1,
   sensitivity, className = '',
-  placeholder, disableScrub, title, propertyPath, fieldLabel,
+  placeholder, disableScrub, disabled, title, propertyPath, fieldLabel,
 }: Props) {
-  const property = useNumericPropertyInput(propertyPath, fieldLabel)
+  const candidate = useNumericPropertyInput(propertyPath, fieldLabel)
+  let property = candidate
+  try { if (candidate?.layer) numericPropertyConstraints(candidate.layer, candidate.path) } catch { property = null }
   const owner = property?.layer
   const saved = owner && property ? numericInputExpression(owner, property.path) : undefined
   const live = owner && property ? owner.propertyExpressions?.fields[property.path] : undefined
@@ -67,12 +72,12 @@ export default function ScrubInput({
   // mid-edit. We commit on blur / Enter.
   const [text, setText] = useState<string>(String(shownValue))
   const dirtyRef = useRef(false)
-  const latest = useRef({ value: shownValue, onChange })
+  const latest = useRef({ value: shownValue, onChange, propertyKey })
   // Invalidate a typed draft before effects as well: blur can arrive between
   // an external value's render and its passive text-sync effect.
-  if (!Object.is(latest.current.value, shownValue)) dirtyRef.current = false
-  latest.current = { value: shownValue, onChange }
-  useEffect(() => { dirtyRef.current = false; setText(String(shownValue)); setError('') }, [shownValue])
+  if (!Object.is(latest.current.value, shownValue) || latest.current.propertyKey !== propertyKey) dirtyRef.current = false
+  latest.current = { value: shownValue, onChange, propertyKey }
+  useEffect(() => { dirtyRef.current = false; setText(String(shownValue)); setError('') }, [shownValue, propertyKey])
 
   /** Open only this source field, carrying any uncommitted/invalid typed draft.
    * Clear blur ownership before native modal focus moves away from the input. */
@@ -180,6 +185,7 @@ export default function ScrubInput({
     <div className="relative w-full">
       <input
         type="text"
+        disabled={disabled}
         inputMode="decimal"
         aria-label={property?.label ?? fieldLabel}
         readOnly={!!saved || !!live}
@@ -210,12 +216,13 @@ export default function ScrubInput({
         className={`relative z-10 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
           focus:outline-none focus:border-blue-500
           ${scrubbing ? 'cursor-ew-resize select-none' : 'cursor-ew-resize'}
-          ${property ? 'pr-8' : ''} ${saved || live ? 'text-violet-200' : ''} ${className}`}
+          ${property || !candidate ? 'pr-8' : ''} ${saved || live ? 'text-violet-200' : ''} ${className}`}
         style={{ touchAction: 'none' }}
       />
       {property && <button type="button" aria-label={`Edit expression for ${property.label}`} title={live ? `Live formula: ${live.formula}` : saved ? `Saved formula: ${saved.formula}` : 'Edit a numeric formula'}
         onMouseDown={event => event.preventDefault()} onClick={event => { event.preventDefault(); event.stopPropagation(); openFormula() }}
         className={`absolute right-0 top-0 z-20 h-7 w-8 rounded-r text-xs focus-visible:outline focus-visible:outline-blue-400 ${saved || live ? 'text-violet-200 bg-violet-900/50' : 'text-gray-400 hover:bg-gray-700'}`}>fx</button>}
+      {!candidate && <span className="absolute right-0 top-0 z-20"><CalculationButton label={fieldLabel ?? placeholder ?? 'value'} value={shownValue} kind="number" min={min} max={max} disabled={disabled} onResult={result => onChange(result as number)} /></span>}
       {!live && saved && saved.value !== value && <p className="mt-1 text-[11px] text-amber-300">Source changed; formula was not reapplied.</p>}
       {liveError && <p role="alert" className="mt-1 text-[11px] text-amber-300">{liveError}</p>}
       {error && <p role="alert" className="mt-1 text-[11px] text-amber-300">{error}</p>}

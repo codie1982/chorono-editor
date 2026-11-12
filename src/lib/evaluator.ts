@@ -239,12 +239,20 @@ export function evaluateNumericTrack(track: Track, timeMs: number): number | nul
  * source changes. Do not mutate the borrowed track/controller while sampling.
  * This is not a global cache and never writes synthetic keys into source. */
 export function createNumericTrackSampler(track: Track): (timeMs: number) => number | null {
-  const prepared = { keys: [...track.keyframes].sort(compareKeyTime), scalar: isScalarNumericTrack(track) }
+  const scalar = isScalarNumericTrack(track), sample = createTrackSampler(track)
   return timeMs => {
-    if (!Number.isFinite(timeMs) || !prepared.scalar) return null
-    const value = evaluateTrackPrepared(track, timeMs, prepared)
+    if (!scalar) return null
+    const value = sample(timeMs)
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
+}
+
+/** Prepared typed sampling through the same native interpolation/range/modifier
+ * pipeline. Sorts a private key array once; each bounded probe uses binary
+ * bracket lookup. Discard on immutable source replacement, never mutate track. */
+export function createTrackSampler(track: Track): (timeMs: number) => AnimatableValue | null {
+  const prepared = { keys: [...track.keyframes].sort(compareKeyTime), scalar: isScalarNumericTrack(track) }
+  return timeMs => Number.isFinite(timeMs) ? evaluateTrackPrepared(track, timeMs, prepared) : null
 }
 
 /**

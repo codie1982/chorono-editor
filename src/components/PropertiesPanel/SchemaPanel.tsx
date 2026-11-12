@@ -16,6 +16,7 @@ import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
 import ScrubInput from '@/components/inputs/ScrubInput'
 import { BooleanInput } from '@/components/inputs/BooleanInput'
+import { TextInput } from '@/components/inputs/TextInput'
 import { NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
 import { readPropertyPath } from '@/lib/scene/properties/readPropertyPath'
 import { writePropertyPath } from '@/lib/scene/properties/writePropertyPath'
@@ -106,6 +107,8 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
 
       {schema.valueType === 'color' && (
         <ColorInput
+          propertyPath={schema.path}
+          fieldLabel={schema.label}
           value={String(value ?? '#000000')}
           onChange={(v) => onChange(v)}
         />
@@ -119,24 +122,11 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
       )}
 
       {schema.valueType === 'select' && (
-        <select
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
-          className={inputClass}
-        >
-          {schema.options?.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        <TextInput propertyPath={schema.path} fieldLabel={schema.label} value={String(value ?? '')} onChange={onChange} options={schema.options} />
       )}
 
       {schema.valueType === 'string' && (
-        <input
-          type="text"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
-          className={inputClass}
-        />
+        <TextInput propertyPath={schema.path} fieldLabel={schema.label} value={String(value ?? '')} onChange={onChange} />
       )}
 
       {(schema.valueType === 'number' || schema.valueType === 'angle' || schema.valueType === 'percent') && (

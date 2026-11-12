@@ -2,6 +2,7 @@
 
 import type { LayerDefinition } from '../../LayerDefinition'
 import type { PropertyGroup } from '../../PropertySchema'
+import { FONT_WEIGHTS, FONT_STYLES } from '../../../text/fontOptions'
 import { newTextLayer } from '@/lib/defaults'
 import { transformGroup, appearanceGroup } from '../sharedSchemas'
 
@@ -17,8 +18,8 @@ const textGroup = (): PropertyGroup => ({
   schemas: [
     { id: 'value',         path: 'text.value',         group: 'Text', label: 'Content',        valueType: 'string',  animatable: false, defaultValue: '' },
     { id: 'fontFamily',    path: 'text.fontFamily',    group: 'Text', label: 'Font',           valueType: 'string',  animatable: false, defaultValue: 'sans-serif' },
-    { id: 'fontWeight',    path: 'text.fontWeight',    group: 'Text', label: 'Weight',         valueType: 'string',  animatable: false, defaultValue: 'normal' },
-    { id: 'fontStyle',     path: 'text.fontStyle',     group: 'Text', label: 'Style',          valueType: 'string',  animatable: false, defaultValue: 'normal' },
+    { id: 'fontWeight',    path: 'text.fontWeight',    group: 'Text', label: 'Weight',         valueType: 'select',  options: FONT_WEIGHTS.map(([value,label]) => ({value,label})), animatable: false, defaultValue: 'normal' },
+    { id: 'fontStyle',     path: 'text.fontStyle',     group: 'Text', label: 'Style',          valueType: 'select', options: FONT_STYLES,  animatable: false, defaultValue: 'normal' },
     { id: 'fontSize',      path: 'text.fontSize',      group: 'Text', label: 'Size',           valueType: 'number',  animatable: true,  defaultValue: 24, min: 1 },
     { id: 'color',         path: 'text.color',         group: 'Text', label: 'Color',          valueType: 'color',   animatable: true,  defaultValue: '#FFFFFF' },
     { id: 'letterSpacing', path: 'text.letterSpacing', group: 'Text', label: 'Letter Spacing', valueType: 'number',  animatable: true,  defaultValue: 0 },

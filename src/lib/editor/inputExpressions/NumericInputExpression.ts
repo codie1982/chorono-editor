@@ -1,3 +1,4 @@
+import { inputExpression, assertInputExpressions, type InputExpressions } from './InputExpression'
 import { inspectExpression } from '../../core/expression/expressionEvaluator'
 import { readPropertyPath } from '../../scene/properties/readPropertyPath'
 import type { Layer } from '../../types'
@@ -9,7 +10,7 @@ export type { NumericConstraints } from '../../core/expression/NumericResult'
  * context handle or function is serialized. A2 owns future timed/dependent
  * expressions; this version never invents an implicit time/source variable. */
 export interface NumericInputExpression { formula: string; value: number }
-export interface NumericInputExpressions { version: 1; fields: Record<string, NumericInputExpression> }
+export type NumericInputExpressions = InputExpressions
 const numberLiteral = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
 
 /** Full-string finite decimal/scientific input. Reject partial parseFloat
@@ -27,19 +28,12 @@ export function inspectNumericFormula(formula: string, limits: NumericConstraint
 /** Read a bounded own formula record. Changed source values are authoritative;
  * consumers report a stale recipe rather than reapplying over manual edits. */
 export function numericInputExpression(layer: Layer, path: string): NumericInputExpression | undefined {
-  const fields = layer.inputExpressions?.fields
-  return fields && Object.prototype.hasOwnProperty.call(fields, path) ? fields[path] : undefined
+  const record = inputExpression(layer, path)
+  return record && typeof record.value === 'number' && (!record.resultType || record.resultType === 'number') ? { formula: record.formula, value: record.value } : undefined
 }
 /** Data-shape validation only: opening a project executes no saved expressions.
  * Parser/evaluation diagnostics are shown when the individual editor opens.
  * Unknown envelope versions fail atomically; source payload stays untouched. */
 export function assertNumericInputExpressions(layer: Layer): void {
-  const input = layer.inputExpressions
-  if (input === undefined) return
-  if (!input || input.version !== 1 || !input.fields || typeof input.fields !== 'object' || Array.isArray(input.fields)
-    || Object.keys(input.fields).length > 128) throw new Error('Invalid numeric input expression envelope.')
-  for (const [path, record] of Object.entries(input.fields)) {
-    if (path.length > 256 || !path || !record || typeof record.formula !== 'string' || record.formula.length > 4096 || !Number.isFinite(record.value)) throw new Error('Invalid numeric input formula.')
-    readPropertyPath(layer, path)
-  }
+  assertInputExpressions(layer)
 }

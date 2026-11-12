@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── CurveModifierStackPanel (BL-46) ────────────────────────────────────────
 // Stack inspector for the curve modifiers attached to the currently selected
 // track (Track scope) and the currently selected keyframe's segment
@@ -332,14 +333,16 @@ function NumberPill({ label, value, min, max, step, onChange }: {
   return (
     <label className="flex items-center gap-1 text-[9px] text-gray-500">
       <span>{label}</span>
-      <input type="number" value={value} min={min} max={max} step={step}
+      <CalculationNumberInput aria-label="value" value={value} min={min} max={max} step={step}
         onChange={(e) => {
           const v = Number(e.target.value)
           if (Number.isFinite(v)) onChange(v)
         }}
         className="w-12 px-1 py-0.5 bg-gray-800 border border-gray-700 rounded text-[10px]
-                   text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-      />
+                   text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => {
+          const v = calculated
+          if (Number.isFinite(v)) onChange(v)
+        }} />
     </label>
   )
 }
@@ -362,14 +365,17 @@ function ParamInput({ name, value, onChange }: {
     return (
       <label className="flex flex-col gap-0.5 text-[9px] text-gray-500">
         <span className="uppercase tracking-wider">{name}</span>
-        <input type="number" value={Number.isFinite(value) ? value : 0}
+        <CalculationNumberInput aria-label="Number is Finite value value 0" value={Number.isFinite(value) ? value : 0}
           step="any"
           onChange={(e) => {
             const v = Number(e.target.value)
             if (Number.isFinite(v)) onChange(v)
           }}
           className="px-1.5 py-1 bg-gray-800 border border-gray-700 rounded text-[10px]
-                     text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                     text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => {
+            const v = calculated
+            if (Number.isFinite(v)) onChange(v)
+          }} />
       </label>
     )
   }
@@ -616,14 +622,17 @@ function NumField({ label, value, onChange, step = 'any', min, max }: {
   return (
     <label className="flex flex-col gap-0.5 text-[9px] text-gray-500">
       <span className="uppercase tracking-wider">{label}</span>
-      <input type="number" value={Number.isFinite(value) ? value : 0}
+      <CalculationNumberInput aria-label="Number is Finite value value 0" value={Number.isFinite(value) ? value : 0}
         step={step} min={min} max={max}
         onChange={(e) => {
           const v = Number(e.target.value)
           if (Number.isFinite(v)) onChange(v)
         }}
         className="px-1.5 py-1 bg-gray-800 border border-gray-700 rounded text-[10px]
-                   text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                   text-gray-200 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => {
+          const v = calculated
+          if (Number.isFinite(v)) onChange(v)
+        }} />
     </label>
   )
 }

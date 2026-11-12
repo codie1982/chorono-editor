@@ -6,6 +6,7 @@ import { paramRefKey } from '../../wiring/helpers'
 import { LayerIndex } from '../../scene/LayerIndex'
 import type { LayerLookup } from '../../scene/LayerIndex'
 import { resolveInstanceLayer } from '../../clone/InstanceResolver'
+import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
 
 export interface PropertyExpressionEntry { readonly layer: Layer; readonly path: string; readonly key: string; readonly definition: PropertyExpression }
 export interface PropertyExpressionPlan {
@@ -34,9 +35,15 @@ export function preparePropertyExpressionPlan(scene: ChronoScene): PropertyExpre
   const edges: [string, string][] = []
   for (const wire of scene.parameterWires ?? []) if (wire.enabled) {
     const key = paramRefKey(wire.target), records = wires.get(key) ?? []
-    records.push(wire); wires.set(key, records); edges.push([paramRefKey(wire.source), key])
+    records.push(wire); wires.set(key, records)
   }
-  for (const entry of Array.from(expressions.values())) for (const source of Object.values(entry.definition.sources)) edges.push([paramRefKey(source), entry.key])
+  const targets = [...Array.from(expressions.keys()), ...Array.from(wires.keys())]
+  const edge = (source: string, target: string) => {
+    const owners = targets.filter(key => propertyPathsOverlap(key, source))
+    for (const owner of owners.length ? owners : [source]) edges.push([owner, target])
+  }
+  for (const records of Array.from(wires.values())) for (const wire of records) edge(paramRefKey(wire.source), paramRefKey(wire.target))
+  for (const entry of Array.from(expressions.values())) for (const source of Object.values(entry.definition.sources)) edge(paramRefKey(source), entry.key)
   const { order, blocked } = dependencyOrder([...Array.from(expressions.keys()), ...Array.from(wires.keys())], edges)
   const animated = new Set(scene.timelines.flatMap(timeline => timeline.tracks.filter(track => track.keyframes.length || track.controller).map(track => track.target)))
   const index = new LayerIndex(scene.layers)

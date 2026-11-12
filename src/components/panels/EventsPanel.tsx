@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── EventsPanel ───────────────────────────────────────────────────────────────
 // Visual editor for ChronoScene.triggers. Each trigger is a "rule card":
 //
@@ -261,12 +262,10 @@ function EventDiscriminator({
       )
     case 'frameReached':
       return (
-        <input
-          type="number"
+        <CalculationNumberInput aria-label="event frame Number 0"
           className="bg-gray-900 border border-gray-700 rounded px-2 py-0.5 text-[11px] text-gray-100 outline-none w-20"
           value={event.frameNumber ?? 0}
-          onChange={(e) => onChange({ frameNumber: Number(e.target.value) })}
-        />
+          onChange={(e) => onChange({ frameNumber: Number(e.target.value) })} onCalculate={calculated => onChange({ frameNumber: calculated })} />
       )
     case 'customEvent':
       return (
@@ -389,13 +388,11 @@ function ActionTargets({
       )
     case 'seek':
       return (
-        <input
-          type="number"
+        <CalculationNumberInput aria-label="action time Ms 0"
           className="bg-gray-900 border border-gray-700 rounded px-2 py-0.5 text-[11px] text-gray-100 outline-none w-24"
           placeholder="time (ms)"
           value={action.timeMs ?? 0}
-          onChange={(e) => onChange({ ...action, timeMs: Number(e.target.value) })}
-        />
+          onChange={(e) => onChange({ ...action, timeMs: Number(e.target.value) })} onCalculate={calculated => onChange({ ...action, timeMs: calculated })} />
       )
     case 'setParam':
       return (

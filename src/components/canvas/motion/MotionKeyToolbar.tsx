@@ -1,3 +1,4 @@
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import type { MotionEditorMode } from './types'
 
 const button = 'min-h-8 rounded border border-slate-600 px-2 text-xs text-slate-100 hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-40'
@@ -30,9 +31,9 @@ export function MotionKeyToolbar(props: Props) {
         aria-label={label} aria-pressed={mode === id} disabled={!editable && id !== 'select'} onClick={() => onModeChange(id)}>{text}</button>)}
       {selectedCount > 0 && <>
         <label className="flex items-center gap-1 text-xs text-slate-300">Copy offset ms
-          <input aria-label="Duplicate motion keys offset ms" type="number" min="0.001" step="any" value={props.duplicateMs}
+          <CalculationNumberInput aria-label="Duplicate motion keys offset ms" min="0.001" step="any" value={props.duplicateMs}
             className="w-20 rounded border border-slate-600 bg-slate-950 px-1 py-1 text-white"
-            onChange={event => props.onDuplicateMs(Number(event.target.value))} />
+            onChange={event => props.onDuplicateMs(Number(event.target.value))} onCalculate={calculated => props.onDuplicateMs(calculated)} />
         </label>
         <button type="button" className={button} disabled={!editable || !Number.isFinite(props.duplicateMs) || props.duplicateMs <= 0}
           onClick={props.onDuplicate}>Duplicate keys</button>

@@ -10,7 +10,7 @@ kapsamı veya teslim koşullarını azaltmaz. 3D öncesi kapılar aşağıda ayr
 | A1 | Formül/değer, fx, undo/portable, gerçek input kabulü | `b223981`; uygulandı |
 | A2 | Named stable refs, local clock, cycle/fallback, ortak frame, clone/remap, runtime/bake, UI ve kaynak bütçesi | `e5551a6`; uygulandı |
 | A3 | Gerçek boolean, karşılaştırma/mantık/koşul ve kısa devre; eski Wire preset uyumu | Uygulandı; kabul kaydı aşağıda |
-| A4 | Sayı/açı/yüzde, renk/vektör/metin/select; Array/audio/spline/key/guide/parametre/efekt/config input kapsam matrisi ve adapter testleri | Bekliyor |
+| A4 — uygulandı | Sayı/açı/yüzde, renk/vektör/metin/select; Array/audio/spline/key/guide/parametre/efekt/config input kapsam matrisi ve adapter testleri | Uygulandı; aşağıdaki A4 kabulü |
 | A5 | Pointer/klavye, eski veri, driver/Undo/portable/player/raster ve Four Seasons 512 MiB kabulü | Bekliyor |
 | V6 / E−1.7 | Native viewport birleşik akışı, 09:05 elle düzenleme → ajan devamı, büyük sahne/regresyon | Bekliyor |
 | Dar entegrasyon | Stable asset/source kimliği, kesin yerel/frame saati, hedef boyut/alpha/renk, kaynak hazırlığı/sahipliği, açık capability ve fallback | Bekliyor |
@@ -57,3 +57,20 @@ son kanıt ayrı origin'de alındı: `artifacts/validation/property-expression-a
 A4 lifecycle/input matrisi, typed discrete bake ve A5/V6 kabulü hâlâ bekler.
 Diğer çalışma değişikliklerinden ayrılmış temiz commit snapshot'ında 364 dosya,
 2.936 test ve TypeScript geçti. CLI build ile 16 CLI testi de geçti.
+
+
+## A4 uygulama ve kabul
+
+Typed string/color/vec2 ve strict select; ortak schema/default/source katalogları,
+constant/live ownership, stable-ID spline/handle mutation ve typed native bake
+uygulandı. Özel numeric/range formlar explicit Calculate once adapter'ına bağlandı;
+asset/identity/filter/action sınırları [alan matrisinde](../typed-input-expressions.md).
+Gerçek UI'da config/result, live string/color/select/Vec2, invalid enum/gain,
+coupled handles, color bake/Undo ve reload/history doğrulandı. Kanıtlar:
+`artifacts/validation/property-expression-a4-20261112/`. A5/Four Seasons/V6 ve dar
+entegrasyon hâlâ bekliyor; 3D geliştirmesi başlamadı.
+
+A4 doğrulaması: çalışma alanında 367 dosya / 2.979 test; diğer mevcut çalışma
+farklarından ayrılmış temiz test kopyasında 367 dosya / 2.978 test ve TypeScript
+geçti. MCP/CLI build, 16 CLI testi ve temiz production build geçti. Kaynak/UI
+kabulü A4 matrisindeki kapsamla sınırlıdır; sonraki kapıları tamamlandı saymaz.

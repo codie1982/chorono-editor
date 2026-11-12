@@ -4,6 +4,8 @@ import { layerRegistry } from '../../registry'
 import type { PropertySchema } from '../../registry/PropertySchema'
 import { assertTrackValues, isVec2, isColorValue, parseAnimatableColor } from '../../animation/typedValues'
 import { readPropertyPath } from '../../scene/properties/readPropertyPath'
+import { splineCoordinateAddress } from '../../spline/animation/splineCoordinateAddress'
+import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
 
 export type KeysetMode = 'all' | 'transform' | 'animated' | 'selected'
 export interface KeyableChannel { path: string; value: AnimatableValue; track?: Track }
@@ -39,7 +41,9 @@ export function keyableChannels(layer: Layer, tracks: readonly Track[], mode: Ke
     if (structural.test(path) || mode === 'transform' && !path.startsWith('transform.') && path !== 'opacity'
       || mode === 'animated' && !track || mode === 'selected' && !selectedTargets.has(prefix + path)) continue
     const value = readPropertyPath(layer, path)
-    const sample = value === undefined ? track?.keyframes[0]?.value : value
+    let sample = value === undefined ? track?.keyframes[0]?.value : value
+    const coordinate = splineCoordinateAddress(path)
+    if (coordinate && !coordinate.component && isVec2(sample)) sample = {x:sample.x,y:sample.y}
     if (!supported(sample)) continue
     const family = schema?.animationValueType ?? schema?.valueType
     if (family === 'color' && !parseAnimatableColor(sample) || family === 'vec2' && !isVec2(sample)
@@ -55,13 +59,13 @@ export function keyableChannels(layer: Layer, tracks: readonly Track[], mode: Ke
 /** Report driven inputs rather than writing an evaluated effect back to source.
  * A supported explicit Bake/Convert stays a separate user operation. */
 export function drivenChannelReason(scene: ChronoScene, layer: Layer, path: string, track?: Track, options: { ignorePropertyExpression?: boolean } = {}): string | null {
-  if (!options.ignorePropertyExpression && layer.propertyExpressions?.fields[path]) return 'A live expression drives this input; bake or explicitly convert it first.'
+  if (!options.ignorePropertyExpression && Object.keys(layer.propertyExpressions?.fields ?? {}).some(target => propertyPathsOverlap(target, path))) return 'A live expression drives this input; bake or explicitly convert it first.'
   if (track?.controller && track.controller.type !== 'keyframe') return 'Procedural controller: bake or convert it first.'
   if (track?.easeCurve || track?.timeWarp || track?.multiplierCurve || track?.modifiers?.some(item => item.enabled)
     || track?.keyframes.some(key => key.segmentModifiers?.some(item => item.enabled))) return 'Modifiers/time remapping: bake this channel first.'
-  if (Object.keys(layer.paramBindings ?? {}).some(input => input === path)
-    || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === layer.id && binding.target.property === path)
-    || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === layer.id && wire.target.propertyPath === path)) return 'A binding or wire drives this input.'
+  if (Object.keys(layer.paramBindings ?? {}).some(input => propertyPathsOverlap(input, path))
+    || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === layer.id && propertyPathsOverlap(binding.target.property, path))
+    || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === layer.id && propertyPathsOverlap(wire.target.propertyPath, path))) return 'A binding or wire drives this input.'
   if (layer.followPath && ['transform.x', 'transform.y', ...(layer.followPath.orientToPath ? ['transform.rotationDeg'] : [])].includes(path)
     || layer.motionPath && ['transform.x', 'transform.y', 'transform.rotationDeg'].includes(path)) return 'Path-driven transform: key the path controls or bake first.'
   return null

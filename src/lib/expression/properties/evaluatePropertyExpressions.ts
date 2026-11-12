@@ -7,13 +7,12 @@ import { readWireSource } from '../../wiring/WireSource'
 import { readPropertyExpressionSource } from './PropertyExpressionSources'
 import { evaluateWireExpression } from '../../wiring/WireExpression'
 import { expressionPrograms } from '../../core/expression/ExpressionProgramCache'
-import { evaluateTypedExpression, type ExpressionScalar } from '../../core/expression/expressionEvaluator'
-import { checkNumericResult } from '../../core/expression/NumericResult'
-import { propertyExpressionConstraints } from './PropertyExpressionCapability'
+import { evaluateTypedExpression, type ExpressionValue } from '../../core/expression/expressionEvaluator'
+import { validatePropertyExpressionValue } from './PropertyExpressionValue'
 import { interpolateAnimatableValues } from '../../animation/typedValues'
 import { EXPRESSION_CONSTANTS } from './PropertyExpression'
 import { preparePropertyExpressionPlan, type PropertyExpressionEntry, type PropertyExpressionPlan } from './PropertyExpressionPlan'
-import { readPropertyPath } from '../../scene/properties/readPropertyPath'
+import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
 
 export interface ExpressionClock {
   readonly globalTimeMs: number
@@ -54,7 +53,7 @@ export class PropertyExpressionEvaluator {
     const brokenWireIds = new Set<string>(), runtimeErrorIds = new Set<string>(), cycleWireIds = new Set<string>()
     const failed = new Set<string>()
     let next = before
-    const put = (key: string, value: ExpressionScalar) => { if (next === before) next = new Map(before); next.set(key, value) }
+    const put = (key: string, value: ExpressionValue) => { if (next === before) next = new Map(before); next.set(key, value) }
     const wireError = (wire: ParameterWire, message: string, broken = false) => {
       errors.set(wire.id, message); (broken ? brokenWireIds : runtimeErrorIds).add(wire.id)
     }
@@ -65,9 +64,13 @@ export class PropertyExpressionEvaluator {
     }
     for (const key of plan.order) {
       for (const wire of plan.wires.get(key) ?? []) {
-        const sourceKey = paramRefKey(wire.source), liveSource = plan.expressions.has(sourceKey)
-        if (liveSource && failed.has(sourceKey)) { failed.add(key); wireError(wire, 'Source expression failed; keeping the pre-driver value.'); continue }
-        const source = readWireSource(wire.source, liveSource ? next : before, params, plan.index!)
+        const sourceKey = paramRefKey(wire.source), liveSource = Array.from(plan.expressions.keys()).some(key => propertyPathsOverlap(key, sourceKey))
+        if (liveSource && Array.from(failed).some(key => propertyPathsOverlap(key, sourceKey))) { failed.add(key); wireError(wire, 'Source expression failed; keeping the pre-driver value.'); continue }
+        let source: number | null
+        try {
+          const typed = liveSource ? readPropertyExpressionSource(wire.source, next, params, plan.resolvedIndex!) : null
+          source = liveSource ? typeof typed === 'number' ? typed : typeof typed === 'boolean' ? +typed : null : readWireSource(wire.source, before, params, plan.index!)
+        } catch { source = null }
         if (source === null) { failed.add(key); wireError(wire, 'Source has no finite numeric value; keeping the pre-driver value.', true); continue }
         try { put(key, evaluateWireExpression(wire, source)); failed.delete(key) }
         catch (error) { failed.add(key); wireError(wire, message(error)) }
@@ -85,27 +88,20 @@ export class PropertyExpressionEvaluator {
         const local = clock.timelineTimes?.get(timeline.id) ?? (clock.externalTime?.timelineId === timeline.id ? clock.externalTime.localTimeMs : computeLocalTime(timeline, clock.globalTimeMs))
         if (!Number.isFinite(local)) throw new Error('Expression local clock must be finite.')
         const timeMs = Math.max(0, Math.min(timeline.durationMs, local - (entry.definition.timeOffsetMs ?? 0)))
-        const context: Record<string, ExpressionScalar> = { ...EXPRESSION_CONSTANTS, timeMs, timeSec: timeMs / 1000, timeNormalized: timeline.durationMs > 0 ? timeMs / timeline.durationMs : 0 }
+        const context: Record<string, ExpressionValue> = { ...EXPRESSION_CONSTANTS, timeMs, timeSec: timeMs / 1000, timeNormalized: timeline.durationMs > 0 ? timeMs / timeline.durationMs : 0 }
         for (const [name, ref] of Object.entries(entry.definition.sources)) {
           Object.defineProperty(context, name, { enumerable: true, get() {
-            if (failed.has(paramRefKey(ref))) throw new Error('A source driver failed; keeping the pre-driver value.')
+            if (Array.from(failed).some(key => propertyPathsOverlap(key, paramRefKey(ref)))) throw new Error('A source driver failed; keeping the pre-driver value.')
             return readPropertyExpressionSource(ref, next, params, plan.resolvedIndex!)
           } })
         }
         const program = expressionPrograms.get(entry.definition.formula)
         if (!program.ast) throw new Error(program.error ?? 'Invalid expression')
-        const schema = propertyExpressionConstraints(entry.layer, entry.path, entry.definition.resultType)
         const output = evaluateTypedExpression(program.ast, context)
-        if (typeof output !== entry.definition.resultType) throw new Error('Expression must return ' + entry.definition.resultType + '; scalar coercion is disabled.')
-        const result = entry.definition.resultType === 'boolean' ? { value: output, error: null } : checkNumericResult(output as number, {
-          min: Math.max(schema.min ?? -Infinity, entry.definition.min ?? -Infinity), max: Math.min(schema.max ?? Infinity, entry.definition.max ?? Infinity),
-        })
-        if (result.error) throw new Error(result.error)
-        let value = result.value!
+        let value = validatePropertyExpressionValue(entry.layer, entry.path, entry.definition.resultType, output, 'live', entry.definition)
         if (weight < 1) {
-          const fallback = before.get(key) ?? readPropertyPath(entry.layer, entry.path) ?? schema.defaultValue
-          if (typeof fallback !== entry.definition.resultType || typeof fallback === 'number' && !Number.isFinite(fallback)) throw new Error('Expression blending needs a matching typed authored fallback.')
-          value = interpolateAnimatableValues(fallback as ExpressionScalar, value, weight, key) as ExpressionScalar
+          const fallback = readPropertyExpressionSource({ layerId: entry.layer.id, propertyPath: entry.path, valueType: entry.definition.resultType }, before, params, plan.resolvedIndex!)
+          value = interpolateAnimatableValues(fallback, value, weight, key)
         }
         put(key, value); failed.delete(key)
       } catch (error) { expressionErrors.set(key, message(error)); failed.add(key) }
@@ -119,8 +115,8 @@ export class PropertyExpressionEvaluator {
  * do not disable playback. No source repair/removal happens during evaluation. */
 function assertUncontested(scene: ChronoScene, plan: PropertyExpressionPlan, entry: PropertyExpressionEntry): void {
   const { layer, path, key } = entry
-  if (plan.animated.has(key) || plan.wires.has(key) || layer.paramBindings?.[path]
-    || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === layer.id && binding.target.property === path)
+  if (Array.from(plan.animated).some(target => propertyPathsOverlap(target, key)) || Array.from(plan.wires.keys()).some(target => propertyPathsOverlap(target, key)) || Object.keys(layer.paramBindings ?? {}).some(target => propertyPathsOverlap(target, path))
+    || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === layer.id && propertyPathsOverlap(binding.target.property, path))
     || layer.followPath && ['transform.x', 'transform.y', ...(layer.followPath.orientToPath ? ['transform.rotationDeg'] : [])].includes(path)
     || layer.motionPath && ['transform.x', 'transform.y', 'transform.rotationDeg'].includes(path)) throw new Error('An existing animation/binding/path/Wire owns this channel; keeping its value.')
   if (layer.inputExpressions?.fields[path]) throw new Error('A constant formula also owns this channel; resolve the conflict explicitly.')

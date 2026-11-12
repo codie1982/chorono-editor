@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useEffect, useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
@@ -54,9 +55,9 @@ export default function AudioOutputControls({ scene, timelineId, onMasterChange,
   }
   return <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-800 bg-gray-950 text-xs text-gray-300" aria-label="Audio output">
     <label className="flex items-center gap-1">Master
-      <input aria-label="Master gain dB" type="number" min={-60} max={12} step={.5} value={draft}
+      <CalculationNumberInput aria-label="Master gain dB" min={-60} max={12} step={.5} value={draft}
         onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-        className="w-16 bg-gray-800 border border-gray-600 rounded px-1 focus:ring-2 focus:ring-blue-500" /> dB
+        className="w-16 bg-gray-800 border border-gray-600 rounded px-1 focus:ring-2 focus:ring-blue-500" onCalculate={calculated => setDraft(String(calculated))} /> dB
     </label>
     <button type="button" onClick={() => onMasterMute(!scene.composition.audioMuted)} aria-pressed={!!scene.composition.audioMuted}
       className="px-2 rounded border border-gray-700 focus:ring-2 focus:ring-blue-500">{scene.composition.audioMuted ? 'Unmute master' : 'Mute master'}</button>

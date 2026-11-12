@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── WireParameterModal (BL-05) ────────────────────────────────────────────────
 // Modal for creating + editing ParameterWires. Two side-by-side picker
 // columns + an expression editor + a live preview row.
@@ -207,17 +208,13 @@ export default function WireParameterModal({
             {clampOn && (
               <>
                 <span className="text-gray-500 text-[10px]">min</span>
-                <input
-                  type="number" value={clampMin}
+                <CalculationNumberInput aria-label="clamp Min" value={clampMin}
                   onChange={(e) => setClampMin(e.target.value)}
-                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none"
-                />
+                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none" onCalculate={calculated => setClampMin(String(calculated))} />
                 <span className="text-gray-500 text-[10px]">max</span>
-                <input
-                  type="number" value={clampMax}
+                <CalculationNumberInput aria-label="clamp Max" value={clampMax}
                   onChange={(e) => setClampMax(e.target.value)}
-                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none"
-                />
+                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none" onCalculate={calculated => setClampMax(String(calculated))} />
               </>
             )}
           </div>

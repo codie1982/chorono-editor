@@ -85,6 +85,7 @@ import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import SplinePointInspector from '@/components/SplinePointInspector'
+import { NumericPropertyProvider } from '@/components/inputs/expressions/NumericPropertyContext'
 import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
 import { newSplineLayerFromData } from '@/lib/defaults'
 import TimelinePanel   from '@/components/TimelinePanel'
@@ -1762,11 +1763,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       dispatchCommand={dispatchCommand}
                     />
                     {selectedLayer?.type === 'spline' && splinePointId && (
+                      <NumericPropertyProvider scene={scene} layerId={selectedLayer.id} dispatch={dispatchCommand} getScene={editor.getScene}
+                        isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                       <SplinePointInspector
                         layer={selectedLayer}
                         pointId={splinePointId}
                         dispatchCommand={dispatchCommand}
                       />
+                      </NumericPropertyProvider>
                     )}
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector

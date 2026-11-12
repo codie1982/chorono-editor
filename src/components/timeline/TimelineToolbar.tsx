@@ -1,4 +1,6 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { SetKeyControls } from './authoring/SetKeyControls'
 import { TimelineTransport } from './authoring/TimelineTransport'
 import type { TimelineAuthoringControls } from './authoring/useTimelineAuthoring'
@@ -120,10 +122,10 @@ export default function TimelineToolbar(props: Props) {
             </label>
             <label className="flex items-center gap-2 px-1 py-0.5" title="Loop count (0 = infinite)">
               <span className="text-gray-500 flex-1">Loop count</span>
-              <input type="number" min={0} step={1} value={selectedTimeline.loopCount ?? 0}
+              <CalculationNumberInput aria-label="selected Timeline loop Count 0" min={0} step={1} value={selectedTimeline.loopCount ?? 0}
                 onChange={(e) => onTimelineFieldChange('loopCount', Number(e.target.value))}
                 className="w-12 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-gray-200
-                           [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                           [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => onTimelineFieldChange('loopCount', calculated)} />
             </label>
           </div>
         )}
@@ -221,14 +223,12 @@ export default function TimelineToolbar(props: Props) {
           Logarithmic mapping so 1× sits near the middle of the track. */}
       <div className="flex items-center gap-1.5 shrink-0">
         <span className="text-[10px] text-gray-600 select-none">Zoom</span>
-        <input
-          type="range"
+        <CalculationRangeInput aria-label="zoom To Slider zoom Factor"
           min={0} max={100} step={1}
           value={zoomToSlider(zoomFactor)}
           onChange={(e) => onZoomChange(sliderToZoom(Number(e.target.value)))}
           className="w-28 accent-blue-500 cursor-pointer"
-          title={`${zoomFactor.toFixed(2)}× — drag to scale timeline`}
-        />
+          title={`${zoomFactor.toFixed(2)}× — drag to scale timeline`} onCalculate={calculated => onZoomChange(sliderToZoom(calculated))} />
         <span className="text-[10px] font-mono text-gray-500 w-10 text-right">
           {zoomFactor.toFixed(zoomFactor < 1 ? 2 : 1)}×
         </span>
@@ -270,11 +270,10 @@ export default function TimelineToolbar(props: Props) {
       {selectedTimeline && (
         <div className="flex items-center gap-2 shrink-0 text-xs text-gray-400">
           <label className="flex items-center gap-1">
-            <input type="number" value={selectedTimeline.durationMs} min={100} step={100}
+            <CalculationNumberInput aria-label="selected Timeline duration Ms" value={selectedTimeline.durationMs} min={100} step={100}
               onChange={(e) => onTimelineFieldChange('durationMs', Number(e.target.value))}
               className="w-16 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-gray-200
-                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-            /> ms
+                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => onTimelineFieldChange('durationMs', calculated)} /> ms
           </label>
           {/* Play mode (autoplay / loop / ping-pong / loop count) now lives in
               the Play button's long-press dropdown. */}

@@ -1,4 +1,5 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 // ── SnapPanel ─────────────────────────────────────────────────────────────
 // Dockable settings panel for the snap subsystem. Sister to the canvas's
 // quick-toggle SnapMenu — the menu gives you fast on/off, the panel gives
@@ -216,14 +217,12 @@ function NumberField({ label, suffix, value, min, max, step, disabled, onChange 
   return (
     <div className={`flex items-center gap-2 px-2 py-1 w-full ${disabled ? 'opacity-50' : ''}`}>
       <span className="text-[11px] text-gray-400 w-24">{label}</span>
-      <input
-        type="range"
+      <CalculationRangeInput aria-label="value"
         min={min} max={max} step={step}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1 accent-blue-500"
-      />
+        className="flex-1 accent-blue-500" onCalculate={calculated => onChange(calculated)} />
       <span className="text-[11px] font-mono text-gray-300 w-14 text-right">
         {value}{suffix}
       </span>

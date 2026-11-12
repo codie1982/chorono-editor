@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── StateMachinePanel (BL-09 Sprint 3) ───────────────────────────────────────
 // SVG node-graph editor for interactive state machines. Lives in the
 // `canvas-leaf` dock tab next to the canvas (toggled by the toolbar sub-mod).
@@ -442,12 +443,10 @@ function StateDetail({
         </select>
       </Field>
       <Field label="Speed">
-        <input
-          type="number" step={0.1}
+        <CalculationNumberInput aria-label="state speed 1" step={0.1}
           value={state.speed ?? 1}
           onChange={(e) => update({ speed: Number(e.target.value) })}
-          className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-200"
-        />
+          className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-200" onCalculate={calculated => update({ speed: calculated })} />
       </Field>
       <div className="flex gap-1 pt-1">
         <button
@@ -540,20 +539,16 @@ function TransitionDetail({
       )}
 
       <Field label="Blend (ms)">
-        <input
-          type="number" min={0} step={50}
+        <CalculationNumberInput aria-label="t blend Ms 0" min={0} step={50}
           value={t.blendMs ?? 0}
           onChange={(e) => update({ blendMs: Number(e.target.value) || undefined })}
-          className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-200"
-        />
+          className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-200" onCalculate={calculated => update({ blendMs: calculated || undefined })} />
       </Field>
       <Field label="Priority">
-        <input
-          type="number" step={1}
+        <CalculationNumberInput aria-label="t priority 0" step={1}
           value={t.priority ?? 0}
           onChange={(e) => update({ priority: Number(e.target.value) || undefined })}
-          className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-200"
-        />
+          className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-200" onCalculate={calculated => update({ priority: calculated || undefined })} />
       </Field>
 
       <button

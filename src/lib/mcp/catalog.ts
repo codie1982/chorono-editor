@@ -145,11 +145,13 @@ export async function getCapabilities(profile: ToolCatalogProfile = 'standard', 
       ...(callableInBatch ? { batchInputSchema: { ...result.tool.inputSchema, required: (result.tool.inputSchema.required ?? []).filter((field: string) => !['expectedRevision', 'readToken'].includes(field)) } } : {}) }
   }
   const base = { version: MCP_VERSION, catalog: catalog.metadata(profile), sourceEditing: SOURCE_EDITING_CAPABILITIES,
-    propertyExpressions: { sourceField: 'Layer.propertyExpressions', version: 1, resultTypes: ['number', 'boolean'], booleanTargets: ['text.uppercase', 'text.underline', 'path.closed'], numericBakeOnly: true, timeVariables: ['timeMs', 'timeSec', 'timeNormalized'], constants: ['pi', 'e'],
+    propertyExpressions: { sourceField: 'Layer.propertyExpressions', version: 1, resultTypes: ['number', 'boolean', 'string', 'color', 'vec2'], booleanTargets: ['text.uppercase', 'text.underline', 'path.closed'], booleanTargetsAreExamples: true, targetCapability: 'Schema-backed visual properties and stable spline coordinates; exact family/options/bounds apply. Lifecycle/configuration controls do not launch live jobs.', numericBakeOnly: false, timeVariables: ['timeMs', 'timeSec', 'timeNormalized'], constants: ['pi', 'e'],
       limits: { perScene: 512, perLayer: 128, namedSources: 16, formulaChars: 4096, cachedPrograms: 512 },
       authoring: 'layer.set/patch or replace_layer_fields; preserve unrelated field records and authored fallback',
       playback: 'editor, full-scene Web SDK, static SVG and raster; basic runtime/animated SVG require explicit native-key bake',
-      bake: 'Numeric only: Properties fx → Bake to keyframes; project-time sampling captures parameters. Global-time bake rejects SM-owned clocks. Boolean supports explicit Convert to value; discrete bake is not available yet.' },
+      bake: 'Properties fx → Bake to keyframes: numbers/vectors/colors use linear keys; booleans/strings use hold keys. Project-time sampling captures parameters; global-time bake rejects SM-owned clocks. Error units are source units or RGBA 0..255; discrete mismatch is 0/1.',
+      functions: ['vec2', 'x', 'y', 'rgb', 'rgba', 'color', 'red', 'green', 'blue', 'alpha', 'concat', 'str', 'fixed'],
+      configuration: 'Lifecycle/asset operations are not live jobs. Inspector configuration calculators apply only an explicitly reviewed result; they do not persist a formula.' },
     particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS,
     exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
   if (options.summary) return { ...base, objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category })) }

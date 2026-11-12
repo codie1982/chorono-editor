@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import type { ChronoScene, ParameterRef } from '@/lib/types'
 import SourceParameterPicker from '@/components/wiring/SourceParameterPicker'
+import { listExpressionLayerRefs } from '@/lib/expression/properties/PropertyExpressionCapability'
 import { formatParameterRef } from '@/lib/wiring/helpers'
 
 /** Named scalar inputs reuse the existing stable-reference picker. Local
@@ -17,7 +18,7 @@ export function ExpressionSourcesEditor({ scene, sources, onChange }: { scene: C
     </div>)}
     <div className="mt-2 flex gap-2"><input aria-label="Source variable name" value={name} maxLength={48} onChange={event => setName(event.target.value)} className="min-w-0 flex-1 rounded border border-gray-600 bg-gray-950 p-1" />
       <button type="button" disabled={!name || Object.keys(sources).length >= 16 || Object.prototype.hasOwnProperty.call(sources, name)} onClick={() => setEditing(name)} className="rounded bg-gray-700 px-2 disabled:opacity-40">Choose source</button></div>
-    {editing && <div className="mt-2"><SourceParameterPicker scene={scene} value={sources[editing] ?? null} acceptedValueTypes={['number', 'boolean']} onChange={ref => { const next = { ...sources, [editing]: ref }; onChange(next); setEditing(null); setName(unusedInputName(next)) }} />
+    {editing && <div className="mt-2"><SourceParameterPicker scene={scene} value={sources[editing] ?? null} layerRefs={listExpressionLayerRefs} acceptedValueTypes={['number', 'boolean', 'string', 'color', 'vec2']} onChange={ref => { const next = { ...sources, [editing]: ref }; onChange(next); setEditing(null); setName(unusedInputName(next)) }} />
       <button type="button" onClick={() => setEditing(null)} className="mt-1 underline">Close source picker</button></div>}
   </fieldset>
 }

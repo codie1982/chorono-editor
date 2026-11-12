@@ -1,3 +1,4 @@
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { TrajectoryNode } from '@/lib/timeline/trajectory'
 import type { MotionPointDraft } from './types'
@@ -20,10 +21,10 @@ export function MotionKeyInspector({ node, durationMs, disabled, onApply }: Prop
   return <form onSubmit={submit} className="flex flex-wrap items-end gap-2 pt-2" aria-label="Selected motion key">
     {([['x', 'World X'], ['y', 'World Y'], ['timeMs', 'Time (ms)']] as const).map(([field, label]) => <label key={field}
       className="flex flex-col gap-0.5 text-xs text-slate-300">{label}
-      <input aria-label={`Motion key ${label}`} type="number" step="any" required disabled={disabled}
+      <CalculationNumberInput aria-label={`Motion key ${label}`} step="any" required disabled={disabled}
         min={field === 'timeMs' ? 0 : undefined} max={field === 'timeMs' ? durationMs : undefined}
         value={draft[field]} onChange={event => setDraft(previous => ({ ...previous, [field]: event.target.value }))}
-        className="w-24 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-white" />
+        className="w-24 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-white" onCalculate={calculated => setDraft(previous => ({ ...previous, [field]: String(calculated) }))} />
     </label>)}
     <button type="submit" disabled={disabled} className="min-h-8 rounded bg-sky-700 px-3 text-xs text-white disabled:opacity-40">Apply key values</button>
   </form>

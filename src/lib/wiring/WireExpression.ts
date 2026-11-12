@@ -13,7 +13,10 @@ export function evaluateWireExpression(wire: ParameterWire, source: number): Exp
   const program = expressionPrograms.get(wire.expression)
   if (!program.ast) throw new Error(program.error ?? 'Invalid expression')
   const value = evaluateTypedExpression(program.ast, { source, s: source }, { legacyNumericConditions: true })
-  if (wire.target.valueType === 'boolean') return typeof value === 'boolean' ? value : clampWireValue(value, wire.clamp) !== 0
+  if (wire.target.valueType === 'boolean') {
+    if (typeof value !== 'boolean' && typeof value !== 'number') throw new Error('Boolean Wire target requires a scalar')
+    return typeof value === 'boolean' ? value : clampWireValue(value, wire.clamp) !== 0
+  }
   if (typeof value !== 'number') throw new Error('Numeric Wire target requires a finite number; select numeric branches explicitly.')
   return clampWireValue(value, wire.clamp)
 }

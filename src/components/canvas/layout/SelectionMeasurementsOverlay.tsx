@@ -1,3 +1,4 @@
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useRef } from 'react'
 import type { SelectionMeasurements } from './useSelectionMeasurements'
 
@@ -60,8 +61,8 @@ export function SelectionGapControls({ measurements, names }: {
     }}>
     <p className="mb-2 text-sm font-semibold">{gap.axis === 'x' ? 'Horizontal' : 'Vertical'} gap</p>
     <p className="mb-2 text-xs text-slate-300 break-words">Fixed: {names.get(gap.fixedId) ?? gap.fixedId}<br />Moving: {names.get(gap.movingId) ?? gap.movingId}</p>
-    <label className="block text-xs">Gap (px)<input ref={input} aria-label="Gap (px)" type="number" step="any" required value={measurements.value}
-      onChange={event => measurements.setValue(event.target.value)} className="mt-1 w-full rounded border border-slate-500 bg-slate-950 px-2 py-2 text-sm focus:border-pink-400 focus:outline-none" /></label>
+    <label className="block text-xs">Gap (px)<CalculationNumberInput ref={input} aria-label="Gap (px)" step="any" required value={measurements.value}
+      onChange={event => measurements.setValue(event.target.value)} className="mt-1 w-full rounded border border-slate-500 bg-slate-950 px-2 py-2 text-sm focus:border-pink-400 focus:outline-none" onCalculate={calculated => measurements.setValue(String(calculated))} /></label>
     <p className="mt-2 text-xs text-slate-400">Edge to edge in composition pixels. Negative values overlap. Other selected objects stay in place.</p>
     {measurements.error && <p role="alert" className="mt-2 text-xs text-rose-200">{measurements.error}</p>}
     <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={measurements.close} aria-label="Cancel gap edit"

@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ChronoScene, Layer, Timeline, Keyframe, EasingType, TimelineSettings,
@@ -2193,23 +2194,20 @@ function KeyframeEditWindow({
         <div className="grid grid-cols-2 gap-2 mb-3">
           <label className="flex flex-col gap-0.5">
             <span className="text-[9px] uppercase tracking-wider text-gray-600">Time (ms)</span>
-            <input
-              autoFocus type="number" value={editingKf.draftTime}
+            <CalculationNumberInput aria-label="editing Kf draft Time"
+              autoFocus value={editingKf.draftTime}
               onChange={(e) => onChangeDraftTime(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
-                         text-white font-mono focus:outline-none focus:border-blue-500"
-            />
+                         text-white font-mono focus:outline-none focus:border-blue-500" onCalculate={calculated => onChangeDraftTime(String(calculated))} />
           </label>
           <label className="flex flex-col gap-0.5">
             <span className="text-[9px] uppercase tracking-wider text-gray-600">Value</span>
-            <input
-              type="number" step="any" value={editingKf.draftValue}
+            <CalculationNumberInput aria-label="editing Kf draft Value" step="any" value={editingKf.draftValue}
               onChange={(e) => onChangeDraftValue(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               className="px-1.5 py-1 bg-gray-950 border border-gray-700 rounded
-                         text-white font-mono focus:outline-none focus:border-blue-500"
-            />
+                         text-white font-mono focus:outline-none focus:border-blue-500" onCalculate={calculated => onChangeDraftValue(String(calculated))} />
           </label>
         </div>
 

@@ -71,7 +71,7 @@ import { useShapePlacement } from './canvas/placement/useShapePlacement'
 import { ShapePlacementOutline } from './canvas/placement/ShapePlacementOutline'
 import { resolveCloneDragMode } from '@/lib/shortcuts/cloneDragGesture'
 import { usePathEdit } from './canvas/hooks/usePathEdit'
-import { resolveSplineEditGeometry } from './canvas/splineEditGeometry'
+import { resolveSplineEditGeometry, drivenSplineEditReason, drivenSplineTopologyReason } from './canvas/splineEditGeometry'
 import { createLayerWorldBoundsResolver } from '@/lib/geometry/resolveLayerWorldBounds'
 import { beginRotationGesture, resolveParentWorldMatrix } from '@/lib/canvas/math/rotationGesture'
 import { prepareTransformTargets } from '@/lib/canvas/math/preparedTransforms'
@@ -689,6 +689,8 @@ export default function SceneCanvas({
         const handle = Object.values(selectedLayer.spline.handles)
           .find(h => h.pointId === hh.pointId && h.kind === hh.kind)
         if (handle) {
+          const reason = drivenSplineEditReason(selectedLayer, scene, 'handles', handle.id)
+          if (reason) { setTransformWarning(reason); return }
           editor.beginTransaction()
           dragRef.current = {
             kind: 'splineHandle', layerId: selectedLayer.id, originalLayer: selectedLayer,
@@ -705,6 +707,8 @@ export default function SceneCanvas({
       if (hp) {
         const p = selectedLayer.spline.points[hp]
         setSelectedSplinePointId(hp)
+        const reason = drivenSplineEditReason(selectedLayer, scene, 'points', hp)
+        if (reason) { setTransformWarning(reason); return }
         editor.beginTransaction()
         dragRef.current = {
           kind: 'splinePoint', layerId: selectedLayer.id, originalLayer: selectedLayer,
@@ -719,6 +723,8 @@ export default function SceneCanvas({
       if (toolMode === 'pen') {
         const hs = hitTestSplineSegment(splineEdit.worldSpline, cx, cy, 6 / zoom)
         if (hs) {
+          const reason = drivenSplineTopologyReason(selectedLayer, scene)
+          if (reason) { setTransformWarning(reason); return }
           const nextSpline = insertPointOnSegment(selectedLayer.spline, hs.segmentId, hs.t)
           editor.dispatchCommand(makeUpdateLayerCmd(selectedLayer.id, { spline: nextSpline }, selectedLayer))
           return
@@ -1389,7 +1395,7 @@ export default function SceneCanvas({
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
           {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
             && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
-            <SplineEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
+            <SplineEditOverlay layer={selectedFrameLayer ?? selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
               hover={splineHover} selectedPointId={selectedSplinePointId} />
           )}
 
@@ -1861,6 +1867,8 @@ export default function SceneCanvas({
         const close = () => { splineCtx.close(); splineCtxTargetRef.current = null }
         const baseSpline = layer.spline
         const mutate = (fn: (s: import('@/lib/types/spline').SplinePathData) => import('@/lib/types/spline').SplinePathData) => {
+          const reason = drivenSplineTopologyReason(layer, scene)
+          if (reason) { setTransformWarning(reason); close(); return }
           const next = fn(baseSpline)
           if (next && next !== baseSpline) {
             editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))

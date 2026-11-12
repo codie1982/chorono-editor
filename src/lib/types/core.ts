@@ -87,10 +87,12 @@ export interface ShapeParams {
 }
 
 /** Colour as four 0–255 channels — used for animated colour values */
-export interface ColorValue { r: number; g: number; b: number; a: number }
+export type { ColorValue } from '../color/ColorValue'
+import type { ColorValue } from '../color/ColorValue'
 
 /** 2D vector — used for animated position values */
-export interface Vec2 { x: number; y: number }
+export type { Vec2 } from '../geometry/CoordinateSystem'
+import type { Vec2 } from '../geometry/CoordinateSystem'
 
 export type AnimatableValue = number | boolean | string | ColorValue | Vec2
 

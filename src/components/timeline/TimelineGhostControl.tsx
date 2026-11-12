@@ -1,4 +1,5 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 
 import { useRef, useState } from 'react'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -138,16 +139,14 @@ export default function TimelineGhostControl({
                   {ghostSettings.beforeFrames} frames
                 </span>
               </div>
-              <input
-                type="range"
+              <CalculationRangeInput aria-label="ghost Settings before Frames"
                 min="0"
                 max="20"
                 value={ghostSettings.beforeFrames}
                 onChange={(e) =>
                   onUpdateSettings({ beforeFrames: parseInt(e.target.value, 10) })
                 }
-                className="w-full h-1 bg-gray-700 rounded cursor-pointer"
-              />
+                className="w-full h-1 bg-gray-700 rounded cursor-pointer" onCalculate={calculated => onUpdateSettings({ beforeFrames: parseInt(String(calculated), 10) })} />
             </div>
 
             <div>
@@ -157,16 +156,14 @@ export default function TimelineGhostControl({
                   {ghostSettings.afterFrames} frames
                 </span>
               </div>
-              <input
-                type="range"
+              <CalculationRangeInput aria-label="ghost Settings after Frames"
                 min="0"
                 max="20"
                 value={ghostSettings.afterFrames}
                 onChange={(e) =>
                   onUpdateSettings({ afterFrames: parseInt(e.target.value, 10) })
                 }
-                className="w-full h-1 bg-gray-700 rounded cursor-pointer"
-              />
+                className="w-full h-1 bg-gray-700 rounded cursor-pointer" onCalculate={calculated => onUpdateSettings({ afterFrames: parseInt(String(calculated), 10) })} />
             </div>
           </div>
 
@@ -178,14 +175,12 @@ export default function TimelineGhostControl({
                 {ghostSettings.opacity}%
               </span>
             </div>
-            <input
-              type="range"
+            <CalculationRangeInput aria-label="ghost Settings opacity"
               min="5"
               max="100"
               value={ghostSettings.opacity}
               onChange={(e) => onUpdateSettings({ opacity: parseInt(e.target.value, 10) })}
-              className="w-full h-1 bg-gray-700 rounded cursor-pointer"
-            />
+              className="w-full h-1 bg-gray-700 rounded cursor-pointer" onCalculate={calculated => onUpdateSettings({ opacity: parseInt(String(calculated), 10) })} />
           </div>
 
           {/* Info text */}

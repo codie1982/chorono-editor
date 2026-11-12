@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
@@ -101,11 +102,9 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="FPS">
-            <input
-              type="number" min={1} max={120} value={fps} disabled={busy}
+            <CalculationNumberInput aria-label="fps" min={1} max={120} value={fps} disabled={busy}
               onChange={(e) => setFps(Math.max(1, Number(e.target.value)))}
-              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 disabled:opacity-50"
-            />
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 disabled:opacity-50" onCalculate={calculated => setFps(Math.max(1, calculated))} />
           </Field>
           <Field label={`Resolution (${scale}×)`}>
             <div className="grid grid-cols-4 gap-1">

@@ -1,6 +1,7 @@
 import type { Binding, ChronoScene, ParameterRef } from '../../types'
 import { paramRefKey } from '../../wiring/helpers'
 import { preparePropertyExpressionPlan } from './PropertyExpressionPlan'
+import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
 
 /** Build a private read-only evaluation scope for one property sample job.
  * Traverse named expression, Wire and linear-binding source references once;
@@ -21,10 +22,13 @@ export function propertyExpressionScope(scene: ChronoScene, target: ParameterRef
   }
   enqueue(target)
   for (let index = 0; index < queue.length; index++) {
-    const key = paramRefKey(queue[index]), entry = plan.expressions.get(key)
-    if (entry) Object.values(entry.definition.sources).forEach(enqueue)
-    for (const wire of plan.wires.get(key) ?? []) enqueue(wire.source)
-    for (const binding of bindings.get(key) ?? []) if (binding.source.type === 'layerProperty' && binding.source.layerId && binding.source.property) {
+    const key = paramRefKey(queue[index])
+    for (const [owner, entry] of Array.from(plan.expressions)) if (propertyPathsOverlap(owner, key)) {
+      enqueue({ layerId: entry.layer.id, propertyPath: entry.path, valueType: entry.definition.resultType })
+      Object.values(entry.definition.sources).forEach(enqueue)
+    }
+    for (const [owner, records] of Array.from(plan.wires)) if (propertyPathsOverlap(owner, key)) for (const wire of records) enqueue(wire.source)
+    for (const [owner, records] of Array.from(bindings)) if (propertyPathsOverlap(owner, key)) for (const binding of records) if (binding.source.type === 'layerProperty' && binding.source.layerId && binding.source.property) {
       enqueue({ layerId: binding.source.layerId, propertyPath: binding.source.property, valueType: 'number' })
     }
   }
@@ -41,9 +45,9 @@ export function propertyExpressionScope(scene: ChronoScene, target: ParameterRef
   }
   return { ...scene, layers: scene.layers.filter(layer => ids.has(layer.id)).map(layer => {
     if (!layer.propertyExpressions) return layer
-    const fields = Object.fromEntries(Object.entries(layer.propertyExpressions.fields).filter(([path]) => refs.has('layers.' + layer.id + '.' + path)))
+    const fields = Object.fromEntries(Object.entries(layer.propertyExpressions.fields).filter(([path]) => Array.from(refs.keys()).some(ref => propertyPathsOverlap(ref, 'layers.' + layer.id + '.' + path))))
     return { ...layer, propertyExpressions: Object.keys(fields).length ? { version: 1, fields } : undefined }
-  }), timelines: scene.timelines.map(timeline => ({ ...timeline, tracks: timeline.tracks.filter(track => refs.has(track.target)) })),
-  bindings: Array.from(bindings).filter(([key]) => refs.has(key)).flatMap(([, records]) => records),
-  parameterWires: scene.parameterWires?.filter(wire => refs.has(paramRefKey(wire.target))) }
+  }), timelines: scene.timelines.map(timeline => ({ ...timeline, tracks: timeline.tracks.filter(track => Array.from(refs.keys()).some(ref => propertyPathsOverlap(ref, track.target))) })),
+  bindings: Array.from(bindings).filter(([key]) => Array.from(refs.keys()).some(ref => propertyPathsOverlap(ref, key))).flatMap(([, records]) => records),
+  parameterWires: scene.parameterWires?.filter(wire => Array.from(refs.keys()).some(ref => propertyPathsOverlap(ref, paramRefKey(wire.target)))) }
 }

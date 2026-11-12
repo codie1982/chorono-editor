@@ -61,7 +61,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
 | Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline tek source tree, Find, subtree flags/undo, çoklu dal filtreleri ve güvenli UI reparent. |
-| Devam ediyor — sırada A2 | E−1.5A, ardından kalan E−1 ve araç kabulü | [A1 sabit numeric input formülleri](input-expressions.md) uygulandı; sırada canlı zaman/kaynak bağlamı A2, sonra A3–A5 ve V6/E−1.7. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
+| Devam ediyor — sırada A5 | E−1.5A, ardından kalan E−1 ve araç kabulü | A1–A4 typed input, live driver ve adapter/bake uygulandı; [A4 sözleşmesi](typed-input-expressions.md). Sırada A5 ve V6/E−1.7. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
 | Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
 | Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |

@@ -1,3 +1,4 @@
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useRef, useState } from 'react'
 
 // ── Snap menu (top-right dropdown — SVGator-style) ───────────────────────────
@@ -65,12 +66,10 @@ export function SnapMenu(p: SnapMenuProps) {
           {p.toGrid && p.enabled && (
             <div className="px-3 py-1.5 flex items-center gap-2 border-t border-gray-800 mt-1 pt-2">
               <span className="text-[10px] text-gray-400">Grid</span>
-              <input
-                type="range" min={2} max={100} step={1}
+              <CalculationRangeInput aria-label="p grid Size" min={2} max={100} step={1}
                 value={p.gridSize}
                 onChange={(e) => p.onGridSizeChange(Number(e.target.value))}
-                className="flex-1 accent-blue-500"
-              />
+                className="flex-1 accent-blue-500" onCalculate={calculated => p.onGridSizeChange(calculated)} />
               <span className="text-[10px] font-mono text-gray-300 w-10 text-right">{p.gridSize}px</span>
             </div>
           )}

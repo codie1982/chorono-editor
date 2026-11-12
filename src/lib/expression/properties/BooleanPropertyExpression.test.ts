@@ -10,6 +10,7 @@ import { parseSceneJson } from '../../format/scene/SceneJsonConverter'
 import { makeCloneForestCmd } from '../../editor/commands-clone-forest'
 import { evaluateParameterWiresVerbose } from '../../runtime/parameterWireEvaluator'
 import { preparePropertyExpressionBake } from './preparePropertyExpressionBake'
+import { makeApplyPropertyExpressionBakeCmd } from '../../editor/inputExpressions/PropertyExpressionBakeCommand'
 import { propertyExpressionConstraints } from './PropertyExpressionCapability'
 import { MAPPING_PRESETS } from '../../../components/wiring/presets'
 import { evaluateWireExpression } from '../../wiring/WireExpression'
@@ -47,7 +48,9 @@ describe('boolean property driver and compatibility adapters', () => {
     expect(evaluateSceneFrame(portable, 500).overrides.get('layers.label.text.uppercase')).toBe(true)
     const clone = makeCloneForestCmd(scene, { sourceIds: ['label'] }), copied = clone.execute(scene)
     expect(evaluateSceneFrame(copied, 500).overrides.get('layers.' + clone.idMaps[0].label + '.text.uppercase')).toBe(true)
-    expect(() => preparePropertyExpressionBake(scene, 'label', 'text.uppercase', { startMs: 0, endMs: 1000, fps: 30, tolerance: 0 })).toThrow(/numeric results only/)
+    const baked = makeApplyPropertyExpressionBakeCmd(preparePropertyExpressionBake(scene, 'label', 'text.uppercase', { startMs: 0, endMs: 1000, fps: 30, tolerance: 0 })).execute(scene)
+    expect(evaluateSceneFrame(baked, 500).overrides.get('layers.label.text.uppercase')).toBe(true)
+    expect(baked.timelines.at(-1)!.tracks[0].keyframes.every(key => typeof key.value === 'boolean' && key.easing.type === 'hold')).toBe(true)
   })
   it('rejects numeric truthiness/type conflicts, preserves fallback and applies exact boolean source types', () => {
     const source = fixture()

@@ -1,4 +1,5 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
@@ -157,12 +158,10 @@ export default function RasterExportDialog({
         {/* Quality (lossy only) */}
         {isLossy && (
           <Field label={`Quality — ${quality}%`}>
-            <input
-              type="range" min={10} max={100} value={quality}
+            <CalculationRangeInput aria-label="quality" min={10} max={100} value={quality}
               disabled={busy}
               onChange={(e) => setQuality(Number(e.target.value))}
-              className="w-full accent-blue-500"
-            />
+              className="w-full accent-blue-500" onCalculate={calculated => setQuality(calculated)} />
           </Field>
         )}
     </BaseExportDialog>

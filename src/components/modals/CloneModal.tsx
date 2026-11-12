@@ -1,4 +1,6 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── CloneModal (BL-59) ────────────────────────────────────────────────────────
 //
 // "Clone with settings…" dialog. Quick Clone (Cmd+D) is fired straight
@@ -131,22 +133,18 @@ export default function CloneModal({
             Number of clones
           </label>
           <div className="flex items-center gap-2">
-            <input
-              type="range"
+            <CalculationRangeInput aria-label="Math min count 50"
               min={MIN_COUNT}
               max={Math.min(50, MAX_COUNT)}
               value={Math.min(count, 50)}
               onChange={(e) => setCount(Number(e.target.value))}
-              className="flex-1 accent-blue-500"
-            />
-            <input
-              type="number"
+              className="flex-1 accent-blue-500" onCalculate={calculated => setCount(calculated)} />
+            <CalculationNumberInput aria-label="count"
               min={MIN_COUNT}
               max={MAX_COUNT}
               value={count}
               onChange={(e) => setCount(Math.max(MIN_COUNT, Math.min(MAX_COUNT, Number(e.target.value))))}
-              className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[12px] text-gray-100 outline-none focus:border-gray-500"
-            />
+              className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-[12px] text-gray-100 outline-none focus:border-gray-500" onCalculate={calculated => setCount(Math.max(MIN_COUNT, Math.min(MAX_COUNT, calculated)))} />
           </div>
           {!validCount && (
             <div className="mt-1 text-[10px] text-rose-400">
@@ -267,8 +265,7 @@ function NumberField({
       <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
         {label}
       </label>
-      <input
-        type="number"
+      <CalculationNumberInput aria-label="value"
         min={min}
         max={max}
         step={step}
@@ -277,8 +274,10 @@ function NumberField({
           const n = Number(e.target.value)
           if (Number.isFinite(n)) onChange(n)
         }}
-        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-gray-500"
-      />
+        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-gray-500" onCalculate={calculated => {
+          const n = calculated
+          if (Number.isFinite(n)) onChange(n)
+        }} />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { BulkEditPolicyControl } from './authoring/BulkEditPolicyControl'
 import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
@@ -1221,9 +1222,8 @@ export default function CurveEditor({
           setEditingKf(null)
         }
         return (
-          <input
+          <CalculationNumberInput aria-label="editing Kf draft"
             autoFocus
-            type="number"
             value={editingKf.draft}
             onChange={(e) => setEditingKf({ ...editingKf, draft: e.target.value })}
             onBlur={commit}
@@ -1240,8 +1240,7 @@ export default function CurveEditor({
               left: LEFT_GUTTER + editingKf.xPx - 40,
               top: (svgRef.current && containerRef.current
                 ? svgRef.current.getBoundingClientRect().top - containerRef.current.getBoundingClientRect().top : 0) + TOP_GUTTER + editingKf.yPx - 24,
-            }}
-          />
+            }} onCalculate={calculated => setEditingKf({ ...editingKf, draft: String(calculated) })} />
         )
       })()}
 

@@ -1,5 +1,7 @@
 # Canlı sayısal özellik ifadeleri — E−1.5A / A2
 
+
+12 Kasım: [A4 typed input/adapter ve bake genişletmesi](typed-input-expressions.md) uygulandı. Aşağıdaki A1/A2/A3 açıklamaları kendi teslim sınırlarını kaydeder; güncel diğer türler ve input matrisi A4 belgesindedir.
 11 Kasım 2026. A2; source'ta saklanan, açık timeline saatinde hesaplanan
 sayısal özellik driver'ıdır. A1 sabit formülleri ve eski dosyalar korunur.
 [A3 boolean/koşul eklendi](boolean-expressions.md); A4 diğer türler/adapter'lar

@@ -3,7 +3,7 @@
 10 Kasım 2026. Kullanıcının onayıyla **E−1.5A** olarak plana eklendi.
 11 Kasım: **A1 sabit sayısal formül, A2 canlı numeric driver ve A3 boolean/koşul uygulandı**;
 [A1 sözleşmesi](../input-expressions.md), [A2 sözleşmesi](../property-expressions.md).
-[A3 sözleşmesi](../boolean-expressions.md). A4–A5 henüz uygulanmadı. Tamamlanan
+[A3 sözleşmesi](../boolean-expressions.md). A4 typed input ve calculation adapter'ları uygulandı; A5 birleşik kabul bekliyor. [A4 sözleşmesi](../typed-input-expressions.md). Tamamlanan
 E−1.5 parser/Wire/graph/bake altyapısını genişletir.
 Önce bu teslim, ardından kalan viewport ve birleşik kullanıcı kabulü V6/E−1.7,
 sonra [kutulu 3D/Poly sırası](geometry-material-boxed3d-sequence.md) gelir.
@@ -31,7 +31,7 @@ hesaplanan sonuç, beklenen tür/birim ve hata aynı yerde gösterilir.
 
 Tek seferlik hesap, yalnız sonucunu kaydeden açık bir seçenek olabilir. Kalıcı
 expression modunun formülü sessizce silip yalnız sayıyı saklaması kabul edilmez.
-Bu metnin A4–A5 UI/API tanımları planlanan davranıştır; mevcut capability değildir.
+A4 UI/API davranışı [typed input sözleşmesinde](../typed-input-expressions.md) uygulanmış alan ve sınırlarıyla kayıtlıdır; A5 kabulü ayrıca bekler.
 A1 yalnız Apply anında hesaplar; A2 açık timeline saati/named numeric kaynaklarla
 canlı hesaplar. Her ikisi formülü saklar; source ile runtime kareleri ayrıdır.
 
@@ -65,7 +65,7 @@ Schema'nın field capability bilgisi hangi modların desteklendiğini bildirir.
 | A1 — uygulandı | Ortak numeric input ve sabit formül düzenleme | Kayıtlı Properties/Schema/Scrub kaynak alanları; sayı, açı, yüzde; fx/çift tıklama, preview, hata, Enter/Escape, tek undo. Formül ve finite source sonucu birlikte saklanır; per-frame driver değildir. Kalan özel input'lar A4'tür. |
 | A2 — uygulandı | Kalıcı özellik expression'ı ve bağlam | Versioned source tanımı, stable hedef/kaynak referansları, adlandırılmış çoklu kaynak, açık timeline-local `timeMs`/`timeSec`/normalized time; ortak bağımlılık/çevrim/fallback, save/load/clone ve runtime/bake adapter'ları. [Kabul](pre3d-completion-audit.md). |
 | A3 — uygulandı | Boolean ve koşullu ifadeler | Karşılaştırmalar, mantık ve kısa devreli koşul; text case/decoration/path closure checkbox'larında actual boolean. Eski Boolean Wire preset'leri ve v1 refs korunur. [Sözleşme ve sınırlar](../boolean-expressions.md). Kalan lifecycle/input adapter'ları A4'tür. |
-| A4 | Diğer türler ve bütün input adapter'ları | Renk, vektör, metin ve select için typed sonuç; Array/ses/spline/key/guide/parametre/efekt ve kalan formlar aynı düzenleme sözleşmesine taşınır. Destek matrisi capability ve testlerle kapanır. |
+| A4 — uygulandı | Diğer türler ve bütün input adapter'ları | Renk, vektör, metin ve select için typed sonuç; Array/ses/spline/key/guide/parametre/efekt ve kalan formlar aynı düzenleme sözleşmesine taşınır. Destek matrisi capability ve testlerle kapanır. |
 | A5 | Birleşik kabul | Klavye/pointer, eski veri, driven channel, undo/redo, portable round-trip, desteklenen player/raster çıktı ve büyük sahnede bounded kaynak kontrolü; ardından V6/E−1.7. |
 
 Her input aynı etkileşim ailesini kullanır; bütün alanlar aynı türde formül

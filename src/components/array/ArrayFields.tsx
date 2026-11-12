@@ -1,3 +1,5 @@
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { BooleanInput } from '../inputs/BooleanInput'
 import type { ReactNode } from 'react'
 
 /** Cohesive numeric form controls for the Array tool. Values are finite source
@@ -12,9 +14,9 @@ export function ArrayNumber({ label, value, onChange, step = 'any' }: {
   label: string; value: number; onChange: (value: number) => void; step?: number | 'any'
 }) {
   return <label className="mb-2 flex items-center gap-2 text-xs text-slate-300">{label}
-    <input type="number" step={step} aria-label={`Array ${label}`} value={value}
+    <CalculationNumberInput step={step} aria-label={`Array ${label}`} value={value}
       onChange={event => { const number = Number(event.target.value); if (Number.isFinite(number)) onChange(number) }}
-      className="ml-auto w-24 rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-white focus:border-blue-400 focus:outline-none" />
+      className="ml-auto w-24 rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-white focus:border-blue-400 focus:outline-none" onCalculate={calculated => { const number = calculated; if (Number.isFinite(number)) onChange(number) }} />
   </label>
 }
 
@@ -26,6 +28,5 @@ export function ArrayVector({ label, value, onChange }: { label: string; value: 
 
 /** Boolean field whose native label supplies pointer and keyboard alternatives. */
 export function ArrayCheck({ label, checked, onChange, disabled = false }: { label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) {
-  return <label className="my-2 flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={checked} disabled={disabled}
-    aria-label={`Array ${label}`} onChange={event => onChange(event.target.checked)} className="mt-0.5 accent-blue-500" />{label}</label>
+  return <BooleanInput label={'Array ' + label} value={checked} disabled={disabled} onChange={onChange} />
 }

@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
 import { useMemo, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
@@ -611,12 +612,10 @@ function StaggerPicker({ count, onApply }: { count: number; onApply: (presetId: 
         Stagger ({count} layers)
       </div>
       <div className="flex items-center gap-1.5">
-        <input
-          type="number" value={stepMs} min={0} step={10}
+        <CalculationNumberInput aria-label="step Ms" value={stepMs} min={0} step={10}
           onChange={(e) => setStepMs(Number(e.target.value))}
           className="w-14 bg-gray-800 border border-gray-600 rounded px-1.5 py-0.5 text-[11px] text-gray-200
-                     [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-        />
+                     [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => setStepMs(calculated)} />
         <span className="text-[10px] text-gray-500">ms / layer</span>
       </div>
       <select

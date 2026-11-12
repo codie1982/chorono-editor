@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── StaggerKeysModal (BL-07) ──────────────────────────────────────────────────
 // Apply a cumulative time offset to a multi-keyframe selection so each kf is
 // shifted by N × offsetMs where N is its index in time order. Classic motion-
@@ -71,16 +72,14 @@ export default function StaggerKeysModal({ items, onApply, onClose }: Props) {
               <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">
                 Offset per item (ms)
               </label>
-              <input
-                type="number"
+              <CalculationNumberInput aria-label="offset Ms"
                 autoFocus
                 min={0}
                 step={10}
                 value={offsetMs}
                 onChange={(e) => setOffsetMs(Math.max(0, Number(e.target.value) || 0))}
                 onKeyDown={(e) => { if (e.key === 'Enter') apply(); if (e.key === 'Escape') onClose() }}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-gray-500 font-mono"
-              />
+                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-gray-500 font-mono" onCalculate={calculated => setOffsetMs(Math.max(0, calculated || 0))} />
             </div>
 
             {/* Direction */}

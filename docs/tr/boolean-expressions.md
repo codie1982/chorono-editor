@@ -1,5 +1,7 @@
 # Boolean ve koşullu ifadeler — E−1.5A / A3
 
+
+12 Kasım: [A4 typed input/adapter ve bake genişletmesi](typed-input-expressions.md) uygulandı. Aşağıdaki A1/A2/A3 açıklamaları kendi teslim sınırlarını kaydeder; güncel diğer türler ve input matrisi A4 belgesindedir.
 11 Kasım 2026. Ortak dil artık finite number ve gerçek boolean sonuçları
 hesaplar. A1 numeric girişlerinin dönüş türü değişmez; `evaluateExpression`
 hâlâ number döndürür veya hata verir. Yeni `evaluateTypedExpression` aynı

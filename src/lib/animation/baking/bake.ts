@@ -4,32 +4,10 @@ import { simplifyRDP, type Sample } from './simplify'
 import { isScalarNumericTrack } from '../typedValues'
 import { sameKeyTime, compareKeyTime } from '../../timeline/authoring/keyTimePolicy'
 
-export const MAX_BAKE_SAMPLES = 20000
-export interface BakeOptions {
-  /** Inclusive timeline-local ms, finite and 0 ≤ start ≤ end. */
-  startMs: number
-  endMs: number
-  /** Positive finite sample rate, at most 240 Hz; fractional rates supported. */
-  fps: number
-  /** Normalized vertical value error at sample times, 0..1; zero keeps samples. */
-  tolerance: number
-  /** Transient cancellation, never persisted in scene/history. */
-  signal?: { readonly aborted: boolean }
-  /** Caller namespace for deterministic IDs; editor commands supply timeline ID. */
-  keyIdPrefix?: string
-}
-
-/** Validate before allocating/evaluating; returns the finite number of intervals.
- * An exact end sample is emitted independently of floating-point frame drift. */
-export function validateBakeOptions(opts: BakeOptions): number {
-  if (![opts.startMs, opts.endMs, opts.fps, opts.tolerance].every(Number.isFinite)
-    || opts.startMs < 0 || opts.endMs < opts.startMs || opts.fps <= 0 || opts.fps > 240
-    || opts.tolerance < 0 || opts.tolerance > 1) throw new Error('Bake requires finite local bounds, 0 < FPS ≤ 240 and 0 ≤ tolerance ≤ 1.')
-  const intervals = Math.ceil((opts.endMs - opts.startMs) * opts.fps / 1000)
-  if (!Number.isSafeInteger(intervals) || intervals + 1 > MAX_BAKE_SAMPLES) throw new Error(`Bake exceeds ${MAX_BAKE_SAMPLES} samples; reduce FPS or the range.`)
-  if (opts.signal?.aborted) throw new Error('Bake cancelled')
-  return intervals
-}
+import { validateBakeOptions, type BakeOptions } from './BakeOptions'
+export { validateBakeOptions, MAX_BAKE_SAMPLES, type BakeOptions } from './BakeOptions'
+import { sampleBakeSignal } from './bakeSampling'
+import { bakedKeysForSamples } from './bakeKeyframes'
 
 /** Fixed-FPS samples plus exact terminal sample. Every evaluated value must be
  * finite scalar; an invalid sample rejects the whole conversion. Caller owns
@@ -43,14 +21,11 @@ export function sampleTrackDense(track: Track, opts: BakeOptions): Sample[] {
  * schedule as track baking. The callback is a trusted domain sampler, never
  * generated code; buffers are caller-owned and cancellation is synchronous. */
 export function sampleNumericSignal(sample: (timeMs: number) => number | null, opts: BakeOptions): Sample[] {
-  const intervals = validateBakeOptions(opts)
-  return Array.from({ length: intervals + 1 }, (_, index) => {
-    if (opts.signal?.aborted) throw new Error('Bake cancelled')
-    const timeMs = index === intervals ? opts.endMs : Math.min(opts.endMs, opts.startMs + index * 1000 / opts.fps)
+  return sampleBakeSignal(timeMs => {
     const value = sample(timeMs)
     if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Track has no finite numeric value at ${timeMs} ms.`)
-    return { timeMs, value }
-  })
+    return value
+  }, opts)
 }
 
 /** Linear key conversion with stable exact-time identities where possible.
@@ -58,16 +33,7 @@ export function sampleNumericSignal(sample: (timeMs: number) => number | null, o
  * tracks/timelines cannot share the old baked_0_0 ID accidentally. */
 function keysFromSamples(track: Track, raw: Sample[], opts: BakeOptions): Keyframe[] {
   const samples = simplifyRDP(raw, opts.tolerance, { metric: 'value', signal: opts.signal, maxComparisons: 2_000_000 })
-  const existing = new Map(track.keyframes.map(key => [key.timeMs, key]))
-  const used = new Set(track.keyframes.map(key => key.id))
-  return samples.map(sample => {
-    const old = existing.get(sample.timeMs)
-    const { segmentModifiers: _segments, ...metadata } = old ?? ({} as Partial<Keyframe>)
-    let id = old?.id ?? `baked:${encodeURIComponent(opts.keyIdPrefix ?? '')}:${encodeURIComponent(track.target)}:${sample.timeMs}`
-    if (!old) { const base = id; let suffix = 0; while (used.has(id)) id = `${base}:${++suffix}` }
-    used.add(id)
-    return { ...metadata, id, timeMs: sample.timeMs, value: sample.value, easing: { type: 'linear' }, tangentMode: 'linear' }
-  })
+  return bakedKeysForSamples(track, samples, opts)
 }
 
 /** Bake window keys only; independent pure utility, with local deterministic IDs.

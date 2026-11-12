@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -66,8 +67,8 @@ export default function TrackBakeDialog({ scene, editor, timelineId, target, onC
       <h2 className="text-sm font-semibold mb-1">Bake track to keyframes</h2><p className="font-mono text-[10px] break-all text-gray-400 mb-3">{target}</p>
       <div className="grid grid-cols-2 gap-3">
         {([['startMs', 'Start · local ms'], ['endMs', 'End · local ms'], ['fps', 'Samples / second'], ['tolerance', 'Value tolerance · 0–1']] as const).map(([key, label]) =>
-          <label key={key} className="flex flex-col gap-1">{label}<input aria-label={label} type="number" step="any" value={Number.isNaN(options[key]) ? '' : options[key]}
-            onChange={event => update(key, event.target.value)} className="bg-gray-800 border border-gray-600 rounded px-2 py-1 focus-visible:outline focus-visible:outline-blue-400" /></label>)}
+          <label key={key} className="flex flex-col gap-1">{label}<CalculationNumberInput aria-label={label} step="any" value={Number.isNaN(options[key]) ? '' : options[key]}
+            onChange={event => update(key, event.target.value)} className="bg-gray-800 border border-gray-600 rounded px-2 py-1 focus-visible:outline focus-visible:outline-blue-400" onCalculate={calculated => update(key, String(calculated))} /></label>)}
       </div>
       <p className="text-[11px] text-gray-400 my-3">Converts this channel's controller, track modifiers and time remapping to linear keys. Existing keys and segment modifiers outside the window stay; removed track processors no longer run outside it. Other channels stay unchanged.</p>
       {(error || stale) && <p role="alert" className="text-red-300 my-2">{error || 'Source changed. Close and preview the current track again.'}</p>}

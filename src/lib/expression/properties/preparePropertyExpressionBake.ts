@@ -2,10 +2,13 @@ import type { ChronoScene, Timeline } from '../../types'
 import type { ParamValueMap } from '../../runtime/paramResolver'
 import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
 import { buildParamValues } from '../../runtime/paramResolver'
-import { prepareNumericSignalBake, validateBakeOptions, type BakeOptions, type BakeReport } from '../../animation/baking/bake'
+import { validateBakeOptions, type BakeOptions, type BakeReport } from '../../animation/baking/bake'
+import { prepareTypedSignalBake } from '../../animation/baking/typedSignalBake'
+import type { ExpressionValueType } from '../../core/expression/ExpressionValue'
 import { propertyExpressionScope } from './PropertyExpressionScope'
 
 export interface PreparedPropertyExpressionBake {
+  readonly resultType: ExpressionValueType
   readonly source: ChronoScene
   readonly layerId: string
   readonly path: string
@@ -30,9 +33,9 @@ export function preparePropertyExpressionBake(scene: ChronoScene, layerId: strin
   options: BakeOptions, parameterValues?: ParamValueMap): PreparedPropertyExpressionBake {
   const count = validateBakeOptions(options), layer = scene.layers.find(item => item.id === layerId)
   if (!layer?.propertyExpressions?.fields[path]) throw new Error('The target has no live expression to bake.')
-  if (layer.propertyExpressions.fields[path].resultType !== 'number') throw new Error('This bake adapter supports numeric results only; convert the boolean to a value or use typed discrete keys.')
+  const kind = layer.propertyExpressions.fields[path].resultType
   if (options.endMs > scene.composition.durationMs) throw new Error('Bake range must be inside the composition.')
-  const sampling = propertyExpressionScope(scene, { layerId, propertyPath: path, valueType: 'number' })
+  const sampling = propertyExpressionScope(scene, { layerId, propertyPath: path, valueType: kind })
   const definitions = sampling.layers.flatMap(item => Object.values(item.propertyExpressions?.fields ?? {}))
   const smOwned = new Set((scene.stateMachines ?? []).flatMap(machine => machine.states.map(state => state.timelineId)))
   if (definitions.some(definition => smOwned.has(definition.timelineId)) || sampling.timelines.some(timeline => timeline.tracks.length && smOwned.has(timeline.id))) throw new Error('State-machine expressions require an explicit state recording; a global-time bake cannot preserve those transitions.')
@@ -44,13 +47,14 @@ export function preparePropertyExpressionBake(scene: ChronoScene, layerId: strin
   let suffix = 1, id = 'expression-bake-' + layerId
   const occupied = new Set(scene.timelines.map(timeline => timeline.id)), prefix = id
   while (occupied.has(id)) id = prefix + '-' + ++suffix
-  const prepared = prepareNumericSignalBake({ target, keyframes: [] }, { ...options, keyIdPrefix: id }, timeMs => {
+  const prepared = prepareTypedSignalBake(target, kind, { ...options, keyIdPrefix: id }, timeMs => {
     const frame = evaluateSceneFrame(sampling, timeMs, { paramValues: params })
     const error = frame.expressionErrors.get(target) ?? frame.expressionErrors.get('scene')
     if (error) throw new Error('Expression failed at ' + timeMs + ' ms: ' + error)
     const value = frame.overrides.get(target)
-    return typeof value === 'number' && Number.isFinite(value) ? value : null
+    if (value === undefined) throw new Error('Expression has no typed sample.')
+    return value
   })
-  return { source: scene, layerId, path, options: { ...options }, parameterValues: params,
+  return { source: scene, layerId, path, resultType: kind, options: { ...options }, parameterValues: params,
     report: prepared.report, timeline: { id, durationMs: scene.composition.durationMs, loop: false, autoplay: true, layerIds: [layerId], tracks: [prepared.track] } }
 }

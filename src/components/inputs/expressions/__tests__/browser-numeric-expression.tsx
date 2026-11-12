@@ -11,13 +11,16 @@ import { useEditorState } from '@/app/hooks/useEditorState'
 import { useSceneSessionRecovery } from '@/app/hooks/useSceneSessionRecovery'
 import { useAssetCache } from '@/app/hooks/useAssetCache'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
-import { emptyScene, newRectLayer, newTextLayer } from '@/lib/defaults'
+import { emptyScene, newRectLayer, newTextLayer, newSplineLayerFromPrimitive } from '@/lib/defaults'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { sceneSourceData } from '@/lib/format/scene/sceneSourceData'
 import { makeSessionProject, readSessionProject } from '@/lib/editor/session/SessionProject'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import { makeCloneForestCmd } from '@/lib/editor/commands-clone-forest'
+import { ArrayNumber } from '@/components/array/ArrayFields'
+import AudioNumberField from '@/components/audio/AudioNumberField'
+import SplinePointInspector from '@/components/SplinePointInspector'
 import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
 
 /** Isolated source/data origin. Tests production state, inspector, schema,
@@ -34,6 +37,7 @@ function fixture() {
  * commands; no private window test handles or synthetic DOM event dispatch. */
 function Host({ session }: { session: BrowserRecoverySession }) {
   const editor = useEditorState(session.scene ?? fixture(), session.history), recovery = useSceneSessionRecovery(editor, session)
+  const [count, setCount] = useState(3), [gain, setGain] = useState(0)
   const [timeMs, setTimeMs] = useState(0), [schema, setSchema] = useState(false), [selected, select] = useState('hero'), [project, setProject] = useState('')
   const identity = useSessionIdentity()!, scene = editor.scene, layer = scene.layers.find(item => item.id === selected)!
   const assets = useAssetCache(scene.assets), snap = useSnapSettings()
@@ -66,7 +70,16 @@ function Host({ session }: { session: BrowserRecoverySession }) {
         source.parameters.push({ id: 'gate', name: 'Gate', type: 'boolean', defaultValue: true })
         identity.adopt(crypto.randomUUID()); editor.resetScene(source); select('label'); setTimeMs(0)
       }}>Boolean test document</button>
+      <button onClick={() => {
+        const source=fixture(), text=newTextLayer(), spline=newSplineLayerFromPrimitive('circle',{radius:40})!
+        source.layers.push({...text,id:'label',name:'Editable label',transform:{...text.transform,x:40,y:210},text:{...text.text!,color:'#111827'}}, {...spline,id:'spline',name:'Editable spline'})
+        identity.adopt(crypto.randomUUID());editor.resetScene(source);select('label');setTimeMs(0)
+      }}>Typed test document</button>
+      <button onClick={() => select('spline')}>Select spline</button>
     </nav>
+    <section className="my-2 flex gap-4" aria-label="Configuration adapters"><ArrayNumber label="Count" value={count} onChange={setCount} />
+      <AudioNumberField label="Configuration gain" value={gain} min={-60} max={12} onCommit={setGain} />
+      <output id="configuration">{JSON.stringify({count,gain})}</output></section>
     <label className="my-2 flex gap-2 text-xs">Playhead ms<input aria-label="Playhead ms" type="range" min="0" max="1000" step="100" value={timeMs} onChange={event => setTimeMs(Number(event.target.value))} />{timeMs}</label>
     <button className="my-2 text-xs" onClick={() => { const source = editor.getScene(), command = makeCloneForestCmd(source, { sourceIds: [selected], offsets: { [selected]: { x: 30, y: 20 } } }); editor.dispatchCommand(command); select(command.idMaps[0][selected]) }}>Copy selection</button>
     <output id="frame" className="block text-xs">{JSON.stringify(Object.fromEntries(frame.overrides))}</output>
@@ -75,6 +88,7 @@ function Host({ session }: { session: BrowserRecoverySession }) {
       <div className="flex w-[420px] flex-col overflow-auto border border-gray-700">
         {schema ? <NumericPropertyProvider scene={scene} layerId={layer.id} dispatch={editor.dispatchCommand} getScene={editor.getScene} isTransactionActive={editor.isTransactionActive} timeMs={timeMs} timelineId="animation" frame={frame}>
           <SchemaPanel layer={layer} onLayerChange={update} />
+          {layer.spline && <SplinePointInspector layer={layer} pointId={Object.keys(layer.spline.points)[0]} dispatchCommand={editor.dispatchCommand} />}
         </NumericPropertyProvider> : <PropertiesPanel layer={layer} composition={scene.composition} scene={scene} allLayers={scene.layers} dispatchCommand={editor.dispatchCommand}
           getScene={editor.getScene} isTransactionActive={editor.isTransactionActive} currentTimeMs={timeMs} selectedTimelineId="animation" expressionFrame={frame} onLayerChange={update} onCompositionChange={() => {}} />}
       </div>

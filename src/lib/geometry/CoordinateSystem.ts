@@ -39,6 +39,15 @@ export interface Vec2 {
   y: number
 }
 
+/** Structural finite 2D vector guard. Extra point metadata remains compatible;
+ * consumers requiring an atomic value additionally check its exact keys. */
+export function isVec2(value: unknown): value is Vec2 {
+  return !!value && typeof value === 'object' && ['x', 'y'].every(key => {
+    const component = (value as Record<string, unknown>)[key]
+    return typeof component === 'number' && Number.isFinite(component)
+  })
+}
+
 export const vec2 = (x: number, y: number): Vec2 => ({ x, y })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

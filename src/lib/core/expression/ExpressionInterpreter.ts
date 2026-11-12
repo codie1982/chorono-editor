@@ -1,5 +1,6 @@
 import type { ExpressionAST } from './ExpressionSyntax'
-import { callExpressionFunction } from './ExpressionFunctions'
+import { callValueExpressionFunction } from './ValueExpressionFunctions'
+import { expressionValueType, type ExpressionValue } from './ExpressionValue'
 
 export type ExpressionScalar = number | boolean
 export interface ExpressionEvaluationOptions {
@@ -9,12 +10,12 @@ export interface ExpressionEvaluationOptions {
 }
 
 /** Require a finite number without JS truthiness/string/boolean coercion. */
-function number(value: ExpressionScalar): number {
+function number(value: ExpressionValue): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('Expression requires a finite number')
   return value
 }
 /** Require an actual boolean, optionally adapting old Wire ternary predicates. */
-function boolean(value: ExpressionScalar, legacy = false): boolean {
+function boolean(value: ExpressionValue, legacy = false): boolean {
   if (typeof value === 'boolean') return value
   if (legacy) return number(value) !== 0
   throw new Error('Expression condition requires a boolean')
@@ -26,16 +27,16 @@ function boolean(value: ExpressionScalar, legacy = false): boolean {
  * logical and conditional branches short circuit and never run skipped errors.
  * One 1024-node/64-depth budget covers every executed path, including malformed
  * cyclic external ASTs. No mutation, host property access, IO or user code. */
-export function evaluateTypedExpression(ast: ExpressionAST, context: Readonly<Record<string, ExpressionScalar>>, options: ExpressionEvaluationOptions = {}): ExpressionScalar {
+export function evaluateTypedExpression(ast: ExpressionAST, context: Readonly<Record<string, ExpressionValue>>, options: ExpressionEvaluationOptions = {}): ExpressionValue {
   let remaining = 1024
-  const condition = (value: ExpressionScalar) => boolean(value, options.legacyNumericConditions)
-  const visit = (node: ExpressionAST | undefined, depth = 0): ExpressionScalar => {
+  const condition = (value: ExpressionValue) => boolean(value, options.legacyNumericConditions)
+  const visit = (node: ExpressionAST | undefined, depth = 0): ExpressionValue => {
     if (!node || --remaining < 0 || depth > 64) throw new Error('Expression evaluation limit exceeded')
     const value = run(node, depth)
-    if (typeof value !== 'boolean' && (typeof value !== 'number' || !Number.isFinite(value))) throw new Error('Expression result must be a finite number or boolean')
+    if (!expressionValueType(value)) throw new Error('Expression result must be a bounded typed value')
     return value
   }
-  const run = (node: ExpressionAST, depth: number): ExpressionScalar => {
+  const run = (node: ExpressionAST, depth: number): ExpressionValue => {
     const child = (value: ExpressionAST | undefined) => visit(value, depth + 1)
     switch (node.type) {
       case 'Literal': return node.value ?? 0
@@ -52,7 +53,7 @@ export function evaluateTypedExpression(ast: ExpressionAST, context: Readonly<Re
           if (args.length !== 3) throw new Error('if expects 3 arguments')
           return child(condition(child(args[0])) ? args[1] : args[2])
         }
-        return callExpressionFunction(node.name ?? '', args.map(arg => number(child(arg))))
+        return callValueExpressionFunction(node.name ?? '', args.map(child))
       }
       case 'UnaryExpression': {
         const value = child(node.argument)
@@ -67,7 +68,7 @@ export function evaluateTypedExpression(ast: ExpressionAST, context: Readonly<Re
         if (op === '||') return boolean(left) || boolean(child(node.right))
         const right = child(node.right)
         if (['==', '===', '!=', '!=='].includes(op ?? '')) {
-          if (typeof left !== typeof right) throw new Error('Equality requires matching scalar types')
+          if (typeof left !== typeof right || typeof left === 'object') throw new Error('Equality requires matching scalar types')
           return op === '==' || op === '===' ? left === right : left !== right
         }
         const a = number(left), b = number(right)

@@ -1,4 +1,5 @@
 'use client'
+import ScrubInput from '../inputs/ScrubInput'
 // ── MotionBindingPanel ────────────────────────────────────────────────────────
 // Visual editor for ChronoScene.bindings — linear remap driver → driven.
 //
@@ -289,19 +290,9 @@ function RangeRow({
   return (
     <div className="flex items-center gap-1.5 mt-1 ml-1">
       <span className="text-[10px] text-gray-500 w-12">{label}</span>
-      <input
-        type="number"
-        className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none"
-        defaultValue={min}
-        onBlur={(e) => onCommit(Number(e.target.value), max)}
-      />
+      <ScrubInput disableScrub fieldLabel={label + ' minimum'} value={min} onChange={value => onCommit(value, max)} />
       <span className="text-gray-600">→</span>
-      <input
-        type="number"
-        className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none"
-        defaultValue={max}
-        onBlur={(e) => onCommit(min, Number(e.target.value))}
-      />
+      <ScrubInput disableScrub fieldLabel={label + ' maximum'} value={max} onChange={value => onCommit(min, value)} />
     </div>
   )
 }

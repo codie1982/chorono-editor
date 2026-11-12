@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '../inputs/CalculationNumberInput'
 import { useEffect, useRef, useState } from 'react'
 
 /** Numeric edits commit once on blur/Enter, and Escape restores the field. */
@@ -14,8 +15,9 @@ export default function AudioNumberField({ label, value, onCommit, min, max, ste
   return <label className={`flex ${compact ? 'items-center gap-1' : 'flex-col gap-1'} min-w-0 text-[10px] text-gray-400`}>
     <span className={compact ? 'sr-only' : ''}>{label}</span>
     <span className="flex items-center gap-1 min-w-0">
-      <input type="number" aria-label={label} value={draft} min={min} max={max} step={step} disabled={disabled}
+      <CalculationNumberInput aria-label={label} value={draft} min={min} max={max} step={step} disabled={disabled}
         className={`${compact ? 'w-14 px-1 py-0.5' : 'w-full px-2 py-1'} min-w-0 rounded bg-gray-950 border border-gray-700 text-xs font-mono text-gray-200 disabled:opacity-40 focus:outline-none focus:border-blue-400`}
+        onCalculate={number => { dirty.current = false; cancelled.current = false; if (number !== value) onCommit(number); setDraft(String(number)) }}
         onFocus={() => { focused.current = true; cancelled.current = false; dirty.current = false }}
         onChange={event => { dirty.current = true; setDraft(event.target.value) }}
         onBlur={() => {

@@ -3,7 +3,7 @@
  * rejects malformed/cyclic structures under its independent execution budget. */
 export interface ExpressionAST {
   type: 'Literal' | 'Identifier' | 'CallExpression' | 'BinaryExpression' | 'UnaryExpression' | 'ConditionalExpression'
-  value?: number | boolean
+  value?: number | boolean | string
   name?: string
   callee?: ExpressionAST
   arguments?: ExpressionAST[]
@@ -15,7 +15,7 @@ export interface ExpressionAST {
   consequent?: ExpressionAST
   alternate?: ExpressionAST
 }
-interface Token { type: 'number' | 'identifier' | 'lparen' | 'rparen' | 'comma' | 'operator' | 'question' | 'colon' | 'eof'; value: string }
+interface Token { type: 'number' | 'string' | 'identifier' | 'lparen' | 'rparen' | 'comma' | 'operator' | 'question' | 'colon' | 'eof'; value: string }
 const precedence: Readonly<Record<string, number>> = { '||': 1, '&&': 2, '==': 3, '!=': 3, '===': 3, '!==': 3, '<': 4, '>': 4, '<=': 4, '>=': 4, '+': 5, '-': 5, '*': 6, '/': 6, '%': 6, '^': 7 }
 
 /** Bound text/token allocation and reject partial numbers, access, assignment
@@ -30,6 +30,25 @@ function tokenize(expr: string): Token[] {
     if (tokens.length >= 1024) throw new SyntaxError('Expression exceeds 1024 tokens')
     const ch = expr[index]
     if (/\s/.test(ch)) { index++; continue }
+    if (ch === '"' || ch === "'") {
+      const quote = ch; let text = '', closed = false; index++
+      while (index < expr.length) {
+        const character = expr[index++]
+        if (character === quote) { closed = true; break }
+        if (character.charCodeAt(0) < 32) throw new SyntaxError('Raw control character in string')
+        if (character !== '\\') { text += character; continue }
+        const escape = expr[index++]
+        const escapes: Readonly<Record<string, string>> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '\\': '\\', '"': '"', "'": "'", '/': '/' }
+        if (escape === 'u') {
+          const hex = expr.slice(index, index + 4)
+          if (!/^[0-9a-f]{4}$/i.test(hex)) throw new SyntaxError('Invalid Unicode escape')
+          text += String.fromCharCode(parseInt(hex, 16)); index += 4
+        } else if (Object.hasOwn(escapes, escape)) text += escapes[escape]
+        else throw new SyntaxError('Invalid string escape')
+      }
+      if (!closed) throw new SyntaxError('Unterminated string')
+      tokens.push({ type: 'string', value: text }); continue
+    }
     if (/[0-9.]/.test(ch)) {
       const number = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(expr.slice(index))?.[0]
       if (!number || !Number.isFinite(Number(number))) throw new SyntaxError(`Invalid finite number at position ${index}`)
@@ -104,6 +123,7 @@ class Parser {
   private primary(): ExpressionAST {
     const token = this.take()
     if (token.type === 'number') return { type: 'Literal', value: Number(token.value) }
+    if (token.type === 'string') return { type: 'Literal', value: token.value }
     if (token.type === 'identifier') {
       if (this.peek().type !== 'lparen') return { type: 'Identifier', name: token.value }
       this.take(); const args: ExpressionAST[] = []

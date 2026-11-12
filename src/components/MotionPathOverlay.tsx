@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChronoScene, Layer } from '@/lib/types'
@@ -146,8 +147,8 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
             }}><option value="">Choose a key…</option>{model.nodes.map(node => <option key={node.id} value={node.id}>{node.timeMs.toFixed(2)} ms · {node.world.x.toFixed(1)}, {node.world.y.toFixed(1)}</option>)}</select>
         </label>}
         {mode === 'add' && <div className="mt-2 flex items-center gap-2 text-xs"><label>Advance after key
-          <input aria-label="Motion key advance" type="number" min={0} step="any" value={addStep} onChange={event => setAddStep(Number(event.target.value))}
-            className="ml-2 w-16 rounded border border-slate-600 bg-slate-950 px-1 py-1" /></label>
+          <CalculationNumberInput aria-label="Motion key advance" min={0} step="any" value={addStep} onChange={event => setAddStep(Number(event.target.value))}
+            className="ml-2 w-16 rounded border border-slate-600 bg-slate-950 px-1 py-1" onCalculate={calculated => setAddStep(calculated)} /></label>
           <select aria-label="Motion key advance unit" value={stepUnit} onChange={event => setStepUnit(event.target.value as 'frames' | 'ms')}
             className="rounded border border-slate-600 bg-slate-950 px-1 py-1"><option value="frames">frames</option><option value="ms">ms</option></select></div>}
         {selectedNodes.length === 1 && mode === 'select' && <MotionKeyInspector node={selectedNodes[0]} durationMs={model.durationMs}

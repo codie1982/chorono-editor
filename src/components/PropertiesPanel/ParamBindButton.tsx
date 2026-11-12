@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import type { Layer, SceneParameter, SceneParameterType } from '@/lib/types'
+import { NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
 
 // BL-69 — Direct parameter binding UI.
 //
@@ -105,7 +106,7 @@ export default function ParamBindButton({
             {boundParam.type}
           </span>
         </button>
-      ) : children}
+      ) : <NumericPropertyScope path={propertyPath} label={label}>{children}</NumericPropertyScope>}
 
       {open && (
         <div

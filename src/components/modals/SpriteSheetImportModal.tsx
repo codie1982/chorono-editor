@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 // ── SpriteSheetImportModal (BL-07b) ───────────────────────────────────────────
 // Collects the grid layout (columns/rows/fps) for a sprite-sheet image, with a
 // live preview overlaying the grid, then imports it as a frameSequence layer.
@@ -95,14 +96,12 @@ export default function SpriteSheetImportModal({ file, onImport, onClose, probes
             ([label, val, set]) => (
               <div key={label}>
                 <label htmlFor={`${dialogId}-${label}`} className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">{label}</label>
-                <input
+                <CalculationNumberInput aria-label="val"
                   id={`${dialogId}-${label}`}
-                  type="number"
                   min={1}
                   value={val}
                   onChange={(e) => set(Math.max(1, Number(e.target.value)))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-blue-500"
-                />
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-blue-500" onCalculate={calculated => set(Math.max(1, calculated))} />
               </div>
             ),
           )}

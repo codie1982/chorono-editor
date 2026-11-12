@@ -14,6 +14,9 @@ import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import { BooleanInput } from '@/components/inputs/BooleanInput'
+import { BLEND_MODES } from '@/lib/render/compositionModes'
+import { FONT_FAMILIES, FONT_WEIGHTS, FONT_STYLES } from '@/lib/text/fontOptions'
+import { TextInput } from '@/components/inputs/TextInput'
 import { NumericPropertyProvider, NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
 import type { NumericPropertyFrame } from '@/components/inputs/expressions/NumericPropertyContext'
 import type { ExternalTimelineTime } from '@/lib/evaluator'
@@ -37,24 +40,7 @@ const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
 ]
 
 // Canvas composite operations the user typically picks from for blending.
-const BLEND_MODES: Array<[GlobalCompositeOperation, string]> = [
-  ['source-over', 'Normal'],
-  ['multiply',    'Multiply'],
-  ['screen',      'Screen'],
-  ['overlay',     'Overlay'],
-  ['darken',      'Darken'],
-  ['lighten',     'Lighten'],
-  ['color-dodge', 'Color Dodge'],
-  ['color-burn',  'Color Burn'],
-  ['hard-light',  'Hard Light'],
-  ['soft-light',  'Soft Light'],
-  ['difference',  'Difference'],
-  ['exclusion',   'Exclusion'],
-  ['hue',         'Hue'],
-  ['saturation',  'Saturation'],
-  ['color',       'Color'],
-  ['luminosity',  'Luminosity'],
-]
+
 
 interface Props {
   layer: Layer | null
@@ -282,28 +268,6 @@ const PARAM_TYPE_BADGE: Record<import('@/lib/types').SceneParameterType, { bg: s
   color:   { bg: 'bg-pink-900',    fg: 'text-pink-300'    },
   image:   { bg: 'bg-violet-900',  fg: 'text-violet-300'  },
 }
-
-// ── Text panel option tables (BL-72 Phase 2) ────────────────────────────────
-// System / web-safe families only — the app loads no custom fonts, so these are
-// guaranteed to render. measureText reflects the chosen family in the browser.
-const FONT_FAMILIES: string[] = [
-  'sans-serif', 'serif', 'monospace',
-  'Arial', 'Helvetica', 'Georgia', 'Times New Roman',
-  'Courier New', 'Verdana', 'Trebuchet MS', 'Impact',
-]
-
-// Curated weight ramp. Values match the FontWeight union (numeric strings +
-// 'normal'/'bold'). drawText injects these straight into the canvas font string.
-const FONT_WEIGHTS: [FontWeight, string][] = [
-  ['100', '100 · Thin'],
-  ['300', '300 · Light'],
-  ['normal', '400 · Regular'],
-  ['500', '500 · Medium'],
-  ['600', '600 · Semibold'],
-  ['bold', '700 · Bold'],
-  ['800', '800 · Extra'],
-  ['900', '900 · Black'],
-]
 
 const TEXT_INPUT_CLASS =
   'w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 ' +
@@ -600,6 +564,7 @@ export default function PropertiesPanel({
                 <div className="flex items-center gap-2">
                   <input
                     type="range" min={0} max={1} step={0.01}
+                    disabled={!!layer.inputExpressions?.fields.opacity || !!layer.propertyExpressions?.fields.opacity}
                     value={layer.opacity}
                     onChange={(e) => update({ opacity: Number(e.target.value) })}
                     className="flex-1 accent-blue-500"
@@ -611,18 +576,9 @@ export default function PropertiesPanel({
                 </div>
               </WireableField>
               <Field label="Blend Mode">
-                <select
-                  value={layer.blendMode ?? 'source-over'}
-                  onChange={(e) => update({
-                    blendMode: e.target.value === 'source-over' ? undefined : (e.target.value as GlobalCompositeOperation),
-                  })}
-                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
-                             focus:outline-none focus:border-blue-500"
-                >
-                  {BLEND_MODES.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <TextInput propertyPath="blendMode" fieldLabel="Blend Mode" value={layer.blendMode ?? 'source-over'}
+                  options={BLEND_MODES.map(([value, label]) => ({ value, label }))}
+                  onChange={value => update({ blendMode: value === 'source-over' ? undefined : value as GlobalCompositeOperation })} />
               </Field>
             </Section>
 
@@ -1202,43 +1158,22 @@ export default function PropertiesPanel({
                   parameters={parameters}
                   onBind={(id) => bindParam('text.value', id)}
                 >
-                  <input
-                    type="text"
-                    value={layer.text.value}
-                    onChange={(e) => updateText({ value: e.target.value })}
-                    className={TEXT_INPUT_CLASS}
-                  />
+                  <TextInput propertyPath="text.value" fieldLabel="Content" value={layer.text.value} onChange={value => updateText({ value })} />
                 </ParamBindButton>
 
                 <Field label="Font">
-                  <select
-                    value={layer.text.fontFamily ?? 'sans-serif'}
-                    onChange={(e) => updateText({ fontFamily: e.target.value })}
-                    className={TEXT_INPUT_CLASS}
-                  >
-                    {FONT_FAMILIES.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
+                  <TextInput propertyPath="text.fontFamily" fieldLabel="Font family" suggestions={FONT_FAMILIES} value={layer.text.fontFamily ?? 'sans-serif'}
+                    onChange={fontFamily => updateText({fontFamily})} className={TEXT_INPUT_CLASS} />
                 </Field>
 
                 <Row2>
                   <Field label="Weight">
-                    <select
-                      value={String(layer.text.fontWeight ?? 'normal')}
-                      onChange={(e) => updateText({ fontWeight: e.target.value as FontWeight })}
-                      className={TEXT_INPUT_CLASS}
-                    >
-                      {FONT_WEIGHTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
+                    <TextInput propertyPath="text.fontWeight" fieldLabel="fontWeight" value={String(layer.text.fontWeight ?? 'normal')}
+                      options={FONT_WEIGHTS.map(([value,label]) => ({value,label}))} onChange={value => updateText({fontWeight: value as FontWeight})} className={TEXT_INPUT_CLASS} />
                   </Field>
                   <Field label="Style">
-                    <select
-                      value={layer.text.fontStyle ?? 'normal'}
-                      onChange={(e) => updateText({ fontStyle: e.target.value as FontStyle })}
-                      className={TEXT_INPUT_CLASS}
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="italic">Italic</option>
-                    </select>
+                    <TextInput propertyPath="text.fontStyle" fieldLabel="fontStyle" value={String(layer.text.fontStyle ?? 'normal')}
+                      options={FONT_STYLES} onChange={value => updateText({fontStyle: value as FontStyle})} className={TEXT_INPUT_CLASS} />
                   </Field>
                 </Row2>
 
@@ -1297,7 +1232,7 @@ export default function PropertiesPanel({
                 )}
 
                 <Field label="Letter Spacing">
-                  <NumInput value={layer.text.letterSpacing ?? 0} step={0.5}
+                  <NumInput propertyPath="text.letterSpacing" fieldLabel="Letter spacing" value={layer.text.letterSpacing ?? 0} step={0.5}
                     onChange={(v) => updateText({ letterSpacing: v })} />
                 </Field>
 
@@ -2233,12 +2168,8 @@ function PathStrokeSection({
       </Row2>
 
       <Field label="Trim Offset (animate via track)">
-        <input
-          type="range" min={0} max={1} step={0.001}
-          value={data.trim.offset}
-          onChange={(e) => patchTrim({ offset: Number(e.target.value) })}
-          className="w-full accent-blue-500"
-        />
+        <NumInput propertyPath="pathStroke.trim.offset" fieldLabel="Trim offset" value={data.trim.offset} min={0} max={1} step={0.001}
+          onChange={offset => patchTrim({offset})} />
       </Field>
 
       <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">

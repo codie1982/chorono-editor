@@ -1,5 +1,7 @@
 # Sayısal input formülleri — E−1.5A / A1
 
+
+12 Kasım: [A4 typed input/adapter ve bake genişletmesi](typed-input-expressions.md) uygulandı. Aşağıdaki A1/A2/A3 açıklamaları kendi teslim sınırlarını kaydeder; güncel diğer türler ve input matrisi A4 belgesindedir.
 11 Kasım 2026. A1, kayıtlı **sabit sayısal formül** düzenlemesidir. Formül
 Apply anında hesaplanır; her karede çalışan yeni bir driver değildir. Canlı
 zaman/kaynak bağımlılıkları A2, boolean A3 ve diğer input adapter'ları A4'tür.

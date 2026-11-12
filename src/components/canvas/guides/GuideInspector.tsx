@@ -1,3 +1,4 @@
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useState } from 'react'
 import type { CanvasGuideEditing } from './useCanvasGuideEditing'
 import { guidePositionInput } from './guidePositionInput'
@@ -27,8 +28,8 @@ export function GuideInspector({ editing }: { editing: CanvasGuideEditing }) {
       <button aria-label="Close guide controls" onClick={editing.close} className="px-2 py-1 rounded hover:bg-slate-700">×</button></div>
     {selected ? <>
       <p className="mb-2 text-cyan-200">{selected.axis === 'v' ? 'Vertical · x' : 'Horizontal · y'}{selected.locked ? ' · locked' : ''}</p>
-      <label className="block">Position<input aria-label="Guide position" type="number" value={draft} disabled={selected.locked}
-        className={field} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); apply() } }} /></label>
+      <label className="block">Position<CalculationNumberInput key={selected.id} aria-label="Guide position" value={draft} disabled={selected.locked}
+        className={field} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); apply() } }} onCalculate={calculated => setDraft(String(calculated))} /></label>
       <div className="flex flex-wrap gap-1 mt-2">
         <button aria-label="Apply guide position" disabled={selected.locked || !draft.trim()} onClick={apply} className="rounded bg-cyan-800 px-2 py-1 disabled:opacity-40">Apply</button>
         <button aria-label={selected.locked ? 'Unlock guide' : 'Lock guide'} onClick={() => editing.update(selected, { locked: !selected.locked })} className="rounded bg-slate-700 px-2 py-1">{selected.locked ? 'Unlock' : 'Lock'}</button>
@@ -38,7 +39,7 @@ export function GuideInspector({ editing }: { editing: CanvasGuideEditing }) {
     </> : <p className="text-slate-400">Click a guide or select one below.</p>}
     <div className="flex gap-2 items-end mt-3 border-t border-slate-700 pt-2">
       <label>Direction<select aria-label="New guide orientation" value={axis} onChange={event => setAxis(event.target.value as 'v' | 'h')} className={field}><option value="v">Vertical</option><option value="h">Horizontal</option></select></label>
-      <label className="min-w-0">Position<input aria-label="New guide position" type="number" value={position} onChange={event => setPosition(event.target.value)} className={field} /></label>
+      <label className="min-w-0">Position<CalculationNumberInput aria-label="New guide position" value={position} onChange={event => setPosition(event.target.value)} className={field} onCalculate={calculated => setPosition(String(calculated))} /></label>
       <button aria-label="Add guide" disabled={!position.trim()} onClick={() => submit(true)} className="rounded bg-cyan-800 px-2 py-1.5">Add</button>
     </div>
     {editing.guides.length > 0 && <select aria-label="Select guide" value={editing.selectedId ?? ''} className={`${field} mt-2`} onChange={event => editing.select(event.target.value || null)}>

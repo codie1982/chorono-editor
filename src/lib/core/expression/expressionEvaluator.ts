@@ -2,6 +2,7 @@ import { parseExpression, type ExpressionAST } from './ExpressionSyntax'
 import { evaluateTypedExpression } from './ExpressionInterpreter'
 export { parseExpression, type ExpressionAST } from './ExpressionSyntax'
 export { evaluateTypedExpression, type ExpressionScalar, type ExpressionEvaluationOptions } from './ExpressionInterpreter'
+export { expressionValueType, type ExpressionValue, type ExpressionValueType } from './ExpressionValue'
 
 /** Backward-compatible numeric entry point. Shares the typed interpreter but
  * refuses boolean output; existing numeric callers never receive a new type.

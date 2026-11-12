@@ -23,7 +23,15 @@ describe('MCP property-expression source contract', () => {
     expect(evaluateSceneFrame(result.scene, 500).overrides.get('layers.label.text.uppercase')).toBe(true)
     expect(result.scene.timelines[0].tracks).toEqual(scene.timelines[0].tracks)
     const capabilities = await getCapabilities('standard', { summary: true })
-    expect((capabilities as any).propertyExpressions.resultTypes).toEqual(['number', 'boolean'])
+    expect((capabilities as any).propertyExpressions.resultTypes).toEqual(['number', 'boolean', 'string', 'color', 'vec2'])
+  })
+  it('runs the typed color example through the real QuickJS bridge', async () => {
+    const markdown=await readFile('docs/tr/typed-input-expressions.md','utf8'), script=/```js\n([\s\S]*?)```/.exec(markdown)![1], scene=fixture()
+    const result=await runSafeScript(script,scene)
+    expect(evaluateSceneFrame(result.scene,500).overrides.get('layers.hero.style.fill.color')).toEqual({r:50,g:100,b:200,a:204})
+    expect(result.scene.timelines[0].tracks).toEqual(scene.timelines[0].tracks)
+    const details=await getCapabilities('standard',{toolName:'replace_layer_fields'}) as any
+    expect(details.tool.inputSchema.properties.patch.properties.inputExpressions.properties.version.enum).toEqual([1])
   })
   it('runs the documented example in QuickJS and keeps manual source/keys', async () => {
     const markdown = await readFile('docs/tr/property-expressions.md', 'utf8')

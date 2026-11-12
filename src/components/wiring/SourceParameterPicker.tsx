@@ -17,7 +17,7 @@
 // incompatible with `expectedType` render disabled.
 
 import { useMemo, useState } from 'react'
-import type { ChronoScene, ParameterRef, ParameterValueType } from '@/lib/types'
+import type { ChronoScene, Layer, ParameterRef, ParameterValueType } from '@/lib/types'
 import {
   listLayerParameterRefs, listSceneParameterRefs,
   formatParameterRef, paramRefKey, areTypesCompatible,
@@ -34,12 +34,14 @@ interface Props {
   expectedType?: ParameterValueType
   /** Exact types for strict expression inputs, without legacy Wire coercion. */
   acceptedValueTypes?: readonly ParameterValueType[]
+  /** Optional strict typed enumeration; legacy Wire sources keep their catalogue. */
+  layerRefs?: (layer: Layer) => ParameterRef[]
   /** Accent color (matches Source vs. Target column tinting in the modal). */
   accentClass?: string
 }
 
 export default function SourceParameterPicker({
-  scene, value, onChange, excludeRef, expectedType, acceptedValueTypes,
+  scene, value, onChange, excludeRef, expectedType, acceptedValueTypes, layerRefs,
   accentClass = 'text-sky-300',
 }: Props) {
   const [search, setSearch] = useState('')
@@ -65,10 +67,10 @@ export default function SourceParameterPicker({
   // Pre-build a list of (layer, refs) tuples and filter; track which layers
   // have *any* match so collapsed-expanded state can be auto-overridden.
   const layerSections = useMemo(() => scene.layers.map((layer) => {
-    const refs = listLayerParameterRefs(layer)
+    const refs = (layerRefs ?? listLayerParameterRefs)(layer)
     const filtered = refs.filter((r) => isMatch(layer.name) || isMatch(r.propertyPath))
     return { layer, refs: filtered, totalRefs: refs.length }
-  }).filter((s) => s.refs.length > 0), [scene.layers, q])
+  }).filter((s) => s.refs.length > 0), [scene.layers, q, layerRefs])
 
   // When searching, auto-expand any layer with matches so hits are visible.
   const forceExpanded = q !== ''

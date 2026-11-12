@@ -1,5 +1,6 @@
 import { layerRegistry } from '../../registry'
 import type { PropertySchema } from '../../registry/PropertySchema'
+import { inputExpressionSchema } from './inputExpressionSchema'
 import { propertyExpressionSchema } from './propertyExpressionSchema'
 
 type Schema = Record<string, any>
@@ -20,6 +21,7 @@ export function layerPatchSchema(): Schema {
       for (const property of group.schemas) addProperty(schema, property)
     }
   }
+  schema.properties.inputExpressions = inputExpressionSchema()
   schema.properties.propertyExpressions = propertyExpressionSchema()
   return schema
 }

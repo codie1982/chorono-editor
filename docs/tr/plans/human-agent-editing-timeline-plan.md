@@ -6,7 +6,7 @@ legacy 77 keşfi ve dokuz alias korunur; her source yazması gerçek bağlantı,
 editör, document epoch ve revision'a bağlı tek kullanımlık `readToken` ister.
 [Uygulama sözleşmesi](../../../src/lib/mcp/source/README.md),
 [istemci geçişi](../../en/mcp.md#mandatory-source-read-and-revision).
-**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı**; kullanıcının yeni isteğiyle sıraya **[E−1.5A input expression](input-expression-plan.md)** eklendi. Ardından **kalan viewport ve birleşik araç kabulü (V6/E−1.7)** var. [E−1.5 sözleşmesi](../procedural-authoring.md). Glama'nın eski
+**E−1.2 kaynak kökeni de tamamlandı (MCP 2.1.0).** **E−1.3 ortak hiyerarşi ve alt ağaç akışı da tamamlandı.** **E−1.4 Set Key/toplu Timeline/transport ve E−1.5 zorunlu prosedürel eğri/bake dilimi de tamamlandı**; kullanıcının yeni isteğiyle sıraya **[E−1.5A input expression](input-expression-plan.md)** eklendi. A1–A4 uygulandı; A5 birleşik kabul bekler. Ardından **kalan viewport ve birleşik araç kabulü (V6/E−1.7)** var. [E−1.5 sözleşmesi](../procedural-authoring.md). Glama'nın eski
 dış puanı ve yerel kabul ayrı ölçümlerdir.
 
 **8 Kasım sıra güncellemesi:** V4 native clone, V5 forest Array ve kullanıcı önceliğiyle
