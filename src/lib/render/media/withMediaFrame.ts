@@ -1,5 +1,6 @@
 import type { ChronoScene } from '../../types'
 import type { OverrideMap } from '../../evaluator'
+import type { ParamValueMap } from '../../runtime/paramResolver'
 import { assetSourcePool } from '../../asset/sources'
 import { VisualMediaSession } from './VisualMediaSession'
 import { prepareRenderFrame } from '../prepareRenderFrame'
@@ -30,9 +31,14 @@ async function seek(element: HTMLVideoElement, seconds: number): Promise<void> {
  * Optional abort stops preparation (including a supplied job-owned session),
  * but media stays pinned during an already-running callback/encoder. Work owns
  * its output cleanup and must actually settle before these pins are dropped.
+ * `timeMs` is absolute composition time in milliseconds. `paramValues` is the
+ * caller's parameter snapshot for this frame. A supplied `overrides` map must
+ * already contain the final evaluated frame (including drivers); it is borrowed
+ * without another runtime tick. The same map prepares resources and reaches
+ * `work`, so resource selection cannot evaluate a different default-param frame.
  */
 export async function withMediaFrame<T>(scene: ChronoScene, timeMs: number, context: CanvasRenderingContext2D,
-  options: { overrides?: OverrideMap;signal?:AbortSignal }, work: (assets: AssetElementMap, overrides: OverrideMap) => T | Promise<T>,
+  options: { overrides?: OverrideMap;paramValues?:ParamValueMap;signal?:AbortSignal }, work: (assets: AssetElementMap, overrides: OverrideMap) => T | Promise<T>,
   supplied?: VisualMediaSession): Promise<T> {
   return assetSourcePool.withAssets(scene.assets, async () => {
     const owner = supplied ?? new VisualMediaSession()
@@ -43,7 +49,7 @@ export async function withMediaFrame<T>(scene: ChronoScene, timeMs: number, cont
     if (!supplied) owner.start()
     try {
       check()
-      const frame = prepareRenderFrame(scene, timeMs, options.overrides)
+      const frame = prepareRenderFrame(scene, timeMs, options.overrides, options.paramValues)
       owner.request({ frame, context })
       await owner.ready()
       preparing=false;check()

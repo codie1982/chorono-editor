@@ -14,6 +14,7 @@ import { evaluateTimelines } from '@/lib/evaluator'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { buildViewportKeyframeCommands } from '@/lib/editor/viewportKeyframes'
 import { buildTrajectoryModel, projectTrajectoryPosition } from '@/lib/timeline/trajectory'
+import {assertAuthoringData} from '@/lib/editor/authoring'
 
 type Point = { x: number; y: number }
 interface Runtime { editor: EditorStateReturn; selected: Set<string>; layerId: string; timeMs: number; motion: boolean; snap: boolean; route: string }
@@ -111,7 +112,12 @@ function assert(value: unknown, message: string): asserts value { if (!value) th
 /** Read after the real React editor has committed. */
 function live(): Runtime { assert(runtime, 'Native motion subject did not mount.'); return runtime }
 /** Compare full portable source data, including key IDs/easing/other timelines. */
-function equal(a: unknown, b: unknown, message: string) { assert(JSON.stringify(a) === JSON.stringify(b), message) }
+function equal(a: unknown, b: unknown, message: string) {
+  if(JSON.stringify(a)===JSON.stringify(b))return
+  const keys=a&&b&&typeof a==='object'&&typeof b==='object'
+    ?Array.from(new Set([...Object.keys(a),...Object.keys(b)])).filter(key=>JSON.stringify((a as Record<string,unknown>)[key])!==JSON.stringify((b as Record<string,unknown>)[key])):[]
+  throw new Error(`${message} Changed top-level fields: ${keys.join(', ')}`)
+}
 /** Composition-pixel precision for matrix/evaluator assertions. */
 function close(a: number, b: number, message: string) { assert(Number.isFinite(a) && Math.abs(a - b) < 1e-4, `${message}: ${a} != ${b}`) }
 /** Wait for actual browser frames, not fixed wall-clock sleeps. */
@@ -259,8 +265,20 @@ async function editCancelChecks(mount: (source?: ChronoScene) => Promise<void>) 
   await mount(); await selectNode(500); const before = structuredClone(live().editor.getScene())
   await value('Duplicate motion keys offset ms', 250); await click('Duplicate keys')
   assert(model().nodes.some(item => item.timeMs === 750), 'Duplicate did not create offset node.')
-  await click('Delete keys'); equal(live().editor.getScene(), before, 'Deleting duplicates changed original keys.')
-  record('duplicate/delete preserve original IDs and timing', { original: 'x500', duplicateTimeMs: 750 })
+  const duplicated=structuredClone(live().editor.getScene())
+  await click('Delete keys'); const deleted=structuredClone(live().editor.getScene())
+  // Creation/deletion are successful authoring actions, unlike cancellation or
+  // Undo. Their bounded provenance may differ even when visual source returns
+  // to its original values. Keep strict equality for every other source field;
+  // independently validate the ledger and exact history snapshots below.
+  const {authoring:_beforeLedger,...beforeSource}=before,{authoring:_afterLedger,...afterSource}=deleted
+  equal(afterSource,beforeSource,'Deleting duplicates changed original keys.')
+  assertAuthoringData(deleted.authoring)
+  await click('Undo');equal(live().editor.getScene(),duplicated,'Delete undo lost duplicate source/provenance.')
+  await click('Undo');equal(live().editor.getScene(),before,'Duplicate undo lost original source/provenance.')
+  await click('Redo');equal(live().editor.getScene(),duplicated,'Duplicate redo changed key IDs/provenance.')
+  await click('Redo');equal(live().editor.getScene(),deleted,'Delete redo changed surviving source/provenance.')
+  record('duplicate/delete preserve original IDs, timing and exact provenance history', { original: 'x500', duplicateTimeMs: 750 })
   await mount(); const baseline = structuredClone(live().editor.getScene()), item = model().nodes.find(entry => entry.timeMs === 500)!
   const element = node(500); pointer(element, 'pointerdown', center(element)); pointer(window, 'pointermove', client({ x: item.world.x + 22, y: item.world.y + 9 }))
   assert(live().editor.isTransactionActive(), 'Escape fixture never started a drag.')

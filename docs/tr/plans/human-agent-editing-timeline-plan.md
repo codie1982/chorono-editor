@@ -357,6 +357,10 @@ Soft selection/connected-loop bu aşamada uygulanacak diye varsayılmaz.
 
 ### E−1.7 — Birleşik kabul ve Export'a geçiş
 
+**12 Kasım 2026: tamamlandı.** [Native UI/MCP akışı, 54 browser adapter kontrolü,
+512 MiB büyük sahne kabulü ve gerçek sınırlar](../pre3d-acceptance.md). Aşağıdaki
+akış kabul koşullarını kaydeder; sonraki Export E0 bütünü veya 3D teslimi değildir.
+
 Örnek akış: ajan saat sahnesini anlamlı gruplarla oluşturur → kullanıcı saati
 09:05'e, bir path handle'ını ve bir key easing'ini değiştirir → ajan taze okur →
 yalnız istenen rengi/hareketi değiştirir → manuel alanlar/ID'ler korunur → bir

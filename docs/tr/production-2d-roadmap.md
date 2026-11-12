@@ -2342,3 +2342,28 @@ Kullanıcının açık sahnesi değiştirilmedi. Kapsam tüm input'lar değildir
 **Sırada A2:** açık timeline-local zaman ve adlandırılmış kaynak bağlamı,
 dependency/cycle/fallback, dinamik değerlendirme ve runtime/bake sözleşmesi;
 ardından A3–A5. E−1.5A'nın bütünü, V6/E−1.7 ve ilk kutulu 3D sırası korunur.
+
+### 12.64. 3D öncesi hedefin kapanışı — 12 Kasım 2026
+
+A2 `e5551a6`, A3 `da5b110` ve A4 `120206c` uygulamaları ardından A5,
+V6/E−1.7 ve dar entegrasyon tamamlandı. [Kapı kaydı](plans/pre3d-completion-audit.md),
+[gerçek kabul ve performans sınırları](pre3d-acceptance.md),
+[kare/çıktı sözleşmesi](pre3d-frame-contract.md).
+
+Typed ve bütçeli input driver'ları; 54 browser araç kontrolü; native 09:05,
+handle/easing, revision/fresh-read, insan alanlarını koruma, Set Key, sine
+bake/key edit, portable/runtime ve reload/history doğrulandı. Aynı Four Seasons
+512 MiB sınırında 10/10 oynadı; managed tepe 46,25 MiB, canvas kayıtları 21→21.
+Güncel A3/A4 kaynak karşılaştırması yapıldı; tarihsel CPU süre farkı son genel
+optimizasyon için açık olarak raporlandı. Tüm RAM/CPU/GPU ölçümü iddiası yoktur.
+
+Raster resource hazırlığında eksik caller parametreleri düzeltildi; aynı
+frame map'i readiness ve draw'a gider. Raster eksik renderer'ı reddeder; SVG
+mask/efekt/blend kayıplarını bildirir. Gerçek native output 8/8. Çalışma alanında
+370 dosya / 2.988 test; temiz index kopyasında 370 / 2.987 test, TypeScript,
+MCP build ve production build geçti. Önceden var olan 47 çalışma dosyası korundu.
+
+**Sonraki onaylı geliştirme ilk kutulu 3D dikey dilimidir; başlanmadı.**
+Kullanıcının “3D geliştirmesinden önceki işleri bitir” sınırında duruldu.
+Poly, material/UV, fizik/kumaş/Blob, Export E0, CFX ve ikinci genel optimizasyon
+[onaylı sırayı](plans/geometry-material-boxed3d-sequence.md) korur.

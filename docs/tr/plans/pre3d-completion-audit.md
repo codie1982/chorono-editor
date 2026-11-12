@@ -11,9 +11,9 @@ kapsamı veya teslim koşullarını azaltmaz. 3D öncesi kapılar aşağıda ayr
 | A2 | Named stable refs, local clock, cycle/fallback, ortak frame, clone/remap, runtime/bake, UI ve kaynak bütçesi | `e5551a6`; uygulandı |
 | A3 | Gerçek boolean, karşılaştırma/mantık/koşul ve kısa devre; eski Wire preset uyumu | Uygulandı; kabul kaydı aşağıda |
 | A4 — uygulandı | Sayı/açı/yüzde, renk/vektör/metin/select; Array/audio/spline/key/guide/parametre/efekt/config input kapsam matrisi ve adapter testleri | Uygulandı; aşağıdaki A4 kabulü |
-| A5 | Pointer/klavye, eski veri, driver/Undo/portable/player/raster ve Four Seasons 512 MiB kabulü | Bekliyor |
-| V6 / E−1.7 | Native viewport birleşik akışı, 09:05 elle düzenleme → ajan devamı, büyük sahne/regresyon | Bekliyor |
-| Dar entegrasyon | Stable asset/source kimliği, kesin yerel/frame saati, hedef boyut/alpha/renk, kaynak hazırlığı/sahipliği, açık capability ve fallback | Bekliyor |
+| A5 | Pointer/klavye, eski veri, driver/Undo/portable/player/raster ve Four Seasons 512 MiB kabulü | Tamamlandı; [sonuçlar ve CPU karşılaştırma sınırı](../pre3d-acceptance.md) |
+| V6 / E−1.7 | Native viewport birleşik akışı, 09:05 elle düzenleme → ajan devamı, büyük sahne/regresyon | Tamamlandı; 54 browser adapter kontrolü ve ayrıca native UI/MCP akışı |
+| Dar entegrasyon | Stable asset/source kimliği, kesin yerel/frame saati, hedef boyut/alpha/renk, kaynak hazırlığı/sahipliği, açık capability ve fallback | Tamamlandı; [gerçek sözleşme ve destek sınırları](../pre3d-frame-contract.md) |
 | İlk kutulu 3D | Kullanıcı açıklaması: bu hedef 3D geliştirmesi başlamadan önce kapanır. İlk 3D dikey dilim onaylı sonraki iştir. | Bu hedefin dışında; başlanmayacak |
 
 Her kapı, kaynak giriş noktaları, anlamlı unit/adaptör testleri, gerçek UI/render
@@ -74,3 +74,26 @@ A4 doğrulaması: çalışma alanında 367 dosya / 2.979 test; diğer mevcut ça
 farklarından ayrılmış temiz test kopyasında 367 dosya / 2.978 test ve TypeScript
 geçti. MCP/CLI build, 16 CLI testi ve temiz production build geçti. Kaynak/UI
 kabulü A4 matrisindeki kapsamla sınırlıdır; sonraki kapıları tamamlandı saymaz.
+
+## A5 / V6 / dar entegrasyon kapanışı — 12 Kasım 2026
+
+Yukarıdaki A2–A4 paragrafları kendi teslim tarihlerindeki durumu kaydeder.
+Son kabulde aynı Four Seasons kaynağı 512 MiB politikasında 10/10 oynadı;
+managed tepe 46,25 MiB, heap 44,30–126,60 MiB ve canvas kaydı 21→21 kaldı.
+120 eşlenik kare/12 exact RGBA checkpoint'i ve güncel A3 kontrolüyle CPU
+incelendi; tarihsel OPT32 ile mutlak süre farkı ve ortam sınırlamaları
+[kabul raporunda](../pre3d-acceptance.md) açıkça korunur.
+
+54 browser bileşen/adapter kontrolü, ayrıca gerçek fare/klavye ile 09:05/path
+handle/easing → revision conflict → fresh narrow agent edit, exact Undo/Redo,
+portable/runtime, Set Key, sine bake/key edit ve session/history restore geçti.
+Raster kaynak hazırlığının caller parametrelerini kaçırması düzeltildi;
+unsupported raster ve SVG kayıpları açık hale getirildi. Native output 8/8.
+Çalışma alanında 370 dosya / 2.988 test; yalnız bu değişikliklerin temiz index
+kopyasında 370 dosya / 2.987 test, TypeScript, MCP ve production build geçti.
+Build yapılan temiz kopyada Next çalışmıyordu; mevcut diğer 47 çalışma dosyası
+byte düzeyinde korundu.
+
+**Kullanıcının bu hedefte istediği bütün 3D öncesi kapılar tamamlandı.** Sonraki
+onaylı geliştirme ilk kutulu 3D dikey dilimidir; bu kabulde başlanmadı. Export
+E0/CFX ve bütün yeni alanları kapsayan son optimizasyon onaylı sonraki sırada kalır.

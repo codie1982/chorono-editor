@@ -296,6 +296,12 @@ Geometri ve zaman kaynakları ayrı kalır:
 
 ## 4. Kabul, kaynak sınırları ve bakım devri
 
+**V6 kapanışı — 12 Kasım 2026:** V1–V5 ortak kabulü tamamlandı. 13 viewport,
+12 motion, 14 clone ve 15 Array browser kontrolü; ayrıca gerçek native UI/MCP
+elle düzenleme, Set Key, bake, portable/history ve Four Seasons 512 MiB kanıtı
+[son kabul raporundadır](../pre3d-acceptance.md). Aşağıdaki ilk inceleme notları
+tarihseldir; güncel teslim ve sınırlar bu kapanış kaydıyla birlikte okunur.
+
 V0 fixture matrisi: rect/text/group, legacy path ve spline; custom/off-center
 pivot; parent rotation, reflection, nonuniform scale ve nested hierarchy; keyed
 nesne/parent, iki farklı timeline; pan/zoom/DPR, transform gizmo/body; parent+child

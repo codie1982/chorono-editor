@@ -33,6 +33,16 @@ function timeline(tracks: ReturnType<typeof track>[], durationMs = 1000) {
 }
 
 describe('exportSVG — document structure', () => {
+  it('reports omitted composition features instead of implying a faithful vector result',()=>{
+    const value=scene([layer({name:'Composed',type:'shape',size:{width:10,height:10},
+      masks:[{id:'mask',maskLayerId:'l1',mode:'intersect',inverted:false,feather:0}],effects:{blur:4},blendMode:'multiply'})])
+    const source=JSON.stringify(value),result=exportSVG(value)
+    expect(result.svg).toContain('<path');expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toMatch(/masks, effects, blend mode.*raster output/)
+    expect(JSON.stringify(value)).toBe(source)
+    value.layers[0]={...value.layers[0],masks:[],effects:{blur:0,brightness:100,contrast:100,saturate:100},blendMode:'source-over'}
+    expect(exportSVG(value).warnings).toEqual([])
+  })
   it('emits a well-formed root svg with composition dimensions', () => {
     const { svg } = exportSVG(scene([]))
     expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg"')

@@ -7,9 +7,10 @@ import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 // nested <g>. Transforms/opacity are resolved at the requested time so the SVG
 // matches the on-screen frame.
 //
-// V1 scope: shape, path, text, group. Unsupported kinds (image, video, spline,
-// particles, masks, effects) are skipped with a warning — vector export of
-// raster/procedural content needs a bake step (future).
+// V1 base geometry: shape, path, text, group. Other layer kinds are skipped
+// with a warning. Masks/effects/blend are omitted from supported geometry with
+// an explicit warning; composed appearance requires raster output. Automatic
+// raster baking into SVG remains a later export feature.
 
 import type { ChronoScene, Layer, Transform } from '@/lib/types'
 import { ShapeToPathConverter, pathToSvgString, type Size } from '@/lib/geometry'
@@ -27,6 +28,7 @@ import {BoundedTextBuilder} from '../../format/text'
 import {measureJson} from '../../format/json'
 import {LayerIndex} from '../../scene/LayerIndex'
 import {preflightSvgOutput,resolveSvgOutputLimits,type SVGOutputLimits} from './SVGOutputLimits'
+import {svgLayerWarnings} from './svgLayerWarnings'
 
 export type SVGBackground = 'scene' | 'transparent' | { color: string }
 
@@ -56,7 +58,7 @@ export interface SVGExportResult {
 
 type OverrideMap = ReturnType<typeof evaluateTimelines>
 
-/** Layer kinds that V1 static SVG export can faithfully represent. */
+/** Layer kinds whose base geometry the V1 SVG adapter serializes. */
 const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
 
 /** Serialize the same static/SMIL SVG with bounded geometry/text construction.
@@ -189,6 +191,7 @@ function writeChildren(layers:readonly Layer[],ctx:BuildCtx,writer:BoundedTextBu
   for(const layer of layers){
     if(!ctx.isVisible(layer))continue
     if(!SUPPORTED.has(layer.type)){ctx.warnings.push(`Layer "${layer.name}" (${layer.type}) skipped — not supported by SVG export.`);continue}
+    ctx.warnings.push(...svgLayerWarnings(layer))
     const anims=ctx.animated?collectLayerAnimations(layer,ctx.scene.timelines,ctx.durationMs):null
     if(!anims&&((layer.type==='path'&&!layer.path?.anchors.length)||(layer.type==='text'&&!layer.text)))continue
     if(written)writer.append('\n');written=true

@@ -8,6 +8,7 @@ import {encodeOutputCanvas} from '../resources/encodeOutputCanvas'
 import type {OutputScope} from '../resources/OutputScope'
 import {RASTER_MIME,RASTER_SUPPORTS_ALPHA,RASTER_EXTENSION} from './ImageEncoders'
 import type {RasterExportOptions,RasterExportResult} from './RasterExportEngine'
+import {assertRasterLayerSupport} from './assertRasterLayerSupport'
 
 /** Internal frame step shared by single-image and sequence jobs. It never
  * submits another outer job. Caller owns scope through use of the returned Blob;
@@ -21,6 +22,7 @@ import type {RasterExportOptions,RasterExportResult} from './RasterExportEngine'
 export async function renderRasterFrame(scene:ChronoScene,opts:RasterExportOptions,scope:OutputScope,
   signal?:AbortSignal,media?:VisualMediaSession):Promise<RasterExportResult>{
   scope.check(signal)
+  assertRasterLayerSupport(scene)
   const baseW=scene.composition.width,baseH=scene.composition.height
   const requested=opts.scale??1,timeMs=opts.timeMs??0,quality=opts.quality??0.92
   if(!Number.isFinite(requested)||!Number.isFinite(timeMs)||!Number.isFinite(quality)||quality<0||quality>1)throw new RangeError('Invalid raster time/scale/quality.')
@@ -35,7 +37,7 @@ export async function renderRasterFrame(scene:ChronoScene,opts:RasterExportOptio
   const base=acquireOutputCanvas(scope,baseW,baseH)
   let target:ReturnType<typeof acquireOutputCanvas>|undefined
   try{
-    return await withMediaFrame(scene,timeMs,base.context,{signal},async(assets,overrides)=>{
+    return await withMediaFrame(scene,timeMs,base.context,{signal,paramValues:opts.paramValues},async(assets,overrides)=>{
       scope.check(signal)
       canvasRenderer.render(base.context,scene,timeMs,null,assets,{overrides,renderMode:'preview',background,paramValues:opts.paramValues})
       scope.check(signal)
