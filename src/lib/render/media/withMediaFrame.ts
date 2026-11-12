@@ -54,6 +54,7 @@ export async function withMediaFrame<T>(scene: ChronoScene, timeMs: number, cont
       await owner.ready()
       preparing=false;check()
       const assets = owner.elements()
+      Object.defineProperty(assets, 'finalOutput', { value: true, enumerable: false })
       for (const layer of frame.scene.layers) {
         if (!layer.video) continue
         const element = videoForLayer(assets, layer.id, layer.video.assetId)

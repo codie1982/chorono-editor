@@ -1,3 +1,4 @@
+import type { Model3DResource } from '../../model3d/types'
 import type { MediaFrameBridge } from '../../render/media/types'
 import type { FontBindings } from '../fonts'
 
@@ -5,6 +6,9 @@ import type { FontBindings } from '../fonts'
  * clip identity; absence of the optional method means legacy per-asset lookup.
  * Native elements are borrowed, not ownership. Async jobs acquire their own pins. */
 export interface AssetElementMap extends Map<string, HTMLImageElement | HTMLVideoElement> {
+  /** Borrowed 3D source; never keep after the media session releases its pin. */
+  readonly finalOutput?: boolean
+  modelForAsset?(assetId: string): Model3DResource | undefined
   videoForLayer?(layerId: string, assetId: string): HTMLVideoElement | undefined
   readonly media?: MediaFrameBridge
   readonly fonts?: FontBindings

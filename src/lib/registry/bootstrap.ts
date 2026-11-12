@@ -1,3 +1,5 @@
+import { modelDefinition } from '../model3d/source/modelDefinition'
+import { modelRendererPlugin } from '../model3d/render/modelRendererPlugin'
 // ── Registry Bootstrap ────────────────────────────────────────────────────────
 //
 // Populates the singleton registries on first import. Order matters — items
@@ -54,6 +56,9 @@ export function bootstrapLayerRegistry(): void {
 
   // Particles (BL-13)
   layerRegistry.register(particleEmitterDefinition)
+
+  layerRegistry.register(modelDefinition)
+  rendererRegistry.register(modelRendererPlugin)
 
   // ── LayerRendererPlugins (canvas dispatch) ──
   for (const plugin of ALL_BUILT_IN_RENDERERS) rendererRegistry.register(plugin)

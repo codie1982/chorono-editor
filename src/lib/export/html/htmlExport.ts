@@ -1,3 +1,4 @@
+import { assertModelPlaybackExport } from '../../model3d/source/modelCapabilities'
 // ── htmlExport ────────────────────────────────────────────────────────────────
 //
 // Standalone HTML export. Produces a single self-playing .html that loads
@@ -49,6 +50,7 @@ function escapeHtml(s: string): string {
 }
 
 export function exportHTML(scene: ChronoScene, opts: HTMLExportOptions = {}): HTMLExportResult {
+  assertModelPlaybackExport(scene)
   return renderHTMLDocument(scene.composition,embedJson(scene),opts)
 }
 

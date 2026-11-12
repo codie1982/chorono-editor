@@ -1,3 +1,4 @@
+import { assertModelPlaybackExport } from '../model3d/source/modelCapabilities'
 // ── Runtime JSON Export ──────────────────────────────────────────────────────
 // Strips editor-only metadata so the resulting JSON is the minimal scene the
 // Chorono runtime (Android/iOS/WASM) needs to play back the animation.
@@ -58,6 +59,7 @@ export interface RuntimeScene {
  *  - Optionally collapses redundant consecutive identical keyframes
  */
 export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions = {}): RuntimeScene {
+  assertModelPlaybackExport(scene)
   if (scene.layers.some(layer => Object.keys(layer.propertyExpressions?.fields ?? {}).length)) throw new Error('Basic runtime export cannot evaluate live property expressions. Bake them to keyframes first, or use the Chorono Web runtime package.')
   const {
     snapKeyframesToFrames = true,

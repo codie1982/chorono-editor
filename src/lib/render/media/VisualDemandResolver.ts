@@ -59,7 +59,7 @@ export class VisualDemandResolver {
     const add = (id: string, layer: Layer | undefined, required: boolean) => {
       const asset = this.byId.get(id)
       if (!asset) { this.absent.add(id); return }
-      if (!['image', 'spriteSheet', 'video', 'font'].includes(asset.type)) return
+      if (!['image', 'spriteSheet', 'video', 'font', 'model3d'].includes(asset.type)) return
       const layerId = asset.type === 'video' ? layer?.id ?? `unknown:${id}` : undefined
       let key:string
       try {key=asset.type==='font'?describeFont(asset).key:JSON.stringify(['visual',asset.id, asset.url, layerId ?? null])}
@@ -128,6 +128,6 @@ export class VisualDemandResolver {
   private index(assets: readonly Asset[]): void {
     if (assets === this.assets) return
     this.assets = assets; this.byId.clear(); assets.forEach(asset => this.byId.set(asset.id, asset))
-    this.nativeAssets = assets.filter(asset => ['image', 'spriteSheet', 'video', 'font'].includes(asset.type))
+    this.nativeAssets = assets.filter(asset => ['image', 'spriteSheet', 'video', 'font', 'model3d'].includes(asset.type))
   }
 }

@@ -1,3 +1,4 @@
+import type { Model3DData } from '../model3d/types'
 // ── Core Scene Types ──────────────────────────────────────────────────────────
 // The data model shared between builder, evaluator, renderer, and runtime JSON.
 // All types here belong to the '2danimation' mode. See src/lib/core/ for the
@@ -16,7 +17,7 @@ import type { StateMachineDefinition } from './statemachine-chorono'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
+export type LayerType   = 'model3d' | 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
@@ -270,6 +271,8 @@ export interface Transform {
 //   UI: right-click layer → "Add Modifier ▶" submenu in LayerPanel.
 
 export interface Layer {
+  /** Versioned source for the boxed 3D adapter; independent of the 2D transform. */
+  model3d?: Model3DData
   id: string
   /** Human-friendly display name, e.g. "Logo", "Background" */
   name: string

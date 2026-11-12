@@ -1,3 +1,4 @@
+import { modelAssetService, type ModelLease } from '../../model3d/resources/ModelAssetService'
 import { visualAssetService, type VisualAssetService, type VisualLease } from '../../asset/visual'
 import type { AssetElementMap } from '../../asset/visual/AssetElementMap'
 import { VisualDemandResolver } from './VisualDemandResolver'
@@ -5,7 +6,7 @@ import type { MediaFrameBridge, MediaFrameInput, VisualDemand } from './types'
 import { MediaElementSnapshot, type MediaElementRecord } from './MediaElementSnapshot'
 import {fontAssetService,FontBindingsSnapshot,type FontAssetService,type FontLease,type FontBindingRecord} from '../../asset/fonts'
 
-interface Consumer { demand: VisualDemand; controller: AbortController; state: 'idle' | 'loading' | 'ready' | 'error'; lease?: VisualLease|FontLease; error?: string; detach?: () => void }
+interface Consumer { demand: VisualDemand; controller: AbortController; state: 'idle' | 'loading' | 'ready' | 'error'; lease?: VisualLease|FontLease|ModelLease; error?: string; detach?: () => void }
 let nextScope = 0
 
 /**
@@ -83,6 +84,7 @@ export class VisualMediaSession implements MediaFrameBridge {
   elements(frameDemand = true): AssetElementMap {
     const records: MediaElementRecord[] = []
     const fonts:FontBindingRecord[]=[]
+    const models = new Map<string, () => import('../../model3d/types').Model3DResource | undefined>()
     this.consumers.forEach((consumer, key) => {
       if(consumer.demand.asset.type==='font'){
         fonts.push({asset:consumer.demand.asset,get alias(){const value=consumer.lease?.value;return value&&'alias'in value?value.alias:undefined},state:()=>{
@@ -93,11 +95,12 @@ export class VisualMediaSession implements MediaFrameBridge {
       }
       if (!consumer.lease) return
       const { asset, layerId } = consumer.demand,value=consumer.lease.value
+      if ('draw' in value) { models.set(asset.id, () => this.consumers.get(key) === consumer && consumer.lease?.value === value ? value : undefined); return }
       if(!('element'in value))return
       const element=value.element
       records.push({ assetId: asset.id, layerId, element, live: () => this.consumers.get(key) === consumer && consumer.lease?.value===value })
     })
-    return new MediaElementSnapshot(records, frameDemand ? this : undefined,new FontBindingsSnapshot(fonts))
+    return new MediaElementSnapshot(records, frameDemand ? this : undefined,new FontBindingsSnapshot(fonts), assetId => models.get(assetId)?.())
   }
   /** Readiness/errors only; no acquire or LRU refresh. IDs refer to source assets. */
   snapshot() {
@@ -130,7 +133,9 @@ export class VisualMediaSession implements MediaFrameBridge {
       if (this.inFlight >= 2) break
       this.inFlight++; consumer.state = 'loading'
       const { asset, layerId, key } = consumer.demand
-      const preparation:Promise<VisualLease|FontLease>=asset.type==='font'
+      const preparation:Promise<VisualLease|FontLease|ModelLease>=asset.type==='model3d'
+        ?modelAssetService.acquire(asset,{signal:consumer.controller.signal})
+        :asset.type==='font'
         ?this.fontService.acquire(asset,{signal:consumer.controller.signal})
         :this.service.acquire(asset, { consumerId: layerId ? `${this.scope}:${layerId}` : undefined, signal: consumer.controller.signal })
       preparation.then(lease => {

@@ -53,3 +53,5 @@ Local evidence linked under `artifacts/` (benchmark reports, recordings and rend
 - [CLI commands and package README](../packages/cli/README.md)
 - [Canonical authoring skill](../skills/chorono/SKILL.md)
 - [Canonical setup skill](../skills/chorono-setup/SKILL.md)
+
+- [Kutulu 3D ilk model/kamera dilimi: kullanım, mimari ve sınırlar](tr/boxed-3d-first-slice.md)

@@ -1460,6 +1460,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onAddImage={addImageLayerFromFile}
                     onAddVideo={addVideoLayerFromFile}
                     onImportSvg={importSvgFile}
+                    onImportModel={file => { void importAnyFile(file) }}
                     onAddAudio={addAudioLayerFromFile}
                     onDelete={deleteLayer}
                     onReorder={reorderLayer}

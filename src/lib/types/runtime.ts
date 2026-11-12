@@ -23,6 +23,7 @@ export interface RuntimePackage {
 }
 
 export type RuntimeWarningCode =
+  | 'UNSUPPORTED_3D'
   | 'REQUIRES_LIVE_EXPRESSIONS'
   | 'INVALID_EXPRESSION'
   | 'UNSUPPORTED_EFFECT'

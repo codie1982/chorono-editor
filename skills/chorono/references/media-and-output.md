@@ -8,6 +8,14 @@ For fonts, import the actual supported font file, read the registered family fro
 
 `Layer.font`, `Layer.stroke` and `Layer.shapeParam` expose typography, strokes, geometry and appearance. Advanced native `replace_layer_fields` (legacy `patch_object`) accepts Layer fields through its discovered schema and `batch_actions`. For effects, masks, gradients, blend modes, repeaters and nested typography, inspect the property schema and `layer.data` first. Use `layer.patch` for recursive object merging. `Layer.set` and `replace_layer_fields` replace nested objects and can remove omitted fields.
 
+## Boxed 3D models
+
+Import GLB 2 or self-contained glTF 2 with `import_asset`, MIME `model/gltf-binary` or `model/gltf+json`. The result creates a `model3d` asset and layer through the native import transaction. Read its returned ids and current `Layer.model3d` before editing. The first slice has a 16 MiB file cap, bounded decoded preparation, embedded PNG/JPEG/WebP textures, imported materials and default pose. External companion files, compressed codecs and clip/rig playback are unsupported; import errors/warnings are explicit.
+
+The outer `Layer.transform` remains 2D composition pixels. `model3d.position/rotation/scale` affect the internal model; rotation is degrees. Presentation framing normalizes the imported bounding sphere to radius one under a wrapper, preserving original node transforms. `model3d.camera` uses yaw/pitch degrees, distance, targetX/Y/Z and fov. Preserve siblings when patching. The viewport's explicit Edit 3D camera toggle changes output framing; its off state retains ordinary 2D movement. Driven camera source gestures/reset refuse rather than erase keys/bindings/expressions.
+
+Use prepared raster previews/image sequences and portable source. Basic/native runtime and standalone HTML exports reject boxed 3D; SVG reports unsupported-layer warnings. Internal surfaces cap the long side at 2048 pixels in this first slice. Never promise imported camera/clip playback, IK, 3D physics or full 3D workspace support.
+
 ## Save and export
 
 | Goal | Tool and behavior |

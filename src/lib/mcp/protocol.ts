@@ -1,3 +1,4 @@
+import { assertModelLayer } from '../model3d/source/modelCapabilities'
 import type { ChronoScene } from '../types'
 import { assertTrackValues, isColorTarget } from '../animation/typedValues'
 import {measureJson} from '../format/json'
@@ -68,6 +69,7 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
       seen.add(parent)
       parent = byId.get(parent)?.parentId
     }
+    assertModelLayer(layer, scene.layers)
     if (layer.particleEmitter && layer.particleEmitter.emitter.maxParticles > 10000) throw new Error('Particle limit exceeded')
     if (layer.type === 'audio' && layer.audio) {
       const audio = layer.audio

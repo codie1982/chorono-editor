@@ -1,4 +1,5 @@
 'use client'
+import { newModelLayer } from '@/lib/model3d/source/modelDefaults'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── AssetsPanel ───────────────────────────────────────────────────────────────
 // Browse all uploaded image / video / audio assets in the scene. Each row
@@ -46,6 +47,7 @@ interface Props {
 }
 
 const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> = {
+  model3d: { bg: 'bg-sky-900', fg: 'text-sky-200', icon: '3D' },
   image:       { bg: 'bg-sky-900/50',     fg: 'text-sky-300',     icon: '🖼' },
   video:       { bg: 'bg-purple-900/50',  fg: 'text-purple-300',  icon: '▶' },
   audio:       { bg: 'bg-emerald-900/50', fg: 'text-emerald-300', icon: '♪' },
@@ -77,7 +79,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
   const layersByAsset = useMemo(() => {
     const map = new Map<string, string[]>()
     for (const l of scene.layers) {
-      const aid = l.image?.assetId ?? l.video?.assetId ?? l.audio?.assetId
+      const aid = l.model3d?.assetId ?? l.image?.assetId ?? l.video?.assetId ?? l.audio?.assetId
       if (!aid) continue
       const list = map.get(aid) ?? []
       list.push(l.id)
@@ -109,6 +111,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
   const addLayerFromAsset = (a: Asset) => {
     let layer
     switch (a.type) {
+      case 'model3d': layer = newModelLayer(`model3d_${crypto.randomUUID()}`, a.id, a.name); break
       case 'image': layer = newImageLayer(a.id, a.width ?? 200, a.height ?? 150); break
       case 'video': layer = newVideoLayer(a.id, a.width ?? 320, a.height ?? 180, a.durationMs); break
       case 'audio': layer = newAudioLayer(a.id, a.durationMs); break

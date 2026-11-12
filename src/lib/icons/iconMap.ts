@@ -142,6 +142,7 @@ export const LAYER_TYPE_ICON: Record<string, string> = {
   particleEmitter: 'noise',  // BL-13: row 3, col 7 (existing sprite)
   text:             'text',
   image:            'image',
+  model3d:          'group',
   video:            'video',
   audio:            'audio',
   pathStroke:       'motionPath',
@@ -214,6 +215,7 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
   {
     title: 'Media',
     items: [
+      { label: '3D Model (GLB/glTF)', type: 'model3d', icon: 'group', available: true },
       { label: 'Image',    type: 'image', icon: 'image', available: true },
       { label: 'Video',    type: 'video', icon: 'video', available: true },
       { label: 'Audio',    type: 'audio', icon: 'audio', available: true },

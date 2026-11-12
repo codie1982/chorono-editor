@@ -116,6 +116,7 @@ export class AssetIndex {
 
   private extractAssetIds(layer: Layer): string[] {
     const ids: string[] = []
+    if (layer.model3d?.assetId) ids.push(layer.model3d.assetId)
     if (layer.image?.assetId)  ids.push(layer.image.assetId)
     if (layer.video?.assetId)  ids.push(layer.video.assetId)
     if (layer.audio?.assetId)  ids.push(layer.audio.assetId)

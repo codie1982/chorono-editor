@@ -45,7 +45,9 @@ export class RuntimeValidator {
         code: 'REQUIRES_LIVE_EXPRESSIONS', layerId: layer.id,
         message: 'Live property expressions require the current Chorono Web runtime. Bake to keyframes for basic/native players or animated SVG.',
       })
+      if (layer.type === 'model3d') errors.push({ code: 'UNSUPPORTED_3D', layerId: layer.id, message: 'Boxed 3D requires the editor raster pipeline; basic runtime export is unsupported.' })
       const refs: { kind: string; id?: string }[] = [
+        { kind: 'model3d', id: layer.model3d?.assetId },
         { kind: 'image', id: layer.image?.assetId },
         { kind: 'video', id: layer.video?.assetId },
         { kind: 'audio', id: layer.audio?.assetId },

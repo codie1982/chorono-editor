@@ -601,6 +601,18 @@ export default function PropertiesPanel({
               />
             )}
 
+            {layer.type === 'model3d' && activeTab === 'properties' && <>
+              <p className="text-xs text-gray-400">3D presentation units: imported bounding-sphere radius = 1. Camera controls are in the viewport.</p>
+              <label className="text-xs text-gray-300">Model asset
+                <select aria-label="3D model asset" className="block w-full bg-gray-800 rounded p-1.5" value={layer.model3d?.assetId ?? ''}
+                  onChange={event => layer.model3d && update({ model3d: { ...layer.model3d, assetId: event.target.value } })}>
+                  <option value="">Choose imported model</option>
+                  {scene?.assets.filter(asset => asset.type === 'model3d').map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                </select>
+              </label>
+              <SchemaPanel layer={layer} onLayerChange={onLayerChange} filterGroup={group => group.title !== 'Transform' && group.title !== 'Appearance'} />
+            </>}
+
             {/* ── Shape özellikleri ──────────────────────────────────── */}
             {layer.type === 'shape' && layer.style && layer.size && (
               <Section title="Shape" helpTopic="editor/layers/basic-shapes">

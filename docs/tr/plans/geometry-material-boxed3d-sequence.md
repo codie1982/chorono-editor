@@ -6,7 +6,7 @@ E−1.Q [MCP araç kalitesi ve uyumlu sadeleştirme](mcp-tool-quality-plan.md) d
 tamamlandı. E−1.1 zorunlu okuma/revision, E−1.2 kaynak kökeni, E−1.3 ortak hiyerarşi,
 E−1.4 Set Key/transport, E−1.5 prosedürel eğri/bake ve
 [E−1.5A input expression](input-expression-plan.md) tamamlandı.
-12 Kasım kapanış: input expression A1–A5, V6/E−1.7 ortak araç kabulü ve dar entegrasyon tamamlandı. Kullanıcının **3D başlamadan önceki işler** hedefi kapandı; sonraki geliştirme ilk kutulu 3D dikey dilimidir. Bu kabulde 3D geliştirilmedi. [Kapı/kabul kaydı](pre3d-completion-audit.md).
+12 Kasım kapanış: input expression A1–A5, V6/E−1.7 ortak araç kabulü ve dar entegrasyon tamamlandı. Kullanıcının **3D başlamadan önceki işler** hedefi kapandı; sonraki geliştirme ilk kutulu 3D dikey dilimidir. Bu pre-3D kabulde 3D geliştirilmedi. 12 Kasım sonraki kullanıcı onayıyla aşağıdaki dar model/kamera dilimi başlatıldı. [Kapı/kabul kaydı](pre3d-completion-audit.md).
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
 
@@ -54,7 +54,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı — E−1.5A | Input'larda düz değer ve expression | A1–A5, typed sonuçlar ve gerçek field adapter'ları. [Plan](input-expression-plan.md), [kabul](../pre3d-acceptance.md). |
 | Tamamlandı | Kalan E−1 ve araç kabulü | V6/E−1.7 birleşik kullanıcı akışı ve aynı 512 MiB büyük sahne regresyonu. [Gerçek sonuç/sınırlar](../pre3d-acceptance.md). |
 | 1 — tamamlandı | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, aynı parameter frame'i, readiness/ownership ve açık output capability. [Sözleşme](../pre3d-frame-contract.md). |
-| 2 — sıradaki, başlanmadı | Kutulu 3D ilk dikey dilim | GLB/glTF import, model hiyerarşisi, kamera/ışık/basit materyal, şeffaf çıktı yüzeyi ve 2D kompozisyon; Timeline transform/clip kontrolü, seç/bounds/undo/save/load. |
+| 2 — ilk dar dilim tamamlandı | Kutulu 3D model/kamera | 12 Kasım kullanıcı kararı: GLB/self-contained glTF, Properties XYZ/dönüş/ölçek, toggle ile Orbit/Pan/Dolly; kapalıyken normal 2D hareket. Portable/raster, bounds, copy/instance ve tek Undo. Imported clip/camera/rig kontrolü ileri dilime taşındı. [Gerçek sözleşme ve kabul](../boxed-3d-first-slice.md). |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
 | 4 | Poly görünümü | UV, vertex color, basit 2D material ve dokulu/deforme triangle çizimi; texture transform ve UV düzenleyicisi. |
 | 5 | Kutulu 3D ileri düzenleme | Bir kutuda birden çok model, kamera animasyonu, malzeme kontrolleri, imported skeleton/clip/morph oynatma ve elle pose düzeltme. Yeni rig üretme/weight painting/IK ayrı artımlı dilimlerdir. |
@@ -145,3 +145,18 @@ Bootstrap yalnız 2D modunu kaydeder; doğrudan Three.js bağımlılığı ve bu
 
 Bu tur dokümantasyon/bağımlılık değerlendirmesidir. Runtime değişikliği, paket
 kurulumu veya canlı sahne mutasyonu yapılmadı; uygulama testleri yeniden çalıştırılmadı.
+
+## 12 Kasım — ilk 3D diliminin onaylanan kapsamı
+
+Kullanıcı hedefi bir modeli 2D kompozisyona eklemek, Properties ile iç 3D
+konum/dönüş/ölçeğini ayarlamak ve açık bir toggle ile mouse kamera kontrolüdür.
+Toggle kapalıyken aynı nesnenin 2D X/Y hareketi sürer. Kaynak pivot/hiyerarşi
+framing wrapper'ı altında korunur; mevcut 2D transform'a z eklenmez.
+
+İlk kabul: GLB ve self-contained glTF → Properties → Orbit/Pan/Dolly → tek Undo
+→ toggle-off ilk 2D taşıma → portable kaydet/aç → hazırlığı bekleyen raster.
+Clip/rig/model node düzenleme, çok dosyalı glTF, diğer model formatları ve gerçek
+3D simülasyon yeni önkoşul değildir. Bunların tamamlandığı iddia edilmez.
+Ayrıntılı modül/yaşam döngüsü/sınırlar [kutulu 3D belgesindedir](../boxed-3d-first-slice.md).
+
+Poly/UV ve sonraki onaylı işlerin sırası korunur; full 3D workspace açılmaz.

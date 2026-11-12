@@ -78,6 +78,7 @@ export class LayerRegistry {
     }
     if (layer.type === 'pathStroke') return this.byKind.get('pathStroke')
     if (layer.type === 'text')       return this.byKind.get('text')
+    if (layer.type === 'model3d')    return this.byKind.get('model3d')
     if (layer.type === 'image')      return this.byKind.get('image')
     if (layer.type === 'video')      return this.byKind.get('video')
     if (layer.type === 'audio')            return this.byKind.get('audio')

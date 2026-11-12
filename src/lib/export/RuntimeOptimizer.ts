@@ -1,3 +1,4 @@
+import { assertModelPlaybackExport } from '../model3d/source/modelCapabilities'
 // ── RuntimeOptimizer ──────────────────────────────────────────────────────────
 //
 // Strips editor-only metadata and collapses redundant data BEFORE the JSON is
@@ -17,6 +18,7 @@ import type { RuntimeAnimation } from '../types/runtime'
 
 export class RuntimeOptimizer {
   optimize(scene: ChronoScene): RuntimeAnimation {
+    assertModelPlaybackExport(scene)
     let s = withoutAuthoring(scene)
     s = this.removeEditorMetadata(s)
     s = this.normalizeKeyframes(s)

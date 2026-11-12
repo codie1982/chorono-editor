@@ -1,4 +1,6 @@
 'use client'
+import { useModelCamera } from './canvas/model3d/useModelCamera'
+import { ModelCameraToolbar } from './canvas/model3d/ModelCameraToolbar'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import {
   useRef, useEffect, useCallback, useState, useMemo,
@@ -594,7 +596,11 @@ export default function SceneCanvas({
     beginMoveForSelection(ids, id, event, null, cloneMode)
   }, [panMode, editor, hideEditorUI, motionEditing, arrayEditing, selectedLayerIds, selectedLayerId, onSelectLayer, beginMoveForSelection, cancelPan])
 
+  const modelCamera = useModelCamera(scene, selectedLayerId, editor,
+    !hideEditorUI && (!selectedLayerIds || selectedLayerIds.size === 1) && !motionEditing && !arrayEditing && !placingShape && !panMode && (toolMode === 'select' || toolMode === 'move'), setTransformWarning)
+
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (modelCamera.begin(e)) return
     // One bounded routing record per down distinguishes an ignored start from
     // a session that actually began and was later cancelled. No scene is copied.
     interactionTrace.recordEvent('viewport', 'pointer-down', { pointerId: e.pointerId, button: e.button,
@@ -786,7 +792,7 @@ export default function SceneCanvas({
     editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode,
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
-    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan])
+    beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan, modelCamera])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1048,7 +1054,7 @@ export default function SceneCanvas({
   // BL-66 — during playback / preview ALL gizmos are suppressed (editor chrome).
   // Gating the whole object here means showFrame (depends on gizmo.frame) and
   // every axis/ring/anchor handle below collapse to false in one place.
-  const gizmo = hideEditorUI || motionEditing || arrayEditing || placingShape ? {
+  const gizmo = hideEditorUI || motionEditing || arrayEditing || placingShape || modelCamera.active ? {
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
@@ -1634,7 +1640,7 @@ export default function SceneCanvas({
           pan={pan}
           containerEl={containerRef.current}
           showRulers={showRulers} showGuides={showGuides}
-          cursorEnabled={!panMode}
+          cursorEnabled={!panMode && !modelCamera.active}
           enabled={!hideEditorUI && !arrayEditing && !motionEditing && !placingShape}
           onWarning={setTransformWarning}
           selectedRect={
@@ -1673,6 +1679,7 @@ export default function SceneCanvas({
       </div>}
 
       <ViewportPerformanceOverlay />
+      {!hideEditorUI && <ModelCameraToolbar camera={modelCamera} />}
 
       {/* Bottom-right controls: zoom pill */}
       <div data-viewport-cursor-block role="toolbar" aria-label="Viewport controls"

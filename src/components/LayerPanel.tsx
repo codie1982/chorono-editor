@@ -38,6 +38,7 @@ interface Props {
   onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
   onAddAudio: (file: File) => void
+  onImportModel?: (file: File) => void
   onImportSvg?: (file: File) => void
   onDelete: (id: string) => void
   onReorder: (from: number, to: number) => void
@@ -66,7 +67,7 @@ interface DropTargetState { id: string; zone: DropZone }
 
 export default function LayerPanel({
   layers, selectedId, selectedIds, onSelect, onAdd, activeAddKind,
-  onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
+  onAddImage, onAddVideo, onAddAudio, onImportSvg, onImportModel, getDocumentSignal,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate,
@@ -129,6 +130,9 @@ export default function LayerPanel({
    * palette available for the next shape or direct same-item toggle. */
   const handleAddItem = (type: string) => {
     switch (type) {
+      case 'model3d':
+        setMenuOpen(false)
+        return pickFile('.glb,.gltf,model/gltf-binary,model/gltf+json', file => onImportModel?.(file))
       case 'image':
         setMenuOpen(false)
         return pickFile('image/*', onAddImage)

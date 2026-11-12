@@ -184,7 +184,7 @@ export function createLayerWorldBoundsResolver(
         : effective.text.textAlign === 'right' ? -size.width : 0
       return rectangleBounds(size.width, size.height, matrix, left)
     }
-    if (['image', 'video', 'frameSequence'].includes(effective.type) && effective.size) {
+    if (['image', 'video', 'frameSequence', 'model3d'].includes(effective.type) && effective.size) {
       return rectangleBounds(effective.size.width, effective.size.height, matrix)
     }
     return null
