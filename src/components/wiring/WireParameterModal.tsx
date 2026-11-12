@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── WireParameterModal (BL-05) ────────────────────────────────────────────────
 // Modal for creating + editing ParameterWires. Two side-by-side picker
 // columns + an expression editor + a live preview row.
@@ -115,6 +116,7 @@ export default function WireParameterModal({
           <h2 className="text-sm font-semibold text-gray-100">
             {isEdit ? '🔗 Edit Wire' : '🔗 Wire Parameter'}
           </h2>
+          <DocumentationHelp topic="editor/state-machines/wires" className="ml-auto mr-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">×</button>
         </div>
 

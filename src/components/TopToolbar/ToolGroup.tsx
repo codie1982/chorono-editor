@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
 export type ToolMode =
   | 'select' | 'pan' | 'pen'
@@ -24,6 +25,8 @@ export type SelectionContainMode = 'inside' | 'touching'
 interface ToolGroupProps {
   mode:     ToolMode
   onChange: (m: ToolMode) => void
+  /** Shared toggle restores the editor's previous tool instead of Select. */
+  onPanToggle?: () => void
   /** When true, pen tool is auto-active because a path layer is selected. */
   penAuto?: boolean
   /** BL-60 Faz 3 — Current containment mode for canvas selection tools. */
@@ -65,18 +68,19 @@ function Divider() {
  * current operation.
  */
 export default function ToolGroup({
-  mode, onChange, penAuto, containMode, onContainModeChange,
+  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange,
 }: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
   const showContainToggle = isSelectionTool(mode) && containMode != null && onContainModeChange != null
   return (
     <div className="flex items-center gap-1">
+      <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/splines' : 'editor/canvas/tools'} compact />
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
           <path d="M2 1 L2 12 L5 9 L7 13 L9 12 L7 8 L11 8 Z" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'pan'} hint="Pan" shortcut="H" onClick={() => onChange(mode === 'pan' ? 'select' : 'pan')}>
+      <ToolBtn active={mode === 'pan'} hint="Pan" shortcut="M / H" onClick={() => onPanToggle ? onPanToggle() : onChange(mode === 'pan' ? 'select' : 'pan')}>
         <span className="text-sm">✋</span>
       </ToolBtn>
       <ToolBtn active={!!effectivePen} hint="Pen Tool" shortcut="P" onClick={() => onChange(mode === 'pen' ? 'select' : 'pen')}>

@@ -1,4 +1,5 @@
 import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useEffect, useRef, useState } from 'react'
 
 // ── Snap menu (top-right dropdown — SVGator-style) ───────────────────────────
@@ -48,6 +49,7 @@ export function SnapMenu(p: SnapMenuProps) {
       {open && (
         <div className="absolute top-full right-0 mt-1 min-w-[220px] bg-gray-900 border border-gray-700
                         rounded shadow-xl py-1 z-50 dock-overlay-in">
+          <div className="flex justify-end px-2"><DocumentationHelp topic="editor/canvas/snapping" /></div>
           {items.map((it) => (
             <button
               key={it.label}

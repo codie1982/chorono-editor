@@ -1,5 +1,6 @@
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useRef } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { SelectionMeasurements } from './useSelectionMeasurements'
 
 /** Exact selected-neighbor edge gaps in composition space, projected through
@@ -55,11 +56,11 @@ export function SelectionGapControls({ measurements, names }: {
   return <form role="dialog" aria-modal="false" aria-label="Edit selection gap" data-selection-gap-controls
     className="absolute top-14 right-3 z-50 w-72 max-w-[calc(100%-24px)] rounded-lg border border-pink-500/60 bg-slate-900 p-3 text-slate-100 shadow-2xl"
     onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
-    onSubmit={event => { event.preventDefault(); measurements.apply() }} onKeyDown={event => {
-      event.stopPropagation()
+    onSubmit={event => { event.preventDefault(); measurements.apply() }} onKeyDown={event => event.stopPropagation()} onKeyDownCapture={event => {
+      if (!event.currentTarget.contains(event.target as Node)) return
       if (event.key === 'Escape') { event.preventDefault(); measurements.close() }
     }}>
-    <p className="mb-2 text-sm font-semibold">{gap.axis === 'x' ? 'Horizontal' : 'Vertical'} gap</p>
+    <div className="mb-2 flex items-center justify-between gap-2"><p className="text-sm font-semibold">{gap.axis === 'x' ? 'Horizontal' : 'Vertical'} gap</p><DocumentationHelp topic="editor/canvas/snapping#measure-and-edit-selection-gaps" compact /></div>
     <p className="mb-2 text-xs text-slate-300 break-words">Fixed: {names.get(gap.fixedId) ?? gap.fixedId}<br />Moving: {names.get(gap.movingId) ?? gap.movingId}</p>
     <label className="block text-xs">Gap (px)<CalculationNumberInput ref={input} aria-label="Gap (px)" step="any" required value={measurements.value}
       onChange={event => measurements.setValue(event.target.value)} className="mt-1 w-full rounded border border-slate-500 bg-slate-950 px-2 py-2 text-sm focus:border-pink-400 focus:outline-none" onCalculate={calculated => measurements.setValue(String(calculated))} /></label>

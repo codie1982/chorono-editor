@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { BulkEditPolicyControl } from '@/components/timeline/authoring/BulkEditPolicyControl'
 import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useCallback } from 'react'
@@ -39,6 +40,7 @@ export default function DopeSheetToolbar({
   return (
     <div className="dope-sheet-toolbar">
       <div className="toolbar-row">
+        <DocumentationHelp topic="editor/timeline/dope-sheet" compact />
         {/* Filter buttons */}
         <button
           type="button"

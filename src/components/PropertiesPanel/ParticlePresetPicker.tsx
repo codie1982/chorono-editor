@@ -7,21 +7,26 @@
 'use client'
 
 import type { Layer } from '@/lib/types'
-import { PARTICLE_PRESETS } from '@/lib/particles/presets'
+import { getAllParticlePresets } from '@/lib/particles/presets'
 
 interface Props {
   layer:         Layer
   onLayerChange: (layer: Layer) => void
 }
 
+/** Render a current registry snapshot and apply a fresh preset configuration.
+ * Array iteration uses real entries: the legacy lazy Proxy has no `has` trap,
+ * so Array.map treats its target as empty even when presets are registered.
+ * The caller owns the layer/history; this component owns no scene mutation. */
 export default function ParticlePresetPicker({ layer, onLayerChange }: Props) {
   // Try to guess the active preset by deep-comparing first-stop colour /
   // particle shape against each registered preset. Cheap heuristic — used
   // only to display the current selection in the <select>.
   const current = guessCurrentPresetId(layer)
 
+  /** Emit a fresh preset configuration through the caller's layer/history adapter; unknown IDs do nothing. */
   function apply(presetId: string) {
-    const preset = PARTICLE_PRESETS.find(p => p.id === presetId)
+    const preset = getAllParticlePresets().find(p => p.id === presetId)
     if (!preset) return
     // createData() returns a fresh deep-cloneable config; calling it each
     // time guarantees no shared references between layers + the registry.
@@ -43,7 +48,7 @@ export default function ParticlePresetPicker({ layer, onLayerChange }: Props) {
                    focus:outline-none focus:border-blue-500"
       >
         <option value="" disabled>— pick a preset —</option>
-        {PARTICLE_PRESETS.map(p => (
+        {getAllParticlePresets().map(p => (
           <option key={p.id} value={p.id}>
             {p.name} {p.mobileSafe ? '📱' : ''} ({p.category})
           </option>
@@ -61,10 +66,11 @@ export default function ParticlePresetPicker({ layer, onLayerChange }: Props) {
 // first close match wins. Exact match isn't needed — this only drives the
 // <select>'s "current" indicator.
 
+/** Return the first shape/mode match for display only; this is not an exact preset equality check. */
 function guessCurrentPresetId(layer: Layer): string | null {
   const cfg = (layer as any).particleEmitter
   if (!cfg) return null
-  for (const p of PARTICLE_PRESETS) {
+  for (const p of getAllParticlePresets()) {
     const sample = p.createData()
     if (
       sample.particle.shape === cfg.particle?.shape &&

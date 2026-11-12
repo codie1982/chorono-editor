@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import {
   useRef, useEffect, useCallback, useState, useMemo,
 } from 'react'
@@ -1111,6 +1112,9 @@ export default function SceneCanvas({
         // area around the artboard — so pan still works outside the canvas
         // (matches Figma / SVGator behaviour).
         if (e.target === canvasRef.current) return
+        // Viewport controls own primary/middle clicks even with Pan active.
+        // Starting pointer capture here used to swallow zoom and toggle clicks.
+        if ((e.target as Element).closest('button,input,select,textarea,a,[role="toolbar"],[role="menu"],[data-viewport-cursor-block]')) return
         if (e.button === 1 || (panMode && e.button === 0)) {
           e.preventDefault()
           beginPan(e)
@@ -1630,6 +1634,7 @@ export default function SceneCanvas({
           pan={pan}
           containerEl={containerRef.current}
           showRulers={showRulers} showGuides={showGuides}
+          cursorEnabled={!panMode}
           enabled={!hideEditorUI && !arrayEditing && !motionEditing && !placingShape}
           onWarning={setTransformWarning}
           selectedRect={
@@ -1642,6 +1647,7 @@ export default function SceneCanvas({
 
       {/* Top-right controls: View + Snap dropdowns (SVGator-style) */}
       <div data-viewport-cursor-block className="absolute top-3 right-3 flex items-center gap-2 select-none z-30">
+        <DocumentationHelp topic="editor/canvas" compact className="bg-gray-900/90" />
         <ViewMenu
           showRulers={showRulers}     onToggleRulers={() => setShowRulers((v) => !v)}
           gridInFront={gridInFront}   onToggleGridFront={() => setGridInFront((v) => !v)}
@@ -1669,12 +1675,15 @@ export default function SceneCanvas({
       <ViewportPerformanceOverlay />
 
       {/* Bottom-right controls: zoom pill */}
-      <div data-viewport-cursor-block className="absolute bottom-3 right-3 z-30 flex items-center gap-2 select-none">
+      <div data-viewport-cursor-block role="toolbar" aria-label="Viewport controls"
+        onPointerDown={event => event.stopPropagation()}
+        className="absolute bottom-3 right-3 z-30 flex items-center gap-2 select-none">
         {/* Zoom + pan pill */}
-        <div className="flex items-center gap-1 bg-gray-900/90 border border-gray-700
+        <div className="flex items-center gap-1 bg-gray-900 border border-gray-700
                         rounded px-2 py-1 text-xs font-mono text-gray-300">
           <button
             onClick={() => setPanMode((p) => !p)}
+            aria-pressed={panMode}
             title="Pan mode — drag the view instead of objects (middle-mouse always pans)"
             className={`px-1.5 py-0.5 rounded transition-colors
               ${panMode ? 'bg-blue-600 text-white hover:bg-blue-500' : 'text-gray-400 hover:bg-gray-700'}`}
@@ -1724,7 +1733,7 @@ export default function SceneCanvas({
       <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono text-gray-500 pointer-events-none
                       bg-gray-900/70 px-2 py-0.5 rounded whitespace-nowrap">
         {panMode
-          ? '✋ Pan mode · drag ANYWHERE on the leaf to pan (click ✋ again to turn off)'
+          ? '✋ Pan mode · drag the work area · M / H or ✋ returns to the previous tool'
           : 'Drag = move · Arrows = 1px · Shift+Arrows = 10px · Shift = axis-lock · Handles to resize · ⌘ = aspect-lock · ⌘+scroll = zoom · Mid-mouse = pan'}
       </div>
 

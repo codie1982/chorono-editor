@@ -1,4 +1,6 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { propertyHelpTopics, type DocumentationTopic } from '@/components/help/documentation'
 import { useEffect, useRef, useState } from 'react'
 import type {
   Layer, Composition,
@@ -315,11 +317,14 @@ function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** Group property controls with optional help for a more specific subtopic.
+ * Help is a sibling of the label, with no effect on field values or history. */
+function Section({ title, children, helpTopic }: { title: string; children: React.ReactNode; helpTopic?: DocumentationTopic }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
-        {title}
+      <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
+        <span>{title}</span>
+        {helpTopic && <DocumentationHelp topic={helpTopic} compact />}
       </div>
       {children}
     </div>
@@ -373,6 +378,7 @@ export default function PropertiesPanel({
 
   if (layer?.type === 'audio' && layer.audio && scene && dispatchCommand) {
     return <aside className="flex-1 min-h-0 overflow-y-auto bg-gray-900 p-3">
+      <div className="flex justify-end"><DocumentationHelp topic="editor/layers/media" /></div>
       <AudioInspector key={layer.id} layer={layer} scene={scene} dispatchCommand={dispatchCommand}
         currentTimeMs={currentTimeMs} selectedTimelineId={selectedTimelineId} onNormalizeAudio={onNormalizeAudio} />
     </aside>
@@ -381,10 +387,11 @@ export default function PropertiesPanel({
   return (
     <NumericPropertyProvider scene={scene} layerId={layer?.id} dispatch={dispatchCommand} getScene={getScene} isTransactionActive={isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTimelineId ?? undefined} frame={expressionFrame} externalTime={expressionExternalTime}>
     <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
-      <div className="px-3 py-2 border-b border-gray-700 shrink-0">
+      <div className="px-3 py-2 border-b border-gray-700 shrink-0 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
           {layer ? `Layer: ${layer.id}` : 'Properties'}
         </span>
+        <DocumentationHelp topic={layer ? propertyHelpTopics[activeTab] : 'editor/projects'} />
       </div>
 
       {/* ── Tab bar — only visible when a layer is selected ── */}
@@ -502,7 +509,7 @@ export default function PropertiesPanel({
             )}
 
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>
-            <Section title="Transform">
+            <Section title="Transform" helpTopic="editor/properties/transform">
               <Row2>
                 <WireableField label="X" layer={layer} propertyPath="transform.x" {...wireProps}
                   acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.x', id)}>
@@ -558,7 +565,7 @@ export default function PropertiesPanel({
               </button>
             </Section>
 
-            <Section title="Appearance">
+            <Section title="Appearance" helpTopic="editor/properties/appearance">
               <WireableField label="Opacity" layer={layer} propertyPath="opacity" {...wireProps}
                 acceptedTypes={['number']} onBindParam={(id) => bindParam('opacity', id)}>
                 <div className="flex items-center gap-2">
@@ -596,7 +603,7 @@ export default function PropertiesPanel({
 
             {/* ── Shape özellikleri ──────────────────────────────────── */}
             {layer.type === 'shape' && layer.style && layer.size && (
-              <Section title="Shape">
+              <Section title="Shape" helpTopic="editor/layers/basic-shapes">
                 <Row2>
                   <Field label="Width">
                     <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
@@ -1149,7 +1156,7 @@ export default function PropertiesPanel({
             {/* ── Text özellikleri ──────────────────────────────────── */}
             {/* ── Text: Character ───────────────────────────────────── */}
             {layer.type === 'text' && layer.text && (
-              <Section title="Text">
+              <Section title="Text" helpTopic="editor/layers/text">
                 <ParamBindButton
                   label="Content"
                   layer={layer}
@@ -1547,7 +1554,7 @@ export default function PropertiesPanel({
 
             {/* ── Masks + Plugin Effects (Effects tab) ──────────────── */}
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'effects' && (<>
-            <Section title="Masks">
+            <Section title="Masks" helpTopic="editor/properties/masks">
               <div className="text-[10px] text-gray-500 leading-snug pb-1">
                 Use another layer&apos;s shape to cut out / reveal this layer.
                 Multiple masks composite in array order.

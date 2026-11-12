@@ -1,5 +1,6 @@
 'use client'
 import ScrubInput from '../inputs/ScrubInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── MotionBindingPanel ────────────────────────────────────────────────────────
 // Visual editor for ChronoScene.bindings — linear remap driver → driven.
 //
@@ -34,6 +35,7 @@ export default function MotionBindingPanel({ scene, editor }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Linear Bindings
         </span>
+        <DocumentationHelp topic="editor/state-machines/bindings" className="ml-auto mr-1" />
         <button
           className="text-[11px] px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
           onClick={() => editor.dispatchCommand(makeAddBindingCmd(newBinding()))}

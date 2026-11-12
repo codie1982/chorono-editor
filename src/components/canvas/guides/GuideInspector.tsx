@@ -1,5 +1,6 @@
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useState } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { CanvasGuideEditing } from './useCanvasGuideEditing'
 import { guidePositionInput } from './guidePositionInput'
 
@@ -20,11 +21,12 @@ export function GuideInspector({ editing }: { editing: CanvasGuideEditing }) {
   const apply = () => submit(false)
   const field = 'w-full rounded bg-slate-800 border border-slate-600 px-2 py-1 text-xs text-slate-100 focus-visible:outline-cyan-300'
   return <div role="dialog" aria-label="Guide controls" className="absolute top-7 left-7 z-50 w-64 rounded border border-cyan-600/60 bg-slate-950/95 p-3 text-xs text-slate-100 shadow-xl"
-    onPointerDown={event => event.stopPropagation()} onKeyDown={event => {
-      event.stopPropagation()
+    onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()} onKeyDownCapture={event => {
+      if (!event.currentTarget.contains(event.target as Node)) return
       if (event.key === 'Escape') { event.preventDefault(); editing.close() }
     }}>
     <div className="flex items-center justify-between mb-2"><strong>Guides · composition px</strong>
+      <DocumentationHelp topic="editor/canvas/snapping#add-and-edit-ruler-guides" compact />
       <button aria-label="Close guide controls" onClick={editing.close} className="px-2 py-1 rounded hover:bg-slate-700">×</button></div>
     {selected ? <>
       <p className="mb-2 text-cyan-200">{selected.axis === 'v' ? 'Vertical · x' : 'Horizontal · y'}{selected.locked ? ' · locked' : ''}</p>

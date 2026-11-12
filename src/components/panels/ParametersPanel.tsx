@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── ParametersPanel ───────────────────────────────────────────────────────────
 // CRUD UI for ChronoScene.parameters. Each row is editable inline; changes
 // dispatch EditorCommands so they participate in undo/redo.
@@ -52,6 +53,7 @@ export default function ParametersPanel({ scene, editor }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Parameters
         </span>
+        <DocumentationHelp topic="editor/state-machines/parameters" className="ml-auto mr-1" />
         <div className="relative">
           <button
             onClick={() => setAddOpen((v) => !v)}

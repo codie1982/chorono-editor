@@ -156,6 +156,8 @@ yazmaz; token gerekmez. Commit yanıtı sınırlı `changeSummary` döndürür;
 `normalize_audio_clip` native batch eylemi değildir (`callableInBatch:false`);
 legacy katalogda doğrudan çağrılır. Script API eşdeğer peak ölçümü sağlamaz.
 
+Araç açıklamalarının sahipliği, gerçek yanıt biçimleri, yeniden deneme sınırları ve Glama yeniden değerlendirme süreci [MCP araç sözleşmeleri](../en/mcp-tool-contracts.md) belgesinde açıklanır. `describe_layer` tam Layer kaydı değil, okunabilir bir özettir; iç içe alanları değiştirmeden önce `get_scene` kullanın. `add_keyframes` eski sayısal giriş şemasını korur; model tipindeki değerler ve customBezier için `set_keyframes` kullanın.
+
 Script ile sahne tasarımı için `scene.snapshot()` tam sahneyi; `layer.data` katmanın tamamını; `layer.get(path)` tek alanı bağımsız veri kopyası olarak okur. `layer.patch(partial)` iç içe ayarları birleştirir; `Layer.set` eski nesne değiştirme davranışını korur. `scene.useTimeline(id)` hem Layer.key hem clone/array animasyon kopyalarının hedefini belirler. Mevcut state machine ve etkileşim kayıtlarının CRUD metotları ile native ses klibi yardımcıları da script içinde kullanılabilir. Renk kanalları ve Vec2 interpolate edilir; metin/boolean key sınırında değişir. Çizim öncesi uygulanan animasyon verisi particle, repeater, shape, tipografi, efekt ve maskeleri kapsar. Kesin imzalar, örnekler ve sınırlar için [betikleme rehberini](scripting.md) okuyun; IO, önizleme ve kayıt ayrı MCP araçlarıdır.
 
 `replace_layer_fields` (eski `patch_object`) ile Layer modelinin effects, masks,
@@ -174,6 +176,8 @@ ve waveform/noise controller'ı yönetir.
 - İstemciler aynı sekmedeki kuyruğu paylaşır. `get_scene` sonucundaki `revision` ve `readToken` değerlerini bir sonraki source çağrısına `expectedRevision` ve `readToken` olarak verin; her yeni yazma öncesi yeniden okuyun. Elle düzenleme veya başka istemciyle çakışma sessizce üzerine yazılmaz. Yeniden denenecek mutasyonlar için sabit `requestId` kullanın; farklı içerikle aynı id reddedilir.
 - Kaynak sahnede isteğe bağlı `editorGuides` (version 1) varsa mevcut cetvel/guide düzenini koruyun. Portable JSON bu editör verisini saklar; final render/runtime çizimine katılmaz. Scene JSON değiştirme işlemleri sürüm, benzersiz ID, eksen ve sonlu konum doğrulamasından geçer. Bu alan için yeni bir MCP authoring metodu eklenmemiştir; [viewport guide sözleşmesine](viewport-layout-editing.md) bakın.
 - Birden fazla sekme açıksa `list_sessions` ile `sessionId` seçilir. Sürükleme işlemi devam ederken MCP mutasyonları reddedilir.
+
+`expectedRevision` okuma, canlı playback/runtime kontrolü ve dışa aktarmalarda uygulanmaz; bu çağrıların döndürdüğü revision gözlenen sahneyi tanımlar. `requestId` bir arka plan iş kimliği değildir: aynı oturumun son 64 kimlikli çağrısının sonuçları bellekte tutulur; hata sonucu da önbelleğe alınır. Bağlantı kapanırsa, süreç yeniden başlarsa veya kayıt önbellekten çıkarsa yeniden deneme garantisi kalmaz. Canlı runtime parametreleri sırayla uygulanır; geç bir hata önceki canlı değeri geri almaz. `get_runtime` ile kontrol edin.
 
 ## Çoklu timeline script örneği
 
@@ -208,6 +212,8 @@ State machine içeren sahnelerde `render_preview` zaman/parametre argümanı ver
 Projeler varsayılan `projects/` altında `.chorono.json` olarak atomik kaydedilir. Yerel blob medyası gömülür; bir dosya 16 MB, sahne yaklaşık 32 MB ile sınırlıdır. Mevcut proje üzerine yazmak için `overwrite:true` gerekir. `CHORONO_MCP_PROJECT_DIR` ile proje kökü değiştirilebilir. Keyfi dosya yolları, traversal ve proje dosyası symlink'leri kabul edilmez.
 
 Çıktılar `projects/exports/` içine yazılır. Önizleme temiz PNG'dir. SVG mevcut vektör dışa aktarıcının uyarılarını döndürür. Kare dizisi ZIP çağrı başına en fazla 300 kare / 4 MP / 24 MB'dır ve ses içermez. MP4/GIF/WebM kodlayıcıları bu MCP sürümünün kapsamında değildir.
+
+SVG'nin varsayılan zamanı editörün oynatma imlecinden bağımsız olarak 0 ms'dir. Dışa aktarmalar mevcut dosyayı değiştirmez; yeni bir ad kullanın. `overwrite:true` yalnızca `save_project` aracındadır. `undo`/`redo` sahne geçmişini değiştirir, diskteki kayıtları/çıktıları geri almaz; boş geçmişte sahne ve revision değişmez.
 
 Bu yerel servis internet yayını veya çok makineli dağıtım için yapılandırılmamıştır. Token `.chorono/mcp-token`, denetim metadatası `.chorono/audit.jsonl` içinde tutulur; bu klasör Git'e eklenmez. Denetim kaydı script veya medya içeriğini yazmaz.
 

@@ -2,7 +2,7 @@
 
 Kullanıcı rehberleri: [Bilgisayara kurulum](installation.md) · [Skill yapısı ve kurulumu](agent-skills.md) · [Sorun giderme](troubleshooting.md) · [Tüm dokümantasyon](../README.md). Bu sayfa CLI yaşam döngüsü ve bakımcı dağıtım ayrıntılarını da içerir.
 
-Chorono'nun editörü, MCP sunucusu, skill kaynakları ve CLI'si aynı repoda yönetilir. Kök Next.js paketi `private:true` kalır; `packages/cli` altındaki `@codie1982/chorono` bağımsız yayımlanır. Güncel yerel paket sürümü `0.2.0`'dır. npm hesabının bu scope üzerindeki yetkisi yayın öncesinde doğrulanmalıdır.
+Chorono'nun editörü, MCP sunucusu, skill kaynakları ve CLI'si aynı repoda yönetilir. Kök Next.js paketi `private:true` kalır; `packages/cli` altındaki `@codie1982/chorono` bağımsız yayımlanır. Güncel yerel paket sürümü `0.3.0`'dır. npm hesabının bu scope üzerindeki yetkisi yayın öncesinde doğrulanmalıdır.
 
 ## Bir ajandan kurulum ve animasyon üretimi
 
@@ -112,12 +112,12 @@ npm run build
 npm run cli:pack
 ```
 
-Tarball `.chorono/packages/codie1982-chorono-0.2.0.tgz` altında üretilir. CLI, skill'ler, manifest, README ve MIT lisansı npm `files` izin listesiyle paketlenir. Editör kaynakları, `.env`, projeler, token, yerel ayarlar ve `node_modules` pakete girmez.
+Tarball `.chorono/packages/codie1982-chorono-0.3.0.tgz` altında üretilir. CLI, skill'ler, manifest, README ve MIT lisansı npm `files` izin listesiyle paketlenir. Editör kaynakları, `.env`, projeler, token, yerel ayarlar ve `node_modules` pakete girmez.
 
 Yerel tarball ile:
 
 ```sh
-npx --package /tam/yol/codie1982-chorono-0.2.0.tgz chorono setup --editor /tam/yol/chorono-editor --project /tam/yol/video
+npx --package /tam/yol/codie1982-chorono-0.3.0.tgz chorono setup --editor /tam/yol/chorono-editor --project /tam/yol/video
 ```
 
 Sürüm `packages/cli/package.json` içinde artırılır; kök kilit dosyası `npm install --package-lock-only --ignore-scripts` ile güncellenir. Yayın hesabı ve paket adı doğrulandıktan sonra, npm yayını ayrıca istenmişse:

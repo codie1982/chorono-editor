@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { EasingType } from '@/lib/types'
 
 interface Props {
@@ -40,6 +41,7 @@ export default function TrackToolBar({
     <div className="flex items-center gap-1.5 px-3 py-1 border-b border-gray-700/60 bg-gray-900 shrink-0">
 
       {/* Selection actions */}
+      <DocumentationHelp topic="editor/keyframes/timing" compact />
       <button
         onClick={onSelectAll}
         disabled={!hasKeyframes}

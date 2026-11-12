@@ -1,6 +1,7 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { prepareBake, type BakeOptions } from '@/lib/animation/baking/bake'
@@ -12,6 +13,7 @@ import { curveSignalPreview } from '@/lib/timeline/curveSignalPreview'
  * enter source/history until explicit Apply. Revision/document/track checks
  * prevent delayed previews replacing manual edits. Cancel/unmount drops the
  * prepared track. Source and baked paths share the real evaluator and axes.
+ * Capture-phase focus handling includes Help even when it stops bubbling keys.
  */
 export default function TrackBakeDialog({ scene, editor, timelineId, target, onClose }: {
   scene: ChronoScene; editor: EditorStateReturn; timelineId: string; target: string; onClose: () => void
@@ -55,16 +57,18 @@ export default function TrackBakeDialog({ scene, editor, timelineId, target, onC
   return <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center" onMouseDown={event => event.target === event.currentTarget && onClose()}>
     <div role="dialog" aria-modal="true" aria-label="Bake track to keyframes" ref={dialog} tabIndex={-1}
       className="w-[560px] max-w-[95vw] max-h-[90vh] overflow-auto rounded border border-gray-600 bg-gray-900 p-4 text-xs text-gray-200 shadow-2xl"
-      onKeyDown={event => {
+      onKeyDownCapture={event => {
+        // A nested Calculate once dialog is portalled outside this DOM subtree.
+        if (!event.currentTarget.contains(event.target as Node)) return
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose() }
         if (event.key === 'Tab') {
-          const controls = Array.from(dialog.current!.querySelectorAll<HTMLElement>('input,button:not([disabled])'))
+          const controls = Array.from(dialog.current!.querySelectorAll<HTMLElement>('a[href],input:not([disabled]),button:not([disabled])'))
           const first = controls[0], last = controls[controls.length - 1]
           if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last?.focus() }
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
         }
       }}>
-      <h2 className="text-sm font-semibold mb-1">Bake track to keyframes</h2><p className="font-mono text-[10px] break-all text-gray-400 mb-3">{target}</p>
+      <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold mb-1">Bake track to keyframes</h2><DocumentationHelp topic="editor/timeline/controllers#bake-a-property-track-to-keyframes" compact /></div><p className="font-mono text-[10px] break-all text-gray-400 mb-3">{target}</p>
       <div className="grid grid-cols-2 gap-3">
         {([['startMs', 'Start · local ms'], ['endMs', 'End · local ms'], ['fps', 'Samples / second'], ['tolerance', 'Value tolerance · 0–1']] as const).map(([key, label]) =>
           <label key={key} className="flex flex-col gap-1">{label}<CalculationNumberInput aria-label={label} step="any" value={Number.isNaN(options[key]) ? '' : options[key]}

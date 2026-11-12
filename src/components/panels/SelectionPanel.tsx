@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── SelectionPanel (BL-60) ────────────────────────────────────────────────────
 // Dock panel for the Smart Selection Engine. Two tabs:
 //   1. Select Similar      — find layers matching a reference's properties
@@ -49,6 +50,7 @@ export default function SelectionPanel({
         <TabButton active={tab === 'byTransform'}
           onClick={() => setTab('byTransform')}
           label="Select By Transform" />
+        <DocumentationHelp topic="editor/canvas/selection" compact />
       </div>
 
       {tab === 'similar' ? (

@@ -46,7 +46,7 @@ function CalculationEditor({ onClose, ...props }: CalculationProps & { onClose()
       latest.current.onResult(result); onClose()
     } catch (failure) { setError((failure as Error).message) }
   }
-  return <ExpressionDialog title={'Calculate once · ' + props.label} onClose={onClose}>
+  return <ExpressionDialog title={'Calculate once · ' + props.label} helpTopic="editor/properties#calculate-once-for-operation-settings" onClose={onClose}>
     <p className="my-3 text-xs text-gray-300">Apply the result to this setting. Formula text is not saved and never runs per frame. <code>value</code> is the reviewed value; pi/e are available.</p>
     <label className="text-xs">Formula<input data-expression-autofocus aria-label={'Calculation for ' + props.label} value={formula} maxLength={4096}
       onChange={event => { setFormula(event.target.value); setError('') }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (!diagnostic && !stale) apply() } }}

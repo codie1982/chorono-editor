@@ -1,6 +1,7 @@
 'use client'
 import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { SetKeyControls } from './authoring/SetKeyControls'
 import { TimelineTransport } from './authoring/TimelineTransport'
 import type { TimelineAuthoringControls } from './authoring/useTimelineAuthoring'
@@ -87,6 +88,7 @@ export default function TimelineToolbar(props: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
 
+      <DocumentationHelp topic="editor/timeline" compact />
       <div className="relative" ref={playRef}>
         <button
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) onPlayToggle() } }}

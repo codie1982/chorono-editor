@@ -1,5 +1,6 @@
 'use client'
 import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
 import { useRef, useState } from 'react'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -51,6 +52,7 @@ export default function TimelineGhostControl({
       {menuOpen && (
         <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded shadow-xl
                         z-50 w-80 p-3 space-y-3">
+          <div className="flex items-center justify-between"><span className="text-xs font-semibold">Onion skin</span><DocumentationHelp topic="editor/timeline/onion-skin" /></div>
           {/* Quick Presets */}
           <div>
             <label className="text-[10px] font-mono text-gray-400 uppercase">

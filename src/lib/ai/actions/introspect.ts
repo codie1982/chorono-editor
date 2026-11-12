@@ -58,7 +58,7 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
   reg.register<LayerIdParam>({
     id: 'introspect.describeLayer',
     toolName: 'describe_layer',
-    description: 'Detailed dump of one layer (transform, opacity, size, style, type-specific data).',
+    description: 'Read a human-readable summary of one layer: transform, opacity, size, style and selected type-specific fields. A missing id returns explanatory content. Use list_layers to discover ids or get_scene for complete nested records before patch_object; this summary is not a full Layer serialization.',
     parameters: {
       type: 'object',
       required: ['layerId'],
@@ -116,7 +116,7 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
   reg.register({
     id: 'introspect.getSceneJson',
     toolName: 'get_scene_json',
-    description: 'Full ChronoScene JSON. Use sparingly (large) — prefer list_layers / describe_*.',
+    description: 'Read the full scene as a JSON-encoded content string; potentially large. In MCP prefer get_scene for scene data with revision, selected timeline and playhead in one snapshot. Use list_layers or describe_layer for shorter inspection.',
     parameters: { type: 'object', properties: {} },
     read: (_params, scene: ChronoScene) => JSON.stringify(scene),
   })
@@ -126,8 +126,9 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
     id: 'introspect.evaluateAtTime',
     toolName: 'evaluate_at_time',
     description:
-      'Compute animated property values at a given time (ms). Optionally filter ' +
-      'to one target path (e.g. "layers.ball.transform.y"). Use to VERIFY an animation.',
+      'Evaluate timeline track values at a given time, optionally filtering one full target path. ' +
+      'Does not evaluate live runtime parameters, wiring or state machines. Use evaluate_frame ' +
+      'for runtime-aware values or render_preview to inspect actual pixels; this cannot verify visual quality.',
     parameters: {
       type: 'object',
       required: ['timeMs'],

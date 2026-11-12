@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useMemo } from 'react'
 import type { ChronoScene, Keyframe, EasingType, EasingDefinition } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -52,6 +53,7 @@ export default function KeyframeInspector({ scene, selectedTimelineId, selectedK
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
           Keyframe ({resolved.length})
         </span>
+        <DocumentationHelp topic="editor/keyframes/inspector" className="ml-auto mr-1" />
         <button
           onClick={() => editor.dispatchCommand(makeBatchCmd('Delete Selected Keyframes', resolved.map((r) =>
             makeDeleteKfCmd(r.timelineId, r.trackTarget, r.kf),

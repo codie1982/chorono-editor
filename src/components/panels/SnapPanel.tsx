@@ -1,5 +1,6 @@
 'use client'
 import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── SnapPanel ─────────────────────────────────────────────────────────────
 // Dockable settings panel for the snap subsystem. Sister to the canvas's
 // quick-toggle SnapMenu — the menu gives you fast on/off, the panel gives
@@ -21,6 +22,7 @@ export default function SnapPanel({ snap }: Props) {
   return (
     <div className="h-full bg-gray-900 text-gray-200 overflow-auto">
       <div className="p-3 space-y-4">
+        <div className="flex items-center justify-between"><span className="text-xs font-semibold">Guides & snapping</span><DocumentationHelp topic="editor/canvas/snapping" /></div>
 
         {/* ── Master toggle ───────────────────────────────────────────────── */}
         <Section title="General">

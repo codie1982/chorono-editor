@@ -1,5 +1,7 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { layerHelpTopic } from '@/components/help/documentation'
 import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
 import { useMemo, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
@@ -250,6 +252,7 @@ export default function LayerPanel({
       <div className="px-3 py-2 border-b border-gray-700 flex flex-wrap items-center justify-between gap-1">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layers</span>
         <div className="flex items-center gap-1">
+          <DocumentationHelp topic={layerHelpTopic(menuOpen, activeCategory)} compact />
           <LayerFocusControls selected={!!selectedId || selectedIds.size > 0}
             canIsolate={layers.some(layer => layer.type !== 'audio' && (selectedIds.has(layer.id) || !selectedIds.size && layer.id === selectedId))}
             isolated={isolationActive} onTimeline={onShowInTimeline} onIsolate={onIsolateSelection} onExit={onExitIsolation} />

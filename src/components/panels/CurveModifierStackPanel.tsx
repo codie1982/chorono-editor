@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── CurveModifierStackPanel (BL-46) ────────────────────────────────────────
 // Stack inspector for the curve modifiers attached to the currently selected
 // track (Track scope) and the currently selected keyframe's segment
@@ -101,13 +102,17 @@ export default function CurveModifierStackPanel({
     return (
       <div className="p-3 text-[11px] text-gray-500 italic">
         Select a track to edit its modifier stack.
+        <DocumentationHelp topic="editor/timeline/controllers" />
       </div>
     )
   }
 
   return (
     <div className="flex flex-col h-full bg-gray-900 text-[11px] text-gray-300">
-      <Header label={`Track: ${focusTrack.target.replace(/^layers\./, '')}`} />
+      <div className="flex items-center justify-between gap-1">
+        <Header label={`Track: ${focusTrack.target.replace(/^layers\./, '')}`} />
+        <DocumentationHelp topic="editor/timeline/controllers" compact />
+      </div>
 
       <ControllerSection
         controller={focusTrack.controller}

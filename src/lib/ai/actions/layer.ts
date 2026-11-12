@@ -340,10 +340,10 @@ const COMMON_LAYER_PROPS = {
   scaleY:       { type: 'number', description: 'Vertical scale (1 = 100%)' },
   shapeKind:    { type: 'string', enum: SHAPE_KIND_ENUM, description: 'Shape geometry kind' },
   fillColor:    { type: 'string', description: 'Fill hex color e.g. "#3B82F6"' },
-  fillOpacity:  { type: 'number', minimum: 0, maximum: 1 },
-  strokeColor:  { type: 'string' },
-  strokeWidth:  { type: 'number' },
-  cornerRadius: { type: 'number' },
+  fillOpacity:  { type: 'number', minimum: 0, maximum: 1, description: 'Shape fill opacity, 0 transparent to 1 opaque; independent of layer opacity.' },
+  strokeColor:  { type: 'string', description: 'Stroke color, for example #ffffff. Supplying strokeColor or strokeWidth creates/updates the stroke.' },
+  strokeWidth:  { type: 'number', description: 'Stroke thickness in pixels.' },
+  cornerRadius: { type: 'number', description: 'Rounded rectangle corner radius in pixels.' },
   sides:        { type: 'number', description: 'Edge count for polygon/star (3-12) or blob (5-64)' },
   innerRadius:  { type: 'number', description: 'Inner radius for star/ring' },
   startAngle:   { type: 'number', description: 'Start angle for arc/ring in degrees' },
@@ -359,12 +359,12 @@ const COMMON_LAYER_PROPS = {
   irregularity: { type: 'number', minimum: 0, maximum: 1, description: 'Blob noise ratio 0–1' },
   seed:         { type: 'number', description: 'Blob deterministic seed integer' },
   text:         { type: 'string', description: 'Text content (required when type=text)' },
-  fontSize:     { type: 'number' },
-  fontFamily:   { type: 'string' },
-  fontWeight:   { type: 'string', enum: FONT_WEIGHT_ENUM },
-  textColor:    { type: 'string' },
-  textAlign:    { type: 'string', enum: TEXT_ALIGN_ENUM },
-  letterSpacing:{ type: 'number' },
+  fontSize:     { type: 'number', description: 'Text font size in pixels.' },
+  fontFamily:   { type: 'string', description: 'Font family available in the editor browser. Omit to use the current/default font.' },
+  fontWeight:   { type: 'string', enum: FONT_WEIGHT_ENUM, description: 'Text font weight from the supported values. Omit to use the current/default weight.' },
+  textColor:    { type: 'string', description: 'Text fill color, for example #ffffff; separate from shape fillColor.' },
+  textAlign:    { type: 'string', enum: TEXT_ALIGN_ENUM, description: 'Text alignment within its text box. Omit to use the current/default alignment.' },
+  letterSpacing:{ type: 'number', description: 'Extra spacing between text characters in pixels; creation defaults to 0.' },
   startMs:      { type: 'number', description: 'Time (ms) when layer becomes visible' },
   endMs:        { type: 'number', description: 'Time (ms) when layer disappears' },
   parentId:     { type: 'string', description: 'Parent group layer id' },
@@ -389,14 +389,17 @@ const COMMON_LAYER_PROPS = {
   loop:      { type: 'boolean', description: 'Video/audio loop' },
 } as const
 
+/** Register flat layer creation/update/deletion actions shared by the editor agent and MCP catalog. */
 export function registerLayerActions(reg: ActionRegistry): void {
   // ── add_layer ─────────────────────────────────────────────────────────────
   reg.register<AddLayerParams>({
     id: 'layer.add',
     toolName: 'add_layer',
     description:
-      'Add a new layer to the scene. Set a meaningful id (e.g. "bg_rect", ' +
-      '"title_text") — you will use this id in add_keyframes track targets.',
+      'Create a layer from flat properties with a caller-chosen unique id and name. ' +
+      'Media requires an existing matching assetId; repeaters require sourceLayerId. ' +
+      'Use create_object for any registered kind and a nested model patch, ' +
+      'import_asset to bring in media, or clone_layer to reuse existing content.',
     parameters: {
       type: 'object',
       required: ['id', 'name', 'type'],
@@ -441,13 +444,13 @@ export function registerLayerActions(reg: ActionRegistry): void {
   reg.register<UpdateLayerParams>({
     id: 'layer.update',
     toolName: 'update_layer',
-    description: 'Update properties of an existing layer. Only provide fields you want to change.',
+    description: 'Change flat properties on an existing layer, preserving omitted fields. Use patch_object for nested model fields such as effects/masks, or set_keyframes to animate a property over time. Missing layer ids fail.',
     parameters: {
       type: 'object',
       required: ['layerId'],
       properties: {
         layerId: { type: 'string', description: 'ID of the layer to update' },
-        name:    { type: 'string' },
+        name:    { type: 'string', description: 'New display name; does not change the stable layer id.' },
         ...COMMON_LAYER_PROPS,
       },
     },
@@ -464,7 +467,7 @@ export function registerLayerActions(reg: ActionRegistry): void {
   reg.register<DeleteLayerParams>({
     id: 'layer.delete',
     toolName: 'delete_layer',
-    description: 'Remove a layer from the scene.',
+    description: 'Delete an existing layer, its descendants and their animation tracks. Missing layer ids fail. Use undo to restore the transaction; use remove_track to delete only animation while retaining the layer.',
     parameters: {
       type: 'object',
       required: ['layerId'],

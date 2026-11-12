@@ -43,6 +43,7 @@ export default function SVGExportDialog({ scene, timeMs, onClose, onExported, on
   return (
     <BaseExportDialog
       title="Export SVG"
+      helpTopic="export/svg"
       onClose={onClose}
       maxWidth="max-w-sm"
       footer={

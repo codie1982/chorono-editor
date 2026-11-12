@@ -1,6 +1,7 @@
 'use client'
 import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── CloneModal (BL-59) ────────────────────────────────────────────────────────
 //
 // "Clone with settings…" dialog. Quick Clone (Cmd+D) is fired straight
@@ -36,6 +37,7 @@ const MAX_OFFSET = 2000
 
 /** Numeric alternative to copy dragging. A failed/stale source command keeps
  * the dialog open; this view owns only form/focus state, never source templates.
+ * The focus loop includes the documentation link as well as form controls.
  * Counts are occurrences of the forest, not a misleading single-layer total. */
 export default function CloneModal({
   source, sourceCount = 1, hasAnimationOnSource, onApply, onClose,
@@ -53,7 +55,7 @@ export default function CloneModal({
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); return }
       if (event.key !== 'Tab') return
-      const fields = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled)') ?? [])
+      const fields = Array.from(dialog.current?.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled)') ?? [])
       const next = event.shiftKey ? fields[fields.length - 1] : fields[0]
       const edge = event.shiftKey ? fields[0] : fields[fields.length - 1]
       if (next && (document.activeElement === edge || !dialog.current?.contains(document.activeElement))) { event.preventDefault(); next.focus() }
@@ -93,6 +95,7 @@ export default function CloneModal({
           <h2 className="text-sm font-semibold text-gray-100">
             {sourceCount > 1 ? `Clone ${sourceCount} selected sources` : <>Clone &ldquo;{source.name}&rdquo;</>}
           </h2>
+          <DocumentationHelp topic="editor/layers/cloning" className="ml-auto mr-1" />
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-300 text-lg leading-none"

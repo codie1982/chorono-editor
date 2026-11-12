@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useState, useCallback, useMemo } from 'react'
 import type { ChronoScene } from '@/lib/types'
@@ -78,6 +79,7 @@ export default function DopeSheetPanel({
       <div className="dope-sheet-panel">
         <div className="dope-sheet-empty">
           <p>No timeline selected</p>
+          <DocumentationHelp topic="editor/timeline/dope-sheet" />
         </div>
       </div>
     )

@@ -66,7 +66,7 @@ export function PropertyFormulaEditor({ input, limits, initialFormula, kind = 'n
       input.dispatch(command); onClose()
     } catch (failure) { setError((failure as Error).message) }
   }
-  return <ExpressionDialog title={'Expression · ' + input.label} onClose={onClose}>
+  return <ExpressionDialog title={'Expression · ' + input.label} helpTopic="editor/properties#animation-expressions-and-formulas" onClose={onClose}>
     <label className="my-3 flex items-center justify-between gap-2 text-xs">Evaluation
       <select aria-label="Expression evaluation mode" value={mode} onChange={event => setMode(event.target.value as 'constant' | 'live')} className="rounded border border-gray-600 bg-gray-950 p-1">
         <option value="constant">When applied</option><option value="live" disabled={!liveSupported}>Live on timeline</option>

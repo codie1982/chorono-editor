@@ -24,7 +24,7 @@ npx --package @codie1982/chorono@latest chorono start --project ./my-animation -
 npx --package @codie1982/chorono@latest chorono doctor --project ./my-animation
 ```
 
-Before publication, use the source checkout or a local tarball with `npx --package /absolute/path/codie1982-chorono-0.2.0.tgz chorono ...`. A fresh remote editor download requires a branch/tag containing the MCP and CLI changes. Use `--repo URL --ref BRANCH_OR_TAG` to select one; older checkouts without MCP support are refused.
+Before publication, use the source checkout or a local tarball with `npx --package /absolute/path/codie1982-chorono-0.3.0.tgz chorono ...`. A fresh remote editor download requires a branch/tag containing the MCP and CLI changes. Use `--repo URL --ref BRANCH_OR_TAG` to select one; older checkouts without MCP support are refused.
 
 ## Commands
 

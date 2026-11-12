@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── KeyframeSpreadsheet (BL-07) ───────────────────────────────────────────────
 // Editable table of the currently selected keyframes. Click a cell, type, hit
 // Enter to commit. Time, value, and easing are all editable here so users can
@@ -52,6 +53,7 @@ export default function KeyframeSpreadsheet({
         <span className="text-[11px] font-mono text-cyan-400">
           ⊞ Keyframe Spreadsheet  <span className="text-gray-500">({rows.length} row{rows.length !== 1 ? 's' : ''})</span>
         </span>
+        <DocumentationHelp topic="editor/keyframes/spreadsheet" className="ml-auto mr-1" />
         <button
           onClick={onClose}
           className="text-[12px] text-gray-500 hover:text-gray-300"

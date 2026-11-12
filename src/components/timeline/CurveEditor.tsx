@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { BulkEditPolicyControl } from './authoring/BulkEditPolicyControl'
 import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
@@ -613,6 +614,7 @@ export default function CurveEditor({
 
         {/* ── Row 1: toolbar + curve legend ──────────────────────────── */}
         <div className="flex items-center gap-1 px-2 py-1 flex-wrap">
+          <DocumentationHelp topic="editor/timeline/curves" compact />
           <ToolbarBtn
             title="Fit all curves to view (A)"
             onClick={() => { setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null) }}
@@ -1435,8 +1437,9 @@ function formatTimeMs(ms: number): string {
 
 function Empty({ msg }: { msg: string }) {
   return (
-    <div className="flex items-center justify-center h-full text-xs text-gray-500 bg-gray-950">
+    <div className="flex flex-col gap-2 items-center justify-center h-full text-xs text-gray-500 bg-gray-950">
       {msg}
+      <DocumentationHelp topic="editor/timeline/curves" />
     </div>
   )
 }

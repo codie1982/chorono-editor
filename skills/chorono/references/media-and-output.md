@@ -21,7 +21,7 @@ For fonts, import the actual supported font file, read the registered family fro
 | Audio preview | `render_audio_preview`; real stereo PCM WAV plus peak/RMS/clipping, up to 10 seconds |
 | Audio mix | `export_audio`; stereo PCM WAV with gain automation, fades, pan and master gain, up to 120 seconds / 24 MB |
 
-Use the returned absolute path instead of inventing an output location. Existing files require explicit overwrite; choose a fresh name when the user has not requested replacement. Saved projects live under the configured project directory, with exports in its `exports/` subdirectory.
+Use the returned absolute path instead of inventing an output location. Only `save_project` accepts `overwrite:true`; exports never replace existing files, so use a fresh basename. Saved projects live under the configured project directory, with exports in its `exports/` subdirectory. Undo/redo affects scene history, not files. SVG defaults to time zero regardless of the live playhead; supply `timeMs` for a different vector frame and inspect all warnings.
 
 Output work also shares the editor's managed resource budget and finite queue.
 Complex geometry, dense runtime baking or large JSON/media copies can be refused

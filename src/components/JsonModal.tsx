@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useEffect,useRef,useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import {useSceneTextPreview} from './export/hooks/useSceneTextPreview'
@@ -57,6 +58,7 @@ export default function JsonModal({ scene, onClose,documentSignal,onSaveProject 
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <DocumentationHelp topic={mode === 'runtime' ? 'export/runtime-json' : 'export/project-json'} compact />
             {/* Mode toggle */}
             <div className="flex rounded overflow-hidden border border-gray-600">
               <button

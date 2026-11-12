@@ -8,7 +8,8 @@ export const defaultBindings: ShortcutDefinition[] = [
 
   // ── Canvas — tools ───────────────────────────────────────────────────────
   { id: 'canvas.tool.select',           label: 'Select Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'v' } },
-  { id: 'canvas.tool.pan',              label: 'Pan Tool',           contexts: ['canvas'], binding: { type: 'keyboard', key: 'h' } },
+  { id: 'canvas.tool.pan',              label: 'Toggle Pan Tool',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'm' }, description: 'Toggle view panning; press again to restore the previous tool' },
+  { id: 'canvas.tool.panLegacy',        label: 'Toggle Pan Tool (H)', contexts: ['canvas'], binding: { type: 'keyboard', key: 'h' }, description: 'Alternate Pan toggle; restores the previous tool' },
   { id: 'canvas.tool.pen',              label: 'Pen Tool',           contexts: ['canvas'], binding: { type: 'keyboard', key: 'p' } },
   { id: 'canvas.tool.move',             label: 'Move Tool',          contexts: ['canvas'], binding: { type: 'keyboard', key: 'g' } },
   { id: 'canvas.tool.rotate',           label: 'Rotate Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'r' } },

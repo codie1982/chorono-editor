@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useEffect, useRef } from 'react'
 import type { ArrayPattern } from '@/lib/array/ArrayTypes'
 import type { ArrayAuthoringController } from '@/components/array/useArrayAuthoring'
@@ -39,6 +40,7 @@ export default function ArrayModal({ authoring }: ArrayModalProps) {
       className="pointer-events-auto absolute right-4 top-4 max-h-[calc(100vh-32px)] w-[420px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-lg border border-slate-600 bg-slate-900 p-4 text-slate-100 shadow-2xl"
       onPointerDown={event => event.stopPropagation()}>
       <div className="mb-3 flex items-start justify-between gap-3"><h2 className="text-sm font-semibold">Array {authoring.sourceCount > 1 ? `${authoring.sourceCount} selected sources` : `“${authoring.sourceName}”`}</h2>
+        <DocumentationHelp topic="editor/layers/arrays" className="ml-auto" />
         <button type="button" aria-label="Close Array" onClick={authoring.close} className="rounded px-2 py-1 hover:bg-slate-700">×</button></div>
       <div role="group" aria-label="Array pattern" className="mb-3 grid grid-cols-4 gap-1">{(['linear','grid','radial','path'] as const).map(pattern =>
         <button key={pattern} type="button" aria-label={`Array ${pattern[0].toUpperCase()}${pattern.slice(1)}`} aria-pressed={settings.pattern === pattern}

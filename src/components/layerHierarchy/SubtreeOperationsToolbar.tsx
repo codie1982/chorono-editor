@@ -1,5 +1,6 @@
 'use client'
 import { memo } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { SubtreeFlag } from '@/lib/editor/branches/SubtreeCommands'
 
 export const SUBTREE_FLAG_ACTIONS: readonly { label: string; field: SubtreeFlag; value: boolean }[] = [
@@ -32,6 +33,7 @@ function SubtreeOperationsToolbar({ selectedCount, affectedCount, hasChildren, c
       {SUBTREE_FLAG_ACTIONS.map((action, index) => <option key={action.label} value={index}
         disabled={!canSetFlag(action.field) || (action.value ? counts[action.field] === affectedCount : counts[action.field] === 0)}>{action.label}</option>)}
     </select>
+    <DocumentationHelp topic="editor/layers/scene-explorer#work-with-a-branch" compact />
   </div>
 }
 export default memo(SubtreeOperationsToolbar)

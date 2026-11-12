@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── WiringListPanel (BL-05) ───────────────────────────────────────────────────
 // All-wires-at-a-glance view. Lives as a dock panel ("Wires") alongside
 // Bindings / Properties / etc. Each wire is a card with toggle / edit /
@@ -36,6 +37,7 @@ export default function WiringListPanel({
             <span className="ml-1.5 px-1 rounded text-[9px] bg-gray-800 text-gray-500">{wires.length}</span>
           )}
         </span>
+        <DocumentationHelp topic="editor/state-machines/wires" className="ml-auto mr-1" />
         <button
           className="text-[11px] px-2 py-0.5 rounded bg-sky-800 hover:bg-sky-700 text-white"
           onClick={onCreateWire}

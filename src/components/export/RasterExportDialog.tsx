@@ -76,6 +76,7 @@ export default function RasterExportDialog({
   return (
     <BaseExportDialog
       title="Export Image"
+      helpTopic="export/images"
       onClose={onClose}
       maxWidth="max-w-md"
       footer={

@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useState } from 'react'
 import type { Composition, CompositionPreset } from '@/lib/types'
 import { COMPOSITION_PRESETS } from '@/lib/types'
@@ -52,6 +53,7 @@ export default function CompositionPresetModal({ composition, onApply, onClose }
           <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wider">
             Composition Size
           </h2>
+          <DocumentationHelp topic="editor/projects" className="ml-auto mr-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
         </div>
 

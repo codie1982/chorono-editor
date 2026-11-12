@@ -18,11 +18,12 @@ function harness(options: { context?: ShortcutContext; nudge?: boolean; active?:
   })
   let active = options.active ?? true
   const undo = vi.fn(), remove = vi.fn(), copy = vi.fn(), paste = vi.fn()
-  const nudge = vi.fn(), stepBack = vi.fn(), stepForward = vi.fn()
+  const nudge = vi.fn(), stepBack = vi.fn(), stepForward = vi.fn(), tool = vi.fn()
   useKeyboard({
     onUndo: undo, onRedo: vi.fn(), onPlayToggle: vi.fn(), onStepBack: stepBack, onStepForward: stepForward,
     onNudgeSelected: options.nudge ? nudge : undefined,
     onDeleteSelected: remove, onDuplicateSelected: vi.fn(), onCopy: copy, onPaste: paste,
+    onToolChange: tool,
     getContext: () => options.context ?? 'timeline', isTransactionActive: () => active,
   })
   const key = (name: string, metaKey = false, tagName = 'DIV', init: {
@@ -35,13 +36,22 @@ function harness(options: { context?: ShortcutContext; nudge?: boolean; active?:
     listeners.get('keydown')?.(event)
     return event
   }
-  return { undo, remove, copy, paste, nudge, stepBack, stepForward, key,
+  return { undo, remove, copy, paste, nudge, stepBack, stepForward, tool, key,
     finishDrag: () => { active = false }, setBlockingScope: (value: boolean, visible = true) => {
       blockingScope = value; scopeVisible = visible
     } }
 }
 
 describe('keyboard commands during an animation drag', () => {
+  it('dispatches M and H Pan toggles once per press and leaves inputs/context/modifiers alone', () => {
+    const h = harness({ context: 'canvas', active: false })
+    h.key('m'); h.key('m', false, 'DIV', { repeat: true }); h.key('h')
+    expect(h.tool.mock.calls).toEqual([['pan'], ['pan']])
+    h.key('m', false, 'INPUT'); h.key('m', true); h.key('m', false, 'DIV', { isComposing: true })
+    expect(h.tool).toHaveBeenCalledTimes(2)
+    const timeline = harness({ context: 'timeline', active: false })
+    timeline.key('m'); expect(timeline.tool).not.toHaveBeenCalled()
+  })
   it('blocks history/deletion/clipboard mutations until the transaction finishes', () => {
     const h = harness()
     h.key('z', true); h.key('Backspace'); h.key('c', true); h.key('v', true)

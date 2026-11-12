@@ -6,6 +6,7 @@
 // undoable makeUpdateLayerCmd commands via the mutation helpers.
 
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
 import { Vector2Input } from '@/components/inputs/Vector2Input'
 import type { Layer } from '@/lib/types'
@@ -47,6 +48,7 @@ export default function SplinePointInspector({ layer, pointId, dispatchCommand }
     <div className="border-t border-gray-700 px-3 py-2 space-y-2" data-panel="spline-point">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-gray-200 uppercase tracking-wide">Spline Point</span>
+        <DocumentationHelp topic="editor/canvas/splines" className="ml-auto mr-1" />
         <button
           onClick={() => apply(deleteSplinePoint(spline, pointId))}
           className="text-[11px] text-red-400 hover:text-red-300"

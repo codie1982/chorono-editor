@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── SegmentModal ──────────────────────────────────────────────────────────────
 // Lightweight create / edit modal for TimelineSegment. Used by the timeline
 // ruler's segment strip and the Events panel's "+ create segment" shortcut.
@@ -42,6 +43,7 @@ export default function SegmentModal({
           <h2 className="text-sm font-semibold text-gray-100">
             {isCreating ? 'Create Segment' : 'Edit Segment'}
           </h2>
+          <DocumentationHelp topic="editor/timeline/segments" className="ml-auto mr-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">
             ×
           </button>

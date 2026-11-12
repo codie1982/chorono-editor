@@ -1,6 +1,8 @@
 import Ajv from 'ajv'
 import { actionRegistry } from '../ai/ActionRegistry'
 import { bootstrapMCPActions } from './actions'
+import { EXTRA_TOOLS } from './extraTools'
+import { withBridgeParameters, withNativeToolContract } from './toolContext'
 import { layerRegistry } from '../registry'
 import { getAllParticlePresets } from '../particles/presets'
 import { assertOperation, LIMITS, MCP_VERSION, type ToolDefinition, type JsonObject } from './protocol'
@@ -8,42 +10,6 @@ import { ToolCatalogIndex } from './tools/ToolCatalogIndex'
 import { implementationToolName, type ToolCatalogProfile } from './tools/ToolCatalogPolicy'
 import { assertSourceFields, isSourceMutation, SOURCE_EDITING_CAPABILITIES } from './source/ToolSourcePolicy'
 import { nativeToolArguments } from './source/NativeArguments'
-
-const string = { type: 'string' }
-const number = { type: 'number', minimum: 0 }
-const boolean = { type: 'boolean' }
-const object = { type: 'object' }
-const extra = (name: string, description: string, properties: JsonObject = {}, required: string[] = [], readOnly = false): ToolDefinition => ({ name, description, inputSchema: { type: 'object', properties, required }, annotations: { readOnlyHint: readOnly, openWorldHint: false } })
-const extras: ToolDefinition[] = [
-  extra('list_sessions', 'List explicitly connected Chorono editor tabs. Use sessionId when several tabs are open.', {}, [], true),
-  extra('get_capabilities', 'Discover tools, object kinds, particle presets and limits. Use summary:true for lightweight discovery, toolName for one exact callable schema, or no options for the full compatibility inventory and script API.', {
-    summary: { type: 'boolean', description: 'When true, omit large tool schemas, property groups and script help. Cannot combine true with toolName.' },
-    toolName: { type: 'string', description: 'Exact canonical or historical tool name. Returns its schema and whether it can be used inside batch_actions; no editor operation runs.' },
-  }, [], true),
-  extra('get_scene', 'Read the live editor scene plus revision, selected timeline and playhead. Read before editing existing work.', {}, [], true),
-  extra('run_script', 'Execute synchronous JavaScript in isolated QuickJS. Only scene API is available; no Node, DOM, fetch, imports or filesystem. All edits are atomic. dryRun returns a planId which apply_script_plan commits without rerunning code.', { code: { type: 'string', maxLength: LIMITS.scriptBytes }, dryRun: boolean }, ['code']),
-  extra('apply_script_plan', 'Commit a previously prepared script plan exactly once, retaining generated object ids. Refuses a stale scene revision.', { planId: string }, ['planId']),
-  extra('batch_actions', 'Apply ordered native tools atomically as ONE undo step. run_script and transport/file tools cannot be nested here.', { actions: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', required: ['name', 'arguments'], properties: { name: string, arguments: object }, additionalProperties: false } } }, ['actions']),
-  extra('render_preview', 'Return an actual PNG frame. With no timeMs/timelineIds/parameters, captures the current live state including state machines. For deterministic time-based state-machine previews specify timelineIds. parameters overrides values for this frame only.', { timeMs: number, timelineIds: { type: 'array', items: string }, width: { type: 'integer', minimum: 16, maximum: 2048 }, parameters: object }, [], true),
-  extra('render_audio_preview', 'Render an actual stereo WAV preview (up to 10 seconds) through the shared audio mixer. Saves a playable WAV and returns measured peak/RMS/clipping. PNG/evaluate_frame cannot verify audio. Specify timelineIds for state-machine scenes.', { name: string, startMs: number, durationMs: { type: 'number', exclusiveMinimum: 0, maximum: 10000 }, timelineIds: { type: 'array', items: string }, sampleRate: { type: 'integer', enum: [44100, 48000] } }, [], true),
-  extra('export_audio', 'Mix the selected timeline audio to an actual stereo PCM WAV (up to 120 seconds, 24 MB). Applies gain automation, fades, pan and saved master gain. Specify timelineIds for state-machine scenes.', { name: string, startMs: number, durationMs: { type: 'number', exclusiveMinimum: 0, maximum: 120000 }, timelineIds: { type: 'array', items: string }, sampleRate: { type: 'integer', enum: [44100, 48000] } }),
-  extra('get_audio_state', 'Read live audio transport, decoded source status, effective source/gain/pan/rate and master meters. Does not mutate playback.', {}, [], true),
-  extra('normalize_audio_clip', 'Measure the trimmed source peak and set clip gain to the requested peak dBFS (default -1). Returns actual normalization gain; automation must be removed first.', { layerId: string, targetDbFS: { type: 'number', minimum: -24, maximum: 0 } }, ['layerId']),
-  extra('control_playback', 'Play, pause, stop or seek the editor; select a timeline and set speed. timelineIds isolates animations in the live viewport; [] restores all animations.', { action: { type: 'string', enum: ['play', 'pause', 'stop', 'seek'] }, timeMs: number, timelineId: string, timelineIds: { type: 'array', items: string }, speed: { type: 'number', minimum: 0.1, maximum: 4 } }, ['action']),
-  extra('control_runtime', 'Set live runtime parameters and dispatch a state-machine event. Events enable runtime test ticks so transitions/blends work while paused; testMode:false stops test ticks.', { parameters: object, event: string, machineId: string, testMode: boolean }),
-  extra('get_runtime', 'Read current runtime parameters, state-machine states, active timelines and playback state.', {}, [], true),
-  extra('evaluate_frame', 'Evaluate timelines, bindings, parameter wiring and runtime parameters at a requested time. Returns property values without rendering pixels.', { timeMs: number, timelineIds: { type: 'array', items: string }, parameters: object }, [], true),
-  extra('undo', 'Undo one editor transaction.'),
-  extra('redo', 'Redo one editor transaction.'),
-  extra('save_project', 'Save a portable scene JSON with local blob media embedded. Files stay inside the configured project directory. Returns exact path, bytes, revision and hash.', { name: string, overwrite: boolean }),
-  extra('list_projects', 'List saved project files inside the project directory.', {}, [], true),
-  extra('load_project', 'Load a saved project by file name into the current editor as one undoable change.', { name: string }, ['name']),
-  extra('export_runtime', 'Save validated and optimized runtime JSON in the export directory.', { name: string }),
-  extra('export_svg', 'Save an SVG export using the existing vector exporter.', { name: string, timeMs: number }),
-  extra('export_sequence', 'Render a frame sequence ZIP using the editor. Bounded to 300 frames per call. Does not include audio.', { name: string, fps: { type: 'number', minimum: 1, maximum: 60 }, timelineIds: { type: 'array', items: string } }),
-  extra('import_asset', 'Import media as base64 using the existing import pipeline. Audio is placed in the requested/current timeline at the requested/current playhead as one undoable operation. No arbitrary local paths or server-side URL fetches.', { name: string, mimeType: string, data: { type: 'string', maxLength: 16 * 1024 * 1024 }, timelineId: string, startMs: number }, ['name', 'mimeType', 'data']),
-  extra('validate_scene', 'Validate scene structure and return runtime-export diagnostics.', {}, [], true),
-]
 
 export const SCRIPT_HELP = `Chorono SceneAPI ${MCP_VERSION}. The outer run_script call requires expectedRevision/readToken from get_scene. A dry run returns a NEW plan-bound readToken and revision for apply_script_plan; never rerun code to commit a plan. These authorization fields are not SceneAPI methods or scene data.
 Scripts are synchronous authoring operations; they create editable layers/tracks rather than running every playback frame.
@@ -84,14 +50,11 @@ let catalogPromise: Promise<ToolCatalogIndex> | undefined
  * belong to ActionRegistry. Both advertised and historical calls use it. */
 function getCatalogIndex(): Promise<ToolCatalogIndex> {
   return catalogPromise ??= bootstrapMCPActions().then(() => {
-    const special = new Set(extras.map(t => t.name))
-    const tools = [...actionRegistry.toMCPTools().filter(t => !special.has(t.name)).map(t => ({ ...t, annotations: { readOnlyHint: !!actionRegistry.get(t.name)?.read, openWorldHint: false } })), ...extras]
-    return new ToolCatalogIndex(tools.map(t => ({ ...t, inputSchema: { ...t.inputSchema, properties: { ...t.inputSchema.properties,
-      sessionId: { type: 'string', description: 'Connected editor id from list_sessions. Required when more than one editor is connected; not used by local catalog discovery.' },
-      expectedRevision: { type: 'integer', minimum: 0, description: 'Required for source changes: revision from the same get_scene read as readToken. Script plan commit uses its returned revision. Read/runtime/export calls do not require it.' },
-      readToken: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Required one-use source-read capability from get_scene in this MCP connection/editor. For apply_script_plan use the token returned by its dry run. Native batches authorize only the outer call. Never store in scene data or logs.' },
-      requestId: { type: 'string', maxLength: 128, description: 'Optional retry key. Repeat the exact same tool name and arguments to reuse a bounded cached result; do not reuse for a different operation.' },
-    }, required: [...(t.inputSchema.required ?? []), ...(isSourceMutation(t.name) ? ['expectedRevision', 'readToken'] : [])], additionalProperties: false } })))
+    const special = new Set(EXTRA_TOOLS.map(t => t.name))
+    const native = actionRegistry.toMCPTools()
+      .filter(tool => !special.has(tool.name))
+      .map(tool => withNativeToolContract(tool, !!actionRegistry.get(tool.name)?.read))
+    return new ToolCatalogIndex([...native, ...EXTRA_TOOLS].map(withBridgeParameters))
   })
 }
 

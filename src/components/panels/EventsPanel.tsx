@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── EventsPanel ───────────────────────────────────────────────────────────────
 // Visual editor for ChronoScene.triggers. Each trigger is a "rule card":
 //
@@ -50,6 +51,7 @@ export default function EventsPanel({ scene, editor }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Events
         </span>
+        <DocumentationHelp topic="editor/state-machines/events" className="ml-auto mr-1" />
         <button
           onClick={() => editor.dispatchCommand(makeAddTriggerCmd(newTrigger()))}
           className="text-[11px] px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"

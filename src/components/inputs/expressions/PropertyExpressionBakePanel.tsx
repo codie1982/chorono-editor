@@ -1,6 +1,7 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useState } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { ChronoScene } from '@/lib/types'
 import type { NumericPropertyInput } from './NumericPropertyContext'
 import { preparePropertyExpressionBake, type PreparedPropertyExpressionBake } from '@/lib/expression/properties/preparePropertyExpressionBake'
@@ -31,7 +32,7 @@ export function PropertyExpressionBakePanel({ input, source, onApplied }: { inpu
     } catch (failure) { setError((failure as Error).message) }
   }
   return <fieldset className="mt-3 rounded border border-gray-600 p-2 text-xs">
-    <legend>Bake saved expression</legend>
+    <legend>Bake saved expression <DocumentationHelp topic="editor/timeline/controllers#bake-a-live-expression-to-keyframes" compact /></legend>
     <p className="mb-2 text-gray-400">Captures current parameters into {discrete ? 'hold' : 'linear'} keys on a new composition-time timeline. Replaces this live driver; other channels and authored fallback stay.</p>
     <p className="mb-2 text-gray-400">Outside the sampled range, the first/last baked value holds. The live driver is removed globally.</p>
     <div className="grid grid-cols-2 gap-2">

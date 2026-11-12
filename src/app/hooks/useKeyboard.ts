@@ -30,7 +30,7 @@ interface Handlers {
   onCloneQuick?: () => void
   /** BL-59 — Open Array dialog (Cmd/Ctrl + Shift + A). */
   onOpenArrayModal?: () => void
-  /** Single-key tool shortcuts (V/H/P/G/R/S/A). No-op if absent. */
+  /** Single-key tool shortcuts (V/M/H/P/G/R/S/A). Pan is a toggle request. No-op if absent. */
   onToolChange?: (mode: ToolMode) => void
   /** Timeline context — reveal a property track (P/S/R/T) or all keyed (U). */
   onTimelineShowProperty?: (prop: TimelineProperty | 'all') => void
@@ -54,6 +54,7 @@ interface Handlers {
 const TOOL_BY_ID: Record<string, ToolMode> = {
   'canvas.tool.select':         'select',
   'canvas.tool.pan':            'pan',
+  'canvas.tool.panLegacy':      'pan',
   'canvas.tool.pen':            'pen',
   'canvas.tool.move':           'move',
   'canvas.tool.rotate':         'rotate',
@@ -169,7 +170,9 @@ export function useKeyboard(handlers: Handlers) {
         : actions[id] ?? scopedShortcutAction(id)
       if (!action) return
       e.preventDefault()
+      // Holding a toggle key must not alternate tools on native key repeat.
       if (e.repeat && id === 'timeline.keyframe.set') return
+      if (e.repeat && (id === 'canvas.tool.pan' || id === 'canvas.tool.panLegacy')) return
       if (isTransactionActive?.()) return
       action()
     }

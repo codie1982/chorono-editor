@@ -1,4 +1,5 @@
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { MotionEditorMode } from './types'
 
 const button = 'min-h-8 rounded border border-slate-600 px-2 text-xs text-slate-100 hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-40'
@@ -23,6 +24,7 @@ export function MotionKeyToolbar(props: Props) {
     <button type="button" className={`${button} ${mode !== 'off' ? 'bg-sky-800 border-sky-400' : 'bg-slate-900'}`}
       aria-label="Motion Keys" aria-pressed={mode !== 'off'} disabled={!timelineId}
       onClick={() => onModeChange(mode === 'off' ? 'select' : 'off')}>Motion Keys</button>
+    <DocumentationHelp topic="editor/canvas/motion-keys" compact />
     {mode !== 'off' && <>
       <span className="text-xs text-slate-300 px-1">{timelineId} · {selectedCount} selected</span>
       {([

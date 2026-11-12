@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 /**
  * BL-52 — Scene Explorer Panel
  *
@@ -408,6 +409,7 @@ export default function SceneExplorerPanel({
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gray-700 shrink-0">
         <span className="text-[10px] font-mono uppercase text-gray-500">Scene Explorer</span>
+        <DocumentationHelp topic="editor/layers/scene-explorer" compact />
         <LayerVisibilityPanel
           filters={visibilityFilters}
           onChange={setVisibilityFilters}

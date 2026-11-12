@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── ChronoPlayerPanel ─────────────────────────────────────────────────────────
 // Live runtime preview using the web-SDK player. Renders the scene through
 // ChronoPlayer (via <ChoronoView>) on its own canvas — exactly what the export
@@ -45,6 +46,7 @@ export default function ChronoPlayerPanel({ scene, assets }: Props) {
           Runtime Player
         </span>
         <div className="flex items-center gap-1">
+          <DocumentationHelp topic="editor/preview" />
           <button
             onClick={togglePlay}
             className="text-[11px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200"

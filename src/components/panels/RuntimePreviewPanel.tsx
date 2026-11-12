@@ -1,6 +1,7 @@
 'use client'
 import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── RuntimePreviewPanel ───────────────────────────────────────────────────────
 // Builder-side interactive preview. Lets the author exercise the runtime
 // without leaving Chorono:
@@ -43,6 +44,7 @@ export default function RuntimePreviewPanel({ scene, runtime }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Runtime Preview
         </span>
+        <DocumentationHelp topic="editor/preview" className="ml-auto mr-1" />
         <button
           onClick={runtime.resetParams}
           className="text-[10px] text-gray-400 hover:text-gray-200"

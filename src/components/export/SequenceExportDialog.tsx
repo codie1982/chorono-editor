@@ -67,6 +67,7 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
   return (
     <BaseExportDialog
       title="Export Image Sequence"
+      helpTopic="export/sequence"
       onClose={onClose}
       maxWidth="max-w-md"
       footer={

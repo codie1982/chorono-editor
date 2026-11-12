@@ -4,6 +4,8 @@ import { flushSync } from 'react-dom'
 import SceneCanvas from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
+import { useToolMode } from '@/app/hooks/useToolMode'
+import { useKeyboard } from '@/app/hooks/useKeyboard'
 import { useEditorState, type EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useAssetCache } from '@/app/hooks/useAssetCache'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
@@ -32,7 +34,11 @@ function source(): ChronoScene {
  * tools must not be mistaken for a missing pointer-up from the earlier drag. */
 function Subject({ properties = false }: { properties?: boolean }) {
   const editor = useEditorState(source()), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
-  const [selected, select] = useState<string | null>(properties ? 'moving' : null), [mode, setMode] = useState<ToolMode>('select')
+  const [selected, select] = useState<string | null>(properties ? 'moving' : null)
+  const { mode, setMode, setPan, chooseTool } = useToolMode()
+  useKeyboard({ onUndo: editor.undo, onRedo: editor.redo, onPlayToggle: () => {}, onStepBack: () => {}, onStepForward: () => {},
+    onDeleteSelected: () => {}, onDuplicateSelected: () => {}, onToolChange: chooseTool, getContext: () => 'canvas',
+    isTransactionActive: editor.isTransactionActive })
   const ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
   const disarmLoss = useRef<(() => void) | undefined>()
   useEffect(() => () => disarmLoss.current?.(), [])
@@ -51,6 +57,7 @@ function Subject({ properties = false }: { properties?: boolean }) {
     return () => events.forEach(type => window.removeEventListener(type, observe, true))
   }, [editor.getScene, editor.getRevision, editor.isTransactionActive])
   return <><nav><button onClick={() => setMode('select')}>Select tool</button><button onClick={() => setMode('pan')}>Pan tool</button>
+    <button onClick={() => setMode('rotate')}>Rotate tool</button>
     <button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button>
     <button onClick={() => { const viewport = host.querySelector('[data-testid="canvas-viewport"]'); assert(viewport, 'Missing viewport')
       viewport.addEventListener('pointerup', event => event.stopPropagation(), { once: true }) }}>Consume next pointer-up bubble</button>
@@ -69,7 +76,7 @@ function Subject({ properties = false }: { properties?: boolean }) {
     <output>Mode {mode} · Layers {editor.scene.layers.length} · Undo {String(editor.canUndo)} · Transaction {String(editor.isTransactionActive())}</output>
     <div style={{ display: 'flex', height: 650 }}><section data-panel="canvas" style={{ display: 'flex', position: 'relative', flex: 1, minWidth: 0 }}>
       <SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} selectedLayerId={selected} selectedLayerIds={ids}
-        timeMs={0} toolMode={mode} panMode={mode === 'pan'} onPanModeChange={next => setMode(next ? 'pan' : 'select')}
+        timeMs={0} toolMode={mode} panMode={mode === 'pan'} onPanModeChange={setPan}
         onToolModeChange={setMode} onSelectLayer={id => select(id)} selectedTimeline={editor.scene.timelines[0]} />
     </section>{properties && <aside data-panel="properties" style={{ display: 'flex', width: 280, minHeight: 0 }}>
       <PropertiesPanel layer={editor.scene.layers.find(layer => layer.id === selected) ?? null} scene={editor.scene}
@@ -238,6 +245,41 @@ async function propertyDraftChecks(mount: (properties?: boolean) => Promise<void
     { synchronizedText, externalSource: external.layers })
 }
 
+/** Pan toggles share the page's tool owner. Public viewport controls must retain
+ * their pointer/click gestures while Pan is active; overlays remain decorative. */
+async function panControlChecks(mount: (properties?: boolean) => Promise<void>) {
+  await mount(); await click('Rotate tool')
+  const hand = 'Pan mode — drag the view instead of objects (middle-mouse always pans)'
+  await click(hand)
+  check('Pan pill enters Pan from Rotate', state().mode === 'pan', { mode: state().mode })
+  pointer(canvas(), 'pointermove', client({ x: 250, y: 180 }), 0); await frames()
+  check('Pan hides cursor point, crosshair and ruler tracking', !host.querySelector('[data-testid="canvas-cursor-crosshair"],[data-testid="canvas-cursor-point"],[data-testid="ruler-cursor-x"],[data-testid="ruler-cursor-y"]'), {})
+  const before = rect().width
+  const zoom = control('Zoom in (Cmd+scroll)'), box = zoom.getBoundingClientRect()
+  const event = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 71, pointerType: 'mouse',
+    button: 0, buttons: 1, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 })
+  flushSync(() => zoom.dispatchEvent(event)); await frames()
+  check('Pan does not capture/prevent viewport control pointerdown', !event.defaultPrevented, {})
+  pointer(zoom, 'pointerup', { x: box.left + box.width / 2, y: box.top + box.height / 2 }, 0, 71)
+  await click('Zoom in (Cmd+scroll)')
+  check('Zoom in works in Pan', rect().width > before && state().mode === 'pan', { before, after: rect().width })
+  await click('Reset to 100% + recentre')
+  check('Percentage reset works in Pan', Math.abs(rect().width - 640) < 1 && state().mode === 'pan', { width: rect().width })
+  await click('Zoom out (Cmd+scroll)')
+  check('Zoom out works in Pan', rect().width < 640, { width: rect().width })
+  await click(hand)
+  check('Pan pill restores the previous Rotate tool', state().mode === 'rotate', { mode: state().mode })
+  const press = async (key: string, repeat = false) => {
+    flushSync(() => canvas().dispatchEvent(new KeyboardEvent('keydown', { key, repeat, bubbles: true, cancelable: true }))); await frames()
+  }
+  await press('m'); await press('m', true)
+  check('M enters Pan and ignores held-key repeats', state().mode === 'pan', { mode: state().mode })
+  await press('m')
+  check('M again restores Rotate', state().mode === 'rotate', { mode: state().mode })
+  await press('h'); await press('h')
+  check('H remains an alternate Pan toggle', state().mode === 'rotate', { mode: state().mode })
+}
+
 /** Standalone QA with real production scene/selection/guide/property adapters.
  * Observational failures remain visible so before/after evidence can be saved. */
 async function main() {
@@ -249,6 +291,7 @@ async function main() {
   inspect.onclick = () => { void mount(true) }
   run.onclick = async () => { run.disabled = inspect.disabled = true; checks.length = 0; document.getElementById('checks')!.textContent = ''; const start = performance.now()
     try { document.getElementById('status')!.textContent = 'Running pointer lifecycle checks…'
+      await panControlChecks(mount)
       await ordinaryChecks(mount); await stalePanObjectChecks(mount); await stalePanGuideChecks(mount); await foreignPointerChecks(mount)
       await focusedInputChecks(mount); await propertyDraftChecks(mount); await captureLossChecks(mount)
       const passed = checks.every(check => check.passed)

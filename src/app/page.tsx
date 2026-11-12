@@ -19,6 +19,7 @@ import { sameKeyTime } from '@/lib/timeline/authoring/keyTimePolicy'
 import { authoringTime } from '@/lib/timeline/authoring/timelineNavigation'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
+import { useToolMode }         from './hooks/useToolMode'
 import type { TimelineProperty } from './hooks/useKeyboard'
 import type { ShortcutContext } from '@/lib/shortcuts'
 import { deletionTargetForPanel, panelFromAttribute, shortcutContextForPanel, type EditorPanel } from '@/lib/editor/keyboardContext'
@@ -194,7 +195,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const selectedLayerIds = useMemo(() => new Set(layerSelection.selectedIds), [layerSelection.selectedIds])
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
-  const [toolMode, setToolMode] = useState<ToolMode>('select')
+  const { mode: toolMode, setMode: setToolMode, setPan: setPanMode, togglePan, chooseTool } = useToolMode()
   const [manualPreview, setManualPreview] = useState(false)
   /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
   const [splinePointId, setSplinePointId] = useState<string | null>(null)
@@ -1248,7 +1249,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     // BL-59 — Clone & Array shortcuts
     onCloneQuick:      cloneQuick,
     onOpenArrayModal:  openArrayModal,
-    onToolChange:      setToolMode,
+    onToolChange:      chooseTool,
     onTimelineToggleKeyframe: toggleTimelineKeyframe,
     onTimelinePrevKeyframe:   () => seekToKeyframe('prev'),
     onTimelineNextKeyframe:   () => seekToKeyframe('next'),
@@ -1331,6 +1332,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         <ToolGroup
           mode={toolMode}
           onChange={setToolMode}
+          onPanToggle={togglePan}
           penAuto={!!(scene.layers.find(l => l.id === selectedLayerId)?.type === 'path')}
           containMode={selectionContainMode}
           onContainModeChange={setSelectionContainMode}
@@ -1605,7 +1607,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       }
                     }}
                     panMode={toolMode === 'pan'}
-                    onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
+                    onPanModeChange={setPanMode}
                     toolMode={toolMode}
                     onToolModeChange={setToolMode}
                     splineDrawKind={splineDrawKind}

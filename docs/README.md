@@ -4,6 +4,8 @@
 
 ## Releases / Sürümler
 
+- [v0.3.0 release notes](releases/v0.3.0.md) / [Türkçe sürüm notları](tr/releases/v0.3.0.md)
+- [v0.3.0 validation and limitations](releases/v0.3.0-validation.md)
 - [v0.2.0 release notes](releases/v0.2.0.md) / [Türkçe sürüm notları](tr/releases/v0.2.0.md)
 - [v0.2.0 validation and measurement scope](releases/v0.2.0-validation.md)
 - [Changelog](../CHANGELOG.md)

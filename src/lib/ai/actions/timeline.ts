@@ -14,6 +14,7 @@ interface CreateTimelineParams {
   pingPong?: boolean
 }
 
+/** Register timeline creation with explicit ids and default playback settings. */
 export function registerTimelineActions(reg: ActionRegistry): void {
   reg.register<CreateTimelineParams>({
     id: 'timeline.create',

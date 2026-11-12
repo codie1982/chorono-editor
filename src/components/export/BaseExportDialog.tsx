@@ -1,5 +1,7 @@
 'use client'
 import type { ReactNode } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import type { DocumentationTopic } from '@/components/help/documentation'
 
 /** Labelled section used inside export dialogs. */
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -13,6 +15,8 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 
 interface Props {
   title: string
+  /** Guide for this output format; opening it never closes the dialog. */
+  helpTopic: DocumentationTopic
   onClose: () => void
   /** Block overlay + ✕ close (e.g. while an export is running). */
   closeDisabled?: boolean
@@ -27,10 +31,10 @@ interface Props {
 /**
  * Shared modal shell for export dialogs (raster / SVG / sequence): backdrop,
  * centred panel, header with ✕, body, and a right-aligned footer. Each dialog
- * supplies only its own options + action buttons.
+ * supplies its own options, action buttons and format-specific help topic.
  */
 export default function BaseExportDialog({
-  title, onClose, closeDisabled = false, maxWidth = 'max-w-md', children, footer,
+  title, helpTopic, onClose, closeDisabled = false, maxWidth = 'max-w-md', children, footer,
 }: Props) {
   return (
     <div
@@ -43,6 +47,7 @@ export default function BaseExportDialog({
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wider">{title}</h2>
+          <DocumentationHelp topic={helpTopic} className="ml-auto mr-2" />
           <button
             onClick={onClose}
             disabled={closeDisabled}

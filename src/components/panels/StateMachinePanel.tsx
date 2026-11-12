@@ -1,5 +1,6 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── StateMachinePanel (BL-09 Sprint 3) ───────────────────────────────────────
 // SVG node-graph editor for interactive state machines. Lives in the
 // `canvas-leaf` dock tab next to the canvas (toggled by the toolbar sub-mod).
@@ -98,7 +99,8 @@ function Header({
           ))}
         </select>
       )}
-      <div className="ml-auto flex gap-1">
+      <div className="ml-auto flex items-center gap-1">
+        <DocumentationHelp topic="editor/state-machines" compact />
         <button
           onClick={() => editor.dispatchCommand(makeCreateSMCmd())}
           className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"

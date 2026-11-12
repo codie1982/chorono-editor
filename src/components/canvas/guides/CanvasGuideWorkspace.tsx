@@ -19,6 +19,8 @@ export interface CanvasGuideWorkspaceProps {
   showRulers: boolean
   showGuides: boolean
   enabled: boolean
+  /** Pan navigation does not need the decorative cursor point/crosshair. */
+  cursorEnabled?: boolean
   onWarning?: (message: string) => void
 }
 
@@ -34,7 +36,7 @@ export interface CanvasGuideWorkspaceProps {
 export function CanvasGuideWorkspace(props: CanvasGuideWorkspaceProps) {
   const { canvasRef, containerEl, composition, zoom, pan, selectedRect, showRulers, showGuides, enabled } = props
   const editing = useCanvasGuideEditing(props)
-  const cursor = useViewportCursor(containerEl, canvasRef, enabled && showRulers, `${zoom}:${pan.x}:${pan.y}`)
+  const cursor = useViewportCursor(containerEl, canvasRef, enabled && showRulers && props.cursorEnabled !== false, `${zoom}:${pan.x}:${pan.y}`)
   const frame = useCanvasViewportMetrics(containerEl, canvasRef.current, composition, zoom, pan)
   const sx = cursor ? frame.originX + cursor.x * frame.scaleX : 0
   const sy = cursor ? frame.originY + cursor.y * frame.scaleY : 0
