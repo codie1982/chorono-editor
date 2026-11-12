@@ -1,7 +1,7 @@
 import type { LayerDefinition } from '../../registry/LayerDefinition'
 import type { PropertyGroup, PropertySchema } from '../../registry/PropertySchema'
 import { transformGroup, appearanceGroup, sizeGroup } from '../../registry/definitions/sharedSchemas'
-import { newModelLayer } from './modelDefaults'
+import { MAX_MODEL_BOX_SIDE, newModelLayer } from './modelDefaults'
 /** Numeric schema shared by Properties, MCP introspection and typed animation.
  * Bounds are source capabilities, not a promise of a full 3D workspace. */
 function number(path: string, label: string, value: number, min?: number, max?: number): PropertySchema {
@@ -10,9 +10,9 @@ function number(path: string, label: string, value: number, min?: number, max?: 
 /** Finished first-slice layer definition: ordinary 2D box plus distinct 3D
  * presentation coordinates. New placeholders show an explicit import prompt. */
 export const modelDefinition: LayerDefinition = {
-  kind: 'model3d', label: '3D Model', iconKey: 'group', category: 'Media', propertyGroupsAreStatic: true,
+  kind: 'model3d', label: '3D Model', iconKey: 'group', category: '3D Objects', propertyGroupsAreStatic: true,
   createDefault: () => newModelLayer(`model3d_${crypto.randomUUID()}`),
-  getPropertyGroups: (): PropertyGroup[] => [transformGroup(), appearanceGroup(), { ...sizeGroup(), schemas: sizeGroup().schemas.map(schema => ({ ...schema, max: 4096 })) },
+  getPropertyGroups: (): PropertyGroup[] => [transformGroup(), appearanceGroup(), { ...sizeGroup(), title: '2D Model Box · px', schemas: sizeGroup().schemas.map(schema => ({ ...schema, max: MAX_MODEL_BOX_SIDE })) },
     { title: '3D Model · presentation units', schemas: [
       ...['x', 'y', 'z'].map(axis => number(`position.${axis}`, `Position ${axis.toUpperCase()}`, 0)),
       ...['x', 'y', 'z'].map(axis => number(`rotation.${axis}`, `Rotation ${axis.toUpperCase()} (deg)`, 0)),

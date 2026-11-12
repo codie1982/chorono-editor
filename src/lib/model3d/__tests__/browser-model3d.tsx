@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import SceneCanvas from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
+import LayerPanel from '@/components/LayerPanel'
 import { useEditorState, type EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useAssetCache } from '@/app/hooks/useAssetCache'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
@@ -39,13 +40,24 @@ function Host() {
   const state = useEditorState(initial), assets = useAssetCache(state.scene.assets, { managed: true }), snap = useSnapSettings()
   const [selected, select] = useState<string | null>('test-model'), ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
   useLayoutEffect(() => { editor = state; (window as any).modelTest = { editor: state, assets, selected } })
-  return <div className="flex h-screen bg-gray-900 text-gray-100">
+  const importModel = async (file: File) => {
+    const result = await new ModelHandler().handle(file)
+    state.dispatchCommand(new ImportTransactionBuilder().build(result))
+    select(result.layers[0].id)
+  }
+  return <div className="flex h-screen bg-gray-900 text-gray-100" style={{ minWidth: 1200 }}>
+    <div className="w-64 shrink-0"><LayerPanel layers={state.scene.layers} selectedId={selected} selectedIds={ids} onSelect={id => select(id)}
+      onAdd={() => {}} onAddImage={() => {}} onAddVideo={() => {}} onAddAudio={() => {}}
+      onImportModel={file => void importModel(file).catch(error => { status.textContent = String(error) })}
+      onDelete={() => {}} onReorder={() => {}} onToggleFlag={() => {}} onRename={() => {}} /></div>
     <div className="flex flex-col flex-1 min-w-0 min-h-0"><div className="flex flex-1 min-h-0"><SceneCanvas scene={state.scene} editor={state} assets={assets} snap={snap}
       selectedLayerId={selected} selectedLayerIds={ids} onSelectLayer={select} timeMs={0} toolMode="select" isPlaying={false} /></div><div className="shrink-0 max-h-36 overflow-auto">
       <output id="source-state" className="block text-xs break-all">{JSON.stringify({ layers: state.scene.layers.length, model: state.scene.layers.find(layer => layer.id === 'test-model'), revision: state.getRevision() })}</output>
       <pre id="trace" className="hidden">{JSON.stringify(trace.records.slice(-8))}</pre>
       <button id="run" onClick={() => (window as any).runModelChecks().catch((error: Error) => { status.textContent = `FAILED: ${error.message}` })}>Run acceptance checks</button>
       <button id="camera-checks" onClick={() => (window as any).runCameraChecks().catch((error: Error) => { status.textContent = `FAILED: ${error.message}` })}>Run camera checks</button>
+      <button id="box-checks" onClick={() => (window as any).runBoxChecks().catch((error: Error) => { status.textContent = `FAILED: ${error.message}` })}>Run box checks</button>
+      <button id="robot-demo" onClick={() => void fetch('chorono-robot.glb').then(response => { if (!response.ok) throw new Error('Demo model could not be loaded.'); return response.blob() }).then(blob => importModel(new File([blob], 'Chorono robot.glb', { type: 'model/gltf-binary' }))).catch(error => { status.textContent = String(error) })}>Load robot demo</button>
       <button id="undo" onClick={state.undo}>Undo</button><button id="redo" onClick={state.redo}>Redo</button></div>
     </div>
     <div className="w-80 overflow-y-auto"><PropertiesPanel layer={state.scene.layers.find(layer => layer.id === selected) ?? null} scene={state.scene}
@@ -142,6 +154,34 @@ createRoot(document.getElementById('app')!).render(<Host />)
   const before = structuredClone(source()); await drag(25, 15)
   assert(JSON.stringify(source().model3d) === JSON.stringify(before.model3d), 'Camera-off 2D dragging preserves all internal 3D settings')
   assert(source().transform.x !== before.transform.x || source().transform.y !== before.transform.y, 'Camera-off first drag moves the 2D layer')
+  flushSync(() => editor.undo()); await frame()
+  status.textContent = checks.join('\n'); return checks
+}
+
+/** Resize the actual selected model through native handle sessions. This checks
+ * release/Undo/Redo and 3D source preservation, not just pure resize arithmetic. */
+;(window as any).runBoxChecks = async () => {
+  const checks: string[] = [], assert = (ok: unknown, label: string) => { if (!ok) throw new Error(label); checks.push(label) }
+  const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  const toggle = document.querySelector<HTMLButtonElement>('[aria-label="3D camera controls"] button')
+  if (toggle?.getAttribute('aria-pressed') === 'true') { flushSync(() => toggle.click()); await frame() }
+  const before = structuredClone(editor.getScene()), id = (window as any).modelTest.selected as string
+  const original = before.layers.find(layer => layer.id === id)!
+  const handle = document.querySelector<HTMLElement>('[data-testid="selection-frame"] [data-handle="se"]')
+  assert(!!handle, 'Selected model has a visible resize handle with camera mode off')
+  const rect = handle!.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2
+  const event = (type: string, dx: number, dy: number, buttons: number) => new PointerEvent(type, { pointerId: 9, pointerType: 'mouse', isPrimary: true, button: 0, buttons, clientX: x + dx, clientY: y + dy, bubbles: true })
+  flushSync(() => handle!.dispatchEvent(event('pointerdown', 0, 0, 1)))
+  flushSync(() => window.dispatchEvent(event('pointermove', 60, -30, 1)))
+  flushSync(() => window.dispatchEvent(event('pointerup', 60, -30, 0))); await frame()
+  const changed = editor.getScene().layers.find(layer => layer.id === id)!
+  assert(changed.size!.width > original.size!.width && changed.size!.height < original.size!.height, 'First pointer-up commits independently editable width and height')
+  assert(JSON.stringify(changed.model3d) === JSON.stringify(original.model3d), 'Box resize preserves internal model, camera and asset')
+  assert(JSON.stringify(editor.getScene().timelines) === JSON.stringify(before.timelines), 'Box resize preserves existing animation tracks')
+  flushSync(() => editor.undo()); await frame()
+  assert(JSON.stringify(editor.getScene()) === JSON.stringify(before), 'One Undo restores the complete original scene')
+  flushSync(() => editor.redo()); await frame()
+  assert(JSON.stringify(editor.getScene().layers.find(layer => layer.id === id)!.size) === JSON.stringify(changed.size), 'Redo restores the resized model box')
   flushSync(() => editor.undo()); await frame()
   status.textContent = checks.join('\n'); return checks
 }

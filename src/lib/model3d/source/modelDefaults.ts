@@ -1,6 +1,8 @@
 import type { Layer } from '../../types'
 import { DEFAULT_TRANSFORM } from '../../defaults'
 import type { Model3DData } from '../types'
+/** Source box dimensions in composition pixels, independently of GPU surface resolution. */
+export const MAX_MODEL_BOX_SIDE = 4096
 /** Fresh owned source defaults; camera points at the imported framing center. */
 export function modelDefaults(assetId = ''): Model3DData {
   return { version: 1, assetId, position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: 1,

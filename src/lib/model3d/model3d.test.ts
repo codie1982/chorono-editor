@@ -68,6 +68,14 @@ describe('native 3D integration', () => {
     expect(cameraIsDriven(scene, layer)).toBe(false)
     expect(cameraIsDriven(scene, { ...layer, paramBindings: { 'model3d.camera.yaw': 'yaw' } })).toBe(true)
     expect(cameraIsDriven(scene, { ...layer, paramBindings: { 'model3d.position.x': 'x' } })).toBe(false)
+    const animated: ChronoScene = { ...scene, timelines: [{ id: 'model-motion', durationMs: 1000, autoplay: false, loop: false,
+      tracks: [{ target: 'layers.model.model3d.rotation.y', keyframes: [{ id: 'rotation', timeMs: 0, value: 30, easing: { type: 'linear' } }] }] }] }
+    const before = JSON.stringify(animated)
+    expect(cameraIsDriven(animated, layer)).toBe(false)
+    const cameraKeys: ChronoScene = { ...animated, timelines: animated.timelines.map(timeline => ({ ...timeline,
+      tracks: timeline.tracks.map(track => ({ ...track, target: 'layers.model.model3d.camera.yaw' })) })) }
+    expect(cameraIsDriven(cameraKeys, layer)).toBe(true)
+    expect(JSON.stringify(animated)).toBe(before)
   })
 })
 

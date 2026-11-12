@@ -194,6 +194,12 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
     ],
   },
   {
+    title: '3D Objects',
+    items: [
+      { label: 'Import GLB / glTF', type: 'model3d', icon: 'group', available: true },
+    ],
+  },
+  {
     title: 'Path & Vector',
     items: [
       { label: 'Path Stroke',  type: 'pathStroke',   icon: 'motionPath',   available: true  },
@@ -215,7 +221,6 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
   {
     title: 'Media',
     items: [
-      { label: '3D Model (GLB/glTF)', type: 'model3d', icon: 'group', available: true },
       { label: 'Image',    type: 'image', icon: 'image', available: true },
       { label: 'Video',    type: 'video', icon: 'video', available: true },
       { label: 'Audio',    type: 'audio', icon: 'audio', available: true },

@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ModelAssetService } from './resources/ModelAssetService'
 import { binaryGlbBytes, triangleDocument } from './__tests__/fixtures'
+import { readFile } from 'node:fs/promises'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 /** Actual GLTFLoader and ownership stack, with only the unavailable Node native
  * bitmap decoder replaced by controllable settlement. No GPU/context is used. */
 describe('3D failed preparation ownership', () => {
+  it('prepares the shipped self-contained robot using the actual loader and releases it', async () => {
+    vi.stubGlobal('ProgressEvent', class extends Event { constructor(type: string, init: object) { super(type); Object.assign(this, init) } })
+    const bytes = await readFile(new URL('../../../examples/3d/chorono-robot.glb', import.meta.url)), service = new ModelAssetService()
+    const pin = await service.acquire({ id: 'robot', name: 'chorono-robot.glb', type: 'model3d', url: `data:model/gltf-binary;base64,${bytes.toString('base64')}` })
+    try { expect(pin.value.bytes).toBeGreaterThan(bytes.length) }
+    finally { pin.release(); service.clearIdle() }
+    expect(service.getSnapshot().residency.chargedBytes).toBe(0)
+  })
   it('prepares a GLB BIN chunk with transformed parent hierarchy through the actual loader', async () => {
     vi.stubGlobal('ProgressEvent', class extends Event { constructor(type: string, init: object) { super(type); Object.assign(this, init) } })
     const bytes = new Uint8Array(binaryGlbBytes()), service = new ModelAssetService()

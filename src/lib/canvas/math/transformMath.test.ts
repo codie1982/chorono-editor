@@ -143,4 +143,11 @@ describe('resizeMath.calculateResize', () => {
     expect(r.width).toBe(110)
     expect(r.height).toBe(121)
   })
+
+  it('caps a source capability while retaining the original aspect ratio', () => {
+    const r = calculateResize({ ...base, width: 200, height: 100, boundsWidth: 1e6, boundsHeight: 1e6,
+      handle: 'se', dx: 10000, dy: 0, proportional: true, maxSize: 4096 })
+    expect(r.width).toBe(4096); expect(r.height).toBe(2048)
+    expect(() => calculateResize({ ...base, handle: 'se', maxSize: 3 })).toThrow(RangeError)
+  })
 })

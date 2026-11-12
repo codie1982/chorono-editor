@@ -1679,12 +1679,12 @@ export default function SceneCanvas({
       </div>}
 
       <ViewportPerformanceOverlay />
-      {!hideEditorUI && <ModelCameraToolbar camera={modelCamera} />}
 
       {/* Bottom-right controls: zoom pill */}
       <div data-viewport-cursor-block role="toolbar" aria-label="Viewport controls"
         onPointerDown={event => event.stopPropagation()}
-        className="absolute bottom-3 right-3 z-30 flex items-center gap-2 select-none">
+        className="absolute bottom-3 right-3 z-30 max-w-[calc(100%-24px)] flex flex-wrap items-center justify-end gap-2 select-none">
+        {!hideEditorUI && <ModelCameraToolbar camera={modelCamera} />}
         {/* Zoom + pan pill */}
         <div className="flex items-center gap-1 bg-gray-900 border border-gray-700
                         rounded px-2 py-1 text-xs font-mono text-gray-300">

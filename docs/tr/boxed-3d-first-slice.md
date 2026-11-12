@@ -6,14 +6,19 @@ Bu belge ilk dilimin gerçek sözleşmesidir; tam 3D workspace/solver planı de�
 
 ## Kullanım
 
-1. Layers → Add → Media → **3D Model (GLB/glTF)** veya Project → Import File ile
+1. Layers → Add → **3D Objects → Import GLB / glTF** veya Project → Import File ile
    bir GLB 2 / kaynakları içine gömülü glTF 2 dosyası seçin.
 2. İçe aktarılan `model3d` katmanı normal 2D kompozisyon içinde bir kutudur.
    Kamera aracı kapalıyken sürükleme dış kutunun X/Y konumunu değiştirir.
+   Select modunda sekiz kenar/köşe tutamacı Width / Height değerlerini değiştirir;
+   Properties → **2D Model Box · px** aynı boyutların sayısal alternatifidir.
+   Kutu aspect/framing'ini değiştirmek iç model pose veya kamera verisini ezmez.
+   Mouse boyutlandırması 4..4096 px aralığında, ortak resize/session/tek Undo
+   akışıyla çalışır; source capability sınırında hata placeholder'ına geçmez.
 3. Properties içindeki **3D Model** alanında iç XYZ konumu, XYZ dönüşü (derece)
    ve ölçek; **3D Camera** alanında yaw/pitch, mesafe, hedef XYZ ve FOV; **3D
    Lighting** alanında ambient/key ışık şiddetini düzenleyin.
-4. Viewport'ta seçili tek model için **Edit 3D camera** açın. Orbit, Pan veya
+4. Viewport'un mevcut pan/zoom araç grubunda seçili tek model için **3D camera** açın. Orbit, Pan veya
    Dolly seçip canvas üzerinde sürükleyin. Reset camera başlangıç kadrajına döner.
    Toggle kapatılınca normal 2D seçim/taşıma davranışı devam eder.
 5. Kamera hareketi kaynakta saklanır ve çıktıya yansır; tek Undo ile geri alınır.
@@ -180,6 +185,50 @@ Hedef checkout'un Next sunucusu install/build sırasında kapalı olmalıdır.
 Tam ürün/çok cihaz/uzun süreli 3D performans kabulü veya export kalite/parity
 fazının bittiği iddia edilmez. Sırada onaylı Editable Poly 2D ve UV/görünüm
 işleri bulunur; ileri kutulu 3D ve son genel optimizasyon sırası korunur.
+
+## Demo ve kutu boyutlandırma eki
+
+`examples/3d/chorono-robot.glb` yaklaşık 20 KiB self-contained örnektir. Üç ortak
+geometri, adlandırılmış gövde/baş/kol/bacak node'ları ve beş PBR materyal içerir.
+`node scripts/model3d/create-demo-robot.mjs` mevcut Three primitive/exporter
+uygulamasını kullanarak aynı dosyayı üretir; ağ veya external asset gerekmez.
+Ürün scene JSON'u üretmez. [Kullanım](../../examples/3d/README.md).
+
+Resize capability mevcut `calculateResize` fonksiyonunun optional `maxSize`
+alanıdır; bu alanı vermeyen mevcut 2D çağrılar aynı davranışı korur. Kutunun
+azami kenarı inspector/schema, serialized source validation, renderer ve mouse
+adapter'ında aynı `MAX_MODEL_BOX_SIDE` sabitinden gelir. Üst sınırda aspect-lock
+boyutları beraber azaltır. Parent world matrix, özel pivot, iç model payload'ı,
+mevcut animation track'leri ve karşı köşe korunur.
+
+Browser fixture masaüstü panel düzeni için en az 1200 CSS px içerik genişliği
+kullanır; küçük browser penceresinde yatay kaydırılabilir. Bu fixture, ürünün
+dar ekran kabulü veya tüm platformlarda performans ölçümü değildir.
+
+Bu ekin doğrulaması: **373 dosya / 3014 test**, TypeScript kontrolü, MCP/CLI ve
+Next üretim derlemeleri başarılı. Gerçek Add → 3D Objects dosya seçimiyle örnek
+robot import edildi; Properties Width değişimi gözlendi. Gerçek browser'da
+model kutusu için 6 DOM PointerEvent kabulü geçti: handle görünürlüğü, ilk
+pointer-up commit, iç 3D/kamera/asset verisinin korunması, track'lerin korunması,
+tek Undo ve Redo. Parent/ters matris/karşı köşe ve capability sınırı birim testinde
+ayrıca doğrulandı. Bu altı kontrol OS mouse testi diye raporlanmaz.
+
+Kamera kontrolü artık ayrı sol-alt panel değildir; mevcut viewport pan/zoom
+kontrollerine bağlı gruptur. Bu bir inceleme kamerası değil, saklanan çıktı
+kamerasıdır. Model pose anahtarları ile kamera anahtarları ayrı hedeflerdir;
+yalnız model hareketi varsa kamera guard'ı yanlışlıkla devreye girmez. Kamera
+hedefinde key/controller/binding varsa doğrudan mouse/Reset işlemi reddedilir.
+
+GLB kliplerini ana Timeline'a veya kemik başına track'lere aktarma bu ekin
+kapsamına alınmadı. Orijinal dosya klipleriyle korunur; bu dilim sabit pozu çizer.
+İleri dilimde tercih edilen tasarım, kaynak klibi model içinde tutup ana
+Timeline'dan klip seçimi/başlangıç/hız/döngü kontrolü yapmak; kemik keylerine
+açmayı açık bir ileri işlem olarak sunmaktır. Ayrı inceleme bakışı da sonraki
+kamera authoring işidir; bugün mevcutmuş gibi sunulmaz.
+
+Kontrol grubu taşındıktan sonra gerçek browser fixture'ında mevcut **11 kamera /
+2D / tek Undo kontrolü** yeniden geçti. Menü, robot, kutu tutamaçları ve yeni
+grup konumu gerçek çizilmiş görüntüde incelendi. Son tam koşu yine 3014 testtir.
 
 Referanslar: [Three GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html),
 [WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html).

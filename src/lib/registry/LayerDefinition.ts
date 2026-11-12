@@ -21,6 +21,7 @@ export type LayerCategory =
   | 'Spline Objects'
   | 'Text'
   | 'Media'
+  | '3D Objects'
   | 'Effects'
   | 'Masks'
   | 'Groups'

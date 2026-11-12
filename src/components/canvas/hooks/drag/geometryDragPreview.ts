@@ -6,6 +6,7 @@ import { moveSplinePoint, moveSplineHandle } from '@/lib/spline'
 import { calculateAnchorMove } from '@/lib/canvas/math/anchorMath'
 import { calculateResize } from '@/lib/canvas/math/resizeMath'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { MAX_MODEL_BOX_SIDE } from '@/lib/model3d/source/modelDefaults'
 
 type GeometryDrag = Exclude<ActiveDrag, { kind: 'move' | 'rotate' | 'scaleAxis' }>
 interface GeometryPreviewInput {
@@ -67,6 +68,7 @@ export function previewGeometryDrag({ base, drag, event, delta, snap }: Geometry
   const size = calculateResize({ x: 0, y: 0, width: original.size.width, height: original.size.height,
     anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x, dy: local.y,
     proportional: event.metaKey || event.ctrlKey, snapPixel: snap.pixel, minSize: 4,
+    maxSize: original.type === 'model3d' ? MAX_MODEL_BOX_SIDE : undefined,
     boundsWidth: Number.MAX_SAFE_INTEGER, boundsHeight: Number.MAX_SAFE_INTEGER })
   const left = drag.handle.includes('w') ? original.size.width - size.width : 0
   const top = drag.handle.includes('n') ? original.size.height - size.height : 0

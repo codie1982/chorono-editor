@@ -1,7 +1,7 @@
 import { AmbientLight, Box3, DirectionalLight, Group, MathUtils, PerspectiveCamera, Scene, Vector3, WebGLRenderer, BufferGeometry, Material, Texture, Mesh, Line, Points, Object3D } from 'three'
 import { editorResourceBudget, type ResourceReservation } from '../../resources/budget'
 import type { Model3DData, Model3DResource } from '../types'
-import { validateModel } from '../source/modelDefaults'
+import { MAX_MODEL_BOX_SIDE, validateModel } from '../source/modelDefaults'
 
 /** One lazily created WebGL2 context shared by this model service. Draws settle
  * synchronously before another model can reconfigure it. Native back buffers
@@ -30,7 +30,7 @@ export class ThreeModelBackend {
       draw: (context, data, width, height) => {
         if (disposed) throw new Error('3D resource lease has expired.')
         validateModel(data)
-        if (!(width > 0 && height > 0 && width <= 4096 && height <= 4096)) throw new Error('3D layer size must be 1..4096 px.')
+        if (!(width > 0 && height > 0 && width <= MAX_MODEL_BOX_SIDE && height <= MAX_MODEL_BOX_SIDE)) throw new Error(`3D layer size must be 1..${MAX_MODEL_BOX_SIDE} px.`)
         const matrix = context.getTransform(), scale = Math.max(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d))
         const ratio = Math.min(1, 2048 / Math.max(width * scale, height * scale))
         const w = Math.max(1, Math.ceil(width * scale * ratio)), h = Math.max(1, Math.ceil(height * scale * ratio))

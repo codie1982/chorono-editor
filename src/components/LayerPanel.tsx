@@ -293,7 +293,7 @@ export default function LayerPanel({
           </div>
 
           {/* Items grid */}
-          <div className="grid grid-cols-2 gap-1 p-2">
+          <div className={`grid ${activeGroup.items.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1 p-2`}>
             {activeGroup.items.map(item => (
               <button
                 key={item.type}
