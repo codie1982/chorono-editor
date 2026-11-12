@@ -3,6 +3,7 @@ import { computeLocalTime } from '../../evaluator'
 import { selectedBranchIds } from '../../scene/hierarchy/editorLayerRows'
 import { parseTrackTarget } from '../TrackTargetParser'
 import { KEY_TIME_EPSILON_MS } from './keyTimePolicy'
+import { isLayerTimelineProperty } from './timelinePropertyScope'
 
 export type TimelineNavigation = 'start' | 'end' | 'previousFrame' | 'nextFrame' | 'previousKey' | 'nextKey' | 'firstKey' | 'lastKey'
 
@@ -38,7 +39,7 @@ export function navigateTimeline(scene: ChronoScene, timelineId: string, localTi
     const owner = parseTrackTarget(track.target)
     if (owner?.entityType === 'layer') {
       const layer = byId.get(owner.entityId)
-      if (!layer || scope && !scope.has(layer.id) || layer.type === 'audio' && layer.audio?.timelineId && layer.audio.timelineId !== timeline.id
+      if (!layer || !isLayerTimelineProperty(layer, owner.propertyPath) || scope && !scope.has(layer.id) || layer.type === 'audio' && layer.audio?.timelineId && layer.audio.timelineId !== timeline.id
         || membership && !membership.has(layer.id) && !(layer.type === 'audio' && !layer.audio?.timelineId)) continue
     } else if (scope) continue
     for (const key of track.keyframes) if (Number.isFinite(key.timeMs) && key.timeMs >= 0 && key.timeMs <= duration) times.push(key.timeMs)

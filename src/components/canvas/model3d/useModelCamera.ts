@@ -9,6 +9,7 @@ import { cameraGesture } from '@/lib/model3d/source/cameraGesture'
 import { EditorPointerSession, type EditorPointerSessionHost, type EditorPointerStart } from '../interactions/EditorPointerSession'
 
 interface Preview { scene: ChronoScene; command: ReturnType<typeof makeUpdateLayerCmd>; changed: boolean }
+const DRIVEN_CAMERA_WARNING = 'Camera animation or a driver is preserved. Direct camera placement is disabled; isolated 3D editing is planned.'
 /** Camera-specific source transaction; native capture/up/cancel/stale ownership
  * remains in the same lifecycle used by 2D object and guide gestures. */
 class CameraSession extends EditorPointerSession<Preview> {
@@ -37,7 +38,7 @@ export function useModelCamera(scene: ChronoScene, selectedId: string | null, ed
     const current = latest.current, base = current.editor.getScene(), source = base.layers.find(item => item.id === current.selectedId)
     if (session.current || current.editor.isTransactionActive()) return true
     if (base !== current.scene || !source?.model3d) { current.warning('Scene changed. Start the camera gesture again.'); return true }
-    if (cameraIsDriven(base, source)) { current.warning('This camera is animated or driven. Edit its Properties/Timeline controls to preserve that animation.'); return true }
+    if (cameraIsDriven(base, source)) { current.warning(DRIVEN_CAMERA_WARNING); return true }
     const x = event.clientX, y = event.clientY
     current.editor.beginTransaction()
     try {
@@ -59,7 +60,7 @@ export function useModelCamera(scene: ChronoScene, selectedId: string | null, ed
    * Same refusal policy as mouse controls prevents hidden animation overwrite. */
   const reset = () => {
     if (!layer?.model3d || editor.isTransactionActive() || editor.getScene() !== scene || !visible) return
-    if (cameraIsDriven(scene, layer)) { warning('Camera has animation. Edit its Timeline instead.'); return }
+    if (cameraIsDriven(scene, layer)) { warning(DRIVEN_CAMERA_WARNING); return }
     editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { model3d: { ...layer.model3d, camera: modelDefaults().camera } }, layer))
   }
   return { visible, active: visible && enabled, enabled, setEnabled, mode, setMode, begin, reset }

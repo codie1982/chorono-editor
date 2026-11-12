@@ -6,6 +6,7 @@ import type {
   TimelineSegment, TimelineMarker,
 } from '@/lib/types'
 import { prepareSetKey } from '@/lib/timeline/authoring/setKey'
+import { timelineTracksInScope } from '@/lib/timeline/authoring/timelinePropertyScope'
 import { prepareClearKeyframes, type ClearKeyScope } from '@/lib/timeline/authoring/clearKeyframes'
 import { applyKeyframeBatch } from '@/lib/timeline/authoring/keyframeBatch'
 import { registerScopedActions } from '@/lib/shortcuts/scopedActions'
@@ -186,7 +187,9 @@ export default function TimelinePanel({
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
   const timeline = scene.timelines.find((t) => t.id === selectedTimelineId) ?? null
-  const layerTracks = useMemo(() => new LayerTrackIndex(timeline?.tracks ?? []), [timeline?.tracks])
+  const editorTracks = useMemo(() => timelineTracksInScope(scene.layers, timeline?.tracks ?? []), [scene.layers, timeline?.tracks])
+  const editorTimeline = useMemo(() => !timeline || editorTracks === timeline.tracks ? timeline : { ...timeline, tracks: editorTracks }, [timeline, editorTracks])
+  const layerTracks = useMemo(() => new LayerTrackIndex(editorTracks), [editorTracks])
   const tracksByTimeline = useMemo(() => new Map(scene.timelines.map(item => [item.id, new LayerTrackIndex(item.tracks)])), [scene.timelines])
   const assetById = useMemo(() => new Map(scene.assets.map(asset => [asset.id, asset])), [scene.assets])
   const duration = timeline?.durationMs ?? scene.composition.durationMs
@@ -563,11 +566,11 @@ export default function TimelinePanel({
   const selectAllKfs = useCallback(() => {
     if (!timeline) return
     const all = new Set<string>()
-    for (const track of timeline.tracks) {
+    for (const track of editorTracks) {
       for (const kf of track.keyframes) all.add(kf.id)
     }
     onSelectKeyframes(all)
-  }, [timeline, onSelectKeyframes])
+  }, [timeline, editorTracks, onSelectKeyframes])
 
   const deleteSelectedKfs = useCallback(() => {
     if (!selectedTimelineId || !timeline || selectedKfIds.size === 0) return
@@ -764,13 +767,13 @@ export default function TimelinePanel({
     const lo = Math.min(startMs, endMs)
     const hi = Math.max(startMs, endMs)
     const hits = new Set<string>(addToExisting ? selectedKfIds : [])
-    for (const track of timeline.tracks) {
+    for (const track of editorTracks) {
       for (const kf of track.keyframes) {
         if (kf.timeMs >= lo && kf.timeMs <= hi) hits.add(kf.id)
       }
     }
     onSelectKeyframes(hits)
-  }, [timeline, selectedKfIds, onSelectKeyframes])
+  }, [timeline, editorTracks, selectedKfIds, onSelectKeyframes])
 
   // BL-07: Slide selected keyframes by delta ms. Clamped to [0, duration]
   // so kfs can't fall off either side. Uses the existing bulk-move command
@@ -1045,7 +1048,7 @@ export default function TimelinePanel({
       {audioControls}
       <SetKeyReview controls={authoring} />
       <TrackToolBar
-        hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
+        hasKeyframes={editorTracks.some((t) => t.keyframes.length > 0)}
         selectedCount={selectedKfIds.size}
         frameRate={scene.composition.frameRate}
         onSelectAll={selectAllKfs}
@@ -1931,7 +1934,7 @@ export default function TimelinePanel({
       <TimelineMinimap
         durationMs={duration}
         currentTimeMs={currentTimeMs}
-        timeline={timeline}
+        timeline={editorTimeline}
         scrollLeftPx={vp.scrollLeftPx}
         totalContentPx={vp.totalContentPx}
         trackWidth={vp.trackWidth}

@@ -66,7 +66,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — ilk dar 3D dilim | Kutulu model ve kamera | GLB/self-contained glTF, Properties ve toggle ile Orbit/Pan/Dolly; 2D taşıma korunur, portable/raster. Imported clip/rig/kamera ve gelişmiş material UI ileri dilimde. [Sözleşme ve kabul](boxed-3d-first-slice.md). |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
 | Sonra 4 | Texture, vertex color, UV ve basit material | Texture gizmo ve UV paneli; dokulu/deforme mesh adapter'ı. |
-| Sonra 5 | Kutulu 3D ileri düzenleme | Çoklu model, camera animasyonu, imported rig/clip/morph; rig oluşturma/IK ayrı artımlı dilimler. |
+| Sonra 5 | Kutulu 3D ileri düzenleme | Çift tıkla izole 3D içerik/detail ve iç Timeline; ana 2D Timeline yalnız dış kutuyu yönetir. Temel sabit Properties kalır; inceleme bakışı ve çıktı kamerası ayrılır. [Plan](plans/boxed3d-isolated-editor.md). Çoklu model, imported rig/clip/morph; rig oluşturma/IK ayrı dilimler. |
 | Sonra 6 | Bileşen kütüphanesi ve Character Motion | Source component/local clock; 2D rig/FK/IK/sprite/state-machine. |
 | Sonra 7 | Simulation Core, rigid, Voronoi ve particle fiziği | Poly kaynaklı kırılma; sabit adım, gravity/field/collision, cache/bake. |
 | Sonra 8 | Fabric/kumaş | Poly rest mesh/UV; gravity/wind/pin/collision ve bake. |

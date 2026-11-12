@@ -14,6 +14,7 @@ import { makeUpdateLayerCmd } from '../../editor/commands-layer'
 import { upsertKeyframe, ensureLayerInTimeline } from '../../timeline/keyframeOps'
 import { nextKfId } from '../../defaults'
 import { copyScriptData, mergeScriptData, readScriptPath, type DeepPartial } from './scriptData'
+import { assertTimelineTargetInScope } from '../../timeline/authoring/timelinePropertyScope'
 import { dbToGain } from '../../audio/audioClip'
 import { makePatchAudioClipCmd, makeMoveAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd, makeSetAudioGainKeyCmd, type AudioClipCommandOptions } from '../../editor/commands-audio'
 import { ParticleHandle } from './ParticleHandle'
@@ -356,6 +357,7 @@ export class LayerHandle {
     const cmd: EditorCommand = {
       label: 'Script Keyframe',
       execute: (scene) => {
+        assertTimelineTargetInScope(scene.layers, target)
         before = scene
         let s = scene
         // 1. Ensure the timeline exists (auto-create a sensible default).

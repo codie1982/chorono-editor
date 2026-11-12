@@ -6,10 +6,12 @@ import { flushSync } from 'react-dom'
 import SceneCanvas from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import LayerPanel from '@/components/LayerPanel'
+import TimelinePanel from '@/components/TimelinePanel'
+import { DEFAULT_TIMELINE_SETTINGS, DEFAULT_TIMELINE_GHOST_SETTINGS } from '@/lib/types/editor'
 import { useEditorState, type EditorStateReturn } from '@/app/hooks/useEditorState'
 import { useAssetCache } from '@/app/hooks/useAssetCache'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
-import { emptyScene, newRectLayer } from '@/lib/defaults'
+import { emptyScene, newRectLayer, newTimeline } from '@/lib/defaults'
 import { newModelLayer } from '../source/modelDefaults'
 import { triangleDocument } from './fixtures'
 import { ModelHandler } from '@/lib/import/handlers/asset/ModelHandler'
@@ -32,6 +34,7 @@ const background = newRectLayer(); background.id = 'background'; background.size
 background.style!.fill = { type: 'solid', color: '#22c55e' }
 const model = newModelLayer('test-model', 'test-model-asset'); model.transform.x = 100; model.transform.y = 40
 initial.layers = [background, model]
+initial.timelines = [{ ...newTimeline(), id: 'active', durationMs: 1000, layerIds: ['test-model'], tracks: [] }]
 initial.assets = [{ id: 'test-model-asset', type: 'model3d', name: 'Test triangle.gltf', url: `data:model/gltf+json;base64,${btoa(JSON.stringify(triangleDocument()))}` }]
 const status = document.getElementById('status')!
 interactionTrace.setEnabled(true)
@@ -39,20 +42,22 @@ function Host() {
   const trace = useSyncExternalStore(interactionTrace.subscribe, interactionTrace.getSnapshot)
   const state = useEditorState(initial), assets = useAssetCache(state.scene.assets, { managed: true }), snap = useSnapSettings()
   const [selected, select] = useState<string | null>('test-model'), ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
+  const [timelineSettings, setTimelineSettings] = useState(DEFAULT_TIMELINE_SETTINGS), [keySelection, setKeySelection] = useState(new Set<string>()), [time, setTime] = useState(0)
+  const noop = () => {}
   useLayoutEffect(() => { editor = state; (window as any).modelTest = { editor: state, assets, selected } })
   const importModel = async (file: File) => {
     const result = await new ModelHandler().handle(file)
     state.dispatchCommand(new ImportTransactionBuilder().build(result))
     select(result.layers[0].id)
   }
-  return <div className="flex h-screen bg-gray-900 text-gray-100" style={{ minWidth: 1200 }}>
+  return <><div className="flex bg-gray-900 text-gray-100" style={{ minWidth: 1200, height: 600 }}>
     <div className="w-64 shrink-0"><LayerPanel layers={state.scene.layers} selectedId={selected} selectedIds={ids} onSelect={id => select(id)}
       onAdd={() => {}} onAddImage={() => {}} onAddVideo={() => {}} onAddAudio={() => {}}
       onImportModel={file => void importModel(file).catch(error => { status.textContent = String(error) })}
       onDelete={() => {}} onReorder={() => {}} onToggleFlag={() => {}} onRename={() => {}} /></div>
     <div className="flex flex-col flex-1 min-w-0 min-h-0"><div className="flex flex-1 min-h-0"><SceneCanvas scene={state.scene} editor={state} assets={assets} snap={snap}
-      selectedLayerId={selected} selectedLayerIds={ids} onSelectLayer={select} timeMs={0} toolMode="select" isPlaying={false} /></div><div className="shrink-0 max-h-36 overflow-auto">
-      <output id="source-state" className="block text-xs break-all">{JSON.stringify({ layers: state.scene.layers.length, model: state.scene.layers.find(layer => layer.id === 'test-model'), revision: state.getRevision() })}</output>
+      selectedLayerId={selected} selectedLayerIds={ids} onSelectLayer={select} timeMs={time} toolMode="select" isPlaying={false} /></div><div className="shrink-0 overflow-auto" style={{ maxHeight: 120 }}>
+      <output id="source-state" className="block text-xs break-all">{JSON.stringify({ layers: state.scene.layers.length, model: state.scene.layers.find(layer => layer.id === selected), tracks: state.scene.timelines[0].tracks, revision: state.getRevision() })}</output>
       <pre id="trace" className="hidden">{JSON.stringify(trace.records.slice(-8))}</pre>
       <button id="run" onClick={() => (window as any).runModelChecks().catch((error: Error) => { status.textContent = `FAILED: ${error.message}` })}>Run acceptance checks</button>
       <button id="camera-checks" onClick={() => (window as any).runCameraChecks().catch((error: Error) => { status.textContent = `FAILED: ${error.message}` })}>Run camera checks</button>
@@ -63,7 +68,13 @@ function Host() {
     <div className="w-80 overflow-y-auto"><PropertiesPanel layer={state.scene.layers.find(layer => layer.id === selected) ?? null} scene={state.scene}
       composition={state.scene.composition} onLayerChange={layer => state.dispatchCommand({ label: 'Properties', execute: scene => ({ ...scene, layers: scene.layers.map(item => item.id === layer.id ? layer : item) }), undo: () => state.scene })}
       onCompositionChange={() => {}} /></div>
-  </div>
+  </div><section className="bg-gray-900 text-gray-100" style={{ minWidth: 1200, height: 550 }} aria-label="Model 2D Timeline">
+    <TimelinePanel scene={state.scene} editor={state} settings={timelineSettings} onSettingsChange={setTimelineSettings}
+      selectedLayerId={selected} selectedLayerIds={ids} selectedTimelineId="active" selectedKfIds={keySelection} onSelectKeyframes={setKeySelection}
+      currentTimeMs={time} isPlaying={false} playbackSpeed={1} onTimeChange={setTime} onPlayToggle={noop} onSelectTimeline={noop}
+      onSelectLayer={select} onToggleLayerFlag={noop} onPlaybackSpeedChange={noop} ghostSettings={DEFAULT_TIMELINE_GHOST_SETTINGS}
+      onGhostUpdate={noop} onGhostToggle={noop} onGhostPreset={noop} />
+  </section></>
 }
 createRoot(document.getElementById('app')!).render(<Host />)
 /** Public QA actions operate real commands/loader/renderers. Pixel output and

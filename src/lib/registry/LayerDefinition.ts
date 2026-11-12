@@ -40,6 +40,12 @@ export interface LayerDefinition<T extends Layer = Layer> {
 
   category: LayerCategory
 
+  /** Internal property subtrees owned by an isolated feature editor. The outer
+   * 2D Timeline must not create/edit these tracks. Existing source tracks stay
+   * serializable/evaluable for compatibility. Omission preserves legacy kinds.
+   * Paths are layer-relative and use the shared parent/child overlap rule. */
+  readonly timelineExcludedPaths?: readonly string[]
+
   /** Default instance constructor — called by `page.tsx addLayer`. */
   createDefault(): T
 

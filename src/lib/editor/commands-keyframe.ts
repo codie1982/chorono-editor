@@ -9,6 +9,8 @@ import {
 import { prepareSetKey } from '../timeline/authoring/setKey'
 import { makeKeyframeBatchCmd, type KeyframeBatchOptions } from '../timeline/authoring/keyframeBatch'
 import { readPropertyPath } from '../scene/properties/readPropertyPath'
+import { assertTimelineTargetInScope } from '../timeline/authoring/timelinePropertyScope'
+import { LayerIndex } from '../scene/LayerIndex'
 
 export interface EditorCommand {
   /** Human-readable label shown in undo history (e.g. "Move Keyframe") */
@@ -82,7 +84,8 @@ export interface KfDeletion {
 /** Delete by stable identity, never by inferred time. Grouped timeline/target
  * lookups filter each affected track once: O(items + scene tracks + affected
  * keys), rather than cloning the scene for every deletion. Unaffected tracks
- * retain references; empty tracks keep controllers/modifiers/settings.
+ * retain references; empty tracks keep controllers/modifiers/settings. Any
+ * isolated target rejects the whole forward batch; undo restores source data.
  * Snapshot restoration preserves legacy coincident keys and all metadata. */
 export function makeBulkDeleteKfCmd(items: KfDeletion[]): EditorCommand {
   let before = new Map<string, Track[]>()
@@ -97,6 +100,8 @@ export function makeBulkDeleteKfCmd(items: KfDeletion[]): EditorCommand {
   return {
     label: `Delete ${items.length} Keyframes`,
     execute: (scene) => {
+      const layers = new LayerIndex(scene.layers)
+      items.forEach(item => assertTimelineTargetInScope(scene.layers, item.target, layers))
       before = new Map(scene.timelines.filter(timeline => groups.has(timeline.id)).map(timeline => [timeline.id, timeline.tracks]))
       return { ...scene, timelines: scene.timelines.map(timeline => {
         const targets = groups.get(timeline.id)
@@ -159,6 +164,8 @@ export function makeKeyframeLayerSnapshotCmd(timelineId: string, layer: Layer, t
 
 // ── Update value (keyframe inspector edit) ────────────────────────────────────
 
+/** Edit one outer-channel value; isolated targets reject before mutation.
+ * Undo uses the original source value, including for older saved history. */
 export function makeUpdateKfValueCmd(
   timelineId: string,
   target: string,
@@ -168,7 +175,7 @@ export function makeUpdateKfValueCmd(
 ): EditorCommand {
   return {
     label: 'Edit Keyframe Value',
-    execute: (scene) => updateKfValue(scene, timelineId, target, kfId, toValue),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, target); return updateKfValue(scene, timelineId, target, kfId, toValue) },
     undo:    (scene) => updateKfValue(scene, timelineId, target, kfId, fromValue),
   }
 }
@@ -247,6 +254,7 @@ export function makeAlignToFrameCmd(
 // in value space). Useful for holding a value across a span without
 // converting both endpoints to hold easing.
 
+/** Flatten an outer numeric segment; execution honors the owning layer's scope. */
 export function makeFlattenSegmentCmd(
   scene:       ChronoScene,
   timelineId:  string,
@@ -264,7 +272,7 @@ export function makeFlattenSegmentCmd(
   const toValue   = kfA.value
   return {
     label: 'Flatten Segment',
-    execute: (s) => updateKfValue(s, timelineId, target, kfBId, toValue),
+    execute: (s) => { assertTimelineTargetInScope(s.layers, target); return updateKfValue(s, timelineId, target, kfBId, toValue) },
     undo:    (s) => updateKfValue(s, timelineId, target, kfBId, fromValue),
   }
 }
@@ -277,6 +285,7 @@ export function makeFlattenSegmentCmd(
 
 export interface KfValueRef { kfId: string; target: string; timelineId: string }
 
+/** Reverse outer numeric values together; isolated targets reject atomically. */
 export function makeReverseValuesCmd(
   scene: ChronoScene,
   items: KfValueRef[],
@@ -298,6 +307,8 @@ export function makeReverseValuesCmd(
   return {
     label: 'Reverse Values',
     execute(s) {
+      const layers = new LayerIndex(s.layers)
+      snaps.forEach(item => assertTimelineTargetInScope(s.layers, item.target, layers))
       let next = s
       for (const sn of snaps) next = updateKfValue(next, sn.timelineId, sn.target, sn.kfId, mirroredFor(sn.priorVal))
       return next
@@ -312,6 +323,8 @@ export function makeReverseValuesCmd(
 
 // ── Update easing ─────────────────────────────────────────────────────────────
 
+/** Change outer-channel easing while preserving the complete original key on
+ * undo. Registry-owned internal tracks cannot be edited by this 2D command. */
 export function makeUpdateEasingCmd(
   timelineId: string,
   target: string,
@@ -323,6 +336,7 @@ export function makeUpdateEasingCmd(
   return {
     label: 'Change Easing',
     execute: (scene) => {
+      assertTimelineTargetInScope(scene.layers, target)
       original ??= scene.timelines.find(timeline => timeline.id === timelineId)?.tracks
         .find(track => track.target === target)?.keyframes.find(key => key.id === kfId)
       return updateKfEasing(scene, timelineId, target, kfId, toEasing)

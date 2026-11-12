@@ -29,8 +29,8 @@ Bu belge ilk dilimin gerçek sözleşmesidir; tam 3D workspace/solver planı de�
 
 Animasyonla/bağlantıyla sürülen bir kamerayı mouse veya Reset ile ezmeyiz:
 Timeline anahtarları/controller'lar, paramBindings, property expression, Binding
-ve etkin Wire varsa doğrudan kaynak işlemi açık uyarıyla reddedilir. Numeric
-Properties ve mevcut Timeline akışı üzerinden düzenleme yapılabilir. Çoklu
+ve etkin Wire varsa doğrudan kaynak işlemi açık uyarıyla reddedilir. Temel sabit
+Properties kalır; iç 3D key düzenleme gelecek izole içerik ekranına aittir. Çoklu
 seçimde veya thin instance üzerinde kamera aracı açılmaz; source model düzenlenir.
 
 ## Koordinatlar ve veri modeli
@@ -47,8 +47,10 @@ seçimde veya thin instance üzerinde kamera aracı açılmaz; source model düz
   Bu bir fizik dünyası/metre birimi değildir. Source asset her zaman özgün kalır.
 - Kamera perspective'tir: yaw/pitch derece, pitch −89..89, distance .1..1000,
   FOV 5..150. Orthographic, roll ve imported camera seçimi ileri dilimdedir.
-- Timeline mevcut milisaniye ve ortak evaluated-frame sözleşmesini kullanır.
-  `model3d.rotation.y` gibi numeric kanallar aynı source değerlendirmesinden geçer.
+- Ana Timeline mevcut milisaniye ve ortak evaluated-frame sözleşmesiyle yalnız
+  dış 2D kutunun kanallarını yönetir. `model3d.*` iç kanalları burada keylenmez.
+  Daha önce kaydedilmiş iç kanallar save/open ve eski değerlendirmede korunur;
+  2D editöründe authorable/visible sayılmaz, otomatik silinmez veya taşınmaz.
   Bu dilim imported animation clip oynatmaz; GLTFLoader'da kullanılmayan animation
   kanallarının runtime buffer'a açılması da durdurulur.
 
@@ -57,7 +59,7 @@ seçimde veya thin instance üzerinde kamera aracı açılmaz; source model düz
 | Modül | Sahip olduğu sorumluluk |
 | --- | --- |
 | `src/lib/model3d/types.ts` | Versioned source ve dar prepared-resource sözleşmesi |
-| `source/modelDefaults.ts`, `modelDefinition.ts` | Fresh defaults, sayısal doğrulama ve inspector/animation schema |
+| `source/modelDefaults.ts`, `modelDefinition.ts` | Fresh defaults, sayısal doğrulama, sabit iç inspector ve dış 2D animation schema |
 | `source/readModelDocument.ts` | GLB/glTF container, embedded dependency, node graph, texture-header ve workload admission |
 | `source/cameraGesture.ts`, `cameraDrivers.ts` | DOM/Three bağımsız kamera hesabı ve mevcut animasyonu koruma |
 | `source/modelCapabilities.ts` | Thin instance doğrulaması ve açık output capability sınırı |
@@ -66,6 +68,7 @@ seçimde veya thin instance üzerinde kamera aracı açılmaz; source model düz
 | `render/ThreeModelBackend.ts` | Ortak WebGL2 context, framing/kamera/ışık, geometri/texture/bitmap dispose |
 | `render/modelRendererPlugin.ts` | Hazır 3D yüzeyi mevcut 2D compositing hattına çizme |
 | `src/components/canvas/model3d` | Geçici araç modu ve ortak EditorPointerSession üzerinden tek gesture/Undo |
+| `src/lib/timeline/authoring/timelinePropertyScope.ts` | Registry'den feature-owned iç property sınırı; key authoring, navigation ve UI projection |
 
 Veri akışı:
 
@@ -186,6 +189,11 @@ Tam ürün/çok cihaz/uzun süreli 3D performans kabulü veya export kalite/pari
 fazının bittiği iddia edilmez. Sırada onaylı Editable Poly 2D ve UV/görünüm
 işleri bulunur; ileri kutulu 3D ve son genel optimizasyon sırası korunur.
 
+12 Kasım sonraki kapsam kararı: 2D model kutusu standart bir 2D katmandır.
+Temel iç model/kamera Properties sabit kalır; `model3d.*` keyleri 2D Timeline'a
+karıştırılmaz. Çift tıkla açılan izole 3D detay + iç Timeline henüz uygulanmadı;
+[ileri dilim planına](plans/boxed3d-isolated-editor.md) kaydedildi.
+
 ## Demo ve kutu boyutlandırma eki
 
 `examples/3d/chorono-robot.glb` yaklaşık 20 KiB self-contained örnektir. Üç ortak
@@ -221,14 +229,38 @@ hedefinde key/controller/binding varsa doğrudan mouse/Reset işlemi reddedilir.
 
 GLB kliplerini ana Timeline'a veya kemik başına track'lere aktarma bu ekin
 kapsamına alınmadı. Orijinal dosya klipleriyle korunur; bu dilim sabit pozu çizer.
-İleri dilimde tercih edilen tasarım, kaynak klibi model içinde tutup ana
-Timeline'dan klip seçimi/başlangıç/hız/döngü kontrolü yapmak; kemik keylerine
+Güncel ileri dilim kararı, kaynak klibi model içinde tutup izole 3D detayın kendi
+Timeline'ından klip seçimi/başlangıç/hız/döngü kontrolü yapmak; kemik keylerine
 açmayı açık bir ileri işlem olarak sunmaktır. Ayrı inceleme bakışı da sonraki
 kamera authoring işidir; bugün mevcutmuş gibi sunulmaz.
 
 Kontrol grubu taşındıktan sonra gerçek browser fixture'ında mevcut **11 kamera /
 2D / tek Undo kontrolü** yeniden geçti. Menü, robot, kutu tutamaçları ve yeni
 grup konumu gerçek çizilmiş görüntüde incelendi. Son tam koşu yine 3014 testtir.
+
+## 2D key kapsamı — son kabul
+
+12 Kasım kapsam düzeltmesi sonrası **374 dosya / 3020 test** geçti; TypeScript,
+MCP/CLI ve Next üretim derlemeleri başarılı. `modelTimelineScope.test.ts`
+static Properties + Auto Key, Set Key'nin tüm keyset'leri, explicit native/
+script/MCP-adapter key/track girişleri, controller, mixed paste/delete
+atomikliği, navigation, ortak Timeline/Curve/Dope projection, clear/undo ve
+eski source save/open/değerlendirme eşliğini doğrular.
+
+Gerçek browser'da üretim TimelinePanel ve PropertiesPanel ile robot üzerinde
+**All supported channels → Set Key** yalnız altı dış kanal oluşturdu:
+`transform.x`, `transform.y`, `transform.scaleX`, `transform.scaleY`,
+`transform.rotationDeg`, `opacity`. Properties iç Z değeri `.25` yapılınca
+aynı key kayıtları değişmeden kaldı. Bir Undo yalnız statik yerleşimi; sonraki
+Undo key eklemeyi geri aldı; Redo aynı altı dış keyi geri getirdi. Görünür
+Timeline'da bu altı satır ve Properties'te temel 3D alanları birlikte incelendi.
+Browser fixture'da Auto Key'nin Properties bağlantısı taklit edilmez; static
+Auto Key ayrımı gerçek domain API ve kaynak adapter testleriyle doğrulanır.
+
+Eski iç keylerin görünümden ayrılması bir veri migrasyonu değildir. Ham source,
+portable kayıt ve history snapshot'ları korunur. İzole 3D detay ekranı halen
+plandır; 2D authoring korumasını aşan bir raw JSON import/restore çağrısı yeni
+bir desteklenen 2D keyleme API'si sayılmaz.
 
 Referanslar: [Three GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html),
 [WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html).

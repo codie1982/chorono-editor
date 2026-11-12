@@ -6,6 +6,7 @@
 import type { ChronoScene, AnimatableValue, Layer } from '../types'
 import { upsertKeyframe } from '../timeline/keyframeOps'
 import { nextKfId } from '../defaults'
+import { isLayerTimelineProperty } from '../timeline/authoring/timelinePropertyScope'
 
 interface Params {
   scene: ChronoScene
@@ -21,7 +22,8 @@ interface Params {
 /**
  * Mutate a layer property, optionally writing a keyframe at the current time.
  *
- * Returns the updated scene — never mutates in place.
+ * Returns the updated scene — never mutates in place. Properties owned by an
+ * isolated editor remain static source edits even while 2D Auto Key is enabled.
  */
 export function setAnimatedPropertyValue(params: Params): ChronoScene {
   const { scene, layerId, propertyPath, timeMs, value, autoKeyframe, timelineId } = params
@@ -31,6 +33,8 @@ export function setAnimatedPropertyValue(params: Params): ChronoScene {
 
   // ── 2. Upsert a keyframe if auto-keyframe is on ──────────────────────────
   if (!autoKeyframe) return nextScene
+  const layer = scene.layers.find(item => item.id === layerId)
+  if (layer && !isLayerTimelineProperty(layer, propertyPath)) return nextScene
 
   const trackTarget = `layers.${layerId}.${propertyPath}`
   const kf = {

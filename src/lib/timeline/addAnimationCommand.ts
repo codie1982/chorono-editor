@@ -3,6 +3,7 @@ import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import { readPropertyPath } from '../scene/properties/readPropertyPath'
 import { assertTrackValues } from '../animation/typedValues'
 import { nextKfId } from '@/lib/defaults'
+import { assertTimelineTargetInScope } from './authoring/timelinePropertyScope'
 
 /** Add a track and its optional first key together, using execution-time data. */
 export function makeAddAnimationCmd(
@@ -16,7 +17,9 @@ export function makeAddAnimationCmd(
     execute(scene) {
       const timeline = scene.timelines.find(t => t.id === timelineId)
       const layer = scene.layers.find(l => l.id === layerId)
-      if (!timeline || !layer || timeline.tracks.some(t => t.target === target)) return scene
+      if (!timeline || !layer) return scene
+      assertTimelineTargetInScope(scene.layers, target)
+      if (timeline.tracks.some(t => t.target === target)) return scene
       const value = readPropertyPath(layer, propertyPath)
       if (keyId && value === undefined) throw new Error('Set this property on the layer before adding its first key; missing payloads are not created.')
       const keyframes: Keyframe[] = keyId ? [{

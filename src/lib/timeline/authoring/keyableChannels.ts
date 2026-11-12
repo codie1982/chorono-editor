@@ -6,6 +6,7 @@ import { assertTrackValues, isVec2, isColorValue, parseAnimatableColor } from '.
 import { readPropertyPath } from '../../scene/properties/readPropertyPath'
 import { splineCoordinateAddress } from '../../spline/animation/splineCoordinateAddress'
 import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
+import { isLayerTimelineProperty } from './timelinePropertyScope'
 
 export type KeysetMode = 'all' | 'transform' | 'animated' | 'selected'
 export interface KeyableChannel { path: string; value: AnimatableValue; track?: Track }
@@ -20,7 +21,7 @@ function supported(value: unknown): value is AnimatableValue {
 
 /** Enumerate existing source channels from the registered property schema and
  * legacy animatable catalogue. Explicit existing tracks remain authorable for
- * typed custom channels; structural identity paths are always excluded. The
+ * typed custom channels; structural identity and isolated feature paths stay excluded. The
  * chosen keyset narrows this same universe. No default payload is materialized.
  * Schema animationValueType can declare Vec2/color independently of input type.
  */
@@ -38,7 +39,7 @@ export function keyableChannels(layer: Layer, tracks: readonly Track[], mode: Ke
   const result: KeyableChannel[] = []
   for (const path of Array.from(paths)) {
     const track = byPath.get(path), schema = metadata.get(path)
-    if (structural.test(path) || mode === 'transform' && !path.startsWith('transform.') && path !== 'opacity'
+    if (!isLayerTimelineProperty(layer, path) || structural.test(path) || mode === 'transform' && !path.startsWith('transform.') && path !== 'opacity'
       || mode === 'animated' && !track || mode === 'selected' && !selectedTargets.has(prefix + path)) continue
     const value = readPropertyPath(layer, path)
     let sample = value === undefined ? track?.keyframes[0]?.value : value

@@ -2,15 +2,16 @@ import type { LayerDefinition } from '../../registry/LayerDefinition'
 import type { PropertyGroup, PropertySchema } from '../../registry/PropertySchema'
 import { transformGroup, appearanceGroup, sizeGroup } from '../../registry/definitions/sharedSchemas'
 import { MAX_MODEL_BOX_SIDE, newModelLayer } from './modelDefaults'
-/** Numeric schema shared by Properties, MCP introspection and typed animation.
+/** Static placement schema shared by Properties and MCP introspection.
  * Bounds are source capabilities, not a promise of a full 3D workspace. */
 function number(path: string, label: string, value: number, min?: number, max?: number): PropertySchema {
-  return { id: path, path: `model3d.${path}`, group: '3D', label, valueType: 'number', animatable: true, defaultValue: value, step: .1, min, max }
+  return { id: path, path: `model3d.${path}`, group: '3D', label, valueType: 'number', animatable: false, defaultValue: value, step: .1, min, max }
 }
 /** Finished first-slice layer definition: ordinary 2D box plus distinct 3D
  * presentation coordinates. New placeholders show an explicit import prompt. */
 export const modelDefinition: LayerDefinition = {
   kind: 'model3d', label: '3D Model', iconKey: 'group', category: '3D Objects', propertyGroupsAreStatic: true,
+  timelineExcludedPaths: ['model3d'],
   createDefault: () => newModelLayer(`model3d_${crypto.randomUUID()}`),
   getPropertyGroups: (): PropertyGroup[] => [transformGroup(), appearanceGroup(), { ...sizeGroup(), title: '2D Model Box · px', schemas: sizeGroup().schemas.map(schema => ({ ...schema, max: MAX_MODEL_BOX_SIDE })) },
     { title: '3D Model · presentation units', schemas: [

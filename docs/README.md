@@ -55,3 +55,4 @@ Local evidence linked under `artifacts/` (benchmark reports, recordings and rend
 - [Canonical setup skill](../skills/chorono-setup/SKILL.md)
 
 - [Kutulu 3D ilk model/kamera dilimi: kullanım, mimari ve sınırlar](tr/boxed-3d-first-slice.md)
+- [2D model kutusu ve çift tıkla izole 3D detay/Timeline planı](tr/plans/boxed3d-isolated-editor.md)

@@ -4,6 +4,7 @@
 
 import { sameKeyTime, compareKeyTime } from './authoring/keyTimePolicy'
 import type { ChronoScene, Keyframe, EasingDefinition, AnimatableValue } from '../types'
+import { assertTimelineTargetInScope } from './authoring/timelinePropertyScope'
 
 // ── Internal helper ───────────────────────────────────────────────────────────
 
@@ -28,14 +29,16 @@ function mapTimeline(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** Low-level immutable insertion. Callers validate bounds and collisions via
- * the authoring batch contract; this primitive also supports transient previews. */
+/** Immutable outer-channel insertion. Callers validate bounds/collisions via
+ * the batch contract; registry-owned internal tracks reject before publication.
+ * Serializer/evaluator/undo restoration preserve earlier internal source data. */
 export function insertKf(
   scene: ChronoScene,
   timelineId: string,
   target: string,
   kf: Keyframe,
 ): ChronoScene {
+  assertTimelineTargetInScope(scene.layers, target)
   return mapTimeline(scene, timelineId, target, (kfs) =>
     [...kfs, kf].sort(compareKeyTime)
   )
@@ -122,9 +125,11 @@ export function ensureLayerInTimeline(
  * requested. Neighbouring sub-ms keys are distinct; ambiguous coincident keys
  * throw instead of deleting several. Existing authoring callers need not sort
  * or implement a second tolerance policy. New key values remain caller-owned.
+ * New authoring must satisfy the layer's outer Timeline scope.
  */
 export function upsertKeyframe(scene: ChronoScene, timelineId: string, target: string,
   kf: Keyframe, options: { updateEasing?: boolean } = {}): ChronoScene {
+  assertTimelineTargetInScope(scene.layers, target)
   if (!Number.isFinite(kf.timeMs) || kf.timeMs < 0) throw new Error('Key time must be finite and non-negative.')
   return mapTimeline(scene, timelineId, target, keys => {
     const matching = keys.filter(key => sameKeyTime(key.timeMs, kf.timeMs))

@@ -3,6 +3,7 @@ import { makeBulkDeleteKfCmd, type EditorCommand } from '../../editor/commands-k
 import { LayerIndex } from '../../scene/LayerIndex'
 import { LayerTrackIndex } from '../LayerTrackIndex'
 import { parseTrackTarget } from '../TrackTargetParser'
+import { isTimelineTargetInScope } from './timelinePropertyScope'
 
 export type ClearKeyScope = { kind: 'layer'; layerId: string } | { kind: 'track'; target: string }
 export interface ClearKeyPlan {
@@ -30,7 +31,7 @@ export function prepareClearKeyframes(scene: ChronoScene, timelineId: string, sc
   const protectedLayer = Array.from(index.ancestorIds([layerId])).map(id => index.get(id)!).find(layer => layer.locked || layer.frozen)
   if (protectedLayer) return empty(`Unlock and unfreeze ${protectedLayer.name} first.`)
   const tracks = scope.kind === 'layer' ? new LayerTrackIndex(timeline.tracks).forLayer(layerId) : timeline.tracks.filter(track => track.target === scope.target)
-  const items = tracks.flatMap(track => track.keyframes.map(kf => ({ timelineId, target: track.target, kf })))
+  const items = tracks.filter(track => isTimelineTargetInScope(scene.layers, track.target, index)).flatMap(track => track.keyframes.map(kf => ({ timelineId, target: track.target, kf })))
   if (!items.length) return empty('No keyframes to clear.')
   const command = makeBulkDeleteKfCmd(items)
   return { keyIds: new Set(items.map(item => item.kf.id)), command: { ...command, label: `Clear ${items.length} Keyframes`,

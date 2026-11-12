@@ -602,7 +602,7 @@ export default function PropertiesPanel({
             )}
 
             {layer.type === 'model3d' && activeTab === 'properties' && <>
-              <p className="text-xs text-gray-400">Resize the 2D model box with its handles or Width / Height below. Turn off 3D camera in the viewport controls to move or resize the box. Internal 3D pose and camera settings stay separate.</p>
+              <p className="text-xs text-gray-400">Move and resize the box with the 2D tools or Width / Height below. The 2D Timeline animates the box; model pose and camera settings below are static.</p>
               <label className="text-xs text-gray-300">Model asset
                 <select aria-label="3D model asset" className="block w-full bg-gray-800 rounded p-1.5" value={layer.model3d?.assetId ?? ''}
                   onChange={event => layer.model3d && update({ model3d: { ...layer.model3d, assetId: event.target.value } })}>

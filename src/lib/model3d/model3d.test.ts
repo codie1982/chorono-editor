@@ -55,7 +55,7 @@ describe('native 3D integration', () => {
     expect(await detector.detect(new File([modelBytes()], 'model.gltf', { type: 'application/json' }))).toBe('model/gltf+json')
     expect(FileTypeDetector.isSupported('model/gltf-binary')).toBe(true)
   })
-  it('evaluates typed 3D keys and restores serializable source without changing 2D transforms', () => {
+  it('preserves legacy internal key evaluation and serializable source without authoring new 3D tracks', () => {
     const layer = newModelLayer('model', 'asset'), base = emptyScene()
     const scene: ChronoScene = { ...base, layers: [layer], timelines: [{ id: 'orbit', durationMs: 1000, autoplay: false, loop: false, tracks: [{ target: 'layers.model.model3d.rotation.y', keyframes: [{ id: 'a', timeMs: 0, value: 0, easing: { type: 'linear' } }, { id: 'b', timeMs: 1000, value: 90, easing: { type: 'linear' } }] }] }] }
     expect(evaluateSceneFrame(scene, 500).overrides.get('layers.model.model3d.rotation.y')).toBe(45)

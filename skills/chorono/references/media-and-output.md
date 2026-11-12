@@ -16,6 +16,8 @@ Import GLB 2 or self-contained glTF 2 with `import_asset`, MIME `model/gltf-bina
 
 The outer `Layer.transform` remains 2D composition pixels. `model3d.position/rotation/scale` affect the internal model; rotation is degrees. Presentation framing normalizes the imported bounding sphere to radius one under a wrapper, preserving original node transforms. `model3d.camera` uses yaw/pitch degrees, distance, targetX/Y/Z and fov. Preserve siblings when patching. The viewport control strip's explicit **3D camera** toggle changes saved output framing; it is not an inspection-only view. Its off state retains ordinary 2D movement. Driven camera source gestures/reset refuse rather than erase keys/bindings/expressions. Imported clips stay in the source asset and are not expanded into Timeline tracks by this slice.
 
+**2D key scope:** animate only the outer layer (2D position/rotation/scale/opacity and supported outer compositing fields). Internal `model3d.*` placement/camera/light fields remain available as static Properties; never key them through `Layer.key`, `Timeline.key` or keyframe tools on the main 2D Timeline. Native authoring rejects those targets. Existing saved internal tracks are preserved for round-trip/evaluation compatibility but excluded from 2D authoring views and bulk clear. A double-click isolated 3D content editor with its own Timeline is planned, not available yet.
+
 Use prepared raster previews/image sequences and portable source. Basic/native runtime and standalone HTML exports reject boxed 3D; SVG reports unsupported-layer warnings. Internal surfaces cap the long side at 2048 pixels in this first slice. Never promise imported camera/clip playback, IK, 3D physics or full 3D workspace support.
 
 ## Save and export

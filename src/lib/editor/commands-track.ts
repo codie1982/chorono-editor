@@ -1,10 +1,14 @@
-/** Commands for track-level operations (out-of-range, curve modifiers). */
+/** Commands for 2D track authoring (controllers, ranges and modifiers).
+ * Forward execution rejects registry-owned internal subtrees before mutation;
+ * undo restores the previous track payload without reapplying authoring guards.
+ * Saved internal 3D tracks therefore survive as read-only compatibility data. */
 
 import type { ChronoScene, Track, Keyframe } from '../types/core'
 import type { EditorCommand } from './commands-keyframe'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 import type { CurveModifier } from '../animation/modifiers/types'
 import { isScalarNumericTrack } from '../animation/typedValues'
+import { assertTimelineTargetInScope } from '../timeline/authoring/timelinePropertyScope'
 
 /** Update a track's out-of-range behavior settings.
  *  @param timelineId - Timeline containing the track
@@ -19,7 +23,7 @@ export function makeSetOutOfRangeCmd(
 ): EditorCommand {
   return {
     label: 'Set Out of Range',
-    execute: (scene) => updateOutOfRange(scene, timelineId, target, nextSettings),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, target); return updateOutOfRange(scene, timelineId, target, nextSettings) },
     undo: (scene) => updateOutOfRange(scene, timelineId, target, prevSettings),
   }
 }
@@ -103,6 +107,7 @@ function updateScopeArray(
   }
 }
 
+/** Append one modifier to an outer track/segment; isolated targets reject on execute. */
 export function makeAddCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
@@ -110,11 +115,12 @@ export function makeAddCurveModifierCmd(
 ): EditorCommand {
   return {
     label: `Add ${modifier.type} modifier`,
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) => [...arr, modifier]),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, scope.target); return updateScopeArray(scene, timelineId, scope, (arr) => [...arr, modifier]) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) => arr.filter((m) => m.id !== modifier.id)),
   }
 }
 
+/** Remove one outer modifier by stable identity; undo restores its original order. */
 export function makeRemoveCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
@@ -124,7 +130,7 @@ export function makeRemoveCurveModifierCmd(
 ): EditorCommand {
   return {
     label: `Remove ${modifier.type} modifier`,
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) => arr.filter((m) => m.id !== modifier.id)),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, scope.target); return updateScopeArray(scene, timelineId, scope, (arr) => arr.filter((m) => m.id !== modifier.id)) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) => {
       const next = [...arr]
       const idx = Math.max(0, Math.min(next.length, originalIndex))
@@ -134,6 +140,7 @@ export function makeRemoveCurveModifierCmd(
   }
 }
 
+/** Replace an outer modifier's source settings; isolated targets remain read-only. */
 export function makeUpdateCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
@@ -143,15 +150,14 @@ export function makeUpdateCurveModifierCmd(
 ): EditorCommand {
   return {
     label: `Edit ${next.type} modifier`,
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) =>
-      arr.map((m) => m.id === modifierId ? next : m)
-    ),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, scope.target); return updateScopeArray(scene, timelineId, scope, (arr) => arr.map((m) => m.id === modifierId ? next : m)) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) =>
       arr.map((m) => m.id === modifierId ? prev : m)
     ),
   }
 }
 
+/** Reorder the outer modifier stack in one reversible, scope-checked source edit. */
 export function makeReorderCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
@@ -167,7 +173,7 @@ export function makeReorderCurveModifierCmd(
   }
   return {
     label: 'Reorder modifier',
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) => reorder(arr, fromIndex, toIndex)),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, scope.target); return updateScopeArray(scene, timelineId, scope, (arr) => reorder(arr, fromIndex, toIndex)) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) => reorder(arr, toIndex, fromIndex)),
   }
 }
@@ -208,7 +214,7 @@ export function makeUpdateTrackCurvesCmd(
   const fields = Object.keys(next).join(', ')
   return {
     label: `Edit Track Curves (${fields || 'reset'})`,
-    execute: (scene) => apply(scene, next),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, target); return apply(scene, next) },
     undo:    (scene) => apply(scene, prev),
   }
 }
@@ -245,6 +251,7 @@ export function makeApplyTrackBakeCmd(timelineId: string, target: string, prevTr
   return {
     label: `Bake Track to Keyframes (${baked.keyframes.length} kfs)`,
     execute: (scene) => {
+      assertTimelineTargetInScope(scene.layers, target)
       validateBakeOptions(options)
       const timeline = scene.timelines.find(item => item.id === timelineId)
       const live = timeline?.tracks.find(track => track.target === target)
@@ -299,7 +306,7 @@ export function makeSetTrackControllerCmd(
     : `Set Controller: ${next.type}`
   return {
     label,
-    execute: (scene) => apply(scene, next),
+    execute: (scene) => { assertTimelineTargetInScope(scene.layers, target); return apply(scene, next) },
     undo:    (scene) => apply(scene, prev),
   }
 }
