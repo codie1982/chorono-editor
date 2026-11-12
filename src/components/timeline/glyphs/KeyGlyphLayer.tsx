@@ -1,4 +1,5 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { KeyGlyphLayout, type KeyGlyphPoint } from '@/lib/timeline/glyphs/KeyGlyphLayout'
 
@@ -116,8 +117,8 @@ export function KeyGlyphLayer(props: Props) {
         }} onKeyDown={event => {
           if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setBrowse(false); navigate(Math.max(0, ordinal)) }
         }}>
-          <input aria-label={`Key number in ${props.label}`} type="number" min={1} max={layout.count} required value={draft}
-            onChange={event => setDraft(event.target.value)} className="w-16 bg-gray-800 text-gray-200" autoFocus />
+          <CalculationNumberInput aria-label={`Key number in ${props.label}`} min={1} max={layout.count} required value={draft}
+            onChange={event => setDraft(event.target.value)} className="w-16 bg-gray-800 text-gray-200" autoFocus onCalculate={calculated => setDraft(String(calculated))} />
           <span>/ {layout.count}</span><button type="submit" aria-label="Go to key">Go</button>
           <button type="button" aria-label="Close key navigation" onClick={() => { setBrowse(false); navigate(Math.max(0, ordinal)) }}>×</button>
         </form> : <button type="button" aria-label={`Browse ${layout.count} keys in ${props.label}`} onClick={() => {

@@ -8,7 +8,8 @@ export const defaultBindings: ShortcutDefinition[] = [
 
   // ── Canvas — tools ───────────────────────────────────────────────────────
   { id: 'canvas.tool.select',           label: 'Select Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'v' } },
-  { id: 'canvas.tool.pan',              label: 'Pan Tool',           contexts: ['canvas'], binding: { type: 'keyboard', key: 'h' } },
+  { id: 'canvas.tool.pan',              label: 'Toggle Pan Tool',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'm' }, description: 'Toggle view panning; press again to restore the previous tool' },
+  { id: 'canvas.tool.panLegacy',        label: 'Toggle Pan Tool (H)', contexts: ['canvas'], binding: { type: 'keyboard', key: 'h' }, description: 'Alternate Pan toggle; restores the previous tool' },
   { id: 'canvas.tool.pen',              label: 'Pen Tool',           contexts: ['canvas'], binding: { type: 'keyboard', key: 'p' } },
   { id: 'canvas.tool.move',             label: 'Move Tool',          contexts: ['canvas'], binding: { type: 'keyboard', key: 'g' } },
   { id: 'canvas.tool.rotate',           label: 'Rotate Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'r' } },
@@ -18,6 +19,16 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.tool.lasso-select',     label: 'Lasso Select',       contexts: ['canvas'], binding: { type: 'keyboard', key: 'l' } },
   { id: 'canvas.tool.circle-select',    label: 'Circle Select',      contexts: ['canvas'], binding: { type: 'keyboard', key: 'o' } },
   { id: 'canvas.tool.paint-select',     label: 'Paint Select',       contexts: ['canvas'], binding: { type: 'keyboard', key: 'w' } },
+
+  // Canvas movement takes precedence over the global timeline frame shortcuts.
+  { id: 'canvas.nudge.left',    label: 'Move Selected Left 1 px',   contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowleft' } },
+  { id: 'canvas.nudge.right',   label: 'Move Selected Right 1 px',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowright' } },
+  { id: 'canvas.nudge.up',      label: 'Move Selected Up 1 px',     contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowup' } },
+  { id: 'canvas.nudge.down',    label: 'Move Selected Down 1 px',   contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowdown' } },
+  { id: 'canvas.nudge.left10',  label: 'Move Selected Left 10 px',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowleft', shift: true } },
+  { id: 'canvas.nudge.right10', label: 'Move Selected Right 10 px', contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowright', shift: true } },
+  { id: 'canvas.nudge.up10',    label: 'Move Selected Up 10 px',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowup', shift: true } },
+  { id: 'canvas.nudge.down10',  label: 'Move Selected Down 10 px',  contexts: ['canvas'], binding: { type: 'keyboard', key: 'arrowdown', shift: true } },
 
   // ── Selection / deletion (works in any context — handler is context-aware) ─
   { id: 'global.delete',            label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'delete' } },
@@ -43,8 +54,9 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.distribute.vertical',    label: 'Distribute Vertical',     contexts: ['canvas'], binding: { type: 'keyboard', key: 'v', meta: true, alt: true } },
 
   // ── Canvas — gestures ────────────────────────────────────────────────────
-  { id: 'canvas.gesture.cloneDrag',    label: 'Clone while dragging',          contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['shift'] } },
-  { id: 'canvas.gesture.instanceDrag', label: 'Instance clone while dragging', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['alt'] } },
+  { id: 'canvas.gesture.cloneDrag',    label: 'Clone while dragging',          contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta'] }, description: 'Cmd/Ctrl + drag copies the complete selected subtree and animation' },
+  { id: 'canvas.gesture.cloneDragAlt', label: 'Copy while dragging (Alt)', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['alt'] }, description: 'Hold Alt before mouse-down, drag, then release the mouse to copy; Alt may remain held' },
+  { id: 'canvas.gesture.instanceDrag', label: 'Instance clone while dragging', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta', 'shift'] }, description: 'Cmd/Ctrl + Shift + drag creates linked appearance with independent animation' },
 
   // ── Playback ─────────────────────────────────────────────────────────────
   { id: 'global.playback.toggle',        label: 'Play / Pause',           contexts: ['global'],   binding: { type: 'keyboard', key: ' ' } },
@@ -66,6 +78,16 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'timeline.keyframe.opacity',  label: 'Add/Remove Opacity Keyframe',  contexts: ['timeline'], binding: { type: 'keyboard', key: 't', alt: true } },
 
   // ── Timeline — navigation ────────────────────────────────────────────────
-  { id: 'timeline.nav.prevKeyframe', label: 'Previous Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: 'j' } },
-  { id: 'timeline.nav.nextKeyframe', label: 'Next Keyframe',     contexts: ['timeline'], binding: { type: 'keyboard', key: 'k' } },
+  { id: 'timeline.nav.prevKeyframe', label: 'Previous Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: ',' } },
+  { id: 'timeline.nav.nextKeyframe', label: 'Next Keyframe',     contexts: ['timeline'], binding: { type: 'keyboard', key: '.' } },
+  { id: 'timeline.keyframe.set', label: 'Set Key', contexts: ['timeline', 'canvas'], binding: { type: 'keyboard', key: 'k' }, description: 'Set the active keyset for all selected layers in one undo' },
+  { id: 'timeline.nav.prevKeyframeLegacy', label: 'Previous Keyframe (legacy J)', contexts: ['timeline'], binding: { type: 'keyboard', key: 'j' } },
+  { id: 'timeline.nav.start', label: 'Timeline Start', contexts: ['timeline'], binding: { type: 'keyboard', key: 'home' } },
+  { id: 'timeline.nav.end', label: 'Timeline End', contexts: ['timeline'], binding: { type: 'keyboard', key: 'end' } },
+  { id: 'timeline.nav.firstKey', label: 'First Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: 'home', shift: true } },
+  { id: 'timeline.nav.lastKey', label: 'Last Keyframe', contexts: ['timeline'], binding: { type: 'keyboard', key: 'end', shift: true } },
+  { id: 'timeline.marker.previous', label: 'Previous Marker', contexts: ['timeline'], binding: { type: 'keyboard', key: '[' } },
+  { id: 'timeline.marker.next', label: 'Next Marker', contexts: ['timeline'], binding: { type: 'keyboard', key: ']' } },
+  { id: 'timeline.bookmark.save', label: 'Save Timeline Bookmark', contexts: ['timeline'], binding: { type: 'keyboard', key: 'b', meta: true } },
+  ...Array.from({ length: 9 }, (_, i) => ({ id: `timeline.bookmark.${i + 1}`, label: `Timeline Bookmark ${i + 1}`, contexts: ['timeline'] as import('./ShortcutDefinition').ShortcutContext[], binding: { type: 'keyboard' as const, key: String(i + 1), meta: true } })),
 ]

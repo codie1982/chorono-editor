@@ -9,12 +9,13 @@
  *     existing BL-38 behaviour: pinned roots float to top)
  *   - Text filter (substring on layer name + type)
  *
- * Reuses {@link SceneTraversal.buildTree} so the parent-child tree itself is
- * cached across calls; only the flattening pass runs on every render.
+ * Uses the common LayerIndex-backed editor projection. Faceted search, solo and
+ * visibility eligibility intersect before ancestor context is added. Stable
+ * sibling sorting, UI collapse and explicit Find never change source data.
  */
 
 import type { Layer, Timeline } from '@/lib/types'
-import { SceneTraversal, type SceneNode } from '@/lib/scene/SceneTraversal'
+import { buildEditorLayerRows } from '@/lib/scene/hierarchy/editorLayerRows'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import { editorSoloScope } from '@/lib/scene/visibility/editorSoloScope'
 import {
@@ -44,6 +45,8 @@ export interface SceneExplorerRow {
   expanded: boolean
   /** Whether this row is currently pinned (root-level only — see filtering). */
   pinned: boolean
+  /** Ancestor or explicit Find result outside the panel match set. */
+  contextOnly?: boolean
 
   // ── Info-row fields (only set when kind === 'info') ───────────────────────
   /** Which info bucket this row belongs to. */
@@ -85,6 +88,8 @@ export interface SceneExplorerFilterOptions {
   /** Predicate: does a layer have effects or masks?
    *  (Only consulted when visibilityFilters.onlyWithEffects is on.) */
   hasEffects?: (layer: Layer) => boolean
+  /** Explicit Find selected paths; preserves all filters and source flags. */
+  revealIds?: readonly string[]
 }
 
 /**
@@ -104,124 +109,23 @@ export function buildSceneExplorerRows(
   layers: Layer[],
   options: SceneExplorerFilterOptions,
 ): SceneExplorerRow[] {
-  const {
-    collapsedIds, subInfoExpandedIds, timeline, textFilter, sort,
-    visibilityFilters, isAnimated, hasEffects,
-  } = options
-  const subExpanded = subInfoExpandedIds ?? new Set<string>()
-
-  // BL-57 — faceted query. Bare-substring queries still work because the
-  // parser emits a bare term (no facet) which the evaluator OR-matches
-  // against name + type.
-  const searchQuery = parseSearchQuery(textFilter ?? '')
-  const searchPreds: SearchPredicates = { isAnimated, hasEffects }
-
-  // Visibility-filter ancestor resolution: when a filter is active, only
-  // layers passing it are emitted — PLUS the ancestors of those layers
-  // (so a matching grandchild stays reachable). Mirrors the text-filter
-  // pattern so the hierarchy never breaks unexpectedly.
-  let visFilterSet: Set<string> | null = null
-  if (visibilityFilters && !isPassThrough(visibilityFilters)) {
-    const isAnim = isAnimated ?? (() => false)
-    const hasFx  = hasEffects ?? (() => false)
-    visFilterSet = new Set<string>()
-    for (const layer of layers) {
-      if (passesFilters(layer, visibilityFilters, isAnim, hasFx)) {
-        visFilterSet.add(layer.id)
-      }
-    }
-    // Add ancestors so collapsed-but-matching descendants stay reachable.
-    const initialMatches = Array.from(visFilterSet)
-    for (const id of initialMatches) {
-      const ancestors = SceneTraversal.getAncestors(SceneTraversal.buildTree(layers), id)
-      for (const node of ancestors) visFilterSet.add(node.layer.id)
-    }
-  }
-
-  // Stable comparator built from the sort accessor; falls back to original
-  // index so layers with equal sort keys keep their authored z-order.
-  const compare = sort
-    ? (a: SceneNode, b: SceneNode): number => {
-        const va = sort.accessor(a.layer)
-        const vb = sort.accessor(b.layer)
-        let r = 0
-        if (va < vb) r = -1
-        else if (va > vb) r = 1
-        return sort.direction === 'desc' ? -r : r
-      }
-    : null
-
-  // Build tree once (cached in SceneTraversal).
-  const roots = SceneTraversal.buildTree(layers)
-
-  // Pre-compute matches set (faceted query) — we need ancestors of matches.
-  let matchIds: Set<string> | null = null
-  if (!searchQuery.isEmpty) {
-    matchIds = new Set<string>()
-    for (const layer of layers) {
-      if (matchesQuery(layer, searchQuery, searchPreds)) matchIds.add(layer.id)
-    }
-    // Add ancestors of every match so the path stays visible. (A nested
-    // matching layer needs its parents drawn so the user can read the
-    // hierarchy — they appear unstyled vs. the matched row.)
-    const ancestorsOf = new Set<string>()
-    matchIds.forEach((id) => {
-      const ancestors = SceneTraversal.getAncestors(roots, id)
-      for (const node of ancestors) ancestorsOf.add(node.layer.id)
-    })
-    ancestorsOf.forEach((id) => matchIds!.add(id))
-  }
-
-  // Shared solo subtrees plus ancestor context; no flat/tree disagreement.
-  const visibleByFilter = editorSoloScope(layers, true)
-
+  const { collapsedIds, subInfoExpandedIds, timeline, textFilter, sort,
+    visibilityFilters, isAnimated, hasEffects, revealIds } = options
+  const query = parseSearchQuery(textFilter ?? ''), preds: SearchPredicates = { isAnimated, hasEffects }
+  const solo = editorSoloScope(layers)
+  const matches = new Set(layers.filter(layer => (!solo || solo.has(layer.id)) &&
+    (query.isEmpty || matchesQuery(layer, query, preds)) &&
+    (!visibilityFilters || isPassThrough(visibilityFilters) || passesFilters(layer, visibilityFilters, isAnimated ?? (() => false), hasEffects ?? (() => false))))
+    .map(layer => layer.id))
+  const compare = sort ? (a: Layer, b: Layer) => {
+    const va = sort.accessor(a), vb = sort.accessor(b), result = va < vb ? -1 : va > vb ? 1 : 0
+    return sort.direction === 'desc' ? -result : result
+  } : undefined
   const out: SceneExplorerRow[] = []
-  const emit = (node: SceneNode) => {
-    const { layer } = node
-    if (visibleByFilter && !visibleByFilter.has(layer.id)) return
-    if (matchIds && !matchIds.has(layer.id)) return
-    if (visFilterSet && !visFilterSet.has(layer.id)) return
-    // hidden layers are still emitted in the tree so the user can toggle
-    // them back — the CELL renders a struck-through / dimmed style.
-    const expanded = !collapsedIds.has(layer.id)
-    out.push({
-      id:          layer.id,
-      kind:        'layer',
-      layer,
-      depth:       node.depth,
-      hasChildren: node.children.length > 0,
-      expanded,
-      pinned:      !!layer.pinned,
-    })
-
-    // BL-57 C-lite — emit read-only sub-info rows below the layer when
-    // the user has expanded its subtree. Independent of group expand state
-    // so the user can have the children collapsed but still inspect what's
-    // animating / what effects are applied.
-    if (subExpanded.has(layer.id)) {
-      const infoRows = buildLayerInfoRows(layer, node.depth + 1, timeline)
-      for (const r of infoRows) out.push(r)
-    }
-
-    if (expanded) {
-      const children = compare
-        ? [...node.children].sort(compare)
-        : node.children
-      for (const child of children) emit(child)
-    }
+  for (const row of buildEditorLayerRows(layers, { collapsedIds, matches, revealIds, compare })) {
+    out.push({ ...row, id: row.layer.id, kind: 'layer', pinned: !!row.layer.pinned && row.depth === 0 })
+    if (subInfoExpandedIds?.has(row.layer.id)) out.push(...buildLayerInfoRows(row.layer, row.depth + 1, timeline))
   }
-
-  // Root-level ordering: pinned roots float to the top (BL-38 parity).
-  // Within each (pinned / unpinned) bucket, apply the active sort so the
-  // parent-child hierarchy is preserved (parent stays at top of its
-  // subtree, children sort within their parent).
-  const pinnedRoots   = roots.filter((n) => !!n.layer.pinned)
-  const unpinnedRoots = roots.filter((n) => !n.layer.pinned)
-  const orderedRoots = compare
-    ? [...pinnedRoots].sort(compare).concat([...unpinnedRoots].sort(compare))
-    : [...pinnedRoots, ...unpinnedRoots]
-  for (const root of orderedRoots) emit(root)
-
   return out
 }
 

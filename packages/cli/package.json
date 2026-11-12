@@ -1,6 +1,6 @@
 {
   "name": "@codie1982/chorono",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Set up the Chorono editor, MCP connection and animation skills for Claude and Codex",
   "type": "module",
   "license": "MIT",

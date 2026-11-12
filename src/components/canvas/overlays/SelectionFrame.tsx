@@ -4,6 +4,7 @@ import { type Handle, HANDLE_CURSORS } from '../types/canvasDragTypes'
 // ── Selection frame with 8 resize handles ────────────────────────────────────
 
 interface FrameProps {
+  selectionKind?: 'multiple'
   x: number; y: number; w: number; h: number
   /** Anchor position in screen px RELATIVE to the frame's top-left.
    *  Used as the CSS transform-origin so the frame rotates around the
@@ -11,6 +12,8 @@ interface FrameProps {
   anchorOffsetX: number
   anchorOffsetY: number
   rotationDeg: number
+  /** Dashed editor frame for geometry partly or wholly outside composition. */
+  dashed?: boolean
   /** Resize handles render only when provided (Scale + Select modes). */
   onHandlePointerDown?: (h: Handle) => (e: React.PointerEvent) => void
   /** Rotate handles render only when provided (Rotate + Select modes). */
@@ -19,7 +22,7 @@ interface FrameProps {
 
 export function SelectionFrame({
   x, y, w, h, anchorOffsetX, anchorOffsetY, rotationDeg,
-  onHandlePointerDown, onRotatePointerDown,
+  onHandlePointerDown, onRotatePointerDown, selectionKind, dashed,
 }: FrameProps) {
   // 8 resize handles on the frame perimeter (corners + edge midpoints)
   const handles: Array<{ key: Handle; cx: number; cy: number }> = [
@@ -44,6 +47,7 @@ export function SelectionFrame({
   return (
     <div
       data-testid="selection-frame"
+      data-selection-kind={selectionKind}
       className="absolute pointer-events-none"
       style={{
         left: x, top: y, width: w, height: h,
@@ -52,7 +56,8 @@ export function SelectionFrame({
       }}
     >
       {/* Frame border */}
-      <div className="absolute inset-0 border border-blue-400/90 box-border" />
+      <div className={`absolute inset-0 border-2 border-blue-400 box-border ${dashed ? 'border-dashed' : ''}`}
+        style={{ boxShadow: '0 0 0 1px rgba(15,23,42,0.65)' }} />
 
       {/* Rotation handles — small white circles, drawn diagonally outside corners */}
       {onRotatePointerDown && rotHandles.map((r) => (
@@ -72,6 +77,8 @@ export function SelectionFrame({
       {onHandlePointerDown && handles.map((h) => (
         <div
           key={h.key}
+          data-handle={h.key}
+          title={`Resize ${h.key}`}
           onPointerDown={onHandlePointerDown(h.key)}
           className="absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2
                      bg-white border border-blue-500 rounded-full shadow pointer-events-auto"

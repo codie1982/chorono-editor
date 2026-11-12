@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useState, useMemo } from 'react'
 import { shortcutRegistry } from '@/lib/shortcuts'
 import type { ShortcutDefinition, ShortcutContext, KeyBinding } from '@/lib/shortcuts'
@@ -100,7 +101,7 @@ export default function KeyboardShortcutsPanel() {
     <div className="h-full bg-gray-900 text-gray-200 overflow-auto flex flex-col">
       {/* ── Visual Keyboard ──────────────────────────────────────────────── */}
       <div className="p-3 border-b border-gray-800 shrink-0">
-        <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 font-semibold">Visual Keyboard</div>
+        <div className="flex items-center justify-between mb-2"><span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Visual Keyboard</span><DocumentationHelp topic="editor/shortcuts" /></div>
         <div className="space-y-1">
           {KB_ROWS.map((row, ri) => (
             <div key={ri} className="flex gap-0.5">

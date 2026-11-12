@@ -40,6 +40,7 @@ const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
   'image',
   'video',
   'audio',
+  'frameSequence',
   'pathStroke',
   'motionPath',
   'followPath',

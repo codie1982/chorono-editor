@@ -5,4 +5,4 @@ export { defaultBindings } from './defaultBindings'
 // Pre-load the singleton with defaults on first import
 import { shortcutRegistry } from './ShortcutRegistry'
 import { defaultBindings } from './defaultBindings'
-shortcutRegistry.registerAll(defaultBindings)
+shortcutRegistry.registerDefaults(defaultBindings)

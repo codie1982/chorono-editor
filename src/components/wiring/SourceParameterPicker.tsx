@@ -17,7 +17,7 @@
 // incompatible with `expectedType` render disabled.
 
 import { useMemo, useState } from 'react'
-import type { ChronoScene, ParameterRef, ParameterValueType } from '@/lib/types'
+import type { ChronoScene, Layer, ParameterRef, ParameterValueType } from '@/lib/types'
 import {
   listLayerParameterRefs, listSceneParameterRefs,
   formatParameterRef, paramRefKey, areTypesCompatible,
@@ -32,17 +32,21 @@ interface Props {
   /** Items not type-compatible with `expectedType` are greyed-out but still
    *  visible (helps users learn what's available). When omitted, no greying. */
   expectedType?: ParameterValueType
+  /** Exact types for strict expression inputs, without legacy Wire coercion. */
+  acceptedValueTypes?: readonly ParameterValueType[]
+  /** Optional strict typed enumeration; legacy Wire sources keep their catalogue. */
+  layerRefs?: (layer: Layer) => ParameterRef[]
   /** Accent color (matches Source vs. Target column tinting in the modal). */
   accentClass?: string
 }
 
 export default function SourceParameterPicker({
-  scene, value, onChange, excludeRef, expectedType,
+  scene, value, onChange, excludeRef, expectedType, acceptedValueTypes, layerRefs,
   accentClass = 'text-sky-300',
 }: Props) {
   const [search, setSearch] = useState('')
   // Layers collapsed by default — saves vertical space for big scenes.
-  const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(new Set())
+  const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(() => new Set(scene.layers.map(layer => layer.id)))
   const [paramsCollapsed, setParamsCollapsed] = useState(false)
 
   const excludeKey = excludeRef ? paramRefKey(excludeRef) : null
@@ -63,10 +67,10 @@ export default function SourceParameterPicker({
   // Pre-build a list of (layer, refs) tuples and filter; track which layers
   // have *any* match so collapsed-expanded state can be auto-overridden.
   const layerSections = useMemo(() => scene.layers.map((layer) => {
-    const refs = listLayerParameterRefs(layer)
+    const refs = (layerRefs ?? listLayerParameterRefs)(layer)
     const filtered = refs.filter((r) => isMatch(layer.name) || isMatch(r.propertyPath))
     return { layer, refs: filtered, totalRefs: refs.length }
-  }).filter((s) => s.refs.length > 0), [scene.layers, q])
+  }).filter((s) => s.refs.length > 0), [scene.layers, q, layerRefs])
 
   // When searching, auto-expand any layer with matches so hits are visible.
   const forceExpanded = q !== ''
@@ -120,7 +124,7 @@ export default function SourceParameterPicker({
                   hint={`(${ref.valueType})`}
                   isSelected={value && paramRefKey(value) === paramRefKey(ref)}
                   isExcluded={excludeKey != null && excludeKey === paramRefKey(ref)}
-                  isCompatible={!expectedType || areTypesCompatible(ref.valueType, expectedType)}
+                  isCompatible={acceptedValueTypes ? acceptedValueTypes.includes(ref.valueType) : !expectedType || areTypesCompatible(ref.valueType, expectedType)}
                   onPick={onChange}
                   accentClass={accentClass}
                 />
@@ -156,7 +160,7 @@ export default function SourceParameterPicker({
                       hint={`(${ref.valueType})`}
                       isSelected={value && paramRefKey(value) === paramRefKey(ref)}
                       isExcluded={excludeKey != null && excludeKey === paramRefKey(ref)}
-                      isCompatible={!expectedType || areTypesCompatible(ref.valueType, expectedType)}
+                      isCompatible={acceptedValueTypes ? acceptedValueTypes.includes(ref.valueType) : !expectedType || areTypesCompatible(ref.valueType, expectedType)}
                       onPick={onChange}
                       indent
                       accentClass={accentClass}

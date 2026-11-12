@@ -6,7 +6,9 @@
 // undoable makeUpdateLayerCmd commands via the mutation helpers.
 
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
+import { Vector2Input } from '@/components/inputs/Vector2Input'
 import type { Layer } from '@/lib/types'
 import type { SplinePathData, SplinePointType } from '@/lib/types/spline'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
@@ -28,22 +30,6 @@ const TYPES: { value: SplinePointType; label: string }[] = [
   { value: 'bezierCorner', label: 'Bezier Corner' },
 ]
 
-function NumberField({ label, value, onCommit }: { label: string; value: number; onCommit: (v: number) => void }) {
-  return (
-    <label className="flex items-center gap-1 text-[11px] text-gray-400">
-      <span className="w-4">{label}</span>
-      <input
-        type="number"
-        defaultValue={Math.round(value * 100) / 100}
-        key={`${label}:${value}`}
-        onBlur={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v) && v !== value) onCommit(v) }}
-        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-        className="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-100 text-[11px]"
-      />
-    </label>
-  )
-}
-
 export default function SplinePointInspector({ layer, pointId, dispatchCommand }: Props) {
   if (layer.type !== 'spline' || !layer.spline || !pointId) return null
   const spline = layer.spline
@@ -62,6 +48,7 @@ export default function SplinePointInspector({ layer, pointId, dispatchCommand }
     <div className="border-t border-gray-700 px-3 py-2 space-y-2" data-panel="spline-point">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-gray-200 uppercase tracking-wide">Spline Point</span>
+        <DocumentationHelp topic="editor/canvas/splines" className="ml-auto mr-1" />
         <button
           onClick={() => apply(deleteSplinePoint(spline, pointId))}
           className="text-[11px] text-red-400 hover:text-red-300"
@@ -82,26 +69,19 @@ export default function SplinePointInspector({ layer, pointId, dispatchCommand }
         </select>
       </label>
 
-      {/* Position */}
-      <div className="grid grid-cols-2 gap-2">
-        <NumberField label="X" value={point.x} onCommit={(v) => apply(moveSplinePoint(spline, pointId, v, point.y))} />
-        <NumberField label="Y" value={point.y} onCommit={(v) => apply(moveSplinePoint(spline, pointId, point.x, v))} />
-      </div>
+      <Vector2Input label="Point position" propertyPath={`spline.points.${pointId}`} value={point}
+        onChange={position => apply(moveSplinePoint(spline, pointId, position.x, position.y))} />
 
       {/* In handle */}
       {inH && (
-        <div className="grid grid-cols-2 gap-2">
-          <NumberField label="iX" value={inH.x} onCommit={(v) => apply(moveSplineHandle(spline, pointId, 'in', v, inH.y))} />
-          <NumberField label="iY" value={inH.y} onCommit={(v) => apply(moveSplineHandle(spline, pointId, 'in', inH.x, v))} />
-        </div>
+        <Vector2Input label="In handle" propertyPath={`spline.handles.${inH.id}`} value={inH}
+          onChange={position => apply(moveSplineHandle(spline, pointId, 'in', position.x, position.y))} />
       )}
 
       {/* Out handle */}
       {outH && (
-        <div className="grid grid-cols-2 gap-2">
-          <NumberField label="oX" value={outH.x} onCommit={(v) => apply(moveSplineHandle(spline, pointId, 'out', v, outH.y))} />
-          <NumberField label="oY" value={outH.y} onCommit={(v) => apply(moveSplineHandle(spline, pointId, 'out', outH.x, v))} />
-        </div>
+        <Vector2Input label="Out handle" propertyPath={`spline.handles.${outH.id}`} value={outH}
+          onChange={position => apply(moveSplineHandle(spline, pointId, 'out', position.x, position.y))} />
       )}
     </div>
   )

@@ -29,11 +29,14 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
   extra('list_sessions',
     'Find browser tabs explicitly paired with the running local Chorono server. Returns JSON text with sessions: [{id,label,lastSeenAt}]; an empty list means no connected editor. Use an id as sessionId to select a tab. Does not open or connect tabs; unlike get_scene, no paired tab is required.', {}, [], true),
   extra('get_capabilities',
-    'Discover supported tools, object kinds/property controls, particle preset ids, limits, exports and the SceneAPI reference. Returns this metadata as JSON text without requiring a running editor. Use get_scene for actual project data; capability discovery does not prove a browser is connected.', {}, [], true),
+    'Discover supported tools, object kinds/property controls, particle preset ids, limits, exports and the SceneAPI reference. Returns this metadata as JSON text without requiring a running editor. Use get_scene for actual project data; capability discovery does not prove a browser is connected. summary:true omits large schemas; toolName returns one exact callable schema and batch support.', {
+      summary: { type: 'boolean', description: 'Lightweight discovery without full schemas/property groups/script help. Cannot combine true with toolName.' },
+      toolName: { type: 'string', description: 'Exact canonical or historical tool name to inspect; no editor operation runs.' },
+    }, [], true),
   extra('get_scene',
-    'Read the complete scene, revision, selectedTimelineId and currentTimeMs from a connected editor as JSON text. Use before editing existing data and for full nested fields; list_layers/describe_layer give shorter summaries. Reading does not embed temporary blob media; save_project creates a portable file.', {}, [], true),
+    'Read the complete scene, revision, selectedTimelineId and currentTimeMs from a connected editor as JSON text. Use before editing existing data and for full nested fields; list_layers/describe_layer give shorter summaries. Returns a one-use readToken for source edits at this revision in this connection, valid five minutes. Reading does not embed temporary blob media; save_project creates a portable file.', {}, [], true),
   extra('run_script',
-    'Build editable layers and animation with synchronous SceneAPI JavaScript in isolated QuickJS, with no Node, DOM, network, imports or filesystem. Failure discards all edits. Returns JSON text with scene summaries, logs and commandCount; a commit also returns revision. dryRun adds planId without editing; use apply_script_plan to commit it. Use batch_actions for native tool calls.', {
+    'Build editable layers and animation with synchronous SceneAPI JavaScript in isolated QuickJS, with no Node, DOM, network, imports or filesystem. Failure discards all edits. Returns JSON text with scene summaries, logs and commandCount; a commit also returns revision. dryRun adds planId and a new plan-bound readToken/revision without editing; use apply_script_plan to commit it. Use batch_actions for native tool calls.', {
       code: { type: 'string', maxLength: LIMITS.scriptBytes, description: 'Synchronous authoring code using the documented scene API in chorono://scripting. Maximum 128 KiB; execution is limited to 2 seconds and a 32 MiB isolated heap.' },
       dryRun: { type: 'boolean', description: 'Default false. If true, prepare a plan valid for five minutes in this session, returning planId and the unchanged revision. Does not apply edits.' },
     }, ['code']),
@@ -45,7 +48,7 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
     'Apply ordered native scene actions atomically as one undo step. Later actions see earlier changes; any failure discards the batch. Returns JSON text with revision, composition, layer/timeline summaries and addedLayerIds. Supports ActionRegistry mutations only, not scripts, reads, playback or file tools; use run_script for procedural authoring.', {
       actions: {
         type: 'array', minItems: 1, maxItems: 100,
-        description: 'One to 100 ordered native mutations; put sessionId, expectedRevision and requestId on the outer batch, not individual actions.',
+        description: 'One to 100 ordered native mutations; put sessionId, expectedRevision, readToken and requestId on the outer batch, not individual actions.',
         items: {
           type: 'object', required: ['name', 'arguments'], additionalProperties: false,
           properties: {

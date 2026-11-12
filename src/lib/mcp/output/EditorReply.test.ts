@@ -2,11 +2,22 @@ import {describe,expect,it,vi} from 'vitest'
 import {executeEditorJobInScope,type MCPHost} from '../editor'
 import {OutputResources} from '../../export/resources'
 import {withEditorReply} from './EditorReply'
+import {SourceAccessError} from '../source/SourceAccessError'
 
 vi.mock('../editor',()=>({executeEditorJobInScope:vi.fn()}))
 const execute=vi.mocked(executeEditorJobInScope),job={id:'j',method:'snapshot',args:{}},host={} as MCPHost
 
 describe('MCP output transport ownership',()=>{
+  it('preserves structured source failures without serializing authorization or scenes',async()=>{
+    const owner=new OutputResources()
+    execute.mockRejectedValueOnce(new SourceAccessError('SOURCE_DOCUMENT_CHANGED'))
+    await withEditorReply(job,host,'session',async body=>{
+      const value=JSON.parse(body)
+      expect(value.errorData).toEqual({code:'SOURCE_DOCUMENT_CHANGED',message:expect.any(String),recovery:'get_scene'})
+      expect(value.result).toBeUndefined();expect(value.sourceAuthorization).toBeUndefined()
+    },{resources:owner})
+    expect(owner.getSnapshot().residency.chargedBytes).toBe(0);owner.dispose()
+  })
   it('holds result and admitted JSON body through actual transport settlement',async()=>{
     const owner=new OutputResources(),dispose=vi.fn()
     execute.mockImplementationOnce(async(_job,_host,scope)=>scope.own(512,()=>({answer:'text'}),dispose).value)

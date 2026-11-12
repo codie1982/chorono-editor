@@ -78,6 +78,7 @@ When delegating planning/exploration tasks, see **[[agent_prompt_quality]]** in 
 
 ## 🔗 Key References
 
+- Source mutations require a fresh `get_scene` read in this MCP connection/editor, `expectedRevision` and its one-use `readToken`; dry-run commit uses the plan's returned token/revision. On conflict read again and preserve the current manual edits. See [the MCP guide](docs/en/mcp.md#mandatory-source-read-and-revision).
 - [MCP animation authoring](AGENTS.md) — connected editor workflow for Claude and Codex
 - [Engineering standards](AGENTS.md#software-engineering-standards) — canonical coding and maintainer handoff rules
 - [MCP setup and capabilities](docs/tr/mcp.md) — isolated scripts, multi-timeline animation, previews and portable projects

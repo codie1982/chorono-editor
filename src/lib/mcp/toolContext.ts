@@ -1,17 +1,20 @@
 import type { JsonObject, ToolDefinition } from './protocol'
+import { isSourceMutation } from './source/ToolSourcePolicy'
 
 const discoveryTools = new Set(['list_sessions', 'get_capabilities', 'list_projects'])
-const unguardedTools = new Set(['control_playback', 'control_runtime', 'export_runtime', 'export_svg', 'export_sequence'])
+const revisionOnlyTools = new Set(['save_project', 'render_audio_preview', 'export_audio'])
 
 /**
  * Add the broker's common parameter documentation without mutating the source
  * schema. Existing validation keywords and parameter types remain unchanged.
- * Discovery ignores these optional fields; most reads, playback and visual exports do not
- * enforce expectedRevision. Retry results are session-local, bounded and volatile.
+ * Authored mutations require the source policy’s one-use read capability and
+ * revision, including historical tool aliases. Reads/exports do not gain a source
+ * write requirement. Retry results are session-local, bounded and volatile.
  */
 export function withBridgeParameters(tool: ToolDefinition): ToolDefinition {
   const discovery = discoveryTools.has(tool.name)
-  const guarded = ['render_audio_preview', 'export_audio'].includes(tool.name) || (!discovery && !tool.annotations?.readOnlyHint && !unguardedTools.has(tool.name))
+  const sourceWrite = isSourceMutation(tool.name)
+  const guarded = sourceWrite || revisionOnlyTools.has(tool.name)
   const unused = 'Unused by this discovery tool; omit.'
   const properties: JsonObject = {
     ...tool.inputSchema.properties,
@@ -22,15 +25,23 @@ export function withBridgeParameters(tool: ToolDefinition): ToolDefinition {
     expectedRevision: {
       type: 'integer', minimum: 0,
       description: guarded
-        ? 'Scene revision from get_scene. Rejects a stale edit or save; on conflict read the scene again before preparing new arguments.'
+        ? 'Scene revision from get_scene. Rejects a stale edit or save; on conflict read the scene again before preparing new arguments. Source mutations require this with readToken; apply_script_plan uses its dry-run revision.'
         : 'Not checked by this tool; omit. Use the returned revision, when present, to identify the observed scene.',
+    },
+    readToken: {
+      type: 'string', pattern: '^[a-f0-9]{64}$',
+      description: sourceWrite
+        ? 'Required one-use capability from get_scene in this connection/editor, valid for five minutes. apply_script_plan uses the new plan-bound token from dryRun. Authorize only the outer batch call; never store this token in scene data or logs.'
+        : 'Not checked by this read, runtime or file operation; omit.',
     },
     requestId: {
       type: 'string', maxLength: 128,
       description: discovery ? unused : 'Optional retry token, not a background job id. Reuse with the same tool and identical arguments to reuse its result. Only the last 64 ids per editor session are cached in memory; changed arguments are rejected.',
     },
   }
-  return { ...tool, inputSchema: { ...tool.inputSchema, properties, additionalProperties: false } }
+  return { ...tool, inputSchema: { ...tool.inputSchema, properties,
+    required: [...(tool.inputSchema.required ?? []), ...(sourceWrite ? ['expectedRevision', 'readToken'] : [])],
+    additionalProperties: false } }
 }
 
 /**

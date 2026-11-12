@@ -2,6 +2,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import type { ChronoScene, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import type { CurveViewport } from '@/lib/timeline/curveMath'
 import { nextKfId } from '@/lib/defaults'
 import {
@@ -25,6 +26,7 @@ interface DragSession {
 }
 
 interface UseCurveDragArgs {
+  collisionPolicy?: KeyCollisionPolicy
   editor: EditorStateReturn
   timelineId: string | null
   getTrackViewport: (target: string) => CurveViewport
@@ -90,14 +92,15 @@ export function useCurveDrag(args: UseCurveDragArgs) {
       return change.keyframe.timeMs !== before.timeMs || change.keyframe.value !== before.value
     })
     if (!changed) { cancel(); return }
-    if (curveChangesCollide(drag.base, drag.timelineId, drag.pending)) {
+    if (curveChangesCollide(drag.base, drag.timelineId, drag.pending, { collisionPolicy: latest.current.collisionPolicy })) {
       cancel()
       latest.current.onWarning?.('Move the keyframe to a free time; the drag was cancelled to preserve the existing keys.')
       return
     }
     dragRef.current = null
     release(drag)
-    latest.current.editor.commitTransaction(makeCurveKeyframeChangesCmd(drag.base, drag.timelineId, drag.pending))
+    try { latest.current.editor.commitTransaction(makeCurveKeyframeChangesCmd(drag.base, drag.timelineId, drag.pending, { collisionPolicy: latest.current.collisionPolicy })) }
+    catch (error) { latest.current.editor.cancelTransaction(); latest.current.onWarning?.((error as Error).message) }
     setPreview(null)
     latest.current.onDragEnd?.()
   }, [cancel])

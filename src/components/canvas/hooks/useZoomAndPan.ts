@@ -1,11 +1,12 @@
 import {
-  useCallback, useLayoutEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type RefObject, type Dispatch, type SetStateAction,
 } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import { clamp } from '@/lib/canvas/math/coordinateMath'
 import type { OverrideMap } from '@/lib/evaluator'
 import { resolveLayerWorldBounds } from '@/lib/geometry/resolveLayerWorldBounds'
+import { PointerGestureSession, type PointerGestureSample } from '../interactions/PointerGestureSession'
 
 export const MIN_ZOOM  = 0.1
 export const MAX_ZOOM  = 8
@@ -44,6 +45,9 @@ export interface UseZoomAndPanReturn {
   zoomIn: () => void
   zoomOut: () => void
   beginPan: (e: React.PointerEvent) => void
+  /** End a view gesture without rolling back its last displayed pan position. */
+  cancelPan: () => void
+  isPanning: boolean
   handleWheel: (e: React.WheelEvent<HTMLDivElement>) => void
   /** Live drag ref — read .current during render for the grabbing cursor. */
   panDragRef: RefObject<{
@@ -62,6 +66,8 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
   const [zoom, setZoom] = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
   const [pan, setPan] = useState<Vec2>({ x: 0, y: 0 })
+  const [isPanning, setPanning] = useState(false)
+  const panSessionRef = useRef<PointerGestureSession | null>(null)
   const panDragRef = useRef<{
     startClientX: number; startClientY: number; startPan: Vec2
   } | null>(null)
@@ -152,7 +158,7 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
     setZoom((z) => clamp(z * factor, MIN_ZOOM, MAX_ZOOM))
   }, [])
 
-  const handlePanMove = useCallback((e: PointerEvent) => {
+  const handlePanMove = useCallback((e: PointerGestureSample) => {
     const p = panDragRef.current
     if (!p) return
     setPan({
@@ -160,25 +166,44 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
       y: p.startPan.y + (e.clientY - p.startClientY),
     })
   }, [])
-  const handlePanUp = useCallback(() => {
-    if (!panDragRef.current) return
+  /** Release the view-only owner. Unlike a source edit, cancelling Pan keeps
+   * the last displayed view; it removes capture/listeners and its active cursor. */
+  const cancelPan = useCallback(() => {
+    panSessionRef.current?.dispose()
+    panSessionRef.current = null
     panDragRef.current = null
-    window.removeEventListener('pointermove', handlePanMove)
-    window.removeEventListener('pointerup',   handlePanUp)
-  }, [handlePanMove])
+    setPanning(false)
+  }, [])
+  /** Capture a stable viewport element for one initiating pointer/button.
+   * Up resamples its final client position. A consumed release, foreign pointer,
+   * blur/cancel or later unpressed movement cannot leave Pan driving the canvas. */
   const beginPan = useCallback((e: React.PointerEvent) => {
+    if (panSessionRef.current && !panSessionRef.current.accepts(e)) return
+    cancelPan()
     panDragRef.current = {
       startClientX: e.clientX, startClientY: e.clientY,
       startPan: { ...pan },
     }
-    window.addEventListener('pointermove', handlePanMove)
-    window.addEventListener('pointerup',   handlePanUp)
-  }, [pan, handlePanMove, handlePanUp])
+    panSessionRef.current = new PointerGestureSession({ eventTarget: window,
+      diagnostics: { owner: 'pan', details: { startPanX: pan.x, startPanY: pan.y, zoom } },
+      move: handlePanMove,
+      up: sample => { handlePanMove(sample); cancelPan() },
+      cancel: cancelPan,
+    }, { pointerId: e.pointerId, currentTarget: containerRef.current ?? e.currentTarget,
+      button: e.button, pointerType: e.pointerType })
+    setPanning(true)
+  }, [pan, zoom, handlePanMove, cancelPan, containerRef])
+
+  useEffect(() => () => {
+    panSessionRef.current?.dispose()
+    panSessionRef.current = null
+    panDragRef.current = null
+  }, [])
 
   return {
     zoom, setZoom, pan, setPan, maxSide,
     panToCentre, fitAll, fitWidth, fitHeight, actualSize, zoomTo,
     fitSelection, centreSelection, zoomIn, zoomOut,
-    beginPan, handleWheel, panDragRef,
+    beginPan, cancelPan, isPanning, handleWheel, panDragRef,
   }
 }

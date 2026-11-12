@@ -1,0 +1,149 @@
+# Sade hata özeti ve sürüm kontrolü
+
+10 Kasım 2026. Kullanıcının “hata içinde boğulmayalım” düzeltmesiyle ilk kapsam
+küçültüldü. **D0–D2 ara işi**, kalan E−1 öncesindedir. D0 kısa özet/sürüm
+altyapısı, D1 kalıcı onay/kuyruk/alıcı servis/sürüm kontrolü ve D2 sade bakım
+listesi tamamlandı. Sırada kalan E−1 ortak düzenleme/araç kabulü var.
+[Gerçek D1 sözleşmesi](../diagnostic-sharing.md),
+[D2 uygulaması ve kabul sınırları](../diagnostic-management.md).
+
+## Kullanıcıya sunulacak davranış
+
+Tek **Share error reports and check for updates** seçeneği, varsayılan kapalı. Kullanıcı açıkça izin
+verirse yalnız beklenmeyen uygulama hatalarının kısa özetleri gönderilir.
+İzni kapatmak yeni toplamayı/gönderimi durdurur ve bekleyen özetleri temizler.
+
+**İlk çalıştırmada tek seferlik onay** gösterilir: “Anonim hata özetlerinin
+Chorono sunucusuna düzenli gönderilmesine izin veriyor musun?” Kısa açıklamada
+sürüm/hata kodu/tekrar sayısının paylaşılacağı, proje içeriğinin gönderilmeyeceği,
+servis hedefi ve dolu kuyruk için 5 dakikalık gönderim aralığı belirtilir.
+UI seçenekleri **Allow** / **Don't send** olur; önceden seçili onay yoktur.
+Yanıt bu tarayıcıda saklanır; red veya pencereyi kapatma sonrası her açılışta
+yeniden sorulmaz. Yanıt verilmemesi onay değildir. Mevcut kullanıcıya özellik
+ilk geldiğinde aynı soru bir kez gösterilir. Tercih Resources ayarından
+değiştirilebilir; kabul yalnız bundan sonraki anonim hata özetlerini kapsar.
+
+Tercih **localStorage'da**, aynı tarayıcı/profil ve uygulama origin'i için
+saklanır; Interaction kaydının sessionStorage'ından ayrıdır. Sekmeyi/tarayıcıyı
+kapatıp açmak veya olağan sürüm güncellemesi yeniden soru çıkarmamalıdır.
+`allowed`, `denied` ve `dismissed` durumları ayrılır; yalnız `allowed` gönderim
+iznidir. İzin sonradan kapatılınca `denied` kaydedilir; sonraki açılışta tekrar
+sorulmaz. Yeni profil veya tarayıcı verilerinin silinmesi ilk kullanım sayılır.
+Depolama çalışmıyorsa otomatik gönderim kapalı kalır. Veri kapsamı veya servis
+hedefi gerçekten değişirse yeni izin gerekir; her uygulama sürümü değişimi değil.
+
+Her mouse hareketi, seçim, başarılı işlem veya normal iptal raporlanmaz.
+Escape, boş tıklama, eşik altı hareket, normal blur ve her `source-cancel`
+otomatik olarak hata sayılmaz. Kataloglanmış commit/işlem başarısızlığı,
+beklenmeyen rollback veya uygulama çökmesi hedeflenir.
+
+Ayrıntılı Interaction kaydı bugünkü gibi **gerektiğinde elle açılan yerel tanı
+aracı** olarak kalır. İlk sürümde uzak Interaction olay penceresi, gesture zinciri
+ve ayrıntılı trace upload yoktur. Eski yerel kayıtlar paylaşım iznine dahil olmaz.
+
+## Hata kalabalığını önleme
+
+Aynı sürüm/build + hata kodu + modül + bilinen sabit hata noktası **tek satırda**
+gruplanır. Örneğin: `0.2.1 · Move commit failed · 143 tekrar`. Her tekrarda yeni
+issue veya bildirim oluşmaz. Gruplama raw mesaj, stack, nesne ID'si veya
+koordinatlardan türetilmez. Yeri bilinmeyen genel hatalar “unclassified” sayılır;
+bunların aynı kök neden olduğu iddia edilmez.
+
+Her grup için günlük tekrar sayısı ve en fazla **bir temizlenmiş örnek** tutulur.
+Bakım listesi yalnız **Yeni / İnceleniyor / Düzeltildi** durumlarını, önem düzeyini
+ve etkilenen sürümü gösterir. Önce çökme/veri kaybı, sonra işlem başarısızlığı;
+uyarılar ve performans ayrıntıları ilk kapsama girmez. Tekrar sayısı kullanıcı
+sayısı değildir; her tekrar için e-posta/bildirim gönderilmez.
+
+## Asgari veri ve sınırlar
+
+- Rapor/schema sürümü, retry için rastgele `reportId`, uygulama sürümü/resmi
+  build, sabit errorCode/module/failureSite, gün kovası ve tekrar sayısı.
+- Örnek yalnız kataloglanmış işlem/sonuç kodlarıdır. İsim, hesap/kurulum
+  kimliği, proje içeriği, nesne ID'si, dosya yolu, URL, raw mesaj/stack, kesin
+  konum veya medya gönderilmez. Yerel build kimliği `local` olur.
+- Gün içinde en çok **20 farklı hata grubu**; taşan hatalar ayrıntısız bir
+  overflow sayacında tutulur. Tekrar sayıları sınırlı tamsayıdır.
+- Özetler en erken **5 dakikada bir**, yalnız kuyruk dolu/online/görünür ve
+  gesture dışında gönderilir. Tek aktif request, en çok **16 KiB/batch**,
+  **256 KiB/24 saatlik** yerel kuyruk ve sınırlı retry/timeout bulunur.
+- Retry aynı `reportId` ve sabit count delta'yı kullanır; tekrar gönderim hata
+  sayısını artırmaz. Yeni hatalar sonraki batch'e girer. Servis duplicate ID'yi
+  tekilleştirir; bilinmeyen alan ve aşırı payload'ı reddeder.
+- Gönderim öncesi güncel izin yeniden kontrol edilir. Eski sekme/geç async
+  sonuç kapatılmış izni veya kuyruğu geri getiremez. İzin öncesi ağ isteği yoktur.
+
+Onay metni gerçek servis hedefini ve saklama süresini açıklar. HTTPS, cookiesiz
+ve referrer'sız gönderim; ayrı hata deposu ve otomatik silme gerekir. Önerilen
+saklama: tek örnek 7 gün, günlük sayaçlar 90 gün. Ağda IP görünürlüğü ve hosting
+log ayarları da doğrulanır; tam anonimlik garantisi verilmez.
+
+## D1 alıcı sunucu
+
+İstemci kuyruğu tek başına D1 teslimi değildir. **Sunucu tarafı da D1'e alındı:**
+gerçek `POST /api/diagnostics/reports` alıcısı, rapor/schema/16 KiB doğrulaması,
+reportId ile tekilleştirme, ayrı hata deposu, günlük sayaç ve otomatik saklama
+süresi temizliği. Yeniden gönderilen batch sayaçları ikinci kez artırmaz.
+Bu yol yerelde uygulanıp doğrulandı; internete yayınlanmış public servis değildir.
+
+Yerel geliştirmede gerçek alıcı implementasyonu entegrasyon testinde çalışır;
+mock başarılı sayılması tek başına sunucu kabulü değildir. Kullanıcılar için
+merkezi sunucunun adresi/hosting'i henüz belirlenmedi. Yayın hedefi ve saklama
+politikası hazır olmadan uzak gönderim veya ilk açılış paylaşım daveti açılmaz.
+Alıcı hazır ve adresi yapılandırılmışken ilk açılış onayı bir kez gösterilir;
+servisin geçici erişilemez olması saklanmış tercihi silmez veya yeniden sormaz.
+
+## Sürüm kontrolü ve kodla uyum
+
+Son kullanıcı isteğiyle sürüm kontrolü **aynı paylaşım onayına** bağlandı:
+Check now ve izinlilerde günde bir otomatik kontrol. Onay yokken ikisi de kapalı.
+Yeni sürüm ve release notları gösterilir; otomatik kurulum bu iş değildir.
+Uygulama paket sürümü/build bilgisi kullanılır; `MCP_VERSION` ve raw MCP status
+uygulama sürümü veya paylaşım verisi olarak kullanılmaz.
+
+`InteractionTrace`/sessionStorage değişmez; ayrıntılı kayıt/JSON indirme yereldir.
+Yeni özet collector, temizleme, gruplama/kuyruk ve transport ayrı sorumluluklar
+olarak `src/lib/diagnostics` altında; build/release işleri `src/lib/version`
+altında önerilir. UI mevcut Resources alanını kullanır. Pointer handler'a ağ işi
+eklenmez. UTF-8 boyut yardımcıları yeniden kullanılır; scene/undo'ya log yazılmaz.
+
+## Uygulama sırası ve kabul
+
+| Dilim | İlk teslim |
+| --- | --- |
+| **D0 — tamamlandı** | Hata kodları ve küçük DTO, sürüm/build bilgisi, temizleme ve tekilleştirme. [Gerçek sözleşme](../../../src/lib/diagnostics/README.md). |
+| **D1 — tamamlandı, yerel kabul** | İlk açılışta bir kez onay, kalıcı tercih; özet kuyruğu ve gerçek alıcı API/depo/tekilleştirme. Aynı izinle sürüm kontrolü. [Uygulama ve yayın sınırları](../diagnostic-sharing.md). |
+| **D2 — tamamlandı** | `/diagnostics`, yalnız admin Bearer token ile liste/durum API'si; günler arası tek satır/tekrar sayısı, New / Investigating / Fixed ve revision CAS. 323 dosya/2.631 test, TypeScript/MCP/production build geçti. Gerçek kabulün güncel durumu [D2 belgesinde](../diagnostic-management.md); public hosting ayrı. |
+| **Sıradaki** | Kalan E−1: MCP revision/provenance/organizasyon, Set Key/transport/prosedürel eğri ve birleşik araç kabulü. |
+
+Kabul: ilk çalıştırmada onay sorusu; kabul/red/kapatma, sekme/tarayıcı yeniden
+açma ve olağan güncellemede tercihin korunması/yeniden sorulmaması; servis yokken
+gönderim başlamaması, servis kesintisinde yeniden onay istenmemesi; gerçek alıcıya
+kaydet/ACK/retry/dedup/TTL kabulü; izin öncesi sıfır request; normal işlemlerden
+sıfır hata raporu; aynı
+hatanın 1.000 tekrarında tek grup ve doğru sayaç; farklı sabit hata noktaları
+ayrı; retry sayacı şişirmez; hassas canary alanları dışarı çıkmaz; offline/limit/
+TTL/revoke/çoklu sekme source'u etkilemez. Mevcut first-drag/guide/creation ve
+tek undo davranışı korunur. Uygulamada repo testleri, MCP/build ve gerçek
+mock-servis tarayıcı kontrolü çalışır; build öncesi Next durdurulur.
+
+D0 uygulaması: `src/lib/version` uygulama paket sürümünü kullanır; varsayılan
+build `local` olur. `src/lib/diagnostics` yalnız açıkça verilen sabit hata
+noktalarını kabul eder, günlük 20 grupta tekilleştirir ve temizlenmiş immutable
+rapor üretir. Sayım ve rapor dönüşümü ayrı; reportId üretimi, count delta/retry
+ve izin/gönderim D1'e aittir. Gün değişince önceki bellek grupları bırakılır;
+bu store kalıcı kuyruk değildir. Bu paragraf D0 sınırını anlatır; D1'de ayrı
+izinli browser owner, kalıcı kuyruk ve gerçek API eklendi. Yerel Interaction
+geçmişi yine aktarılmaz; varsayılan uzak paylaşım kapalıdır.
+
+D2 uygulaması: browser-safe yönetim sözleşmesi `src/lib/diagnostics/management`,
+HTTP/auth adaptörü `src/server/diagnostics/management`, sayfa `/diagnostics`.
+Server-only `CHORONO_DIAGNOSTICS_ADMIN_TOKEN` ve bellekte tutulan işletmeci
+kimliği, D1'in kalıcı paylaşım onayından ayrıdır; onay yönetim erişimi sağlamaz.
+Kimlik UTC gününü içermez; farklı build/noktalar ayrı, saklanan günlük sayılar
+tek satırdır. Status manuel kalır, yeni rapor Fixed'i yeniden açmaz. Private
+dosya V2, ağ raporu V1'dir; V1→V2 geçişi/retention ve eski zaman verisinin
+sınırı [gerçek D2 sözleşmesinde](../diagnostic-management.md) açıklanır.
+
+[Mevcut yerel kayıt sözleşmesi](../../../src/components/canvas/interactions/diagnostics/README.md)
+ve [pointer kabulü](../pointer-gesture-lifecycle.md) uygulama dayanaklarıdır.

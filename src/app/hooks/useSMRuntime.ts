@@ -26,6 +26,8 @@ export interface SMFrameResult {
   /** Timeline ids backed by SM states — the host excludes these from its
    *  "evaluate every timeline" base so they aren't double-played. */
   ownedTimelineIds: Set<string>
+  /** Expression contribution of SM-owned timelines (including inactive zeroes). */
+  timelineWeights: ReadonlyMap<string, number>
   /** Entry/exit actions fired this frame (host applies setParam / emitEvent). */
   actions: SMAction[]
 }
@@ -42,7 +44,7 @@ export interface SMRuntimeReturn {
 
 const EMPTY: SMFrameResult = {
   overrides: new Map(),
-  ownedTimelineIds: new Set(),
+  ownedTimelineIds: new Set(), timelineWeights: new Map(),
   actions: [],
 }
 
@@ -84,13 +86,13 @@ export function useSMRuntime(scene: ChronoScene): SMRuntimeReturn {
         return EMPTY
       }
 
-      const owned = new Set<string>()
+      const owned = new Set<string>(), timelineWeights = new Map<string, number>()
       const actions: SMAction[] = []
       const contributions: OverrideMap[] = []
       const pending = eventQueueRef.current.splice(0)
 
       rts.forEach((rt) => {
-        rt.sm.states.forEach((s) => owned.add(s.timelineId))
+        rt.sm.states.forEach((s) => { owned.add(s.timelineId); timelineWeights.set(s.timelineId, 0) })
 
         // Event-driven transitions (broadcast or targeted).
         for (const e of pending) {
@@ -106,12 +108,14 @@ export function useSMRuntime(scene: ChronoScene): SMRuntimeReturn {
         // single active-state timeline.
         const blend = rt.getBlend(wallMs)
         if (blend) {
+          timelineWeights.set(blend.fromTimelineId, 1 - blend.alpha); timelineWeights.set(blend.toTimelineId, blend.alpha)
           const fromTl = scene.timelines.find((t) => t.id === blend.fromTimelineId)
           const toTl   = scene.timelines.find((t) => t.id === blend.toTimelineId)
           const fromOv = fromTl ? evaluateTimelines([fromTl], globalTimeMs) : new Map<string, number>()
           const toOv   = toTl   ? evaluateTimelines([toTl],   globalTimeMs) : new Map<string, number>()
           contributions.push(blendOverrides(fromOv, toOv, blend.alpha))
         } else if (rt.activeTimelineId) {
+          timelineWeights.set(rt.activeTimelineId, 1)
           const tl = scene.timelines.find((t) => t.id === rt.activeTimelineId)
           if (tl) contributions.push(evaluateTimelines([tl], globalTimeMs))
         }
@@ -120,7 +124,7 @@ export function useSMRuntime(scene: ChronoScene): SMRuntimeReturn {
       const overrides = contributions.length
         ? mergeOverrides(...contributions)
         : new Map<string, number>()
-      return { overrides, ownedTimelineIds: owned, actions }
+      return { overrides, ownedTimelineIds: owned, timelineWeights, actions }
     },
     [scene],
   )

@@ -4,8 +4,8 @@
 // idMap so the caller can remap ALL references safely:
 //   - child.parentId  → newParentId (handled here)
 //   - track targets   (handled by callers via TrackTargetParser)
-//   - mask refs       (TODO Phase 2)
-//   - constraint refs (TODO Phase 2)
+//   - mask / follow / repeater / particle / baked-trail layer references
+//     (shared typed CloneReferenceRemapper)
 //
 // Without idMap, deep-cloning a group breaks because:
 //   1. Children's parentId still points at the OLD group id.
@@ -16,6 +16,8 @@
 
 import type { Layer } from '../types'
 import { cloneSingleLayer } from './CloneSingleLayer'
+import { remapCloneLayerReferences } from './CloneReferenceRemapper'
+import { LayerIndex } from '../scene/LayerIndex'
 import type {
   CloneOptions,
   CloneTreeResult,
@@ -24,31 +26,17 @@ import type {
 
 /**
  * Find all direct + transitive descendants of `rootId` in `allLayers`.
- * Returns layers in tree order (root first, then BFS). Does NOT include
- * the root itself.
+ * Returns descendants in breadth-first order with authored sibling order;
+ * does NOT include the root itself. Cycles reject rather than looping forever.
  */
 export function collectDescendants(
   rootId: string,
   allLayers: Layer[],
 ): Layer[] {
-  const out: Layer[] = []
-  const byParent = new Map<string, Layer[]>()
-  for (const l of allLayers) {
-    const p = l.parentId ?? '__root__'
-    const arr = byParent.get(p)
-    if (arr) arr.push(l)
-    else byParent.set(p, [l])
-  }
-
-  // BFS — preserves render order across the subtree.
-  const queue: string[] = [rootId]
-  while (queue.length > 0) {
-    const parent = queue.shift()!
-    const kids = byParent.get(parent) ?? []
-    for (const k of kids) {
-      out.push(k)
-      queue.push(k.id)
-    }
+  const index = new LayerIndex(allLayers), seen = new Set([rootId]), queue = [rootId], out: Layer[] = []
+  for (let i = 0; i < queue.length; i++) for (const child of index.childrenOf(queue[i])) {
+    if (seen.has(child.id)) throw new Error('Repair the cyclic layer hierarchy before cloning.')
+    seen.add(child.id); queue.push(child.id); out.push(child)
   }
   return out
 }
@@ -111,22 +99,7 @@ export function cloneLayerTree(
   // 3. Remap parentId on every clone using the freshly built idMap.
   //    The root's parentId stays as-is (it sits next to the source);
   //    descendants get remapped to point at their NEW parent.
-  for (let i = 0; i < clones.length; i++) {
-    const clone = clones[i]
-    if (i === 0) continue // root: keep original parentId
-    const oldParentId = clone.parentId
-    if (oldParentId && idMap[oldParentId]) {
-      clones[i] = { ...clone, parentId: idMap[oldParentId] }
-    }
-    // If parentId points outside the cloned subtree we leave it alone
-    // (the new layer sits at the same level as the original). This is
-    // a defensive guard; in practice the BFS above only collects
-    // descendants so every child's parentId IS in idMap.
-  }
-
-  // 4. TODO Phase 2: remap masks, constraints, follow-path refs.
-  //    Pass `idMap` through TrackTargetParser.remapTrackTarget in the
-  //    command layer (commands-clone.ts) for animation tracks.
+  for (let i = 0; i < clones.length; i++) clones[i] = remapCloneLayerReferences(clones[i], idMap)
 
   return {
     clonedRoot: clones[0],

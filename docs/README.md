@@ -4,6 +4,8 @@
 
 ## Releases / Sürümler
 
+- [v0.3.0 release notes](releases/v0.3.0.md) / [Türkçe sürüm notları](tr/releases/v0.3.0.md)
+- [v0.3.0 validation and limitations](releases/v0.3.0-validation.md)
 - [v0.2.0 release notes](releases/v0.2.0.md) / [Türkçe sürüm notları](tr/releases/v0.2.0.md)
 - [v0.2.0 validation and measurement scope](releases/v0.2.0-validation.md)
 - [Changelog](../CHANGELOG.md)
@@ -46,7 +48,7 @@ Local evidence linked under `artifacts/` (benchmark reports, recordings and rend
 - [Render resource ownership, shared mask/effect scratch pipeline and native regression checks](tr/render-resource-management.md)
 - [OPT0 renderer baseline protocol, reproducible browser harness and measured results](tr/performance-baseline.md)
 - [Frame layer indexing: snapshot ownership, renderer adapters and comparison protocol](tr/layer-indexing.md)
-- [MCP setup, tools, limits and smoke tests](tr/mcp.md)
+- MCP catalog and compatibility: [English](en/mcp.md) / [Türkçe setup, tools, limits and smoke tests](tr/mcp.md)
 - [CLI lifecycle, skill distribution and maintainer packaging](tr/skills.md)
 - [CLI commands and package README](../packages/cli/README.md)
 - [Canonical authoring skill](../skills/chorono/SKILL.md)

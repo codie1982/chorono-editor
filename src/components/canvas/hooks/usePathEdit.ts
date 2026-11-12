@@ -6,14 +6,19 @@ import {
   hitTestPath, hitTestSegment, insertAnchorOnSegment, togglePathClosed,
 } from '@/lib/path/pathOps'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
+import type { OverrideMap } from '@/lib/evaluator'
+import { resolvePathEditGeometry } from '../pathEditGeometry'
 
 export interface UsePathEditOptions {
   editorRef: { current: EditorStateReturn }
   sceneRef: { current: ChronoScene }
   dragRef: MutableRefObject<ActiveDrag | null>
   /** Attach the window pointer listeners (from useCanvasDrag). */
-  startDrag: () => void
+  startDrag: (event?: { pointerId: number; currentTarget: Element }) => void
   toolMode?: string
+  timeMs: number
+  overrides?: OverrideMap
+  zoom: number
 }
 
 export interface UsePathEditReturn {
@@ -36,7 +41,7 @@ export interface UsePathEditReturn {
  * first anchor, and appends new anchors (corner → smooth on drag) in pen mode.
  */
 export function usePathEdit(opts: UsePathEditOptions): UsePathEditReturn {
-  const { editorRef, sceneRef, dragRef, startDrag, toolMode } = opts
+  const { editorRef, sceneRef, dragRef, startDrag, toolMode, timeMs, overrides, zoom } = opts
 
   // Pen-tool close-path double-click detection. First click on the path's first
   // anchor stores the timestamp; a second click within 350ms on the same anchor
@@ -48,9 +53,10 @@ export function usePathEdit(opts: UsePathEditOptions): UsePathEditReturn {
   ): boolean => {
     if (!selectedLayer.path) return false
     const editor = editorRef.current
-    const lx = cx - selectedLayer.transform.x
-    const ly = cy - selectedLayer.transform.y
-    const penHit = hitTestPath(selectedLayer.path, lx, ly, 8)
+    const geometry = resolvePathEditGeometry(selectedLayer, editor.getScene(), timeMs, overrides)
+    if (!geometry) return false
+    const { x: lx, y: ly } = geometry.worldToLocal.applyToPoint({ x: cx, y: cy })
+    const penHit = hitTestPath(geometry.worldPath, cx, cy, 8 / Math.max(zoom, 1e-6))
     if (penHit) {
       // BL-03: Pen-tool double-click on FIRST anchor of an open path closes it.
       // We detect "quick second click" via the click-time ref so the first
@@ -89,8 +95,9 @@ export function usePathEdit(opts: UsePathEditOptions): UsePathEditReturn {
         startClientY: e.clientY,
         anchorIndex: penHit.anchorIndex,
         part: penHit.type,
+        worldToLocal: geometry.worldToLocal,
       }
-      startDrag()
+      startDrag(e)
       return true
     }
 
@@ -98,7 +105,7 @@ export function usePathEdit(opts: UsePathEditOptions): UsePathEditReturn {
     // click point so the curve is unchanged but the user can now grab a
     // new control point. Standard Figma/Illustrator behavior. (BL-03)
     if (toolMode === 'pen') {
-      const segHit = hitTestSegment(selectedLayer.path, lx, ly, 6)
+      const segHit = hitTestSegment(geometry.worldPath, cx, cy, 6 / Math.max(zoom, 1e-6))
       if (segHit) {
         const nextPath = insertAnchorOnSegment(selectedLayer.path, segHit.segmentIndex, segHit.t)
         editor.dispatchCommand(makeUpdateLayerCmd(
@@ -137,13 +144,14 @@ export function usePathEdit(opts: UsePathEditOptions): UsePathEditReturn {
         startClientX: e.clientX,
         startClientY: e.clientY,
         anchorIndex: provisional.path.anchors.length - 1,
+        worldToLocal: geometry.worldToLocal,
       }
-      startDrag()
+      startDrag(e)
       return true
     }
 
     return false
-  }, [editorRef, sceneRef, dragRef, startDrag, toolMode])
+  }, [editorRef, sceneRef, dragRef, startDrag, toolMode, timeMs, overrides, zoom])
 
   return { tryStartPathEdit }
 }

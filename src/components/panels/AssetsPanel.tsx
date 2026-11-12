@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── AssetsPanel ───────────────────────────────────────────────────────────────
 // Browse all uploaded image / video / audio assets in the scene. Each row
 // shows a thumbnail, name, type badge, and quick actions:
@@ -182,6 +183,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
           Assets
         </span>
         <div className="flex items-center gap-2">
+          <DocumentationHelp topic="editor/layers/media" compact />
           <span className="text-[10px] text-gray-500">
             {scene.assets.length} item{scene.assets.length === 1 ? '' : 's'}
             {inventory.totalBytes > 0 && <> · {formatBytes(inventory.totalBytes)}</>}

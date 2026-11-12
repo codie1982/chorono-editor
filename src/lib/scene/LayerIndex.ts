@@ -55,6 +55,26 @@ export class LayerIndex implements LayerRelations {
   /** Direct children in original stacking order, including hidden ones; shared empty view if absent. */
   childrenOf(parentId: string): readonly Layer[] { return this.children.get(parentId) ?? EMPTY_CHILDREN }
 
+  /** Ancestor closure for one or several identities, optionally including each
+   * source itself. Missing parents are not invented; overlapping chains/cycles
+   * are visited once. Caller owns the set, source and sibling order stay intact.
+   * O(number of reached ancestors); no recursive or whole-tree scan per match.
+   */
+  ancestorIds(ids: Iterable<string>, includeSelf = true): Set<string> {
+    const result = new Set<string>(), walked = new Set<string>()
+    for (const id of Array.from(ids)) {
+      let item = this.get(id)
+      if (item && includeSelf) result.add(id)
+      let parentId = item?.parentId
+      while (parentId && !walked.has(parentId)) {
+        walked.add(parentId); item = this.get(parentId)
+        if (!item) break
+        result.add(item.id); parentId = item.parentId
+      }
+    }
+    return result
+  }
+
   /** Collect existing roots and descendants in deterministic pre-order with
    * authored sibling order. Overlapping roots and cycles are visited once; missing
    * ids are ignored. includeRoots=false excludes every supplied root. Returns

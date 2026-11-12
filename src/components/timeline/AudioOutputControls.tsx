@@ -1,4 +1,6 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useEffect, useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import { dbToGain, gainToDb } from '@/lib/audio/audioClip'
@@ -17,6 +19,7 @@ interface Props {
   documentSignal?:AbortSignal
 }
 export default function AudioOutputControls({ scene, timelineId, onMasterChange, onMasterMute, getState, subscribeMeter,documentSignal }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const volume = scene.composition.audioVolume ?? 1
   const [draft, setDraft] = useState(volume > 0 ? gainToDb(volume).toFixed(1) : '-60')
   const [peak, setPeak] = useState<number | null>(null)
@@ -45,16 +48,16 @@ export default function AudioOutputControls({ scene, timelineId, onMasterChange,
     await operation.run(signal=>acquireAudioMix(scene,{durationMs,timelineIds:timelineId?[timelineId]:undefined},{signal}),lease=>{
       const rendered=lease.value
       const blob=editorOutputResources.own(rendered.bytes.byteLength,()=>new Blob([rendered.bytes],{type:rendered.mimeType}),()=>{})
-      try{downloadOutput(blob,value=>value,`${scene.composition.id||'audio'}-${timelineId||'mix'}.wav`)}finally{blob.release()}
+      try{downloadOutput(blob,value=>value,sessionFilename(`${scene.composition.id||'audio'}-${timelineId||'mix'}.wav`))}finally{blob.release()}
       if (rendered.warnings.length) toast.warning('Audio exported', { detail: rendered.warnings.join(' ') })
       else toast.success('WAV audio exported')
     },message=>toast.error('Audio export failed',{detail:message}))
   }
   return <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-800 bg-gray-950 text-xs text-gray-300" aria-label="Audio output">
     <label className="flex items-center gap-1">Master
-      <input aria-label="Master gain dB" type="number" min={-60} max={12} step={.5} value={draft}
+      <CalculationNumberInput aria-label="Master gain dB" min={-60} max={12} step={.5} value={draft}
         onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-        className="w-16 bg-gray-800 border border-gray-600 rounded px-1 focus:ring-2 focus:ring-blue-500" /> dB
+        className="w-16 bg-gray-800 border border-gray-600 rounded px-1 focus:ring-2 focus:ring-blue-500" onCalculate={calculated => setDraft(String(calculated))} /> dB
     </label>
     <button type="button" onClick={() => onMasterMute(!scene.composition.audioMuted)} aria-pressed={!!scene.composition.audioMuted}
       className="px-2 rounded border border-gray-700 focus:ring-2 focus:ring-blue-500">{scene.composition.audioMuted ? 'Unmute master' : 'Mute master'}</button>

@@ -1,41 +1,44 @@
 import type { Track, Timeline } from '@/lib/types'
 import type { DopeSheetRow, TrackNode } from '@/components/dope-sheet/types'
 
-/** Both columns consume this exact sequence, including structural summary rows. */
+/** Both columns consume this exact sequence and filtered descendant summaries.
+ * Iterative postorder aggregation and preorder display avoid recursion limits
+ * on deep source trees. Collapsing hides rows, not their summary keys. Inputs
+ * are borrowed; target identity deduplicates summaries and cycles are bounded.
+ */
 export function flattenDopeSheetRows(nodes: TrackNode[], timeline: Timeline, collapsed: Set<string>): DopeSheetRow[] {
   const byId = new Map(nodes.map(node => [node.id, node]))
   const byTarget = new Map(timeline.tracks.map(track => [track.target, track]))
-  const cache = new Map<string, Track[]>()
-  function tracksFor(node: TrackNode, ancestors = new Set<string>()): Track[] {
-    if (cache.has(node.id)) return cache.get(node.id)!
-    if (ancestors.has(node.id)) return []
-    const chain = new Set(ancestors).add(node.id)
-    const tracks = new Map<string, Track>()
-    if (node.type === 'property' && node.trackTarget) {
-      const track = byTarget.get(node.trackTarget)
-      if (track) tracks.set(track.target, track)
-    }
-    for (const id of node.children) {
-      const child = byId.get(id)
-      if (child) for (const track of tracksFor(child, chain)) tracks.set(track.target, track)
-    }
-    const result = Array.from(tracks.values())
-    cache.set(node.id, result)
-    return result
-  }
-  const rows: DopeSheetRow[] = []
-  const visited = new Set<string>()
-  function visit(node: TrackNode) {
-    if (visited.has(node.id)) return
-    visited.add(node.id)
-    rows.push({ node, tracks: tracksFor(node) })
-    if (!collapsed.has(node.id)) for (const id of node.children) {
-      const child = byId.get(id)
-      if (child) visit(child)
+  const cache = new Map<string, Track[]>(), root = byId.get('scene')
+  if (!root) return []
+  const entered = new Set<string>(), pending = [{ node: root, exit: false }]
+  while (pending.length) {
+    const { node, exit } = pending.pop()!
+    if (!exit) {
+      if (entered.has(node.id)) continue
+      entered.add(node.id); pending.push({ node, exit: true })
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        const child = byId.get(node.children[i])
+        if (child) pending.push({ node: child, exit: false })
+      }
+    } else {
+      const tracks = new Map<string, Track>()
+      const own = node.type === 'property' && node.trackTarget ? byTarget.get(node.trackTarget) : undefined
+      if (own) tracks.set(own.target, own)
+      for (const id of node.children) for (const track of cache.get(id) ?? []) tracks.set(track.target, track)
+      cache.set(node.id, Array.from(tracks.values()))
     }
   }
-  const root = nodes.find(node => node.id === 'scene')
-  if (root) visit(root)
+  const rows: DopeSheetRow[] = [], visited = new Set<string>(), visible = [root]
+  while (visible.length) {
+    const node = visible.pop()!
+    if (visited.has(node.id)) continue
+    visited.add(node.id); rows.push({ node, tracks: cache.get(node.id) ?? [] })
+    if (!collapsed.has(node.id)) for (let i = node.children.length - 1; i >= 0; i--) {
+      const child = byId.get(node.children[i])
+      if (child) visible.push(child)
+    }
+  }
   return rows
 }
 

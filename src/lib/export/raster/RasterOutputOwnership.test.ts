@@ -2,7 +2,9 @@ import {afterEach,describe,expect,it,vi} from 'vitest'
 import {acquireRasterImage} from './RasterExportEngine'
 import {OutputResources} from '../resources'
 import {ResourceBudget} from '../../resources/budget'
-import {emptyScene} from '../../defaults'
+import '../../registry/bootstrap'
+import {emptyScene,newRectLayer} from '../../defaults'
+import {canvasRenderer} from '../../render/CanvasRenderer'
 import {surfaceStub} from '../../render/resources/__tests__/surfaceStub'
 
 vi.mock('../../render/CanvasRenderer',()=>({canvasRenderer:{render:vi.fn()}}))
@@ -18,6 +20,21 @@ function canvases(encode:(canvas:HTMLCanvasElement,done:(blob:Blob|null)=>void)=
 const scene=()=>{const value=emptyScene();return {...value,composition:{...value.composition,width:32,height:32}}}
 
 describe('owned raster frame output',()=>{
+  it('forwards runtime parameters into the complete frame before final rendering',async()=>{
+    canvases((_canvas,done)=>done(new Blob(['encoded'])) )
+    const resources=new OutputResources(),value=scene(),rect={...newRectLayer(),id:'rect'}
+    value.timelines=[{id:'clock',durationMs:1000,autoplay:true,loop:false,tracks:[]}]
+    value.parameters=[{id:'width',name:'Width',type:'number',defaultValue:4}]
+    rect.propertyExpressions={version:1,fields:{'size.width':{resultType:'number',formula:'width+timeSec',timelineId:'clock',sources:{width:{propertyPath:'width',valueType:'number'}}}}}
+    value.layers=[rect]
+    const source=JSON.stringify(value),params=new Map([['width',12]])
+    const result=await acquireRasterImage(value,new Map(),{format:'png',timeMs:500,paramValues:params},{resources})
+    try{
+      const options=vi.mocked(canvasRenderer.render).mock.calls.at(-1)![5]!
+      expect(options.overrides!.get('layers.rect.size.width')).toBe(12.5)
+      expect(options.paramValues).toBe(params);expect(JSON.stringify(value)).toBe(source)
+    }finally{result.release();resources.dispose()}
+  })
   it('retains only encoded output after native completion, then releases the final consumer pin',async()=>{
     const host=canvases((_canvas,done)=>done(new Blob(['encoded'],{type:'image/png'}))),budget=new ResourceBudget({maxBytes:1024**2})
     const resources=new OutputResources({budget})

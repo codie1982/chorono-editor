@@ -1,9 +1,14 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { BulkEditPolicyControl } from '@/components/timeline/authoring/BulkEditPolicyControl'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useCallback } from 'react'
 import type { DopeSheetUIState } from './types'
 import type { TimelineSettings } from '@/lib/types'
 
 interface Props {
+  collisionPolicy: KeyCollisionPolicy
+  onCollisionPolicyChange: (policy: KeyCollisionPolicy) => void
   uiState: DopeSheetUIState
   onFilterChange: (key: keyof DopeSheetUIState, value: any) => void
   settings: TimelineSettings
@@ -11,7 +16,7 @@ interface Props {
 }
 
 export default function DopeSheetToolbar({
-  uiState,
+  uiState, collisionPolicy, onCollisionPolicyChange,
   onFilterChange,
   settings,
   onSettingsChange,
@@ -35,6 +40,7 @@ export default function DopeSheetToolbar({
   return (
     <div className="dope-sheet-toolbar">
       <div className="toolbar-row">
+        <DocumentationHelp topic="editor/timeline/dope-sheet" compact />
         {/* Filter buttons */}
         <button
           type="button"
@@ -51,13 +57,14 @@ export default function DopeSheetToolbar({
           aria-pressed={uiState.filterSelectedObjectOnly}
           className={`toolbar-btn ${uiState.filterSelectedObjectOnly ? 'active' : ''}`}
           onClick={toggleSelectedOnly}
-          title="Show only selected layer"
+          title="Show the union of selected layers and their source descendants"
         >
           Selected Only
         </button>
 
         <div className="toolbar-divider" />
 
+        <BulkEditPolicyControl policy={collisionPolicy} onChange={onCollisionPolicyChange} />
         {/* Search */}
         <input
           type="text"

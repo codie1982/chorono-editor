@@ -24,12 +24,8 @@ import { useSMRuntime } from './useSMRuntime'
 import { useRuntimeFrameSignal } from './runtime/useRuntimeFrameSignal'
 import { useRuntimeParameters } from './runtime/useRuntimeParameters'
 import type { ParamLookup } from '@/lib/statemachine'
-import {
-  applyParamBindingsToOverrides,
-  type ParamValueMap,
-} from '@/lib/runtime/paramResolver'
-import { evaluateBindings } from '@/lib/runtime/bindingEvaluator'
-import { evaluateParameterWires } from '@/lib/runtime/parameterWireEvaluator'
+import type { ParamValueMap } from '@/lib/runtime/paramResolver'
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import {
   evaluateTriggers,
   type RuntimeEvent, type ResolvedAction,
@@ -50,6 +46,10 @@ import {
 export interface FrameEvalResult {
   /** Final OverrideMap to be passed into the renderer. */
   overrides:    OverrideMap
+  /** Same immutable input frame used to resolve wire sources; before wire output. */
+  wireSourceOverrides?: OverrideMap
+  wireErrors?: ReadonlyMap<string, string>
+  expressionErrors?: ReadonlyMap<string, string>
   /** Resolved parameter values used during this frame. */
   paramValues:  ParamValueMap
   /** Any events that fired this frame — useful for debugging. */
@@ -100,8 +100,10 @@ export interface InteractiveRuntimeReturn {
   /** Subscribe to lifecycle / trigger events (Android-bridge style). */
   onEvent: (listener: (event: RuntimeEvent) => void) => () => void
 
-  /** Per-frame pipeline. Call from the render loop with the global time. */
-  evaluateFrame: (globalTimeMs: number) => FrameEvalResult
+  /** Per-frame pipeline with global ms. An optional editor-only local override
+   * holds a paused timeline at its terminal pose without loop remapping. Segment
+   * preview takes priority; omitted override preserves runtime/player callers. */
+  evaluateFrame: (globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null) => FrameEvalResult
   /** Monotonic counter that increments every animation frame while a
    *  segment is actively playing. Consumers add it to `useMemo` deps to
    *  force re-evaluation on each frame without polling. Retains its last value
@@ -177,7 +179,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
   const prevSnapshotRef = useRef<PlaybackSnapshot>(emptySnapshot())
 
   // ── Per-frame evaluation ───────────────────────────────────────────────
-  const evaluateFrame = useCallback((globalTimeMs: number): FrameEvalResult => {
+  const evaluateFrame = useCallback((globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null): FrameEvalResult => {
     acknowledge()
     const paramValues = readValues()
     // Drain before the SM/trigger passes. Feedback emitted by either pass stays
@@ -188,7 +190,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     const seg = segmentRef.current
     const externalTime: ExternalTimelineTime | null = seg
       ? { timelineId: seg.timelineId, localTimeMs: computeSegmentTime(seg, performance.now()) }
-      : null
+      : authoringOverride ?? null
 
     // ── State machine pass (BL-09) ────────────────────────────────────────
     // When machines exist, the SM owns its state timelines: forward incoming
@@ -197,6 +199,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     const getParam: ParamLookup = (name) => paramValues.get(name)
     const wallMs = performance.now()
     let baseOverrides: OverrideMap
+    let timelineWeights: ReadonlyMap<string, number> | undefined
     let smActiveTimelineId: string | null = null
 
     if (sm.hasSM) {
@@ -207,6 +210,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
       }
 
       const smRes = sm.tickFrame(globalTimeMs, getParam, wallMs)
+      timelineWeights = smRes.timelineWeights
       const nonSmTimelines = scene.timelines.filter((t) => !smRes.ownedTimelineIds.has(t.id))
       const nonSmOverrides = evaluateTimelines(nonSmTimelines, globalTimeMs, externalTime)
       baseOverrides = mergeOverrides(nonSmOverrides, smRes.overrides)
@@ -229,12 +233,9 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
       baseOverrides = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
     }
 
-    const paramOverrides   = applyParamBindingsToOverrides(scene.layers, paramValues, baseOverrides)
-    const bindingOverrides = evaluateBindings(scene.bindings, paramOverrides, paramValues, scene)
-    // BL-05: Apply expression-based parameter wires after linear bindings so
-    // expression wires can read values produced by the simpler binding system.
-    const wireOverrides    = evaluateParameterWires(scene.parameterWires, bindingOverrides, paramValues, scene)
-    const overrides = mergeOverrides(wireOverrides) // wireOverrides already wraps everything
+    const wireEvaluation = evaluateSceneFrame(scene, globalTimeMs, { baseOverrides, paramValues, externalTime, timelineWeights })
+    const bindingOverrides = wireEvaluation.wireSourceOverrides
+    const overrides = wireEvaluation.overrides
 
     // ── Build new snapshot ────────────────────────────────────────────────
     const activeTimelineId = smActiveTimelineId
@@ -275,7 +276,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     prevSnapshotRef.current = nextSnapshot
 
     return {
-      overrides,
+      overrides, wireSourceOverrides: bindingOverrides, wireErrors: wireEvaluation.errors, expressionErrors: wireEvaluation.expressionErrors,
       paramValues,
       events:  allEvents,
       actions,

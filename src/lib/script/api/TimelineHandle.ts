@@ -4,6 +4,7 @@ import { LayerHandle } from './LayerHandle'
 import { nextModifierId, makeAddCurveModifierCmd, makeBakeTrackToKeyframesCmd } from '../../editor/commands-track'
 import type { CurveModifier } from '../../animation/modifiers/types'
 import { copyScriptData } from './scriptData'
+import { ensureLayerInTimeline } from '../../timeline/keyframeOps'
 
 export class TimelineHandle {
   constructor(public readonly id: string, private readonly ctx: ApiContext) {}
@@ -32,13 +33,20 @@ export class TimelineHandle {
     return this
   }
 
+  /** Shallowly configure one full target path; supplied arrays/objects replace
+   * that field. Existing layer owners enter explicit timeline membership in
+   * the same command. Undo restores the complete original timeline. */
   track(target: string, patch: Partial<Omit<Track, 'target'>>): this {
     const prev = this.data
     const existing = prev.tracks.find(t => t.target === target)
     const next = { target, keyframes: [], ...existing, ...patch }
     this.ctx.host.applyCommand({
       label: `Update track ${target}`,
-      execute: scene => ({ ...scene, timelines: scene.timelines.map(t => t.id !== this.id ? t : { ...t, tracks: existing ? t.tracks.map(tr => tr.target === target ? next : tr) : [...t.tracks, next] }) }),
+      execute: scene => {
+        const updated = { ...scene, timelines: scene.timelines.map(t => t.id !== this.id ? t : { ...t, tracks: existing ? t.tracks.map(tr => tr.target === target ? next : tr) : [...t.tracks, next] }) }
+        const layerId = /^layers\.([^.]+)\./.exec(target)?.[1]
+        return layerId && scene.layers.some(layer => layer.id === layerId) ? ensureLayerInTimeline(updated, this.id, layerId) : updated
+      },
       undo: scene => ({ ...scene, timelines: scene.timelines.map(t => t.id === this.id ? prev : t) }),
     })
     return this
@@ -58,10 +66,13 @@ export class TimelineHandle {
     return this
   }
 
-  bake(target: string, fps = 60, tolerance = 0.005): this {
+  /** Convert a numeric source signal in local ms. The optional window defaults
+   * to the full timeline; keys outside it remain but signal processors are
+   * removed globally. One stale-checked command restores the original on undo. */
+  bake(target: string, fps = 60, tolerance = 0.005, range: { startMs?: number; endMs?: number } = {}): this {
     const track = this.data.tracks.find(t => t.target === target)
     if (!track) throw new Error(`Track '${target}' not found`)
-    this.ctx.host.applyCommand(makeBakeTrackToKeyframesCmd(this.id, target, track, { startMs: 0, endMs: this.data.durationMs, fps, tolerance }))
+    this.ctx.host.applyCommand(makeBakeTrackToKeyframesCmd(this.id, target, track, { startMs: range.startMs ?? 0, endMs: range.endMs ?? this.data.durationMs, fps, tolerance }))
     return this
   }
 }

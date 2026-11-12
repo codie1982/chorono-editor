@@ -12,6 +12,9 @@ import type {
 } from '@/lib/types'
 import { upsertKeyframe, ensureLayerInTimeline } from '@/lib/timeline/keyframeOps'
 import type { ActionRegistry } from '../ActionRegistry'
+import { assertTrackValues, isColorTarget, isColorValue, isVec2 } from '@/lib/animation/typedValues'
+import { keyframeInputSchema, simpleEasingSchema, SIMPLE_EASING_TYPES } from '@/lib/animation/typedValueSchema'
+import { readScriptPath } from '@/lib/script/api/scriptData'
 
 interface KfInput {
   timeMs: number
@@ -27,9 +30,7 @@ interface AddKeyframesParams {
 
 // ── Coercion helpers ──────────────────────────────────────────────────────────
 
-const VALID_EASINGS: ReadonlySet<EasingType> = new Set<EasingType>([
-  'linear', 'hold', 'easeIn', 'easeOut', 'easeInOut',
-])
+const VALID_EASINGS: ReadonlySet<EasingType> = new Set<EasingType>(SIMPLE_EASING_TYPES)
 
 function coerceEasing(raw: unknown): EasingType {
   if (typeof raw === 'string' && (VALID_EASINGS as Set<string>).has(raw)) {
@@ -40,24 +41,20 @@ function coerceEasing(raw: unknown): EasingType {
 
 /**
  * Coerce arbitrary JSON value into AnimatableValue.
- * - Color tracks (.color suffix): kept as hex string. Renderer reads override
- *   directly; AI must use 2-keyframe step transitions (no smooth interp).
- * - Vec2 objects: pass through
- * - Booleans: pass through
- * - Default: numeric coercion
+ * - Color targets retain CSS, canonical RGBA and legacy packed RGB values.
+ * - Vec2 and booleans pass through; ordinary text values remain discrete.
+ * - Numeric strings keep legacy numeric coercion except for typed text fields.
  *
  * Throws on non-coercible values — caller surfaces as error command.
  */
-function coerceValue(target: string, raw: unknown): AnimatableValue {
-  if (target.endsWith('.color') || target.toLowerCase().endsWith('color')) {
-    return String(raw)
-  }
-  if (typeof raw === 'object' && raw !== null && 'x' in raw && 'y' in raw) {
-    return raw as AnimatableValue
-  }
+function coerceValue(target: string, raw: unknown, staticValue: unknown): AnimatableValue {
+  if (isColorTarget(target) && (typeof raw === 'string' || typeof raw === 'number' || isColorValue(raw))) return raw
+  if (isColorValue(raw) || isVec2(raw)) return raw
   if (typeof raw === 'boolean') return raw
+  if (typeof raw === 'string' && (typeof staticValue === 'string' || /\.text\.value$/.test(target))) return raw
   const n = Number(raw)
   if (Number.isFinite(n)) return n
+  if (typeof raw === 'string') return raw
   throw new Error(`cannot coerce value "${String(raw)}" for target "${target}"`)
 }
 
@@ -99,13 +96,40 @@ function ensureTrack(
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
-/** Register the legacy numeric full-target keyframe action; the MCP set_keyframes tool supports richer model values. */
+/** Register the legacy auto-creating key action with a typed input schema.
+ * Its numeric-string coercion, easeInOut insertion default, exact-time update and
+ * single undo command remain compatible; color/text/vector families follow the
+ * same validation/evaluation helpers as modern scene commits. */
 export function registerKeyframeActions(reg: ActionRegistry): void {
   reg.register<AddKeyframesParams>({
     id: 'keyframe.addBatch',
     toolName: 'add_keyframes',
     description:
-`Upsert numeric keyframes using a full track target such as layers.hero.transform.x. Auto-creates a missing timeline/track and preserves unrelated keys. This legacy input schema accepts numeric values and named easing strings; use set_keyframes for model-typed values or customBezier. Positions use pixels, rotation degrees, scales 1=100%, opacity 0..1. Easing belongs to the starting keyframe.`,
+`Upsert keys on a target path using the legacy auto-create timeline/track workflow; creates one undoable editor command. Use an explicit existing timeline when preserving its settings. Exact-time updates preserve key IDs, tangents and unspecified easing; nearby fractional keys remain separate. New keys retain the legacy easeInOut default.
+
+TRACK TARGET FORMAT: "layers.{layerId}.{property}"
+
+AVAILABLE PROPERTIES:
+  opacity                → 0.0 - 1.0
+  transform.x            → pixels (horizontal position)
+  transform.y            → pixels (vertical position)
+  transform.scaleX       → 1.0 = 100%
+  transform.scaleY       → 1.0 = 100%
+  transform.rotationDeg  → degrees
+  style.fill.color       → CSS hex/rgb/hsl, supported color name, RGBA 0..255 or packed RGB; channels interpolate
+  style.fill.opacity     → 0.0 - 1.0
+  style.stroke.width     → pixels
+  style.cornerRadius     → pixels
+  text.fontSize          → pixels
+  text.letterSpacing     → pixels
+  effects.<effectId>.*    → use the actual registered effect property schema
+
+Numbers and Vec2 interpolate; strings and booleans hold until the next key. Match the source property's data type. One key is valid for a held value. Time is timeline-local milliseconds, transform coordinates are parent-local pixels and rotation is degrees. Omitted easing is easeInOut; it belongs to the leading key.
+
+EXAMPLES:
+  target: "layers.bg_circle.opacity"
+  target: "layers.title_text.transform.y"
+  target: "layers.logo.transform.scaleX"`,
     parameters: {
       type: 'object',
       required: ['timelineId', 'target', 'keyframes'],
@@ -114,20 +138,9 @@ export function registerKeyframeActions(reg: ActionRegistry): void {
         target:     { type: 'string', description: 'Track target e.g. "layers.bg_circle.opacity"' },
         keyframes: {
           type: 'array',
-          description: 'Keys to insert or replace at matching times. One key sets a held value; two or more define motion.',
-          items: {
-            type: 'object',
-            required: ['timeMs', 'value'],
-            properties: {
-              timeMs: { type: 'number', description: 'Time in milliseconds' },
-              value:  { type: 'number', description: 'Numeric property value. For color strings, vectors or custom easing use MCP set_keyframes instead.' },
-              easing: {
-                type: 'string',
-                enum: ['linear', 'easeIn', 'easeOut', 'easeInOut', 'hold'],
-                description: 'Easing curve from this keyframe to the next',
-              },
-            },
-          },
+          minItems: 1,
+          description: 'One or more keys. One key holds a value; at least two distinct times are needed for interpolation.',
+          items: keyframeInputSchema(simpleEasingSchema),
         },
       },
     },
@@ -138,20 +151,23 @@ export function registerKeyframeActions(reg: ActionRegistry): void {
       }
       // Validate layerId in target exists (defensive — silent failure otherwise)
       const layerMatch = p.target.match(/^layers\.([^.]+)\./)
-      const layerId = layerMatch?.[1]
-      if (layerId && !scene.layers.some((l) => l.id === layerId)) {
+      const layerId = layerMatch?.[1], layer = scene.layers.find(l => l.id === layerId)
+      if (layerId && !layer) {
         return errorCmd(`layer "${layerId}" not found for target "${p.target}"`)
       }
 
       // Build keyframes with coerced values + easings
       let kfs: Keyframe[]
       try {
+        const staticValue = layer ? readScriptPath(layer, p.target.slice(`layers.${layerId}.`.length)) : undefined
         kfs = p.keyframes.map((kf, i) => ({
           id:     `kf_ai_${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${i}`,
           timeMs: Number(kf.timeMs) || 0,
-          value:  coerceValue(p.target, kf.value),
+          value:  coerceValue(p.target, kf.value, staticValue),
           easing: { type: coerceEasing(kf.easing) },
         }))
+        const existing = scene.timelines.find(timeline => timeline.id === p.timelineId)?.tracks.find(track => track.target === p.target)
+        assertTrackValues({ ...existing, target: p.target, keyframes: kfs }, staticValue ?? undefined)
       } catch (err) {
         return errorCmd((err as Error).message)
       }
@@ -165,8 +181,8 @@ export function registerKeyframeActions(reg: ActionRegistry): void {
           let next = ensureTimeline(s, p.timelineId, maxTimeMs)
           next     = ensureTrack(next, p.timelineId, p.target)
           if (layerId) next = ensureLayerInTimeline(next, p.timelineId, layerId)
-          for (const kf of kfs) {
-            next = upsertKeyframe(next, p.timelineId, p.target, kf)
+          for (const [index, kf] of Array.from(kfs.entries())) {
+            next = upsertKeyframe(next, p.timelineId, p.target, kf, { updateEasing: p.keyframes[index].easing !== undefined })
           }
           return next
         },

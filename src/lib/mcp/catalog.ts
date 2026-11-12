@@ -6,10 +6,15 @@ import { withBridgeParameters, withNativeToolContract } from './toolContext'
 import { layerRegistry } from '../registry'
 import { getAllParticlePresets } from '../particles/presets'
 import { assertOperation, LIMITS, MCP_VERSION, type ToolDefinition, type JsonObject } from './protocol'
+import { ToolCatalogIndex } from './tools/ToolCatalogIndex'
+import { implementationToolName, type ToolCatalogProfile } from './tools/ToolCatalogPolicy'
+import { assertSourceFields, isSourceMutation, SOURCE_EDITING_CAPABILITIES } from './source/ToolSourcePolicy'
+import { nativeToolArguments } from './source/NativeArguments'
 
-export const SCRIPT_HELP = `Chorono SceneAPI ${MCP_VERSION}. Scripts are synchronous authoring operations; they create editable layers/tracks rather than running every playback frame.
+export const SCRIPT_HELP = `Chorono SceneAPI ${MCP_VERSION}. The outer run_script call requires expectedRevision/readToken from get_scene. A dry run returns a NEW plan-bound readToken and revision for apply_script_plan; never rerun code to commit a plan. These authorization fields are not SceneAPI methods or scene data.
+Scripts are synchronous authoring operations; they create editable layers/tracks rather than running every playback frame.
 scene.add(kind) -> Layer; scene.get(id), scene.find(name), scene.layers; scene.remove(handle)
-scene.snapshot() returns the complete current scene as detached JSON. scene.assets/assetCollections/parameters/triggers/bindings/parameterWires/stateMachines/initialState are detached JSON getters. Editing these copies never changes the editor; use command methods. scene.setInitialState(object) replaces initialState.
+scene.snapshot() returns the complete current scene as detached JSON, including optional authoring v1 metadata. Creation and field writers differ; missing attribution is unknown. The ledger is editor-managed, not an animation parameter or actor setter API. scene.assets/assetCollections/parameters/triggers/bindings/parameterWires/stateMachines/initialState are detached JSON getters. Editing these copies never changes the editor; use command methods. scene.setInitialState(object) replaces initialState.
 Layer: id/name/type getters; pos=[x,y], size=[w,h], opacity, rotation, scale=[x,y], fill, text, cornerRadius, blendMode
 Layer reads: layer.data is a detached complete Layer; layer.get('style.fill.color') reads a detached nested value (null if missing). Layer methods: set(Partial<Layer>) shallowly replaces nested objects; patch(deepPartial) recursively merges objects and replaces arrays/scalars/null, preserving unrelated nested settings. patch refuses id/type changes. font({family,size,weight,color,align}), stroke({color,width,opacity}), shapeParam(name,value), parent(handle|id|null), interactive(options), followPath(pathId,options), configureParticles(config), key(property,timeMs,value,easing)
 scene.composition({width,height,durationMs,frameRate,backgroundColor}); scene.createTimeline({id,durationMs,loop,autoplay}); scene.timelines
@@ -17,7 +22,9 @@ scene.useTimeline(id) selects the timeline used by subsequent Layer.key calls. s
 cloneTimeline keeps the same objects and animation values but assigns fresh keyframe ids. Read the clone before targeting individual keys. Reassign state-machine references before deleting a timeline.
 Audio clips: import_asset imports and places a file, or add_audio_clip reuses an existing asset. Native move_audio_clip/trim_audio_clip/split_audio_clip/set_audio_gain/set_audio_fades share editor undo behavior. audio.volume is linear gain (0..4), UI gain is in dB; 0dB=1, -6.0206dB=0.5. audio.fadeInMs/fadeOutMs/pan/timelineId are editable. Never use generic animation stretching to trim audio. Render audio with render_audio_preview/export_audio; PNG preview has no sound.
 In scripts, scene.audioClip(assetId,{timelineId?,startMs?,layerId?,name?}) returns a Layer and uses native placement/membership/duration commands. layer.audioGain(gainDb,{timeMs?,timelineId?}), audioFades({fadeInMs?,fadeOutMs?}), moveAudio(startMs,{timelineId?}), trimAudio({startMs?,endMs?},{timelineId?}), splitAudio(timeMs,{timelineId?,rightLayerId?})->rightLayer share native safe audio commands. Animated gain requires timeMs; an existing gain key keeps its id/easing/metadata. Use these helpers instead of raw audio/timing patches for clip edits.
-Timeline: id, data; set(options), key(layerOrId,property,timeMs,value,easing), track(target,patch), removeTrack(target), modifier(target,{type,parameters,weight,blendMode}), bake(target,fps,tolerance)
+Timeline: id, data; set(options), key(layerOrId,property,timeMs,value,easing), track(target,patch), removeTrack(target), modifier(target,{type,parameters,weight,blendMode}), bake(target,fps,tolerance,{startMs?,endMs?})
+Numeric layer Timeline.track configuration also ensures explicit timeline membership; Curve Editor can display zero-key numeric controllers without baking. Bake defaults to the full local timeline; an optional local-ms window preserves outside keys, while stripping signal fields globally. Maximum 240 FPS / 20000 samples; tolerance bounds normalized vertical simplification error at samples, not continuous equality.
+Source keys: Layer.key, Timeline.key and upsert_keyframes preserve existing ID/tangents/segment settings and omitted easing at the same local time (1e-6 ms tolerance); explicit easing replaces it. New keys default linear. Nearby fractional keys stay separate; ambiguous coincident keys refuse. These operations do not bake driven controllers/bindings.
 Animation values: numbers interpolate with easing; color property paths interpolate RGB/alpha channels (CSS hex/rgb/hsl, RGBA ColorValue 0..255, legacy packed RGB); Vec2 values interpolate x/y. Ordinary strings and booleans hold until the next key. Controllers, signal modifiers and bake are numeric-only. Values must match the property's model/schema. Renderer applies evaluated values to layer data before drawing, including particles, repeaters, geometry, typography, effects and masks. Key existing point/handle scalar coordinates for fixed-topology path/spline motion; whole-object topology morphing is not supported.
 Easing: linear, hold, easeIn, easeOut, easeInOut or {type:'customBezier',bezier:{cx1:0.2,cy1:0,cx2:0.3,cy2:1}}. Easing is applied from the START keyframe.
 scene.clone(handle,count,{offsetX,offsetY,mode,timelineId?}); scene.array(handle,{pattern:'radial',count:8,radius:120},{timelineId?}). Both copy the active useTimeline animation, or first timeline by default; explicit timelineId overrides it.
@@ -38,30 +45,79 @@ const loop=scene.cloneTimeline('intro','loop'); loop.set({loop:true});
 loop.modifier('layers.'+ball.id+'.transform.y',{type:'sine',parameters:{amplitude:30,frequency:1}});
 `
 
-let catalogPromise: Promise<ToolDefinition[]> | undefined
-/** Return the cached MCP catalog, preserving native action schemas and adding bridge-only documentation. */
-export function getToolCatalog(): Promise<ToolDefinition[]> {
+let catalogPromise: Promise<ToolCatalogIndex> | undefined
+/** Compose the authoritative metadata index once; concrete commands still
+ * belong to ActionRegistry. Both advertised and historical calls use it. */
+function getCatalogIndex(): Promise<ToolCatalogIndex> {
   return catalogPromise ??= bootstrapMCPActions().then(() => {
     const special = new Set(EXTRA_TOOLS.map(t => t.name))
     const native = actionRegistry.toMCPTools()
       .filter(tool => !special.has(tool.name))
       .map(tool => withNativeToolContract(tool, !!actionRegistry.get(tool.name)?.read))
-    return [...native, ...EXTRA_TOOLS].map(withBridgeParameters)
+    return new ToolCatalogIndex([...native, ...EXTRA_TOOLS].map(withBridgeParameters))
   })
+}
+
+/** Standard discovery is focused; legacy lists every pre-1.1 name. Call
+ * validation is deliberately independent from this presentation choice. */
+export async function getToolCatalog(profile: ToolCatalogProfile = 'standard'): Promise<ToolDefinition[]> {
+  return (await getCatalogIndex()).list(profile)
+}
+
+/** Resolve a callable schema, including non-advertised historical names. */
+export async function getCallableTool(name: string): Promise<ToolDefinition> {
+  return (await getCatalogIndex()).get(name)
 }
 
 const ajv = new Ajv({ strict: false, allErrors: true })
 const validators = new Map<string, ReturnType<typeof ajv.compile>>()
-export async function validateToolCall(name: string, args: JsonObject): Promise<ToolDefinition> {
-  const tool = (await getToolCatalog()).find(t => t.name === name)
-  if (!tool) throw new Error(`Unknown tool '${name}'`)
-  let validate = validators.get(name)
-  if (!validate) { validate = ajv.compile(tool.inputSchema); validators.set(name, validate) }
+/** Validate the exact public tool name, source envelope and native workload.
+ * This does not grant access or contact an editor. `withinBatch` is exclusively
+ * for internal sub-action validation after outer authorization; transport
+ * callers must use the default. Revisions are safe integer counters, not scene
+ * coordinates. Borrowed inputs are not mutated. Throws on unknown/invalid data;
+ * returns immutable metadata. Validator caches separate direct/batch schemas.
+ */
+export async function validateToolCall(name: string, args: JsonObject, options: { withinBatch?: boolean } = {}): Promise<ToolDefinition> {
+  const tool = await getCallableTool(name)
+  if (!options.withinBatch) assertSourceFields(name, args)
+  const cacheKey = `${name}:${options.withinBatch ? 'batch' : 'direct'}`
+  let validate = validators.get(cacheKey)
+  if (!validate) {
+    const schema = options.withinBatch ? { ...tool.inputSchema, required: (tool.inputSchema.required ?? []).filter((field: string) => !['expectedRevision', 'readToken'].includes(field)) } : tool.inputSchema
+    validate = ajv.compile(schema); validators.set(cacheKey, validate)
+  }
   if (!validate(args)) throw new Error(`Invalid arguments: ${ajv.errorsText(validate.errors)}`)
-  assertOperation(args)
+  // Source revisions are counters, not geometry/time coordinates. Their own
+  // schema/safe-integer guard applies; domain workload limits see native data.
+  assertOperation(nativeToolArguments(args))
   return tool
 }
 
-export async function getCapabilities() {
-  return { version: MCP_VERSION, tools: await getToolCatalog(), objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category, properties: d.getPropertyGroups(d.createDefault()) })), particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS, scripting: SCRIPT_HELP, exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
+/** Metadata-only discovery. The no-option response preserves its historical
+ * tools inventory and scripting fields; summary and single-tool modes are
+ * opt-in, bounded alternatives. They never contact a live editor or mutate it. */
+export async function getCapabilities(profile: ToolCatalogProfile = 'standard', options: { summary?: boolean; toolName?: string } = {}) {
+  const catalog = await getCatalogIndex()
+  if (options.toolName !== undefined) {
+    if (options.summary) throw new Error('Use either summary:true or toolName, not both')
+    const implementation = implementationToolName(options.toolName)
+    const callableInBatch = implementation !== 'run_script' && !!actionRegistry.get(implementation)?.toCommand
+    const result = catalog.describe(options.toolName, profile, callableInBatch)
+    return { version: MCP_VERSION, sourceEditing: SOURCE_EDITING_CAPABILITIES, ...result,
+      ...(callableInBatch ? { batchInputSchema: { ...result.tool.inputSchema, required: (result.tool.inputSchema.required ?? []).filter((field: string) => !['expectedRevision', 'readToken'].includes(field)) } } : {}) }
+  }
+  const base = { version: MCP_VERSION, catalog: catalog.metadata(profile), sourceEditing: SOURCE_EDITING_CAPABILITIES,
+    propertyExpressions: { sourceField: 'Layer.propertyExpressions', version: 1, resultTypes: ['number', 'boolean', 'string', 'color', 'vec2'], booleanTargets: ['text.uppercase', 'text.underline', 'path.closed'], booleanTargetsAreExamples: true, targetCapability: 'Schema-backed visual properties and stable spline coordinates; exact family/options/bounds apply. Lifecycle/configuration controls do not launch live jobs.', numericBakeOnly: false, timeVariables: ['timeMs', 'timeSec', 'timeNormalized'], constants: ['pi', 'e'],
+      limits: { perScene: 512, perLayer: 128, namedSources: 16, formulaChars: 4096, cachedPrograms: 512 },
+      authoring: 'layer.set/patch or replace_layer_fields; preserve unrelated field records and authored fallback',
+      playback: 'editor, full-scene Web SDK, static SVG and raster; basic runtime/animated SVG require explicit native-key bake',
+      bake: 'Properties fx → Bake to keyframes: numbers/vectors/colors use linear keys; booleans/strings use hold keys. Project-time sampling captures parameters; global-time bake rejects SM-owned clocks. Error units are source units or RGBA 0..255; discrete mismatch is 0/1.',
+      functions: ['vec2', 'x', 'y', 'rgb', 'rgba', 'color', 'red', 'green', 'blue', 'alpha', 'concat', 'str', 'fixed'],
+      configuration: 'Lifecycle/asset operations are not live jobs. Inspector configuration calculators apply only an explicitly reviewed result; they do not persist a formula.' },
+    particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS,
+    exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
+  if (options.summary) return { ...base, objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category })) }
+  return { ...base, tools: catalog.list('legacy'),
+    objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category, properties: d.getPropertyGroups(d.createDefault()) })), scripting: SCRIPT_HELP }
 }

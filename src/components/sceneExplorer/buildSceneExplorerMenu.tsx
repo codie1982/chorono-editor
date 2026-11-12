@@ -15,6 +15,8 @@
  *     visibility / lock toggles.
  */
 
+import { SUBTREE_FLAG_ACTIONS } from '@/components/layerHierarchy/SubtreeOperationsToolbar'
+import type { SubtreeFlag } from '@/lib/editor/branches/SubtreeCommands'
 import type { Layer } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
 
@@ -49,6 +51,7 @@ export interface SceneExplorerMenuHandlers {
   collapseSubtrees?: (ids:readonly string[]) => void
   /** Explicit recursive visibility, delegated as one reversible editor command. */
   setSubtreeHidden?: (ids:readonly string[],hidden:boolean) => void
+  setSubtreeFlag?: (ids: readonly string[], field: SubtreeFlag, value: boolean) => void
 }
 
 export interface BuildMenuOptions {
@@ -118,6 +121,7 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
       { kind: 'action', label: 'Collapse subtree', disabled: !handlers.collapseSubtrees, onSelect: () => handlers.collapseSubtrees?.(ids) },
       { kind: 'action', label: 'Show subtree', disabled: !handlers.setSubtreeHidden, onSelect: () => handlers.setSubtreeHidden?.(ids, false) },
       { kind: 'action', label: 'Hide subtree', disabled: !handlers.setSubtreeHidden, onSelect: () => handlers.setSubtreeHidden?.(ids, true) },
+      ...SUBTREE_FLAG_ACTIONS.map(action => ({ kind: 'action' as const, label: action.label, disabled: !handlers.setSubtreeFlag, onSelect: () => handlers.setSubtreeFlag?.(ids, action.field, action.value) })),
     ],
   })
 

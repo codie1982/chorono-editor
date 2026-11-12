@@ -1,21 +1,25 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useEffect,useRef,useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import {useSceneTextPreview} from './export/hooks/useSceneTextPreview'
 import {useOutputOperation} from './export/hooks/useOutputOperation'
 import {editorOutputResources,downloadOutput} from '@/lib/export/resources'
+import { useSessionOutputFilename } from './editorSession/SessionOutputContext'
 
 interface Props {
   scene: ChronoScene
   onClose: () => void
   documentSignal?:AbortSignal
+  onSaveProject?:()=>void
 }
 
 type Mode = 'editor' | 'runtime'
 
 /** Full JSON stays output-owned for copy/download. Display is capped at 200000
  * UTF-16 units; mode/document changes release obsolete pins and timers. */
-export default function JsonModal({ scene, onClose,documentSignal }: Props) {
+export default function JsonModal({ scene, onClose,documentSignal,onSaveProject }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const [mode,   setMode]   = useState<Mode>('editor')
   const [copied, setCopied] = useState(false)
 
@@ -29,11 +33,11 @@ export default function JsonModal({ scene, onClose,documentSignal }: Props) {
     if(context.isCurrent()){setCopied(true);clearTimeout(timer.current);timer.current=setTimeout(()=>setCopied(false),2000)}
   },setActionError)
 
-  const handleDownload=()=>operation.run(async()=>preview.retain(),lease=>{
+  const handleDownload=()=>{if(mode==='editor'&&onSaveProject){onSaveProject();return}return operation.run(async()=>preview.retain(),lease=>{
     setActionError('')
     const value=lease.value,blob=editorOutputResources.own(Math.max(1,value.byteLength),()=>new Blob([value.text],{type:value.mimeType}),()=>{})
-    try{downloadOutput(blob,item=>item,`${scene.composition.id}.${mode==='runtime'?'runtime':'editor'}.json`)}finally{blob.release()}
-  },setActionError)
+    try{downloadOutput(blob,item=>item,sessionFilename(`${scene.composition.id}.${mode==='runtime'?'runtime':'editor'}.json`))}finally{blob.release()}
+  },setActionError)}
 
   return (
     <div
@@ -54,6 +58,7 @@ export default function JsonModal({ scene, onClose,documentSignal }: Props) {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <DocumentationHelp topic={mode === 'runtime' ? 'export/runtime-json' : 'export/project-json'} compact />
             {/* Mode toggle */}
             <div className="flex rounded overflow-hidden border border-gray-600">
               <button

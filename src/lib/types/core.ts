@@ -87,10 +87,12 @@ export interface ShapeParams {
 }
 
 /** Colour as four 0–255 channels — used for animated colour values */
-export interface ColorValue { r: number; g: number; b: number; a: number }
+export type { ColorValue } from '../color/ColorValue'
+import type { ColorValue } from '../color/ColorValue'
 
 /** 2D vector — used for animated position values */
-export interface Vec2 { x: number; y: number }
+export type { Vec2 } from '../geometry/CoordinateSystem'
+import type { Vec2 } from '../geometry/CoordinateSystem'
 
 export type AnimatableValue = number | boolean | string | ColorValue | Vec2
 
@@ -295,6 +297,10 @@ export interface Layer {
   /** Pivot for rotation/scale — set once in PropertiesPanel, NOT keyframed */
   transform: Transform
   opacity: number
+  /** Constant numeric input recipes (editor-only); computed source values stay numeric. */
+  inputExpressions?: import('../editor/inputExpressions/NumericInputExpression').NumericInputExpressions
+  /** Live source drivers; outputs and compiled programs remain runtime-only. */
+  propertyExpressions?: import('../expression/properties/PropertyExpression').PropertyExpressions
   /** Canvas composite operation. Default 'source-over'. */
   blendMode?: GlobalCompositeOperation
 
@@ -724,6 +730,12 @@ export interface ChronoScene {
   /** Interactive state machines (BL-09). Each state binds to a timeline;
    *  transitions switch the active playhead. Optional for backward compat. */
   stateMachines?: StateMachineDefinition[]
+  /** Editor-only reference lines. Legacy scenes omit this payload; portable
+   * source saves retain it while runtime/raster/vector outputs omit guides. */
+  editorGuides?: import('../geometry/guides/SceneGuide').SceneGuideData
+  /** Optional sparse editor attribution. Missing legacy data means unknown;
+   * portable saves/history preserve it, runtime exporters explicitly omit it. */
+  authoring?: import('./authoring').SceneAuthoring
   initialState: Record<string, unknown>
 }
 

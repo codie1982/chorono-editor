@@ -1,4 +1,6 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useState, useCallback, useMemo } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -10,18 +12,21 @@ import { INITIAL_DOPE_SHEET_STATE } from './types'
 import './DopeSheetPanel.css'
 
 interface Props {
+  collisionPolicy?: KeyCollisionPolicy
+  onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
   scene: ChronoScene
   editor: EditorStateReturn
   settings: TimelineSettings
   onSettingsChange: (next: TimelineSettings) => void
   selectedLayerId: string | null
+  selectedLayerIds?: ReadonlySet<string>
   selectedTimelineId: string | null
   selectedKfIds: Set<string>
   currentTimeMs: number
   isPlaying: boolean
   onTimeChange: (ms: number) => void
   onSelectKeyframes: (next: Set<string>) => void
-  onSelectLayer: (id: string | null) => void
+  onSelectLayer: (id: string | null, additive?: boolean) => void
 }
 
 export default function DopeSheetPanel({
@@ -30,14 +35,18 @@ export default function DopeSheetPanel({
   settings,
   onSettingsChange,
   selectedLayerId,
+  selectedLayerIds,
   selectedTimelineId,
   selectedKfIds,
   currentTimeMs,
   isPlaying,
   onTimeChange,
   onSelectKeyframes,
-  onSelectLayer,
+  onSelectLayer, collisionPolicy, onCollisionPolicyChange,
 }: Props) {
+  const [localPolicy, setLocalPolicy] = useState<KeyCollisionPolicy>('reject')
+  const bulkPolicy = collisionPolicy ?? localPolicy
+  const setBulkPolicy = onCollisionPolicyChange ?? setLocalPolicy
   const [uiState, setUiState] = useState<DopeSheetUIState>(INITIAL_DOPE_SHEET_STATE)
 
   // Get selected timeline
@@ -70,6 +79,7 @@ export default function DopeSheetPanel({
       <div className="dope-sheet-panel">
         <div className="dope-sheet-empty">
           <p>No timeline selected</p>
+          <DocumentationHelp topic="editor/timeline/dope-sheet" />
         </div>
       </div>
     )
@@ -77,18 +87,19 @@ export default function DopeSheetPanel({
 
   return (
     <div className="dope-sheet-panel">
-      <DopeSheetToolbar
+      <DopeSheetToolbar collisionPolicy={bulkPolicy} onCollisionPolicyChange={setBulkPolicy}
         uiState={uiState}
         onFilterChange={updateFilter}
         settings={settings}
         onSettingsChange={onSettingsChange}
       />
-      <DopeSheetContainer
+      <DopeSheetContainer collisionPolicy={bulkPolicy} onCollisionPolicyChange={setBulkPolicy}
         scene={scene}
         selectedTimeline={selectedTimeline}
         editor={editor}
         settings={settings}
         selectedLayerId={selectedLayerId}
+        selectedLayerIds={selectedLayerIds}
         selectedKfIds={selectedKfIds}
         onToggleExpand={toggleNodeExpand}
         onSelectKeyframes={onSelectKeyframes}

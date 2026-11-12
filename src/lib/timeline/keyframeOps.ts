@@ -2,6 +2,7 @@
 // Pure functions that return new ChronoScene values — no side effects.
 // Used by editor commands (commands-keyframe.ts) and auto-keyframe logic.
 
+import { sameKeyTime, compareKeyTime } from './authoring/keyTimePolicy'
 import type { ChronoScene, Keyframe, EasingDefinition, AnimatableValue } from '../types'
 
 // ── Internal helper ───────────────────────────────────────────────────────────
@@ -27,7 +28,8 @@ function mapTimeline(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** Insert a keyframe (caller must ensure no duplicate timeMs ± 1ms). */
+/** Low-level immutable insertion. Callers validate bounds and collisions via
+ * the authoring batch contract; this primitive also supports transient previews. */
 export function insertKf(
   scene: ChronoScene,
   timelineId: string,
@@ -35,7 +37,7 @@ export function insertKf(
   kf: Keyframe,
 ): ChronoScene {
   return mapTimeline(scene, timelineId, target, (kfs) =>
-    [...kfs, kf].sort((a, b) => a.timeMs - b.timeMs)
+    [...kfs, kf].sort(compareKeyTime)
   )
 }
 
@@ -61,7 +63,7 @@ export function updateKfTimeMs(
 ): ChronoScene {
   return mapTimeline(scene, timelineId, target, (kfs) =>
     kfs.map((k) => k.id === kfId ? { ...k, timeMs: newMs } : k)
-      .sort((a, b) => a.timeMs - b.timeMs)
+      .sort(compareKeyTime)
   )
 }
 
@@ -115,19 +117,24 @@ export function ensureLayerInTimeline(
   }
 }
 
-/**
- * Insert or replace a keyframe.
- * If a keyframe within 1 ms of kf.timeMs already exists, replace it.
- * Otherwise insert and sort.
+/** Exact-time source upsert. Updates preserve the existing stable ID, time and
+ * unspecified tangent/segment data. Easing is preserved unless explicitly
+ * requested. Neighbouring sub-ms keys are distinct; ambiguous coincident keys
+ * throw instead of deleting several. Existing authoring callers need not sort
+ * or implement a second tolerance policy. New key values remain caller-owned.
  */
-export function upsertKeyframe(
-  scene: ChronoScene,
-  timelineId: string,
-  target: string,
-  kf: Keyframe,
-): ChronoScene {
-  return mapTimeline(scene, timelineId, target, (kfs) => {
-    const filtered = kfs.filter((k) => Math.abs(k.timeMs - kf.timeMs) > 1)
-    return [...filtered, kf].sort((a, b) => a.timeMs - b.timeMs)
+export function upsertKeyframe(scene: ChronoScene, timelineId: string, target: string,
+  kf: Keyframe, options: { updateEasing?: boolean } = {}): ChronoScene {
+  if (!Number.isFinite(kf.timeMs) || kf.timeMs < 0) throw new Error('Key time must be finite and non-negative.')
+  return mapTimeline(scene, timelineId, target, keys => {
+    const matching = keys.filter(key => sameKeyTime(key.timeMs, kf.timeMs))
+    if (matching.length > 1) throw new Error('Multiple keys share this time. Resolve the collision before updating.')
+    if (matching.length) {
+      const existing = matching[0]
+      return keys.map(key => key.id === existing.id ? { ...existing, ...kf, id: existing.id, timeMs: existing.timeMs,
+        easing: options.updateEasing ? kf.easing : existing.easing } : key).sort(compareKeyTime)
+    }
+    if (keys.some(key => key.id === kf.id)) throw new Error('Key identity already exists at another time.')
+    return [...keys, kf].sort(compareKeyTime)
   })
 }

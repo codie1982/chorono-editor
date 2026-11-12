@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PanelRegistry } from '@/components/dock/registry'
 import type { DockNode } from '@/components/dock/types'
+import { exportMenuItems } from './exportMenuItems'
 
 interface FileMenuProps {
   /** Current scene filename (composition.id by default). */
@@ -166,29 +167,8 @@ export default function FileMenu(props: FileMenuProps) {
 
           {/* ── Export ── */}
           <div className={sectionLabel}>Export</div>
-          {props.onExportImage && (
-            <button className={item} onClick={() => { setOpen(false); props.onExportImage!() }}>
-              🖼 Image (PNG / WEBP / JPEG)…
-            </button>
-          )}
-          {props.onExportSvg && (
-            <button className={item} onClick={() => { setOpen(false); props.onExportSvg!() }}>
-              ⬡ SVG (vector)…
-            </button>
-          )}
-          {props.onExportSequence && (
-            <button className={item} onClick={() => { setOpen(false); props.onExportSequence!() }}>
-              ⛶ Image Sequence (ZIP)…
-            </button>
-          )}
-          {props.onExportHtml && (
-            <button className={item} onClick={() => { setOpen(false); props.onExportHtml!() }}>
-              ◈ Standalone HTML (self-playing)
-            </button>
-          )}
-          <button className={item} onClick={() => { setOpen(false); props.onExportRuntime() }}>
-            ⤓ Runtime JSON (lean)
-          </button>
+          {exportMenuItems(props).map(action => <button key={action.label} className={item}
+            onClick={() => { setOpen(false); action.onSelect() }}>{action.label}</button>)}
           <button className={item} onClick={() => { setOpen(false); props.onCopySceneJson() }}>
             ⧉ Copy Scene JSON to clipboard
           </button>

@@ -1,4 +1,6 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── WireParameterModal (BL-05) ────────────────────────────────────────────────
 // Modal for creating + editing ParameterWires. Two side-by-side picker
 // columns + an expression editor + a live preview row.
@@ -10,20 +12,24 @@
 // Apply commits via makeAddParameterWireCmd / makeUpdateParameterWireCmd so
 // undo/redo works.
 
-import { useEffect, useState, useMemo } from 'react'
+import { useRef, useId, useState, useMemo } from 'react'
 import type { ChronoScene, ParameterRef, ParameterWire } from '@/lib/types'
 import { newParameterWire } from '@/lib/defaults'
 import {
   makeAddParameterWireCmd, makeUpdateParameterWireCmd, makeDeleteParameterWireCmd,
 } from '@/lib/editor/commands-interactive'
-import { safeEvaluate, parseExpression } from '@/lib/core/expression/expressionEvaluator'
-import { formatParameterRef, areTypesCompatible } from '@/lib/wiring/helpers'
+import type { OverrideMap } from '@/lib/evaluator'
+import type { ParamValueMap } from '@/lib/runtime/paramResolver'
+import { inspectWire } from '@/lib/wiring/WirePreview'
+import { areTypesCompatible } from '@/lib/wiring/helpers'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import SourceParameterPicker from './SourceParameterPicker'
 import MappingPresets from './MappingPresets'
 
 interface Props {
   scene: ChronoScene
+  sourceOverrides?: OverrideMap
+  paramValues?: ParamValueMap
   editor: EditorStateReturn
   /** When supplied, modal opens in EDIT mode and prefills from this wire. */
   existingWire?: ParameterWire | null
@@ -33,13 +39,18 @@ interface Props {
   onClose: () => void
 }
 
+/** Review one Wire against the shared pre-wire runtime frame. Draft state is
+ * owned until close; revision changes invalidate Apply rather than replacing
+ * manual edits. Only a finite, cycle-free candidate becomes one editor command.
+ * Without a frame, the shared explicit static/default source fallback applies. */
 export default function WireParameterModal({
-  scene, editor, existingWire, preFilledTarget, onClose,
+  scene, editor, existingWire, preFilledTarget, onClose, sourceOverrides, paramValues,
 }: Props) {
   const isEdit = !!existingWire
-  const initialWire = existingWire ?? newParameterWire(
-    preFilledTarget ? { target: preFilledTarget } : undefined,
-  )
+  const [initialWire] = useState(() => existingWire ?? newParameterWire(preFilledTarget ? { target: preFilledTarget } : undefined))
+  const revision = useRef(editor.getRevision())
+  const expressionId = useId()
+  const stale = revision.current !== editor.getRevision()
 
   const [source,     setSource]     = useState<ParameterRef | null>(initialWire.source.propertyPath ? initialWire.source : null)
   const [target,     setTarget]     = useState<ParameterRef | null>(initialWire.target.propertyPath ? initialWire.target : null)
@@ -49,35 +60,12 @@ export default function WireParameterModal({
   const [clampMin,   setClampMin]   = useState<string>(initialWire.clamp?.min != null ? String(initialWire.clamp.min) : '')
   const [clampMax,   setClampMax]   = useState<string>(initialWire.clamp?.max != null ? String(initialWire.clamp.max) : '')
 
-  // Sync external changes (rare — usually modal owns state until apply)
-  useEffect(() => {
-    if (!existingWire) return
-    setSource(existingWire.source)
-    setTarget(existingWire.target)
-    setExpression(existingWire.expression)
-    setEnabled(existingWire.enabled)
-    setClampOn(existingWire.clamp?.enabled ?? false)
-    setClampMin(existingWire.clamp?.min != null ? String(existingWire.clamp.min) : '')
-    setClampMax(existingWire.clamp?.max != null ? String(existingWire.clamp.max) : '')
-  }, [existingWire])
-
-  // Live preview — feed the current source value through the expression
-  const { exprError, sourcePreview, result } = useMemo(() => {
-    try { parseExpression(expression) }
-    catch (e) {
-      return {
-        exprError: e instanceof Error ? e.message.replace(/^Parse error:\s*/, '') : 'Invalid expression',
-        sourcePreview: null as number | null,
-        result: null as number | null,
-      }
-    }
-    const sv = source ? resolveSourceValue(scene, source) : null
-    if (sv == null) {
-      return { exprError: null, sourcePreview: null, result: null }
-    }
-    const r = safeEvaluate(expression, { source: sv, s: sv })
-    return { exprError: null, sourcePreview: sv, result: r }
-  }, [expression, source, scene])
+  const candidate: ParameterWire = { ...initialWire, source: source ?? initialWire.source,
+    target: target ?? initialWire.target, expression, enabled,
+    clamp: clampOn || initialWire.clamp ? { ...initialWire.clamp, enabled: clampOn, min: clampMin.trim() ? Number(clampMin) : undefined, max: clampMax.trim() ? Number(clampMax) : undefined } : undefined }
+  const { error: exprError, source: sourcePreview, value: result } = useMemo(() => source && target
+    ? inspectWire(candidate, scene, sourceOverrides, paramValues) : { error: null, source: null, value: null },
+  [source, target, expression, enabled, clampOn, clampMin, clampMax, scene, sourceOverrides, paramValues])
 
   const typeMismatch = source && target && !areTypesCompatible(source.valueType, target.valueType)
 
@@ -85,17 +73,14 @@ export default function WireParameterModal({
     source != null && target != null
     && (source.layerId !== target.layerId || source.propertyPath !== target.propertyPath)
     && expression.trim().length > 0
-    && exprError == null
+    && exprError == null && result !== null && !stale
 
   function applyAndClose() {
     if (!canApply || !source || !target) return
-    const clamp = clampOn
-      ? {
-          enabled: true,
-          min: clampMin === '' ? undefined : Number(clampMin),
-          max: clampMax === '' ? undefined : Number(clampMax),
-        }
-      : undefined
+    if (editor.getRevision() !== revision.current) return
+    const checked = inspectWire(candidate, editor.getScene(), sourceOverrides, paramValues)
+    if (checked.error || checked.value === null) return
+    const clamp = candidate.clamp
     const now = Date.now()
     if (isEdit && existingWire) {
       const next: ParameterWire = {
@@ -122,7 +107,7 @@ export default function WireParameterModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div
+      <div role="dialog" aria-modal="true" aria-label="Wire Parameter" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose() } }}
         className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-[820px] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -131,6 +116,7 @@ export default function WireParameterModal({
           <h2 className="text-sm font-semibold text-gray-100">
             {isEdit ? '🔗 Edit Wire' : '🔗 Wire Parameter'}
           </h2>
+          <DocumentationHelp topic="editor/state-machines/wires" className="ml-auto mr-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">×</button>
         </div>
 
@@ -168,6 +154,7 @@ export default function WireParameterModal({
             </div>
           )}
 
+          {stale && <p role="alert" className="text-xs text-amber-300">Scene changed while this dialog was open. Reopen it to preserve the current source.</p>}
           {/* Expression */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -175,11 +162,12 @@ export default function WireParameterModal({
               <MappingPresets expression={expression} onChange={setExpression} />
             </div>
             <input
+              aria-label="Wire expression" aria-invalid={!!exprError} aria-describedby={`${expressionId}-error`}
               value={expression}
               onChange={(e) => setExpression(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && canApply) applyAndClose()
-                if (e.key === 'Escape') onClose()
+                if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (canApply) applyAndClose() }
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose() }
               }}
               placeholder="e.g. map(source, 0, 1, 0, 360)"
               spellCheck={false}
@@ -188,7 +176,7 @@ export default function WireParameterModal({
               }`}
             />
             {exprError && (
-              <div className="text-[10px] text-red-400 px-1 mt-1">{exprError}</div>
+              <div id={`${expressionId}-error`} role="alert" className="text-[10px] text-red-400 px-1 mt-1">{exprError}</div>
             )}
           </div>
 
@@ -222,17 +210,13 @@ export default function WireParameterModal({
             {clampOn && (
               <>
                 <span className="text-gray-500 text-[10px]">min</span>
-                <input
-                  type="number" value={clampMin}
+                <CalculationNumberInput aria-label="clamp Min" value={clampMin}
                   onChange={(e) => setClampMin(e.target.value)}
-                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none"
-                />
+                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none" onCalculate={calculated => setClampMin(String(calculated))} />
                 <span className="text-gray-500 text-[10px]">max</span>
-                <input
-                  type="number" value={clampMax}
+                <CalculationNumberInput aria-label="clamp Max" value={clampMax}
                   onChange={(e) => setClampMax(e.target.value)}
-                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none"
-                />
+                  className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[11px] text-gray-100 font-mono outline-none" onCalculate={calculated => setClampMax(String(calculated))} />
               </>
             )}
           </div>
@@ -275,28 +259,6 @@ export default function WireParameterModal({
 // ─────────────────────────────────────────────────────────────────────────────
 // Preview helper — resolve a source value at modal-open time (static fallback,
 // no live override map; preview only shows magnitude).
-// ─────────────────────────────────────────────────────────────────────────────
-
-function resolveSourceValue(scene: ChronoScene, ref: ParameterRef): number | null {
-  if (!ref.layerId) {
-    const p = scene.parameters.find((pp) => pp.id === ref.propertyPath)
-    if (!p) return null
-    const v = p.defaultValue
-    if (typeof v === 'number')  return v
-    if (typeof v === 'boolean') return v ? 1 : 0
-    if (typeof v === 'string') { const n = Number(v); return Number.isFinite(n) ? n : null }
-    return null
-  }
-  const layer = scene.layers.find((l) => l.id === ref.layerId)
-  if (!layer) return null
-  let cursor: unknown = layer
-  for (const seg of ref.propertyPath.split('.')) {
-    if (cursor == null || typeof cursor !== 'object') return null
-    cursor = (cursor as Record<string, unknown>)[seg]
-  }
-  return typeof cursor === 'number' ? cursor : null
-}
-
 function formatNum(n: number): string {
   if (!Number.isFinite(n)) return String(n)
   if (Math.abs(n) >= 1000) return n.toFixed(0)

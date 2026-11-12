@@ -3,6 +3,9 @@ import {useCallback,useEffect,useRef,useState} from 'react'
 import type {ChronoScene} from '@/lib/types'
 import {assetSourcePool} from '@/lib/asset/sources'
 import {SceneFileWriter,SceneAutoSaveCoordinator,type SceneWritable} from '@/lib/editor/persistence'
+import type { HistoryState } from '@/lib/editor/history'
+import { HistorySnapshotIndex } from '@/lib/editor/history/HistorySnapshotIndex'
+import { sessionOutputFilename, validSessionId } from '@/lib/editor/session/sessionIdentity'
 
 export type FileVersioningState='no-directory'|'idle'|'saving'|'saved'|'error'|'unsupported'
 /** Platform directory capability, outside scene JSON/undo. Native and private
@@ -10,10 +13,13 @@ export type FileVersioningState='no-directory'|'idle'|'saving'|'saved'|'error'|'
 export interface SceneDirectory{
   readonly name:string
   getFileHandle(name:string,options:{create:true}):Promise<{createWritable():Promise<SceneWritable>}>
+  getDirectoryHandle?(name:string,options:{create:true}):Promise<SceneDirectory>
 }
 interface UseFileVersioningOptions{
   interval_ms?:number;fallback_ms?:number;snapshot_ms?:number;baseName?:string
   documentSignal?:AbortSignal
+  sessionId?:string
+  history?:HistoryState
   /** Optional host-native picker; browser composition uses showDirectoryPicker. */
   pickDirectory?:()=>Promise<SceneDirectory>
 }
@@ -41,16 +47,22 @@ async function browserDirectory():Promise<SceneDirectory>{
  *
  * Picker resolves after the initial current+version writes, as before. StrictMode
  * replay/document replacement invalidates obsolete setup without publishing its
- * status. Later versions keep timestamp naming and original JSON/source policy.
+ * status. Session-aware versions keep timestamp naming under sessions/<sessionId>/
+ * and include portable committed history; source-only host callers keep their
+ * existing JSON contract.
  * No directory/native handles enter scene/undo. Timers/pending picker are released
  * on unmount; same-folder selection can intentionally create another version.
  */
 export function useFileVersioning(scene:ChronoScene|null,options:UseFileVersioningOptions={}){
-  const {interval_ms=500,fallback_ms=10000,snapshot_ms=600000,baseName='scene',documentSignal}=options
+  const {interval_ms=500,fallback_ms=10000,snapshot_ms=600000,baseName='scene',documentSignal,sessionId}=options
   const [mounted,setMounted]=useState(false),[isSupported,setSupported]=useState(false)
   const [state,setState]=useState<FileVersioningState>('no-directory'),[selection,setSelection]=useState<Selection|null>(null)
   const [lastSavedAt,setLastSavedAt]=useState<Date|null>(null),[lastSnapshotAt,setLastSnapshotAt]=useState<Date|null>(null),[snapshotCount,setSnapshotCount]=useState(0)
   const latest=useRef({scene,options});latest.current={scene,options}
+  const snapshots=useRef<HistorySnapshotIndex>()
+  if(!snapshots.current)snapshots.current=new HistorySnapshotIndex()
+  const currentInput=()=>{const value=latest.current.scene,history=latest.current.options.history
+    return value&&history&&history.present===value?snapshots.current!.carrier(history):value}
   const owner=useRef<FolderOwner>(),alive=useRef(false),picking=useRef(false)
   const initialized=useRef<WeakSet<Selection>>(),statusTimer=useRef<ReturnType<typeof setTimeout>>()
   if(!initialized.current)initialized.current=new WeakSet<Selection>()
@@ -69,9 +81,18 @@ export function useFileVersioning(scene:ChronoScene|null,options:UseFileVersioni
     const saved=()=>{if(current()){setState('saved');clearTimeout(statusTimer.current);statusTimer.current=setTimeout(()=>{if(current())setState(value=>value==='saved'?'idle':value)},2000)}}
     /** Validate before deriving a filename or opening a native handle. */
     const filename=(suffix:string)=>{if(!baseName.length||baseName.length>512)throw new RangeError('Scene filename base must contain 1–512 characters.');return baseName+suffix}
-    const write=(name:string,value:ChronoScene,signal=documentSignal)=>writer.write(value,async()=>{
-      const file=await directory.getFileHandle(name,{create:true});return file.createWritable()
-    },signal)
+    let target:Promise<SceneDirectory>|undefined
+    const write=(name:string,value:ChronoScene,signal=documentSignal)=>{
+      const history=snapshots.current!.history(value)
+      return writer.write(history?.present??value,async()=>{
+        if(sessionId&&!validSessionId(sessionId))throw new Error('Invalid save session ID.')
+        if(!target)target=sessionId&&directory.getDirectoryHandle
+          ?directory.getDirectoryHandle('sessions',{create:true}).then(root=>root.getDirectoryHandle!(sessionId,{create:true}))
+          :Promise.resolve(directory)
+        const root=await target
+        const file=await root.getFileHandle(sessionId&&!directory.getDirectoryHandle?sessionOutputFilename(name,sessionId):name,{create:true});return file.createWritable()
+      },signal,sessionId&&history?{sessionId,history}:undefined)
+    }
     const context:FolderOwner={writer,active:true,initializing:!initialized.current!.has(selection),
       autosave:new SceneAutoSaveCoordinator({intervalMs:interval_ms,fallbackMs:fallback_ms,
         retain:value=>assetSourcePool.retainAssets(value.assets),
@@ -82,7 +103,7 @@ export function useFileVersioning(scene:ChronoScene|null,options:UseFileVersioni
         onStatus:status=>{if(!current())return;clearTimeout(statusTimer.current);setState(status.state==='offline'?'error':status.state);if(status.state==='saved')setLastSavedAt(new Date())},
       }),
       snapshot:async()=>{
-        const value=latest.current.scene;if(!value||!current())return
+        const value=currentInput();if(!value||!current())return
         clearTimeout(statusTimer.current);setState('saving')
         try{
           await write(filename(`_${formatTimestamp(new Date())}.json`),value)
@@ -96,14 +117,14 @@ export function useFileVersioning(scene:ChronoScene|null,options:UseFileVersioni
     void(async()=>{
       try{
         if(context.initializing&&latest.current.scene){
-          const value=latest.current.scene;setState('saving')
+          const value=currentInput()!;setState('saving')
           await write(filename('.json'),value);lastWritten=new WeakRef(value)
           if(current()){setLastSavedAt(new Date());await context.snapshot()}
         }
         if(!current())return
         initialized.current!.add(selection);context.initializing=false
         if(pendingPicker.current?.selection===selection){pendingPicker.current.resolve();pendingPicker.current=undefined}
-        if(latest.current.scene)context.autosave.request(latest.current.scene)
+        const value=currentInput();if(value)context.autosave.request(value)
       }catch(error){
         if(current()){
           setState('error');context.initializing=false
@@ -112,8 +133,8 @@ export function useFileVersioning(scene:ChronoScene|null,options:UseFileVersioni
       }
     })()
     return()=>{documentSignal?.removeEventListener('abort',abort);abort();if(owner.current===context)owner.current=undefined}
-  },[selection,baseName,interval_ms,fallback_ms,documentSignal])
-  useEffect(()=>{if(scene&&owner.current&&!owner.current.initializing)owner.current.autosave.request(scene)},[scene])
+  },[selection,baseName,interval_ms,fallback_ms,documentSignal,sessionId])
+  useEffect(()=>{const value=currentInput();if(value&&owner.current&&!owner.current.initializing)owner.current.autosave.request(value)},[scene,options.history])
   const saveSnapshotNow=useCallback(async()=>{
     if(!owner.current){setState(isSupported?'no-directory':'unsupported');return}
     try{await owner.current.snapshot()}catch{/* The current owner publishes its error; stale owners publish nothing. */}

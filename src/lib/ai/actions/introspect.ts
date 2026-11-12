@@ -4,13 +4,15 @@
 
 import type { ActionRegistry } from '../ActionRegistry'
 import type { ChronoScene } from '@/lib/types'
+import { describeAuthoring } from '../../editor/authoring/AuthoringQuery'
 import { evaluateTimelines } from '@/lib/evaluator'
 
 interface LayerIdParam { layerId: string }
 interface TimelineIdParam { timelineId: string }
 interface EvalParam { timeMs: number; target?: string }
 
-/** Register human-readable scene queries; full nested records and revision snapshots are available through MCP get_scene. */
+/** Register source-only reads used by AI/MCP adapters. Reads return the legacy
+ * text/JSON representation without mutating scene, transport or media assets. */
 export function registerIntrospectActions(reg: ActionRegistry): void {
   // ── list_layers ─────────────────────────────────────────────────────────────
   reg.register({
@@ -38,10 +40,10 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
     toolName: 'list_assets',
     description:
       'List uploaded media assets (image/video/audio) with their ids. Use to find a ' +
-      'valid assetId before add_layer type=image/video/audio. Use import_asset in MCP to import supplied file bytes.',
+      'valid assetId before creating media layers. To add new file content through MCP, use import_asset with base64 data; this list does not import media or fetch URLs.',
     parameters: { type: 'object', properties: {} },
     read: (_params, scene: ChronoScene) => {
-      if (scene.assets.length === 0) return 'Scene has no assets. The user must upload media first.'
+      if (scene.assets.length === 0) return 'Scene has no assets. Import file content with import_asset through MCP, or upload media in the editor.'
       return scene.assets
         .map((a) => {
           const dim = a.width && a.height ? ` ${a.width}×${a.height}` : ''
@@ -71,6 +73,8 @@ export function registerIntrospectActions(reg: ActionRegistry): void {
         `transform: pos=(${t.x},${t.y}) scale=(${t.scaleX},${t.scaleY}) rot=${t.rotationDeg}° anchor=(${t.anchorX},${t.anchorY})`,
         `opacity: ${l.opacity}`,
       ]
+      lines.push(`authoring (self): ${JSON.stringify(describeAuthoring(scene, ['layer', l.id]))}`)
+      if (l.type === 'group' || l.type === 'spline') lines.push(`authoring (subtree): ${JSON.stringify(describeAuthoring(scene, ['layer', l.id], true))}`)
       if (l.size) lines.push(`size: ${l.size.width}×${l.size.height}`)
       if (l.shapeKind || l.shape) lines.push(`shape: ${l.shapeKind ?? l.shape}`)
       if (l.style?.fill) lines.push(`fill: ${JSON.stringify(l.style.fill)}`)

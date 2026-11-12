@@ -1,4 +1,6 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
@@ -33,6 +35,7 @@ const SCALES = [1, 2, 3, 4] as const
  * the chosen fps and downloads them as a ZIP. Progress is shown per frame.
  */
 export default function SequenceExportDialog({ scene, assets, onClose, onExported, onError,documentSignal }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const [format, setFormat]           = useState<RasterFormat>('png')
   const [fps, setFps]                 = useState(scene.composition.frameRate || 30)
   const [scale, setScale]             = useState(1)
@@ -52,8 +55,9 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
         {signal},report,
       ),lease=>{
       const result=lease.value
-      downloadOutput(lease,value=>value.blob,result.filename)
-      onExported?.(result.filename, result.frameCount, result.warnings)
+      const filename=sessionFilename(result.filename)
+      downloadOutput(lease,value=>value.blob,filename)
+      onExported?.(filename, result.frameCount, result.warnings)
       onClose()
     },onError)
   }
@@ -63,6 +67,7 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
   return (
     <BaseExportDialog
       title="Export Image Sequence"
+      helpTopic="export/sequence"
       onClose={onClose}
       maxWidth="max-w-md"
       footer={
@@ -98,11 +103,9 @@ export default function SequenceExportDialog({ scene, assets, onClose, onExporte
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="FPS">
-            <input
-              type="number" min={1} max={120} value={fps} disabled={busy}
+            <CalculationNumberInput aria-label="fps" min={1} max={120} value={fps} disabled={busy}
               onChange={(e) => setFps(Math.max(1, Number(e.target.value)))}
-              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 disabled:opacity-50"
-            />
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 disabled:opacity-50" onCalculate={calculated => setFps(Math.max(1, calculated))} />
           </Field>
           <Field label={`Resolution (${scale}×)`}>
             <div className="grid grid-cols-4 gap-1">

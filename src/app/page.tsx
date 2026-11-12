@@ -8,14 +8,24 @@ import {
   cloneLayerForDuplicate,
 } from '@/lib/defaults'
 import { layerRegistry } from '@/lib/registry'
+import { useShapeCreationTool } from '@/components/canvas/placement/useShapeCreationTool'
+import { ensureInteractionTracePersistence } from '@/components/canvas/interactions/diagnostics'
+import { acquireDiagnosticSharing } from '@/lib/diagnostics/browser/sharing'
+import { DiagnosticConsentPrompt } from '@/components/resources/diagnostics/DiagnosticConsentPrompt'
 import { computeTimelineCycleEnd, hasInfinitePlayback } from '@/lib/evaluator'
 import { useEditorState }      from './hooks/useEditorState'
+import { useTimelineAuthoring } from '@/components/timeline/authoring/useTimelineAuthoring'
+import { sameKeyTime } from '@/lib/timeline/authoring/keyTimePolicy'
+import { authoringTime } from '@/lib/timeline/authoring/timelineNavigation'
 import { usePlayback }         from './hooks/usePlayback'
 import { useKeyboard }         from './hooks/useKeyboard'
+import { useToolMode }         from './hooks/useToolMode'
 import type { TimelineProperty } from './hooks/useKeyboard'
 import type { ShortcutContext } from '@/lib/shortcuts'
 import { deletionTargetForPanel, panelFromAttribute, shortcutContextForPanel, type EditorPanel } from '@/lib/editor/keyboardContext'
 import { resolveSelectedKeyframes } from '@/lib/timeline/keyframeSelection'
+import { buildViewportNudgeCommand } from '@/lib/editor/viewportNudge'
+import { combineLayerSelection, createLayerSelection, retainLayerSelection, toggleLayerSelection } from '@/lib/selection/layerSelection'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
 import { useAssetCache }       from './hooks/useAssetCache'
@@ -32,7 +42,15 @@ import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGho
 import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
-import { FileVersioningControl } from '@/components/FileVersioningControl'
+import ProjectMenu from '@/components/TopToolbar/ProjectMenu'
+import { SessionOutputProvider, useSessionIdentity } from '@/components/editorSession/SessionOutputContext'
+import { createChoronoDemo } from '@/lib/editor/demo/createChoronoDemo'
+import { readSessionProject } from '@/lib/editor/session/SessionProject'
+import { EditorSessionBoundary } from '@/components/editorSession/EditorSessionBoundary'
+import { LocalRecoveryStatus } from '@/components/editorSession/LocalRecoveryStatus'
+import { useSceneSessionRecovery } from './hooks/useSceneSessionRecovery'
+import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
+import ExportMenu from '@/components/TopToolbar/ExportMenu'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
 import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
 import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
@@ -42,9 +60,10 @@ import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
   makeDuplicateLayerCmd, makeMoveLayerCmd,
   makeBulkUpdateLayersCmd, makeBulkToggleFlagCmd,
-  makeIsolateLayersCmd, makeShowAllLayersCmd,
+  makeShowAllLayersCmd,
 } from '@/lib/editor/commands-layer'
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
+import { buildViewportKeyframeCommands, type ViewportLayerChange } from '@/lib/editor/viewportKeyframes'
 import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
@@ -58,10 +77,16 @@ const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
 }
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
+import { useLayerIsolation } from '@/app/hooks/useLayerIsolation'
+import { LayerIsolationBar } from '@/components/layerHierarchy/LayerFocusControls'
+import type { TimelineRevealRequest } from '@/lib/timeline/hierarchy/TimelineRevealRequest'
+import { makeMoveLayerInTreeCmd, makeGroupSiblingLayersCmd } from '@/lib/editor/branches/HierarchyCommands'
+import { makeSetSubtreeFlagCmd } from '@/lib/editor/branches/SubtreeCommands'
 import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import SplinePointInspector from '@/components/SplinePointInspector'
+import { NumericPropertyProvider } from '@/components/inputs/expressions/NumericPropertyContext'
 import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
 import { newSplineLayerFromData } from '@/lib/defaults'
 import TimelinePanel   from '@/components/TimelinePanel'
@@ -110,8 +135,11 @@ import CompositionPresetModal from '@/components/modals/CompositionPresetModal'
 import ShortcutHelpModal      from '@/components/modals/ShortcutHelpModal'
 import CloneModal             from '@/components/modals/CloneModal'
 import ArrayModal             from '@/components/modals/ArrayModal'
-import { makeCloneCmd, makeArrayCmd, makeCloneAlignCmd } from '@/lib/editor/commands-clone'
-import { makeConvertToRepeaterCmd, makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
+import { useArrayAuthoring } from '@/components/array/useArrayAuthoring'
+import { makeCloneAlignCmd } from '@/lib/editor/commands-clone'
+import { prepareCloneForest } from '@/lib/editor/commands-clone-forest'
+import { LayerIndex } from '@/lib/scene/LayerIndex'
+import { makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 // ── Mode system bootstrap ─────────────────────────────────────────────────────
@@ -119,62 +147,15 @@ import '@/lib/modes/bootstrap'
 import { modeRegistry } from '@/lib/modes'
 import type { EditorMode } from '@/lib/core/EditorMode'
 
-// ── Demo scene shown on first load ────────────────────────────────────────────
-
-function makeDemoScene(): ChronoScene {
-  const s = emptyScene()
-
-  const card: Layer = {
-    id: 'card', name: 'Card', type: 'shape', shape: 'rect',
-    transform: { x: 40, y: 60, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 140, anchorY: 60 },
-    opacity: 0,
-    style: { fill: { type: 'solid', color: '#3B82F6' }, cornerRadius: 16 },
-    size: { width: 280, height: 120 },
-  }
-  const label: Layer = {
-    id: 'label', name: 'Label', type: 'text',
-    // Anchor at the visual centre of "Chorono" @22px (rough text bbox)
-    transform: { x: 130, y: 128, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 42, anchorY: 13 },
-    opacity: 0,
-    // BL-72: text layers carry a measured `size` so the SelectionFrame renders
-    // and tracks the glyphs. Edits re-measure via PropertiesPanel.updateText.
-    size: { width: 84, height: 26 },
-    text: { value: 'Chorono', fontSize: 22, color: '#FFFFFF' },
-  }
-  s.layers = [card, label]
-
-  const tl = newTimeline()
-  Object.assign(tl, { id: 'intro', durationMs: 600, autoplay: true, layerIds: ['card', 'label'] })
-  tl.tracks = [
-    {
-      target: 'layers.card.opacity',
-      keyframes: [
-        { id: 'k1', timeMs: 0,   value: 0, easing: { type: 'easeOut' as const } },
-        { id: 'k2', timeMs: 600, value: 1, easing: { type: 'linear'  as const } },
-      ],
-    },
-    {
-      target: 'layers.card.transform.y',
-      keyframes: [
-        { id: 'k3', timeMs: 0,   value: 90, easing: { type: 'easeOut' as const } },
-        { id: 'k4', timeMs: 600, value: 60, easing: { type: 'linear'  as const } },
-      ],
-    },
-    {
-      target: 'layers.label.opacity',
-      keyframes: [
-        { id: 'k5', timeMs: 200, value: 0, easing: { type: 'easeOut' as const } },
-        { id: 'k6', timeMs: 600, value: 1, easing: { type: 'linear'  as const } },
-      ],
-    },
-  ]
-  s.timelines = [tl]
-  return s
+export default function BuilderPage() {
+  return <EditorSessionBoundary>{session => <SessionOutputProvider sessionId={session.id}><BuilderWorkspace session={session} /></SessionOutputProvider>}</EditorSessionBoundary>
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-export default function BuilderPage() {
+/** Source/editor owners mount only after the local recovery barrier completes. */
+function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
+  // Restore the user's same-tab diagnostic session before any authoring gesture;
+  // the adapter owns storage/timer/pagehide cleanup independently of dock panels.
+  useEffect(() => ensureInteractionTracePersistence(), [])
   // ── Active editor mode ────────────────────────────────────────────────────
   // Currently always '2danimation'. When a mode selector UI lands, this will
   // drive descriptor lookup for panels / tools / renderer.
@@ -182,19 +163,24 @@ export default function BuilderPage() {
   const modeDescriptor = modeRegistry.get(currentMode)
 
   // ── Central scene state with history + transactions ──────────────────────
-  const editor = useEditorState(makeDemoScene())
+  const [initialScene] = useState(() => session.scene ?? createChoronoDemo())
+  const sessionIdentity = useSessionIdentity()!
+  const editor = useEditorState(initialScene, session.history)
+  const recovery = useSceneSessionRecovery(editor, session)
+  useEffect(() => acquireDiagnosticSharing(() => !editor.isTransactionActive()), [editor.isTransactionActive])
   const {
     scene, canUndo, canRedo, dispatchCommand, resetScene, undo, redo,
     layerMetaById, getSiblingsInArray,
   } = editor
-  const welcome = useWelcomeScreen()
+  const welcome = useWelcomeScreen(session.restored)
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
-  //  - {name}.json          → "current" file, overwritten on change (500ms)
-  //  - {name}_TIMESTAMP.json → version snapshots (every 10 min + manual)
+  //  - sessions/<sessionId>/{name}.json → committed current + bounded history
+  //  - same directory: {name}_TIMESTAMP.json → 10 min + manual versions
   // No server / MongoDB / Git — pure browser file output.
-  const fileVersioning = useFileVersioning(scene, {
+  const fileVersioning = useFileVersioning(editor.committedScene, {
+    sessionId: sessionIdentity.id, history: editor.committedHistory,
     documentSignal:editor.getDocumentSignal(),
     interval_ms: 500,
     fallback_ms: 10000,
@@ -203,27 +189,28 @@ export default function BuilderPage() {
   })
 
   // ── Local UI selection / modal state (not part of scene history) ─────────
-  const [selectedLayerId,  setSelectedLayer]  = useState<string | null>('card')
-  /** BL-73 — when true, spline primitives append to the selected spline layer
-   *  instead of starting a new one (3ds Max "Start New Shape" off). */
-  const [splineAppendMode, setSplineAppendMode] = useState(false)
+  const [layerSelection, setLayerSelection] = useState(() => createLayerSelection(scene.layers[0] ? [scene.layers[0].id] : [], scene.layers[0]?.id ?? null))
+  const selectedLayerId = layerSelection.primaryId
+  // Legacy panel props accept Set; lend them a copy rather than mutable state.
+  const selectedLayerIds = useMemo(() => new Set(layerSelection.selectedIds), [layerSelection.selectedIds])
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
+  const { mode: toolMode, setMode: setToolMode, setPan: setPanMode, togglePan, chooseTool } = useToolMode()
+  const [manualPreview, setManualPreview] = useState(false)
   /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
   const [splinePointId, setSplinePointId] = useState<string | null>(null)
-  /** Multi-layer selection — primary is selectedLayerId, extras live here. */
-  const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(() => new Set(['card']))
-  const [selectedTlId,     setSelectedTl]    = useState<string>('intro')
+  const [selectedTlId,     setSelectedTl]    = useState<string>(scene.timelines[0]?.id ?? '')
   const [showJson,        setShowJson]      = useState(false)
   const [showCompModal,   setShowCompModal] = useState(false)
   // BL-05: WireParameterModal state — opened by PropertiesPanel 🔗, WiringListPanel, etc.
   const wireModal = useWireModal()
   const [showHelp,        setShowHelp]      = useState(false)
 
-  // BL-59 — Clone & Array modals. Source layer is captured at open time
-  // so re-selection during the modal session doesn't change the target.
+  // Clone modal source is captured at open time. The Array authoring adapter
+  // below owns its independent multi-root source/time/document session.
   const [cloneModalSource, setCloneModalSource] = useState<Layer | null>(null)
-  const [arrayModalSource, setArrayModalSource] = useState<Layer | null>(null)
+  const [cloneModalIds, setCloneModalIds] = useState<string[]>([])
+  const [cloneModalScene, setCloneModalScene] = useState<ChronoScene | null>(null)
 
   // ── Dock layout (drag-droppable panel tiling) ────────────────────────────
   // The id list must enumerate EVERY panel the registry exposes — the
@@ -240,9 +227,7 @@ export default function BuilderPage() {
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
   // The State Machine panel shares the canvas leaf as a tab. The toolbar
   // toggle (and Cmd+Shift+M) just switches the active tab — no separate "mode"
-  // system. `smModeActive` reflects whichever leaf currently hosts the panel.
-  const smLeaf = findLeafOfPanel(dock.layout, 'stateMachine')
-  const smModeActive = !!smLeaf && smLeaf.panels[smLeaf.activeIndex] === 'stateMachine'
+  // system. Dock tabs own navigation; this callback preserves the shortcut.
   const toggleSMMode = useCallback(() => {
     const leaf = findLeafOfPanel(dock.layout, 'stateMachine')
     if (!leaf) return
@@ -277,6 +262,8 @@ export default function BuilderPage() {
   const dockContainerRef = useRef<HTMLDivElement | null>(null)
   /** UUID-based keyframe multi-selection — survives drag, persists across renders */
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
+  /** A motion-key tool owns canvas arrows/delete while editing its selection. */
+  const [motionKeyEditing, setMotionKeyEditing] = useState(false)
   const selectTimeline = useCallback((id: string) => {
     setSelectedTl(id)
     setSelectedKfIds(new Set())
@@ -352,7 +339,7 @@ export default function BuilderPage() {
   // ── Playback loop ────────────────────────────────────────────────────────
   const {
     currentTimeMs, isPlaying, playbackSpeed,
-    handlePlayToggle, handleSeek, setPlaybackSpeed,
+    handlePlayToggle, handlePause, handleSeek, setPlaybackSpeed,
   } = usePlayback({
     maxDuration, wrapAtEnd,
     workAreaInMs: activeWorkArea.inMs,
@@ -389,13 +376,39 @@ export default function BuilderPage() {
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
+  const expressionAuthoringClock = useMemo(() => !isPlaying && !manualPreview && selectedTlId && scene.timelines.some(item => item.id === selectedTlId)
+    ? { timelineId: selectedTlId, localTimeMs: authoringTime(scene.timelines.find(item => item.id === selectedTlId)!, currentTimeMs) } : null,
+    [isPlaying, manualPreview, selectedTlId, scene.timelines, currentTimeMs])
   const frame = useMemo(
-    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs)),
+    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs, expressionAuthoringClock)),
     // We deliberately include paramValues so slider edits cause a re-eval.
     // One revision includes segment/test playback and queued events while paused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, playbackScene, currentTimeMs, runtime.paramValues, runtime.segmentState, runtime.frameRevision],
+    [scene, playbackScene, currentTimeMs, isPlaying, manualPreview, selectedTlId, runtime.paramValues, runtime.segmentState, runtime.frameRevision, expressionAuthoringClock],
   )
+
+  /** Manual transport is local and paused; work-area playback never wraps an edit. */
+  const layerFocusDocument = editor.getDocumentSignal()
+  const layerIsolation = useLayerIsolation(scene, layerFocusDocument)
+  const isolatedSelectedIds = useMemo(() => layerIsolation.scope
+    ? new Set(Array.from(selectedLayerIds).filter(id => layerIsolation.scope!.has(id))) : selectedLayerIds,
+  [layerIsolation.scope, selectedLayerIds])
+  const isolatedPrimaryId = selectedLayerId && (!layerIsolation.scope || layerIsolation.scope.has(selectedLayerId)) ? selectedLayerId : null
+  const [timelineReveal, setTimelineReveal] = useState<TimelineRevealRequest | null>(null)
+  useEffect(() => { setTimelineReveal(null) }, [selectedLayerId, selectedLayerIds, selectedTlId, layerFocusDocument])
+  /** Explicit navigation only. Restore/select the existing dock panel without
+   * rewriting source membership, changing the playhead or stealing selection. */
+  const showSelectionInTimeline = useCallback(() => {
+    if (!selectedTlId) return
+    const ids = Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : [])
+    if (!ids.length) return
+    setTimelineReveal(previous => ({ nonce: (previous?.nonce ?? 0) + 1, timelineId: selectedTlId, layerIds: ids, primaryId: selectedLayerId }))
+    dock.dispatchRestorePanel('timeline')
+  }, [selectedTlId, selectedLayerId, selectedLayerIds, dock.dispatchRestorePanel])
+  const seekAuthoring = useCallback((ms: number) => { handlePause(); handleSeek(ms) }, [handlePause, handleSeek])
+  const timelineAuthoring = useTimelineAuthoring({ scene, editor, timelineId: selectedTlId,
+    selectedId: selectedLayerId, selectedIds: selectedLayerIds, selectedKeyIds: selectedKfIds,
+    currentTimeMs, isPlaying, timeBasis: 'global', enabled: !manualPreview && !runtime.segmentState, onSeek: seekAuthoring })
 
   // Video properties use the same evaluated frame as the canvas and audio.
   useVideoPlaybackSync({ scene, assetCache, currentTimeMs, isPlaying, playbackSpeed, overrides: frame.overrides })
@@ -421,28 +434,36 @@ export default function BuilderPage() {
     } catch (error) { toast.error('Audio normalization failed', { detail: (error as Error).message }) }
   }, [editor, dispatchCommand])
 
-  /**
-   * Click → replace selection. Shift+click → toggle in/out. Keeps the most
-   * recently clicked layer as the primary (for PropertiesPanel + keyframe ops).
-   */
-  const selectLayer = useCallback((id: string | null, shiftHeld = false) => {
-    if (id == null) {
-      setSelectedLayer(null)
-      setSelectedLayerIds(new Set())
-      return
-    }
-    if (!shiftHeld) {
-      setSelectedLayer(id)
-      setSelectedLayerIds(new Set([id]))
-      return
-    }
-    setSelectedLayerIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-    setSelectedLayer(id)
+  /** Replace a bulk selection in one React update; keep its preferred primary
+   * only if selected. Copy now so callers cannot mutate queued UI state. */
+  const replaceLayerSelection = useCallback((ids: Iterable<string>, primaryId?: string | null) => {
+    const selected = new Set(ids)
+    setLayerSelection(previous => createLayerSelection(selected,
+      primaryId === undefined ? previous.primaryId : primaryId))
   }, [])
+
+  const selectArrayRoots = useCallback((ids: readonly string[]) => replaceLayerSelection(ids, ids[0] ?? null), [replaceLayerSelection])
+  const arrayAuthoring = useArrayAuthoring({ editor, scene, timeMs: currentTimeMs,
+    selectedLayerIds, selectedLayerId, onSelectLayers: selectArrayRoots })
+
+  /** Click replaces selection; Shift-click toggles. Primary and membership
+   * change atomically, including when the primary or final member is removed. */
+  const selectLayer = useCallback((id: string | null, shiftHeld = false) => {
+    setLayerSelection(previous => id == null ? createLayerSelection([])
+      : shiftHeld ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))
+  }, [])
+  const shapeCreation = useShapeCreationTool({ toolMode, setToolMode, onSelect: selectLayer,
+    documentSignal: editor.getDocumentSignal(), getScene: editor.getScene })
+  useEffect(() => {
+    if (manualPreview || runtime.segmentState || isPlaying) shapeCreation.close()
+  }, [manualPreview, runtime.segmentState, isPlaying, shapeCreation.close])
+
+  // External edits, undo and document replacement can remove selected layers.
+  // Keep surviving members instead of clearing the whole selection.
+  useEffect(() => {
+    const valid = new Set(scene.layers.map(layer => layer.id))
+    setLayerSelection(previous => retainLayerSelection(previous, valid))
+  }, [scene.layers])
 
   // ── Universal import pipeline (BL-04–06) ─────────────────────────────────
   // Routes any File through ImportManager → atomic command → dispatch.
@@ -502,14 +523,20 @@ export default function BuilderPage() {
   }, [handleImportFiles, editor.getDocumentSignal])
 
   // ── Layer commands ───────────────────────────────────────────────────────
-  // Layer creation is fully registry-driven: every kind looks up its
-  // LayerDefinition and calls createDefault(). Adding a new shape no longer
-  // requires touching this switch — just register a new LayerDefinition.
+  /** Activate native creation from registry defaults, or use the layer's
+   * dedicated insertion workflow. Native shapes exit runtime Preview/playback
+   * without modifying existing source and return true to keep the palette open.
+   * Shape gestures own insertion/undo; choosing a tool alone writes no history. */
   const addLayer = useCallback((kind: string) => {
+    if (editor.isTransactionActive()) return
+    arrayAuthoring.close()
+    setPathPickMode(null)
     // BL-73 — Spline primitives are mouse-drawn, not instantly placed. Clicking
     // one enters draw mode; the canvas handles the create/append gesture.
     const splineKind = SPLINE_MENU_TO_KIND[kind]
     if (splineKind) {
+      shapeCreation.close()
+      setManualPreview(false); runtime.stopSegment(); handlePause()
       setSplineDrawKind(splineKind)
       setToolMode('spline-draw')
       return
@@ -521,6 +548,14 @@ export default function BuilderPage() {
       return
     }
     const l = def.createDefault()
+    if (shapeCreation.choose(kind, l, () => def.createDefault())) {
+      setManualPreview(false)
+      runtime.stopSegment()
+      handlePause()
+      setSplineDrawKind(null)
+      return true
+    }
+    shapeCreation.close()
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
     // BL-66: paths start empty — auto-switch to Pen tool so the next click
@@ -528,7 +563,8 @@ export default function BuilderPage() {
     if (kind === 'bezierPath' || kind === 'motionPath') {
       setToolMode('pen')
     }
-  }, [dispatchCommand, selectLayer])
+  }, [dispatchCommand, selectLayer, editor.isTransactionActive, arrayAuthoring.close, handlePause,
+    shapeCreation.choose, shapeCreation.close, runtime.stopSegment])
 
   // BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines.
   // Async: lazily fetches + parses the font (opentype.js) before building the
@@ -618,8 +654,9 @@ export default function BuilderPage() {
     const layer = scene.layers.find((l) => l.id === id)
     if (!layer) return
     dispatchCommand(makeDeleteLayerCmd(layer))
-    if (selectedLayerId === id) selectLayer(null)
-  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
+    const valid = new Set(editor.getScene().layers.map(item => item.id))
+    setLayerSelection(previous => retainLayerSelection(previous, valid))
+  }, [scene.layers, dispatchCommand, editor.getScene])
 
   // Which panel last received a pointer-down. Lets the global Delete shortcut
   // act in-context: in the timeline it strips the layer's animation, elsewhere
@@ -692,11 +729,11 @@ export default function BuilderPage() {
     newParentId: string | undefined,
     toIndex:     number,
   ) => {
-    import('@/lib/editor/commands-layer').then(({ makeMoveLayerToCmdWithSnapshot }) => {
-      const cmd = makeMoveLayerToCmdWithSnapshot(scene, draggedId, newParentId, toIndex)
-      if (cmd) dispatchCommand(cmd)
-    })
-  }, [scene, dispatchCommand])
+    try {
+      const command = makeMoveLayerInTreeCmd(editor.getScene(), draggedId, newParentId, toIndex)
+      if (command) dispatchCommand(command)
+    } catch (error) { toast.error('Cannot move layer', { detail: (error as Error).message }) }
+  }, [editor.getScene, dispatchCommand])
 
   const groupLayersByDrop = useCallback(async (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return
@@ -715,12 +752,12 @@ export default function BuilderPage() {
       return
     }
 
-    // Both are leaves → wrap them in a fresh group via the existing command.
-    const { makeGroupCmd } = await import('@/lib/editor/commands-group')
-    const cmd = makeGroupCmd([draggedId, targetId])
-    dispatchCommand(cmd)
-    selectLayer(cmd.groupId)
-  }, [scene.layers, dispatchCommand, moveLayerInTree, selectLayer])
+    // Identity grouping preserves sibling animation; other parents need conversion.
+    try {
+      const command = makeGroupSiblingLayersCmd(editor.getScene(), [draggedId, targetId])
+      if (command) { dispatchCommand(command); selectLayer(command.groupId) }
+    } catch (error) { toast.error('Cannot group layers', { detail: (error as Error).message }) }
+  }, [scene.layers, editor.getScene, dispatchCommand, moveLayerInTree, selectLayer])
 
   /**
    * Stagger: apply the same preset to every selected layer, offsetting each
@@ -740,18 +777,32 @@ export default function BuilderPage() {
     })
   }, [scene.layers, selectedLayerIds, selectedTlId, currentTimeMs, dispatchCommand])
 
-  const duplicateSelectedLayer = useCallback(() => {
-    if (!selectedLayerId) return
-    const orig = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!orig) return
-    const next = cloneLayerForDuplicate(orig)
-    // Offset slightly so the duplicate is visible on canvas + later on timeline
-    next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
-    if (next.startMs != null) next.startMs += 100
-    if (next.endMs   != null) next.endMs   += 100
-    dispatchCommand(makeDuplicateLayerCmd(orig, next))
-    selectLayer(next.id)
-  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
+  /** One editor entry point for Duplicate, quick clone and modal clone.
+   * Commands resolve current source IDs, normalize selected roots and preserve
+   * every relevant timeline. Selection updates only after a successful dispatch. */
+  const cloneSourceIds = useCallback((sourceIds: readonly string[], params: {
+    count?: number; offsetX?: number; offsetY?: number; duplicateAnimation?: boolean
+    mode?: import('@/lib/clone/CloneTypes').CloneMode
+  } = {}): boolean => {
+    if (!sourceIds.length) return false
+    try {
+      const source = editor.getScene()
+      const plan = prepareCloneForest(source, { sourceIds, count: params.count ?? 1,
+        mode: params.mode ?? 'copy', duplicateAnimation: params.duplicateAnimation ?? true })
+      const cmd = plan.atOffsets(Object.fromEntries(plan.sourceRootIds.map(id =>
+        [id, { x: params.offsetX ?? 20, y: params.offsetY ?? 20 }])))
+      dispatchCommand(cmd)
+      replaceLayerSelection(cmd.result.suggestedSelection, cmd.result.suggestedSelection[0])
+      if (cmd.diagnostics.length) toast.info('Clone completed', { detail: cmd.diagnostics.join(' ') })
+      return true
+    } catch (error) {
+      toast.warning('Cannot clone selection', { detail: error instanceof Error ? error.message : String(error) })
+      return false
+    }
+  }, [editor, dispatchCommand, replaceLayerSelection])
+  const selectedCloneIds = useCallback(() => selectedLayerIds.size
+    ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : [], [selectedLayerIds, selectedLayerId])
+  const duplicateSelectedLayer = useCallback(() => { cloneSourceIds(selectedCloneIds()) }, [cloneSourceIds, selectedCloneIds])
 
   // ── BL-59 — Clone & Array System ──────────────────────────────────────────
   //
@@ -761,57 +812,36 @@ export default function BuilderPage() {
   //   • openCloneModal — opens CloneModal for count + offset + anim toggle.
   //   • openArrayModal — opens ArrayModal (Linear/Grid/Radial).
   //
-  // All three resolve the active timeline via `selectedTlId` so cloned
-  // animation tracks live alongside the source's existing tracks.
+  // Duplicate/Clone and Array preserve all relevant source timelines. The
+  // active-timeline helper remains for the separate Clone & Align workflow.
 
   const getActiveTimeline = useCallback(() => {
     return scene.timelines.find((tl) => tl.id === selectedTlId) ?? null
   }, [scene.timelines, selectedTlId])
 
-  const sourceHasAnimation = useCallback((source: Layer): boolean => {
-    const tl = getActiveTimeline()
-    if (!tl) return false
-    return tl.tracks.some((t) => targetsLayer(t.target, source.id))
-  }, [getActiveTimeline])
+  const sourceHasAnimation = useCallback((source: Layer, allTimelines = false): boolean => {
+    const ids = new LayerIndex(scene.layers).subtreeIds([source.id])
+    const timelines = allTimelines ? scene.timelines : scene.timelines.filter(timeline => timeline.id === selectedTlId)
+    return timelines.some(timeline => timeline.tracks.some(track =>
+      Array.from(ids).some(id => targetsLayer(track.target, id))))
+  }, [scene.layers, scene.timelines, selectedTlId])
 
-  const cloneQuick = useCallback(() => {
-    if (!selectedLayerId) return
-    const source = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!source) return
-    const cmd = makeCloneCmd({
-      source,
-      count: 1,
-      offsetX: 20,
-      offsetY: 20,
-      timeline: getActiveTimeline(),
-      allLayers: scene.layers,
-      duplicateAnimation: true,
-    })
-    dispatchCommand(cmd)
-    // Select the first new clone so subsequent transforms target it.
-    const firstNewId = cmd.result.suggestedSelection[0]
-    if (firstNewId) selectLayer(firstNewId)
-  }, [
-    selectedLayerId,
-    scene.layers,
-    getActiveTimeline,
-    dispatchCommand,
-    selectLayer,
-  ])
+  const cloneQuick = duplicateSelectedLayer
 
   const openCloneModal = useCallback(() => {
     if (!selectedLayerId) return
     const source = scene.layers.find((l) => l.id === selectedLayerId)
     if (!source) return
     setCloneModalSource(source)
-  }, [selectedLayerId, scene.layers])
+    setCloneModalIds(selectedCloneIds())
+    setCloneModalScene(editor.getScene())
+  }, [selectedLayerId, scene.layers, selectedCloneIds, editor])
 
+  /** All Array entry points open the same pinned multi-root editing session. */
   const openArrayModal = useCallback(() => {
-    if (!selectedLayerId) return
-    const source = scene.layers.find((l) => l.id === selectedLayerId)
-    if (!source) return
-    setArrayModalSource(source)
-  }, [selectedLayerId, scene.layers])
+    if (!arrayAuthoring.open()) return
+    shapeCreation.close()
+  }, [arrayAuthoring.open, shapeCreation.close])
 
   const handleCloneApply = useCallback((params: {
     count: number
@@ -820,64 +850,14 @@ export default function BuilderPage() {
     duplicateAnimation: boolean
     mode: import('@/lib/clone/CloneTypes').CloneMode
   }) => {
-    if (!cloneModalSource) return
-    const cmd = makeCloneCmd({
-      source: cloneModalSource,
-      count: params.count,
-      offsetX: params.offsetX,
-      offsetY: params.offsetY,
-      timeline: getActiveTimeline(),
-      allLayers: scene.layers,
-      duplicateAnimation: params.duplicateAnimation,
-      mode: params.mode,
-    })
-    dispatchCommand(cmd)
-    const firstNewId = cmd.result.suggestedSelection[0]
-    if (firstNewId) selectLayer(firstNewId)
-    toast.success(
-      `Cloned "${cloneModalSource.name}" — ${cmd.result.createdLayerIds.length} new ${params.mode === 'instance' ? 'instance' : 'layer'}${
-        cmd.result.createdLayerIds.length === 1 ? '' : 's'
-      }`,
-    )
-  }, [cloneModalSource, getActiveTimeline, scene.layers, dispatchCommand, selectLayer])
-
-  const handleArrayApply = useCallback((
-    settings: import('@/lib/array/ArrayTypes').ArraySettings,
-    asRepeater: boolean,
-  ) => {
-    if (!arrayModalSource) return
-
-    // BL-59 Phase 2 — Non-destructive Repeater Modifier path.
-    if (asRepeater) {
-      const cmd = makeConvertToRepeaterCmd({
-        source: arrayModalSource,
-        settings,
-      })
-      if (cmd) {
-        dispatchCommand(cmd)
-        toast.success(
-          `Converted "${arrayModalSource.name}" to a Repeater Modifier (non-destructive)`,
-        )
-        return
-      }
-      toast.warning('Repeater rendering not supported for this pattern — falling back to Array.')
+    if (!cloneModalSource) return false
+    const current = editor.getScene().layers.find(layer => layer.id === cloneModalSource.id)
+    if (current !== cloneModalSource || editor.getScene() !== cloneModalScene) {
+      toast.warning('Clone source changed', { detail: 'Close the dialog and open it again against the current scene.' })
+      return false
     }
-
-    const cmd = makeArrayCmd({
-      source: arrayModalSource,
-      settings,
-      timeline: getActiveTimeline(),
-      allLayers: scene.layers,
-    })
-    dispatchCommand(cmd)
-    const firstNewId = cmd.result.suggestedSelection[0]
-    if (firstNewId) selectLayer(firstNewId)
-    toast.success(
-      `Array "${arrayModalSource.name}" — ${cmd.result.createdLayerIds.length} new layer${
-        cmd.result.createdLayerIds.length === 1 ? '' : 's'
-      }`,
-    )
-  }, [arrayModalSource, getActiveTimeline, scene.layers, dispatchCommand, selectLayer])
+    return cloneSourceIds(cloneModalIds, params)
+  }, [cloneModalSource, cloneModalIds, cloneModalScene, editor, cloneSourceIds])
 
   // ── In-memory layer clipboard (cut / copy / paste from right-click menu) ──
   // Held in a ref because the clipboard is editor-state, not view-state — no
@@ -1007,8 +987,16 @@ export default function BuilderPage() {
       )
     }
     if (toKey.length === 0) return
-    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, currentTimeMs, toKey))
-  }, [selectedTlId, currentTimeMs, dispatchCommand, isAutoKeyActive, scene.timelines])
+    dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, timelineAuthoring.localTimeMs, toKey))
+  }, [selectedTlId, timelineAuthoring.localTimeMs, dispatchCommand, isAutoKeyActive, scene.timelines])
+
+  /** Compose viewport keys with its source-layer commands in one transaction.
+   * Read the synchronous current scene so a fast final pointer sample never
+   * keys a stale React render; unchanged animated channels remain untouched. */
+  const viewportKeyCommands = useCallback((changes: readonly ViewportLayerChange[]) =>
+    buildViewportKeyframeCommands(editor.getScene(), changes, {
+      timelineId: selectedTlId, timeMs: timelineAuthoring.localTimeMs, autoKeyframe: isAutoKeyActive(),
+    }), [editor.getScene, selectedTlId, timelineAuthoring.localTimeMs, isAutoKeyActive])
 
   const updateLayer = useCallback((next: Layer) => {
     const prev = scene.layers.find((l) => l.id === next.id)
@@ -1028,33 +1016,21 @@ export default function BuilderPage() {
   // Used by the canvas right-click "Animate ▶" submenu — snapshots the
   // current value of one property into a fresh keyframe on the active
   // timeline. If no timeline exists yet, this is a no-op.
-  const keyframeSelectedLayers = useCallback((properties: string[]) => {
-    if (!selectedTlId || properties.length === 0) return
-    const ids = selectedLayerIds.size > 0
-      ? Array.from(selectedLayerIds)
-      : (selectedLayerId ? [selectedLayerId] : [])
-    for (const id of ids) {
-      const layer = scene.layers.find((l) => l.id === id)
-      if (!layer) continue
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, layer, currentTimeMs, properties))
-    }
-  }, [scene.layers, selectedLayerIds, selectedLayerId, selectedTlId, currentTimeMs, dispatchCommand])
+  const keyframeSelectedLayers = useCallback((properties: string[]) => timelineAuthoring.setKey(properties), [timelineAuthoring.setKey])
 
   // ── Group / Ungroup (Cmd+G / Cmd+Shift+G) ────────────────────────────────
-  const groupSelected = useCallback(async () => {
-    const ids = selectedLayerIds.size > 0
-      ? Array.from(selectedLayerIds)
-      : (selectedLayerId ? [selectedLayerId] : [])
+  /** Group the explicit context-menu scope without waiting for a selection
+   * render; the created group becomes the only selected layer atomically. */
+  const groupLayers = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return
-    const { makeGroupCmd } = await import('@/lib/editor/commands-group')
-    const cmd = makeGroupCmd(ids)
-    dispatchCommand(cmd)
-    selectLayer(cmd.groupId)
-    setSelectedLayerIds(new Set([cmd.groupId]))
-  }, [selectedLayerIds, selectedLayerId, dispatchCommand, selectLayer])
-
-  // ── Tool mode (Select / Pan / Pen) — driven by top toolbar ──────────────
-  const [toolMode, setToolMode] = useState<ToolMode>('select')
+    try {
+      const command = makeGroupSiblingLayersCmd(editor.getScene(), ids)
+      if (command) { dispatchCommand(command); selectLayer(command.groupId) }
+    } catch (error) { toast.error('Cannot group layers', { detail: (error as Error).message }) }
+  }, [editor.getScene, dispatchCommand, selectLayer])
+  const groupSelected = useCallback(() => groupLayers(selectedLayerIds.size > 0
+    ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : []),
+  [selectedLayerIds, selectedLayerId, groupLayers])
 
   // BL-67 — Motion path pick mode. When non-null, the next click on a
   // dashed path overlay assigns that path as the target layer's followPath
@@ -1102,7 +1078,6 @@ export default function BuilderPage() {
 
   // ── Manual preview-mode toggle (so user can test draggable / tappable
   //    layers without setting up segments / clicking the Preview tab) ──────
-  const [manualPreview, setManualPreview] = useState(false)
   // BL-80 — raster image export dialog visibility.
   const [showRasterExport, setShowRasterExport] = useState(false)
   // BL-84 — SVG (vector) export dialog visibility.
@@ -1111,30 +1086,33 @@ export default function BuilderPage() {
   const [showSequenceExport, setShowSequenceExport] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
-  const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(scene,importDocument)
+  const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(editor.committedScene,importDocument,editor.getCommittedHistory)
 
   const openSceneJson = useCallback(() => {
     openDocumentFilePicker({ accept: '.json,application/json', getDocumentSignal: editor.getDocumentSignal,
       onFiles: files => { void openSceneFile(files[0], parsed => {
-        resetScene(parsed)
+        const project = readSessionProject(parsed)
+        sessionIdentity.adopt(project.sessionId ?? crypto.randomUUID())
+        editor.resetHistory(project.history)
         selectLayer(null)
         handleSeek(0)
         setSelectedTl(parsed.timelines[0]?.id ?? '')
         welcome.close()
         toast.success(`Loaded scene from ${files[0].name}`)
       }, error => welcome.setError(`Could not open project: ${error.message}`)) } })
-  }, [editor.getDocumentSignal, openSceneFile, resetScene, selectLayer, handleSeek, welcome.close, welcome.setError])
+  }, [editor.getDocumentSignal, openSceneFile, editor.resetHistory, sessionIdentity.adopt, selectLayer, handleSeek, welcome.close, welcome.setError])
 
   const newScene = useCallback((settings?: WelcomeProjectSettings): boolean => {
-    if (editor.getRevision() > 0 && !confirm('Start a new project? Unsaved changes will be lost.')) return false
+    if ((editor.getRevision() > 0 || session.restored) && !confirm('Start a new project? This replaces the current workspace. Save Scene JSON if you want to keep a separate copy.')) return false
     const next = settings ? createWelcomeProject(settings) : emptyScene()
+    sessionIdentity.adopt(crypto.randomUUID())
     resetScene(next)
     selectLayer(null)
     handleSeek(0)
     setSelectedTl(next.timelines[0]?.id ?? '')
     welcome.close()
     return true
-  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close])
+  }, [editor.getRevision, resetScene, selectLayer, handleSeek, welcome.close, session.restored, sessionIdentity.adopt])
 
   const ungroupSelected = useCallback(async () => {
     if (!selectedLayerId) return
@@ -1157,7 +1135,9 @@ export default function BuilderPage() {
   // ── Keyframe clipboard (Cmd+C / Cmd+V) ──────────────────────────────────
   const clipboard = useKeyframeClipboard({
     scene, selectedKfIds, selectedTimelineId: selectedTlId,
-    currentTimeMs, dispatchCommand,
+    currentTimeMs: timelineAuthoring.localTimeMs, dispatchCommand,
+    collisionPolicy: timelineAuthoring.collisionPolicy,
+    onError: message => toast.warning('Paste cancelled', { detail: message }),
   })
 
   // ── BL-56 Timeline Ghost / Onion-Skin (page-level state so SceneCanvas
@@ -1195,27 +1175,19 @@ export default function BuilderPage() {
   // Alt+P/S/R/T — add a keyframe for the property at the playhead, or remove it
   // if one already sits there (toggle). Mirrors AE's keyframe-stopwatch click.
   const toggleTimelineKeyframe = useCallback((prop: TimelineProperty) => {
-    if (!selectedLayerId) return
-    const layer = scene.layers.find((l) => l.id === selectedLayerId)
-    const tl = scene.timelines.find((t) => t.id === selectedTlId)
-    if (!layer || !tl) return
-    const paths = TIMELINE_PROP_PATHS[prop]
-    const TOL = 1 // ms — treat a keyframe within 1ms of the playhead as "here"
+    const source = editor.getScene(), active = source.timelines.find(item => item.id === selectedTlId)
+    if (!active || editor.isTransactionActive()) return
+    const ids = selectedLayerIds.size ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : []
+    const paths = TIMELINE_PROP_PATHS[prop], at = timelineAuthoring.localTimeMs
     const existing: KfDeletion[] = []
-    let allKeyed = true
-    for (const path of paths) {
-      const target = `layers.${layer.id}.${path}`
-      const track = tl.tracks.find((t) => t.target === target)
-      const kf = track?.keyframes.find((k) => Math.abs(k.timeMs - currentTimeMs) <= TOL)
-      if (kf) existing.push({ timelineId: tl.id, target, kf })
-      else allKeyed = false
+    for (const id of ids) for (const path of paths) {
+      const target = `layers.${id}.${path}`, keys = active.tracks.find(track => track.target === target)?.keyframes
+      const key = keys?.find(item => sameKeyTime(item.timeMs, at))
+      if (key) existing.push({ timelineId: active.id, target, kf: key })
     }
-    if (allKeyed && existing.length > 0) {
-      dispatchCommand(makeBulkDeleteKfCmd(existing)) // toggle OFF
-    } else {
-      dispatchCommand(makeKeyframeLayerSnapshotCmd(tl.id, layer, currentTimeMs, paths)) // toggle ON
-    }
-  }, [selectedLayerId, scene.layers, scene.timelines, selectedTlId, currentTimeMs, dispatchCommand, TIMELINE_PROP_PATHS])
+    if (ids.length && existing.length === ids.length * paths.length) dispatchCommand(makeBulkDeleteKfCmd(existing))
+    else timelineAuthoring.setKey(paths)
+  }, [editor.getScene, editor.isTransactionActive, selectedTlId, selectedLayerIds, selectedLayerId, timelineAuthoring.localTimeMs, timelineAuthoring.setKey, dispatchCommand, TIMELINE_PROP_PATHS])
 
   // P/S/R/T/U — reveal a property in the timeline (filters track rows to that
   // property; 'all' shows only animated tracks). The nonce makes each press
@@ -1226,35 +1198,39 @@ export default function BuilderPage() {
     setRevealProperty((prev) => ({ prop, nonce: (prev?.nonce ?? 0) + 1 }))
   }, [])
 
-  // J / K — seek to the previous / next keyframe time across the selected
-  // layer's tracks on the active timeline.
-  const seekToKeyframe = useCallback((direction: 'prev' | 'next') => {
-    if (!selectedLayerId) return
-    const tl = scene.timelines.find((t) => t.id === selectedTlId)
-    if (!tl) return
-    const prefix = `layers.${selectedLayerId}.`
-    const times = new Set<number>()
-    for (const track of tl.tracks) {
-      if (!track.target.startsWith(prefix)) continue
-      for (const kf of track.keyframes) times.add(kf.timeMs)
+  // Central transport uses the selected branches on the active timeline.
+  const seekToKeyframe = useCallback((direction: 'prev' | 'next') => timelineAuthoring.navigate(direction === 'prev' ? 'previousKey' : 'nextKey'), [timelineAuthoring.navigate])
+
+  /** Move the complete selected root set in composition pixels. The same
+   * source/key command as pointer authoring preserves displayed pose and emits
+   * one undo. Read-only playback/preview and active drag own their input. */
+  const nudgeSelected = useCallback((dx: number, dy: number) => {
+    if (motionKeyEditing || isPlaying || manualPreview || runtime.segmentState || editor.isTransactionActive()) return
+    const ids = selectedLayerIds.size ? selectedLayerIds : new Set(selectedLayerId ? [selectedLayerId] : [])
+    try {
+      const command = buildViewportNudgeCommand(editor.getScene(), ids, { x: dx, y: dy }, {
+        timelineId: selectedTlId, timeMs: timelineAuthoring.localTimeMs, autoKeyframe: isAutoKeyActive(), overrides: frame.overrides,
+      })
+      if (command) dispatchCommand(command)
+    } catch (error) {
+      toast.warning('Cannot move selection', { detail: error instanceof Error ? error.message : String(error) })
     }
-    if (times.size === 0) return
-    const sorted = Array.from(times).sort((a, b) => a - b)
-    const next = direction === 'next'
-      ? sorted.find((t) => t > currentTimeMs + 0.5)
-      : [...sorted].reverse().find((t) => t < currentTimeMs - 0.5)
-    if (next !== undefined) handleSeek(next)
-  }, [selectedLayerId, scene.timelines, selectedTlId, currentTimeMs, handleSeek])
+  }, [motionKeyEditing, isPlaying, manualPreview, runtime.segmentState, editor.isTransactionActive, editor.getScene,
+    selectedLayerIds, selectedLayerId, selectedTlId, timelineAuthoring.localTimeMs, isAutoKeyActive, frame.overrides, dispatchCommand])
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
     isTransactionActive: editor.isTransactionActive,
+    onSetKey: () => timelineAuthoring.setKey(),
+    onTimelineNavigate: timelineAuthoring.navigate,
     onUndo: undo,
     onRedo: redo,
     onPlayToggle: handlePlayToggle,
     onStepBack:    (frames) => handleSeek(Math.max(0, currentTimeMs - (frames * 1000) / frameRate)),
     onStepForward: (frames) => handleSeek(Math.min(maxDuration, currentTimeMs + (frames * 1000) / frameRate)),
+    onNudgeSelected: nudgeSelected,
     onDeleteSelected: () => {
+      if (motionKeyEditing && activePanelRef.current === 'canvas') return
       if (selectedLayer?.type === 'audio' && selectedLayer.locked) return
       const target = deletionTargetForPanel(activePanelRef.current, selectedKeyframes.length > 0, !!selectedLayerId, selectedLayer?.type)
       if (target === 'keyframes') deleteSelectedKeyframes()
@@ -1273,7 +1249,7 @@ export default function BuilderPage() {
     // BL-59 — Clone & Array shortcuts
     onCloneQuick:      cloneQuick,
     onOpenArrayModal:  openArrayModal,
-    onToolChange:      setToolMode,
+    onToolChange:      chooseTool,
     onTimelineToggleKeyframe: toggleTimelineKeyframe,
     onTimelinePrevKeyframe:   () => seekToKeyframe('prev'),
     onTimelineNextKeyframe:   () => seekToKeyframe('next'),
@@ -1318,6 +1294,8 @@ export default function BuilderPage() {
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
 
+      <DiagnosticConsentPrompt visible={!welcome.isOpen} />
+
       <ImportActivityBar activeCount={importActiveCount} settlingCount={importSettlingCount}
         label={importLabel} progress={importProgress} onCancel={cancelImports} />
 
@@ -1354,46 +1332,11 @@ export default function BuilderPage() {
         <ToolGroup
           mode={toolMode}
           onChange={setToolMode}
+          onPanToggle={togglePan}
           penAuto={!!(scene.layers.find(l => l.id === selectedLayerId)?.type === 'path')}
           containMode={selectionContainMode}
           onContainModeChange={setSelectionContainMode}
         />
-
-        <div className="w-px h-6 bg-gray-700 mx-1" />
-
-        {/* ── Animation / State-Machine sub-mod (BL-09) ──────────────────── */}
-        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Toggle State Machine view (Cmd+Shift+M)">
-          <button
-            onClick={() => { if (smModeActive) toggleSMMode() }}
-            className={`px-2 py-1 text-xs rounded ${!smModeActive ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ● Animation
-          </button>
-          <button
-            onClick={() => { if (!smModeActive) toggleSMMode() }}
-            className={`px-2 py-1 text-xs rounded ${smModeActive ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ◇ SM
-          </button>
-        </div>
-
-        {/* ── Spline creation mode (BL-73) ───────────────────────────────── */}
-        <div className="flex items-center rounded bg-gray-800 p-0.5" title="Spline: start a new layer, or append the next spline primitive into the selected spline layer">
-          <button
-            onClick={() => setSplineAppendMode(false)}
-            className={`px-2 py-1 text-xs rounded ${!splineAppendMode ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ↳ New Spline
-          </button>
-          <button
-            onClick={() => setSplineAppendMode(true)}
-            disabled={selectedLayer?.type !== 'spline'}
-            title={selectedLayer?.type !== 'spline' ? 'Select a spline layer to enable append mode' : 'Append next spline primitive into selected layer'}
-            className={`px-2 py-1 text-xs rounded disabled:opacity-40 disabled:cursor-not-allowed ${splineAppendMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            ⊕ Append
-          </button>
-        </div>
 
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
@@ -1458,7 +1401,9 @@ export default function BuilderPage() {
         </span>
 
         {/* File versioning: choose folder + auto-save + timestamped snapshots */}
-        <FileVersioningControl
+        <LocalRecoveryStatus status={recovery} sessionId={sessionIdentity.id} history={editor.committedHistory} budget={editor.historyBudget} />
+        <ProjectMenu
+          sessionInfo={{id:sessionIdentity.id,undo:editor.committedHistory.past.length,redo:editor.committedHistory.future.length}}
           mounted={fileVersioning.mounted}
           state={fileVersioning.state}
           directoryName={fileVersioning.directoryName}
@@ -1467,6 +1412,9 @@ export default function BuilderPage() {
           isSupported={fileVersioning.isSupported}
           onPickDirectory={fileVersioning.pickDirectory}
           onSaveSnapshot={fileVersioning.saveSnapshotNow}
+          onSaveSceneJson={saveSceneJson}
+          onCopySceneJson={copySceneJson}
+          onInspectJson={() => setShowJson(true)}
         />
 
         {/* Preview Mode toggle — when ON, draggable/tappable layers respond
@@ -1484,29 +1432,9 @@ export default function BuilderPage() {
           {manualPreview ? <>⏹ Exit Preview</> : <>▶ Preview</>}
         </button>
 
-        {/* Panel registry is created below — passed here via context/props */}
-        {/* Primary export — rest live inside FileMenu */}
-        <button
-          onClick={() => dock.dispatchRestorePanel('resourceMonitor')}
-          title="Open Resources & Performance"
-          className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
-        >
-          Resources
-        </button>
-        <button
-          onClick={() => setShowJson(true)}
-          title="Inspect raw scene JSON"
-          className="px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium"
-        >
-          {'{ }'} JSON
-        </button>
-        <button
-          onClick={exportRuntimeJson}
-          title="Validate scene + emit lean runtime JSON for Android/iOS/Web players"
-          className="px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-        >
-          ⤓ Runtime
-        </button>
+        <ExportMenu onExportRuntime={exportRuntimeJson} onExportImage={() => setShowRasterExport(true)}
+          onExportSvg={() => setShowSvgExport(true)} onExportSequence={() => setShowSequenceExport(true)}
+          onExportHtml={exportSceneHtml} />
       </header>
 
       {/* ── Dockable work area ─────────────────────────────────────── */}
@@ -1523,7 +1451,11 @@ export default function BuilderPage() {
                     selectedId={selectedLayerId}
                     selectedIds={selectedLayerIds}
                     onSelect={selectLayer}
+                    onShowInTimeline={showSelectionInTimeline}
+                    onIsolateSelection={() => layerIsolation.enter(Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : []))}
+                    onExitIsolation={layerIsolation.exit} isolationActive={layerIsolation.active}
                     onAdd={addLayer}
+                    activeAddKind={shapeCreation.kind}
                     getDocumentSignal={editor.getDocumentSignal}
                     onAddImage={addImageLayerFromFile}
                     onAddVideo={addVideoLayerFromFile}
@@ -1546,15 +1478,7 @@ export default function BuilderPage() {
                         : makeAddLayerToTimelineCmd(selectedTlId, layerId)
                       dispatchCommand(cmd)
                     }}
-                    onDuplicate={(layerId) => {
-                      const orig = scene.layers.find((l) => l.id === layerId)
-                      if (!orig) return
-                      const next = cloneLayerForDuplicate(orig)
-                      next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
-                      if (next.startMs != null) next.startMs += 100
-                      if (next.endMs   != null) next.endMs   += 100
-                      dispatchCommand(makeDuplicateLayerCmd(orig, next))
-                    }}
+                    onDuplicate={(layerId) => cloneSourceIds(selectedLayerIds.has(layerId) ? selectedCloneIds() : [layerId])}
                   />
                 ),
               },
@@ -1574,29 +1498,22 @@ export default function BuilderPage() {
                     onToggleFlag={toggleLayerFlag}
                     onMoveInTree={moveLayerInTree}
                     onGroupWith={groupLayersByDrop}
+                    onSetSubtreeFlag={(roots, field, value) => {
+                      const command = makeSetSubtreeFlagCmd(editor.getScene(), roots, field, value)
+                      if (command) dispatchCommand(command)
+                    }}
                     onClearSelection={() => selectLayer(null)}
                     contextHandlers={{
                       // Rename re-uses the inline editor — selecting the
                       // layer first lets the panel know which row to put
                       // into edit mode (handled inside the panel via key).
                       rename: (id) => { selectLayer(id); /* panel's "rename" entry triggers F2-style edit in BL-58 polish */ },
-                      duplicate: (id) => {
-                        const orig = scene.layers.find((l) => l.id === id)
-                        if (!orig) return
-                        const next = cloneLayerForDuplicate(orig)
-                        next.transform = { ...next.transform, x: next.transform.x + 20, y: next.transform.y + 20 }
-                        if (next.startMs != null) next.startMs += 100
-                        if (next.endMs   != null) next.endMs   += 100
-                        dispatchCommand(makeDuplicateLayerCmd(orig, next))
-                      },
+                      duplicate: (id) => { cloneSourceIds(selectedLayerIds.has(id) ? selectedCloneIds() : [id]) },
                       deleteLayers: (ids) => ids.forEach((id) => deleteLayer(id)),
                       groupLayers: (ids) => {
                         if (ids.length === 0) return
-                        // groupSelected uses the selection state directly,
-                        // so make sure it matches what the menu opened on.
-                        setSelectedLayerIds(new Set(ids))
-                        setSelectedLayer(ids[0])
-                        groupSelected()
+                        replaceLayerSelection(ids, ids[0])
+                        void groupLayers(ids)
                       },
                       ungroupGroup: (id) => {
                         if (selectedLayerId !== id) selectLayer(id)
@@ -1608,8 +1525,8 @@ export default function BuilderPage() {
                       bulkToggleFlag: (ids, field, nextValue) => {
                         dispatchCommand(makeBulkToggleFlagCmd(ids, field, nextValue))
                       },
-                      isolate: (ids) => dispatchCommand(makeIsolateLayersCmd(ids)),
-                      showAll: () => dispatchCommand(makeShowAllLayersCmd()),
+                      isolate: (ids) => layerIsolation.enter(ids),
+                      showAll: () => layerIsolation.active ? layerIsolation.exit() : dispatchCommand(makeShowAllLayersCmd()),
                     }}
                     onFreezeSelection={() => {
                       const ids = Array.from(selectedLayerIds.size > 0
@@ -1638,15 +1555,21 @@ export default function BuilderPage() {
               {
                 id: 'canvas', title: 'Canvas',
                 render: () => (
-                  <SceneCanvas
-                    scene={scene}
+                  <div className="h-full min-h-0 flex flex-col">
+                    <LayerIsolationBar count={layerIsolation.roots.length} onExit={layerIsolation.exit} />
+                    <div className="flex flex-1 min-h-0 min-w-0"><SceneCanvas
+                    arrayAuthoring={arrayAuthoring}
+                    shapePlacementLayer={shapeCreation.template}
+                    onShapePlacementComplete={shapeCreation.complete}
+                    scene={scene} displayScene={layerIsolation.scene}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
-                    selectedLayerId={selectedLayerId}
-                    selectedLayerIds={selectedLayerIds}
+                    selectedLayerId={isolatedPrimaryId}
+                    selectedLayerIds={isolatedSelectedIds}
                     assets={assetCache}
-                    onSelectLayer={(id) => selectLayer(id)}
+                    onSelectLayer={selectLayer}
+                    onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
@@ -1684,39 +1607,42 @@ export default function BuilderPage() {
                       }
                     }}
                     panMode={toolMode === 'pan'}
-                    onPanModeChange={(next) => setToolMode(next ? 'pan' : 'select')}
+                    onPanModeChange={setPanMode}
                     toolMode={toolMode}
                     onToolModeChange={setToolMode}
                     splineDrawKind={splineDrawKind}
                     splineAppendTargetId={
-                      splineAppendMode && selectedLayer?.type === 'spline' ? selectedLayerId : null
+                      selectedLayer?.type === 'spline' ? selectedLayerId : null
                     }
+                    onDrawSplineLine={targetId => {
+                      if (editor.isTransactionActive()) return
+                      shapeCreation.close(); setManualPreview(false); runtime.stopSegment(); handlePause()
+                      selectLayer(targetId); setSplineDrawKind('line'); setToolMode('spline-draw')
+                    }}
                     onSplineDrawCommit={() => { setSplineDrawKind(null); setToolMode('select') }}
                     onSplinePointSelected={setSplinePointId}
                     snap={snap}
                     onSelectByGeometry={(ids, mode) => {
-                      // BL-60 Faz 3 — canvas selection tools commit. Plain
-                      // drag replaces selection; Shift adds; Alt subtracts.
-                      let next: Set<string>
-                      if (mode === 'replace') {
-                        next = new Set(ids)
-                      } else if (mode === 'add') {
-                        next = new Set(selectedLayerIds)
-                        ids.forEach((id) => next.add(id))
-                      } else {
-                        next = new Set(selectedLayerIds)
-                        ids.forEach((id) => next.delete(id))
-                      }
-                      setSelectedLayerIds(next)
-                      const first = next.values().next().value
-                      setSelectedLayer(first ?? null)
+                      const incoming = new Set(ids)
+                      setLayerSelection(previous => combineLayerSelection(previous, incoming, mode))
                     }}
                     selectionContainMode={selectionContainMode}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}
+                    buildLayerCommitCommands={viewportKeyCommands}
                     ghostSettings={ghostSettings}
                     selectedTimeline={selectedTimelineForGhost}
+                    selectedKeyframeIds={selectedKfIds}
+                    onSelectKeyframes={setSelectedKfIds}
+                    onSeekKeyframe={handleSeek}
+                    onMotionEditingChange={setMotionKeyEditing}
+                    onEditMotionTiming={(layerId) => {
+                      selectLayer(layerId)
+                      revealTimelineProperty('all')
+                      const leaf = findLeafOfPanel(dock.layout, 'timeline')
+                      if (leaf) dock.dispatchTab(leaf.id, 'timeline')
+                    }}
                     pathPickMode={pathPickMode}
                     onAssignPath={(targetId, pathId) => {
                       assignMotionPathToLayer(targetId, pathId)
@@ -1758,7 +1684,7 @@ export default function BuilderPage() {
                       selectAllInArray: (layerId: string) => {
                         const siblings = getSiblingsInArray(layerId)
                         if (siblings.length <= 1) return
-                        setSelectedLayerIds(new Set(siblings))
+                        replaceLayerSelection(siblings, layerId)
                         toast.info(`Selected ${siblings.length} layers in array`)
                       },
                       isLayerInArray: (layerId: string) =>
@@ -1801,7 +1727,7 @@ export default function BuilderPage() {
                         toast.success(`Baked "${repeater.name}" — ${repeater.repeater.count} layers`)
                       },
                     }}
-                  />
+                  /></div></div>
                 ),
               },
               {
@@ -1815,6 +1741,10 @@ export default function BuilderPage() {
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
                     <PropertiesPanel
+                      expressionFrame={frame}
+                      expressionExternalTime={expressionAuthoringClock}
+                      getScene={editor.getScene}
+                      isTransactionActive={editor.isTransactionActive}
                       layer={selectedLayer}
                       currentTimeMs={currentTimeMs}
                       selectedTimelineId={selectedTlId}
@@ -1835,11 +1765,14 @@ export default function BuilderPage() {
                       dispatchCommand={dispatchCommand}
                     />
                     {selectedLayer?.type === 'spline' && splinePointId && (
+                      <NumericPropertyProvider scene={scene} layerId={selectedLayer.id} dispatch={dispatchCommand} getScene={editor.getScene}
+                        isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                       <SplinePointInspector
                         layer={selectedLayer}
                         pointId={splinePointId}
                         dispatchCommand={dispatchCommand}
                       />
+                      </NumericPropertyProvider>
                     )}
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
@@ -1858,6 +1791,8 @@ export default function BuilderPage() {
                   <div className="h-full bg-gray-900 overflow-hidden" data-panel="timeline">
                     <TimelinePanel
                       scene={scene}
+                      authoring={timelineAuthoring}
+                      revealRequest={timelineReveal}
                       editor={editor}
                       settings={timelineSettings}
                       onSettingsChange={setTimelineSettings}
@@ -1865,10 +1800,10 @@ export default function BuilderPage() {
                       selectedLayerIds={selectedLayerIds}
                       selectedTimelineId={selectedTlId}
                       selectedKfIds={selectedKfIds}
-                      currentTimeMs={currentTimeMs}
+                      currentTimeMs={timelineAuthoring.localTimeMs}
                       isPlaying={isPlaying}
                       playbackSpeed={playbackSpeed}
-                      onTimeChange={handleSeek}
+                      onTimeChange={seekAuthoring}
                       onPlayToggle={handlePlayToggle}
                       onSelectTimeline={id => { setMCPTimelineIds(null); selectTimeline(id) }}
                       onSelectKeyframes={setSelectedKfIds}
@@ -1899,11 +1834,14 @@ export default function BuilderPage() {
                   <div className="h-full min-h-0 overflow-hidden" data-panel="curveEditor">
                   <CurveEditor
                     scene={scene}
+                    collisionPolicy={timelineAuthoring.collisionPolicy}
+                    onCollisionPolicyChange={timelineAuthoring.setCollisionPolicy}
                     editor={editor}
                     selectedLayerId={selectedLayerId}
+                    selectedLayerIds={selectedLayerIds}
                     selectedTimelineId={selectedTlId}
-                    currentTimeMs={currentTimeMs}
-                    onTimeChange={handleSeek}
+                    currentTimeMs={timelineAuthoring.localTimeMs}
+                    onTimeChange={seekAuthoring}
                     selectedKfIds={selectedKfIds}
                     onSelectKeyframes={setSelectedKfIds}
                   />
@@ -1916,15 +1854,18 @@ export default function BuilderPage() {
                   <div className="h-full min-h-0 overflow-hidden" data-panel="dopeSheet">
                   <DopeSheetPanel
                     scene={scene}
+                    collisionPolicy={timelineAuthoring.collisionPolicy}
+                    onCollisionPolicyChange={timelineAuthoring.setCollisionPolicy}
                     editor={editor}
                     settings={timelineSettings}
                     onSettingsChange={setTimelineSettings}
                     selectedLayerId={selectedLayerId}
+                    selectedLayerIds={selectedLayerIds}
                     selectedTimelineId={selectedTlId}
                     selectedKfIds={selectedKfIds}
-                    currentTimeMs={currentTimeMs}
+                    currentTimeMs={timelineAuthoring.localTimeMs}
                     isPlaying={isPlaying}
-                    onTimeChange={handleSeek}
+                    onTimeChange={seekAuthoring}
                     onSelectKeyframes={setSelectedKfIds}
                     onSelectLayer={selectLayer}
                   />
@@ -1960,6 +1901,7 @@ export default function BuilderPage() {
                   <WiringListPanel
                     scene={scene}
                     editor={editor}
+                    wireErrors={frame.wireErrors}
                     onEditWire={wireModal.openForEdit}
                     onCreateWire={wireModal.openNew}
                   />
@@ -1972,11 +1914,7 @@ export default function BuilderPage() {
                     scene={scene}
                     selectedLayerId={selectedLayerId}
                     onSelectMatched={(ids) => {
-                      // Mirror the multi-select flow used by the lasso: set
-                      // selectedLayerIds + bump primary to the first hit.
-                      setSelectedLayerIds(ids)
-                      const first = ids.values().next().value
-                      if (first) setSelectedLayer(first)
+                      replaceLayerSelection(ids, null)
                     }}
                   />
                 ),
@@ -2079,7 +2017,7 @@ export default function BuilderPage() {
         error={welcome.error} onCreate={newScene} onOpenProject={openSceneJson} onContinue={welcome.close}
       />}
 
-      {showJson && <JsonModal scene={scene} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
+      {showJson && <JsonModal scene={scene} onSaveProject={saveSceneJson} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
 
       {/* ── Composition Preset Modal ───────────────────────────────── */}
       {showCompModal && (
@@ -2177,28 +2115,22 @@ export default function BuilderPage() {
       {cloneModalSource && (
         <CloneModal
           source={cloneModalSource}
-          hasAnimationOnSource={sourceHasAnimation(cloneModalSource)}
+          sourceCount={cloneModalIds.length}
+          hasAnimationOnSource={cloneModalIds.some(id => { const layer = scene.layers.find(item => item.id === id); return layer ? sourceHasAnimation(layer, true) : false })}
           onApply={handleCloneApply}
-          onClose={() => setCloneModalSource(null)}
+          onClose={() => { setCloneModalSource(null); setCloneModalIds([]); setCloneModalScene(null) }}
         />
       )}
 
-      {/* ── BL-59 Array Modal ──────────────────────────────────────── */}
-      {arrayModalSource && (
-        <ArrayModal
-          source={arrayModalSource}
-          hasAnimationOnSource={sourceHasAnimation(arrayModalSource)}
-          allLayers={scene.layers}
-          onApply={handleArrayApply}
-          onClose={() => setArrayModalSource(null)}
-        />
-      )}
+      {/* Array controls and viewport share one pinned source/solution. */}
+      {arrayAuthoring.active && <ArrayModal authoring={arrayAuthoring} />}
 
       {/* ── BL-05: Wire Parameter modal (formula-driven parameter wiring) ── */}
       {wireModal.isOpen && (
         <WireParameterModal
           scene={scene}
           editor={editor}
+          sourceOverrides={frame.wireSourceOverrides} paramValues={frame.paramValues}
           existingWire={wireModal.editWire}
           preFilledTarget={wireModal.newTarget}
           onClose={wireModal.close}

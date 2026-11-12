@@ -9,7 +9,8 @@ import {
   layerAnchorWorldPos, getLayerWorldBounds,
 } from '../canvasShapes'
 import type { ChronoScene, Layer } from '../../types'
-import { newSplineLayerFromPrimitive } from '../../defaults'
+import type { OverrideMap } from '../../evaluator'
+import { newSplineLayerFromPrimitive, newTimeline } from '../../defaults'
 
 function makeLayer(p: {
   id: string; x?: number; y?: number; w?: number; h?: number
@@ -56,6 +57,70 @@ describe('transformed spline selection bounds', () => {
     expect(bounds.h).toBeCloseTo(80)
     expect(layersInRect(scene, { x: 0, y: 20, w: 80, h: 100 }, 'inside').has(spline.id)).toBe(true)
     expect(layersInRect(scene, { x: 90, y: 70, w: 40, h: 20 }).has(spline.id)).toBe(false)
+  })
+})
+
+describe('selection in the displayed animation frame', () => {
+  it('uses animated child and parent transforms consistently for box, circle, lasso and paint', () => {
+    const parent = makeLayer({ id: 'parent', type: 'group', x: 100, y: 50 })
+    Object.assign(parent.transform, { rotationDeg: 90, scaleX: 2, scaleY: 3 })
+    const child = makeLayer({ id: 'child', parentId: parent.id, x: 10, y: 20, w: 10, h: 10 })
+    const scene = makeScene([parent, child])
+    scene.timelines = [{ ...newTimeline(), durationMs: 1000, tracks: [
+      { target: 'layers.child.transform.x', keyframes: [
+        { id: 'start', timeMs: 0, value: 10, easing: { type: 'linear' } },
+        { id: 'end', timeMs: 1000, value: 30, easing: { type: 'linear' } },
+      ] },
+      { target: 'layers.parent.transform.x', keyframes: [
+        { id: 'parent-start', timeMs: 0, value: 100, easing: { type: 'linear' } },
+        { id: 'parent-end', timeMs: 1000, value: 200, easing: { type: 'linear' } },
+      ] },
+    ] }]
+    const source = structuredClone(scene)
+    const frame = { timeMs: 500 }
+    const rect = { x: 55, y: 85, w: 40, h: 30 }
+    const polygon = [{ x: 55, y: 85 }, { x: 95, y: 85 }, { x: 95, y: 115 }, { x: 55, y: 115 }]
+    const bounds = getLayerWorldBounds(scene, child, frame)
+    expect(bounds.x).toBeCloseTo(60)
+    expect(bounds.y).toBeCloseTo(90)
+    expect(bounds.w).toBeCloseTo(30)
+    expect(bounds.h).toBeCloseTo(20)
+    expect(layersInRect(scene, rect, 'inside', frame).has(child.id)).toBe(true)
+    expect(layersInCircle(scene, { x: 75, y: 100, r: 26 }, 'inside', frame).has(child.id)).toBe(true)
+    expect(layersInPolygon(scene, polygon, 'inside', frame).has(child.id)).toBe(true)
+    expect(layersUnderPaintBrush(scene, { x: 75, y: 105 }, 5, frame).has(child.id)).toBe(true)
+    // Legacy callers keep source/static coordinates until they opt into a frame.
+    expect(layersInRect(scene, rect, 'inside').has(child.id)).toBe(false)
+    expect(layersUnderPaintBrush(scene, { x: 75, y: 105 }, 5).has(child.id)).toBe(false)
+    expect(scene).toEqual(source)
+  })
+
+  it('uses supplied runtime/isolation overrides instead of re-evaluating all timelines', () => {
+    const layer = makeLayer({ id: 'moving', x: 10, y: 20, w: 10, h: 10 })
+    const scene = makeScene([layer])
+    scene.timelines = [{ ...newTimeline(), tracks: [{ target: 'layers.moving.transform.x', keyframes: [
+      { id: 'key', timeMs: 0, value: 200, easing: { type: 'linear' } },
+    ] }] }]
+    const rect = { x: 395, y: 15, w: 20, h: 20 }
+    const overrides = new Map([['layers.moving.transform.x', 400]])
+    expect(layersInRect(scene, rect, 'inside', { timeMs: 500, overrides })).toEqual(new Set([layer.id]))
+    expect(layersInRect(scene, rect, 'inside', { timeMs: 500 })).toEqual(new Set())
+    expect(getLayerWorldBounds(scene, layer, { timeMs: 500, overrides: new Map() }).x).toBe(10)
+    expect(overrides).toEqual(new Map([['layers.moving.transform.x', 400]]))
+  })
+
+  it('preserves hidden, locked, frozen and audio exclusions in evaluated frames', () => {
+    const layers = ['visible', 'hidden', 'locked', 'frozen', 'audio'].map(id => makeLayer({
+      id, w: 10, h: 10, hidden: id === 'hidden', locked: id === 'locked', type: id === 'audio' ? 'audio' : 'shape',
+    }))
+    layers[3].frozen = true
+    const scene = makeScene(layers)
+    const rect = { x: 95, y: -5, w: 20, h: 20 }
+    const overrides = new Map(layers.map(layer => [`layers.${layer.id}.transform.x`, 100] as const))
+    expect(layersInRect(scene, rect, 'inside', { timeMs: 500, overrides })).toEqual(new Set(['visible']))
+    const hiddenOverrides: OverrideMap = new Map(overrides)
+    hiddenOverrides.set('layers.visible.hidden', true)
+    expect(layersInRect(scene, rect, 'inside', { overrides: hiddenOverrides })).toEqual(new Set())
   })
 })
 

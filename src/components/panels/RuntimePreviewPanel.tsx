@@ -1,4 +1,7 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── RuntimePreviewPanel ───────────────────────────────────────────────────────
 // Builder-side interactive preview. Lets the author exercise the runtime
 // without leaving Chorono:
@@ -41,6 +44,7 @@ export default function RuntimePreviewPanel({ scene, runtime }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Runtime Preview
         </span>
+        <DocumentationHelp topic="editor/preview" className="ml-auto mr-1" />
         <button
           onClick={runtime.resetParams}
           className="text-[10px] text-gray-400 hover:text-gray-200"
@@ -176,21 +180,17 @@ function ParamControl({ param, runtime }: { param: SceneParameter; runtime: Inte
       const n = typeof liveValue === 'number' ? liveValue : Number(liveValue) || 0
       return (
         <ParamRow param={param}>
-          <input
-            type="range"
+          <CalculationRangeInput aria-label="n"
             min={min}
             max={max}
             step={(max - min) / 1000 || 1}
             value={n}
             onChange={(e) => set(Number(e.target.value))}
-            className="flex-1"
-          />
-          <input
-            type="number"
+            className="flex-1" onCalculate={calculated => set(calculated)} />
+          <CalculationNumberInput aria-label="n"
             value={n}
             onChange={(e) => set(Number(e.target.value))}
-            className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none"
-          />
+            className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none" onCalculate={calculated => set(calculated)} />
         </ParamRow>
       )
     }

@@ -38,6 +38,7 @@ export function RotateRing({ x, y, radius, isDragging, onPointerDown }: RotateRi
         style={{ left: -outer, top: -outer, overflow: 'visible' }}
       >
         <circle
+          data-testid="rotation-ring"
           cx={outer} cy={outer} r={radius}
           fill="none"
           stroke="transparent"

@@ -10,7 +10,7 @@ export interface DopeSheetUIState {
   /** Hide tracks with no keyframes */
   filterAnimatedOnly: boolean
 
-  /** Show only selected layer's hierarchy */
+  /** Show the union of selected layer hierarchies */
   filterSelectedObjectOnly: boolean
 
   /** Search/filter by property path substring */

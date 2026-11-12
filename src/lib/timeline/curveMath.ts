@@ -11,7 +11,7 @@
 // to call from React render without memo overhead.
 
 import type { Track } from '../types'
-import { evaluateNumericTrack } from '../evaluator'
+import { createNumericTrackSampler } from '../evaluator'
 
 // ── Track colour palette ────────────────────────────────────────────────────
 // 3ds Max convention: position X = red, position Y = green, position Z = blue.
@@ -143,7 +143,7 @@ function viewportKey(vp: CurveViewport): string {
 }
 
 export function buildCurvePath(track: Track, vp: CurveViewport): string {
-  if (track.keyframes.length < 2) return ''
+  if (track.keyframes.length < 2 && (!track.controller || track.controller.type === 'keyframe')) return ''
 
   let perTrack = pathCache.get(track)
   if (!perTrack) {
@@ -156,16 +156,19 @@ export function buildCurvePath(track: Track, vp: CurveViewport): string {
 
   // Miss — sample.
   const stepPx = 2
-  const steps = Math.max(8, Math.floor(vp.widthPx / stepPx))
+  const steps = Math.max(8, Math.min(2048, Math.floor(vp.widthPx / stepPx)))
+  const sample = createNumericTrackSampler(track)
   const visMs = Math.max(1, vp.endMs - vp.startMs)
   let d = ''
+  let connected = false
   for (let i = 0; i <= steps; i++) {
     const tMs = vp.startMs + (i / steps) * visMs
-    const v = evaluateNumericTrack(track, tMs)
-    if (v == null) continue
+    const v = sample(tMs)
+    if (v == null) { connected = false; continue }
     const x = msToX(vp, tMs)
     const y = valueToY(vp, v)
-    d += `${d ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)} `
+    d += `${connected ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)} `
+    connected = true
   }
   const out = d.trim()
 
@@ -206,6 +209,7 @@ export function buildCurvePathSegments(track: Track, vp: CurveViewport): CurvePa
   const empty: CurvePathSegments = {
     before: '', inRange: '', after: '', rangeStartX: null, rangeEndX: null,
   }
+  if (track.controller && track.controller.type !== 'keyframe') return { ...empty, inRange: buildCurvePath(track, vp) }
   if (track.keyframes.length < 1) return empty
 
   const sortedKfs = [...track.keyframes].sort((a, b) => a.timeMs - b.timeMs)
@@ -213,7 +217,8 @@ export function buildCurvePathSegments(track: Track, vp: CurveViewport): CurvePa
   const rangeEnd   = sortedKfs[sortedKfs.length - 1].timeMs
 
   const stepPx = 2
-  const steps = Math.max(8, Math.floor(vp.widthPx / stepPx))
+  const steps = Math.max(8, Math.min(2048, Math.floor(vp.widthPx / stepPx)))
+  const sample = createNumericTrackSampler(track)
   const visMs = Math.max(1, vp.endMs - vp.startMs)
 
   type Seg = 'before' | 'inRange' | 'after'
@@ -222,7 +227,7 @@ export function buildCurvePathSegments(track: Track, vp: CurveViewport): CurvePa
 
   for (let i = 0; i <= steps; i++) {
     const tMs = vp.startMs + (i / steps) * visMs
-    const v = evaluateNumericTrack(track, tMs)
+    const v = sample(tMs)
     if (v == null) { prevSeg = null; continue }
     const x = msToX(vp, tMs)
     const y = valueToY(vp, v)

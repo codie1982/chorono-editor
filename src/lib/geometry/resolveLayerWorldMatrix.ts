@@ -1,5 +1,6 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer } from '@/lib/types'
-import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
+import { type OverrideMap } from '@/lib/evaluator'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
 import { Matrix2D } from './Matrix2D'
 import type { LayerLookup } from '@/lib/scene/LayerIndex'
@@ -16,7 +17,7 @@ export function resolveLayerWorldMatrix(
   overrides?: OverrideMap,
   lookup?: LayerLookup,
 ): Matrix2D {
-  const frameOverrides = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const frameOverrides = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   return resolveWorldMatrix(layer, scene, timeMs, frameOverrides, lookup)
 }
 
@@ -29,7 +30,7 @@ export function resolveLayerWorldMatrix(
  * truncation/identity semantics and are never memoized. */
 export function createLayerWorldMatrixResolver(scene: ChronoScene, timeMs = 0,
   overrides?: OverrideMap, lookup?: LayerLookup): (layer: Layer) => Matrix2D {
-  const frame = overrides ?? evaluateTimelines(scene.timelines, timeMs)
+  const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   const index = lookup ?? new LayerIndex(scene.layers)
   const memo = new Map<Layer, Matrix2D>()
   return layer => resolveWorldMatrix(layer, scene, timeMs, frame, index,

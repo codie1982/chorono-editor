@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── KeyframeSpreadsheet (BL-07) ───────────────────────────────────────────────
 // Editable table of the currently selected keyframes. Click a cell, type, hit
 // Enter to commit. Time, value, and easing are all editable here so users can
@@ -8,6 +9,7 @@
 // TrackToolBar's "⊞ Sheet" button.
 
 import { useState } from 'react'
+import ScrubInput from '../inputs/ScrubInput'
 import type { EasingType } from '@/lib/types'
 
 const EASING_TYPES: EasingType[] = [
@@ -40,24 +42,9 @@ interface Props {
 export default function KeyframeSpreadsheet({
   rows, onUpdateTime, onUpdateValue, onUpdateEasing, onDelete, onClose,
 }: Props) {
-  const [editing, setEditing] = useState<{ kfId: string; field: 'time' | 'value'; draft: string } | null>(null)
-
-  function startEdit(kfId: string, field: 'time' | 'value', initial: string) {
-    setEditing({ kfId, field, draft: initial })
-  }
-
-  function commitEdit(row: KeyframeSheetRow) {
-    if (!editing || editing.kfId !== row.kfId) return
-    const num = parseFloat(editing.draft)
-    if (!Number.isFinite(num)) { setEditing(null); return }
-    if (editing.field === 'time' && num !== row.timeMs) {
-      onUpdateTime(row.kfId, row.trackTarget, row.timeMs, Math.max(0, num))
-    }
-    if (editing.field === 'value' && row.value !== null && num !== row.value) {
-      onUpdateValue(row.kfId, row.trackTarget, row.value, num)
-    }
-    setEditing(null)
-  }
+  const [editing, setEditing] = useState<{ kfId: string; field: 'time' | 'value' } | null>(null)
+  /** Selection identifies the native key, never its current row index. */
+  function startEdit(kfId: string, field: 'time' | 'value', _initial: string) { setEditing({ kfId, field }) }
 
   return (
     <div className="border-t border-cyan-900/60 bg-gray-950 max-h-[40vh] flex flex-col shrink-0">
@@ -66,6 +53,7 @@ export default function KeyframeSpreadsheet({
         <span className="text-[11px] font-mono text-cyan-400">
           ⊞ Keyframe Spreadsheet  <span className="text-gray-500">({rows.length} row{rows.length !== 1 ? 's' : ''})</span>
         </span>
+        <DocumentationHelp topic="editor/keyframes/spreadsheet" className="ml-auto mr-1" />
         <button
           onClick={onClose}
           className="text-[12px] text-gray-500 hover:text-gray-300"
@@ -100,18 +88,8 @@ export default function KeyframeSpreadsheet({
                     </td>
                     <td className="px-2 py-1 text-right">
                       {isEditingTime ? (
-                        <input
-                          autoFocus
-                          type="number"
-                          value={editing!.draft}
-                          onChange={(e) => setEditing({ ...editing!, draft: e.target.value })}
-                          onBlur={() => commitEdit(row)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitEdit(row)
-                            if (e.key === 'Escape') setEditing(null)
-                          }}
-                          className="w-20 bg-gray-800 border border-cyan-700 rounded px-1 py-0.5 text-right text-cyan-200 outline-none"
-                        />
+                        <ScrubInput disableScrub key={row.kfId + ':time'} fieldLabel="Key time (ms)" value={row.timeMs} min={0}
+                          onChange={number => { onUpdateTime(row.kfId, row.trackTarget, row.timeMs, number); setEditing(null) }} />
                       ) : (
                         <button
                           onClick={() => startEdit(row.kfId, 'time', row.timeMs.toString())}
@@ -125,19 +103,8 @@ export default function KeyframeSpreadsheet({
                       {row.value === null ? (
                         <span className="text-gray-600 italic text-[10px]">non-numeric</span>
                       ) : isEditingValue ? (
-                        <input
-                          autoFocus
-                          type="number"
-                          step="any"
-                          value={editing!.draft}
-                          onChange={(e) => setEditing({ ...editing!, draft: e.target.value })}
-                          onBlur={() => commitEdit(row)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitEdit(row)
-                            if (e.key === 'Escape') setEditing(null)
-                          }}
-                          className="w-24 bg-gray-800 border border-cyan-700 rounded px-1 py-0.5 text-right text-cyan-200 outline-none"
-                        />
+                        <ScrubInput disableScrub key={row.kfId + ':value'} fieldLabel="Key value" value={row.value!}
+                          onChange={number => { onUpdateValue(row.kfId, row.trackTarget, row.value!, number); setEditing(null) }} />
                       ) : (
                         <button
                           onClick={() => startEdit(row.kfId, 'value', String(row.value))}

@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 // ── SVGExporter ───────────────────────────────────────────────────────────────
 //
 // BL-84 — exports a scene frame to a static SVG document. Shapes and paths are
@@ -6,9 +7,10 @@
 // nested <g>. Transforms/opacity are resolved at the requested time so the SVG
 // matches the on-screen frame.
 //
-// V1 scope: shape, path, text, group. Unsupported kinds (image, video, spline,
-// particles, masks, effects) are skipped with a warning — vector export of
-// raster/procedural content needs a bake step (future).
+// V1 base geometry: shape, path, text, group. Other layer kinds are skipped
+// with a warning. Masks/effects/blend are omitted from supported geometry with
+// an explicit warning; composed appearance requires raster output. Automatic
+// raster baking into SVG remains a later export feature.
 
 import type { ChronoScene, Layer, Transform } from '@/lib/types'
 import { ShapeToPathConverter, pathToSvgString, type Size } from '@/lib/geometry'
@@ -26,6 +28,7 @@ import {BoundedTextBuilder} from '../../format/text'
 import {measureJson} from '../../format/json'
 import {LayerIndex} from '../../scene/LayerIndex'
 import {preflightSvgOutput,resolveSvgOutputLimits,type SVGOutputLimits} from './SVGOutputLimits'
+import {svgLayerWarnings} from './svgLayerWarnings'
 
 export type SVGBackground = 'scene' | 'transparent' | { color: string }
 
@@ -55,7 +58,7 @@ export interface SVGExportResult {
 
 type OverrideMap = ReturnType<typeof evaluateTimelines>
 
-/** Layer kinds that V1 static SVG export can faithfully represent. */
+/** Layer kinds whose base geometry the V1 SVG adapter serializes. */
 const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
 
 /** Serialize the same static/SMIL SVG with bounded geometry/text construction.
@@ -64,6 +67,7 @@ const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
  * Invalid/oversized geometry, cycles and unsupported precision reject before
  * dense conversion. Unsupported layer kinds retain their existing warnings. */
 export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGExportResult {
+  if (opts.animated && scene.layers.some(layer => Object.keys(layer.propertyExpressions?.fields ?? {}).length)) throw new Error('Animated SVG cannot evaluate live property expressions. Bake to keyframes or use raster output; a static SVG supports the selected frame.')
   measureJson(scene,{maxBytes:96*1024**2})
   const limits=resolveSvgOutputLimits(opts.limits)
   const { composition } = scene
@@ -72,7 +76,7 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
   if(!Number.isInteger(precision)||precision<0||precision>12||!Number.isFinite(timeMs))throw new RangeError('Invalid SVG time/precision.')
   const warnings: string[] = []
   const gradients = new GradientRegistry()
-  const overrides = evaluateTimelines(scene.timelines, timeMs)
+  const overrides = evaluateSceneFrame(scene, timeMs).overrides
   scene = materializeRenderScene(scene, overrides)
   preflightSvgOutput(scene,opts.animated??false,limits)
 
@@ -187,6 +191,7 @@ function writeChildren(layers:readonly Layer[],ctx:BuildCtx,writer:BoundedTextBu
   for(const layer of layers){
     if(!ctx.isVisible(layer))continue
     if(!SUPPORTED.has(layer.type)){ctx.warnings.push(`Layer "${layer.name}" (${layer.type}) skipped — not supported by SVG export.`);continue}
+    ctx.warnings.push(...svgLayerWarnings(layer))
     const anims=ctx.animated?collectLayerAnimations(layer,ctx.scene.timelines,ctx.durationMs):null
     if(!anims&&((layer.type==='path'&&!layer.path?.anchors.length)||(layer.type==='text'&&!layer.text)))continue
     if(written)writer.append('\n');written=true
@@ -220,6 +225,8 @@ function buildPath(layer: Layer, ctx: BuildCtx, xform: string, opacity: string):
   return `<path d="${d}"${style}${xform}${opacity}/>`
 }
 
+/** Emit the materialized frame's text case/decoration and numeric style using
+ * escaped SVG attributes/content. Local coordinates and font size are in px. */
 function buildText(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
   const t = layer.text
   if (!t) return ''
@@ -234,6 +241,7 @@ function buildText(layer: Layer, ctx: BuildCtx, xform: string, opacity: string):
   if (t.fontFamily)              attrs.push(`font-family="${escapeXml(t.fontFamily)}"`)
   if (t.fontWeight)              attrs.push(`font-weight="${t.fontWeight}"`)
   if (t.fontStyle)              attrs.push(`font-style="${t.fontStyle}"`)
+  if (t.underline)              attrs.push('text-decoration="underline"')
   if (anchor !== 'start')        attrs.push(`text-anchor="${anchor}"`)
   if (t.letterSpacing)           attrs.push(`letter-spacing="${num(t.letterSpacing, ctx.precision)}"`)
   if (t.stroke && t.stroke.width > 0) {

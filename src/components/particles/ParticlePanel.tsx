@@ -12,6 +12,7 @@
 //   5. Empty state        — when no particle layer is selected
 
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
 import type { ChronoScene, Layer } from '@/lib/types'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
@@ -92,6 +93,7 @@ function PanelHeader({ title, subtitle }: { title: string; subtitle?: string }) 
           <span className="text-[10px] text-gray-500 font-mono">{subtitle}</span>
         )}
       </div>
+      <DocumentationHelp topic="editor/layers/particles" className="ml-auto" />
     </div>
   )
 }

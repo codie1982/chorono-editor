@@ -39,7 +39,7 @@ Mevcut projede boyutları ve kimlikleri uyarlayın. Süreler milisaniye, açıla
 ```js
 scene.composition({width:960,height:540,durationMs:4000,frameRate:30,backgroundColor:'#0b1220'});
 const intro = scene.createTimeline({id:'intro',durationMs:2000});
-const idle = scene.createTimeline({id:'idle',durationMs:2000,loop:true});
+const idle = scene.createTimeline({id:'idle',durationMs:Math.PI*1000,loop:true});
 const hero = scene.add('rect');
 hero.set({name:'Hero card'});
 hero.pos = [90,160];
@@ -48,9 +48,8 @@ hero.fill = '#2563eb';
 hero.cornerRadius = 24;
 intro.key(hero,'transform.x',0,90,'easeOut').key(hero,'transform.x',1800,480);
 intro.key(hero,'style.fill.color',0,'#2563eb').key(hero,'style.fill.color',1800,'#f97316');
-idle.key(hero,'transform.y',0,160);
-idle.modifier('layers.'+hero.id+'.transform.y',{
-  type:'sine',parameters:{amplitude:12,frequency:1}
+idle.track('layers.'+hero.id+'.transform.y',{
+  controller:{type:'waveform',waveform:{shape:'sine',amplitude:12,frequency:1/Math.PI,phase:0,offset:160,duty:0.5}}
 });
 scene.log(hero.id,intro.data,idle.data);
 ```
@@ -64,6 +63,8 @@ Timeline isimleri animasyonları sıraya koymaz. Kesintisiz film için tek maste
 `scene.add(kind)` için capabilities içindeki gerçek türleri kullanın. Handle alanları: `pos`, `size`, `opacity`, `rotation`, `scale`, `fill`, `text`, `cornerRadius`, `blendMode`. Yardımcılar: `font`, `stroke`, `shapeParam`, `parent`, `interactive`, `followPath`, `configureParticles`, `key`.
 
 Kare değerlendirmesi animasyon değerlerini çizimden önce katman verisine uygular. Shape parametreleri, tipografi, efektler, maskeler, repeater ve particle ayarları bu akışa dahildir. Değerler gerçek özellik şemasına uymalıdır; rastgele alan ismi yazmak yeni bir çizim özelliği oluşturmaz.
+
+Aynı zamandaki key güncellemesi mevcut ID, tangent, segment ayarları ve belirtilmeyen easing’i korur; easing değiştirmek için açıkça verin. Yeni key varsayılanı linear’dır. Eşitlik `1e-6 ms`; yakın fractional key’ler ayrı kalır, belirsiz çakışık key’ler reddedilir. Ara değeri örnekleyerek key eklemek bütün nonlinear segmenti aynen koruma sözü vermez. Driven controller/binding için explicit bake/düzenleme akışını kullanın.
 
 Sayılar easing ile; renk alanları kanallar üzerinden; Vec2 değerleri bileşenleri üzerinden interpolate edilir. Diğer metin ve boolean değerleri keyframe sınırında değişir. Controller/modifier'lar sayısaldır. Mevcut path/spline noktaları ve handle'ları aynı topoloji korunarak sayısal koordinat yollarıyla hareket ettirilebilir; bütün geometri nesnesini veya topolojiyi keyframe ile değiştiren genel morph sistemi yoktur.
 
@@ -110,3 +111,12 @@ Yeni dosyaları MCP `import_asset` ile alın. `render_preview` PNG; ses önizlem
 Güncel MCP sınırları: script başına 128 KiB kod, 2 saniye, 32 MiB QuickJS belleği ve 20.000 komut; sahne toplamında 5.000 katman, 100 timeline ve 50.000 keyframe. Bağlı sürümün kesin sınırlarını capabilities'ten okuyun. Bunlar işlem kotalarıdır, oynatma FPS garantisi değildir.
 
 Kurulum ve tüm araçlar için [MCP rehberine](mcp.md), ajan akışı için [authoring skill'ine](../../skills/chorono/SKILL.md) bakın.
+
+
+## Prosedürel eğri, expression ve bake
+
+Yukarıdaki waveform `160 + 12*sin(2*tSec)` üretir; frekans Hz, phase radyandır. Katmana ait `Timeline.track` üyeliği de tamamlar. Sıfır key'li numeric controller Curve Editor'da hesaplanmış aralık ve sınırlı sayıda graph örneğiyle görünür; bunlar source key değildir. Track'in **Bake…** düğmesi kaynak/bake eğrisini ve sample/midpoint hatalarını önizletir; Apply tek undo olur.
+
+`timeline.bake(target,60,0.005,{startMs:0,endMs:1000})` ve native `bake_track` optional `startMs`/`endMs` timeline-local ms kullanır; bounds atlanırsa tam timeline seçilir. FPS pozitif ve en fazla 240, örnek sayısı en fazla 20.000, tolerance 0..1 örneklerde normalize dikey sadeleştirme hatasıdır. Pencere dışı eski key'ler ve ilgisiz metadata korunur; controller/OOR/modifier/time remapping global olarak kaldırılır. Dışarıda kalan key'ler/constant uçlar çalışır. Örnekleme hatası FPS'e bağlıdır; tolerance sürekli matematiksel eşlik garantisi değildir. Geçersiz/non-finite/stale kaynak reddedilir; Cancel source değiştirmez.
+
+Wire önizlemesi ve runtime aynı güvenli parser/evaluator'ı kullanır. `source`/`s` o anki pre-wire evaluated input'tur; örtük zaman/çarpma yoktur. `2+3`, scientific notation ve açık çarpma çalışır; `^` sağdan birleşir ve unary işaretten önceliklidir (`-2^2=-4`, `(-2)^2=4`). Yanlış argüman sayısı, bilinmeyen isim, non-finite/domain hatası ve çevrim açıklanır; hedefin pre-wire değeri korunur. Wires aynı input frame'i okur; iterative feedback yapmaz. Katman kaynakları numeric scalar, scene parametreleri legacy boolean/numeric-string dönüşümü kullanır. Sınırlar 4096 karakter, 1024 token/node ve 64 nesting seviyesidir. Serbest zaman expression controller'ı ayrı özelliktir.

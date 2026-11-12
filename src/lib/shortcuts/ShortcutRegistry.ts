@@ -11,6 +11,24 @@ export class ShortcutRegistry {
     for (const def of defs) this.register(def)
   }
 
+  /** Install defaults without replacing explicit registrations. A new default
+   * conflicting with a prior binding in an overlapping/global context stays unassigned;
+   * the visible command remains usable. No saved preference is silently reset. */
+  registerDefaults(definitions: ShortcutDefinition[]): void {
+    // Compare with prior registrations, not defaults from this same batch:
+    // intentional context overrides (canvas nudge vs global frame step) remain.
+    const previous = this.getAll()
+    for (const definition of definitions) {
+      if (this.shortcuts.has(definition.id)) continue
+      const binding = definition.binding
+      const conflict = binding.type === 'keyboard' && previous.some(existing => existing.binding.type === 'keyboard'
+        && (existing.contexts.includes('global') || definition.contexts.includes('global') || existing.contexts.some(context => definition.contexts.includes(context)))
+        && existing.binding.key === binding.key && !!existing.binding.meta === !!binding.meta
+        && !!existing.binding.shift === !!binding.shift && !!existing.binding.alt === !!binding.alt)
+      if (!conflict) this.register(definition)
+    }
+  }
+
   getAll(): ShortcutDefinition[] {
     return Array.from(this.shortcuts.values())
   }

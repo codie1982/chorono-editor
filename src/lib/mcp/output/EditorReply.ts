@@ -2,6 +2,7 @@ import type {BridgeJob} from '../protocol'
 import {LIMITS} from '../protocol'
 import {executeEditorJobInScope,type MCPHost} from '../editor'
 import {OutputResources,editorOutputResources,outputJson} from '../../export/resources'
+import {SourceAccessError,type SourceFailure} from '../source/SourceAccessError'
 
 /** Execute and serialize one reply inside the same output lifetime. Consumer
  * borrows its body only until its returned promise settles (e.g. awaited fetch).
@@ -13,12 +14,13 @@ import {OutputResources,editorOutputResources,outputJson} from '../../export/res
 export async function withEditorReply(job:BridgeJob,host:MCPHost,sessionId:string,
   consume:(body:string,signal:AbortSignal)=>Promise<void>,options:{signal?:AbortSignal;resources?:OutputResources}={}):Promise<{error?:string}>{
   const lease=await(options.resources??editorOutputResources).run(async(scope,signal)=>{
-    let result:unknown,error:string|undefined
+    let result:unknown,error:string|undefined,errorData:SourceFailure|undefined
     try{result=await executeEditorJobInScope(job,host,scope,signal)}catch(failure){
       error=(failure instanceof Error?failure.message:String(failure)).slice(0,4096)
+      if(failure instanceof SourceAccessError)errorData=failure.toJSON()
     }
     scope.check(signal)
-    const body=outputJson(scope,{op:'reply',sessionId,jobId:job.id,result,error},{maxBytes:LIMITS.requestBytes,maxChars:LIMITS.requestBytes})
+    const body=outputJson(scope,{op:'reply',sessionId,jobId:job.id,result,error,...(errorData?{errorData}:{})},{maxBytes:LIMITS.requestBytes,maxChars:LIMITS.requestBytes})
     await consume(body.value,signal);scope.check(signal)
     return {error}
   },{signal:options.signal})

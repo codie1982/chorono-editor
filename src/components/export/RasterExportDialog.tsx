@@ -1,4 +1,6 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { useSessionOutputFilename } from '@/components/editorSession/SessionOutputContext'
 import { useState } from 'react'
 import type { ChronoScene } from '@/lib/types'
 import type { AssetElementMap } from '@/lib/renderer'
@@ -40,6 +42,7 @@ const SCALES = [1, 2, 3, 4] as const
 export default function RasterExportDialog({
   scene, assets, timeMs, onClose, onExported, onError,documentSignal,
 }: Props) {
+  const sessionFilename=useSessionOutputFilename()
   const [format,      setFormat]      = useState<RasterFormat>('png')
   const [scale,       setScale]       = useState<number>(1)
   const [transparent, setTransparent] = useState(false)
@@ -63,8 +66,9 @@ export default function RasterExportDialog({
         quality: quality / 100,
       },{signal}),lease=>{
       const result=lease.value
-      downloadOutput(lease,value=>value.blob,result.filename)
-      onExported?.(result.filename, result.warnings)
+      const filename=sessionFilename(result.filename)
+      downloadOutput(lease,value=>value.blob,filename)
+      onExported?.(filename, result.warnings)
       onClose()
     },onError)
   }
@@ -72,6 +76,7 @@ export default function RasterExportDialog({
   return (
     <BaseExportDialog
       title="Export Image"
+      helpTopic="export/images"
       onClose={onClose}
       maxWidth="max-w-md"
       footer={
@@ -154,12 +159,10 @@ export default function RasterExportDialog({
         {/* Quality (lossy only) */}
         {isLossy && (
           <Field label={`Quality — ${quality}%`}>
-            <input
-              type="range" min={10} max={100} value={quality}
+            <CalculationRangeInput aria-label="quality" min={10} max={100} value={quality}
               disabled={busy}
               onChange={(e) => setQuality(Number(e.target.value))}
-              className="w-full accent-blue-500"
-            />
+              className="w-full accent-blue-500" onCalculate={calculated => setQuality(calculated)} />
           </Field>
         )}
     </BaseExportDialog>

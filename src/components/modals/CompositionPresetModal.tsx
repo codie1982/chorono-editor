@@ -1,4 +1,6 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { useState } from 'react'
 import type { Composition, CompositionPreset } from '@/lib/types'
 import { COMPOSITION_PRESETS } from '@/lib/types'
@@ -51,6 +53,7 @@ export default function CompositionPresetModal({ composition, onApply, onClose }
           <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wider">
             Composition Size
           </h2>
+          <DocumentationHelp topic="editor/projects" className="ml-auto mr-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
         </div>
 
@@ -82,19 +85,19 @@ export default function CompositionPresetModal({ composition, onApply, onClose }
           <div className="text-[10px] text-gray-500 uppercase tracking-wider">Custom</div>
           <div className="grid grid-cols-4 gap-2 items-end">
             <Field label="Width">
-              <input type="number" value={width} min={1}
+              <CalculationNumberInput aria-label="width" value={width} min={1}
                 onChange={(e) => setWidth(Number(e.target.value))}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" />
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" onCalculate={calculated => setWidth(calculated)} />
             </Field>
             <Field label="Height">
-              <input type="number" value={height} min={1}
+              <CalculationNumberInput aria-label="height" value={height} min={1}
                 onChange={(e) => setHeight(Number(e.target.value))}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" />
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" onCalculate={calculated => setHeight(calculated)} />
             </Field>
             <Field label="FPS">
-              <input type="number" value={fps} min={1} max={120}
+              <CalculationNumberInput aria-label="fps" value={fps} min={1} max={120}
                 onChange={(e) => setFps(Number(e.target.value))}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" />
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200" onCalculate={calculated => setFps(calculated)} />
             </Field>
             <Field label="Background">
               <ColorInput value={bg} onChange={(v) => setBg(v)} />

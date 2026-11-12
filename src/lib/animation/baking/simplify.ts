@@ -19,9 +19,14 @@ export interface Sample {
   value:  number
 }
 
-/** Simplify samples in-place equivalent — returns a NEW filtered array
- *  whose first + last elements always match `samples`. */
-export function simplifyRDP(samples: Sample[], epsilon: number): Sample[] {
+/** Return a new filtered array retaining endpoints. Default perpendicular
+ * metric preserves legacy callers. Value metric bounds normalized vertical
+ * deviation at source sample times, using time interpolation on each retained
+ * segment; it makes no claim between samples. Optional cancellation and a
+ * comparison budget reject excessive synchronous work without source mutation. */
+export function simplifyRDP(samples: Sample[], epsilon: number, options: {
+  metric?: 'perpendicular' | 'value'; signal?: { readonly aborted: boolean }; maxComparisons?: number
+} = {}): Sample[] {
   if (samples.length <= 2 || epsilon <= 0) return [...samples]
 
   // Normalise bbox so epsilon is a fraction of total range.
@@ -48,7 +53,9 @@ export function simplifyRDP(samples: Sample[], epsilon: number): Sample[] {
   keep[samples.length - 1] = 1
 
   const stack: [number, number][] = [[0, samples.length - 1]]
+  let comparisons = 0
   while (stack.length > 0) {
+    if (options.signal?.aborted) throw new Error('Bake cancelled')
     const [a, b] = stack.pop()!
     if (b - a < 2) continue
     const [ax, ay] = norm[a]
@@ -58,10 +65,13 @@ export function simplifyRDP(samples: Sample[], epsilon: number): Sample[] {
     let maxDist = 0
     let maxIdx = a
     for (let i = a + 1; i < b; i++) {
+      if (++comparisons > (options.maxComparisons ?? Infinity)) throw new Error('Simplification work limit exceeded; reduce FPS or the bake range.')
       const [px, py] = norm[i]
       // Perpendicular distance — area-of-triangle / base trick.
       let dist: number
-      if (len2 === 0) {
+      if (options.metric === 'value') {
+        dist = Math.abs(py - (ay + (dx ? (px - ax) / dx : 0) * dy))
+      } else if (len2 === 0) {
         dist = Math.hypot(px - ax, py - ay)
       } else {
         const t = ((px - ax) * dx + (py - ay) * dy) / len2

@@ -14,6 +14,7 @@
 // effect params, etc.).
 
 import type { ChronoScene, Layer, Timeline, Track, Keyframe } from '../types'
+import type { AuthoringHints } from '../types/authoring'
 import type { EditorCommand } from './commands-keyframe'
 import { makeBatchCmd } from './commands-batch'
 import { makeAddLayerCmd } from './commands-layer'
@@ -69,6 +70,7 @@ export function duplicateAnimationTracksForIdMap(
   timeline: Timeline,
   idMap: Record<string, string>,
   timeOffsetMs: number = 0,
+  copies?: NonNullable<AuthoringHints['copies']>[number][],
 ): Track[] {
   const out: Track[] = []
   for (const track of timeline.tracks) {
@@ -77,11 +79,12 @@ export function duplicateAnimationTracksForIdMap(
     if (!idMap[parsed.entityId]) continue
 
     const newTarget = remapTrackTarget(track.target, idMap)
-    const newKeyframes: Keyframe[] = track.keyframes.map((kf) => ({
-      ...kf,
-      id: nextKfId(),
-      timeMs: kf.timeMs + timeOffsetMs,
-    }))
+    copies?.push({ from: ['track', timeline.id, track.target], to: ['track', timeline.id, newTarget] })
+    const newKeyframes: Keyframe[] = track.keyframes.map(kf => {
+      const id = nextKfId()
+      copies?.push({ from: ['key', timeline.id, track.target, kf.id], to: ['key', timeline.id, newTarget, id] })
+      return { ...kf, id, timeMs: kf.timeMs + timeOffsetMs }
+    })
 
     out.push({
       ...track,
@@ -182,6 +185,7 @@ export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
 
   const newLayers: Layer[] = []
   const newTracks: Track[] = []
+  const copies: NonNullable<AuthoringHints['copies']>[number][] = []
   const layerMetadata: Record<string, CloneMetadata> = {}
   const arrayGroupId = `clone_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
 
@@ -206,7 +210,7 @@ export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
         layerMetadata[newId] = meta
       }
       if (duplicateAnimation && timeline) {
-        const tracks = duplicateAnimationTracksForIdMap(timeline, tree.idMap)
+        const tracks = duplicateAnimationTracksForIdMap(timeline, tree.idMap, 0, copies)
         for (const t of tracks) newTracks.push(t)
       }
     } else {
@@ -217,7 +221,7 @@ export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
       newLayers.push(clonedLayer)
       layerMetadata[clonedLayer.id] = metadata
       if (duplicateAnimation && timeline) {
-        const tracks = duplicateAnimationTracksForIdMap(timeline, idMap)
+        const tracks = duplicateAnimationTracksForIdMap(timeline, idMap, 0, copies)
         for (const t of tracks) newTracks.push(t)
       }
     }
@@ -241,6 +245,7 @@ export function makeCloneCmd(params: MakeCloneCmdParams): CloneArrayCommand {
 
   return {
     ...batch,
+    authoring: { ...batch.authoring, copies },
     layerMetadata,
     result: {
       label,
@@ -273,12 +278,13 @@ export function makeArrayCmd(params: MakeArrayCmdParams): CloneArrayCommand {
 
   // 3. Duplicate animation tracks if requested.
   const newTracks: Track[] = []
+  const copies: NonNullable<AuthoringHints['copies']>[number][] = []
   if (settings.duplicateAnimation && timeline) {
     for (let i = 0; i < factory.perInstanceIdMaps.length; i++) {
       const idMap = factory.perInstanceIdMaps[i]
       if (!idMap || Object.keys(idMap).length === 0) continue
       const offset = (settings.timeOffsetMs ?? 0) * i
-      const dup = duplicateAnimationTracksForIdMap(timeline, idMap, offset)
+      const dup = duplicateAnimationTracksForIdMap(timeline, idMap, offset, copies)
       for (const t of dup) newTracks.push(t)
     }
   }
@@ -306,6 +312,7 @@ export function makeArrayCmd(params: MakeArrayCmdParams): CloneArrayCommand {
 
   return {
     ...batch,
+    authoring: { ...batch.authoring, copies },
     layerMetadata: factory.metadata,
     result: {
       label,
@@ -345,6 +352,7 @@ export function makeCloneAlignCmd(params: MakeCloneAlignCmdParams): CloneArrayCo
 
   const newLayers: Layer[] = []
   const newTracks: Track[] = []
+  const copies: NonNullable<AuthoringHints['copies']>[number][] = []
   const layerMetadata: Record<string, CloneMetadata> = {}
   const replaceCmds: EditorCommand[] = []
 
@@ -368,7 +376,7 @@ export function makeCloneAlignCmd(params: MakeCloneAlignCmdParams): CloneArrayCo
         layerMetadata[id] = meta
       }
       if (duplicateAnimation && timeline) {
-        const tracks = duplicateAnimationTracksForIdMap(timeline, tree.idMap)
+        const tracks = duplicateAnimationTracksForIdMap(timeline, tree.idMap, 0, copies)
         for (const t of tracks) newTracks.push(t)
       }
     } else {
@@ -384,7 +392,7 @@ export function makeCloneAlignCmd(params: MakeCloneAlignCmdParams): CloneArrayCo
       newLayers.push(clonedLayer)
       layerMetadata[clonedLayer.id] = metadata
       if (duplicateAnimation && timeline) {
-        const tracks = duplicateAnimationTracksForIdMap(timeline, idMap)
+        const tracks = duplicateAnimationTracksForIdMap(timeline, idMap, 0, copies)
         for (const t of tracks) newTracks.push(t)
       }
     }
@@ -414,6 +422,7 @@ export function makeCloneAlignCmd(params: MakeCloneAlignCmdParams): CloneArrayCo
 
   return {
     ...batch,
+    authoring: { ...batch.authoring, copies },
     layerMetadata,
     result: {
       label,

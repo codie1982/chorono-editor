@@ -16,6 +16,7 @@ export type { DrawBox, BoxSplineSpec } from './creation'
 export {
   moveSplinePoint, moveSplineHandle, insertPointOnSegment, deleteSplinePoint,
   setSplinePointType, setSegmentType, setContourClosed, reverseContour,
+  extendSplineContour, splineContinuation,
 } from './edit'
 export {
   createCircleSpline, createLineSpline, createRectangleSpline, createEllipseSpline,

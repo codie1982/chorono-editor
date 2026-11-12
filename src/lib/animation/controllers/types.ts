@@ -43,7 +43,7 @@ export type WaveformShape =
 
 export interface WaveformControllerParams {
   shape:     WaveformShape
-  /** Peak-to-trough amplitude. Final output ∈ [offset-amp, offset+amp]. */
+  /** Peak deviation from offset. Final output ∈ [offset-amp, offset+amp]. */
   amplitude: number
   /** Cycles per second. */
   frequency: number

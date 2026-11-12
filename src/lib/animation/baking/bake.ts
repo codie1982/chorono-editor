@@ -1,84 +1,101 @@
-/** Track baking (BL-51).
- *
- *  Converts an "active" track (with modifiers / out-of-range / time warp /
- *  procedural controller) into a flat keyframe array that any consumer
- *  can interpret with the existing linear/bezier interpolator. The
- *  bake-then-export workflow is what makes the runtime able to play
- *  modifier-heavy scenes on low-end devices without shipping the whole
- *  evaluator.
- *
- *  Pipeline:
- *    1. Sample evaluateTrack(track, t) at fixed FPS across [startMs, endMs].
- *    2. RDP-simplify the (timeMs, value) sequence to `tolerance`.
- *    3. Emit linear-easing keyframes (one per kept sample). Caller can
- *       wrap into a NEW track that has `modifiers: undefined`,
- *       `controller: undefined`, `outOfRange: undefined` — guaranteed
- *       playback parity within the tolerance.
- */
-
 import type { Track, Keyframe } from '../../types'
-import { evaluateTrack } from '../../evaluator'
+import { createNumericTrackSampler } from '../../evaluator'
 import { simplifyRDP, type Sample } from './simplify'
 import { isScalarNumericTrack } from '../typedValues'
+import { sameKeyTime, compareKeyTime } from '../../timeline/authoring/keyTimePolicy'
 
-export interface BakeOptions {
-  /** Inclusive start time of the bake window (ms). */
-  startMs:   number
-  /** Inclusive end time of the bake window (ms). */
-  endMs:     number
-  /** Sample rate. 60 → one sample every ~16.66ms. */
-  fps:       number
-  /** RDP tolerance in normalised [0..1] units (fraction of bbox).
-   *  0 disables simplification (raw sampled kfs). Typical: 0.005 - 0.02. */
-  tolerance: number
-}
+import { validateBakeOptions, type BakeOptions } from './BakeOptions'
+export { validateBakeOptions, MAX_BAKE_SAMPLES, type BakeOptions } from './BakeOptions'
+import { sampleBakeSignal } from './bakeSampling'
+import { bakedKeysForSamples } from './bakeKeyframes'
 
-/** Sample a track densely across the bake window. */
+/** Fixed-FPS samples plus exact terminal sample. Every evaluated value must be
+ * finite scalar; an invalid sample rejects the whole conversion. Caller owns
+ * the returned array. Source is never mutated, even on cancellation/failure. */
 export function sampleTrackDense(track: Track, opts: BakeOptions): Sample[] {
-  const stepMs = 1000 / Math.max(1, opts.fps)
-  const out: Sample[] = []
-  for (let t = opts.startMs; t <= opts.endMs + 0.0001; t += stepMs) {
-    const v = evaluateTrack(track, t)
-    if (typeof v === 'number') out.push({ timeMs: t, value: v })
-  }
-  // Always ensure the endMs sample is present (loop may stop one step short).
-  if (out.length === 0 || out[out.length - 1].timeMs < opts.endMs) {
-    const v = evaluateTrack(track, opts.endMs)
-    if (typeof v === 'number') out.push({ timeMs: opts.endMs, value: v })
-  }
-  return out
+  if (!isScalarNumericTrack(track)) throw new Error('Baking supports scalar numeric tracks only; color, vector and discrete tracks must retain their typed keys.')
+  return sampleNumericSignal(createNumericTrackSampler(track), opts)
 }
 
-/** Bake a track to a fresh array of linear-easing keyframes. The returned
- *  kfs have stable ids derived from index so a re-bake of the same window
- *  produces deterministic diff (cheap to undo/redo). */
+/** Sample an explicit finite numeric signal using the same bounded exact-end
+ * schedule as track baking. The callback is a trusted domain sampler, never
+ * generated code; buffers are caller-owned and cancellation is synchronous. */
+export function sampleNumericSignal(sample: (timeMs: number) => number | null, opts: BakeOptions): Sample[] {
+  return sampleBakeSignal(timeMs => {
+    const value = sample(timeMs)
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Track has no finite numeric value at ${timeMs} ms.`)
+    return value
+  }, opts)
+}
+
+/** Linear key conversion with stable exact-time identities where possible.
+ * Generated IDs include caller namespace + target + exact time, so different
+ * tracks/timelines cannot share the old baked_0_0 ID accidentally. */
+function keysFromSamples(track: Track, raw: Sample[], opts: BakeOptions): Keyframe[] {
+  const samples = simplifyRDP(raw, opts.tolerance, { metric: 'value', signal: opts.signal, maxComparisons: 2_000_000 })
+  return bakedKeysForSamples(track, samples, opts)
+}
+
+/** Bake window keys only; independent pure utility, with local deterministic IDs.
+ * Scene consumers provide keyIdPrefix to distinguish equal targets in timelines. */
 export function bakeTrackToKeyframes(track: Track, opts: BakeOptions): Keyframe[] {
-  if (!isScalarNumericTrack(track)) {
-    throw new Error('Baking supports scalar numeric tracks only; color, vector and discrete tracks must retain their typed keys.')
-  }
-  const raw = sampleTrackDense(track, opts)
-  const simplified = simplifyRDP(raw, opts.tolerance)
-  return simplified.map((s, i) => ({
-    id:     `baked_${i}_${Math.round(s.timeMs)}`,
-    timeMs: s.timeMs,
-    value:  s.value,
-    easing: { type: 'linear' },
-  }))
+  return keysFromSamples(track, sampleTrackDense(track, opts), opts)
 }
 
-/** Return a new Track with the modifier / OOR / time-warp / procedural-
- *  controller fields stripped and `keyframes` replaced by the baked
- *  sequence. Use this when shipping a "frozen" runtime version of a
- *  signal-system-heavy scene. */
+/** Strip the evaluated signal fields only. Preserve unrelated track metadata
+ * and authored keys strictly outside the chosen window. Signal conversion is
+ * global: outside that window preserved keys/constant endpoints now drive the
+ * track, not its removed controller/OOR/modifiers. UI must state this explicitly. */
+function replaceSignal(track: Track, keys: Keyframe[], opts: BakeOptions): Track {
+  const { controller: _controller, outOfRange: _oor, modifiers: _modifiers, easeCurve: _ease,
+    timeWarp: _warp, multiplierCurve: _multiplier, multiplierAmplitude: _amplitude, ...metadata } = track
+  const outside = track.keyframes.filter(key => key.timeMs < opts.startMs && !sameKeyTime(key.timeMs, opts.startMs)
+    || key.timeMs > opts.endMs && !sameKeyTime(key.timeMs, opts.endMs))
+  return { ...metadata, keyframes: [...outside, ...keys].sort(compareKeyTime) }
+}
+
+/** Immutable numeric signal conversion. Sampling is bounded/synchronous; the
+ * editor owns preview cancellation and a single atomic source commit. */
 export function bakeTrack(track: Track, opts: BakeOptions): Track {
-  const keyframes = bakeTrackToKeyframes(track, opts)
-  return {
-    target: track.target,
-    label:  track.label,
-    keyframes,
-    kind:   'property',
-    // All signal-system fields intentionally dropped:
-    // outOfRange / modifiers / easeCurve / timeWarp / multiplierCurve /
-    // multiplierAmplitude / controller are all undefined in the result.
+  return prepareBake(track, opts).track
+}
+
+export interface BakeReport {
+  sampleCount: number; keyCount: number; maxSampleError: number; maxMidpointError: number
+  valueSpan: number; retainedOutsideKeys: number
+}
+
+/** Prepare a reusable preview and measured quality report with one sample pass.
+ * Vertical simplification tolerance is checked at samples. Midpoint checks show
+ * interpolation/sampling error separately; neither proves continuous equality
+ * or catches every aliased/discontinuous/high-frequency signal. No source edit. */
+export function prepareBake(track: Track, opts: BakeOptions): { track: Track; report: BakeReport } {
+  if (!isScalarNumericTrack(track)) throw new Error('Baking supports scalar numeric tracks only; color, vector and discrete tracks must retain their typed keys.')
+  return prepareNumericSignalBake(track, opts, createNumericTrackSampler(track))
+}
+
+/** Shared scalar conversion/quality measurement for a prepared track or live
+ * scene-property sampler. Sampling, stable IDs, simplification and midpoint
+ * reporting have one implementation. No dense frames are persisted. */
+export function prepareNumericSignalBake(track: Track, opts: BakeOptions, sourceSample: (timeMs: number) => number | null): { track: Track; report: BakeReport } {
+  const raw = sampleNumericSignal(sourceSample, opts), keys = keysFromSamples(track, raw, opts)
+  const baked = replaceSignal(track, keys, opts)
+  const bakedSample = createNumericTrackSampler(baked)
+  let min = Infinity, max = -Infinity, maxSampleError = 0, maxMidpointError = 0
+  for (let i = 0; i < raw.length; i++) {
+    if (opts.signal?.aborted) throw new Error('Bake cancelled')
+    const sample = raw[i]; min = Math.min(min, sample.value); max = Math.max(max, sample.value)
+    const evaluated = bakedSample(sample.timeMs)
+    if (evaluated === null) throw new Error('Baked interpolation has no finite numeric value.')
+    maxSampleError = Math.max(maxSampleError, Math.abs(sample.value - evaluated))
+    if (i) {
+      const time = (raw[i - 1].timeMs + sample.timeMs) / 2, original = sourceSample(time)
+      if (original === null) throw new Error(`Track has no finite numeric midpoint at ${time} ms.`)
+      const interpolated = bakedSample(time)
+      if (interpolated === null) throw new Error('Baked interpolation has no finite numeric midpoint.')
+      maxMidpointError = Math.max(maxMidpointError, Math.abs(original - interpolated))
+    }
   }
+  return { track: baked, report: { sampleCount: raw.length, keyCount: keys.length, maxSampleError,
+    maxMidpointError, valueSpan: max - min, retainedOutsideKeys: baked.keyframes.length - keys.length } }
 }

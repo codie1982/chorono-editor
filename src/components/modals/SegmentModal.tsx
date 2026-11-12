@@ -1,4 +1,6 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── SegmentModal ──────────────────────────────────────────────────────────────
 // Lightweight create / edit modal for TimelineSegment. Used by the timeline
 // ruler's segment strip and the Events panel's "+ create segment" shortcut.
@@ -41,6 +43,7 @@ export default function SegmentModal({
           <h2 className="text-sm font-semibold text-gray-100">
             {isCreating ? 'Create Segment' : 'Edit Segment'}
           </h2>
+          <DocumentationHelp topic="editor/timeline/segments" className="ml-auto mr-1" />
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">
             ×
           </button>
@@ -62,25 +65,21 @@ export default function SegmentModal({
         <div className="mb-3 grid grid-cols-2 gap-2">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Start (ms)</label>
-            <input
-              type="number"
+            <CalculationNumberInput aria-label="start Ms"
               min={0}
               max={durationMs}
               className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-gray-500"
               value={startMs}
-              onChange={(e) => setStartMs(Math.max(0, Number(e.target.value)))}
-            />
+              onChange={(e) => setStartMs(Math.max(0, Number(e.target.value)))} onCalculate={calculated => setStartMs(Math.max(0, calculated))} />
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">End (ms)</label>
-            <input
-              type="number"
+            <CalculationNumberInput aria-label="end Ms"
               min={0}
               max={durationMs}
               className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-[12px] text-gray-100 outline-none focus:border-gray-500"
               value={endMs}
-              onChange={(e) => setEndMs(Math.max(0, Number(e.target.value)))}
-            />
+              onChange={(e) => setEndMs(Math.max(0, Number(e.target.value)))} onCalculate={calculated => setEndMs(Math.max(0, calculated))} />
           </div>
         </div>
         {endMs <= startMs && (

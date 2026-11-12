@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── ParametersPanel ───────────────────────────────────────────────────────────
 // CRUD UI for ChronoScene.parameters. Each row is editable inline; changes
 // dispatch EditorCommands so they participate in undo/redo.
@@ -12,6 +13,9 @@ import { useState } from 'react'
 import type {
   ChronoScene, SceneParameter, SceneParameterType, SceneParameterValue,
 } from '@/lib/types'
+import { BooleanInput } from '../inputs/BooleanInput'
+import { TextInput } from '../inputs/TextInput'
+import ScrubInput from '../inputs/ScrubInput'
 import ColorInput from '@/components/inputs/ColorInput'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { newSceneParameter } from '@/lib/defaults'
@@ -49,6 +53,7 @@ export default function ParametersPanel({ scene, editor }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Parameters
         </span>
+        <DocumentationHelp topic="editor/state-machines/parameters" className="ml-auto mr-1" />
         <div className="relative">
           <button
             onClick={() => setAddOpen((v) => !v)}
@@ -209,6 +214,7 @@ function ParamValueInput({
 }) {
   switch (param.type) {
     case 'string':
+      return <TextInput fieldLabel={param.name + ' default'} value={String(value ?? '')} onChange={next => { onChange(next); onCommit(next) }} />
     case 'image':
       return (
         <input
@@ -219,26 +225,10 @@ function ParamValueInput({
         />
       )
     case 'number':
-      return (
-        <input
-          type="number"
-          className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[11px] text-gray-100 outline-none focus:border-gray-500"
-          value={Number(value ?? 0)}
-          onChange={(e) => onChange(Number(e.target.value))}
-          onBlur={(e) => onCommit(Number(e.target.value))}
-        />
-      )
+      return <ScrubInput disableScrub fieldLabel={param.name + ' default'} value={Number(value ?? 0)} min={param.min} max={param.max}
+        onChange={number => { onChange(number); onCommit(number) }} />
     case 'boolean':
-      return (
-        <label className="flex items-center gap-2 text-[11px] text-gray-200">
-          <input
-            type="checkbox"
-            checked={Boolean(value)}
-            onChange={(e) => { onChange(e.target.checked); onCommit(e.target.checked) }}
-          />
-          {value ? 'true' : 'false'}
-        </label>
-      )
+      return <BooleanInput label={param.name + ' default'} value={value === true} onChange={next => { onChange(next); onCommit(next) }} />
     case 'color':
       return (
         <ColorInput
@@ -256,19 +246,5 @@ function NumberInput({
   onCommit: (v: number) => void
   placeholder?: string
 }) {
-  const [draft, setDraft] = useState(String(value))
-  return (
-    <input
-      type="number"
-      className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none focus:border-gray-500"
-      value={draft}
-      placeholder={placeholder}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        const n = Number(draft)
-        if (Number.isFinite(n) && n !== value) onCommit(n)
-        else setDraft(String(value))
-      }}
-    />
-  )
+  return <ScrubInput disableScrub fieldLabel={placeholder ?? 'Parameter bound'} value={value} onChange={onCommit} />
 }

@@ -9,6 +9,8 @@ import { useEffect } from 'react'
 import type { GradientFill, GradientStop } from '@/lib/types'
 import ColorInput from './ColorInput'
 import ScrubInput from './ScrubInput'
+import { NumericPropertyProvider } from './expressions/NumericPropertyContext'
+import { TextInput } from './TextInput'
 
 interface Props {
   value:    GradientFill | undefined
@@ -82,7 +84,7 @@ export default function GradientInput({ value, onChange }: Props) {
     "focus:outline-none focus:border-blue-500"
 
   return (
-    <div className="flex flex-col gap-2">
+    <NumericPropertyProvider><div className="flex flex-col gap-2">
       {/* Preview bar */}
       <div
         className="h-6 w-full rounded border border-gray-600"
@@ -94,20 +96,14 @@ export default function GradientInput({ value, onChange }: Props) {
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-0.5">
           <span className="text-[10px] text-gray-500 uppercase tracking-wide">Type</span>
-          <select
-            value={g.type}
-            onChange={(e) => update({ type: e.target.value as GradientFill['type'] })}
-            className={selectClass}
-          >
-            <option value="linear">Linear</option>
-            <option value="radial">Radial</option>
-          </select>
+          <TextInput value={g.type} fieldLabel="Gradient type" options={[{value:'linear',label:'Linear'},{value:'radial',label:'Radial'}]}
+            onChange={type => update({type: type as GradientFill['type']})} className={selectClass} />
         </label>
         {g.type === 'linear' && (
           <label className="flex flex-col gap-0.5">
             <span className="text-[10px] text-gray-500 uppercase tracking-wide">Angle °</span>
             <ScrubInput
-              value={g.angle ?? 0}
+              fieldLabel="Gradient angle" value={g.angle ?? 0}
               min={0}
               max={360}
               step={1}
@@ -123,11 +119,11 @@ export default function GradientInput({ value, onChange }: Props) {
         {g.stops.map((s, i) => (
           <div key={i} className="flex items-center gap-1">
             <div className="flex-1 min-w-0">
-              <ColorInput value={s.color} onChange={(c) => updateStop(i, { color: c })} />
+              <ColorInput fieldLabel={`Gradient stop ${i+1} color`} value={s.color} onChange={(c) => updateStop(i, { color: c })} />
             </div>
             <div className="w-16 shrink-0">
               <ScrubInput
-                value={Math.round(s.offset * 100)}
+                fieldLabel={`Gradient stop ${i+1} position`} value={Math.round(s.offset * 100)}
                 min={0}
                 max={100}
                 step={1}
@@ -154,6 +150,6 @@ export default function GradientInput({ value, onChange }: Props) {
           + Add stop
         </button>
       </div>
-    </div>
+    </div></NumericPropertyProvider>
   )
 }

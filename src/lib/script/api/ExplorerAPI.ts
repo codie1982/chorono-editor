@@ -1,3 +1,4 @@
+import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, Transform } from '../../types'
 import type { ApiContext } from './LayerHandle'
 import { copyScriptData } from './scriptData'
@@ -5,10 +6,10 @@ import { parseSearchQuery } from '../../sceneExplorer/searchQuery'
 import { matchesQuery } from '../../sceneExplorer/searchEval'
 import { makeGroupCmd, makeUngroupCmd } from '../../editor/commands-group'
 import { makeBulkUpdateLayersCmd, makeMoveLayerToCmdWithSnapshot, makeUpdateLayerCmd } from '../../editor/commands-layer'
+import { assertStaticTransform, localTransform } from '../../editor/branches/WorldPlacement'
 import { Matrix2D } from '../../geometry/Matrix2D'
 import { resolveLayerWorldMatrix } from '../../geometry/resolveLayerWorldMatrix'
 import { createLayerWorldBoundsResolver } from '../../geometry/resolveLayerWorldBounds'
-import { evaluateTimelines } from '../../evaluator'
 
 export interface ExplorerReadOptions { timelineId?: string; timeMs?: number }
 export interface ExplorerQuery extends ExplorerReadOptions {
@@ -87,30 +88,6 @@ function editable(index: Hierarchy, id: string, subtree = false): void {
     if (layer.locked || layer.frozen) throw new Error(`Unlock and unfreeze '${layer.name}' before editing its hierarchy.`)
   }
 }
-function assertStaticTransform(scene: ChronoScene, ids: string[]): void {
-  for (const id of ids) {
-    const layer = scene.layers.find(layer => layer.id === id)!
-    if (layer.followPath || layer.motionPath || Object.keys(layer.paramBindings ?? {}).some(path => path.startsWith('transform.'))
-      || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === id && binding.target.property?.startsWith('transform.'))
-      || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === id && wire.target.propertyPath.startsWith('transform.'))
-      || scene.timelines.some(timeline => timeline.tracks.some(track => track.target.startsWith(`layers.${id}.transform.`)))) {
-      throw new Error('Preserving world placement for animated transforms requires baking first; use keepWorld:false for an intentional local-space move.')
-    }
-  }
-}
-function localTransform(matrix: Matrix2D, previous: Transform): Transform {
-  if (matrix.toArray().some(value => !Number.isFinite(value))) throw new Error('Cannot preserve a non-finite transform.')
-  const d = matrix.decompose()
-  if (Math.abs(matrix.determinant()) < 1e-9) throw new Error('Cannot preserve a singular transform.')
-  const reconstructed = Matrix2D.rotation(d.rotation).scale(d.scaleX, d.scaleY)
-  if (Math.max(Math.abs(matrix.a - reconstructed.a), Math.abs(matrix.b - reconstructed.b), Math.abs(matrix.c - reconstructed.c), Math.abs(matrix.d - reconstructed.d)) > 1e-6) {
-    throw new Error('This hierarchy change requires shear, which a layer transform cannot represent. Use keepWorld:false or bake the geometry first.')
-  }
-  // Canvas transform = T(x+anchor) R S T(-anchor).
-  const anchor = reconstructed.applyToVector({ x: previous.anchorX, y: previous.anchorY })
-  return { ...previous, x: matrix.e - previous.anchorX + anchor.x, y: matrix.f - previous.anchorY + anchor.y,
-    rotationDeg: d.rotation, scaleX: d.scaleX, scaleY: d.scaleY }
-}
 function flags(layer: Layer): ExplorerNode['flags'] {
   return { hidden: !!layer.hidden, locked: !!layer.locked, solo: !!layer.solo, pinned: !!layer.pinned, frozen: !!layer.frozen }
 }
@@ -126,7 +103,7 @@ export class ExplorerAPI {
     const timelineId = options.timelineId ?? this.ctx.resolveTimelineId()
     if (options.timelineId !== undefined && !scene.timelines.some(timeline => timeline.id === options.timelineId)) throw new Error('Explorer timeline was not found.')
     const timelines = scene.timelines.filter(timeline => timeline.id === timelineId)
-    const bounds = createLayerWorldBoundsResolver(scene, timeMs, evaluateTimelines(timelines, timeMs))
+    const bounds = createLayerWorldBoundsResolver(scene, timeMs, evaluateSceneFrame({ ...scene, timelines }, timeMs).overrides)
     const makeNode = (id: string, data = false): ExplorerNode => {
       const layer = requireLayer(index, id), ancestorIds = index.ancestors.get(id)!
       const ancestors = ancestorIds.map(id => index.byId.get(id)!)

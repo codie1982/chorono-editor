@@ -1,12 +1,18 @@
 import type { ChronoScene } from '../types'
 import { assertTrackValues, isColorTarget } from '../animation/typedValues'
 import {measureJson} from '../format/json'
+import { assertCloneForestBudget, CLONE_WORKLOAD_LIMITS } from '../clone/CloneWorkload'
+import { assertSceneGuides } from '../geometry/guides/sceneGuideData'
+import { assertAuthoringData } from '../editor/authoring/AuthoringValidation'
+import type { SourceAuthorization } from './source/EditorSourceIdentity'
+import { assertScenePropertyExpressions } from '../expression/properties/PropertyExpression'
+import { assertNumericInputExpressions } from '../editor/inputExpressions/NumericInputExpression'
 
-export const MCP_VERSION = '1.0.0'
-export const LIMITS = { layers: 5000, timelines: 100, keyframes: 50000, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
+export const MCP_VERSION = '2.1.0'
+export const LIMITS = { layers: CLONE_WORKLOAD_LIMITS.layers, timelines: 100, keyframes: CLONE_WORKLOAD_LIMITS.keyframes, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
 export type JsonObject = Record<string, any>
-export interface BridgeJob { id: string; method: string; args: JsonObject }
-export interface Snapshot { scene: ChronoScene; revision: number; selectedTimelineId?: string; currentTimeMs?: number }
+export interface BridgeJob { id: string; method: string; args: JsonObject; sourceAuthorization?: SourceAuthorization }
+export interface Snapshot { scene: ChronoScene; revision: number; documentEpoch: string; transactionActive: boolean; selectedTimelineId?: string; currentTimeMs?: number }
 export interface ToolDefinition { name: string; description: string; inputSchema: JsonObject; annotations?: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } }
 
 export function assertJson(value: unknown): void {
@@ -31,6 +37,10 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
   const scene = value as ChronoScene
   if (!scene || !scene.composition || !Array.isArray(scene.layers) || !Array.isArray(scene.timelines) || !Array.isArray(scene.assets) || !Array.isArray(scene.parameters) || !Array.isArray(scene.bindings) || !Array.isArray(scene.triggers)) throw new Error('Invalid Chorono scene')
   if (!String(scene.formatVersion).startsWith('1.')) throw new Error('Unsupported scene version')
+  assertSceneGuides(scene.editorGuides)
+  assertAuthoringData(scene.authoring)
+  assertScenePropertyExpressions(scene)
+  scene.layers.forEach(assertNumericInputExpressions)
   const comp = scene.composition
   if (comp.audioVolume !== undefined && (!Number.isFinite(comp.audioVolume) || comp.audioVolume < 0 || comp.audioVolume > 4)) throw new Error('Invalid master audio gain')
   if (comp.audioMuted !== undefined && typeof comp.audioMuted !== 'boolean') throw new Error('Invalid master audio mute')
@@ -113,6 +123,10 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
   if (count > LIMITS.keyframes) throw new Error('Keyframe limit exceeded')
 }
 
+/** Legacy single-root MCP admission adapter. Expands the authored child tree,
+ * rejects cycles, then shares layer/key-count policy with native forest clones.
+ * count is NEW occurrences. This validates source workload without allocating
+ * copies; it neither changes the scene nor measures runtime/GPU memory. */
 export function assertCloneBudget(scene: ChronoScene, sourceId: string, count: number) {
   if (!Number.isInteger(count) || count < 1 || count > LIMITS.layers) throw new Error('Clone count limit exceeded')
   const children = new Map<string, string[]>()
@@ -124,10 +138,7 @@ export function assertCloneBudget(scene: ChronoScene, sourceId: string, count: n
     ids.add(id)
     pending.push(...(children.get(id) ?? []))
   }
-  const tracks = scene.timelines.flatMap(t => t.tracks)
-  const totalKeys = tracks.reduce((n, t) => n + t.keyframes.length, 0)
-  const sourceKeys = tracks.filter(t => ids.has(t.target.match(/^layers\.([^.]+)\./)?.[1] ?? '')).reduce((n, t) => n + t.keyframes.length, 0)
-  if (scene.layers.length + ids.size * count > LIMITS.layers || totalKeys + sourceKeys * count > LIMITS.keyframes) throw new Error('Expanded clone/array workload limit exceeded')
+  assertCloneForestBudget(scene, ids, count)
 }
 
 export function assertOperation(value: unknown, options: { colorValueIndex?: number; colorTarget?: boolean; uint32ValueIndex?: number } = {}): void {

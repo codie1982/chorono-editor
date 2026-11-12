@@ -1,4 +1,6 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { propertyHelpTopics, type DocumentationTopic } from '@/components/help/documentation'
 import { useEffect, useRef, useState } from 'react'
 import type {
   Layer, Composition,
@@ -13,6 +15,13 @@ import {
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
+import { BooleanInput } from '@/components/inputs/BooleanInput'
+import { BLEND_MODES } from '@/lib/render/compositionModes'
+import { FONT_FAMILIES, FONT_WEIGHTS, FONT_STYLES } from '@/lib/text/fontOptions'
+import { TextInput } from '@/components/inputs/TextInput'
+import { NumericPropertyProvider, NumericPropertyScope } from '@/components/inputs/expressions/NumericPropertyContext'
+import type { NumericPropertyFrame } from '@/components/inputs/expressions/NumericPropertyContext'
+import type { ExternalTimelineTime } from '@/lib/evaluator'
 import ColorInput  from '@/components/inputs/ColorInput'
 import GradientInput from '@/components/inputs/GradientInput'
 import { findWireForProperty, formatParameterRef } from '@/lib/wiring/helpers'
@@ -33,24 +42,7 @@ const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
 ]
 
 // Canvas composite operations the user typically picks from for blending.
-const BLEND_MODES: Array<[GlobalCompositeOperation, string]> = [
-  ['source-over', 'Normal'],
-  ['multiply',    'Multiply'],
-  ['screen',      'Screen'],
-  ['overlay',     'Overlay'],
-  ['darken',      'Darken'],
-  ['lighten',     'Lighten'],
-  ['color-dodge', 'Color Dodge'],
-  ['color-burn',  'Color Burn'],
-  ['hard-light',  'Hard Light'],
-  ['soft-light',  'Soft Light'],
-  ['difference',  'Difference'],
-  ['exclusion',   'Exclusion'],
-  ['hue',         'Hue'],
-  ['saturation',  'Saturation'],
-  ['color',       'Color'],
-  ['luminosity',  'Luminosity'],
-]
+
 
 interface Props {
   layer: Layer | null
@@ -78,6 +70,11 @@ interface Props {
   onEditWire?: (wire: ParameterWire) => void
   currentTimeMs?: number
   selectedTimelineId?: string | null
+  /** Synchronous source/gesture guards for property formula drafts. */
+  getScene?: () => ChronoScene
+  isTransactionActive?: () => boolean
+  expressionFrame?: NumericPropertyFrame
+  expressionExternalTime?: ExternalTimelineTime | null
   onNormalizeAudio?: (layerId: string) => void | Promise<void>
 }
 
@@ -209,7 +206,7 @@ function WireableField({
             {boundParam.type}
           </span>
         </button>
-      ) : children}
+      ) : <NumericPropertyScope path={propertyPath} label={label}>{children}</NumericPropertyScope>}
 
       {paramOpen && canParam && (
         <div
@@ -274,28 +271,6 @@ const PARAM_TYPE_BADGE: Record<import('@/lib/types').SceneParameterType, { bg: s
   image:   { bg: 'bg-violet-900',  fg: 'text-violet-300'  },
 }
 
-// ── Text panel option tables (BL-72 Phase 2) ────────────────────────────────
-// System / web-safe families only — the app loads no custom fonts, so these are
-// guaranteed to render. measureText reflects the chosen family in the browser.
-const FONT_FAMILIES: string[] = [
-  'sans-serif', 'serif', 'monospace',
-  'Arial', 'Helvetica', 'Georgia', 'Times New Roman',
-  'Courier New', 'Verdana', 'Trebuchet MS', 'Impact',
-]
-
-// Curated weight ramp. Values match the FontWeight union (numeric strings +
-// 'normal'/'bold'). drawText injects these straight into the canvas font string.
-const FONT_WEIGHTS: [FontWeight, string][] = [
-  ['100', '100 · Thin'],
-  ['300', '300 · Light'],
-  ['normal', '400 · Regular'],
-  ['500', '500 · Medium'],
-  ['600', '600 · Semibold'],
-  ['bold', '700 · Bold'],
-  ['800', '800 · Extra'],
-  ['900', '900 · Black'],
-]
-
 const TEXT_INPUT_CLASS =
   'w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 ' +
   'focus:outline-none focus:border-blue-500'
@@ -314,10 +289,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function NumInput({ value, onChange, min, max, step = 1 }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number
+function NumInput({ value, onChange, min, max, step = 1, propertyPath, fieldLabel }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; propertyPath?: string; fieldLabel?: string
 }) {
-  return <ScrubInput value={value} onChange={onChange} min={min} max={max} step={step} />
+  return <ScrubInput value={value} onChange={onChange} min={min} max={max} step={step} propertyPath={propertyPath} fieldLabel={fieldLabel} />
 }
 
 
@@ -342,11 +317,14 @@ function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** Group property controls with optional help for a more specific subtopic.
+ * Help is a sibling of the label, with no effect on field values or history. */
+function Section({ title, children, helpTopic }: { title: string; children: React.ReactNode; helpTopic?: DocumentationTopic }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
-        {title}
+      <div className="flex items-center justify-between text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
+        <span>{title}</span>
+        {helpTopic && <DocumentationHelp topic={helpTopic} compact />}
       </div>
       {children}
     </div>
@@ -361,7 +339,7 @@ export default function PropertiesPanel({
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
   dispatchCommand,
-  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio,
+  currentTimeMs = 0, selectedTimelineId, onNormalizeAudio, getScene, isTransactionActive, expressionFrame, expressionExternalTime,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
   // every WireableField call. `parameters` is shared too; `acceptedTypes`
@@ -400,17 +378,20 @@ export default function PropertiesPanel({
 
   if (layer?.type === 'audio' && layer.audio && scene && dispatchCommand) {
     return <aside className="flex-1 min-h-0 overflow-y-auto bg-gray-900 p-3">
+      <div className="flex justify-end"><DocumentationHelp topic="editor/layers/media" /></div>
       <AudioInspector key={layer.id} layer={layer} scene={scene} dispatchCommand={dispatchCommand}
         currentTimeMs={currentTimeMs} selectedTimelineId={selectedTimelineId} onNormalizeAudio={onNormalizeAudio} />
     </aside>
   }
 
   return (
+    <NumericPropertyProvider scene={scene} layerId={layer?.id} dispatch={dispatchCommand} getScene={getScene} isTransactionActive={isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTimelineId ?? undefined} frame={expressionFrame} externalTime={expressionExternalTime}>
     <aside className="flex flex-col flex-1 min-h-0 bg-gray-900 overflow-y-auto">
-      <div className="px-3 py-2 border-b border-gray-700 shrink-0">
+      <div className="px-3 py-2 border-b border-gray-700 shrink-0 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
           {layer ? `Layer: ${layer.id}` : 'Properties'}
         </span>
+        <DocumentationHelp topic={layer ? propertyHelpTopics[activeTab] : 'editor/projects'} />
       </div>
 
       {/* ── Tab bar — only visible when a layer is selected ── */}
@@ -528,7 +509,7 @@ export default function PropertiesPanel({
             )}
 
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'properties' && (<>
-            <Section title="Transform">
+            <Section title="Transform" helpTopic="editor/properties/transform">
               <Row2>
                 <WireableField label="X" layer={layer} propertyPath="transform.x" {...wireProps}
                   acceptedTypes={['number']} onBindParam={(id) => bindParam('transform.x', id)}>
@@ -562,7 +543,7 @@ export default function PropertiesPanel({
                   acceptedTypes={['number']} parameters={parameters}
                   onBind={(id) => bindParam('transform.anchorX', id)}
                 >
-                  <NumInput value={layer.transform.anchorX}
+                  <NumInput propertyPath="transform.anchorX" fieldLabel="Anchor X" value={layer.transform.anchorX}
                     onChange={(v) => updateTransform('anchorX', v)} />
                 </ParamBindButton>
                 <ParamBindButton
@@ -570,7 +551,7 @@ export default function PropertiesPanel({
                   acceptedTypes={['number']} parameters={parameters}
                   onBind={(id) => bindParam('transform.anchorY', id)}
                 >
-                  <NumInput value={layer.transform.anchorY}
+                  <NumInput propertyPath="transform.anchorY" fieldLabel="Anchor Y" value={layer.transform.anchorY}
                     onChange={(v) => updateTransform('anchorY', v)} />
                 </ParamBindButton>
               </Row2>
@@ -584,12 +565,13 @@ export default function PropertiesPanel({
               </button>
             </Section>
 
-            <Section title="Appearance">
+            <Section title="Appearance" helpTopic="editor/properties/appearance">
               <WireableField label="Opacity" layer={layer} propertyPath="opacity" {...wireProps}
                 acceptedTypes={['number']} onBindParam={(id) => bindParam('opacity', id)}>
                 <div className="flex items-center gap-2">
                   <input
                     type="range" min={0} max={1} step={0.01}
+                    disabled={!!layer.inputExpressions?.fields.opacity || !!layer.propertyExpressions?.fields.opacity}
                     value={layer.opacity}
                     onChange={(e) => update({ opacity: Number(e.target.value) })}
                     className="flex-1 accent-blue-500"
@@ -597,21 +579,13 @@ export default function PropertiesPanel({
                   <span className="text-xs text-gray-400 w-8 text-right">
                     {(layer.opacity * 100).toFixed(0)}%
                   </span>
+                  <div className="w-24"><NumInput value={layer.opacity} min={0} max={1} step={0.01} onChange={value => update({ opacity: value })} /></div>
                 </div>
               </WireableField>
               <Field label="Blend Mode">
-                <select
-                  value={layer.blendMode ?? 'source-over'}
-                  onChange={(e) => update({
-                    blendMode: e.target.value === 'source-over' ? undefined : (e.target.value as GlobalCompositeOperation),
-                  })}
-                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200
-                             focus:outline-none focus:border-blue-500"
-                >
-                  {BLEND_MODES.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <TextInput propertyPath="blendMode" fieldLabel="Blend Mode" value={layer.blendMode ?? 'source-over'}
+                  options={BLEND_MODES.map(([value, label]) => ({ value, label }))}
+                  onChange={value => update({ blendMode: value === 'source-over' ? undefined : value as GlobalCompositeOperation })} />
               </Field>
             </Section>
 
@@ -629,14 +603,14 @@ export default function PropertiesPanel({
 
             {/* ── Shape özellikleri ──────────────────────────────────── */}
             {layer.type === 'shape' && layer.style && layer.size && (
-              <Section title="Shape">
+              <Section title="Shape" helpTopic="editor/layers/basic-shapes">
                 <Row2>
                   <Field label="Width">
-                    <NumInput value={layer.size.width} min={1}
+                    <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
                   </Field>
                   <Field label="Height">
-                    <NumInput value={layer.size.height} min={1}
+                    <NumInput propertyPath="size.height" fieldLabel="Height" value={layer.size.height} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
@@ -1182,7 +1156,7 @@ export default function PropertiesPanel({
             {/* ── Text özellikleri ──────────────────────────────────── */}
             {/* ── Text: Character ───────────────────────────────────── */}
             {layer.type === 'text' && layer.text && (
-              <Section title="Text">
+              <Section title="Text" helpTopic="editor/layers/text">
                 <ParamBindButton
                   label="Content"
                   layer={layer}
@@ -1191,43 +1165,22 @@ export default function PropertiesPanel({
                   parameters={parameters}
                   onBind={(id) => bindParam('text.value', id)}
                 >
-                  <input
-                    type="text"
-                    value={layer.text.value}
-                    onChange={(e) => updateText({ value: e.target.value })}
-                    className={TEXT_INPUT_CLASS}
-                  />
+                  <TextInput propertyPath="text.value" fieldLabel="Content" value={layer.text.value} onChange={value => updateText({ value })} />
                 </ParamBindButton>
 
                 <Field label="Font">
-                  <select
-                    value={layer.text.fontFamily ?? 'sans-serif'}
-                    onChange={(e) => updateText({ fontFamily: e.target.value })}
-                    className={TEXT_INPUT_CLASS}
-                  >
-                    {FONT_FAMILIES.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
+                  <TextInput propertyPath="text.fontFamily" fieldLabel="Font family" suggestions={FONT_FAMILIES} value={layer.text.fontFamily ?? 'sans-serif'}
+                    onChange={fontFamily => updateText({fontFamily})} className={TEXT_INPUT_CLASS} />
                 </Field>
 
                 <Row2>
                   <Field label="Weight">
-                    <select
-                      value={String(layer.text.fontWeight ?? 'normal')}
-                      onChange={(e) => updateText({ fontWeight: e.target.value as FontWeight })}
-                      className={TEXT_INPUT_CLASS}
-                    >
-                      {FONT_WEIGHTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
+                    <TextInput propertyPath="text.fontWeight" fieldLabel="fontWeight" value={String(layer.text.fontWeight ?? 'normal')}
+                      options={FONT_WEIGHTS.map(([value,label]) => ({value,label}))} onChange={value => updateText({fontWeight: value as FontWeight})} className={TEXT_INPUT_CLASS} />
                   </Field>
                   <Field label="Style">
-                    <select
-                      value={layer.text.fontStyle ?? 'normal'}
-                      onChange={(e) => updateText({ fontStyle: e.target.value as FontStyle })}
-                      className={TEXT_INPUT_CLASS}
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="italic">Italic</option>
-                    </select>
+                    <TextInput propertyPath="text.fontStyle" fieldLabel="fontStyle" value={String(layer.text.fontStyle ?? 'normal')}
+                      options={FONT_STYLES} onChange={value => updateText({fontStyle: value as FontStyle})} className={TEXT_INPUT_CLASS} />
                   </Field>
                 </Row2>
 
@@ -1286,23 +1239,13 @@ export default function PropertiesPanel({
                 )}
 
                 <Field label="Letter Spacing">
-                  <NumInput value={layer.text.letterSpacing ?? 0} step={0.5}
+                  <NumInput propertyPath="text.letterSpacing" fieldLabel="Letter spacing" value={layer.text.letterSpacing ?? 0} step={0.5}
                     onChange={(v) => updateText({ letterSpacing: v })} />
                 </Field>
 
                 <Row2>
-                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                    <input type="checkbox" checked={!!layer.text.uppercase}
-                      onChange={(e) => updateText({ uppercase: e.target.checked })}
-                      className="accent-blue-500" />
-                    Uppercase
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                    <input type="checkbox" checked={!!layer.text.underline}
-                      onChange={(e) => updateText({ underline: e.target.checked })}
-                      className="accent-blue-500" />
-                    Underline
-                  </label>
+                  <BooleanInput propertyPath="text.uppercase" label="Uppercase" value={!!layer.text.uppercase} onChange={value => updateText({ uppercase: value })} />
+                  <BooleanInput propertyPath="text.underline" label="Underline" value={!!layer.text.underline} onChange={value => updateText({ underline: value })} />
                 </Row2>
               </Section>
             )}
@@ -1372,11 +1315,11 @@ export default function PropertiesPanel({
               <Section title="Image">
                 <Row2>
                   <Field label="Width">
-                    <NumInput value={layer.size.width} min={1}
+                    <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
                   </Field>
                   <Field label="Height">
-                    <NumInput value={layer.size.height} min={1}
+                    <NumInput propertyPath="size.height" fieldLabel="Height" value={layer.size.height} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
@@ -1402,11 +1345,11 @@ export default function PropertiesPanel({
               <Section title="Video">
                 <Row2>
                   <Field label="Width">
-                    <NumInput value={layer.size.width} min={1}
+                    <NumInput propertyPath="size.width" fieldLabel="Width" value={layer.size.width} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, width: v } })} />
                   </Field>
                   <Field label="Height">
-                    <NumInput value={layer.size.height} min={1}
+                    <NumInput propertyPath="size.height" fieldLabel="Height" value={layer.size.height} min={1}
                       onChange={(v) => update({ size: { ...layer.size!, height: v } })} />
                   </Field>
                 </Row2>
@@ -1611,7 +1554,7 @@ export default function PropertiesPanel({
 
             {/* ── Masks + Plugin Effects (Effects tab) ──────────────── */}
             {layer.type !== 'group' && layer.type !== 'repeater' && activeTab === 'effects' && (<>
-            <Section title="Masks">
+            <Section title="Masks" helpTopic="editor/properties/masks">
               <div className="text-[10px] text-gray-500 leading-snug pb-1">
                 Use another layer&apos;s shape to cut out / reveal this layer.
                 Multiple masks composite in array order.
@@ -2136,6 +2079,7 @@ export default function PropertiesPanel({
         )}
       </div>
     </aside>
+    </NumericPropertyProvider>
   )
 }
 
@@ -2231,12 +2175,8 @@ function PathStrokeSection({
       </Row2>
 
       <Field label="Trim Offset (animate via track)">
-        <input
-          type="range" min={0} max={1} step={0.001}
-          value={data.trim.offset}
-          onChange={(e) => patchTrim({ offset: Number(e.target.value) })}
-          className="w-full accent-blue-500"
-        />
+        <NumInput propertyPath="pathStroke.trim.offset" fieldLabel="Trim offset" value={data.trim.offset} min={0} max={1} step={0.001}
+          onChange={offset => patchTrim({offset})} />
       </Field>
 
       <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">

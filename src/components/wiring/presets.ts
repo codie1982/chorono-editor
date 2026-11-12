@@ -32,14 +32,14 @@ export const MAPPING_PRESETS: MappingPreset[] = [
 
   // ── Boolean ────────────────────────────────────────────────────────────
   { category: 'Boolean', label: 'Boolean → scale (1 / 1.2)',
-    expression: 'source ? 1.2 : 1',
+    expression: 'source != 0 ? 1.2 : 1',
     description: 'true grows 20%, false stays at 1.' },
   { category: 'Boolean', label: 'Boolean → opacity',
-    expression: 'source ? 1 : 0',
+    expression: 'source != 0 ? 1 : 0',
     description: 'true fully visible, false hidden.' },
   { category: 'Boolean', label: 'Boolean → angle (0 / 360)',
-    expression: 'source ? 360 : 0',
-    description: 'Quarter-turn-like toggle for rotation.' },
+    expression: 'source != 0 ? 360 : 0',
+    description: 'One full turn when true, zero when false.' },
 
   // ── Easing ─────────────────────────────────────────────────────────────
   { category: 'Easing', label: 'Smoothstep',

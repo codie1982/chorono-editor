@@ -1,4 +1,5 @@
 'use client'
+import { handleLayerTreeKey } from '@/components/layerHierarchy/LayerTreeKeyboard'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Layer, Track, EasingType, AnimatableProperty, ParameterWire } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
@@ -30,6 +31,13 @@ interface Props {
   attributes?: VirtualRowAttributes
   scrollRef?: React.RefObject<HTMLElement>
   expanded: boolean
+  depth?: number
+  hasChildren?: boolean
+  childrenExpanded?: boolean
+  contextOnly?: boolean
+  propertiesAvailable?: boolean
+  onToggleChildren?: () => void
+  onNavigate?: (direction: 'up' | 'down' | 'parent' | 'child') => void
   graphMode: boolean
   isPrimary: boolean
   isInSet: boolean
@@ -113,7 +121,8 @@ export default function LayerTimelineSection({
   onTrackAreaContextMenu, onTrackAreaDoubleClick, onTrackHeaderContextMenu, clientXToMs,
   durationMs, currentTimeMs, frameRate, labelColWidth, onLayerBarCommit, pinIndex, audioUrl,
   parameterWires, onEditWire,
-  audioContext, pinTop, attributes, scrollRef,
+  audioContext, pinTop, attributes, scrollRef, depth = 0, hasChildren = false, childrenExpanded = true,
+  contextOnly = false, propertiesAvailable = true, onToggleChildren, onNavigate,
 }: Props) {
 
   // A track "has a key at the playhead" when one sits within half a frame of
@@ -143,7 +152,7 @@ export default function LayerTimelineSection({
   })
 
   return (
-    <div {...attributes} className={`${isInSet && !isPrimary ? 'bg-blue-950/30' : ''}`}>
+    <div {...attributes} data-layer-depth={depth} data-context-only={contextOnly || undefined} className={`${isInSet && !isPrimary ? 'bg-blue-950/30' : ''}`}>
       {/* ── Layer header row (label + activity bar) ───────────────────────── */}
       <div
         className={`flex items-stretch border-b border-gray-800
@@ -160,11 +169,15 @@ export default function LayerTimelineSection({
       >
         {/* Left: label */}
         <div
-          className="shrink-0 flex flex-col justify-center gap-1 px-2 border-r border-gray-700 cursor-pointer relative"
-          style={{ width: labelColWidth }}
+          className="shrink-0 flex flex-col justify-center gap-1 px-2 border-r border-gray-700 cursor-pointer relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 focus-visible:outline-offset-[-2px]"
+          style={{ width: labelColWidth, paddingLeft: 8 + Math.min(depth, 16) * 12 }}
+          role="treeitem" aria-level={depth + 1} aria-expanded={hasChildren ? childrenExpanded : undefined}
+          aria-selected={isPrimary || isInSet} tabIndex={0}
+          onKeyDown={event => handleLayerTreeKey(event, { hasChildren, expanded: childrenExpanded,
+            onSelect: onSelectLayer, onToggle: onToggleChildren, onNavigate })}
           onClick={(e) => layer.type === 'audio'
-            ? activateAudioClipSelection('header', e.shiftKey, onSelectLayer, audioContext?.clearKeySelection)
-            : onSelectLayer(e.shiftKey)}
+            ? activateAudioClipSelection('header', e.shiftKey || e.metaKey || e.ctrlKey, onSelectLayer, audioContext?.clearKeySelection)
+            : onSelectLayer(e.shiftKey || e.metaKey || e.ctrlKey)}
           onDoubleClick={(e) => {
             // Double-click the layer header → toggle Solo (isolate in canvas).
             // Avoids racing the chevron / flag buttons which stop propagation.
@@ -173,7 +186,8 @@ export default function LayerTimelineSection({
             e.stopPropagation()
             onToggleFlag('solo')
           }}
-          title="Click: select · Double-click: solo (isolate)"
+          onContextMenu={!contextOnly && onLayerBarContextMenu ? event => onLayerBarContextMenu(layer.id, event) : undefined}
+          title="Click: select · Double-click: solo (isolate) · Right-click: layer actions"
         >
           <div className="flex items-center gap-1.5 w-full min-w-0">
           {/* Color label stripe — left edge of the row */}
@@ -183,7 +197,13 @@ export default function LayerTimelineSection({
               style={{ backgroundColor: layer.colorLabel }}
             />
           )}
+          {hasChildren ? <button title={childrenExpanded ? 'Collapse child layers' : 'Expand child layers'}
+            aria-label={`${childrenExpanded ? 'Collapse' : 'Expand'} child layers of ${layer.name}`} aria-expanded={childrenExpanded}
+            className="w-4 shrink-0 text-xs text-gray-400 hover:text-gray-200 focus-visible:outline focus-visible:outline-blue-400"
+            onClick={event => { event.stopPropagation(); onToggleChildren?.() }}>{childrenExpanded ? '▾' : '▸'}</button> : <span className="w-4 shrink-0" aria-hidden="true" />}
           <button
+            disabled={!propertiesAvailable} aria-label={`${expanded ? 'Collapse' : 'Expand'} properties of ${layer.name}`}
+            title={expanded ? 'Collapse properties' : 'Expand properties'} aria-expanded={expanded}
             onClick={(e) => { e.stopPropagation(); onToggleExpand() }}
             className="w-4 text-xs text-gray-500 hover:text-gray-300"
           >{expanded ? '▾' : '▸'}</button>
@@ -199,7 +219,7 @@ export default function LayerTimelineSection({
           <LayerFlag active={!!layer.solo} on="S" off="s" highlight={layer.solo ? 'text-amber-400 font-bold' : ''}
             onClick={(e) => { e.stopPropagation(); onToggleFlag('solo') }} />
           </div>
-          {layer.type === 'audio' && audioContext && <AudioClipControls layer={layer}
+          {layer.type === 'audio' && audioContext && !contextOnly && <AudioClipControls layer={layer}
             onPatch={patch => audioContext.editor.dispatchCommand(makePatchAudioClipCmd(layer.id, patch, { timelineId: audioContext.timelineId }))}
             gain={audioGainAtPlayhead(layer, audioTracks, currentTimeMs)}
             onGainCommit={gain => audioContext.editor.dispatchCommand(audioTimelineId
@@ -212,9 +232,9 @@ export default function LayerTimelineSection({
         {/* Right: layer activity bar (draggable) */}
         <div
           className="flex-1 relative"
-          onContextMenu={onLayerBarContextMenu && ((e) => onLayerBarContextMenu(layer.id, e))}
+          onContextMenu={!contextOnly && onLayerBarContextMenu ? (e) => onLayerBarContextMenu(layer.id, e) : undefined}
         >
-          {layer.type === 'audio' && audioContext ? <AudioClipTimeline layer={layer} context={audioContext}
+          {contextOnly ? <span className="px-2 text-[10px] text-gray-500">Hierarchy context · outside this timeline</span> : layer.type === 'audio' && audioContext ? <AudioClipTimeline layer={layer} context={audioContext}
             audioUrl={audioUrl} durationMs={durationMs} visibleStartMs={visibleStartMs} visibleEndMs={visibleEndMs}
             msToScreenPx={msToScreenPx} onSelect={onSelectLayer} tracks={audioTracks}
             selectedKfIds={selectedKfIds} previewMs={previewMs} onSelectKf={onSelectKf}

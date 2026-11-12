@@ -20,9 +20,9 @@ export function registerTimelineActions(reg: ActionRegistry): void {
     id: 'timeline.create',
     toolName: 'create_timeline',
     description:
-      'Create an empty animation timeline with an explicit unique id and duration. ' +
-      'Existing ids fail. Use update_timeline to change settings or clone_timeline ' +
-      'to copy animation. Unlike add_keyframes, set_keyframes requires an existing timeline.',
+      'Create an animation timeline with an explicit id and duration. Reference ' +
+      'this id when adding keys. Legacy add_keyframes can auto-create a missing ' +
+      'timeline; create explicitly when its playback or loop settings matter.',
     parameters: {
       type: 'object',
       required: ['id', 'durationMs'],

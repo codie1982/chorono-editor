@@ -3,6 +3,8 @@ import {assetSourcePool} from '../../asset/sources'
 import {BoundedJobQueue} from '../../resources/jobs'
 import {OutputResources,editorOutputResources} from '../../export/resources'
 import {OwnedSceneFileWrite,type SceneWritable} from './OwnedSceneFileWrite'
+import type { HistoryState } from '../history'
+import { historyAssets } from '../session/SessionProject'
 
 /** One selected-folder writer. Its FIFO serializes current/snapshot file writes
  * (1 active,2 waiting), while all actual IO also enters the shared output queue.
@@ -16,11 +18,11 @@ export class SceneFileWriter{
   constructor(private readonly resources:OutputResources=editorOutputResources){}
   /** Submit a file operation. open is invoked only after text/native-work policy
    * admission, so quota rejection cannot truncate/create the target file. */
-  write(scene:ChronoScene,open:()=>Promise<SceneWritable>,signal?:AbortSignal):Promise<void>{
-    return assetSourcePool.withAssets(scene.assets,()=>this.queue.submit(async local=>{
+  write(scene:ChronoScene,open:()=>Promise<SceneWritable>,signal?:AbortSignal,session?:{sessionId:string;history:HistoryState}):Promise<void>{
+    return assetSourcePool.withAssets(session?historyAssets(session.history):scene.assets,()=>this.queue.submit(async local=>{
       const result=await this.resources.run(async(scope,native)=>{
         const operation=scope.own(4096,()=>new OwnedSceneFileWrite(this.resources),value=>value.dispose())
-        await operation.value.write(scene,open,native)
+        await operation.value.write(scene,open,native,session)
       },{signal:local})
       result.release()
     },{signal}))

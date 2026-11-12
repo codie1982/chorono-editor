@@ -6,6 +6,7 @@ interface ViewMenuProps {
   showRulers:    boolean; onToggleRulers:    () => void
   gridInFront:   boolean; onToggleGridFront: () => void
   showGuides:    boolean; onToggleGuides:    () => void
+  showMeasurements?: boolean; onToggleMeasurements?: () => void
 }
 
 export function ViewMenu(p: ViewMenuProps) {
@@ -25,6 +26,7 @@ export function ViewMenu(p: ViewMenuProps) {
     { label: 'Show guides',          value: p.showGuides,  onToggle: p.onToggleGuides,    kbd: 'Alt + L' },
     { label: 'Grid on top of layers',value: p.gridInFront, onToggle: p.onToggleGridFront },
   ]
+  if (p.onToggleMeasurements) rows.push({ label: 'Show selection gaps', value: !!p.showMeasurements, onToggle: p.onToggleMeasurements })
 
   return (
     <div ref={ref} className="relative">

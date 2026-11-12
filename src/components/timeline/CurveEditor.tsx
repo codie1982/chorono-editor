@@ -1,13 +1,19 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { BulkEditPolicyControl } from './authoring/BulkEditPolicyControl'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
-import type { ChronoScene, Track, Layer, Keyframe } from '@/lib/types'
+import type { ChronoScene, Track, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
-  pickTrackColor, unionValueRange, buildCurvePath,
+  pickTrackColor, buildCurvePath,
   buildCurvePathSegments, hasNonConstantOutOfRange,
   msToX, valueToY, pickTimeTickMs, pickValueTick, formatTickValue,
   type CurveViewport, type ValueRange,
 } from '@/lib/timeline/curveMath'
+import TrackBakeDialog from './baking/TrackBakeDialog'
+import { curveSignalPreview } from '@/lib/timeline/curveSignalPreview'
 import { useCurveDrag } from './hooks/useCurveDrag'
 import { useBezierHandleDrag } from './hooks/useBezierHandleDrag'
 import { insertCurveKeyframe, makeReplaceCurveKeysCmd, makeCurveKeyframeChangesCmd } from '@/lib/timeline/curveEditing'
@@ -19,6 +25,8 @@ import {
 import { updateKfTimeMs, updateKfEasing } from '@/lib/timeline/keyframeOps'
 import type { TangentMode } from '@/lib/types'
 import { nextKfId } from '@/lib/defaults'
+import { buildTimelineLayerRows } from '@/lib/timeline/hierarchy/timelineLayerRows'
+import { parseTrackTarget } from '@/lib/timeline/TrackTargetParser'
 import { isScalarNumericTrack } from '@/lib/animation/typedValues'
 import ContextMenu, { useContextMenu, type MenuItem } from '@/components/ui/ContextMenu'
 import type { EasingType } from '@/lib/types'
@@ -30,6 +38,9 @@ interface Props {
   scene:              ChronoScene
   editor:             EditorStateReturn
   selectedLayerId:    string | null
+  collisionPolicy?: KeyCollisionPolicy
+  onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
+  selectedLayerIds?:  ReadonlySet<string>
   selectedTimelineId: string | null
   currentTimeMs:      number
   onTimeChange:       (ms: number) => void
@@ -45,7 +56,7 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
 /**
  * 3ds Max / After Effects-style curve editor.
  *
- * Shows every animated property of the selected layer as a colour-coded
+ * Shows numeric properties of the union of selected layer subtrees as a colour-coded
  * curve on a shared time × value plot. Click anywhere on the plot to seek;
  * drag a keyframe node to retime (X) or revalue (Y) it in real time. Bezier
  * tangent handles edit custom easing directly. Built-in easing types
@@ -56,9 +67,12 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
  * have a meaningful value axis. Add a key in the timeline panel first.
  */
 export default function CurveEditor({
-  scene, editor, selectedLayerId, selectedTimelineId,
-  currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes,
+  scene, editor, selectedLayerId, selectedLayerIds, selectedTimelineId,
+  currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes, collisionPolicy, onCollisionPolicyChange,
 }: Props) {
+  const [localPolicy, setLocalPolicy] = useState<KeyCollisionPolicy>('reject')
+  const bulkPolicy = collisionPolicy ?? localPolicy
+  const setBulkPolicy = onCollisionPolicyChange ?? setLocalPolicy
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef       = useRef<SVGSVGElement>(null)
   /** Live ResizeObserver — held across re-renders so a single observer
@@ -69,25 +83,16 @@ export default function CurveEditor({
   const layer    = scene.layers.find((l) => l.id === selectedLayerId) ?? null
   const duration = timeline?.durationMs ?? scene.composition.durationMs
 
-  // ── Track set: every numeric track on the selected layer ─────────────────
-  //
-  // TODO(big-feature): "Show in Curve Editor" pin set.
-  //   Today the Curve Editor's track set is implicit from the selected
-  //   layer. A v2 model would let the user PIN specific tracks across any
-  //   layers (a `visiblePropertyIds` set in editor state), so they can
-  //   tune e.g. "Logo.opacity + Card.x" together without changing selection.
-  //   Implementation: lift the visible-track set out of this component
-  //   into useEditorState / useTrackViewState; replace the layer-driven
-  //   `tracks` filter with a Set-driven lookup.
+  // Shared eligibility and union of selected source branches, not just primary.
   const tracks: Track[] = useMemo(() => {
-    if (!timeline || !layer) return []
-    const prefix = `layers.${layer.id}.`
-    return timeline.tracks.filter((t) =>
-      t.target.startsWith(prefix) &&
-      t.keyframes.length > 0 &&
-      isScalarNumericTrack(t),
-    )
-  }, [timeline, layer])
+    if (!timeline) return []
+    return buildTimelineLayerRows(scene.layers, timeline, { selectedOnly: true,
+      selectedId: selectedLayerId, selectedIds: selectedLayerIds }).rows
+      .flatMap(row => row.tracks).filter(track => (track.keyframes.length > 0 || track.controller && track.controller.type !== 'keyframe') && isScalarNumericTrack(track))
+  }, [timeline, scene.layers, selectedLayerId, selectedLayerIds])
+  const layerNames = useMemo(() => new Map(scene.layers.map(item => [item.id, item.name])), [scene.layers])
+
+  const multipleOwners = useMemo(() => new Set(tracks.map(track => parseTrackTarget(track.target)?.entityId)).size > 1, [tracks])
 
   // ── Per-track visibility toggle (3ds Max-style: click curve name to hide) ─
   const [hidden, setHidden] = useState<Set<string>>(new Set())
@@ -106,22 +111,8 @@ export default function CurveEditor({
   // become visually comparable at the same height.
   const [normalizeMode, setNormalizeMode] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [bakeTarget, setBakeTarget] = useState<string | null>(null)
   const [frozenRanges, setFrozenRanges] = useState<{ range: ValueRange; tracks: Map<string, ValueRange>; normalized: boolean } | null>(null)
-
-  const perTrackRanges = useMemo((): Map<string, ValueRange> => {
-    const m = new Map<string, ValueRange>()
-    for (const t of visibleTracks) {
-      const vals = t.keyframes
-        .map((k) => k.value)
-        .filter((v): v is number => typeof v === 'number')
-      if (vals.length === 0) { m.set(t.target, { min: -1, max: 1 }); continue }
-      const lo = Math.min(...vals)
-      const hi = Math.max(...vals)
-      const pad = (hi - lo) * 0.1 || 0.5
-      m.set(t.target, { min: lo - pad, max: hi + pad })
-    }
-    return m
-  }, [visibleTracks])
 
   // ── Hover state — shows kf metadata in the status bar ────────────────────
   const [hoveredKf, setHoveredKf] = useState<{
@@ -176,9 +167,11 @@ export default function CurveEditor({
     setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null)
   }, [duration])
 
+  const signalPreview = useMemo(() => curveSignalPreview(visibleTracks, viewStartMs, viewEndMs), [visibleTracks, viewStartMs, viewEndMs])
+  const perTrackRanges = signalPreview.ranges
   const range: ValueRange = useMemo(
-    () => frozenRanges?.range ?? valueRangeOverride ?? unionValueRange(visibleTracks) ?? { min: -1, max: 1 },
-    [frozenRanges, valueRangeOverride, visibleTracks],
+    () => frozenRanges?.range ?? valueRangeOverride ?? signalPreview.range,
+    [frozenRanges, valueRangeOverride, signalPreview],
   )
 
   const plotW = Math.max(1, size.w - LEFT_GUTTER - 8)
@@ -421,7 +414,7 @@ export default function CurveEditor({
   }
   const releaseRanges = () => setFrozenRanges(null)
   const drag = useCurveDrag({
-    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal,
+    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal, collisionPolicy: bulkPolicy,
     onDragStart: freezeRanges, onDragEnd: releaseRanges, onWarning: setNotice,
   })
   const bezierDrag = useBezierHandleDrag({
@@ -436,7 +429,7 @@ export default function CurveEditor({
   useEffect(() => {
     drag.cancel()
     bezierDrag.cancel()
-  }, [selectedTimelineId, selectedLayerId, drag.cancel, bezierDrag.cancel])
+  }, [selectedTimelineId, selectedLayerId, selectedLayerIds, drag.cancel, bezierDrag.cancel])
 
   // ── Plot drag — three modes selected by modifier at pointerdown ──────────
   //
@@ -593,14 +586,14 @@ export default function CurveEditor({
   const valueTicks = niceTickArray(range.min,  range.max,  valueTick)
 
   // ── Empty states ──────────────────────────────────────────────────────────
-  if (!layer) return (
+  if (!layer && !selectedLayerIds?.size) return (
     <Empty msg="Select a layer to inspect its animation curves." />
   )
   if (!timeline) return (
     <Empty msg="No timeline selected." />
   )
   if (tracks.length === 0) return (
-    <Empty msg={`"${layer.name}" has no animated numeric properties yet.`} />
+    <Empty msg={`"${layer?.name ?? 'Selection'}" has no animated numeric properties yet.`} />
   )
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -621,6 +614,7 @@ export default function CurveEditor({
 
         {/* ── Row 1: toolbar + curve legend ──────────────────────────── */}
         <div className="flex items-center gap-1 px-2 py-1 flex-wrap">
+          <DocumentationHelp topic="editor/timeline/curves" compact />
           <ToolbarBtn
             title="Fit all curves to view (A)"
             onClick={() => { setViewStartMs(0); setViewEndMs(duration); setValueRangeOverride(null) }}
@@ -647,6 +641,7 @@ export default function CurveEditor({
             disabled={visibleTracks.length === 0}
           >All</ToolbarBtn>
 
+          <BulkEditPolicyControl policy={bulkPolicy} onChange={setBulkPolicy} />
           <span className="w-px h-4 bg-gray-700 mx-1.5 shrink-0" />
 
           <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mr-1 shrink-0">
@@ -656,15 +651,16 @@ export default function CurveEditor({
             const color = pickTrackColor(t.target, i)
             const isHidden = hidden.has(t.target)
             const isIso    = isolatedTrack === t.target
-            const label = t.target.replace(`layers.${layer.id}.`, '')
+            const owner = parseTrackTarget(t.target)
+            const label = owner ? multipleOwners ? `${layerNames.get(owner.entityId) ?? owner.entityId} · ${owner.propertyPath}` : owner.propertyPath : t.target
             // BL-45: OOR badge — shown only if before/after has any non-constant mode
             const oor = t.outOfRange
             const oorBefore = oor?.before ?? 'constant'
             const oorAfter  = oor?.after  ?? 'constant'
             const hasOor = oorBefore !== 'constant' || oorAfter !== 'constant'
             return (
+              <span key={t.target} className="inline-flex items-center shrink-0">
               <button
-                key={t.target}
                 onClick={(e) => {
                   // Shift+click → toggle isolation (BL-40); plain click → hide/show.
                   if (e.shiftKey) {
@@ -687,6 +683,7 @@ export default function CurveEditor({
               >
                 <span style={{ color }}>■</span>
                 <span className="ml-1 text-gray-300">{label}</span>
+                {t.controller && t.controller.type !== 'keyframe' && <span className="ml-1 text-sky-300">{t.controller.type}</span>}
                 {isIso && <span className="ml-1 text-blue-400 text-[8px]">SOLO</span>}
                 {hasOor && (
                   <span
@@ -699,6 +696,9 @@ export default function CurveEditor({
                   </span>
                 )}
               </button>
+              <button onClick={() => setBakeTarget(t.target)} aria-label={`Bake ${label}`} title="Preview and convert this signal to editable keys"
+                disabled={editor.isTransactionActive?.()} className="px-1 text-[10px] text-amber-300 rounded hover:bg-gray-800 focus-visible:outline disabled:opacity-40">Bake…</button>
+              </span>
             )
           })}
         </div>
@@ -894,7 +894,7 @@ export default function CurveEditor({
               }
             }
             return (
-              <g key={t.target}>
+              <g key={t.target} data-curve-target={t.target}>
                 <path
                   d={d}
                   fill="none" stroke="transparent"
@@ -1116,6 +1116,9 @@ export default function CurveEditor({
                     />
                   )}
                   <circle
+                    data-curve-key-id={kf.id}
+                    data-curve-key-target={t.target}
+                    data-curve-key-selected={isSelected ? 'true' : 'false'}
                     cx={cx} cy={cy}
                     r={isSelected ? 5 : 4}
                     fill={isSelected ? '#fff' : color}
@@ -1196,6 +1199,9 @@ export default function CurveEditor({
       </svg>
       </div>
 
+      {bakeTarget && <TrackBakeDialog key={`${timeline.id}:${bakeTarget}`} scene={scene} editor={editor} timelineId={timeline.id} target={bakeTarget} onClose={() => setBakeTarget(null)} />}
+      {!!signalPreview.diagnostics.size && <p role="status" className="text-[10px] text-red-300 px-2">{Array.from(signalPreview.diagnostics.values()).slice(0, 3).join(' ')}</p>}
+
       {/* Inline value-edit input (kf double-click) ─────────────────────────
           Positioned absolutely over the SVG using the kf's pixel coords.
           Auto-focuses on open; commits on Enter / blur, cancels on Esc. */}
@@ -1218,9 +1224,8 @@ export default function CurveEditor({
           setEditingKf(null)
         }
         return (
-          <input
+          <CalculationNumberInput aria-label="editing Kf draft"
             autoFocus
-            type="number"
             value={editingKf.draft}
             onChange={(e) => setEditingKf({ ...editingKf, draft: e.target.value })}
             onBlur={commit}
@@ -1237,8 +1242,7 @@ export default function CurveEditor({
               left: LEFT_GUTTER + editingKf.xPx - 40,
               top: (svgRef.current && containerRef.current
                 ? svgRef.current.getBoundingClientRect().top - containerRef.current.getBoundingClientRect().top : 0) + TOP_GUTTER + editingKf.yPx - 24,
-            }}
-          />
+            }} onCalculate={calculated => setEditingKf({ ...editingKf, draft: String(calculated) })} />
         )
       })()}
 
@@ -1341,8 +1345,8 @@ export default function CurveEditor({
               if (selectedKfIds.has(k.id)) refs.push({ kfId: k.id, target: tr.target, timelineId: selectedTimelineId! })
             }
           }
-          const cmd = makeMirrorTimingCmd(scene, refs)
-          if (cmd) editor.dispatchCommand(cmd)
+          const cmd = makeMirrorTimingCmd(scene, refs, { collisionPolicy: bulkPolicy })
+          if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         } : undefined,
         reverseValues: selectedKfIds.size > 1 ? () => {
           const refs: KfValueRef[] = []
@@ -1352,7 +1356,7 @@ export default function CurveEditor({
             }
           }
           const cmd = makeReverseValuesCmd(scene, refs)
-          if (cmd) editor.dispatchCommand(cmd)
+          if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         } : undefined,
         setTangentMode: (k, mode) => {
           const prev = k.tangentMode
@@ -1392,7 +1396,7 @@ export default function CurveEditor({
           const kfB = sorted[idx + 1]
           if (!kfB) return
           const cmd = makeFlattenSegmentCmd(scene, tl.id, ctxData.trackTarget, seg.id, kfB.id)
-          if (cmd) editor.dispatchCommand(cmd)
+          if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         },
       })
     }
@@ -1433,8 +1437,9 @@ function formatTimeMs(ms: number): string {
 
 function Empty({ msg }: { msg: string }) {
   return (
-    <div className="flex items-center justify-center h-full text-xs text-gray-500 bg-gray-950">
+    <div className="flex flex-col gap-2 items-center justify-center h-full text-xs text-gray-500 bg-gray-950">
       {msg}
+      <DocumentationHelp topic="editor/timeline/curves" />
     </div>
   )
 }

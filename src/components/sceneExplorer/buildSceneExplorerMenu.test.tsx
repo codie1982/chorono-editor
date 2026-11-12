@@ -38,6 +38,6 @@ describe('Scene Explorer subtree menu', () => {
     const expand = branch.items.find(item => item.kind === 'action' && item.label === 'Expand subtree')
     if (expand?.kind === 'action') expand.onSelect()
     expect(input.handlers.expandSubtrees).toHaveBeenCalledWith(['parent'])
-    expect(branch.items.filter(item => item.kind === 'action' && item.disabled)).toHaveLength(2)
+    expect(branch.items.filter(item => item.kind === 'action' && item.disabled)).toHaveLength(8)
   })
 })

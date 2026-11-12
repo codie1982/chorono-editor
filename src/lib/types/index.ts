@@ -160,3 +160,6 @@ export type {
   ParticleRenderingConfig,
   ParticleChannels,
 } from '../particles/types'
+
+// Optional editor-only source attribution; runtime outputs omit this ledger.
+export type { AuthoringActor, AuthoringStamp, AuthoringAddress, AuthoringRecord, SceneAuthoring } from './authoring'

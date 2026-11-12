@@ -1,8 +1,8 @@
 # MCP tool contracts and definition quality
 
 Chorono's MCP catalog describes the existing local editor operations. Its tool
-names, accepted inputs and execution behavior are unchanged by the November 2026
-description improvements. Glama TDQS evaluates the definitions, not animation
+definitions include the November metadata improvements and the newer 2.1
+fresh-read and typed-animation contracts. Historical tool names remain callable. Glama TDQS evaluates the definitions, not animation
 quality, runtime correctness or security. A new score requires a new Glama build
 and evaluation; improved documentation alone is not a measured score increase.
 
@@ -31,9 +31,14 @@ require a paired browser. Scene operations require the running editor and a tab
 explicitly connected with **MCP → Connect this editor**. With multiple tabs,
 choose `sessionId` from `list_sessions`; one connected tab can be selected implicitly.
 
-`expectedRevision` is a scene guard for authored mutations, scripts/plans,
-undo/redo, project load/save and audio rendering (`render_audio_preview` and
-`export_audio`). It is not enforced for other read-only tools, playback/runtime
+`expectedRevision` and a one-use `readToken` from `get_scene` are mandatory
+for authored mutations, scripts/plans, undo/redo and project loading. A token
+expires after five minutes and is scoped to the client, editor, document and
+revision. A dry run returns a new plan-bound token for `apply_script_plan`;
+authorize only the outer `batch_actions` call. Never put access tokens in scene
+JSON or diagnostic logs. Project saving and audio rendering
+(`render_audio_preview`, `export_audio`) check a supplied revision without
+requiring a source-write token. It is not enforced for other read-only tools, playback/runtime
 controls or visual/runtime exports. Export `revision` identifies the captured scene.
 On a conflict, read the scene again and prepare new arguments for a fresh edit.
 
@@ -55,18 +60,19 @@ earlier live value changed. Use `get_runtime` to inspect that state.
 | --- | --- | --- |
 | Full scene records and concurrency revision | `get_scene` | `describe_layer` is a summary, not a full nested Layer record |
 | Flat layer properties with a chosen id | `add_layer`, `update_layer` | `create_object`/`patch_object` use model-shaped nested data |
-| Model-valued keys and custom Bézier easing | `set_keyframes` | `add_keyframes` keeps its legacy numeric input schema |
+| Model-valued keys and custom Bézier easing | `set_keyframes` | `add_keyframes` keeps full-target addressing and its easeInOut insertion default |
 | Append a numeric signal modifier | `add_modifier` | `update_track` replaces arrays; `bake_track` replaces the authored stack with sampled keys |
 | Live interactive values/events | `control_runtime` | `edit_entity` changes authored defaults/records |
 | Pixel inspection | `render_preview` | `evaluate_frame` returns values, not an image |
 | Editable portable source | `save_project` | Runtime JSON, SVG and PNG sequence are delivery formats |
 
-Nested objects in `patch_object` replace existing nested objects. On this version,
-`configure_particles` merges its top level and the first level of `emitter` and
-`particle`; deeper objects/arrays replace existing values. Read full settings
+Nested objects in `patch_object` replace existing nested objects. `configure_particles` recursively merges objects; arrays and scalars replace.
+`patch_object` stays shallow; use `Layer.patch` for an explicit recursive patch. Read full settings
 before supplying those replacements. Modifier sine `frequency` counts cycles
 over the normalized track/segment evaluation range; it is not a hertz value.
-Baking defaults to 60 FPS and a normalized RDP tolerance of 0.005.
+Numeric track baking defaults to 60 FPS and normalized vertical sample-error
+tolerance 0.005. The limit is 240 FPS / 20,000 samples. Optional local-ms windows
+preserve outside keys; procedural signal fields are removed globally.
 
 ## Results and files
 
@@ -101,7 +107,7 @@ Run these as MCP tool calls against an explicitly selected connected editor:
 {"name":"get_scene","arguments":{"sessionId":"<connected-editor-id>"}}
 ```
 
-Use that response's `revision` and a unique request token for the new mutation:
+Use that response's `revision`, one-use `readToken` and a unique retry token for the new mutation:
 
 ```json
 {
@@ -109,6 +115,7 @@ Use that response's `revision` and a unique request token for the new mutation:
   "arguments": {
     "sessionId": "<connected-editor-id>",
     "expectedRevision": 0,
+    "readToken": "<64-hex-token-from-get_scene>",
     "requestId": "create-hero-001",
     "kind": "circle",
     "patch": {"name":"Hero","opacity":0.8}
@@ -116,7 +123,7 @@ Use that response's `revision` and a unique request token for the new mutation:
 }
 ```
 
-Replace `0` with the actual revision, use the returned `addedLayerIds` for later
+Replace the revision and token with the actual response values, use the returned `addedLayerIds` for later
 edits, inspect PNG previews and validate before `save_project`.
 
 ## Verification and re-evaluation
@@ -127,8 +134,9 @@ ownership, revision/retry semantics and history behavior. Also inspect the actua
 STDIO `tools/list` response: native UI metadata alone is not the published catalog.
 
 When changing documentation, compare the full catalog before/after while excluding
-`description`/`examples`. Tool names, validation keywords and annotations should
-remain identical unless an intentional contract change is documented separately.
+`description`/`examples`. Metadata-only changes must preserve validation. Source authorization fields,
+preferred aliases and typed values intentionally extend the earlier catalog;
+see the source-editing capabilities and canonical skill for their contracts.
 
 After the reviewed commit is merged, pin that commit in the free Glama Docker
 configuration, run its build/introspection checks, publish a release and wait for

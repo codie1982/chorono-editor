@@ -1,4 +1,7 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { layerHelpTopic } from '@/components/help/documentation'
 import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
 import { useMemo, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
@@ -10,13 +13,26 @@ import { buildLegacyLayerRows } from '@/lib/sceneExplorer/legacyLayerRows'
 import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
 import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
+import { useSelectedLayerReveal } from '@/components/layerHierarchy/useSelectedLayerReveal'
+import { LayerFocusControls } from '@/components/layerHierarchy/LayerFocusControls'
 
 interface Props {
+  /** Explicit navigation; ordinary selection never requests a Timeline reveal. */
+  onShowInTimeline?: () => void
+  onIsolateSelection?: () => void
+  onExitIsolation?: () => void
+  isolationActive?: boolean
   layers: Layer[]
   selectedId: string | null
   selectedIds: Set<string>
   onSelect: (id: string, shiftHeld: boolean) => void
-  onAdd: (kind: string) => void
+  /** Add/activate a registry item. Return true to keep this palette open for a
+   * persistent tool (including toggling that tool off); void/false closes it.
+   * The owner decides capability and source mutation, so this UI never creates
+   * a second factory or duplicates the native-shape eligibility rules. */
+  onAdd: (kind: string) => boolean | void
+  /** Active persistent native creation tool. Selecting its item again exits. */
+  activeAddKind?: string | null
   /** Native media pickers borrow the initiating document identity. */
   getDocumentSignal?: () => AbortSignal
   onAddImage: (file: File) => void
@@ -49,11 +65,12 @@ type DropZone = 'before' | 'after' | 'into'
 interface DropTargetState { id: string; zone: DropZone }
 
 export default function LayerPanel({
-  layers, selectedId, selectedIds, onSelect, onAdd,
+  layers, selectedId, selectedIds, onSelect, onAdd, activeAddKind,
   onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate,
+  onShowInTimeline, onIsolateSelection, onExitIsolation, isolationActive = false,
 }: Props) {
   // ── Right-click context menu — layer rows ────────────────────────────────
   const ctxMenu = useContextMenu()
@@ -95,6 +112,8 @@ export default function LayerPanel({
   const rowKeys = useMemo(() => rows.map(row => row.layer.id), [rows])
   const listRef = useRef<HTMLUListElement>(null)
   const windowed = useRowWindow(layout, rowKeys, listRef)
+  useSelectedLayerReveal({ layers, selectedId, selectedIds, setCollapsedIds: setCollapsedGroups,
+    rowKeys, reveal: windowed.reveal, viewportHeight: windowed.viewport.height })
   const toggleCollapsed = (id: string) => setCollapsedGroups(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
@@ -106,21 +125,26 @@ export default function LayerPanel({
     openDocumentFilePicker({ accept, getDocumentSignal, onFiles: files => handler(files[0]) })
   }
 
+  /** Media pickers close immediately; persistent native tools keep their
+   * palette available for the next shape or direct same-item toggle. */
   const handleAddItem = (type: string) => {
-    setMenuOpen(false)
     switch (type) {
       case 'image':
+        setMenuOpen(false)
         return pickFile('image/*', onAddImage)
       case 'video':
+        setMenuOpen(false)
         return pickFile('video/*', onAddVideo)
       case 'audio':
+        setMenuOpen(false)
         return pickFile('audio/*', onAddAudio)
       case 'svgImport':
+        setMenuOpen(false)
         return pickFile('.svg,image/svg+xml', file => onImportSvg?.(file))
       default:
         // All shape kinds, text, pathStroke, bezierPath, pathStroke —
         // registry-driven via page.tsx addLayer().
-        return onAdd(type)
+        setMenuOpen(onAdd(type) === true)
     }
   }
 
@@ -225,9 +249,13 @@ export default function LayerPanel({
   return (
     <aside className="flex flex-col h-full w-full bg-gray-900 border-r border-gray-700 select-none">
       {/* ── Header ── */}
-      <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between gap-1">
+      <div className="px-3 py-2 border-b border-gray-700 flex flex-wrap items-center justify-between gap-1">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layers</span>
         <div className="flex items-center gap-1">
+          <DocumentationHelp topic={layerHelpTopic(menuOpen, activeCategory)} compact />
+          <LayerFocusControls selected={!!selectedId || selectedIds.size > 0}
+            canIsolate={layers.some(layer => layer.type !== 'audio' && (selectedIds.has(layer.id) || !selectedIds.size && layer.id === selectedId))}
+            isolated={isolationActive} onTimeline={onShowInTimeline} onIsolate={onIsolateSelection} onExit={onExitIsolation} />
           {/* Group / Ungroup buttons now live in the top toolbar so the panel
               header stays clean. Cmd+G / Cmd+Shift+G shortcuts still work. */}
           <button
@@ -266,7 +294,8 @@ export default function LayerPanel({
               <button
                 key={item.type}
                 onClick={() => item.available && handleAddItem(item.type)}
-                className={`ch-layer-btn ${!item.available ? 'ch-layer-btn--soon' : ''}`}
+                className={`ch-layer-btn ${!item.available ? 'ch-layer-btn--soon' : ''} ${activeAddKind === item.type ? 'ring-1 ring-blue-400 bg-blue-900/40' : ''}`}
+                aria-pressed={item.available ? activeAddKind === item.type : undefined}
                 title={item.available ? `Add ${item.label}` : `${item.label} — coming soon`}
               >
                 <ChoronoIcon name={item.icon} size={20} />
@@ -586,12 +615,10 @@ function StaggerPicker({ count, onApply }: { count: number; onApply: (presetId: 
         Stagger ({count} layers)
       </div>
       <div className="flex items-center gap-1.5">
-        <input
-          type="number" value={stepMs} min={0} step={10}
+        <CalculationNumberInput aria-label="step Ms" value={stepMs} min={0} step={10}
           onChange={(e) => setStepMs(Number(e.target.value))}
           className="w-14 bg-gray-800 border border-gray-600 rounded px-1.5 py-0.5 text-[11px] text-gray-200
-                     [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-        />
+                     [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => setStepMs(calculated)} />
         <span className="text-[10px] text-gray-500">ms / layer</span>
       </div>
       <select

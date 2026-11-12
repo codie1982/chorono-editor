@@ -1,4 +1,6 @@
 'use client'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── SelectionPanel (BL-60) ────────────────────────────────────────────────────
 // Dock panel for the Smart Selection Engine. Two tabs:
 //   1. Select Similar      — find layers matching a reference's properties
@@ -48,6 +50,7 @@ export default function SelectionPanel({
         <TabButton active={tab === 'byTransform'}
           onClick={() => setTab('byTransform')}
           label="Select By Transform" />
+        <DocumentationHelp topic="editor/canvas/selection" compact />
       </div>
 
       {tab === 'similar' ? (
@@ -424,21 +427,17 @@ function NumericRuleValues({
       >
         {NUMERIC_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
       </select>
-      <input
-        type="number"
+      <CalculationNumberInput aria-label="rule value"
         value={rule.value}
         onChange={(e) => onChange({ value: Number(e.target.value) })}
-        className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 font-mono outline-none text-right"
-      />
+        className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 font-mono outline-none text-right" onCalculate={calculated => onChange({ value: calculated })} />
       {showValue2 && (
         <>
           <span className="text-[9px] text-gray-500">{rule.operator === 'between' ? '…' : '±'}</span>
-          <input
-            type="number"
+          <CalculationNumberInput aria-label="rule value2 0"
             value={rule.value2 ?? 0}
             onChange={(e) => onChange({ value2: Number(e.target.value) })}
-            className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 font-mono outline-none text-right"
-          />
+            className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-gray-100 font-mono outline-none text-right" onCalculate={calculated => onChange({ value2: calculated })} />
         </>
       )}
     </>
@@ -516,16 +515,14 @@ function MatchToggleWithTolerance({
       />
       <span className={`flex-1 ${checked ? 'text-gray-200' : 'text-gray-500'}`}>{label}</span>
       <span className="text-[9px] text-gray-500">{unit}</span>
-      <input
-        type="number"
+      <CalculationNumberInput aria-label="tolerance"
         value={tolerance}
         step={step}
         min={min}
         max={max}
         disabled={!checked}
         onChange={(e) => onToleranceChange(Number(e.target.value))}
-        className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none disabled:opacity-30 font-mono text-right"
-      />
+        className="w-16 bg-gray-900 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] text-gray-100 outline-none disabled:opacity-30 font-mono text-right" onCalculate={calculated => onToleranceChange(calculated)} />
     </div>
   )
 }

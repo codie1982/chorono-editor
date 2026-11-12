@@ -6,6 +6,7 @@
 // Each builder returns ONE PropertyGroup that LayerDefinition can splice
 // into its own getPropertyGroups() result.
 
+import { BLEND_MODES } from '../../render/compositionModes'
 import type { Layer } from '@/lib/types'
 import type { PropertyGroup, PropertySchema } from '../PropertySchema'
 
@@ -31,14 +32,7 @@ export const appearanceGroup = (): PropertyGroup => ({
   schemas: [
     { id: 'opacity',   path: 'opacity',   group: 'Appearance', label: 'Opacity',    valueType: 'percent', animatable: true,  defaultValue: 1, min: 0, max: 1, step: 0.01 },
     { id: 'blendMode', path: 'blendMode', group: 'Appearance', label: 'Blend Mode', valueType: 'select',  animatable: false, defaultValue: 'source-over',
-      options: [
-        { value: 'source-over', label: 'Normal'      },
-        { value: 'multiply',    label: 'Multiply'    },
-        { value: 'screen',      label: 'Screen'      },
-        { value: 'overlay',     label: 'Overlay'     },
-        { value: 'darken',      label: 'Darken'      },
-        { value: 'lighten',     label: 'Lighten'     },
-      ],
+      options: BLEND_MODES.map(([value,label]) => ({value,label})),
     },
   ],
 })

@@ -4,6 +4,7 @@ import type { ChronoScene, Keyframe } from '@/lib/types'
 import { nextKfId } from '@/lib/defaults'
 import { makePasteKfCmd, type KfInsertion } from '@/lib/editor/commands-keyframe'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
+import type { KeyCollisionPolicy } from '@/lib/timeline/authoring/keyframeBatch'
 import { collectKeyframeClipboard } from '@/lib/timeline/keyframeClipboard'
 
 interface ClipboardEntry {
@@ -20,6 +21,8 @@ interface Params {
   selectedTimelineId: string | null
   /** Paste anchor */
   currentTimeMs: number
+  collisionPolicy?: KeyCollisionPolicy
+  onError?: (message: string) => void
   dispatchCommand: (cmd: EditorCommand) => void
 }
 
@@ -60,11 +63,12 @@ export function useKeyframeClipboard(params: Params): ClipboardReturn {
     for (const entry of entries) {
       const destTimelineId = selectedTimelineId ?? entry.timelineId
       const tl = scene.timelines.find((t) => t.id === destTimelineId)
-      if (!tl || !tl.tracks.some((t) => t.target === entry.target)) continue
+      if (!tl || !tl.tracks.some((t) => t.target === entry.target)) { paramsRef.current.onError?.('A copied track is missing in the destination timeline. Nothing was pasted.'); return new Set() }
 
       const newId = nextKfId()
       newIds.add(newId)
       insertions.push({
+        copiedFrom: ['key', entry.timelineId, entry.target, entry.kf.id],
         timelineId: destTimelineId,
         target:     entry.target,
         kf: { ...entry.kf, id: newId, timeMs: currentTimeMs + entry.relativeMs },
@@ -72,8 +76,8 @@ export function useKeyframeClipboard(params: Params): ClipboardReturn {
     }
 
     if (insertions.length === 0) return new Set()
-    dispatchCommand(makePasteKfCmd(insertions))
-    return newIds
+    try { dispatchCommand(makePasteKfCmd(insertions, { collisionPolicy: paramsRef.current.collisionPolicy })); return newIds }
+    catch (error) { paramsRef.current.onError?.((error as Error).message); return new Set() }
   }, [])
 
   const hasItems = useCallback(() => clipboardRef.current.length > 0, [])

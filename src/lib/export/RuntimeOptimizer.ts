@@ -11,12 +11,13 @@
 //                                 the middle one (cubic still passes through)
 //   4. packAssets               — already lean; placeholder for future binary pack
 
+import { withoutAuthoring } from '../editor/authoring/AuthoringConverter'
 import type { ChronoScene, Layer, Track } from '../types'
 import type { RuntimeAnimation } from '../types/runtime'
 
 export class RuntimeOptimizer {
   optimize(scene: ChronoScene): RuntimeAnimation {
-    let s = scene
+    let s = withoutAuthoring(scene)
     s = this.removeEditorMetadata(s)
     s = this.normalizeKeyframes(s)
     s = this.removeRedundantKeyframes(s)
@@ -38,7 +39,7 @@ export class RuntimeOptimizer {
       ...scene,
       layers: scene.layers.map(l => {
         const {
-          locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c, internalGrid: _g,
+          locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c, internalGrid: _g, inputExpressions: _inputs,
           ...keep
         } = l
         return keep as Layer

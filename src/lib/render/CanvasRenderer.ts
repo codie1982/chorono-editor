@@ -16,7 +16,7 @@
 
 import type { ChronoScene, Layer } from '@/lib/types'
 import { buildEffectsFilter } from '@/lib/types'
-import { evaluateTimelines, getLayerValue, type OverrideMap } from '@/lib/evaluator'
+import { getLayerValue, type OverrideMap } from '@/lib/evaluator'
 import type { AssetElementMap } from '@/lib/renderer'
 import { layerRegistry, rendererRegistry } from '@/lib/registry'
 import type { RenderContext, ParamValueMap, RenderMode } from './RenderContext'
@@ -123,7 +123,7 @@ export class CanvasRenderer {
     this.paintStatistics = null
     canvasMemoryTracker.track(ctx.canvas)
     this._renderedLayerCount = 0
-    const prepared = prepareRenderFrame(scene, timeMs, options.overrides)
+    const prepared = prepareRenderFrame(scene, timeMs, options.overrides, options.paramValues)
     const { sourceScene } = prepared
     const overrides = projectFrameFontOverrides(prepared.scene, prepared.overrides, assets.fonts)
     scene = projectFrameFonts(prepared.scene,assets.fonts)
@@ -416,7 +416,7 @@ export class CanvasRenderer {
     },
   ): void {
     if (this._mbRenderingSet.size === 0) this._renderedLayerCount = 0
-    const prepared = prepareRenderFrame(scene, options.timeMs, options.overrides ?? new Map())
+    const prepared = prepareRenderFrame(scene, options.timeMs, options.overrides, options.paramValues)
     const { sourceScene } = prepared
     const overrides = projectFrameFontOverrides(prepared.scene, prepared.overrides, assets.fonts)
     scene = projectFrameFonts(prepared.scene,assets.fonts)

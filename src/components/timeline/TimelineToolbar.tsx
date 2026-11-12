@@ -1,4 +1,10 @@
 'use client'
+import { CalculationRangeInput } from '@/components/inputs/CalculationNumberInput'
+import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { SetKeyControls } from './authoring/SetKeyControls'
+import { TimelineTransport } from './authoring/TimelineTransport'
+import type { TimelineAuthoringControls } from './authoring/useTimelineAuthoring'
 import { useState, useRef, useCallback } from 'react'
 import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
@@ -6,6 +12,7 @@ import TimelineGhostControl from './TimelineGhostControl'
 import { useClickOutside } from './hooks/useClickOutside'
 
 interface Props {
+  authoring: TimelineAuthoringControls
   timelines: Timeline[]
   selectedTimelineId: string | null
   selectedTimeline: Timeline | null
@@ -17,7 +24,6 @@ interface Props {
   timelineMode: TimelineMode
   autoKeyMode: AutoKeyMode
   onAutoKeyModeChange: (mode: AutoKeyMode) => void
-  hasSelectedLayer: boolean
   onPlayToggle: () => void
   /** Jump the playhead to the previous / next keyframe. */
   onPrevKeyframe: () => void
@@ -31,8 +37,6 @@ interface Props {
   onTimelineFieldChange: <K extends keyof Timeline>(key: K, val: Timeline[K]) => void
   onPlaybackSpeedChange: (s: number) => void
   onModeChange: (mode: TimelineMode) => void
-  /** Snapshot a subset of properties for the selected layer at the playhead. */
-  onKeyframeProperties: (properties: string[]) => void
   /** BL-56 — Ghost / Onion-Skin settings (playhead-relative frame preview) */
   ghostSettings: TimelineGhostSettings
   selectedLayerIds: Set<string>
@@ -45,15 +49,6 @@ interface Props {
   workAreaActive?: boolean
 }
 
-const KEYFRAME_PRESETS: Array<{ label: string; props: string[] }> = [
-  { label: 'Position (X, Y)',         props: ['transform.x', 'transform.y'] },
-  { label: 'Scale (X, Y)',            props: ['transform.scaleX', 'transform.scaleY'] },
-  { label: 'Rotation',                props: ['transform.rotationDeg'] },
-  { label: 'Opacity',                 props: ['opacity'] },
-  { label: 'Transform (all)',         props: ['transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY', 'transform.rotationDeg'] },
-  { label: 'All (transform + opacity)', props: ['opacity', 'transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY', 'transform.rotationDeg'] },
-]
-
 const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2]
 
 /**
@@ -62,23 +57,18 @@ const SPEED_OPTIONS = [0.25, 0.5, 1, 1.5, 2]
  */
 export default function TimelineToolbar(props: Props) {
   const {
-    timelines, selectedTimelineId, selectedTimeline,
+    authoring, timelines, selectedTimelineId, selectedTimeline,
     currentTimeMs, duration, isPlaying, zoomFactor, playbackSpeed,
-    timelineMode, autoKeyMode, onAutoKeyModeChange, hasSelectedLayer,
+    timelineMode, autoKeyMode, onAutoKeyModeChange,
     onPlayToggle, onPrevKeyframe, onNextKeyframe,
     onSelectTimeline, onAddTimeline, onDeleteTimeline,
     getTimelineDeleteReason,
     onZoomChange, onFit, onTimelineFieldChange, onPlaybackSpeedChange,
-    onModeChange, onKeyframeProperties,
+    onModeChange,
     ghostSettings, selectedLayerIds,
     onGhostUpdate, onGhostToggle, onGhostPreset,
     onToggleWorkArea, workAreaActive,
   } = props
-
-  // ── Keyframe dropdown ───────────────────────────────────────────────────
-  const [kfMenuOpen, setKfMenuOpen] = useState(false)
-  const kfRef = useRef<HTMLDivElement>(null)
-  useClickOutside(kfRef, kfMenuOpen, () => setKfMenuOpen(false))
 
   // ── Play-type dropdown (long-press the Play button) ──────────────────────
   const [playMenuOpen, setPlayMenuOpen] = useState(false)
@@ -96,10 +86,12 @@ export default function TimelineToolbar(props: Props) {
   }, [onPlayToggle])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
+    <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
 
+      <DocumentationHelp topic="editor/timeline" compact />
       <div className="relative" ref={playRef}>
         <button
+          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) onPlayToggle() } }}
           onPointerDown={onPlayPointerDown}
           onPointerUp={onPlayPointerUp}
           onPointerLeave={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null } }}
@@ -132,28 +124,17 @@ export default function TimelineToolbar(props: Props) {
             </label>
             <label className="flex items-center gap-2 px-1 py-0.5" title="Loop count (0 = infinite)">
               <span className="text-gray-500 flex-1">Loop count</span>
-              <input type="number" min={0} step={1} value={selectedTimeline.loopCount ?? 0}
+              <CalculationNumberInput aria-label="selected Timeline loop Count 0" min={0} step={1} value={selectedTimeline.loopCount ?? 0}
                 onChange={(e) => onTimelineFieldChange('loopCount', Number(e.target.value))}
                 className="w-12 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-gray-200
-                           [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                           [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => onTimelineFieldChange('loopCount', calculated)} />
             </label>
           </div>
         )}
       </div>
 
-      {/* Jump to previous / next keyframe */}
-      <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">
-        <button
-          onClick={onPrevKeyframe}
-          className="px-1.5 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white font-mono"
-          title="Previous keyframe (,)"
-        >◀◆</button>
-        <button
-          onClick={onNextKeyframe}
-          className="px-1.5 py-1 text-xs text-gray-300 hover:bg-gray-700 hover:text-white font-mono border-l border-gray-600"
-          title="Next keyframe (.)"
-        >◆▶</button>
-      </div>
+      <TimelineTransport onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
+      <SetKeyControls controls={authoring} />
 
       <span className="text-xs font-mono text-gray-400 w-24">
         {Math.round(currentTimeMs)} / {duration} ms
@@ -181,37 +162,6 @@ export default function TimelineToolbar(props: Props) {
             <span className="mr-0.5">{m.dot}</span>{m.label}
           </button>
         ))}
-      </div>
-
-      {/* Keyframe dropdown — pick which property subset to snapshot */}
-      <div ref={kfRef} className="relative">
-        <button
-          onClick={() => setKfMenuOpen((o) => !o)}
-          disabled={!hasSelectedLayer}
-          title="Keyframe properties of selected layer at playhead"
-          className="px-2 py-1 text-xs rounded bg-yellow-600 hover:bg-yellow-500 text-white font-mono
-                     disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed
-                     flex items-center gap-1"
-        >
-          ◆ Keyframe ▾
-        </button>
-        {kfMenuOpen && hasSelectedLayer && (
-          <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded shadow-xl
-                          z-50 min-w-[180px] py-1">
-            {KEYFRAME_PRESETS.map((p) => (
-              <button
-                key={p.label}
-                onClick={() => { onKeyframeProperties(p.props); setKfMenuOpen(false) }}
-                className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700
-                           flex items-center gap-2"
-              >
-                <span className="text-yellow-400">◆</span>
-                <span className="flex-1">{p.label}</span>
-                <span className="text-[9px] font-mono text-gray-500">{p.props.length}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Playback speed */}
@@ -275,14 +225,12 @@ export default function TimelineToolbar(props: Props) {
           Logarithmic mapping so 1× sits near the middle of the track. */}
       <div className="flex items-center gap-1.5 shrink-0">
         <span className="text-[10px] text-gray-600 select-none">Zoom</span>
-        <input
-          type="range"
+        <CalculationRangeInput aria-label="zoom To Slider zoom Factor"
           min={0} max={100} step={1}
           value={zoomToSlider(zoomFactor)}
           onChange={(e) => onZoomChange(sliderToZoom(Number(e.target.value)))}
           className="w-28 accent-blue-500 cursor-pointer"
-          title={`${zoomFactor.toFixed(2)}× — drag to scale timeline`}
-        />
+          title={`${zoomFactor.toFixed(2)}× — drag to scale timeline`} onCalculate={calculated => onZoomChange(sliderToZoom(calculated))} />
         <span className="text-[10px] font-mono text-gray-500 w-10 text-right">
           {zoomFactor.toFixed(zoomFactor < 1 ? 2 : 1)}×
         </span>
@@ -324,11 +272,10 @@ export default function TimelineToolbar(props: Props) {
       {selectedTimeline && (
         <div className="flex items-center gap-2 shrink-0 text-xs text-gray-400">
           <label className="flex items-center gap-1">
-            <input type="number" value={selectedTimeline.durationMs} min={100} step={100}
+            <CalculationNumberInput aria-label="selected Timeline duration Ms" value={selectedTimeline.durationMs} min={100} step={100}
               onChange={(e) => onTimelineFieldChange('durationMs', Number(e.target.value))}
               className="w-16 bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-gray-200
-                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-            /> ms
+                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" onCalculate={calculated => onTimelineFieldChange('durationMs', calculated)} /> ms
           </label>
           {/* Play mode (autoplay / loop / ping-pong / loop count) now lives in
               the Play button's long-press dropdown. */}

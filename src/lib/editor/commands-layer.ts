@@ -318,7 +318,7 @@ export function makeTrimLayerCmd(
 
 // ── Toggle layer flag (locked / hidden / solo / pinned) ───────────────────────
 
-export type LayerToggleField = 'locked' | 'hidden' | 'solo' | 'pinned'
+export type LayerToggleField = 'locked' | 'hidden' | 'solo' | 'pinned' | 'frozen'
 
 export function makeToggleLayerCmd(
   layerId: string,
@@ -345,8 +345,10 @@ export function makeDuplicateLayerCmd(
 ): EditorCommand {
   let audioCommand: EditorCommand | undefined
   const keyIds = new Map<string, string>()
+  const copies: NonNullable<import('../types/authoring').AuthoringHints['copies']>[number][] = [{ from: ['layer', original.id], to: ['layer', newLayer.id] }]
   return {
     label: `Duplicate ${original.name}`,
+    authoring: { copies },
     execute: (scene) => {
       if (original.type !== 'audio' || !newLayer.audio) return { ...scene, layers: [...scene.layers, newLayer] }
       const asset = scene.assets.find(item => item.id === newLayer.audio!.assetId)
@@ -364,7 +366,8 @@ export function makeDuplicateLayerCmd(
         if (!track) return timeline
         return { ...timeline, tracks: [...timeline.tracks, { ...track, target: `layers.${newLayer.id}.audio.volume`, keyframes: track.keyframes.map(key => {
           let id = keyIds.get(key.id)
-          if (!id) { id = nextKfId(); keyIds.set(key.id, id) }
+          if (!id) { id = nextKfId(); keyIds.set(key.id, id)
+            copies.push({ from: ['key', timeline.id, oldTarget, key.id], to: ['key', timeline.id, `layers.${newLayer.id}.audio.volume`, id] }) }
           return { ...key, id, timeMs: key.timeMs + delta }
         }) }] }
       }) }

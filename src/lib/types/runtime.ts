@@ -23,6 +23,8 @@ export interface RuntimePackage {
 }
 
 export type RuntimeWarningCode =
+  | 'REQUIRES_LIVE_EXPRESSIONS'
+  | 'INVALID_EXPRESSION'
   | 'UNSUPPORTED_EFFECT'
   | 'MISSING_ASSET'
   | 'INVALID_PATH'

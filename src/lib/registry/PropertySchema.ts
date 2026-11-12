@@ -29,6 +29,9 @@ export interface PropertySchema {
   valueType: PropValueType
   /** Whether this property can be keyframed (controls + on PropertyRow). */
   animatable: boolean
+  /** Source animation family when it differs from the inspector input type.
+   * Vec2/color values remain atomic typed keys, never arbitrary object payloads. */
+  animationValueType?: 'number' | 'string' | 'boolean' | 'color' | 'vec2'
 
   // ── Numeric constraints ──
   min?:  number

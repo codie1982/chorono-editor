@@ -64,8 +64,10 @@ export class SnapEngine {
     let guides: SnapResult['guides'] = []
 
     // ── Object / point snap (alignment to other layers + canvas) ──
-    if (s.targets.objects || s.targets.points) {
-      const r = canvasSnap.snapRect({ ...rect, x: nx, y: ny }, ctx, s.radiusPx)
+    if (s.targets.objects || s.targets.points || s.targets.guides) {
+      const r = canvasSnap.snapRect({ ...rect, x: nx, y: ny }, { ...ctx,
+        includeObjects: s.targets.objects || s.targets.points,
+        customGuides: s.targets.guides ? ctx.customGuides : undefined }, s.radiusPx)
       nx = r.point.x; ny = r.point.y
       guides = r.guides
     }

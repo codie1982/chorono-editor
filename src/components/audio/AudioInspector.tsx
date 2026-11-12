@@ -1,4 +1,5 @@
 'use client'
+import { BooleanInput } from '../inputs/BooleanInput'
 import { useState } from 'react'
 import type { ChronoScene, Layer, AudioData } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
@@ -53,10 +54,8 @@ export default function AudioInspector({ layer, scene, currentTimeMs = 0, select
     {automated && <p className="text-[10px] text-amber-300">Gain is automated. Level edits add a key at the playhead.</p>}
     <p className="text-[10px] text-gray-500">Source out: {Math.round(window.sourceEndMs)} ms{asset?.durationMs ? ` / ${Math.round(asset.durationMs)} ms` : ''}{displayedGain === 0 ? ' · Gain: −∞ dB' : ''}</p>
     <div className="flex items-center gap-4 text-xs text-gray-300">
-      <label className="flex items-center gap-1.5"><input type="checkbox" checked={!!audio.muted} disabled={layer.locked}
-        onChange={event => patch({ muted: event.target.checked })} />Mute</label>
-      <label className="flex items-center gap-1.5"><input type="checkbox" checked={!!audio.loop} disabled={layer.locked}
-        onChange={event => patch({ loop: event.target.checked })} />Loop</label>
+      <BooleanInput label="Mute" value={!!audio.muted} disabled={layer.locked} onChange={muted => patch({muted})} />
+      <BooleanInput label="Loop" value={!!audio.loop} disabled={layer.locked} onChange={loop => patch({loop})} />
       <button type="button" disabled={layer.locked} onClick={() => changeGain(0)}
         className="text-[10px] text-gray-400 hover:text-white disabled:opacity-40">Silence</button>
     </div>

@@ -7,6 +7,7 @@ import type {
   Asset, Trigger, Binding, SceneParameter,
   StateMachineDefinition, ChronoSMState,
 } from '../types'
+import { withoutAuthoring } from '../editor/authoring/AuthoringConverter'
 import { bakeTrack } from '../animation/baking/bake'
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ export interface RuntimeScene {
  *  - Optionally collapses redundant consecutive identical keyframes
  */
 export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions = {}): RuntimeScene {
+  if (scene.layers.some(layer => Object.keys(layer.propertyExpressions?.fields ?? {}).length)) throw new Error('Basic runtime export cannot evaluate live property expressions. Bake them to keyframes first, or use the Chorono Web runtime package.')
   const {
     snapKeyframesToFrames = true,
     collapseIdenticalKeyframes = true,
@@ -64,6 +66,7 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
     bakeFps = 60,
     bakeTolerance = 0.005,
   } = opts
+  scene = withoutAuthoring(scene)
   const frameRate = Math.max(1, scene.composition.frameRate)
 
   return {
@@ -111,7 +114,7 @@ function stripLayerMeta(layer: Layer): Layer {
   // runtime should treat the layer as fully selectable + opaque).
   const {
     locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c,
-    frozen: _f,
+    frozen: _f, inputExpressions: _inputExpressions,
     ...rest
   } = layer
   return rest

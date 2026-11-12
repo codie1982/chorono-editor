@@ -7,6 +7,8 @@ interface UsePlaybackReturn {
   isPlaying: boolean
   playbackSpeed: number
   handlePlayToggle: () => void
+  /** Idempotently pause the live clock, preserving its current playhead. */
+  handlePause: () => void
   handleSeek: (ms: number) => void
   setPlaybackSpeed: (speed: number) => void
 }
@@ -31,8 +33,10 @@ interface UsePlaybackOptions {
 }
 
 /**
- * rAF-based playback loop.
- * Uses startRef + offsetRef so seek and speed changes don't jump.
+ * rAF adapter over the monotonic PlaybackClock. The live clock owns time and
+ * transport state; published React values may lag the most recent sample.
+ * Unmount cancels its frame request. Explicit pause never restarts an ended
+ * clock, making it appropriate for transitions into editing tools.
  */
 export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
   const window = playbackWindow(opts)
@@ -82,10 +86,17 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
     publish()
   }, [publish])
 
+  /** Sample and pause using the live clock rather than a possibly stale React
+   * isPlaying snapshot. Repeated calls preserve paused time and never toggle. */
+  const handlePause = useCallback(() => {
+    clock.current!.pause(performance.now())
+    publish()
+  }, [publish])
+
   const setPlaybackSpeed = useCallback((speed: number) => {
     clock.current!.setSpeed(speed, performance.now())
     publish()
   }, [publish])
 
-  return { currentTimeMs, isPlaying, playbackSpeed, handlePlayToggle, handleSeek, setPlaybackSpeed }
+  return { currentTimeMs, isPlaying, playbackSpeed, handlePlayToggle, handlePause, handleSeek, setPlaybackSpeed }
 }

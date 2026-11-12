@@ -35,6 +35,7 @@ export class ImportTransactionBuilder {
 
     const command: EditorCommand = {
       label,
+      authoring: { mode: 'import' },
 
       execute(scene: ChronoScene): ChronoScene {
         beforeAudioImport = scene

@@ -1,6 +1,9 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type RefObject } from 'react'
 import type { RowLayout } from '@/lib/editor/virtualization/RowLayout'
+
+// Server rendering has no focus target; avoid React's layout-effect warning.
+const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 interface Viewport { top: number; height: number; width: number; left: number; offset: number }
 const INITIAL: Viewport = { top: 0, height: 300, width: 800, left: 0, offset: 0 }
@@ -89,33 +92,43 @@ export function useRowWindow(layout: RowLayout, keys: readonly string[],
   const retained = [...Object.values(owners), pendingFocus?.key ?? ''].map(key => byKey.get(key) ?? -1)
   const indices = layout.indices(range, retained)
   /** Scroll a data row into view after an explicit selection/navigation change.
-   * No focus is stolen and playhead ticks must not call this operation. */
+   * Returns false until both the row and a visible viewport exist, so callers
+   * can retry after expanding ancestors or opening a dock. No focus is stolen
+   * and playhead ticks must not call this operation. */
   const reveal = useCallback((index: number) => {
     const scroll = scrollRef.current
-    if (!scroll || index < 0 || index >= layout.count) return
-    const top = layout.top(index) + viewport.offset, bottom = layout.top(index + 1) + viewport.offset
-    if (top < scroll.scrollTop) scroll.scrollTop = top
+    if (!scroll || scroll.clientHeight <= 0 || index < 0 || index >= layout.count) return false
+    const content = contentRef?.current
+    const offset = content ? content.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop : viewport.offset
+    const top = layout.top(index) + offset, bottom = layout.top(index + 1) + offset
+    if (top < scroll.scrollTop || bottom - top > scroll.clientHeight) scroll.scrollTop = top
     else if (bottom > scroll.scrollTop + scroll.clientHeight) scroll.scrollTop = bottom - scroll.clientHeight
-  }, [layout, scrollRef, viewport.offset])
-  useEffect(() => {
+    return true
+  }, [layout, scrollRef, contentRef, viewport.offset])
+  // Retained rows are already mounted in this commit. Resolve focus before
+  // paint; a deferred RAF can be repeatedly cancelled by fast arrow/key-repeat
+  // requests and leave every event navigating from the original row.
+  useBrowserLayoutEffect(() => {
     if (!pendingFocus) return
-    const frame = requestAnimationFrame(() => {
-      const scroll = scrollRef.current
-      const row = Array.from(scroll?.querySelectorAll<HTMLElement>('[data-virtual-row]') ?? [])
-        .find(node => node.dataset.virtualRow === pendingFocus.key)
-      const controls = row ? focusable(row) : []
-      const target = pendingFocus.backwards ? controls[controls.length - 1] : controls[0]
-      reveal(byKey.get(pendingFocus.key) ?? -1)
-      target?.focus({ preventScroll: true })
-      setPendingFocus(null)
-    })
-    return () => cancelAnimationFrame(frame)
+    const scroll = scrollRef.current
+    const row = Array.from(scroll?.querySelectorAll<HTMLElement>('[data-virtual-row]') ?? [])
+      .find(node => node.dataset.virtualRow === pendingFocus.key)
+    const controls = row ? focusable(row) : []
+    const target = pendingFocus.backwards ? controls[controls.length - 1] : controls[0]
+    reveal(byKey.get(pendingFocus.key) ?? -1)
+    target?.focus({ preventScroll: true })
+    setPendingFocus(null)
   }, [pendingFocus, byKey, reveal, scrollRef])
-  return { indices, range, viewport, reveal }
+  /** Keyboard-only navigation can mount/focus a data row across virtual gaps.
+   * Automatic external selection uses reveal() and never invokes this. */
+  const focusKey = useCallback((key: string) => { if (byKey.has(key)) setPendingFocus({ key, backwards: false }) }, [byKey])
+  const focus = useCallback((index: number) => { if (index >= 0 && index < keys.length) focusKey(keys[index]) }, [keys, focusKey])
+  return { indices, range, viewport, reveal, focus, focusKey }
 }
 
 /** Native sequential-focus candidates, queried only at a keyboard boundary. */
 function focusable(row: HTMLElement): HTMLElement[] {
-  return Array.from(row.querySelectorAll<HTMLElement>('button,input,select,textarea,a[href],[tabindex]'))
+  const selector = 'button,input,select,textarea,a[href],[tabindex]'
+  return [row, ...Array.from(row.querySelectorAll<HTMLElement>(selector))].filter(node => node.matches(selector))
     .filter(node => node.tabIndex >= 0 && !node.matches(':disabled') && node.getClientRects().length > 0)
 }

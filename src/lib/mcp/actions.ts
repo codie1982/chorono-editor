@@ -9,8 +9,15 @@ import { makeGroupCmd, makeUngroupCmd } from '../editor/commands-group'
 import { layerRegistry } from '../registry'
 import { makeAddAudioClipCmd, makePatchAudioClipCmd, makeMoveAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd, makeSetAudioGainKeyCmd } from '../editor/commands-audio'
 import { dbToGain } from '../audio/audioClip'
+import { keyframeInputSchema } from '../animation/typedValueSchema'
+import { layerPatchSchema, particlePatchSchema } from './schema/registryPayloadSchemas'
+import { modifierSchema } from './schema/modifierSchema'
+import { trackPatchSchema } from './schema/trackPatchSchema'
 
 let ready: Promise<void> | undefined
+const str = { type: 'string', description: 'String value in the native model; use returned stable ids for references.' }
+const obj = { type: 'object' }
+const num = { type: 'number' }
 const layerId = { type: 'string', description: 'Existing layer id from get_scene or a creation result; display names are not ids.' }
 const timelineId = { type: 'string', description: 'Existing timeline id from get_scene or list_timelines; independent of the UI-selected timeline.' }
 const target = { type: 'string', description: 'Full track target, for example layers.hero.transform.x. Use the same target as the existing track; positions are pixels, rotations degrees, opacity 0..1.' }
@@ -24,7 +31,10 @@ function scripted(label: string, scene: ChronoScene, run: (api: SceneAPI) => voi
   return makeBatchCmd(label, commands)
 }
 
-/** Register MCP-native action implementations and their input documentation once, extending the existing AI/UI action registry. */
+/** Register MCP-only native command adapters once after the shared AI actions.
+ * Public payload hints reuse registry/animation metadata; command execution,
+ * particle validation and undo ownership remain in the existing domain APIs.
+ * This bootstrap allocates schema data, never a scene or browser resource. */
 export function bootstrapMCPActions(): Promise<void> {
   return ready ??= bootstrapAIActions().then(() => {
     const audioAction = (name: string, description: string, properties: Record<string, any>, required: string[], toCommand: (p: any, scene: ChronoScene) => EditorCommand) => {
@@ -81,60 +91,26 @@ export function bootstrapMCPActions(): Promise<void> {
     const register = (name: string, description: string, properties: Record<string, any>, required: string[], run: (p: any, api: SceneAPI, scene: ChronoScene) => void) => {
       actionRegistry.register({ id: `mcp.${name}`, toolName: name, description, parameters: { type: 'object', properties, required }, toCommand: (p, scene) => scripted(name, scene, api => run(p, api, scene)) })
     }
-    register('create_object', 'Create one registered object with generated defaults and an optional Layer patch. Use for kinds discovered by get_capabilities; add_layer instead accepts flat fields and a caller-chosen id. Read the returned addedLayerIds before subsequent edits.', {
-      kind: { type: 'string', description: 'Registered kind id from get_capabilities.objectKinds, for example rect, circle, text or particleEmitter.' },
-      patch: { type: 'object', description: 'Optional Partial<Layer> applied over defaults, for example {name:"Hero",opacity:0.8}. Nested objects replace their default value; preserve required transform/style fields.' },
-    }, ['kind'], (p, api) => { api.add(p.kind).set(p.patch ?? {}) })
-    register('patch_object', 'Change model fields on an existing layer, including typography, transforms, effects, masks, geometry and repeater settings. This is a shallow patch: nested objects replace existing values. Read get_scene for complete nested data; describe_layer is only a summary. Use update_layer for flat fields or configure_particles for emitter/particle-field merging. id/type changes fail.', {
-      layerId,
-      patch: { type: 'object', description: 'Partial<Layer>; omitted top-level fields stay unchanged, supplied nested objects/arrays replace them. Do not include id or type. Example: {opacity:0.5}.' },
-    }, ['layerId', 'patch'], (p, api) => {
+    register('create_object', 'Create one registry-kind Layer with nested source data in one undo step. Use this for kinds discovered in get_capabilities; add_layer is the legacy flat-field creator, while add_spline/add_path offer geometry-specific setup. patch shallowly replaces nested fields on the new default.', { kind: { ...str, description: 'Exact registered kind returned by get_capabilities.objectKinds.' }, patch: layerPatchSchema() }, ['kind'], (p, api) => { api.add(p.kind).set(p.patch ?? {}) })
+    register('patch_object', 'Shallowly replace specified fields on an existing Layer in one undo step. Nested objects replace in full; read the layer and include siblings to preserve them. For a safe recursive object merge use layer.patch in run_script. update_layer is the legacy flat-field setter.', { layerId, patch: layerPatchSchema() }, ['layerId', 'patch'], (p, api) => {
       const layer = api.get(p.layerId)
       if (!layer) throw new Error('Layer not found')
       if ('id' in p.patch || 'type' in p.patch) throw new Error('Cannot change object id or type')
       layer.set(p.patch)
     })
-    register('update_timeline', 'Change one existing timeline settings; omitted fields and tracks are preserved. Extending its duration also extends composition duration when needed; shortening does not shorten the composition. Use update_track/set_keyframes for tracks, create_timeline for a new animation, or control_playback for live transport.', {
-      timelineId,
-      patch: { type: 'object', description: 'Shallow timeline patch: durationMs (milliseconds), loop, loopCount, pingPong, autoplay, workArea, layerIds, markers, segments or events. Arrays replace existing arrays; id/tracks cannot be changed here.' },
-    }, ['timelineId', 'patch'], (p, api) => api.timeline(p.timelineId).set(p.patch))
-    register('clone_timeline', 'Copy timeline data, tracks, curves, modifiers, events and segments under a new timeline id. Both timelines reference the same scene layers; this does not duplicate objects. The source must exist and newId must be unique. Use clone_layer to duplicate objects instead.', {
-      timelineId, newId: { type: 'string', description: 'New unique timeline id (letters, digits, underscores or hyphens, at most 128 characters), for example idle-loop.' },
-    }, ['timelineId', 'newId'], (p, api) => { api.cloneTimeline(p.timelineId, p.newId) })
-    register('delete_timeline', 'Remove one timeline and its tracks without deleting scene layers. Fails if the timeline is missing or referenced by a state-machine state; edit_entity can update those references. Use remove_track to remove just one property animation.', { timelineId }, ['timelineId'], (p, api) => api.deleteTimeline(p.timelineId))
-    register('set_keyframes', 'Upsert keys on an explicit timeline and layer-relative property, preserving other keys/tracks. The timeline and layer must exist. Easing belongs to the starting keyframe; customBezier is supported. Use add_keyframes for the legacy numeric full-target format, or update_track to replace an entire keyframe array.', {
-      timelineId, layerId,
-      property: { type: 'string', description: 'Layer-relative property path, for example opacity or transform.x; do not prefix layers.<id>. Values must match the property model.' },
-      keyframes: { type: 'array', description: 'Keys to insert or replace at matching times. Other keyframes remain unchanged.', items: {
-        type: 'object', required: ['timeMs', 'value'], properties: {
-          timeMs: { type: 'number', description: 'Nonnegative absolute timeline time in milliseconds. Late keys can extend the timeline duration.' },
-          value: { description: 'Animatable property value; numeric for signal modifiers/baking, or a supported model value such as a color string or {x,y} vector.' },
-          easing: { description: 'Default linear. linear, hold, easeIn, easeOut, easeInOut, or {type:"customBezier",bezier:{cx1,cy1,cx2,cy2}}. Applied from this key toward the next.' },
-        },
-      } },
-    }, ['timelineId', 'layerId', 'property', 'keyframes'], (p, api) => {
+    register('update_timeline', 'Shallowly update one existing timeline in one undo step. Fields/arrays supplied in patch replace in full; id and tracks remain unchanged. Use update_track for track data. durationMs, marker and segment times are timeline-local milliseconds.', { timelineId, patch: { ...obj, description: 'Partial Timeline fields excluding id/tracks: durationMs, loop, pingPong, autoplay, workArea, layerIds, markers, segments or events. Read current arrays before replacement; omitted fields remain unchanged.' } }, ['timelineId', 'patch'], (p, api) => api.timeline(p.timelineId).set(p.patch))
+    register('clone_timeline', 'Duplicate an animation including keyframes, curves, modifiers, events and segments with a new timeline id.', { timelineId, newId: str }, ['timelineId', 'newId'], (p, api) => { api.cloneTimeline(p.timelineId, p.newId) })
+    register('delete_timeline', 'Delete one timeline. Refuses timelines referenced by state machines.', { timelineId }, ['timelineId'], (p, api) => api.deleteTimeline(p.timelineId))
+    register('set_keyframes', 'Upsert individual keys on an existing explicit timeline and Layer property in one undo step; keys at other times remain. Unlike add_keyframes, the timeline must already exist and addressing uses layerId/property. New keys default to linear easing on the starting key. Exact-time updates preserve existing IDs, tangents, segment settings and omitted easing; explicit easing replaces it. Equality uses 1e-6 ms and neighbouring keys remain separate; use update_track only for intentional complete key-array replacement.', { timelineId, layerId, property: { ...str, description: 'Layer-relative source property path, e.g. transform.x or style.fill.color; no layers.<id> prefix.' }, keyframes: { type: 'array', description: 'Keys to upsert; the native key command owns time collision handling. An empty array is a no-op.', items: keyframeInputSchema() } }, ['timelineId', 'layerId', 'property', 'keyframes'], (p, api) => {
       if (!api.get(p.layerId)) throw new Error('Layer not found')
       const tl = api.timeline(p.timelineId)
       for (const key of p.keyframes) tl.key(p.layerId, p.property, key.timeMs, key.value, key.easing)
     })
-    register('update_track', 'Shallow-patch one track in an existing timeline, creating an empty track if the target is missing. Supplied keyframe/modifier arrays replace existing arrays. Use set_keyframes to preserve unrelated keys, add_modifier to append one modifier, or bake_track to flatten procedural motion.', {
-      timelineId, target,
-      patch: { type: 'object', description: 'Track fields such as keyframes, outOfRange, easeCurve, timeWarp, multiplierCurve, multiplierAmplitude, controller or modifiers. Read get_scene for current values; preserve nested settings. Keep target unchanged.' },
-    }, ['timelineId', 'target', 'patch'], (p, api) => { api.timeline(p.timelineId).track(p.target, p.patch) })
-    register('remove_track', 'Remove the matching property track, including all its keys, controller and modifiers, from one existing timeline. Leaves the layer and other timelines unchanged; a missing target is a no-op scene transaction. Use update_track or set_keyframes to edit rather than delete animation.', { timelineId, target }, ['timelineId', 'target'], (p, api) => { api.timeline(p.timelineId).removeTrack(p.target) })
-    register('add_modifier', 'Append a numeric signal modifier to a track; creates an empty track if missing. Defaults to enabled, additive blending and weight 1. Modifier order affects evaluation. Use update_track to replace/reorder the stack, or bake_track to flatten it into keys.', {
-      timelineId, target,
-      modifier: { type: 'object', description: 'CurveModifier config. type: sine, pulse, quantize, offset, scale, clamp, wave, noise, fractalNoise, jitter, timeWarp, bounce, elastic, overshoot, decay or spring. Optional parameters, enabled, weight and blendMode (add/multiply/replace/blend). Example: {type:"sine",parameters:{amplitude:20,frequency:1}}; amplitude uses property units, sine frequency counts cycles over the normalized track/segment range.' },
-    }, ['timelineId', 'target', 'modifier'], (p, api) => { api.timeline(p.timelineId).modifier(p.target, p.modifier) })
-    register('bake_track', 'Sample one existing numeric track over 0..timeline.durationMs into editable linear keys, then simplify them. Replaces its keys and removes procedural/modifier/curve settings; use undo to recover the authored stack. Limited by the 50,000-key workload budget. Use evaluate_frame to inspect values without replacing the track.', {
-      timelineId, target,
-      fps: { type: 'number', description: 'Sampling rate in frames per second, 1..120; default 60. Higher rates capture faster motion but generate more samples.' },
-      tolerance: { type: 'number', description: 'RDP simplification tolerance as a fraction of the time/value bounding box; default 0.005. Zero keeps all samples; typical values 0.005..0.02.' },
-    }, ['timelineId', 'target'], (p, api) => { api.timeline(p.timelineId).bake(p.target, p.fps, p.tolerance) })
-    register('configure_particles', 'Update a particleEmitter layer while preserving omitted emitter and particle fields. Merges config, emitter and particle one level deep; deeper objects/arrays replace existing values. Missing/non-emitter layers fail. Use add_particle_emitter to create from a preset, get_scene to inspect full settings, or set_keyframes for animated properties.', {
-      layerId,
-      config: { type: 'object', description: 'Partial particleEmitter data, for example {emitter:{maxParticles:100,loop:false}}. At most 10,000 particles. emitter/particle fields are shallow-merged; preserve existing deeper settings when replacing them.' },
-    }, ['layerId', 'config'], (p, api) => {
+    register('update_track', 'Shallowly configure one track on an existing timeline, creating an empty track if absent. Each provided field replaces in full, including keyframes/controller/modifiers. Prefer set_keyframes for individual key upserts and add_modifier to append one modifier. One undo step.', { timelineId, target, patch: trackPatchSchema() }, ['timelineId', 'target', 'patch'], (p, api) => { api.timeline(p.timelineId).track(p.target, p.patch) })
+    register('remove_track', 'Remove an animation track from an explicit timeline.', { timelineId, target }, ['timelineId', 'target'], (p, api) => { api.timeline(p.timelineId).removeTrack(p.target) })
+    register('add_modifier', 'Append a scalar numeric modifier to one track, creating an empty track if needed, in one undo step. Registered kinds/default parameters are described in modifier. Track timeWarp is configured with update_track; legacy modifier kind timeWarp is a no-op.', { timelineId, target, modifier: modifierSchema() }, ['timelineId', 'target', 'modifier'], (p, api) => { api.timeline(p.timelineId).modifier(p.target, p.modifier) })
+    register('bake_track', 'Convert a scalar numeric track to linear keys in a local-ms window (default full timeline). Removes controller/OOR/modifiers/time remapping globally; keeps unrelated metadata and keys outside the window. FPS is positive up to 240; tolerance 0..1 bounds normalized vertical simplification error at samples, not continuous error. At most 20000 samples; rejects stale/non-finite source. One undo.', { timelineId, target, fps: { ...num, exclusiveMinimum: 0, maximum: 240, description: 'Samples per second, greater than zero up to 240; default 60.' }, tolerance: { ...num, minimum: 0, maximum: 1, description: 'Normalized vertical simplification error at sampled points, 0..1; default 0.005.' }, startMs: { ...num, minimum: 0, description: 'Local timeline start time in milliseconds; defaults to zero.' }, endMs: { ...num, minimum: 0, description: 'Local timeline end time in milliseconds; defaults to timeline duration.' } }, ['timelineId', 'target'], (p, api) => { api.timeline(p.timelineId).bake(p.target, p.fps, p.tolerance, { startMs: p.startMs, endMs: p.endMs }) })
+    register('configure_particles', 'Deep-merge ParticleEmitterData on an existing emitter in one undo step. Objects merge, arrays/scalars replace; layer transform and unrelated data remain. Use for emitter, life gradients, motion modifiers and rendering settings, not a new emitter or a fluid/rigid-body solver.', { layerId, config: particlePatchSchema() }, ['layerId', 'config'], (p, api) => {
       const handle = api.get(p.layerId)
       if (!handle || handle.type !== 'particleEmitter') throw new Error('Particle emitter not found')
       handle.configureParticles(p.config)

@@ -1,4 +1,5 @@
 'use client'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 /**
  * BL-52 — Scene Explorer Panel
  *
@@ -31,7 +32,12 @@ import ContextMenu from '@/components/ui/ContextMenu'
 import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
 import SubtreeOperationsToolbar from './SubtreeOperationsToolbar'
-import { useSceneExplorerBranches } from './hooks/useSceneExplorerBranches'
+import { useLayerBranches } from '@/components/layerHierarchy/useLayerBranches'
+import { useFindSelected } from '@/components/layerHierarchy/useFindSelected'
+import { FindSelectedButton, FoundSelectionNotice } from '@/components/layerHierarchy/FindSelectedControls'
+import { LayerIndex } from '@/lib/scene/LayerIndex'
+import type { SubtreeFlag } from '@/lib/editor/branches/SubtreeCommands'
+import { useSelectedLayerReveal } from './hooks/useSelectedLayerReveal'
 import LayerVisibilityPanel from './LayerVisibilityPanel'
 import SceneExplorerStatusBar from './SceneExplorerStatusBar'
 import QuickFilterChips from './QuickFilterChips'
@@ -71,7 +77,9 @@ interface Props {
   /** Predicate: does a layer have effects or masks?
    *  Used by the "Only with effects" filter. */
   doesLayerHaveEffects?: (layer: Layer) => boolean
-  /** Freeze the current selection. */
+  /** Resolve selected source roots plus descendants in one reversible command. */
+  onSetSubtreeFlag?: (roots: readonly string[], field: SubtreeFlag, value: boolean) => void
+  /** Freeze the current explicit selection only. */
   onFreezeSelection?: () => void
   /** Unfreeze the current selection. */
   onUnfreezeSelection?: () => void
@@ -83,12 +91,19 @@ export default function SceneExplorerPanel({
   onMoveInTree, onGroupWith,
   contextHandlers, onClearSelection,
   isLayerAnimated, doesLayerHaveEffects,
-  onFreezeSelection, onUnfreezeSelection,
+  onFreezeSelection, onUnfreezeSelection, onSetSubtreeFlag,
 }: Props) {
   // ── State ────────────────────────────────────────────────────────────────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
-  const branches = useSceneExplorerBranches({ layers, selectedId, selectedIds, setCollapsedIds,
-    onHidden: contextHandlers?.bulkToggleFlag })
+  const findSelection = useFindSelected(selectedId, selectedIds)
+  const setBranchFlag = useCallback((roots: readonly string[], field: SubtreeFlag, value: boolean) => {
+    if (onSetSubtreeFlag) { onSetSubtreeFlag(roots, field, value); return }
+    if (field === 'frozen') return
+    const index = new LayerIndex(layers)
+    const changed = Array.from(index.subtreeIds(roots)).filter(id => !!index.get(id)?.[field] !== value)
+    if (changed.length) contextHandlers?.bulkToggleFlag?.(changed, field, value)
+  }, [layers, onSetSubtreeFlag, contextHandlers?.bulkToggleFlag])
+  const branches = useLayerBranches({ layers, selectedId, selectedIds, setCollapsedIds, onSetFlag: setBranchFlag })
   const [textFilter, setTextFilter]     = useState('')
   // BL-57 C-lite — which layers have their info sub-rows expanded inline.
   // Independent of `collapsedIds` so the user can hide group children but
@@ -209,25 +224,21 @@ export default function SceneExplorerPanel({
   }, [sortState])
   const rows = useMemo(
     () => buildSceneExplorerRows(layers, {
-      collapsedIds, subInfoExpandedIds, timeline,
+      collapsedIds, subInfoExpandedIds, timeline, revealIds: findSelection.revealIds,
       textFilter, sort: activeSort,
       visibilityFilters,
       isAnimated: isLayerAnimated,
       hasEffects: doesLayerHaveEffects,
     }),
-    [layers, collapsedIds, subInfoExpandedIds, timeline, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects],
+    [layers, collapsedIds, subInfoExpandedIds, timeline, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects, findSelection.revealIds],
   )
   const scrollRef = useRef<HTMLDivElement>(null)
   const layout = useMemo(() => RowLayout.fixed(rows.length, SCENE_EXPLORER_ROW_HEIGHT), [rows.length])
   const rowKeys = useMemo(() => rows.map(row => row.id), [rows])
   const canFocusRow = useCallback((index: number) => rows[index].kind === 'layer', [rows])
   const windowed = useRowWindow(layout, rowKeys, scrollRef, undefined, canFocusRow)
-  const revealedSelection = useRef<string | null>(null)
-  useEffect(() => {
-    if (revealedSelection.current === selectedId) return
-    revealedSelection.current = selectedId
-    windowed.reveal(rows.findIndex(row => row.id === selectedId))
-  }, [selectedId, rows, windowed.reveal])
+  useSelectedLayerReveal({ layers, selectedId, selectedIds, setCollapsedIds,
+    rowKeys, reveal: windowed.reveal, viewportHeight: windowed.viewport.height, requestKey: findSelection.nonce })
 
   // ── BL-58 Keyboard shortcuts ─────────────────────────────────────────────
   // Active only when the pointer is over the panel — keeps Delete / Cmd+D
@@ -398,6 +409,7 @@ export default function SceneExplorerPanel({
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gray-700 shrink-0">
         <span className="text-[10px] font-mono uppercase text-gray-500">Scene Explorer</span>
+        <DocumentationHelp topic="editor/layers/scene-explorer" compact />
         <LayerVisibilityPanel
           filters={visibilityFilters}
           onChange={setVisibilityFilters}
@@ -419,6 +431,11 @@ export default function SceneExplorerPanel({
         </span>
       </div>
 
+      <div className="flex items-center gap-2 px-2 py-1 border-b border-gray-700">
+        <FindSelectedButton disabled={!selectedId} onFind={findSelection.find} />
+      </div>
+      {findSelection.revealIds.length > 0 && <FoundSelectionNotice onRestore={findSelection.restore} />}
+
       {/* BL-58 — Quick filter chips (single-row type-solo presets) */}
       <QuickFilterChips
         filters={visibilityFilters}
@@ -427,12 +444,11 @@ export default function SceneExplorerPanel({
 
       {branches.roots.length > 0 && <SubtreeOperationsToolbar
         selectedCount={branches.roots.length} affectedCount={branches.ids.size}
-        hasChildren={branches.hasChildren} hiddenCount={branches.hiddenCount}
-        canSetHidden={!!contextHandlers?.bulkToggleFlag}
+        hasChildren={branches.hasChildren} counts={branches.counts}
+        canSetFlag={field => !!onSetSubtreeFlag || field !== 'frozen' && !!contextHandlers?.bulkToggleFlag}
         onExpand={() => branches.setExpanded(branches.roots, true)}
         onCollapse={() => branches.setExpanded(branches.roots, false)}
-        onShow={() => branches.setHidden(branches.roots, false)}
-        onHide={() => branches.setHidden(branches.roots, true)} />}
+        onSetFlag={(field, value) => branches.setFlag(branches.roots, field, value)} />}
 
       {/* BL-53 — Bulk operations toolbar (appears when 2+ rows selected) */}
       {selectedIds.size >= 2 && contextHandlers && (
@@ -528,6 +544,13 @@ export default function SceneExplorerPanel({
               onCommitRename={commitRename}
               onCancelRename={cancelRename}
               onSelect={onSelect}
+              onNavigate={direction => {
+                if (direction === 'parent') { windowed.focusKey(row.layer.parentId ?? ''); return }
+                const step = direction === 'up' ? -1 : 1
+                let next = index + step
+                while (next >= 0 && next < rows.length && rows[next].kind !== 'layer') next += step
+                if (next >= 0 && next < rows.length && (direction !== 'child' || rows[next].depth > row.depth)) windowed.focus(next)
+              }}
               onToggleExpand={() => toggleExpand(row.id)}
               onToggleFlag={(field) => onToggleFlag(row.id, field)}
               onDragStart={handleDragStart}
@@ -654,7 +677,8 @@ export default function SceneExplorerPanel({
           showAll:       contextHandlers.showAll,
           expandSubtrees: ids => branches.setExpanded(ids, true),
           collapseSubtrees: ids => branches.setExpanded(ids, false),
-          setSubtreeHidden: contextHandlers.bulkToggleFlag ? branches.setHidden : undefined,
+          setSubtreeHidden: (onSetSubtreeFlag || contextHandlers.bulkToggleFlag) ? (ids, hidden) => branches.setFlag(ids, 'hidden', hidden) : undefined,
+          setSubtreeFlag: onSetSubtreeFlag ? branches.setFlag : undefined,
         }
         return (
           <ContextMenu

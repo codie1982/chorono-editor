@@ -1,0 +1,51 @@
+import type { ChronoScene } from '../types'
+import { parseTrackTarget } from '../timeline/TrackTargetParser'
+import { MAX_PROPERTY_EXPRESSIONS } from '../expression/properties/PropertyExpression'
+
+/** Shared source-expansion limits for editor and MCP clone/array admission.
+ * They bound source layer/key counts, not process RAM or GPU allocation. */
+export const CLONE_WORKLOAD_LIMITS = { layers: 5000, keyframes: 50000 } as const
+
+export interface CloneWorkloadOptions {
+  /** Additional placement wrappers per NEW occurrence. */
+  extraLayersPerOccurrence?: number
+  /** Exact total wrapper count for nonuniform per-occurrence placements.
+   * Takes precedence over extraLayersPerOccurrence when supplied. */
+  extraLayersTotal?: number
+  /** Omit for all relevant timelines; an empty set copies no tracks. */
+  timelineIds?: ReadonlySet<string>
+}
+
+/** Refuse an expanded forest before allocating copied payloads/IDs.
+ * sourceIds must contain the validated, deduplicated forest with descendants.
+ * count means NEW occurrences. Existing keys from all timelines consume budget;
+ * only selected timelines contribute copied keys. Inputs are never mutated.
+ * Throws for invalid count, missing sources, or an expanded workload overflow.
+ */
+export function assertCloneForestBudget(scene: ChronoScene, sourceIds: ReadonlySet<string>,
+  count: number, options: CloneWorkloadOptions = {}): void {
+  const extra = options.extraLayersPerOccurrence ?? 0
+  const extraTotal = options.extraLayersTotal ?? extra * count
+  if (!Number.isSafeInteger(count) || count < 1 || count > CLONE_WORKLOAD_LIMITS.layers
+      || !Number.isSafeInteger(extra) || extra < 0
+      || !Number.isSafeInteger(extraTotal) || extraTotal < 0) throw new Error('Clone count limit exceeded')
+  const existing = new Set(scene.layers.map(layer => layer.id))
+  let live = 0, copiedLive = 0
+  for (const layer of scene.layers) for (const definition of Object.values(layer.propertyExpressions?.fields ?? {})) {
+    live++
+    if (sourceIds.has(layer.id) && (!options.timelineIds || options.timelineIds.has(definition.timelineId))) copiedLive++
+  }
+  if (live + copiedLive * count > MAX_PROPERTY_EXPRESSIONS) throw new Error('Expanded clone/array exceeds the 512 live-expression budget; bake or reduce the count.')
+  if (!sourceIds.size || Array.from(sourceIds).some(id => !existing.has(id))) throw new Error('Clone source no longer exists')
+  let totalKeys = 0, copiedKeys = 0
+  for (const timeline of scene.timelines) for (const track of timeline.tracks) {
+    totalKeys += track.keyframes.length
+    const target = parseTrackTarget(track.target)
+    if ((!options.timelineIds || options.timelineIds.has(timeline.id))
+        && target?.entityType === 'layer' && sourceIds.has(target.entityId)) copiedKeys += track.keyframes.length
+  }
+  if (scene.layers.length + sourceIds.size * count + extraTotal > CLONE_WORKLOAD_LIMITS.layers
+      || totalKeys + copiedKeys * count > CLONE_WORKLOAD_LIMITS.keyframes) {
+    throw new Error('Expanded clone/array workload limit exceeded')
+  }
+}

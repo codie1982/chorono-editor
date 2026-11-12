@@ -1,5 +1,9 @@
 # Claude ve Codex için Chorono MCP
 
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
+Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
+Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
+
 Chorono MCP, STDIO üzerinden standart MCP konuşan yerel bir sunucudur. Claude Desktop, Claude Code ve Codex aynı editör bağlantısını kullanabilir. Ayrıca bir model API anahtarı gerekmez: model istemcide çalışır, MCP editörde araçları yürütür.
 
 ## Kurulum
@@ -38,35 +42,139 @@ Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin vey
 
 Claude Code ve Codex için araç kullanım iş akışları ayrıca `skills/` altında dağıtılır. Skill kurulum CLI'si, yerel deneme ve npm paketleme için [skill rehberini](skills.md) okuyun. Skill kurulumu bu MCP bağlantısının yerine geçmez.
 
-Sunucu orijinal ActionRegistry araçlarını otomatik yayımlar. Bunlar katman/kompozisyon/keyframe/timeline oluşturma, clone ve array, path ve spline, motion path, trim, particle emitter, parametre, trigger, binding, wiring, interactivity ve state machine araçlarını kapsar.
-
-Ek araçlar:
+Sunucu aynı ActionRegistry/domain komutlarını kullanır. Varsayılan STDIO
+`tools/list` yüzeyi sık kullanılan 40 aracı gösterir; uzman eylemler tekil şema
+keşfi ve `batch_actions` ile kullanılabilir. Bu ayrım katman/kompozisyon,
+keyframe/timeline, clone/array, spline/path, particle ve state-machine
+kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları kullanır:
 
 | Alan | Araçlar |
 | --- | --- |
-| Keşif | `list_sessions`, `get_capabilities`, `get_scene`, `list_timelines`, `validate_scene` |
-| Nesneler | `create_object`, `patch_object`, `group_layers`, `ungroup_layer`, `import_asset` |
-| Çoklu animasyon | `update_timeline`, `clone_timeline`, `delete_timeline`, `set_keyframes`, `update_track`, `remove_track` |
-| İleri hareket | `add_modifier`, `bake_track`, `configure_particles`, `edit_entity` |
+| Keşif | `list_sessions`, `get_capabilities`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
+| Nesneler | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
+| Animasyon | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Script | `run_script`, `apply_script_plan`, `batch_actions` |
 | İzleme | `render_preview`, `evaluate_frame`, `control_playback`, `control_runtime`, `get_runtime`, `undo`, `redo` |
 | Dosyalar | `save_project`, `list_projects`, `load_project`, `export_runtime`, `export_svg`, `export_sequence` |
+| Ses | `get_audio_state`, `render_audio_preview`, `export_audio` |
 
-`get_capabilities`, gerçek katman türlerini, özellik şemalarını, parçacık presetlerini, araç giriş şemalarını ve script API'sini döndürür. `chorono://scripting`, `chorono://capabilities`, `chorono://sessions` MCP kaynakları ve `animate_scene` istemi de vardır.
+### Keşif ve uzman araçlar
+
+İlk keşifte `get_capabilities({summary:true})` kullanın. Bu hafif yanıt sürüm,
+katalog metadatası, tür adları, preset'ler, limitler ve çıktı kapsamını verir;
+bütün araç/özellik şemalarını ve script yardımını taşımaz. Authoring için
+`chorono://scripting` kaynağını okuyun. Tek bir native şema gerektiğinde
+`get_capabilities({toolName:'configure_particles'})` isteyin; `toolName` ve
+`summary:true` aynı çağrıda kullanılmaz.
+
+Tek araç sonucu tam şemayı, implementation/canonical adı, yayımlanma bilgisini
+ve `callableInBatch` değerini verir. Değer true ise adı ve argümanları
+`batch_actions` içine koyun. Keşif istemcinin araç listesine dinamik araç eklemez.
+Salt okuma, dosya ve playback/runtime taşıma araçları mutasyon batch'ine giremez.
+`add_spline`, `configure_particles`, `update_track`, `bake_track` ve native ses
+klibi düzenlemeleri bu uzman mutasyon yolunu kullanabilir; scriptte aynı domain
+işlemleri de vardır.
+
+`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` eski 77 aracın
+uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
+Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
+`catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
+alias girdileri `{name,implementationName}` biçimindedir. `chorono://capabilities`
+ve `chorono://sessions` kaynakları ile `animate_scene` istemi de vardır.
+
+### Adlar ve geriye uyum
+
+| Tercih edilen ad | Eski implementation adı | Korunan anlam |
+| --- | --- | --- |
+| `create_layer` | `create_object` | Registry `kind` ve isteğe bağlı Layer patch'i. |
+| `get_layer` | `describe_layer` | Tek katmanın biçimlendirilmiş özeti; tam nested model değildir. |
+| `get_timeline` | `describe_timeline` | Tek timeline'ın track/key ayrıntıları. |
+| `upsert_keyframes` | `set_keyframes` | Açık timeline/layer/property adresinde key ekle/güncelle; tüm track'i değiştirmez. |
+| `replace_layer_fields` | `patch_object` | Verilen nested nesneyi tümüyle değiştiren shallow işlem. Deep merge değildir. |
+| `evaluate_timeline_values` | `evaluate_at_time` | Yalnız timeline değerlendirmesi; `evaluate_frame` ile aynı kapsam değildir. |
+| `create_state_machine_state` | `add_sm_state` | State ekleme. |
+| `create_state_machine_transition` | `add_sm_transition` | Transition ekleme. |
+| `set_state_machine_initial_state` | `set_initial_state` | Makinenin ilk state'ini seçme. |
+
+Yeni adların hepsi varsayılan doğrudan listede değildir; uzman şeması üzerinden
+batch desteği kontrol edilir. `get_scene` revision/bağlamlı ana okuma yoludur;
+eski `get_scene_json` yalnız JSON döndürmeye devam eder. `add_keyframes` eski
+target adresi ve timeline auto-create davranışını korur; `upsert_keyframes`
+ile aynı input değildir. E−1.4 ile aynı zamandaki upsert mevcut key ID, tangent,
+segment ayarları ve belirtilmeyen easing'i korur. Explicit easing onu değiştirir;
+yeni key varsayılanı linear'dır. Eşitlik toleransı `1e-6 ms`; yakın fractional
+key'ler ayrı kalır, belirsiz çakışık key'ler reddedilir. Bu işlem driven kanalı
+bake etmez; editördeki Set Key ayrı bir MCP aracı değildir.
+
+Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
+`get_scene` snapshot'ını veya script `layer.data` kaydını okuyun. `get_layer`
+özeti bu nested verinin tümünü içermez; ondan tam bir kayıt yeniden kurulmaz.
+
+Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
+`CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
+`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı yayımlar; `standard`
+varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
+değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
+bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.
+
+Eski adlar her iki profilde de sunucuda çözümlenir; payload, çıktı ve eski
+varsayılanları korunur. Aynı retry'da araç adı, argüman ve `requestId` aynı
+kalmalıdır. Yeni ad seçmek eski belirsiz isteğin tekrarı sayılmaz. Profil
+daraltılması mevcut source revision/aktif drag/dry-run/tek undo korumalarını
+atlayan bir yol oluşturmaz. **2.0.0 ile source düzenleme çağrıları bilinçli
+olarak değişmiştir:** editörü yeniden derleyip başlatın ve STDIO istemcisini yeniden
+bağlayın. Eski ad/profil zorunlu yetkilendirmeyi atlayamaz; scene JSON değişmez.
+
+Her source mutasyonundan önce aynı MCP bağlantısı ve editörde `get_scene` okuyun.
+Dönen `revision` değerini `expectedRevision`, tek kullanımlık `readToken` değerini
+aynı adlı alana koyun. Token beş dakika geçerlidir; gerçek istemci bağlantısı,
+editör session, document epoch ve revision'a bağlıdır. `get_layer` gibi kısmi
+okumalar yetki vermez. İşlem başarılı olsa da sonraki yazma için yeniden okuyun.
+Çakışmada mevcut elle değişiklikleri okuyup isteği uyarlayın; eski tam sahne
+payload'una yalnızca yeni revision yazıp göndermeyin.
+
+`batch_actions` dış çağrısı tek `expectedRevision`/`readToken`/`requestId` taşır.
+Alt işlemler için `get_capabilities({toolName})` içindeki `batchInputSchema`
+kullanılır. `run_script` dry-run normal okuma token'ını tüketir; yeni plan-bound
+`readToken`, `revision` ve `planId` döndürür. `apply_script_plan` bunları kullanır,
+script yeniden çalıştırılmaz. Sonraki okumalar ayrılmış plan yetkisini bozmaz;
+araya source değişikliği veya belge değiştirme girerse plan reddedilir.
+
+Aynı bağlantıda transport tekrarında aynı araç adı, **aynı token dahil aynı
+argümanlar** ve sabit `requestId` kullanılır. Editör başına en fazla 64 sonuç
+saklanır; istemciler kimlikle ayrılır. Bağlantı yenilendiyse önce sahneyi okuyup
+sonucu kontrol edin. Token'ları sahne JSON'una, kalıcı kayda veya loglara yazmayın.
+Eksik/eski/kullanılmış okuma, document değişimi ve aktif drag durumları
+`code/message/recovery` içeren yapılandırılmış hatalar döndürür. Son browser CAS
+kontrolü, broker kabulünden sonra araya giren elle düzenlemeyi de korur.
+
+Native source komutları, script, project load, import, normalize ve undo/redo
+bu kapsamdadır. Okuma, runtime/playback, preview/export ve dosyaya kaydetme source
+yazmaz; token gerekmez. Commit yanıtı sınırlı `changeSummary` döndürür;
+`truncated:true` tam liste olmadığını belirtir. E−1.2 attribution artık uygulanmıştır; aşağıdaki kaynak kökeni sözleşmesine bakın.
+
+`normalize_audio_clip` native batch eylemi değildir (`callableInBatch:false`);
+legacy katalogda doğrudan çağrılır. Script API eşdeğer peak ölçümü sağlamaz.
 
 Araç açıklamalarının sahipliği, gerçek yanıt biçimleri, yeniden deneme sınırları ve Glama yeniden değerlendirme süreci [MCP araç sözleşmeleri](../en/mcp-tool-contracts.md) belgesinde açıklanır. `describe_layer` tam Layer kaydı değil, okunabilir bir özettir; iç içe alanları değiştirmeden önce `get_scene` kullanın. `add_keyframes` eski sayısal giriş şemasını korur; model tipindeki değerler ve customBezier için `set_keyframes` kullanın.
 
 Script ile sahne tasarımı için `scene.snapshot()` tam sahneyi; `layer.data` katmanın tamamını; `layer.get(path)` tek alanı bağımsız veri kopyası olarak okur. `layer.patch(partial)` iç içe ayarları birleştirir; `Layer.set` eski nesne değiştirme davranışını korur. `scene.useTimeline(id)` hem Layer.key hem clone/array animasyon kopyalarının hedefini belirler. Mevcut state machine ve etkileşim kayıtlarının CRUD metotları ile native ses klibi yardımcıları da script içinde kullanılabilir. Renk kanalları ve Vec2 interpolate edilir; metin/boolean key sınırında değişir. Çizim öncesi uygulanan animasyon verisi particle, repeater, shape, tipografi, efekt ve maskeleri kapsar. Kesin imzalar, örnekler ve sınırlar için [betikleme rehberini](scripting.md) okuyun; IO, önizleme ve kayıt ayrı MCP araçlarıdır.
 
-`patch_object` ile Layer modelinin effects, masks, typography, geometry, repeater ve diğer alanlarına erişilir. İç içe nesneler değiştirilir; kısmi iç içe güncellemelerde mevcut alanları koruyun. `update_track` easing/timeWarp/multiplier eğrilerini, outOfRange davranışını, modifier listesini ve waveform/noise controller'ı yönetir.
+`replace_layer_fields` (eski `patch_object`) ile Layer modelinin effects, masks,
+typography, geometry, repeater ve diğer alanlarına erişilir. İç içe nesneler
+değiştirilir; kısmi iç içe güncellemelerde mevcut alanları koruyun. Recursive
+merge için script `layer.patch` kullanın. Uzman `update_track`
+easing/timeWarp/multiplier eğrilerini, outOfRange davranışını, modifier listesini
+ve waveform/noise controller'ı yönetir.
 
 ## Güvenli ve tutarlı düzenleme
 
 - Editörde bağlantı açıkça etkinleştirilir. Yerel servis yalnızca loopback arayüzünde çalışır; Host, Origin, JSON içerik türü ve token doğrulanır. Köprü normal başlangıçta kapalıdır.
 - Scriptler QuickJS WASM içinde çalışır. Node, require, ağ, DOM ve dosya erişimi verilmez. Süre, bellek, komut, nesne ve keyframe sınırları vardır. Hata halinde sahne uygulanmaz.
-- `run_script({code,dryRun:true})`, beş dakika geçerli bir `planId` üretir. `apply_script_plan` aynı sahneyi tekrar script çalıştırmadan uygular. Üretilen nesne kimlikleri korunur.
+- `run_script({code,dryRun:true,expectedRevision,readToken})`, beş dakika geçerli `planId`, yeni plan-bound `readToken` ve `revision` üretir. `apply_script_plan` aynı sahneyi tekrar script çalıştırmadan uygular. Üretilen nesne kimlikleri korunur.
 - Mutasyonlar bir geri alma adımıdır. `batch_actions` içindeki hata tüm grubu iptal eder. Batch içine script veya dosya/köprü araçları konulamaz.
-- İstemciler aynı sekmedeki kuyruğu paylaşır. `get_scene` sonucundaki `revision` değerini sonraki çağrıya `expectedRevision` olarak verin. Elle düzenleme veya başka istemciyle çakışma sessizce üzerine yazılmaz. Yeniden denenecek mutasyonlar için sabit `requestId` kullanın; farklı içerikle aynı id reddedilir.
+- İstemciler aynı sekmedeki kuyruğu paylaşır. `get_scene` sonucundaki `revision` ve `readToken` değerlerini bir sonraki source çağrısına `expectedRevision` ve `readToken` olarak verin; her yeni yazma öncesi yeniden okuyun. Elle düzenleme veya başka istemciyle çakışma sessizce üzerine yazılmaz. Yeniden denenecek mutasyonlar için sabit `requestId` kullanın; farklı içerikle aynı id reddedilir.
+- Kaynak sahnede isteğe bağlı `editorGuides` (version 1) varsa mevcut cetvel/guide düzenini koruyun. Portable JSON bu editör verisini saklar; final render/runtime çizimine katılmaz. Scene JSON değiştirme işlemleri sürüm, benzersiz ID, eksen ve sonlu konum doğrulamasından geçer. Bu alan için yeni bir MCP authoring metodu eklenmemiştir; [viewport guide sözleşmesine](viewport-layout-editing.md) bakın.
 - Birden fazla sekme açıksa `list_sessions` ile `sessionId` seçilir. Sürükleme işlemi devam ederken MCP mutasyonları reddedilir.
 
 `expectedRevision` okuma, canlı playback/runtime kontrolü ve dışa aktarmalarda uygulanmaz; bu çağrıların döndürdüğü revision gözlenen sahneyi tanımlar. `requestId` bir arka plan iş kimliği değildir: aynı oturumun son 64 kimlikli çağrısının sonuçları bellekte tutulur; hata sonucu da önbelleğe alınır. Bağlantı kapanırsa, süreç yeniden başlarsa veya kayıt önbellekten çıkarsa yeniden deneme garantisi kalmaz. Canlı runtime parametreleri sırayla uygulanır; geç bir hata önceki canlı değeri geri almaz. `get_runtime` ile kontrol edin.
@@ -130,3 +238,21 @@ Gerçek bağlı editörde oluşturma, çoklu timeline, script izolasyonu, PNG, m
 `get_audio_state` canlı kaynakları, decode hatalarını ve metreleri okur. `render_audio_preview` en fazla 10 saniyelik gerçek WAV üretir; `export_audio` en fazla 120 saniye/24 MB stereo WAV kaydeder. Kazanç, fade, otomasyon, pan ve master ayarı aynı değerlendirme hattını kullanır. State machine sahnelerinde deterministik çıktı için `timelineIds` açık verilmelidir. PNG ve frame değerleri ses doğrulaması değildir. Runtime JSON veya görüntü dizisi karıştırılmış ses içermez; WAV ayrıca üretilmelidir.
 
 `normalize_audio_clip` kırpılmış kaynak aralığının peak seviyesini ölçerek statik kazancı ayarlar (varsayılan −1 dBFS). Kazanç otomasyonu varsa önce kaldırılmalıdır. `set_audio_master` master dB/mute ayarını projeye kaydeder. Dışa aktarım uyarıları sessiz aralığı, kazanç sınırını veya clipping'i bildirir.
+
+## Kaynak kökeni — MCP 2.1.0
+
+Optional `scene.authoring` version 1; ilk oluşturanı, son yerel değiştireni ve
+alan yazanlarını ayırır. Browser commit insan, MCP/planner commit ajan, merge
+import içeriği import olarak kaydedilir. Eksik/eski/elenmiş bilgi `unknown`
+olur; Hermès/ajan parametresinin olmaması insan kökeni kanıtlamaz. `get_layer`
+kendi katkısını ve group/spline için alt ağaç katkısını ayrı bildirir. Tam kayıtlar
+`get_scene` içindedir; adres ve alan anahtarları JSON string tuple biçimindedir.
+Kopyanın yeni oluşturucusu ile devraldığı içerik kökeni ayrıdır.
+
+Yalnız commit damgalanır. Undo/redo ve tam proje açma özgün metadata'yı geri
+getirir; portable save saklar, iki runtime exporter kök ledger'ı açıkça çıkarır.
+Kullanıcıya ait authoring/hermes animasyon verileri korunur. Kayıt sınırlıdır;
+`truncated:true` eksik kapsamı bildirir. Bu bilgi kimlik doğrulama, sahiplik veya
+istenmeyen değişiklik izni değildir. Genel key upsert semantiği değişmedi.
+2.1.0 için editör/STDIO birlikte yeniden başlatılıp bağlanır; source argümanları
+2.0.0 ile aynıdır. [Bakım sözleşmesi](../../src/lib/editor/authoring/README.md).

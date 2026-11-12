@@ -1,4 +1,5 @@
 'use client'
+import { handleLayerTreeKey, type TreeDirection } from '@/components/layerHierarchy/LayerTreeKeyboard'
 /**
  * BL-52 — Scene Explorer row
  *
@@ -54,6 +55,7 @@ interface Props {
 
   // Interaction
   onSelect:         (id: string, shift: boolean, meta: boolean) => void
+  onNavigate?: (direction: TreeDirection) => void
   onToggleExpand:   () => void
   onToggleFlag:     (field: 'locked' | 'hidden' | 'solo' | 'pinned') => void
 
@@ -137,8 +139,11 @@ export default function SceneExplorerRow(props: Props) {
     <div
       {...props.attributes}
       ref={ref}
-      role="row"
+      role="treeitem" tabIndex={0} aria-level={row.depth + 1}
+      aria-expanded={row.hasChildren ? row.expanded : undefined}
       aria-selected={isSelected}
+      onKeyDown={event => handleLayerTreeKey(event, { hasChildren: row.hasChildren, expanded: row.expanded,
+        onSelect: additive => onSelect(row.id, additive, false), onToggle: onToggleExpand, onNavigate: props.onNavigate })}
       draggable={!isEditing}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/x-chorono-layer', row.id)
@@ -174,7 +179,7 @@ export default function SceneExplorerRow(props: Props) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={`relative flex items-stretch border-b border-gray-800/50 ${bg} ${ringClass}
-                  cursor-pointer select-none transition-colors`}
+                  cursor-pointer select-none transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 focus-visible:outline-offset-[-2px]`}
       style={{ height: ROW_HEIGHT }}
     >
       {/* Before / after drop-line indicators */}
