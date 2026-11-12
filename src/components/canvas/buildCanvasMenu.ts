@@ -9,8 +9,11 @@
 import type { Layer } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import { itemDetailMenu } from '@/components/detail/detailMenu'
 
 export interface CanvasMenuHandlers {
+  editContent?: () => void
+  isolateSelection?: () => void
   // Clipboard
   cut?:        () => void
   copy?:       () => void
@@ -102,6 +105,7 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
   const isLocked  = args.layer.locked === true
 
   return [
+    ...itemDetailMenu(args.layer, args.multiCount, h.editContent, h.isolateSelection),
     // ── Copy / Paste submenu ───────────────────────────────────────────────
     {
       kind: 'submenu', label: 'Copy / Paste',

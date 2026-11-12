@@ -11,6 +11,8 @@ import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 export type TimelineProperty = 'position' | 'scale' | 'rotation' | 'opacity'
 
 interface Handlers {
+  /** Suspend this host while a separate detail authoring surface owns shortcuts. */
+  enabled?: boolean
   onUndo: () => void
   onRedo: () => void
   onPlayToggle: () => void
@@ -77,6 +79,7 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
  */
 export function useKeyboard(handlers: Handlers) {
   const {
+    enabled = true,
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
@@ -93,6 +96,7 @@ export function useKeyboard(handlers: Handlers) {
   } = handlers
 
   useEffect(() => {
+    if (!enabled) return
     // Build the id → action map fresh each effect run so it closes over the
     // latest handlers. Missing handlers leave the slot undefined (no-op).
     const actions: Record<string, (() => void) | undefined> = {
@@ -180,6 +184,7 @@ export function useKeyboard(handlers: Handlers) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [
+    enabled,
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,

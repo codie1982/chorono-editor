@@ -19,6 +19,7 @@ import { SUBTREE_FLAG_ACTIONS } from '@/components/layerHierarchy/SubtreeOperati
 import type { SubtreeFlag } from '@/lib/editor/branches/SubtreeCommands'
 import type { Layer } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import { itemDetailMenu } from '@/components/detail/detailMenu'
 
 // Same palette as TimelinePanel + LayerPanel so colour labels stay
 // consistent across surfaces (BL-38 parity).
@@ -35,6 +36,7 @@ const COLOR_LABELS: { label: string; hex: string | null }[] = [
 ]
 
 export interface SceneExplorerMenuHandlers {
+  editContent?: (id: string) => void
   rename:        (id: string) => void
   duplicate:     (id: string) => void
   deleteLayers:  (ids: string[]) => void
@@ -84,6 +86,7 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
   })
 
   const items: MenuItem[] = [
+    ...itemDetailMenu(target, ids.length, handlers.editContent ? () => handlers.editContent!(target.id) : undefined),
     {
       kind:     'action',
       label:    'Rename',

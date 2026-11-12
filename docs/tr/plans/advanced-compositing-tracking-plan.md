@@ -23,6 +23,12 @@ Aktif kullanıcı ortamı 2D/2.5D kalır. Tam bağımsız 3D Modeling/Game Engin
 çalışma alanı açılmaz. Temel video kurgu, kaynak videoya bağlı analiz ve 2D
 içinde 3D compositing planlanır; ayrı Video Editor modu bu belgeyle açılmaz.
 
+12 Kasım ortak detay genişlemesi: video/texture ve ileride compositing araçları
+[ortak öğe detay host'unu](shared-item-detail-editor.md) kendi adapter'larıyla
+kullanır; ikinci detay oturumu/cache altyapısı kurulmaz. Host'un varlığı CFX7
+çoklu video/cache, CFX7K chroma/despill veya CFX10 ortak derinlik teslimi değildir;
+bu özellikler burada belirtilen sonraki sırada ve kendi kabul kapılarında kalır.
+
 ## 2. Sonraki fazın teslim sırası
 
 | Kod | Teslim | Bağımlılık ve tamamlanma koşulu |

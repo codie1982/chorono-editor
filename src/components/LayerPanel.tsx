@@ -15,6 +15,8 @@ import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { useSelectedLayerReveal } from '@/components/layerHierarchy/useSelectedLayerReveal'
 import { LayerFocusControls } from '@/components/layerHierarchy/LayerFocusControls'
+import { itemDetailMenu } from '@/components/detail/detailMenu'
+import { detailUnavailableReason } from '@/lib/editor/detail'
 
 interface Props {
   /** Explicit navigation; ordinary selection never requests a Timeline reveal. */
@@ -22,6 +24,8 @@ interface Props {
   onIsolateSelection?: () => void
   onExitIsolation?: () => void
   isolationActive?: boolean
+  onEditContent?: (id: string) => void
+  onIsolateLayers?: (ids: readonly string[]) => void
   layers: Layer[]
   selectedId: string | null
   selectedIds: Set<string>
@@ -72,6 +76,7 @@ export default function LayerPanel({
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate,
   onShowInTimeline, onIsolateSelection, onExitIsolation, isolationActive = false,
+  onEditContent, onIsolateLayers,
 }: Props) {
   // ── Right-click context menu — layer rows ────────────────────────────────
   const ctxMenu = useContextMenu()
@@ -260,6 +265,10 @@ export default function LayerPanel({
           <LayerFocusControls selected={!!selectedId || selectedIds.size > 0}
             canIsolate={layers.some(layer => layer.type !== 'audio' && (selectedIds.has(layer.id) || !selectedIds.size && layer.id === selectedId))}
             isolated={isolationActive} onTimeline={onShowInTimeline} onIsolate={onIsolateSelection} onExit={onExitIsolation} />
+          {onEditContent && <button type="button" className="rounded bg-gray-700 px-2 py-1 text-xs disabled:opacity-40"
+            disabled={selectedIds.size > 1 || !!detailUnavailableReason(layers.find(layer => layer.id === selectedId))}
+            title={selectedIds.size > 1 ? 'Select one item to edit its content.' : detailUnavailableReason(layers.find(layer => layer.id === selectedId)) ?? 'Open the selected item detail editor'}
+            onClick={() => { if (selectedId) onEditContent(selectedId) }}>Edit content</button>}
           {/* Group / Ungroup buttons now live in the top toolbar so the panel
               header stays clean. Cmd+G / Cmd+Shift+G shortcuts still work. */}
           <button
@@ -572,6 +581,9 @@ export default function LayerPanel({
         const inTimeline = timelineLayerIds?.includes(layer.id) ?? false
         const canToggleTimeline = timelineLayerIds !== undefined && !!onToggleInTimeline
         const items = [
+          ...itemDetailMenu(layer, selectedIds.has(layer.id) ? selectedIds.size : 1,
+            onEditContent ? () => onEditContent(layer.id) : undefined,
+            onIsolateLayers ? () => onIsolateLayers(selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id]) : undefined),
           {
             kind: 'action' as const,
             label: inTimeline ? '✕ Remove from Timeline' : '＋ Add to Timeline',

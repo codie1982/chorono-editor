@@ -55,4 +55,6 @@ Local evidence linked under `artifacts/` (benchmark reports, recordings and rend
 - [Canonical setup skill](../skills/chorono-setup/SKILL.md)
 
 - [Kutulu 3D ilk model/kamera dilimi: kullanım, mimari ve sınırlar](tr/boxed-3d-first-slice.md)
-- [2D model kutusu ve çift tıkla izole 3D detay/Timeline planı](tr/plans/boxed3d-isolated-editor.md)
+- [Ortak 3D İçerik Editörü: model kutusu, iç Timeline, 2D asset ve gelecek oyun runtime sınırı](tr/plans/boxed3d-isolated-editor.md)
+- [Ortak öğe detay host'u: Shape/Poly, image/texture, video ve 3D adapter'ları; gelecek mod sınırları](tr/plans/shared-item-detail-editor.md)
+- [Çalışan DET0–DET1: Shape/Path/model detay, taslak, revision, tek Undo ve kabul](tr/item-detail-editor.md)

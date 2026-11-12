@@ -1,5 +1,7 @@
 'use client'
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useItemDetail, useInactiveDetailSurface } from '@/components/detail/useItemDetail'
+import { ItemDetailWorkspace } from '@/components/detail/ItemDetailWorkspace'
 import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
 import {
@@ -345,6 +347,19 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     workAreaInMs: activeWorkArea.inMs,
     workAreaOutMs: activeWorkArea.outMs,
   })
+
+  const detail = useItemDetail(editor)
+  const detailHeaderRef = useInactiveDetailSurface<HTMLElement>(!!detail.session)
+  const detailBackgroundRef = useInactiveDetailSurface<HTMLDivElement>(!!detail.session)
+  const [detailTimeMs, setDetailTimeMs] = useState(0)
+  /** Read current committed source before entering; selection and dock stay put. */
+  const openItemDetail = useCallback((id: string) => {
+    try {
+      if (motionKeyEditing || toolMode === 'shape-draw' || toolMode === 'spline-draw') throw new Error('Finish the current drawing or motion-key tool before opening content.')
+      detail.open(id); setDetailTimeMs(currentTimeMs); handlePause()
+    }
+    catch (error) { toast.warning('Cannot edit content', { detail: error instanceof Error ? error.message : String(error) }) }
+  }, [detail.open, currentTimeMs, handlePause, motionKeyEditing, toolMode])
 
   // ── Autoplay: kick off playback once on first mount if any timeline asks for it.
   // Subsequent scene edits do NOT restart — toggling autoplay later is metadata
@@ -1220,6 +1235,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
+    enabled: !detail.session,
     isTransactionActive: editor.isTransactionActive,
     onSetKey: () => timelineAuthoring.setKey(),
     onTimelineNavigate: timelineAuthoring.navigate,
@@ -1300,7 +1316,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         label={importLabel} progress={importProgress} onCancel={cancelImports} />
 
       {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <header data-panel="canvas" className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
+      <header ref={detailHeaderRef} aria-hidden={detail.session ? true : undefined} data-panel="canvas" className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
         <FileMenu
           filename={scene.composition.id}
           onRename={(next) => updateComposition({ ...scene.composition, id: next })}
@@ -1440,6 +1456,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       {/* ── Dockable work area ─────────────────────────────────────── */}
       <DockDragProvider onDrop={dock.dispatchDrop}>
         <div ref={dockContainerRef} className="flex-1 min-h-0 relative">
+          <div ref={detailBackgroundRef} className="h-full min-h-0" aria-hidden={detail.session ? true : undefined}
+            style={{ visibility: detail.session ? 'hidden' : undefined }}>
           {!fullscreenCanvas && <DockOuterEdges containerRef={dockContainerRef} />}
           {(() => {
             const registry = makeRegistry([
@@ -1454,6 +1472,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onShowInTimeline={showSelectionInTimeline}
                     onIsolateSelection={() => layerIsolation.enter(Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : []))}
                     onExitIsolation={layerIsolation.exit} isolationActive={layerIsolation.active}
+                    onEditContent={openItemDetail}
+                    onIsolateLayers={layerIsolation.enter}
                     onAdd={addLayer}
                     activeAddKind={shapeCreation.kind}
                     getDocumentSignal={editor.getDocumentSignal}
@@ -1505,6 +1525,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     }}
                     onClearSelection={() => selectLayer(null)}
                     contextHandlers={{
+                      editContent: openItemDetail,
                       // Rename re-uses the inline editor — selecting the
                       // layer first lets the panel know which row to put
                       // into edit mode (handled inside the panel via key).
@@ -1563,6 +1584,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     shapePlacementLayer={shapeCreation.template}
                     onShapePlacementComplete={shapeCreation.complete}
                     scene={scene} displayScene={layerIsolation.scene}
+                    onEditContent={openItemDetail} onIsolateContent={layerIsolation.enter}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
@@ -2008,6 +2030,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
               />
             )
           })()}
+          </div>
+          {detail.session && <ItemDetailWorkspace key={detail.session.id} session={detail.session} editor={editor}
+            timeMs={detailTimeMs} onClose={detail.close} />}
         </div>
       </DockDragProvider>
 

@@ -1,5 +1,6 @@
 'use client'
 import { useModelCamera } from './canvas/model3d/useModelCamera'
+import { detailUnavailableReason } from '@/lib/editor/detail'
 import { ModelCameraToolbar } from './canvas/model3d/ModelCameraToolbar'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import {
@@ -88,6 +89,12 @@ import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
 import type { ShortcutContext } from '@/lib/shortcuts'
 
 interface Props {
+  /** Content host owns source controls: retain pan/zoom and model camera, but
+   * hide/disable outer guides, motion-key authoring and layer context commands. */
+  contentInspection?: boolean
+  /** Optional content host; existing path double-click still enters Pen. */
+  onEditContent?: (id: string) => void
+  onIsolateContent?: (ids: readonly string[]) => void
   scene: ChronoScene
   /** Display/hit-test-only projection; commands always borrow scene as source. */
   displayScene?: ChronoScene
@@ -258,6 +265,8 @@ export default function SceneCanvas({
   onSelectByGeometry, selectionContainMode = 'touching',
   fullscreen, onToggleFullscreen,
   menuHandlers, onAfterLayerCommit, buildLayerCommitCommands,
+  contentInspection = false,
+  onEditContent, onIsolateContent,
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming,
   arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
@@ -522,6 +531,9 @@ export default function SceneCanvas({
   // Capture phase so it pre-empts the page's layer-delete shortcut.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Window capture listeners outlive native focus isolation. A mounted main
+      // viewport behind a detail surface must not delete its old spline point.
+      if (contentInspection || canvasRef.current?.closest('[inert]')) return
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
       const target = e.target as HTMLElement | null
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
@@ -544,7 +556,7 @@ export default function SceneCanvas({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext, motionEditing, arrayEditing, placingShape])
+  }, [selectedLayerId, previewMode, isPlaying, getShortcutContext, motionEditing, arrayEditing, placingShape, contentInspection])
 
   /** Prepare independent selected roots once. Body and axis dragging share
    * the same evaluated baseline and parent-space conversion contract. */
@@ -1183,7 +1195,7 @@ export default function SceneCanvas({
               // BL-66 — Çift tık path layer'a girer ve pen tool'u açar.
               // Bu sayede kullanıcı menü/araç çubuğuna gitmeden ek anchor
               // ekleyip mevcut anchorları sürükleyebilir.
-              if (motionEditing || arrayEditing || placingShape || previewMode) return
+              if (motionEditing || arrayEditing || placingShape || previewMode || editor.isTransactionActive() || isPlaying) return
               const cv = canvasRef.current
               if (!cv) return
               const rect = cv.getBoundingClientRect()
@@ -1196,9 +1208,12 @@ export default function SceneCanvas({
               if (hitLayer?.type === 'path' && !hitLayer.locked) {
                 onSelectLayer(hitId!)
                 onToolModeChange?.('pen')
+              } else if (hitLayer && onEditContent && !detailUnavailableReason(hitLayer)) {
+                onEditContent(hitLayer.id)
               }
             }}
             onContextMenu={(e) => {
+              if (contentInspection) { e.preventDefault(); return }
               if (placingShape) { e.preventDefault(); e.stopPropagation(); shapePlacement.cancel(); return }
               if (onSplineDrawContextMenu()) { e.preventDefault(); e.stopPropagation(); return }
               if (motionEditing || arrayEditing || previewMode) return // Motion keys own canvas editing while active.
@@ -1351,7 +1366,7 @@ export default function SceneCanvas({
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
           {selectedLayer && !selectedLayer.hidden && (!selectedLayerIds || selectedLayerIds.has(selectedLayer.id))
-            && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && (
+            && !contentInspection && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1641,7 +1656,7 @@ export default function SceneCanvas({
           containerEl={containerRef.current}
           showRulers={showRulers} showGuides={showGuides}
           cursorEnabled={!panMode && !modelCamera.active}
-          enabled={!hideEditorUI && !arrayEditing && !motionEditing && !placingShape}
+          enabled={!contentInspection && !hideEditorUI && !arrayEditing && !motionEditing && !placingShape}
           onWarning={setTransformWarning}
           selectedRect={
             selectedLayer && !selectedLayer.hidden
@@ -1751,6 +1766,8 @@ export default function SceneCanvas({
         const target = scene.layers.find((l) => l.id === ctxTargetLayerId)
         if (!target) { ctxMenu.close(); return null }
         const handlers: CanvasMenuHandlers = {
+          editContent: onEditContent ? () => onEditContent(target.id) : undefined,
+          isolateSelection: onIsolateContent ? () => onIsolateContent(selectedLayerIds?.has(target.id) ? Array.from(selectedLayerIds) : [target.id]) : undefined,
           // ── Page-injected handlers (clipboard, group, animate, align) ───
           cut:        menuHandlers?.cut,
           copy:       menuHandlers?.copy,

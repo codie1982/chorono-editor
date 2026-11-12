@@ -231,6 +231,9 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
   useEffect(() => {
     if (toolMode !== 'spline-draw') return
     const onKey = (e: KeyboardEvent) => {
+      // A retained main viewport cannot finish/cancel drawing behind another
+      // authoring surface; inert does not suppress window capture listeners.
+      if (canvasRef.current?.closest('[inert]')) return
       if ((e.target as Element | null)?.closest?.('input,textarea,select,[contenteditable=true],[role=menu]')) return
       if (['Escape', 'Enter', 'Backspace'].includes(e.key)) e.stopPropagation()
       if (e.key === 'Escape') {

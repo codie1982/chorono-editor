@@ -1,11 +1,11 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 11 Kasım 2026. **Güncel ve onaylanan sıra:**
+Tarih: 4 Kasım 2026. Güncelleme: 13 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
 tamamlanan E−1.Q/E−1.1/E−1.2/E−1.3 MCP açıklığı/güvenli düzenleme/köken/ortak hiyerarşi, E−1.4 Set Key/transport ve
-E−1.5 prosedürel eğri/bake sonrasında E−1.5A input expression ve kalan
-viewport/ortak araç kabulü → dar entegrasyon sözleşmeleri →
-kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
+E−1.5 prosedürel eğri/bake, E−1.5A input expression, viewport/ortak araç kabulü,
+dar entegrasyon ve ilk kutulu 3D dilimi tamamlandı. 13 Kasım'da dar ortak
+detay/izolasyon DET0–DET1 de uygulandı. Sırada Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
 ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
 [Ayrıntılı sıra ve bağımlılık sınırları](plans/geometry-material-boxed3d-sequence.md)
@@ -15,7 +15,8 @@ güncel iş kuyruğu bu bölüm ve bağlantılı sıra belgesidir.
 **11 Kasım sonraki faz kaydı:** [CFX — ileri katman/kompozisyon/efekt, video
 kurgu, yerel tracking ve 3D compositing](plans/advanced-compositing-tracking-plan.md)
 mevcut serinin son optimizasyon ve birleşik kabulünden **sonraki ayrı faza**
-eklenmiştir. Mevcut sıra ve sıradaki E−1.5A değişmez; CFX yeni bir ara iş değildir.
+eklenmiştir. Bu kayıttaki E−1.5A sonraki kabulde tamamlandı; güncel sıradaki iş
+DET0–DET1 sonrasında Poly 2D'dir. CFX sonraki ayrı faz olarak kalır, yeni bir ara iş değildir.
 
 Genel optimizasyonun ilk kabulü §12.37'de, viewport V1/V2 §12.40'ta ve V3
 position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
@@ -42,7 +43,7 @@ D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, ger�
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
 hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
-E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake (§12.58) tamamlandı. Sırada E−1.5A input expression (§12.59), ardından kalan ortak araç kabulü var.**
+E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake (§12.58) tamamlandı. E−1.5A ve kalan ortak araç kabulü de [12 Kasım kapısında](plans/pre3d-completion-audit.md) kapandı; ilk 3D ve dar DET0–DET1 sonrasında sırada Poly 2D vardır.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -61,12 +62,13 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
 | Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline tek source tree, Find, subtree flags/undo, çoklu dal filtreleri ve güvenli UI reparent. |
-| Devam ediyor — sırada A5 | E−1.5A, ardından kalan E−1 ve araç kabulü | A1–A4 typed input, live driver ve adapter/bake uygulandı; [A4 sözleşmesi](typed-input-expressions.md). Sırada A5 ve V6/E−1.7. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
-| Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
+| Tamamlandı — 12 Kasım | E−1.5A ve kalan ortak araç kabulü | A1–A5 ve V6/E−1.7 kapandı. [Sözleşme](typed-input-expressions.md), [kapı/kabul](plans/pre3d-completion-audit.md). |
+| Tamamlandı | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. [Sözleşme](pre3d-frame-contract.md). |
 | Tamamlandı — ilk dar 3D dilim | Kutulu model ve kamera | GLB/self-contained glTF, Properties ve toggle ile Orbit/Pan/Dolly; 2D taşıma korunur, portable/raster. Imported clip/rig/kamera ve gelişmiş material UI ileri dilimde. [Sözleşme ve kabul](boxed-3d-first-slice.md). |
+| Tamamlandı — dar DET0–DET1 | Ortak detay düzenleyicisi ve izolasyon akışı | Mevcut dock korunarak detay ortamı; çift tık + sağ tık, tek seviyeli breadcrumb/Back, bounded draft, Apply/Cancel ve tek Undo. Shape/Path + model3d sabit yerleşim. [Gerçek sözleşme/kabul](item-detail-editor.md); nested/iç Timeline ve ileri medya araçları sonraki kapsam. |
 | Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
 | Sonra 4 | Texture, vertex color, UV ve basit material | Texture gizmo ve UV paneli; dokulu/deforme mesh adapter'ı. |
-| Sonra 5 | Kutulu 3D ileri düzenleme | Çift tıkla izole 3D içerik/detail ve iç Timeline; ana 2D Timeline yalnız dış kutuyu yönetir. Temel sabit Properties kalır; inceleme bakışı ve çıktı kamerası ayrılır. [Plan](plans/boxed3d-isolated-editor.md). Çoklu model, imported rig/clip/morph; rig oluşturma/IK ayrı dilimler. |
+| Sonra 5 | Ortak host üzerinde kutulu 3D ileri düzenleme | Önceden teslim edilen DET0–DET1 host'u kullanılır; diğer adapter'lar domain teslimleriyle eklenir. 3D iç Timeline/kamera/material kendi adapter'ında; ana Timeline dış kutuyu yönetir, temel sabit Properties kalır. [Ortak plan](plans/shared-item-detail-editor.md), [3D planı](plans/boxed3d-isolated-editor.md). Çoklu model, imported rig/clip/morph; rig oluşturma/IK ayrı dilimler. |
 | Sonra 6 | Bileşen kütüphanesi ve Character Motion | Source component/local clock; 2D rig/FK/IK/sprite/state-machine. |
 | Sonra 7 | Simulation Core, rigid, Voronoi ve particle fiziği | Poly kaynaklı kırılma; sabit adım, gravity/field/collision, cache/bake. |
 | Sonra 8 | Fabric/kumaş | Poly rest mesh/UV; gravity/wind/pin/collision ve bake. |
@@ -98,9 +100,10 @@ flowchart TD
     Q --> H[Kalan ortak düzenleme ve araç kabulü]
     H --> I[Dar source / time / resource sözleşmeleri]
     I --> B[Kutulu 3D ilk sürüm]
-    B --> G[Poly 2D]
+    B --> D[Ortak detay / izolasyon DET0–DET1]
+    D --> G[Poly 2D]
     G --> U[UV / vertex color / material]
-    U --> B2[İleri kutulu 3D]
+    U --> B2[Ortak host üzerinde ileri kutulu 3D]
     B2 --> C[Bileşen ve karakter]
     C --> S[Simulation core / rigid / Voronoi / particle]
     G --> S
@@ -117,6 +120,29 @@ flowchart TD
 Bu diyagram teslim sırasını ve önemli geometri bağımlılıklarını gösterir;
 her ok zorunlu kod bağımlılığı değildir. Tam export compiler bileşen source
 modelinin önkoşulu değildir; kesin zaman/asset/capability sözleşmesi önkoşuldur.
+
+**12 Kasım — ortak öğe detay/izolasyon kararı:**
+[Shape/Poly, image/texture, video, component ve 3D detay planı](plans/shared-item-detail-editor.md)
+aynı host/oturum/Apply-Cancel yaşam döngüsünü, türe özel araç ve renderer
+adapter'larıyla paylaşır. Mevcut Isolate yalnız geçici görünüm filtresi olarak
+korunur; her öğeye yeni iç Timeline eklenmez. Sonraki kullanıcı önceliğiyle dar
+ortak host DET0–DET1, Poly/UV'den önce alındı ve 13 Kasım'da uygulandı: çift tık/sağ tık ve
+breadcrumb ile aynı uygulamada detay ortamı açılır. Sonra Poly → UV → ileri
+kutulu 3D sırası, CFX ve bağımsız 3D/Game Engine sınırı korunur.
+
+**12 Kasım — 3D authoring tek sahibi:**
+[3D İçerik Editörü](plans/boxed3d-isolated-editor.md) ortak detay host'unda
+büyür; aynı işleri yapan ikinci bir 3D Animation/Modeling editörü kurulmaz.
+İçerik 2D'de kutulu render, gelecekte oyunda native model/scene instance olarak
+tüketilebilir. 2D kaynaklar world sprite/plane veya HUD/UI adapter'ıyla birlikte
+gösterilebilir. Oyun entity/input/physics/tick ve 3D solver işleri ayrı ileri
+kapsamdır; mevcut sıra değişmez, bu kaynak/runtime mimarisi henüz uygulanmadı.
+
+**3D film üretimi hedefi:** [Gömülü 3D çekimler ve ana 2D kurgu/kompozisyon](plans/boxed3d-isolated-editor.md)
+onaylı kapsama eklendi. İç kamera/karakter/klip Timeline'ı ayrı; ana sahne çekim,
+geçiş, grafik ve sesi birleştirir. Kesin local-clock, bütçeli çekim hazırlığı ve
+final render kabulü kendi aşamalarında teslim edilir. DET0–DET1 dar sınırında
+kalır; ilk statik model/detay dilimi film üretimi tamamlandı anlamına gelmez.
 
 
 - **G0 — İnsan–ajan devam edebilir:** E−1 birleşik kabulü geçer; taze okuma ve manuel alan/kimlik koruması, tek undo, keyset/transport/eğri ve viewport pivot/seçim/key çizimi/subtree çoğaltma doğrulanır. Ayrıntı E−1 ve viewport planındadır; soft selection tartışması bu kapıya eklenmez.

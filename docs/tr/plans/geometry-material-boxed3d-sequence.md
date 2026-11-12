@@ -55,9 +55,10 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | Tamamlandı | Kalan E−1 ve araç kabulü | V6/E−1.7 birleşik kullanıcı akışı ve aynı 512 MiB büyük sahne regresyonu. [Gerçek sonuç/sınırlar](../pre3d-acceptance.md). |
 | 1 — tamamlandı | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, aynı parameter frame'i, readiness/ownership ve açık output capability. [Sözleşme](../pre3d-frame-contract.md). |
 | 2 — ilk dar dilim tamamlandı | Kutulu 3D model/kamera | 12 Kasım kullanıcı kararı: GLB/self-contained glTF, Properties XYZ/dönüş/ölçek, toggle ile Orbit/Pan/Dolly; kapalıyken normal 2D hareket. Portable/raster, bounds, copy/instance ve tek Undo. Imported clip/camera/rig kontrolü ileri dilime taşındı. [Gerçek sözleşme ve kabul](../boxed-3d-first-slice.md). |
+| 2a — dar DET0–DET1 tamamlandı | Ortak detay düzenleyicisi ve izolasyon akışı | Aynı uygulamada ana dock mounted/inert korunur; sağ tık, Shape/model çift tık, tek seviyeli breadcrumb/Back, bounded draft, Apply/Cancel ve tek Undo. Shape/Path + model3d sabit yerleşim. [Gerçek sözleşme/kabul](../item-detail-editor.md), [ileriki plan](shared-item-detail-editor.md). Nested/iç Timeline/ileri medya araçları bu dar kabulde yoktur. |
 | 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
 | 4 | Poly görünümü | UV, vertex color, basit 2D material ve dokulu/deforme triangle çizimi; texture transform ve UV düzenleyicisi. |
-| 5 | Kutulu 3D ileri düzenleme | Çift tıkla izole içerik/detail ekranı ve ayrı iç Timeline; inceleme bakışı/çıktı kamerası ayrımı, kamera animasyonu, malzeme, imported skeleton/clip/morph ve pose düzeltme. Ana 2D Timeline yalnız dış kutuyu yönetir; Properties'te temel sabit yerleşim kalır. [Sınır ve kabul planı](boxed3d-isolated-editor.md). Yeni rig üretme/weight painting/IK ayrı dilimlerdir. |
+| 5 | Ortak host üzerinde kutulu 3D ileri düzenleme | DET0–DET1'de kurulan host kullanılır; image/texture/Poly adapter'ları ilgili domain teslimleriyle eklenir. 3D iç Timeline, inceleme/çıktı kamerası ayrımı, malzeme, imported skeleton/clip/morph kendi adapter'ındadır. Ana 2D Timeline dış kutuyu yönetir; temel sabit Properties kalır. [Ortak aşamalar](shared-item-detail-editor.md), [3D sınırı](boxed3d-isolated-editor.md). Rig üretme/weight painting/IK ayrı dilimlerdir. |
 | 6 | Yeni katmanların ortak araç adapter kabulü | Tamamlanan clone/array/ortak düzenleme sözleşmeleri Poly ve kutulu 3D için de doğrulanır; ikinci clone algoritması yazılmaz. |
 | 7 | Bileşen kütüphanesi ve karakter | Source component/local clock, 2D karakter rig/sprite/state-machine; ortak parametre/expression'a bağlı Canvas Slider/Switch/Checkbox/Input bileşenleri ve yeniden kullanılabilir üretim kontrolleri. |
 | 8 | Fizik ve kırılma | Sabit adım/core, collision/force fields/bake; Poly kaynaklı Voronoi kırılma, particle entegrasyonu. |
@@ -90,6 +91,15 @@ kabulü sayılmaz.
 
 ## Poly, UV ve basit materyal
 
+12 Kasım detay/izolasyon genişlemesi: [ortak öğe detay planı](shared-item-detail-editor.md)
+eklendi. Sonraki kullanıcı önceliğiyle dar ortak host DET0–DET1, Poly/UV'den
+önce alındı ve 13 Kasım'da dar teslimi tamamlandı; sağ tık ve breadcrumb
+gerçek host'ta vardır. Poly/UV
+implementasyonları kendi domain araçları olarak kalır ve teslim edilince bu
+host'a adapter ile bağlanır. İleri 3D/klip/rig işleri erkene alınmaz. Video kurgu/keying ve
+ortak derinlikli compositing mevcut CFX sırasında, bağımsız 3D/Game Engine
+modları ise ayrı ileriki kapsamda kalır.
+
 Mevcut `polygon` parametreli shape'i editable mesh değildir. Poly ayrı source
 türü ve mevcut Shape araçlarından açık dönüşüm olarak eklenir. Source tri/quad
 yüzleri korunur; render için kararlı triangle buffer türetilir.
@@ -113,6 +123,14 @@ tek başına sağlamaz; triangle tabanlı backend/adaptör ayrıca uygulanır.
 
 ## Kutulu 3D sahne ve animasyon sınırı
 
+Sonraki kullanıcı mimari yönü: [3D İçerik Editörü](boxed3d-isolated-editor.md)
+ortak detay host'unda 3D authoring yeteneklerini sahiplenir. Aynı alanları yapan
+ayrı bir 3D Animation/Modeling editör motoru kurulmaz. Sürümlü içerik, 2D kutuda
+raster yüzey ve gelecekte Game Engine'de native 3D instance olarak farklı
+adapter'larla kullanılabilir. 2D asset'ler world plane/sprite veya HUD/UI olarak
+stable referanslarla bağlanır; oyun runtime/input/physics ayrı sorumluluktur.
+Bu yön DET0–DET1 sırasını değiştirmez ve Game Engine geliştirmesini başlatmaz.
+
 Bir kutu bir modelle sınırlı değildir: kendi scene tree, kamera, ışık, modeller,
 material ve clip kontrolleri olan bir alt sahne olabilir. 2D timeline kutunun
 konum/ölçek/opacity'sini; ayrı hedefler iç model TRS, camera ve clip saatini
@@ -134,8 +152,11 @@ kademeli doğrulanır. Her çıktı formatında native 3D/SVG/Lottie desteği va
 
 Kod: `src/lib/core/IRenderer.ts`, `src/lib/registry/LayerRendererRegistry.ts`,
 `src/lib/modes/bootstrap.ts`, `src/lib/types/core.ts`, `package.json`.
-Bootstrap yalnız 2D modunu kaydeder; doğrudan Three.js bağımlılığı ve bu belgede
-önerilen tam Poly/UV/material/3D source katmanları henüz mevcut değildir.
+Bootstrap yalnız 2D modunu kaydeder. 12 Kasım ilk kutulu 3D dilimi Three.js
+bağımlılığı ve model3d source/adapter'ını ekledi; tam Poly/UV/material ve ortak
+detay host'u henüz uygulanmadı. Bu bölümün ilk incelemesindeki 3D-yok kaydı
+ilk dilim için güncel değildir; [gerçek sözleşme](../boxed-3d-first-slice.md)
+çalışan kapsamı belirtir.
 
 - https://threejs.org/docs/pages/BufferGeometry.html
 - https://threejs.org/docs/pages/MeshBasicMaterial.html

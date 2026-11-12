@@ -20,6 +20,8 @@ export interface MenuActionItem {
   label:     string
   shortcut?: string                  // e.g. '⌘D' — shown right-aligned
   disabled?: boolean
+  /** Explain a capability/ownership restriction without widening the menu label. */
+  disabledReason?: string
   /** Optional small leading icon — anything renderable. */
   icon?:     ReactNode
   onSelect:  () => void
@@ -255,6 +257,7 @@ function Row({ item, isOpen, onEnter, onActivate }: {
     <div
       role="menuitem"
       aria-disabled={disabled}
+      title={item.kind === 'action' ? item.disabledReason : undefined}
       className={`group flex items-center gap-2 px-3 py-1 text-[13px] ${rowClass}`}
       onMouseEnter={onEnter}
       onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate() } }}

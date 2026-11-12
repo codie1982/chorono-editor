@@ -33,15 +33,19 @@ interface Props {
    * Appearance, Shape, etc. for richly-customised layer types).
    */
   filterGroup?: (group: PropertyGroup) => boolean
+  /** Optional capability-owned projection of the same authoritative schemas. */
+  groups?: readonly PropertyGroup[]
+  /** Read-only driver/ownership explanation; literal controls cannot bypass it. */
+  disabledReason?: (schema: PropertySchema) => string | null
 }
 
 /** Render registered source schemas. Numeric fields retain their explicit source
  * path for formula commands; literal changes use the shared immutable writer.
  * No source is mutated or expression evaluated by rendering the inspector. */
-export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props) {
+export default function SchemaPanel({ layer, onLayerChange, filterGroup, groups: suppliedGroups, disabledReason }: Props) {
   const def = layerRegistry.findForLayer(layer)
-  if (!def?.getPropertyGroups) return null
-  const groups = def.getPropertyGroups(layer)
+  if (!def?.getPropertyGroups && !suppliedGroups) return null
+  const groups = suppliedGroups ?? def!.getPropertyGroups(layer)
 
   return (
     <>
@@ -58,13 +62,14 @@ export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props
             </div>
             <div className="grid grid-cols-2 gap-2">
               {visible.map(schema => (
-                <div key={schema.id} className={schema.fullWidth ? 'col-span-2' : ''}>
+                <fieldset key={schema.id} aria-label={schema.label} disabled={!!disabledReason?.(schema)} className={`min-w-0 ${schema.fullWidth ? 'col-span-2' : ''}`}>
                   <SchemaField
                     schema={schema}
                     value={readPropertyPath(layer, schema.path) ?? schema.defaultValue}
-                    onChange={(v) => onLayerChange(writePropertyPath(layer, schema.path, v, true))}
+                    onChange={(v) => { if (!disabledReason?.(schema)) onLayerChange(writePropertyPath(layer, schema.path, v, true)) }}
                   />
-                </div>
+                  {disabledReason?.(schema) && <p className="text-xs text-amber-200 mt-1">{disabledReason(schema)}</p>}
+                </fieldset>
               ))}
             </div>
           </div>

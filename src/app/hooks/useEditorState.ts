@@ -13,7 +13,7 @@ import { executeAuthoredCommand, assertAuthoringData } from '@/lib/editor/author
 import { EditorDocumentLifetime } from '@/lib/editor/lifecycle/EditorDocumentLifetime'
 import { CommittedScene } from '@/lib/editor/persistence/recovery/CommittedScene'
 import { CommittedSnapshot } from '@/lib/editor/persistence/recovery/CommittedSnapshot'
-import { HISTORY_POLICY, type HistoryBudgetResult } from '@/lib/editor/history/historyBudget'
+import { HISTORY_POLICY, type HistoryBudgetResult, type HistoryPolicy } from '@/lib/editor/history/historyBudget'
 import { prepareHistory } from '@/lib/editor/history/HistoryGraph'
 
 // ── Transaction ref ────────────────────────────────────────────────────────────
@@ -79,11 +79,14 @@ export interface EditorStateReturn {
  * Authoring attribution is stamped once on command/gesture commit, stored in
  * the same immutable history snapshot. Preview/cancel/evaluation do not stamp;
  * undo/redo restores the original attribution.
+ * Optional historyPolicy is a stable composition-time limit for a private
+ * authoring host; omission preserves the main editor's existing budget. It
+ * bounds retained history, not native media or the current source's total RAM.
  * Layout setup/cleanup supports StrictMode replay through the pool's deferred
  * final release. Reset discards both history and an in-progress transaction.
  */
-export function useEditorState(initialScene: ChronoScene, restoredHistory?: HistoryState): EditorStateReturn {
-  const policy = { ...HISTORY_POLICY, assetBytes: (asset: ChronoScene['assets'][number]) => asset.url.startsWith('blob:')
+export function useEditorState(initialScene: ChronoScene, restoredHistory?: HistoryState, historyPolicy: Readonly<HistoryPolicy> = HISTORY_POLICY): EditorStateReturn {
+  const policy = { ...historyPolicy, assetBytes: (asset: ChronoScene['assets'][number]) => asset.url.startsWith('blob:')
     ? assetSourcePool.getSourceBytes(asset.url) ?? asset.metadata?.filesize ?? HISTORY_POLICY.maxBytes : 0 }
   const budgetRef = useRef<HistoryBudgetResult>()
   const [history, setHistory] = useState<HistoryState>(() => {

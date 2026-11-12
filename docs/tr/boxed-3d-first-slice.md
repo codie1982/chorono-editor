@@ -186,8 +186,10 @@ Hedef checkout'un Next sunucusu install/build sırasında kapalı olmalıdır.
   iç konumu değiştirdi; Undo geri getirdi. Bağlı kullanıcı sahnesi değiştirilmedi.
 
 Tam ürün/çok cihaz/uzun süreli 3D performans kabulü veya export kalite/parity
-fazının bittiği iddia edilmez. Sırada onaylı Editable Poly 2D ve UV/görünüm
-işleri bulunur; ileri kutulu 3D ve son genel optimizasyon sırası korunur.
+fazının bittiği iddia edilmez. Sonraki kullanıcı kararıyla sırada
+[dar ortak detay/izolasyon DET0–DET1](plans/shared-item-detail-editor.md),
+ardından Editable Poly 2D ve UV/görünüm işleri bulunur; ileri kutulu 3D ve son
+genel optimizasyon sırası korunur.
 
 12 Kasım sonraki kapsam kararı: 2D model kutusu standart bir 2D katmandır.
 Temel iç model/kamera Properties sabit kalır; `model3d.*` keyleri 2D Timeline'a

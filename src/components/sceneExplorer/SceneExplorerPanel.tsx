@@ -666,6 +666,7 @@ export default function SceneExplorerPanel({
           : [target.id]
         // Provide safe defaults for any handlers the caller omitted.
         const handlers: SceneExplorerMenuHandlers = {
+          editContent: contextHandlers.editContent,
           rename:        contextHandlers.rename        ?? (() => {}),
           duplicate:     contextHandlers.duplicate     ?? (() => {}),
           deleteLayers:  contextHandlers.deleteLayers  ?? (() => {}),
