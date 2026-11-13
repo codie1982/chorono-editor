@@ -126,7 +126,7 @@ node scripts/perf/serve.mjs /private/tmp/chorono-detail-browser 4332
 
 Fixture gerçek üretim bileşenlerini kullanır, kullanıcı sahnesine veya recovery
 deposuna bağlanmaz. Sentetik DOM suite OS mouse testi olarak sunulmaz. Bu kabul
-uzun süreli büyük sahne/çok cihaz performans veya 3D film render kabulü değildir.
+uzun süreli büyük sahne/çok cihaz performans veya ileri 3D animasyon kabulü değildir.
 
 Bkz. [ortak detay planı](plans/shared-item-detail-editor.md),
-[3D içerik ve film mimarisi](plans/boxed3d-isolated-editor.md).
+[3D içerik mimarisi](plans/boxed3d-isolated-editor.md).

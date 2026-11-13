@@ -138,11 +138,10 @@ tüketilebilir. 2D kaynaklar world sprite/plane veya HUD/UI adapter'ıyla birlik
 gösterilebilir. Oyun entity/input/physics/tick ve 3D solver işleri ayrı ileri
 kapsamdır; mevcut sıra değişmez, bu kaynak/runtime mimarisi henüz uygulanmadı.
 
-**3D film üretimi hedefi:** [Gömülü 3D çekimler ve ana 2D kurgu/kompozisyon](plans/boxed3d-isolated-editor.md)
-onaylı kapsama eklendi. İç kamera/karakter/klip Timeline'ı ayrı; ana sahne çekim,
-geçiş, grafik ve sesi birleştirir. Kesin local-clock, bütçeli çekim hazırlığı ve
-final render kabulü kendi aşamalarında teslim edilir. DET0–DET1 dar sınırında
-kalır; ilk statik model/detay dilimi film üretimi tamamlandı anlamına gelmez.
+**Kullanım örneği; ürün hedefi değil:** [3D içeriklerin ana 2D kompozisyonda birleştirilmesi](plans/boxed3d-isolated-editor.md)
+3D film üretiminde de kullanılabilir. Kullanıcının 13 Kasım düzeltmesiyle film
+üretimi ayrı hedef, teslim, zorunlu demo veya kabul kapısı olarak planlanmaz;
+mevcut teknik kapsam ve geliştirme sırası değişmez.
 
 
 - **G0 — İnsan–ajan devam edebilir:** E−1 birleşik kabulü geçer; taze okuma ve manuel alan/kimlik koruması, tek undo, keyset/transport/eğri ve viewport pivot/seçim/key çizimi/subtree çoğaltma doğrulanır. Ayrıntı E−1 ve viewport planındadır; soft selection tartışması bu kapıya eklenmez.

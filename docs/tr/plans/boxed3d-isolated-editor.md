@@ -109,47 +109,21 @@ Game Engine ve 3D solver geliştirmesi bu mimari yönle başlatılmış olmaz; s
 ayrı ürün kapsamıdır. `EditorMode` değerleri veya mevcut source şemaları yalnız
 bu planı yazmak için silinmez/değiştirilmez.
 
-## 3D film üretimi — gömülü çekimler ve ana kompozisyon
+## Kullanım örneği — 3D çekimlerin 2D kompozisyonda birleşmesi
 
-Kullanıcı onayıyla 3D film üretimi bu mimarinin hedef kullanımına eklenmiştir.
-Ayrı ikinci bir 3D Animation workspace motoru önkoşul değildir. Bir içerik
-kutusu, tek modelin yanında bütün bir çekimi de barındırabilir: dekor, modeller,
-karakterler, ışık, çıktı kamerası ve iç Timeline aynı 3D içerik belgesindedir.
-Birbirini örten/gölgeleyen veya etkileşen nesneler aynı iç 3D sahnede bulunur.
+13 Kasım kullanıcı düzeltmesi: **3D film üretimi ayrı ürün hedefi, geliştirme
+fazı veya kabul kapısı değildir; mimarinin olası kullanım örneğidir.** Bu örnek
+için zorunlu film/demo fixture'ı, film editörü veya yeni teslim maddesi eklenmez.
+
+Örnekte bir 3D içerik dekor, karakterler, ışık, kamera ve iç animasyonu aynı
+belgede barındırabilir; ana 2D kompozisyon bunları yazı, grafik ve sesle
+birleştirebilir. Birbirini örten/gölgeleyen nesneler aynı iç 3D sahnede tutulur.
 Bağımsız kutular arasında ortak derinlik/ışık kendiliğinden oluşmaz.
 
-- **Çekim hazırlığı:** Ortak 3D İçerik Editörü'nde modeller, imported klip/rig,
-  pose, kamera ve ışıklar ilgili capability'leri teslim edildikçe düzenlenir.
-  Kaynak model/rig ile çekime özel instance/animasyon düzeltmeleri ayrılır.
-- **Kurgu ve kompozisyon:** Ana 2D sahne çekimlerin sırasını/yerleşimini,
-  geçişleri, yazıları, grafikleri ve ses/müzik yerleşimini yönetir. İç kemik ve
-  kamera keyleri ana 2D Timeline'a otomatik yayılmaz. Çok çekimli kurguya gereken
-  trim/offset/süre/speed/loop mapping, ilgili component/local-clock ve CFX
-  araçları üzerinden açık teslimdir; bugünkü model kutusunda var sayılmaz.
-- **Kare hesabı:** Final render ana çıktı karesinin zamanını çekimin yerel
-  saatine dönüştürür; kamera, karakter/klip, video ve bake sonucu o kesin zamanda
-  değerlendirilir. UI FPS'i veya ayrı serbest playback saati çıktı zamanını seçmez.
-  Ses aynı kurgu zaman tabanından mix edilir; geçişte gereken iki çekim de hesaba katılır.
-- **Kaynak yönetimi:** Ortak asset referansları paylaşılır. Yalnız aktif çekim,
-  geçiş bağımlılıkları ve bütçeli yakın hazırlık yüklenir; bütün film/decoded
-  kareler/texture'lar belleğe yığılmaz. Bake/cache, job cancellation ve stale
-  invalidation mevcut kaynak sözleşmelerini kullanır.
-- **Teslim:** Önce kısa bir çok çekimli ürün/açıklayıcı film fixture'ı; ardından
-  daha uzun/karakterli iş yükleri. Hedef çözünürlükte 3D yüzey, sampling, gölge,
-  renk/alpha, efektler ve ses eşliği export/final kalite aşamasında doğrulanır.
-  İlk model diliminin 2048 px surface sınırı ve statik poz desteği tam film veya
-  yüksek kaliteli final render kabulü değildir.
-
-Kabul: shot/local time mapping ile scrub ve final raster aynı kareyi verir;
-kamera/karakter keyleri yalnız ilgili iç belgeyi değiştirir; portable açılışta
-çekim/asset referansları ve ses yerleşimi korunur; geçişte eksik kaynak sessizce
-boş kareye dönüşmez; uzun render/cancel/resume işi bellek bütçesini izler. Resume
-desteği ancak gerçek job/çıktı manifesti teslim edilince capability olarak açılır.
-
-Bu hedef DET0–DET1'i film editörü teslimine büyütmez. Ortak detay → Poly/UV →
-ileri 3D içerik/animasyon → ilgili bileşen/saat işleri → export/final kalite
-sırası ve daha sonraki CFX konumu korunur. Game Engine film üretiminin önkoşulu
-değildir; tam rig üretme/3D simülasyon araçları ayrı ileri kabul gerektirir.
+Örneğin ihtiyaç duyduğu scene/clip/local-clock, kaynak sahipliği ve final render
+yetenekleri zaten kendi onaylı aşamalarında değerlendirilir; yalnız bu örnek
+üzerinden yeni zorunluluk veya bitmiş özellik iddiası çıkarılmaz. Ortak detay →
+Poly/UV → ileri 3D içerik → bileşen/karakter ve mevcut devam sırası korunur.
 
 ## Şimdi çalışan sınır
 

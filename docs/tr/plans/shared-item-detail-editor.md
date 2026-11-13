@@ -208,6 +208,42 @@ sayılmaz. Son genel optimizasyon bu temel yaşam döngüsü kontrollerini ertel
 
 ## Teslim sırası ve önceki 3D önerilerinin yeri
 
+### 13 Kasım kod denetimi — iç animasyon ve rig henüz yok
+
+DET0–DET1 ortak statik detay host'udur; animasyon içinde animasyon veya
+karakter rig editörü teslimi değildir. `src/lib/types/core.ts` içindeki
+Timeline'lar düz scene listesinde durur; `evaluator.ts/evaluateTimelines`
+bunları ortak overrides map'inde değerlendirir. Mevcut local-time/loop ve SM
+saatleri yeniden kullanım temelidir, fakat nested source/instance/child Timeline
+anlamına gelmez. `LayerType` içinde reusable component/subscene veya skeleton
+source türü ve detayda ayrı oynatma/Timeline UI'sı henüz bulunmaz.
+
+3D importta `ModelAssetService.ts` kaynak GLB bytes'ını korurken runtime parse
+sırasında animations dizisini boşaltır; ilk dilim sabit pozu gösterir. İç
+model/kamera keyleri de ana 2D authoring'de kapalıdır. Source alanlarını açmak
+tek başına bir klip oynatıcısı veya bone/rig düzenleyicisi sağlamaz.
+
+Mevcut ileri detay/3D ve bileşen/karakter dilimlerinin açık bağımlılığı:
+
+1. **Ortak iç animasyon kaynağı ve değerlendirme:** Stable ID'li alt içerik ve
+   instance referansı, iç Timeline/klip, ana zaman → içerik zamanı eşlemesi
+   (başlangıç, offset, hız, loop/hold politikası), scoped hedefler ve döngüsel
+   referans koruması. 2D affine ve 3D TRS payload'ları ayrı adapter'lardır.
+2. **Detayda authoring:** Yerel playhead/scrub/Set Key ve iç animasyon listesi.
+   Ana Timeline kutu/instance'ın dış hareketini kontrol eder; iç keyler aynı
+   source alanlarına kopyalanmaz. Apply/Cancel, revision, Undo, instance override,
+   portable ve final-frame zaman eşliği birlikte teslim edilir.
+3. **Rig araçları:** 2D için parça/joint/attachment ve FK/IK; mesh deformasyonu
+   gerektiğinde Poly/UV + skin weights/rest pose. 3D için imported skeleton/clip
+   oynatma ve pose düzenleme ile sıfırdan rig/weight/IK üretme ayrı capability'lerdir.
+   Aynı detay host'u araçları barındırır; aynı skeleton/solver formatı iki boyuta
+   zorla uygulanmaz. Oyun runtime'ına otomatik entity/physics üretmez.
+
+Bu çekirdeğin dar kısmı iç 3D animasyonun önünde, ileri 3D diliminde geliştirilir;
+bileşen kütüphanesi ve karakter aşaması onu yeniden kullanır. Böylece ilerideki
+component teslimini önce bekleyen döngüsel bağımlılık kurulmaz. Poly/UV önceliği
+ve mevcut genel sıra değişmez; bu denetim kod veya rig sistemi uygulaması değildir.
+
 | Dilim | Onaylı sıradaki yeri ve sınırı |
 | --- | --- |
 | DET0 — dar sözleşme uygulandı | Mevcut ContextMenu/Isolate/komut sahipleri üzerinden capability catalog, hedef, revision ve taslak sınırı. [Gerçek sözleşme](../item-detail-editor.md). |
