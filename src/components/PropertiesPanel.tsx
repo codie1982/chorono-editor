@@ -1177,8 +1177,28 @@ export default function PropertiesPanel({
                   parameters={parameters}
                   onBind={(id) => bindParam('text.value', id)}
                 >
-                  <TextInput propertyPath="text.value" fieldLabel="Content" value={layer.text.value} onChange={value => updateText({ value })} />
+                  <TextInput propertyPath="text.value" fieldLabel="Content" value={layer.text.value} multiline onChange={value => updateText({ value })} />
                 </ParamBindButton>
+
+                <Row2>
+                  <Field label="Direction">
+                    <select value={layer.text.direction ?? 'horizontal'}
+                      onChange={e => updateText({ direction: e.target.value as 'horizontal' | 'vertical' })}
+                      className={TEXT_INPUT_CLASS}>
+                      <option value="horizontal">Horizontal</option>
+                      <option value="vertical">Vertical</option>
+                    </select>
+                  </Field>
+                  <Field label="Alignment">
+                    <select value={layer.text.textAlign ?? 'left'}
+                      onChange={e => updateText({ textAlign: e.target.value as 'left' | 'center' | 'right' })}
+                      className={TEXT_INPUT_CLASS}>
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </Field>
+                </Row2>
 
                 <Field label="Font">
                   <TextInput propertyPath="text.fontFamily" fieldLabel="Font family" suggestions={FONT_FAMILIES} value={layer.text.fontFamily ?? 'sans-serif'}
@@ -1250,10 +1270,52 @@ export default function PropertiesPanel({
                   </Field>
                 )}
 
-                <Field label="Letter Spacing">
-                  <NumInput propertyPath="text.letterSpacing" fieldLabel="Letter spacing" value={layer.text.letterSpacing ?? 0} step={0.5}
-                    onChange={(v) => updateText({ letterSpacing: v })} />
+                <Field label="Texture (image asset)">
+                  <select value={layer.text.textureAssetId ?? ''}
+                    onChange={e => updateText({ textureAssetId: e.target.value || undefined })}
+                    className={TEXT_INPUT_CLASS}>
+                    <option value="">None — color or gradient</option>
+                    {(scene?.assets ?? []).filter(asset => asset.type === 'image').map(asset => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                  </select>
                 </Field>
+
+                <Row2>
+                  <Field label="Letter Spacing (px)">
+                    <NumInput propertyPath="text.letterSpacing" fieldLabel="Letter spacing" value={layer.text.letterSpacing ?? 0} step={0.5}
+                      onChange={v => updateText({ letterSpacing: v })} />
+                  </Field>
+                  <Field label="Line Height">
+                    <NumInput propertyPath="text.lineHeight" fieldLabel="Line height" value={layer.text.lineHeight ?? 1.2} min={0.5} max={5} step={0.05}
+                      onChange={v => updateText({ lineHeight: v })} />
+                  </Field>
+                </Row2>
+
+                <Field label="Text Opacity">
+                  <input type="range" min={0} max={1} step={0.01} value={layer.opacity}
+                    onChange={e => update({ opacity: Number(e.target.value) })}
+                    className="w-full accent-blue-500" aria-label="Text opacity" />
+                </Field>
+
+                <Field label="Use text as mask for…">
+                  <select value="" onChange={e => {
+                    const target = allLayers.find(item => item.id === e.target.value)
+                    if (!target) return
+                    onLayerChange({ ...target, masks: [
+                      ...(target.masks ?? []),
+                      { id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                        maskLayerId: layer.id, mode: 'add', opacity: 1 },
+                    ] })
+                  }} className={TEXT_INPUT_CLASS}>
+                    <option value="">Choose a target layer…</option>
+                    {allLayers.filter(item => item.id !== layer.id && item.type !== 'audio' && item.type !== 'group'
+                      && !(item.masks ?? []).some(mask => mask.maskLayerId === layer.id)).map(item => (
+                      <option key={item.id} value={item.id}>{item.name} ({item.type})</option>
+                    ))}
+                  </select>
+                </Field>
+                <p className="text-[10px] text-gray-500">The text stays editable; its glyphs reveal the target layer.</p>
 
                 <Row2>
                   <BooleanInput propertyPath="text.uppercase" label="Uppercase" value={!!layer.text.uppercase} onChange={value => updateText({ uppercase: value })} />

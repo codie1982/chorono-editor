@@ -37,11 +37,14 @@ export const shapeRendererPlugin: LayerRendererPlugin = {
 
 export const textRendererPlugin: LayerRendererPlugin = {
   id: 'text',
-  mediaDependencies: layer => ({fontFamilies:[layer.text?.fontFamily??'sans-serif']}),
+  mediaDependencies: layer => ({
+    fontFamilies: [layer.text?.fontFamily ?? 'sans-serif'],
+    assetIds: layer.text?.textureAssetId ? [layer.text.textureAssetId] : [],
+  }),
   paint: { alphaSafe: true },
   supports: (layer: Layer) => layer.type === 'text',
   render(ctx: RenderContext, layer: Layer): void {
-    drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides)
+    drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides, ctx.assets)
   },
 }
 

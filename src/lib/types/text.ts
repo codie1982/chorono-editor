@@ -9,6 +9,7 @@ export type FontWeight =
 
 export type FontStyle  = 'normal' | 'italic'
 export type TextAlign  = 'left' | 'center' | 'right'
+export type TextDirection = 'horizontal' | 'vertical'
 
 // ── Text Outline (Stroke) ─────────────────────────────────────────────────────
 // Rendered BEFORE fill so the fill covers the inner half of the stroke.
@@ -37,6 +38,10 @@ export interface TextStyle {
   color: string
   /** Optional gradient fill. When set (≥2 stops), it replaces `color`. */
   gradient?: GradientFill
+  /** Image asset painted inside the glyph alpha. */
+  textureAssetId?: string
+  /** Horizontal lines or upright glyphs in vertical columns. */
+  direction?: TextDirection
 
   // ── Font ────────────────────────────────────────────────────────────────────
   fontFamily?: string    // 'Inter', 'Roboto', 'monospace', …
@@ -64,4 +69,5 @@ export interface TextStyle {
 // ── Animatable text properties ────────────────────────────────────────────────
 // text.fontSize      → font grows / shrinks
 // text.letterSpacing → spacing widens / narrows
+// text.lineHeight    → rows / columns move apart
 // opacity            → fade (via layer opacity, not TextStyle)

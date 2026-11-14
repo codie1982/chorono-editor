@@ -495,12 +495,13 @@ export function drawText(
   layer: Layer,
   paramValues?: ParamValueMap,
   overrides?: ReturnType<typeof evaluateTimelines>,
+  assets?: AssetElementMap,
 ) {
   if (!layer.text) return
   const {
-    value, color, gradient,
+    value, color, gradient, textureAssetId,
     fontFamily = 'sans-serif', fontWeight = 'normal', fontStyle = 'normal',
-    textAlign = 'left', lineHeight: _lh,
+    textAlign = 'left', direction = 'horizontal',
     stroke, shadow, uppercase, underline,
   } = layer.text
   // text.fontSize can be driven by a paramBinding or keyframe override.
@@ -510,6 +511,9 @@ export function drawText(
   const letterSpacing = overrides
     ? getLayerValue(overrides, layer.id, 'text.letterSpacing', layer.text.letterSpacing ?? 0)
     : layer.text.letterSpacing ?? 0
+  const lineHeight = overrides
+    ? getLayerValue(overrides, layer.id, 'text.lineHeight', layer.text.lineHeight ?? 1.2)
+    : layer.text.lineHeight ?? 1.2
 
   // Runtime parameter resolution:
   //   1. paramBindings['text.value'] → entire text replaced by parameter value
@@ -524,9 +528,21 @@ export function drawText(
     ? (getStringParamBinding(layer, 'text.color', paramValues)
       ?? (overrides ? resolveRenderColor(overrides, layer.id, 'text.color', color) : color))
     : overrides ? resolveRenderColor(overrides, layer.id, 'text.color', color) : color
-  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
-  ctx.textAlign    = textAlign as CanvasTextAlign
+  const font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`
+  const lines = displayText.split('\n')
+  const metrics = measureTextLayout({ ...layer.text, value: resolvedValue, fontSize, letterSpacing, lineHeight })
+  const blockLeft = direction === 'vertical' ? 0
+    : textAlign === 'center' ? -metrics.width / 2
+    : textAlign === 'right' ? -metrics.width : 0
+  ctx.font = font
   ctx.textBaseline = 'top'
+
+  const lineWidth = (line: string): number => {
+    const chars = Array.from(line)
+    if (!letterSpacing) return ctx.measureText(line).width
+    return chars.reduce((sum, char) => sum + ctx.measureText(char).width, 0)
+      + Math.max(0, chars.length - 1) * letterSpacing
+  }
 
   // Shadow
   if (shadow) {
@@ -536,18 +552,35 @@ export function drawText(
     ctx.shadowColor   = shadow.color
   }
 
-  const drawRun = (method: 'fill' | 'stroke') => {
-    if (letterSpacing === 0) {
-      if (method === 'fill') ctx.fillText(displayText, 0, 0)
-      else                   ctx.strokeText(displayText, 0, 0)
-      return
+  const drawRun = (target: CanvasRenderingContext2D, method: 'fill' | 'stroke') => {
+    target.save()
+    target.font = font
+    target.textBaseline = 'top'
+    const draw = (text: string, x: number, y: number) => {
+      if (method === 'fill') target.fillText(text, x, y)
+      else target.strokeText(text, x, y)
     }
-    let cursor = 0
-    Array.from(displayText).forEach((char) => {
-      if (method === 'fill') ctx.fillText(char, cursor, 0)
-      else                   ctx.strokeText(char, cursor, 0)
-      cursor += ctx.measureText(char).width + letterSpacing
-    })
+    if (direction === 'vertical') {
+      target.textAlign = 'center'
+      lines.forEach((line, column) => {
+        const x = (lines.length - column - 1) * fontSize * lineHeight + fontSize / 2
+        Array.from(line).forEach((char, row) => draw(char, x, row * (fontSize + letterSpacing)))
+      })
+    } else {
+      target.textAlign = 'left'
+      lines.forEach((line, row) => {
+        const width = lineWidth(line)
+        let x = blockLeft + (textAlign === 'center' ? (metrics.width - width) / 2
+          : textAlign === 'right' ? metrics.width - width : 0)
+        const y = row * fontSize * lineHeight
+        if (!letterSpacing) draw(line, x, y)
+        else Array.from(line).forEach((char) => {
+          draw(char, x, y)
+          x += target.measureText(char).width + letterSpacing
+        })
+      })
+    }
+    target.restore()
   }
 
   // Text outline — must come BEFORE fill so fill covers the inner half
@@ -555,34 +588,45 @@ export function drawText(
     ctx.strokeStyle = stroke.color
     ctx.lineWidth   = stroke.width * 2
     ctx.lineJoin    = 'round'
-    drawRun('stroke')
+    drawRun(ctx, 'stroke')
   }
 
-  // Gradient fill spans the measured text bounds (offset by textAlign so it
-  // tracks where the glyphs actually land). Falls back to the solid colour.
-  let textFill: string | CanvasGradient = resolvedColor
+  // Gradient spans the measured glyph box, including multiple lines/columns.
+  let textFill: string | CanvasGradient | CanvasPattern = resolvedColor
   if (gradient && gradient.stops?.length >= 2) {
-    const textWidth = letterSpacing === 0
-      ? ctx.measureText(displayText).width
-      : Array.from(displayText).reduce((w, c) => w + ctx.measureText(c).width + letterSpacing, 0)
-    const left = textAlign === 'center' ? -textWidth / 2
-      : textAlign === 'right' ? -textWidth
-      : 0
-    const g = buildGradient(ctx, gradient, textWidth, fontSize, left, 0)
+    const g = buildGradient(ctx, gradient, metrics.width, metrics.height, blockLeft, 0)
     if (g) textFill = g
   }
+  const texture = textureAssetId ? assets?.get(textureAssetId) : undefined
+  if (typeof HTMLImageElement !== 'undefined' && texture instanceof HTMLImageElement
+      && texture.complete && texture.naturalWidth > 0) {
+    const pattern = ctx.createPattern(texture, 'no-repeat')
+    if (pattern) {
+      pattern.setTransform(new DOMMatrix().translate(blockLeft, 0)
+        .scale(metrics.width / texture.naturalWidth, metrics.height / texture.naturalHeight))
+      textFill = pattern
+    }
+  }
   ctx.fillStyle = textFill
-  drawRun('fill')
+  drawRun(ctx, 'fill')
 
   // Reset shadow so it doesn't bleed into the next layer
   if (shadow) ctx.shadowColor = 'transparent'
 
   // Manual underline (Canvas has no text-decoration API)
   if (underline) {
-    const totalWidth = letterSpacing === 0
-      ? ctx.measureText(displayText).width
-      : Array.from(displayText).reduce((w, c) => w + ctx.measureText(c).width + letterSpacing, 0)
-    ctx.fillRect(0, fontSize * 1.15, totalWidth, Math.max(1, fontSize / 15))
+    if (direction === 'vertical') {
+      lines.forEach((line, column) => {
+        const x = (lines.length - column - 1) * fontSize * lineHeight
+        ctx.fillRect(x, 0, Math.max(1, fontSize / 15), Array.from(line).length * (fontSize + letterSpacing))
+      })
+    } else lines.forEach((line, row) => {
+      const width = lineWidth(line)
+      const x = blockLeft + (textAlign === 'center' ? (metrics.width - width) / 2
+        : textAlign === 'right' ? metrics.width - width : 0)
+      ctx.fillRect(x, row * fontSize * lineHeight + fontSize * 1.05,
+        width, Math.max(1, fontSize / 15))
+    })
   }
 }
 
@@ -637,7 +681,7 @@ function renderLayer(
   if (layer.type === 'shape' && layer.size) {
     drawShape(ctx, layer, overrides, paramValues)
   } else if (layer.type === 'text') {
-    drawText(ctx, layer, paramValues, overrides)
+    drawText(ctx, layer, paramValues, overrides, assets)
   } else if (layer.type === 'image') {
     drawImageLayer(ctx, layer, assets)
   } else if (layer.type === 'video') {
@@ -935,7 +979,9 @@ export function hitTestLayersAt(
 function hitTestLayerLocal(layer: Layer, lx: number, ly: number, assets: readonly Asset[]): boolean {
   if (layer.type === 'text' && layer.text) {
     const size = measureTextLayout(layer.text, assets)
-    const left = layer.text.textAlign === 'center' ? -size.width / 2 : layer.text.textAlign === 'right' ? -size.width : 0
+    const left = layer.text.direction === 'vertical' ? 0
+      : layer.text.textAlign === 'center' ? -size.width / 2
+      : layer.text.textAlign === 'right' ? -size.width : 0
     return lx >= left && lx <= left + size.width && ly >= 0 && ly <= size.height
   }
   if (layer.type === 'spline') {

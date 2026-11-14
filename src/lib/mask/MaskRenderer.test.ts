@@ -46,12 +46,12 @@ const pools: CanvasSurfacePool[] = []
 afterEach(() => pools.splice(0).forEach(pool => pool.dispose()))
 
 describe('MaskRenderer pooled temporary surfaces', () => {
-  it('keeps 3000 masks and subsequent frames at two reusable surfaces', () => {
-    const { renderer, pool, args, mask, createCanvas } = fixture(32)
+  it('keeps 3000 masks and subsequent frames at three reusable surfaces', () => {
+    const { renderer, pool, args, mask, createCanvas } = fixture(48)
     renderer.render(Array.from({ length: 3000 }, (_, i) => ({ ...mask, id: `mask-${i}` })), args)
     for (let frame = 0; frame < 60; frame++) renderer.render([mask], args)
-    expect(createCanvas).toHaveBeenCalledTimes(2)
-    expect(pool.getSnapshot()).toMatchObject({ residentBytes: 32, peakResidentBytes: 32, activeSurfaces: 0, idleSurfaces: 2 })
+    expect(createCanvas).toHaveBeenCalledTimes(3)
+    expect(pool.getSnapshot()).toMatchObject({ residentBytes: 48, peakResidentBytes: 48, activeSurfaces: 0, idleSurfaces: 3 })
     expect(args.destCtx.drawImage).toHaveBeenCalledTimes(61)
   })
 
@@ -59,9 +59,20 @@ describe('MaskRenderer pooled temporary surfaces', () => {
     const { renderer, args, mask, trace } = fixture()
     renderer.render([{ ...mask, mode, opacity: 0.4, feather: 3, inverted: true }], args)
     expect(trace).toContainEqual({ operation: 'source-over', alpha: 1, filter: 'blur(3px)', kind: 'fill' })
-    expect(trace).toContainEqual({ operation: 'difference', alpha: 1, filter: 'none', kind: 'fill' })
+    expect(trace).toContainEqual({ operation: 'xor', alpha: 1, filter: 'none', kind: 'fill' })
     expect(trace).toContainEqual({ operation: mode === 'subtract' ? 'destination-out' : 'destination-in', alpha: 0.4, filter: 'none', kind: 'image' })
     expect(args.destCtx.drawImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('unites add masks before clipping the host and then applies intersections', () => {
+    const { renderer, args, mask, trace } = fixture()
+    renderer.render([
+      mask,
+      { ...mask, id: 'second-add' },
+      { ...mask, id: 'intersection', mode: 'intersect' },
+    ], args)
+    expect(trace.filter(draw => draw.kind === 'image').map(draw => draw.operation))
+      .toEqual(['source-over', 'source-over', 'destination-in', 'destination-in'])
   })
 
   it.each(['host', 'mask', 'destination', 'lookup'] as const)('returns all leases after a %s failure', stage => {

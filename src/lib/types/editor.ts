@@ -52,6 +52,7 @@ export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
   // ── Text ──────────────────────────────────────────────────────────────────
   { label: 'Font Size',       path: 'text.fontSize',         group: 'Text',   layerTypes: ['text'] },
   { label: 'Letter Spacing',  path: 'text.letterSpacing',    group: 'Text',   layerTypes: ['text'] },
+  { label: 'Line Height',     path: 'text.lineHeight',       group: 'Text',   layerTypes: ['text'] },
   // ── Effects ───────────────────────────────────────────────────────────────
   // Visual filters — irrelevant for audio.
   { label: 'Blur',            path: 'effects.blur',          group: 'Effects', notLayerTypes: NON_VISUAL_LAYER_TYPES },

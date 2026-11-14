@@ -47,13 +47,15 @@ All shape layers support fill (solid or gradient), stroke, trim path, and all st
 
 ### Text
 
-Text layers render styled text. You can animate any text property — position, scale, color, opacity, character spacing, and more. Text layers support:
+Adding text opens an editor directly on the canvas. Double-click existing text to edit it; `Ctrl/⌘ + Enter` applies and `Esc` cancels. The Content field in Properties also accepts multiple lines.
 
-- Font family, weight, size, line height, letter spacing.
-- Fill and stroke (solid color or gradient).
-- Multi-line blocks with alignment (left, center, right, justify).
-- Per-character animation via the text animator (rigging individual letters).
-- **Convert to Spline** — explodes the text into editable bezier outlines.
+- Horizontal lines or vertical columns of upright glyphs, with left, center and right alignment.
+- Font family, weight, size, letter spacing and line height. Font size, letter spacing and line height can be keyed on the timeline.
+- Solid color, gradient or an imported image texture; outline, shadow and layer opacity.
+- **Use text as mask for…** selects a target layer while keeping the text editable. Its glyph alpha reveals the target. The target's Effects > Masks controls add, subtract, intersect, inversion, opacity and feather. Multiple **add** masks form a union.
+- **Convert to Spline** turns text into editable bezier outlines.
+
+Mask sources do not draw independently in output; selecting one in the editor shows a faint preview. SVG vector export does not yet carry text image textures, gradient fills or layer masks; raster/video output uses the canvas rendering.
 
 ### Image
 

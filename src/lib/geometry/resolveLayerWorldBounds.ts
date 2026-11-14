@@ -179,8 +179,11 @@ export function createLayerWorldBoundsResolver(
       const size = !hasAnimatedSize && !fontMapped && effective.size ? effective.size : measureTextLayout({
         ...effective.text,
         fontSize: getLayerValue(frame, effective.id, 'text.fontSize', effective.text.fontSize),
+        letterSpacing: getLayerValue(frame, effective.id, 'text.letterSpacing', effective.text.letterSpacing ?? 0),
+        lineHeight: getLayerValue(frame, effective.id, 'text.lineHeight', effective.text.lineHeight ?? 1.2),
       },scene.assets)
-      const left = effective.text.textAlign === 'center' ? -size.width / 2
+      const left = effective.text.direction === 'vertical' ? 0
+        : effective.text.textAlign === 'center' ? -size.width / 2
         : effective.text.textAlign === 'right' ? -size.width : 0
       return rectangleBounds(size.width, size.height, matrix, left)
     }

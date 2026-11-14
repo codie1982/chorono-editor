@@ -75,6 +75,8 @@ import { useShapePlacement } from './canvas/placement/useShapePlacement'
 import { ShapePlacementOutline } from './canvas/placement/ShapePlacementOutline'
 import { resolveCloneDragMode } from '@/lib/shortcuts/cloneDragGesture'
 import { usePathEdit } from './canvas/hooks/usePathEdit'
+import { TextEditOverlay } from './canvas/TextEditOverlay'
+import { syncTextLayerSize } from '@/lib/text/measureText'
 import { resolveSplineEditGeometry, drivenSplineEditReason, drivenSplineTopologyReason } from './canvas/splineEditGeometry'
 import { createLayerWorldBoundsResolver } from '@/lib/geometry/resolveLayerWorldBounds'
 import { beginRotationGesture, resolveParentWorldMatrix } from '@/lib/canvas/math/rotationGesture'
@@ -107,6 +109,9 @@ interface Props {
   selectedLayerIds?: Set<string>
   assets: AssetElementMap
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
+  /** One-shot request to edit a freshly inserted text layer in the viewport. */
+  textEditRequestId?: string | null
+  onTextEditRequestDone?: () => void
   /** Replace selection atomically with every new forest root after drag-copy. */
   onSelectLayers?: (ids: readonly string[]) => void
   /** Optional pre-computed override map from the interactive runtime hook
@@ -260,6 +265,7 @@ const NO_MOTION_KEYS: ReadonlySet<string> = new Set()
 
 export default function SceneCanvas({
   scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers,
+  textEditRequestId, onTextEditRequestDone,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
@@ -276,6 +282,12 @@ export default function SceneCanvas({
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [editingTextId, setEditingTextId] = useState<string | null>(null)
+  useEffect(() => {
+    if (textEditRequestId && scene.layers.some(layer => layer.id === textEditRequestId)) {
+      setEditingTextId(textEditRequestId)
+    }
+  }, [textEditRequestId, scene.layers])
 
   // BL-66 — hide all editor chrome (selection, gizmos, grid, overlays) during
   // playback or preview so the viewport shows clean animation content. This is
@@ -1066,7 +1078,7 @@ export default function SceneCanvas({
   // BL-66 — during playback / preview ALL gizmos are suppressed (editor chrome).
   // Gating the whole object here means showFrame (depends on gizmo.frame) and
   // every axis/ring/anchor handle below collapse to false in one place.
-  const gizmo = hideEditorUI || motionEditing || arrayEditing || placingShape || modelCamera.active ? {
+  const gizmo = hideEditorUI || !!editingTextId || motionEditing || arrayEditing || placingShape || modelCamera.active ? {
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
@@ -1205,7 +1217,10 @@ export default function SceneCanvas({
               const cy = (e.clientY - rect.top)  * sy
               const hitId = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
               const hitLayer = hitId ? scene.layers.find((l) => l.id === hitId) : null
-              if (hitLayer?.type === 'path' && !hitLayer.locked) {
+              if (hitLayer?.type === 'text' && !hitLayer.locked && !hitLayer.frozen) {
+                onSelectLayer(hitId!)
+                setEditingTextId(hitId!)
+              } else if (hitLayer?.type === 'path' && !hitLayer.locked) {
                 onSelectLayer(hitId!)
                 onToolModeChange?.('pen')
               } else if (hitLayer && onEditContent && !detailUnavailableReason(hitLayer)) {
@@ -1331,7 +1346,24 @@ export default function SceneCanvas({
           {shapePlacement.draft && <ShapePlacementOutline bounds={boundsForFrame(shapePlacement.draft)}
             width={width} height={height} zoom={zoom} />}
 
-          {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
+          {editingTextId && !hideEditorUI && (() => {
+            const textLayer = scene.layers.find(layer => layer.id === editingTextId)
+            if (!textLayer?.text || textLayer.locked || textLayer.frozen) return null
+            const worldMatrix = resolveLayerWorldMatrix(textLayer, scene, timeMs, displayOverrides)
+            return <TextEditOverlay key={editingTextId} layer={textLayer} assets={scene.assets} zoom={zoom} worldMatrix={worldMatrix}
+              onCommit={value => {
+                setEditingTextId(null)
+                onTextEditRequestDone?.()
+                if (value !== textLayer.text!.value) {
+                  const next = syncTextLayerSize({ ...textLayer, text: { ...textLayer.text!, value } }, scene.assets)
+                  editor.dispatchCommand(makeUpdateLayerCmd(textLayer.id, next, textLayer))
+                  onAfterLayerCommit?.(textLayer, next)
+                }
+              }}
+              onCancel={() => { setEditingTextId(null); onTextEditRequestDone?.() }} />
+          })()}
+
+          {!hideEditorUI && !editingTextId && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
             scene={displayScene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
             cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}

@@ -193,6 +193,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   // ── Local UI selection / modal state (not part of scene history) ─────────
   const [layerSelection, setLayerSelection] = useState(() => createLayerSelection(scene.layers[0] ? [scene.layers[0].id] : [], scene.layers[0]?.id ?? null))
   const selectedLayerId = layerSelection.primaryId
+  const [textEditRequestId, setTextEditRequestId] = useState<string | null>(null)
   // Legacy panel props accept Set; lend them a copy rather than mutable state.
   const selectedLayerIds = useMemo(() => new Set(layerSelection.selectedIds), [layerSelection.selectedIds])
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
@@ -573,6 +574,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     shapeCreation.close()
     dispatchCommand(makeAddLayerCmd(l))
     selectLayer(l.id)
+    if (kind === 'text') setTextEditRequestId(l.id)
     // BL-66: paths start empty — auto-switch to Pen tool so the next click
     // on the canvas places the first anchor.
     if (kind === 'bezierPath' || kind === 'motionPath') {
@@ -981,6 +983,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       'transform.x', 'transform.y',
       'transform.scaleX', 'transform.scaleY',
       'transform.rotationDeg',
+      'text.fontSize', 'text.letterSpacing', 'text.lineHeight',
     ]
     const changed = candidates.filter((p) => {
       const a = readNumber(prev, p), b = readNumber(next, p)
@@ -1589,6 +1592,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
                     selectedLayerId={isolatedPrimaryId}
+                    textEditRequestId={textEditRequestId}
+                    onTextEditRequestDone={() => setTextEditRequestId(null)}
                     selectedLayerIds={isolatedSelectedIds}
                     assets={assetCache}
                     onSelectLayer={selectLayer}
