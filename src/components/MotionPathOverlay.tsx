@@ -32,12 +32,17 @@ export interface MotionPathOverlayProps {
   /** Positioned, unscaled viewport host for controls. Missing/unattached hosts
    * keep controls inline; trajectory geometry always stays in composition space. */
   controlsHostRef?: RefObject<HTMLElement>
+  /** Dock-owned controls host. Explicit null hides controls while its tab is
+   * unmounted; geometry/drafts stay in this owner. Undefined keeps legacy hosts. */
+  controlsHost?: HTMLElement | null
   mode?: MotionEditorMode
   onModeChange?: (mode: MotionEditorMode) => void
   onEditingChange?: (editing: boolean) => void
   onEditPathSource?: (sourceId: string) => void
   onEditProgressTiming?: (layerId: string) => void
   snapWorldPoint?: (point: { x: number; y: number }) => { x: number; y: number }
+  /** Pan retains trajectory feedback while refusing pointer/keyboard edits. */
+  interactionDisabled?: boolean
 }
 
 /** Editable native position trajectory on one explicit timeline. Geometry path
@@ -99,7 +104,7 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
     timelineId, layerId: layer.id, nodes: selectedNodes.map(trajectoryNodeRef), deltaWorld: { x: dx, y: dy },
   })), [actions.apply, editor, timelineId, layer.id, selectedNodes])
   const cancel = useCallback(() => { drag.cancel(); drawing.clear(); changeMode('select') }, [drag.cancel, drawing.clear, changeMode])
-  useMotionKeyboard({ active: mode !== 'off', canEdit: model.capability.editable,
+  useMotionKeyboard({ active: mode !== 'off' && !props.interactionDisabled, canEdit: model.capability.editable,
     hasSelection: selectedNodes.length > 0, move: moveSelected, remove: actions.remove, cancel })
   const preview = useMemo(() => drawing.previewScene ? buildTrajectoryModel(drawing.previewScene, timelineId, layer.id) : null,
   [drawing.previewScene, timelineId, layer.id])
@@ -110,14 +115,14 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
     return next
   }
   const beginNode = (node: TrajectoryNode) => (event: React.PointerEvent<SVGGElement>) => {
-    if (event.button !== 0 || editor.isTransactionActive()) return
+    if (props.interactionDisabled || event.button !== 0 || editor.isTransactionActive()) return
     event.stopPropagation(); event.preventDefault()
     const next = pick(node, event.shiftKey)
     if (event.shiftKey || !model.capability.editable) return
     drag.begin(event, [node, ...model.nodes.filter(item => item.id !== node.id && isMotionNodeSelected(item, next))])
   }
   const place = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (event.button !== 0 || !model.capability.editable || !canvasRef?.current || (mode !== 'add' && mode !== 'draw')) return
+    if (props.interactionDisabled || event.button !== 0 || !model.capability.editable || !canvasRef?.current || (mode !== 'add' && mode !== 'draw')) return
     event.preventDefault(); event.stopPropagation()
     try {
       const raw = motionPointerWorld(canvasRef.current, event.clientX, event.clientY), point = props.snapWorldPoint?.(raw) ?? raw
@@ -128,11 +133,13 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
       }
     } catch (error) { setWarning(error instanceof Error ? error.message : String(error)) }
   }
-  const active = mode !== 'off', editable = model.capability.editable && !!canvasRef?.current
+  const active = mode !== 'off', editable = model.capability.editable && !!canvasRef?.current && !props.interactionDisabled
   const diagnostics = model.capability.diagnostics.map(item => item.message)
   const lines = preview?.segments ?? model.segments
-  const controls = <div className="absolute left-2 top-2 z-[65] overflow-y-auto rounded-md border border-slate-600 bg-slate-900/95 p-2 text-white shadow-xl pointer-events-auto"
-      style={{ maxWidth: 'min(720px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)' }}
+  const docked = props.controlsHost !== undefined
+  const targetHost = docked ? props.controlsHost : controlsHost
+  const controls = <div className={docked ? 'p-3 text-white pointer-events-auto' : 'absolute left-2 top-2 z-[65] overflow-y-auto rounded-md border border-slate-600 bg-slate-900/95 p-2 text-white shadow-xl pointer-events-auto'}
+      style={docked ? undefined : { maxWidth: 'min(720px, calc(100% - 16px))', maxHeight: 'calc(100% - 16px)' }}
       onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} data-motion-controls>
       <MotionKeyToolbar mode={mode} onModeChange={changeMode} timelineId={timelineId} selectedCount={selectedNodes.length} editable={editable}
         duplicateMs={duplicateMs} onDuplicateMs={setDuplicateMs} onDuplicate={() => actions.duplicate(duplicateMs)} onDelete={actions.remove} />
@@ -152,7 +159,7 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
           <select aria-label="Motion key advance unit" value={stepUnit} onChange={event => setStepUnit(event.target.value as 'frames' | 'ms')}
             className="rounded border border-slate-600 bg-slate-950 px-1 py-1"><option value="frames">frames</option><option value="ms">ms</option></select></div>}
         {selectedNodes.length === 1 && mode === 'select' && <MotionKeyInspector node={selectedNodes[0]} durationMs={model.durationMs}
-          disabled={!model.capability.editable} onApply={actions.numeric} />}
+          disabled={!editable} onApply={actions.numeric} />}
         {mode === 'draw' && <MotionDrawingPanel settings={drawing.settings} onChange={drawing.setSettings} pointCount={drawing.points.length}
           durationMs={model.durationMs} canApply={drawing.canApply} onApply={drawing.apply} onClear={drawing.clear} onCancel={cancel} />}
         {layer.followPath && <div className="mt-2 flex gap-2 text-xs">
@@ -165,18 +172,19 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
       </>}
     </div>
   return <>
-    {controlsHost ? createPortal(controls, controlsHost) : controls}
+    {active && (targetHost ? createPortal(controls, targetHost) : !docked ? controls : null)}
     {active && <svg className="absolute inset-0 z-40 overflow-visible" style={{ width: '100%', height: '100%',
-      pointerEvents: mode === 'add' || mode === 'draw' ? 'auto' : 'none', cursor: mode === 'add' || mode === 'draw' ? 'crosshair' : undefined }}
+      pointerEvents: !props.interactionDisabled && (mode === 'add' || mode === 'draw') ? 'auto' : 'none', cursor: !props.interactionDisabled && (mode === 'add' || mode === 'draw') ? 'crosshair' : undefined }}
       aria-label="Motion trajectory" data-testid="motion-input-surface" onPointerDown={place}>
       {lines.map((samples, index) => <polyline key={index} points={samples.map(sample => `${sample.world.x * zoom},${sample.world.y * zoom}`).join(' ')}
         fill="none" stroke={preview ? '#fbbf24' : '#7dd3fc'} strokeWidth={2} strokeDasharray={preview ? '5 3' : undefined} pointerEvents="none" />)}
       {drawing.points.map((point, index) => <circle key={`draft-${index}`} cx={point.x * zoom} cy={point.y * zoom} r={4} fill="#fbbf24" pointerEvents="none" />)}
       {model.nodes.map(node => <g key={node.id} data-motion-node-id={node.id} data-motion-time-ms={node.timeMs}
-        transform={`translate(${node.world.x * zoom} ${node.world.y * zoom})`} role="button" tabIndex={mode === 'select' ? 0 : -1}
+        transform={`translate(${node.world.x * zoom} ${node.world.y * zoom})`} role="button" tabIndex={mode === 'select' && !props.interactionDisabled ? 0 : -1}
         aria-label={`Motion key ${node.timeMs.toFixed(2)} milliseconds`} aria-pressed={isMotionNodeSelected(node, selection)}
-        style={{ pointerEvents: mode === 'select' ? 'all' : 'none', cursor: model.capability.editable ? 'grab' : 'pointer' }}
-        onPointerDown={beginNode(node)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); pick(node, event.shiftKey) } }}>
+        aria-disabled={props.interactionDisabled || undefined}
+        style={{ pointerEvents: mode === 'select' && !props.interactionDisabled ? 'all' : 'none', cursor: model.capability.editable ? 'grab' : 'pointer' }}
+        onPointerDown={beginNode(node)} onKeyDown={event => { if (!props.interactionDisabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopPropagation(); pick(node, event.shiftKey) } }}>
         <title>{node.timeMs.toFixed(2)} ms · world {node.world.x.toFixed(2)}, {node.world.y.toFixed(2)}</title>
         <circle r={12} fill="transparent" />
         <rect x={isMotionNodeSelected(node, selection) ? -6 : -5} y={isMotionNodeSelected(node, selection) ? -6 : -5}

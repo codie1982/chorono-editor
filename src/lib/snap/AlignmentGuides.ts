@@ -22,7 +22,7 @@ export interface Guide {
   /** Position in composition (world) coordinates. */
   position: number
   /** Where this guide came from (debug + filtering). */
-  source: 'canvas-edge' | 'canvas-center' | 'layer-edge' | 'layer-center' | 'custom-guide'
+  source: 'canvas-edge' | 'canvas-center' | 'layer-edge' | 'layer-center' | 'custom-guide' | 'parent-edge' | 'grid' | 'pixel'
 }
 
 export interface SnapResult {
@@ -38,42 +38,36 @@ export interface SnapTarget {
   axis: 'v' | 'h'
   position: number   // line position (world coords)
   source: Guide['source']
+  /** Grid quantizes the source origin, whereas bounds align edges/centers. */
+  originOnly?: boolean
+}
+
+/** Emit world-axis bounds edges/centers in deterministic order. Parent/object
+ * bounds are evaluated by the caller, including displayed transforms. */
+function rectangleTargets(r: Rect, edge: Guide['source'], center: Guide['source'] | null, edges: boolean): SnapTarget[] {
+  return [
+    ...(edges ? [{ axis: 'v' as const, position: r.x, source: edge }, { axis: 'v' as const, position: r.x + r.width, source: edge },
+      { axis: 'h' as const, position: r.y, source: edge }, { axis: 'h' as const, position: r.y + r.height, source: edge }] : []),
+    ...(center ? [{ axis: 'v' as const, position: r.x + r.width / 2, source: center }, { axis: 'h' as const, position: r.y + r.height / 2, source: center }] : []),
+  ]
 }
 
 /**
- * Build the candidate target list once per drag (cheap — under 100 items even
- * with many layers). Each layer contributes up to 6 lines (left/right/cx/cy/top/bottom).
+ * Build world-axis targets in O(layers + parents). Default options preserve
+ * legacy edges and centers; explicit policies keep checkbox types independent.
+ * Parents precede ordinary bounds, winning exact distance ties.
  */
 export function buildSnapTargets(
   compositionWidth:  number,
   compositionHeight: number,
   otherLayers: Array<Rect & { id: string }>,
+  policy: { edges?: boolean; centers?: boolean; parents?: readonly Rect[] } = {},
 ): SnapTarget[] {
-  const out: SnapTarget[] = []
-
-  // ── Canvas edges ──
-  out.push({ axis: 'v', position: 0,                 source: 'canvas-edge' })
-  out.push({ axis: 'v', position: compositionWidth,  source: 'canvas-edge' })
-  out.push({ axis: 'h', position: 0,                 source: 'canvas-edge' })
-  out.push({ axis: 'h', position: compositionHeight, source: 'canvas-edge' })
-
-  // ── Canvas centerlines ──
-  out.push({ axis: 'v', position: compositionWidth  / 2, source: 'canvas-center' })
-  out.push({ axis: 'h', position: compositionHeight / 2, source: 'canvas-center' })
-
-  // ── Other layer edges + centers ──
-  for (const r of otherLayers) {
-    const cx = r.x + r.width  / 2
-    const cy = r.y + r.height / 2
-    out.push({ axis: 'v', position: r.x,             source: 'layer-edge'   })
-    out.push({ axis: 'v', position: r.x + r.width,   source: 'layer-edge'   })
-    out.push({ axis: 'v', position: cx,              source: 'layer-center' })
-    out.push({ axis: 'h', position: r.y,             source: 'layer-edge'   })
-    out.push({ axis: 'h', position: r.y + r.height,  source: 'layer-edge'   })
-    out.push({ axis: 'h', position: cy,              source: 'layer-center' })
-  }
-
-  return out
+  return [
+    ...(policy.parents ?? []).flatMap(r => rectangleTargets(r, 'parent-edge', null, true)),
+    ...rectangleTargets({ x: 0, y: 0, width: compositionWidth, height: compositionHeight }, 'canvas-edge', policy.centers === false ? null : 'canvas-center', policy.edges !== false),
+    ...otherLayers.flatMap(r => rectangleTargets(r, 'layer-edge', policy.centers === false ? null : 'layer-center', policy.edges !== false)),
+  ].filter(target => Number.isFinite(target.position))
 }
 
 /**
@@ -101,11 +95,11 @@ export function snapRect(
   for (const t of targets) {
     if (t.axis === 'v') {
       // Try snapping each vertical anchor (left, cx, right)
-      for (const { anchor, delta } of [
+      for (const { delta } of (t.originOnly ? [{ delta: t.position - left }] : [
         { anchor: 'left',  delta: t.position - left  },
         { anchor: 'cx',    delta: t.position - cx    },
         { anchor: 'right', delta: t.position - right },
-      ]) {
+      ])) {
         const abs = Math.abs(delta)
         if (abs < threshold && abs < bestVDx) {
           bestVDx = abs
@@ -114,11 +108,11 @@ export function snapRect(
         }
       }
     } else {
-      for (const { anchor, delta } of [
+      for (const { delta } of (t.originOnly ? [{ delta: t.position - top }] : [
         { anchor: 'top',    delta: t.position - top    },
         { anchor: 'cy',     delta: t.position - cy     },
         { anchor: 'bottom', delta: t.position - bottom },
-      ]) {
+      ])) {
         const abs = Math.abs(delta)
         if (abs < threshold && abs < bestHDy) {
           bestHDy = abs

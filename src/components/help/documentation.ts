@@ -8,6 +8,8 @@ export const documentationPages = {
   'editor/canvas/selection': 'Advanced selection',
   'editor/canvas/snapping': 'Guides & snapping',
   'editor/canvas/splines': 'Bézier points & splines',
+  'editor/canvas/compound-splines': 'Compound spline editing',
+  'editor/canvas/spline-modeling': 'Spline modeling release preview',
   'editor/canvas/motion-keys': 'Motion Keys',
   'editor/layers': 'Layers',
   'editor/layers/basic-shapes': 'Basic Shapes',
@@ -15,6 +17,7 @@ export const documentationPages = {
   'editor/layers/text': 'Text',
   'editor/layers/media': 'Image, video & audio',
   'editor/layers/spline-objects': 'Spline Objects',
+  'scripting/splines': 'Spline scripting',
   'editor/layers/particles': 'Particle Emitter',
   'editor/layers/scene-explorer': 'Scene Explorer',
   'editor/layers/cloning': 'Clone & Instance',
@@ -64,10 +67,15 @@ export const documentationPages = {
 
 export type DocumentationTopic = keyof typeof documentationPages
 
-/** Return a stable absolute production URL, independent of the editor's port,
- * deployment or router. This performs no network request or state mutation. */
+/** Return a stable production guide URL with editor Help attribution.
+ * URL handles fragment topics so campaign parameters precede the heading hash.
+ * This performs no network request or editor state mutation. */
 export function documentationUrl(topic: DocumentationTopic): string {
-  return `https://www.chorono.com/docs/${topic}`
+  const url = new URL(topic, 'https://www.chorono.com/docs/')
+  url.searchParams.set('utm_source', 'chorono_editor')
+  url.searchParams.set('utm_medium', 'referral')
+  url.searchParams.set('utm_campaign', 'editor_help')
+  return url.toString()
 }
 
 /** Open palette categories resolve to their task guide; a closed palette or

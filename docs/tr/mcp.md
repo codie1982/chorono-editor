@@ -1,6 +1,6 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.1.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 41 ortak aracı yayımlar.
 Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
@@ -38,19 +38,38 @@ Geliştirirken üretim sunucusunu durdurup `npm run dev:mcp` kullanabilirsiniz. 
 
 Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin veya `claude mcp add --transport stdio chorono -- /tam/node/yolu /tam/proje/yolu/dist/mcp/server.cjs` kullanın. Codex kaydı `[mcp_servers.chorono]` bölümünde `command`, `args`, `startup_timeout_sec` ve `tool_timeout_sec` içerir.
 
+## Editörden ajana odak metni kopyalama
+
+Editörde MCP bağlantısını açtıktan sonra tuvaldeki katmana, Katmanlar panelindeki
+satıra veya Sahne Gezgini satırına sağ tıklayın. **Send to Agent** alt menüsü
+açıklama, sorun bulma, iyileştirme önerisi, düzenleme isteği ve özel soru
+seçenekleri sunar. Seçenekler ajan sohbetine yapıştırılacak bir görev metni
+kopyalar; doğrudan sohbet başlatmaz. Düzenleme ve özel soru seçenekleri önce
+kısa bir metin ister. Kopyalanan metin yalnız editör oturumu ve süreli bir
+odak kimliği taşır. Seçili katmanlar, timeline, oynatma zamanı, tuval koordinatı,
+belge kimliği ve güncel sahne `get_handoff_context` ile MCP üzerinden okunur.
+Odak kaydı aynı tarayıcı sekmesinde en fazla on dakika tutulur; belge veya hedef
+değişirse okuma hata verir ve yeni bir aktarım gerekir. Araç kaynak yazma yetkisi
+vermez: her değişiklik öncesinde ayrıca `get_scene` okunur. Ajan gerçek
+`render_preview` PNG'lerini, gerekiyorsa `evaluate_frame` değerlerini ve
+`validate_scene` sonucunu inceleyip sahne revizyonu ile kanıtı raporlamalıdır.
+Kod ve loglar tek başına görsel doğruluğu kanıtlamaz. MCP kaynak yazmaları için
+güncel okuma teknik olarak zorunludur; salt okunur yanıtta bu akışa uyma
+sorumluluğu ajandadır.
+
 ## Araç kapsamı
 
 Claude Code ve Codex için araç kullanım iş akışları ayrıca `skills/` altında dağıtılır. Skill kurulum CLI'si, yerel deneme ve npm paketleme için [skill rehberini](skills.md) okuyun. Skill kurulumu bu MCP bağlantısının yerine geçmez.
 
 Sunucu aynı ActionRegistry/domain komutlarını kullanır. Varsayılan STDIO
-`tools/list` yüzeyi sık kullanılan 40 aracı gösterir; uzman eylemler tekil şema
+`tools/list` yüzeyi sık kullanılan 41 aracı gösterir; uzman eylemler tekil şema
 keşfi ve `batch_actions` ile kullanılabilir. Bu ayrım katman/kompozisyon,
 keyframe/timeline, clone/array, spline/path, particle ve state-machine
 kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları kullanır:
 
 | Alan | Araçlar |
 | --- | --- |
-| Keşif | `list_sessions`, `get_capabilities`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
+| Keşif | `list_sessions`, `get_capabilities`, `get_handoff_context`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
 | Nesneler | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
 | Animasyon | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Script | `run_script`, `apply_script_plan`, `batch_actions` |
@@ -75,7 +94,7 @@ Salt okuma, dosya ve playback/runtime taşıma araçları mutasyon batch'ine gir
 klibi düzenlemeleri bu uzman mutasyon yolunu kullanabilir; scriptte aynı domain
 işlemleri de vardır.
 
-`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` eski 77 aracın
+`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 78 aracın
 uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
 Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
 `catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;

@@ -15,10 +15,14 @@ export interface CanvasRendererOptions {
   selectedLayerId: string | null
   selectedLayerIds?: Set<string>
   assets: AssetElementMap
-  /** Master snap enabled (controls whether the grid is drawn). */
+  /** Legacy fallback for hosts without an explicit grid visibility setting. */
   snapEnabled: boolean
   snapToGridOn: boolean
   gridSize: number
+  /** Viewport-only visibility; independent of snapping when supplied. */
+  gridVisible?: boolean
+  /** false paints behind content; omitted retains the historical front grid. */
+  gridInFront?: boolean
   /** Timeline / runtime override map (already merged upstream). */
   overrides?: OverrideMap
   paramValues?: Map<string, string | number | boolean>

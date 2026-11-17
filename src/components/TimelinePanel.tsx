@@ -54,6 +54,7 @@ import type { TimelineGhostSettings } from '@/lib/types/editor'
 import { useKeyframeDrag, type DragSnapshot } from './timeline/hooks/useKeyframeDrag'
 import TimelineRuler           from './timeline/TimelineRuler'
 import TimelineToolbar         from './timeline/TimelineToolbar'
+import { TimelineTools } from './timeline/TimelineTools'
 import TrackToolBar            from './timeline/TrackToolBar'
 import TimelineStatusBar       from './timeline/TimelineStatusBar'
 import TimelineMinimap         from './timeline/TimelineMinimap'
@@ -1044,6 +1045,7 @@ export default function TimelinePanel({
 
       {audioControls}
       <SetKeyReview controls={authoring} />
+      <TimelineTools selectedLayers={selectedLayerIds.size || (selectedLayerId ? 1 : 0)} selectedKeys={selectedKfIds.size} revealed={hierarchy.find.revealIds.length > 0}>
       <TrackToolBar
         hasKeyframes={!!(timeline && timeline.tracks.some((t) => t.keyframes.length > 0))}
         selectedCount={selectedKfIds.size}
@@ -1068,6 +1070,8 @@ export default function TimelinePanel({
         canSetFlag={() => true} onExpand={() => hierarchy.branches.setExpanded(hierarchy.branches.roots, true)}
         onCollapse={() => hierarchy.branches.setExpanded(hierarchy.branches.roots, false)}
         onSetFlag={(field, value) => hierarchy.branches.setFlag(hierarchy.branches.roots, field, value)} />}
+
+      </TimelineTools>
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
       <div className="flex border-b border-gray-700 shrink-0">

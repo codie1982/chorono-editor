@@ -5,6 +5,7 @@ import {
   defaultLayout, dropPanel, dropPanelToRoot,
   setActiveTab, setSplitRatio, setLeafCollapsed, removePanel, addPanelToLayout, isValidLayout,
 } from './layoutOps'
+import { migrateDockLayout } from './migrateDockLayout'
 import { ROOT_LEAF_ID } from './DockOuterEdges'
 
 const LS_KEY = 'chorono.dockLayout.v1'
@@ -16,7 +17,7 @@ interface DockLayoutReturn {
   dispatchResize:    (splitId: string, ratio: number) => void
   dispatchCollapse:  (leafId: string, collapsed: boolean) => void
   dispatchClosePanel: (panelId: string) => void
-  dispatchRestorePanel: (panelId: string) => void
+  dispatchRestorePanel: (panelId: string, nearPanelId?: string) => void
   resetLayout:       () => void
 }
 
@@ -39,7 +40,7 @@ export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn
     try {
       const raw = window.localStorage.getItem(LS_KEY)
       if (raw) {
-        const parsed = JSON.parse(raw) as DockNode
+        const parsed = migrateDockLayout(JSON.parse(raw) as DockNode)
         const validShape = parsed && typeof parsed === 'object' && 'kind' in parsed
         const validPanels = expectedPanelIds.length === 0
           || isValidLayout(parsed, new Set(expectedPanelIds))
@@ -81,8 +82,8 @@ export function useDockLayout(expectedPanelIds: string[] = []): DockLayoutReturn
     setLayout((tree) => removePanel(tree, panelId))
   }, [])
 
-  const dispatchRestorePanel = useCallback((panelId: string) => {
-    setLayout((tree) => addPanelToLayout(tree, panelId))
+  const dispatchRestorePanel = useCallback((panelId: string, nearPanelId?: string) => {
+    setLayout((tree) => addPanelToLayout(tree, panelId, nearPanelId))
   }, [])
 
   const resetLayout = useCallback(() => setLayout(defaultLayout()), [])

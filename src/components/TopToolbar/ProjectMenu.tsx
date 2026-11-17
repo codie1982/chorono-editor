@@ -2,6 +2,7 @@
 import type { FileVersioningState } from '@/app/hooks/useFileVersioning'
 import type { MenuActionItem } from '@/components/ui/ContextMenu'
 import DropdownButton from './DropdownButton'
+import { exportMenuItems, type ExportActions } from './exportMenuItems'
 
 export interface ProjectMenuProps {
   mounted: boolean; state: FileVersioningState; directoryName: string | null
@@ -9,6 +10,7 @@ export interface ProjectMenuProps {
   onPickDirectory: () => void; onSaveSnapshot: () => void
   onSaveSceneJson: () => void; onCopySceneJson: () => void; onInspectJson: () => void
   sessionInfo?: { id: string; undo: number; redo: number }
+  exports?: ExportActions
 }
 
 /** Project persistence/inspection UI. Replaces the standalone folder/version
@@ -32,5 +34,6 @@ export default function ProjectMenu(props: ProjectMenuProps) {
       action(hasDirectory ? 'Change Save Folder…' : 'Choose Save Folder…', props.onPickDirectory, !canVersion),
       action('Save Version', props.onSaveSnapshot, !canVersion || !hasDirectory || props.state === 'saving')] },
     { label: 'Inspect', items: [action('Inspect Scene JSON…', props.onInspectJson), action('Copy Scene JSON', props.onCopySceneJson)] },
+    ...(props.exports ? [{ label: 'Export', items: exportMenuItems(props.exports) }] : []),
   ]} />
 }

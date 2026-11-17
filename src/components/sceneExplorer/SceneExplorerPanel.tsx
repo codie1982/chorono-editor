@@ -30,6 +30,8 @@ import SceneExplorerRow, {
 } from './SceneExplorerRow'
 import ContextMenu from '@/components/ui/ContextMenu'
 import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
+import { agentHandoffMenu } from '@/components/agentHandoff/menu'
+import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
 import SubtreeOperationsToolbar from './SubtreeOperationsToolbar'
 import { useLayerBranches } from '@/components/layerHierarchy/useLayerBranches'
@@ -67,6 +69,8 @@ interface Props {
 
   // BL-53 — Context-menu actions (omit any you don't want to expose)
   contextHandlers?: Partial<SceneExplorerMenuHandlers>
+  /** Copy a focused MCP task prompt from a scene row. */
+  onAgentHandoff?: (request: AgentHandoffRequest) => void
   /** BL-53 — called when the bulk toolbar's ✕ button is pressed. */
   onClearSelection?: () => void
 
@@ -89,7 +93,7 @@ export default function SceneExplorerPanel({
   layers, timeline, selectedId, selectedIds,
   onSelect, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
-  contextHandlers, onClearSelection,
+  contextHandlers, onClearSelection, onAgentHandoff,
   isLayerAnimated, doesLayerHaveEffects,
   onFreezeSelection, onUnfreezeSelection, onSetSubtreeFlag,
 }: Props) {
@@ -426,14 +430,12 @@ export default function SceneExplorerPanel({
           onChange={setTextFilter}
           layers={layers}
         />
+        <FindSelectedButton compact disabled={!selectedId} onFind={findSelection.find} />
         <span className="text-[9px] font-mono text-gray-600 shrink-0">
           {rows.length}/{layers.length}
         </span>
       </div>
 
-      <div className="flex items-center gap-2 px-2 py-1 border-b border-gray-700">
-        <FindSelectedButton disabled={!selectedId} onFind={findSelection.find} />
-      </div>
       {findSelection.revealIds.length > 0 && <FoundSelectionNotice onRestore={findSelection.restore} />}
 
       {/* BL-58 — Quick filter chips (single-row type-solo presets) */}
@@ -685,12 +687,10 @@ export default function SceneExplorerPanel({
             x={menuState.x}
             y={menuState.y}
             onClose={() => setMenuState(null)}
-            items={buildSceneExplorerMenu({
-              target,
-              selectionIds: ids,
-              allLayers: layers,
-              handlers,
-            })}
+            items={[
+              ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: ids }, onAgentHandoff), { kind: 'separator' as const }] : []),
+              ...buildSceneExplorerMenu({ target, selectionIds: ids, allLayers: layers, handlers }),
+            ]}
           />
         )
       })()}

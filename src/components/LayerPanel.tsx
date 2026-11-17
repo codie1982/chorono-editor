@@ -8,13 +8,14 @@ import type { Layer } from '@/lib/types'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import ChoronoIcon from '@/components/ui/ChoronoIcon'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
+import { agentHandoffMenu } from '@/components/agentHandoff/menu'
+import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import { LAYER_TYPE_ICON, ADD_LAYER_GROUPS } from '@/lib/icons/iconMap'
 import { buildLegacyLayerRows } from '@/lib/sceneExplorer/legacyLayerRows'
 import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
 import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { useSelectedLayerReveal } from '@/components/layerHierarchy/useSelectedLayerReveal'
-import { LayerFocusControls } from '@/components/layerHierarchy/LayerFocusControls'
 
 interface Props {
   /** Explicit navigation; ordinary selection never requests a Timeline reveal. */
@@ -59,6 +60,8 @@ interface Props {
   onToggleInTimeline?: (layerId: string) => void
   /** Duplicate a layer (context-menu entry). */
   onDuplicate?: (layerId: string) => void
+  /** Copy a focused MCP task prompt from a layer row. */
+  onAgentHandoff?: (request: AgentHandoffRequest) => void
 }
 
 type DropZone = 'before' | 'after' | 'into'
@@ -69,7 +72,7 @@ export default function LayerPanel({
   onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
-  timelineLayerIds, onToggleInTimeline, onDuplicate,
+  timelineLayerIds, onToggleInTimeline, onDuplicate, onAgentHandoff,
   onShowInTimeline, onIsolateSelection, onExitIsolation, isolationActive = false,
 }: Props) {
   // ── Right-click context menu — layer rows ────────────────────────────────
@@ -253,10 +256,7 @@ export default function LayerPanel({
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layers</span>
         <div className="flex items-center gap-1">
           <DocumentationHelp topic={layerHelpTopic(menuOpen, activeCategory)} compact />
-          <LayerFocusControls selected={!!selectedId || selectedIds.size > 0}
-            canIsolate={layers.some(layer => layer.type !== 'audio' && (selectedIds.has(layer.id) || !selectedIds.size && layer.id === selectedId))}
-            isolated={isolationActive} onTimeline={onShowInTimeline} onIsolate={onIsolateSelection} onExit={onExitIsolation} />
-          {/* Group / Ungroup buttons now live in the top toolbar so the panel
+          {/* Group / Ungroup actions live in row context menus so the panel
               header stays clean. Cmd+G / Cmd+Shift+G shortcuts still work. */}
           <button
             onClick={() => setMenuOpen(v => !v)}
@@ -568,6 +568,10 @@ export default function LayerPanel({
         const inTimeline = timelineLayerIds?.includes(layer.id) ?? false
         const canToggleTimeline = timelineLayerIds !== undefined && !!onToggleInTimeline
         const items = [
+          ...(onIsolateSelection ? [{ kind: 'action' as const, label: 'Isolate selection',
+            onSelect: () => { onIsolateSelection(); ctxMenu.close(); setCtxLayerId(null) } }] : []),
+          ...(isolationActive && onExitIsolation ? [{ kind: 'action' as const, label: 'Exit isolation',
+            onSelect: () => { onExitIsolation(); ctxMenu.close(); setCtxLayerId(null) } }] : []),
           {
             kind: 'action' as const,
             label: inTimeline ? '✕ Remove from Timeline' : '＋ Add to Timeline',
@@ -586,6 +590,7 @@ export default function LayerPanel({
             shortcut: '⌘D', disabled: !onDuplicate,
             onSelect: () => { onDuplicate?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
           },
+          ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id] }, onAgentHandoff)] : []),
           { kind: 'separator' as const },
           {
             kind: 'action' as const, label: 'Delete',
