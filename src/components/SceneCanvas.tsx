@@ -56,6 +56,7 @@ import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
 import { AnchorHandle } from './canvas/overlays/AnchorHandle'
 import { MoveAxisGizmo, ScaleAxisGizmo } from './canvas/overlays/AxisGizmos'
 import { RotateRing } from './canvas/overlays/RotateRing'
+import { SnapPointOverlay } from './canvas/overlays/SnapPointOverlay'
 import { TransformHUD } from './canvas/overlays/TransformHUD'
 import { CanvasGuideWorkspace } from './canvas/guides/CanvasGuideWorkspace'
 import { FitMenu } from './canvas/controls/FitMenu'
@@ -502,7 +503,7 @@ export default function SceneCanvas({
   // ── Core transform/drag engine (move/resize/rotate/scale/anchor/path/spline) ─
   const snapLayerIds = useMemo(() => displayScene === scene ? undefined
     : new Set(displayScene.layers.filter(layer => !layer.hidden).map(layer => layer.id)), [displayScene, scene])
-  const { dragRef, startDrag } = useCanvasDrag({
+  const { dragRef, startDrag, snapPoint: dragSnapPoint } = useCanvasDrag({
     snapLayerIds,
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
@@ -1086,6 +1087,18 @@ export default function SceneCanvas({
   const selectedWorldPivot = toolMode === 'anchor' ? actualWorldPivot
     : gesturePivot ?? (multiPreparation?.ok ? multiPreparation.pivot : actualWorldPivot)
   const transformWorldBounds = multiSelectionBounds ?? selectedWorldBounds
+  const rotationRingRadius = transformWorldBounds ? Math.max(60,
+    Math.abs(transformWorldBounds.x - selectedWorldPivot.x) * zoom + 16,
+    Math.abs(transformWorldBounds.x + transformWorldBounds.width - selectedWorldPivot.x) * zoom + 16,
+    Math.abs(transformWorldBounds.y - selectedWorldPivot.y) * zoom + 16,
+    Math.abs(transformWorldBounds.y + transformWorldBounds.height - selectedWorldPivot.y) * zoom + 16) : 60
+  let hudPoint = dragHud
+  if (dragHud && activeDrag?.kind === 'rotate' && canvasRef.current) {
+    const rect = canvasRef.current.getBoundingClientRect()
+    const center = { x: rect.left + selectedWorldPivot.x * zoom, y: rect.top + selectedWorldPivot.y * zoom }
+    const dx = dragHud.x - center.x, dy = dragHud.y - center.y, distance = Math.hypot(dx, dy) || 1
+    hudPoint = { ...dragHud, x: center.x + dx / distance * rotationRingRadius, y: center.y + dy / distance * rotationRingRadius }
+  }
   // Vector geometry wins over retained size metadata; groups use the union
   // of visible children. Regular sized objects keep their resize frame.
   const usesWorldFrame = selectedLayer?.type === 'path' || selectedLayer?.type === 'spline' || selectedLayer?.type === 'group'
@@ -1352,6 +1365,8 @@ export default function SceneCanvas({
             )
           })()}
 
+          {!hideEditorUI && dragSnapPoint && <SnapPointOverlay point={dragSnapPoint} zoom={zoom} />}
+
           {/* Motion path — trajectory the selected layer follows over time,
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
@@ -1560,13 +1575,7 @@ export default function SceneCanvas({
             <RotateRing
               x={selectedWorldPivot.x * zoom}
               y={selectedWorldPivot.y * zoom}
-              radius={transformWorldBounds ? Math.max(
-                60,
-                Math.abs(transformWorldBounds.x - selectedWorldPivot.x) * zoom + 16,
-                Math.abs(transformWorldBounds.x + transformWorldBounds.width - selectedWorldPivot.x) * zoom + 16,
-                Math.abs(transformWorldBounds.y - selectedWorldPivot.y) * zoom + 16,
-                Math.abs(transformWorldBounds.y + transformWorldBounds.height - selectedWorldPivot.y) * zoom + 16,
-              ) : 60}
+              radius={rotationRingRadius}
               isDragging={dragRef.current?.kind === 'rotate'}
               onPointerDown={beginRotate}
             />
@@ -1583,7 +1592,7 @@ export default function SceneCanvas({
           )}
 
           {/* Drag-time numeric readout (position / rotation / size) */}
-          {dragHud && <TransformHUD {...dragHud} />}
+          {hudPoint && containerRef.current && <TransformHUD {...hudPoint} viewport={containerRef.current} />}
           {!hideEditorUI && transformWarning && <div role="status"
             className="absolute top-10 left-2 right-2 rounded border border-amber-500/60 bg-slate-950/95 p-2 text-xs text-amber-100 z-50">
             {transformWarning}

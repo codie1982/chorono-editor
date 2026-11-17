@@ -6,6 +6,8 @@ import { moveSplinePoint, moveSplineHandle } from '@/lib/spline'
 import { calculateAnchorMove } from '@/lib/canvas/math/anchorMath'
 import { calculateResize } from '@/lib/canvas/math/resizeMath'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
+import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
 
 type GeometryDrag = Exclude<ActiveDrag, { kind: 'move' | 'rotate' | 'scaleAxis' }>
 interface GeometryPreviewInput {
@@ -14,12 +16,14 @@ interface GeometryPreviewInput {
   event: CanvasPointerSample
   delta: { x: number; y: number }
   snap: { grid: boolean; pixel: boolean; size: number }
+  resolveSnap?: (point: Vec2) => SnapResult
+  snapRadiusWorld?: number
 }
 
 /** Pure path/spline/anchor/size preview from the gesture's immutable baseline.
  * Geometry deltas use the complete displayed inverse; path points keep their
  * existing topology and custom pivot. No per-frame geometry is accumulated. */
-export function previewGeometryDrag({ base, drag, event, delta, snap }: GeometryPreviewInput): CanvasDragPreview {
+export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSnap, snapRadiusWorld = 0 }: GeometryPreviewInput): CanvasDragPreview {
   const original = drag.originalLayer
   if (drag.kind === 'pathPoint') {
     const anchor = original.path?.anchors[drag.anchorIndex]
@@ -64,10 +68,29 @@ export function previewGeometryDrag({ base, drag, event, delta, snap }: Geometry
   if (!original.size) return previewLayer(base, original, original, [])
   const displayed = drag.displayTransform ?? original.transform
   const local = drag.worldToLocal?.applyToVector(delta) ?? delta
-  const size = calculateResize({ x: 0, y: 0, width: original.size.width, height: original.size.height,
+  const input = { x: 0, y: 0, width: original.size.width, height: original.size.height,
     anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x, dy: local.y,
     proportional: event.metaKey || event.ctrlKey, snapPixel: snap.pixel, minSize: 4,
-    boundsWidth: Number.MAX_SAFE_INTEGER, boundsHeight: Number.MAX_SAFE_INTEGER })
+
+    boundsWidth: Number.MAX_SAFE_INTEGER, boundsHeight: Number.MAX_SAFE_INTEGER }
+  let size = calculateResize(input)
+  const matrix = drag.worldToLocal?.invert(), proportional = event.metaKey || event.ctrlKey
+  const localHandle = (value: typeof size) => resizeHandlePoint({ ...value,
+    x: drag.handle.includes('w') ? original.size!.width - value.width : 0,
+    y: drag.handle.includes('n') ? original.size!.height - value.height : 0 }, drag.handle)
+  let candidateGuides: CanvasDragPreview['guides'] = []
+  if (matrix && resolveSnap) {
+    const originalHandle = resizeHandlePoint({ x: 0, y: 0, ...original.size }, drag.handle)
+    const direction = proportional ? { x: (drag.handle.includes('w') ? -1 : drag.handle.includes('e') ? 1 : .5) * original.size.width,
+      y: (drag.handle.includes('n') ? -1 : drag.handle.includes('s') ? 1 : .5) * original.size.height }
+      : drag.handle.length === 1 ? { x: 'ew'.includes(drag.handle) ? 1 : 0, y: 'ns'.includes(drag.handle) ? 1 : 0 } : null
+    const acquired = snapResizeHandle(matrix.applyToPoint(localHandle(size)), direction && matrix.applyToVector(direction), snapRadiusWorld, resolveSnap)
+    if (acquired.guides.length) {
+      const endpoint = drag.worldToLocal!.applyToPoint(acquired.point)
+      size = calculateResize({ ...input, dx: endpoint.x - originalHandle.x, dy: endpoint.y - originalHandle.y, snapPixel: false })
+      candidateGuides = reachedResizeGuides(matrix.applyToPoint(localHandle(size)), acquired.guides)
+    }
+  }
   const left = drag.handle.includes('w') ? original.size.width - size.width : 0
   const top = drag.handle.includes('n') ? original.size.height - size.height : 0
   // The custom pivot is authored independently of geometry size. Keep a fixed:
@@ -81,7 +104,8 @@ export function previewGeometryDrag({ base, drag, event, delta, snap }: Geometry
   const properties = [...(preview.changes[0]?.changedProperties ?? [])]
   if (size.width !== original.size.width) properties.push('size.width')
   if (size.height !== original.size.height) properties.push('size.height')
-  return previewLayer(base, original, { ...next, size: { ...original.size, width: size.width, height: size.height } }, properties, preview.label, preview.overrides)
+  const result = previewLayer(base, original, { ...next, size: { ...original.size, width: size.width, height: size.height } }, properties, preview.label, preview.overrides)
+  return { ...result, guides: candidateGuides, snapPoint: candidateGuides.length && matrix ? matrix.applyToPoint(localHandle(size)) : undefined }
 }
 
 /** Select only changed displayed channels, leaving authored fallback values on
