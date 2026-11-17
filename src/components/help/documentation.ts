@@ -9,7 +9,7 @@ export const documentationPages = {
   'editor/canvas/snapping': 'Guides & snapping',
   'editor/canvas/splines': 'Bézier points & splines',
   'editor/canvas/compound-splines': 'Compound spline editing',
-  'editor/canvas/spline-modeling': 'Spline modeling release preview',
+  'editor/canvas/spline-modeling': 'Spline modeling',
   'editor/canvas/motion-keys': 'Motion Keys',
   'editor/layers': 'Layers',
   'editor/layers/basic-shapes': 'Basic Shapes',
