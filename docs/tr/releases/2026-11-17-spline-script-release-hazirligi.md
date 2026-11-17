@@ -2,11 +2,11 @@
 
 ## Dal ve sürüm durumu
 
-GitHub `codie1982/chorono-editor` üzerindeki `main`, yerel `main` HEAD ve `origin/main` aynı commit'te: `a4d4e64f6c1cb7a4cd6e9e48127b5af9e007f7e1`. Commit farkı **0 ileri / 0 geri**. Son etiket `v0.3.0` (`7305ba8`, 12 Kasım 2026); etiketten sonraki tek `main` commit'i Vercel Web Analytics ekliyor. `package.json` sürümü `0.3.0`. Dolayısıyla GitHub'daki `main`, bu rapordaki yeni spline kodunu henüz içermiyor. Yerel `main` çalışma ağacında commit edilmemiş geliştirmeler var; commit farkı sıfır olması kodun eşit olduğu anlamına gelmiyor.
+GitHub `codie1982/chorono-editor` üzerindeki `main` ve yerel `origin/main` `a4d4e64f` commit'inde. Yerel `main`deki `7e46b37e` kaynak commit'i bu noktanın ilerisinde; rapor güncellemesi de ayrı yerel commit'tir. Son etiket `v0.3.0` (`7305ba8`, 12 Kasım 2026); etiket ile uzak `main` arasındaki tek commit Vercel Web Analytics ekliyor. `package.json` sürümü `0.3.0`. `7e46b37e` modelleme araçlarıyla birlikte Agent Handoff, Snap/Grid ve başka UI düzenlemelerini aynı commit'e aldı. Bu yerel geliştirmeler henüz push edilmedi.
 
 ## Kullanıcının bildirdiği spline paketi
 
-İncelenen `a4d4e64` commit'inde aşağıdaki durum doğrulandı. Çalışma ağacında aynı dönemde başka, bağımsız UI/MCP değişiklikleri de bulunduğu için bu tablo **gönderilmiş sürüm** değil, commit bazlı karşılaştırmadır.
+İncelenen uzak `a4d4e64` commit'inde aşağıdaki durum doğrulandı. Tablo **gönderilmiş sürüm** değil, commit bazlı karşılaştırmadır.
 
 | İşlem | `main` HEAD durumu | Sürüm için yapılacak |
 | --- | --- | --- |
@@ -25,9 +25,13 @@ GitHub `codie1982/chorono-editor` üzerindeki `main`, yerel `main` HEAD ve `orig
 
 Bu özelliklerin bir bölümü `artifacts/recovery-20261117/original-snapshot` adlı kurtarılmış kaynak kopyasında görünüyor. Kopya bir commit/dal değil; mevcut `main`e uygulandığı veya release'e hazır olduğu varsayılmamalı. Kaynak farkı, testler ve etkilenen kullanıcı akışları ayrı bir entegrasyon çalışması olarak incelenmeli.
 
+## Aynı yerel commit'teki diğer işler
+
+`7e46b37e` yalnız spline modellemesini içermiyor. Kod ve testlerde ayrıca şu alanlar değişti: seçimden MCP odak bağlamı alan **Send to Agent** akışı (`get_handoff_context`, panoya prompt kopyalama); Snap hedeflerini tek menüde düzenleme, görünür grid/parent hizalaması ve ayrı transform snap denetimleri; Shortcuts penceresi; Motion Keys dock paneli ve viewport önizleme düzenlemeleri. Bunlar yeni spline geometri script API'sinden ayrı geliştirmeler. Release metnine alınmadan önce tam commit kapsamı ve görsel akışları incelenmeli.
+
 ## Bu çalışma ağacına eklenen modelleme paketi
 
-Kullanıcının son isteği üzerine **Offset / Outline, Chamfer ve Fillet** yerel `main` çalışma ağacına eklendi:
+Kullanıcının son isteği üzerine **Offset / Outline, Chamfer ve Fillet** yerel `main` commit'i `7e46b37e` içine eklendi:
 
 | Araç | Uygulama ve davranış | Sınır |
 | --- | --- | --- |
@@ -42,9 +46,9 @@ Script/QuickJS/MCP yüzeyine `offsetContour`, `outlineContour`, `chamferCorners`
 
 ## Doğrulama ve release kararı
 
-- `npm test`: 376 dosya, 3011 test geçti (son küçük kesişim kontrolü değişikliğinden önce). Son değişiklikten sonra ilgili 3 dosyada 32 test geçti.
-- `npm run mcp:build` ve `npm run build`: geçti (son küçük kesişim kontrolü değişikliğinden önce); yeniden çalıştırılacak.
+- `npm test`: 378 dosya, 3019 test geçti.
+- `npm run mcp:build`: geçti. Paylaşılan `.next` çıktısına eşzamanlı build yazıldığı için normal dizindeki iki deneme son dosya toplama aşamasında `ENOENT` ile kesildi. Aynı güncel kaynak `/private/tmp/chorono-isolated-build-20261117` dizinine kopyalanıp `npm run build` tek başına çalıştırıldı ve geçti. Geçici kopyaya `.env.local` alınmadı.
 - Tarayıcıda Offset önizlemesi ve Apply ile ikinci katmanın oluşması görüldü; tek Undo ile katman sayısı 2'den 1'e döndü.
-- Kaynak değişiklikleri henüz commit edilmedi, push edilmedi veya GitHub release'e bağlanmadı. Çalışma ağacında bu işten bağımsız Agent Handoff/Snap/UI değişiklikleri de bulunuyor; bunlar yanlışlıkla modelleme commit'ine alınmamalı.
+- Kaynak değişiklikleri yerel `7e46b37e` commit'inde, ancak push edilmedi veya GitHub release'e bağlanmadı. GitHub `main` SHA'sı ayrıca API'den `a4d4e64f` olarak doğrulandı. Bu commit modellemeyle birlikte yukarıdaki işleri de içeriyor; release kapsamı commit'in tüm etkilerine göre incelenmeli.
 
-`v0.4.0` **taslak** release metni [burada](../../releases/v0.4.0-draft.md). Üç yeni araç için metin hazırlanabilir; kullanıcının bildirdiği diğer özellikler kaynak entegrasyonu ve kabul testleri tamamlanmadan yayımlanmış özellik olarak listelenmemeli. Bir sonraki adım, bağımsız değişiklikleri koruyarak modelleme değişikliklerini commit etmek, kalan spline paketinin gerçek kaynak farkını değerlendirmek, portable save/load ve export görsel kabulünü tamamlamak, ardından tag hedefiyle GitHub taslağını eşleştirmektir.
+`v0.4.0` **taslak** release metni [burada](../../releases/v0.4.0-draft.md). Üç yeni araç için metin hazırlanabilir; kullanıcının bildirdiği diğer özellikler kaynak entegrasyonu ve kabul testleri tamamlanmadan yayımlanmış özellik olarak listelenmemeli. Bir sonraki adım, yerel commit'in modelleme dışındaki değişikliklerini de incelemek, kalan spline paketinin gerçek kaynak farkını değerlendirmek, portable save/load ve export görsel kabulünü tamamlamak, ardından push ve tag hedefiyle GitHub taslağını eşleştirmektir.
