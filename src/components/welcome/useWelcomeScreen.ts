@@ -13,6 +13,7 @@ const STARTUP_KEY = 'chorono.welcome.showOnStartup'
  */
 export function useWelcomeScreen(recoveredSession = false) {
   const [isOpen, setOpen] = useState(false)
+  const [isReady, setReady] = useState(false)
   const [showOnStartup, setShowOnStartup] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,6 +22,7 @@ export function useWelcomeScreen(recoveredSession = false) {
     try { show = localStorage.getItem(STARTUP_KEY) !== 'false' } catch { /* Browser storage can be disabled. */ }
     setShowOnStartup(show)
     setOpen(show && !recoveredSession)
+    setReady(true)
   }, [recoveredSession])
 
   /** Opens the existing workspace's welcome view without replacing any scene data. */
@@ -33,5 +35,5 @@ export function useWelcomeScreen(recoveredSession = false) {
     try { localStorage.setItem(STARTUP_KEY, String(show)) } catch { /* Preference is still applied for this session. */ }
   }, [])
 
-  return { isOpen, showOnStartup, error, open, close, changeStartup, setError }
+  return { isOpen, isReady, showOnStartup, error, open, close, changeStartup, setError }
 }

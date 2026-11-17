@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PanelRegistry } from '@/components/dock/registry'
 import type { DockNode } from '@/components/dock/types'
+import { featuredReleaseNotes } from '@/components/releaseNotes/releaseNotes'
 import { exportMenuItems } from './exportMenuItems'
 
 interface FileMenuProps {
@@ -30,6 +31,8 @@ interface FileMenuProps {
   onExportHtml?:   () => void
   onCopySceneJson: () => void
   onShowShortcuts: () => void
+  /** Manually reopens the current release notes; startup display remains one-time. */
+  onShowReleaseNotes?: () => void
   /** Reopens the welcome screen while preserving the current scene. */
   onShowWelcome?: () => void
   /** Focuses or restores the existing resource monitor dock panel. */
@@ -242,6 +245,9 @@ export default function FileMenu(props: FileMenuProps) {
           <div className={sectionLabel}>Help</div>
           {props.onShowWelcome && <button className={item + ' min-h-[44px]'} onClick={() => { setOpen(false); props.onShowWelcome!() }}>
             Welcome screen
+          </button>}
+          {props.onShowReleaseNotes && <button className={item + ' min-h-[44px]'} onClick={() => { setOpen(false); props.onShowReleaseNotes!() }}>
+            What’s New · v{featuredReleaseNotes.version}
           </button>}
           <button className={item} onClick={() => { setOpen(false); props.onShowShortcuts() }}>
             ⌨ Show Shortcuts (Cmd+/)

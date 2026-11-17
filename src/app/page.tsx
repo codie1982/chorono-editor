@@ -57,9 +57,11 @@ import { useSceneSessionRecovery } from './hooks/useSceneSessionRecovery'
 import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
 import { InteractivePreviewButton } from '@/components/TopToolbar/InteractivePreviewButton'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
+import ReleaseNotesDialog from '@/components/releaseNotes/ReleaseNotesDialog'
 import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
 import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
 import { useWelcomeScreen } from '@/components/welcome/useWelcomeScreen'
+import { useReleaseNotes } from '@/components/releaseNotes/useReleaseNotes'
 import { createWelcomeProject, type WelcomeProjectSettings } from '@/lib/editor/welcomeProject'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
@@ -177,6 +179,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     layerMetaById, getSiblingsInArray,
   } = editor
   const welcome = useWelcomeScreen(session.restored)
+  const releaseNotes = useReleaseNotes(welcome.isReady, welcome.isOpen)
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
@@ -1339,7 +1342,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
 
-      <DiagnosticConsentPrompt visible={!welcome.isOpen} />
+      <DiagnosticConsentPrompt visible={releaseNotes.isReady && !welcome.isOpen && !releaseNotes.isOpen} />
 
       <ImportActivityBar activeCount={importActiveCount} settlingCount={importSettlingCount}
         label={importLabel} progress={importProgress} onCancel={cancelImports} />
@@ -1363,6 +1366,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
+          onShowReleaseNotes={releaseNotes.open}
           onShowWelcome={welcome.open}
           onShowResources={() => dock.dispatchRestorePanel('resourceMonitor')}
           onResetLayout={dock.resetLayout}
@@ -2033,6 +2037,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         showOnStartup={welcome.showOnStartup} onStartupChange={welcome.changeStartup}
         error={welcome.error} onCreate={newScene} onOpenProject={openSceneJson} onContinue={welcome.close}
       />}
+      {releaseNotes.isOpen && !welcome.isOpen && <ReleaseNotesDialog onClose={releaseNotes.close} />}
 
       {showJson && <JsonModal scene={scene} onSaveProject={saveSceneJson} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
 
