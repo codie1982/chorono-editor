@@ -40,8 +40,9 @@ Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin vey
 
 ## Editörden ajana odak metni kopyalama
 
-Editörde MCP bağlantısını açtıktan sonra tuvaldeki katmana, Katmanlar panelindeki
-satıra veya Sahne Gezgini satırına sağ tıklayın. **Send to Agent** alt menüsü
+Tuvaldeki katmana, Katmanlar panelindeki satıra veya Sahne Gezgini satırına
+sağ tıklayın. MCP bağlı değilse seçenek yine görünür; seçildiğinde bağlantı
+uyarısı verir. **Send to Agent** alt menüsü
 açıklama, sorun bulma, iyileştirme önerisi, düzenleme isteği ve özel soru
 seçenekleri sunar. Seçenekler ajan sohbetine yapıştırılacak bir görev metni
 kopyalar; doğrudan sohbet başlatmaz. Düzenleme ve özel soru seçenekleri önce

@@ -13,8 +13,9 @@ instructions are [skills/chorono](../../skills/chorono/SKILL.md).
 
 ## Copy focused context from the editor
 
-Once the editor MCP connection is active, right-click a canvas layer, a Layers
-row, or a Scene Explorer row and choose **Send to Agent**. The submenu copies a
+Right-click a canvas layer, a Layers row, or a Scene Explorer row and choose
+**Send to Agent**. The menu remains available when MCP is disconnected and
+shows a connection warning if selected. The submenu copies a
 task prompt for explanation, diagnosis, suggestions, an edit request or a custom
 question. Edit and custom-question actions first ask for short text. Paste the
 result into your agent chat; this action does not start a conversation. The

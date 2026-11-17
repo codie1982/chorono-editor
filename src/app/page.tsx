@@ -57,9 +57,11 @@ import { useSceneSessionRecovery } from './hooks/useSceneSessionRecovery'
 import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
 import { InteractivePreviewButton } from '@/components/TopToolbar/InteractivePreviewButton'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
+import ReleaseNotesDialog from '@/components/releaseNotes/ReleaseNotesDialog'
 import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
 import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
 import { useWelcomeScreen } from '@/components/welcome/useWelcomeScreen'
+import { useReleaseNotes } from '@/components/releaseNotes/useReleaseNotes'
 import { createWelcomeProject, type WelcomeProjectSettings } from '@/lib/editor/welcomeProject'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
@@ -177,6 +179,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     layerMetaById, getSiblingsInArray,
   } = editor
   const welcome = useWelcomeScreen(session.restored)
+  const releaseNotes = useReleaseNotes(welcome.isReady, welcome.isOpen)
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
@@ -394,7 +397,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     }
   }, [])
   const handleAgentHandoff = useCallback((request: AgentHandoffRequest) => {
-    if (!mcp.connected || !mcp.sessionId) return
+    if (!mcp.connected || !mcp.sessionId) {
+      toast.warning('MCP bağlantısı gerekli', {
+        detail: mcp.enabled
+          ? 'Üst araç çubuğundaki MCP düğmesinden “Connect this editor” seçin.'
+          : 'MCP servisini başlatın, ardından üst araç çubuğundaki MCP düğmesinden editörü bağlayın.',
+      })
+      return
+    }
     try {
       if (editor.isTransactionActive()) throw new Error('Finish the current edit before copying an agent prompt.')
       const context = captureAgentHandoffContext({
@@ -407,7 +417,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     } catch (error) {
       toast.warning('Cannot prepare agent prompt', { detail: error instanceof Error ? error.message : String(error) })
     }
-  }, [mcp.connected, mcp.sessionId, editor, selectedTlId, currentTimeMs, copyAgentHandoff])
+  }, [mcp.connected, mcp.enabled, mcp.sessionId, editor, selectedTlId, currentTimeMs, copyAgentHandoff])
 
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
@@ -1332,7 +1342,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
 
-      <DiagnosticConsentPrompt visible={!welcome.isOpen} />
+      <DiagnosticConsentPrompt visible={releaseNotes.isReady && !welcome.isOpen && !releaseNotes.isOpen} />
 
       <ImportActivityBar activeCount={importActiveCount} settlingCount={importSettlingCount}
         label={importLabel} progress={importProgress} onCancel={cancelImports} />
@@ -1356,6 +1366,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
+          onShowReleaseNotes={releaseNotes.open}
           onShowWelcome={welcome.open}
           onShowResources={() => dock.dispatchRestorePanel('resourceMonitor')}
           onResetLayout={dock.resetLayout}
@@ -1476,7 +1487,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       dispatchCommand(cmd)
                     }}
                     onDuplicate={(layerId) => cloneSourceIds(selectedLayerIds.has(layerId) ? selectedCloneIds() : [layerId])}
-                    onAgentHandoff={mcp.connected ? handleAgentHandoff : undefined}
+                    onAgentHandoff={handleAgentHandoff}
                   />
                 ),
               },
@@ -1501,7 +1512,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       if (command) dispatchCommand(command)
                     }}
                     onClearSelection={() => selectLayer(null)}
-                    onAgentHandoff={mcp.connected ? handleAgentHandoff : undefined}
+                    onAgentHandoff={handleAgentHandoff}
                     contextHandlers={{
                       // Rename re-uses the inline editor — selecting the
                       // layer first lets the panel know which row to put
@@ -1569,7 +1580,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     assets={assetCache}
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
-                    onAgentHandoff={mcp.connected ? handleAgentHandoff : undefined}
+                    onAgentHandoff={handleAgentHandoff}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
@@ -2026,6 +2037,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         showOnStartup={welcome.showOnStartup} onStartupChange={welcome.changeStartup}
         error={welcome.error} onCreate={newScene} onOpenProject={openSceneJson} onContinue={welcome.close}
       />}
+      {releaseNotes.isOpen && !welcome.isOpen && <ReleaseNotesDialog onClose={releaseNotes.close} />}
 
       {showJson && <JsonModal scene={scene} onSaveProject={saveSceneJson} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
 

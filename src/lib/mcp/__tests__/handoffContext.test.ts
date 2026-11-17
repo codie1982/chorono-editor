@@ -27,4 +27,35 @@ describe('MCP agent handoff context', () => {
       await expect(editor.rawCall('get_handoff_context', { handoffId: 'handoff-1' })).rejects.toThrow('Agent handoff expired')
     } finally { await editor.close() }
   })
+  it('changes one circle color without changing any other layer or animation', async () => {
+    const editor = fakeEditor()
+    try {
+      const circleId = (await editor.call('create_layer', { kind: 'circle' })).addedLayerIds[0]
+      const otherId = (await editor.call('create_layer', { kind: 'rect' })).addedLayerIds[0]
+      await editor.call('create_timeline', { id: 'motion', durationMs: 1000 })
+      await editor.call('upsert_keyframes', { timelineId: 'motion', layerId: circleId, property: 'transform.x',
+        keyframes: [{ timeMs: 0, value: 10 }, { timeMs: 1000, value: 80 }] })
+      await editor.call('upsert_keyframes', { timelineId: 'motion', layerId: otherId, property: 'opacity',
+        keyframes: [{ timeMs: 0, value: 1 }, { timeMs: 1000, value: 0.5 }] })
+      const before = await editor.rawCall('get_scene')
+      const focus = captureAgentHandoffContext({
+        scene: before.scene, sessionId: editor.paired.id, documentEpoch: before.documentEpoch,
+        revision: before.revision, timelineId: 'motion', timeMs: 500,
+        target: { layerIds: [circleId] },
+      })
+      editor.host.getAgentHandoff = id => id === 'circle-color' ? focus : undefined
+      const handoff = await editor.rawCall('get_handoff_context', { handoffId: 'circle-color' })
+      expect(handoff.focus.layers.map((layer: { id: string }) => layer.id)).toEqual([circleId])
+      const otherBefore = structuredClone(before.scene.layers.find((layer: { id: string }) => layer.id === otherId))
+      const timelinesBefore = structuredClone(before.scene.timelines)
+      const read = await editor.rawCall('get_scene')
+      await editor.rawCall('update_layer', { layerId: circleId, fillColor: '#00FF00',
+        expectedRevision: read.revision, readToken: read.readToken })
+      const after = await editor.rawCall('get_scene')
+      expect(after.scene.layers.find((layer: { id: string }) => layer.id === circleId)?.style?.fill?.color).toBe('#00FF00')
+      expect(after.scene.layers.find((layer: { id: string }) => layer.id === otherId)).toEqual(otherBefore)
+      expect(after.scene.timelines).toEqual(timelinesBefore)
+    } finally { await editor.close() }
+  })
+
 })
