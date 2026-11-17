@@ -394,7 +394,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     }
   }, [])
   const handleAgentHandoff = useCallback((request: AgentHandoffRequest) => {
-    if (!mcp.connected || !mcp.sessionId) return
+    if (!mcp.connected || !mcp.sessionId) {
+      toast.warning('MCP bağlantısı gerekli', {
+        detail: mcp.enabled
+          ? 'Üst araç çubuğundaki MCP düğmesinden “Connect this editor” seçin.'
+          : 'MCP servisini başlatın, ardından üst araç çubuğundaki MCP düğmesinden editörü bağlayın.',
+      })
+      return
+    }
     try {
       if (editor.isTransactionActive()) throw new Error('Finish the current edit before copying an agent prompt.')
       const context = captureAgentHandoffContext({
@@ -407,7 +414,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     } catch (error) {
       toast.warning('Cannot prepare agent prompt', { detail: error instanceof Error ? error.message : String(error) })
     }
-  }, [mcp.connected, mcp.sessionId, editor, selectedTlId, currentTimeMs, copyAgentHandoff])
+  }, [mcp.connected, mcp.enabled, mcp.sessionId, editor, selectedTlId, currentTimeMs, copyAgentHandoff])
 
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
@@ -1476,7 +1483,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       dispatchCommand(cmd)
                     }}
                     onDuplicate={(layerId) => cloneSourceIds(selectedLayerIds.has(layerId) ? selectedCloneIds() : [layerId])}
-                    onAgentHandoff={mcp.connected ? handleAgentHandoff : undefined}
+                    onAgentHandoff={handleAgentHandoff}
                   />
                 ),
               },
@@ -1501,7 +1508,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       if (command) dispatchCommand(command)
                     }}
                     onClearSelection={() => selectLayer(null)}
-                    onAgentHandoff={mcp.connected ? handleAgentHandoff : undefined}
+                    onAgentHandoff={handleAgentHandoff}
                     contextHandlers={{
                       // Rename re-uses the inline editor — selecting the
                       // layer first lets the panel know which row to put
@@ -1569,7 +1576,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     assets={assetCache}
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
-                    onAgentHandoff={mcp.connected ? handleAgentHandoff : undefined}
+                    onAgentHandoff={handleAgentHandoff}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
