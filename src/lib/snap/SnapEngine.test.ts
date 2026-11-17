@@ -37,12 +37,21 @@ describe('SnapEngine.snapRect', () => {
   it('snaps to grid lattice when grid target is enabled', () => {
     const e = new SnapEngine({
       ...baseSettings,
+      radiusPx: 8,
       targets: { ...baseSettings.targets, objects: false, points: false, grid: true },
       grid:    { sizePx: 20, subdivisions: 4 },
     })
     const r = e.snapRect({ x: 44, y: 36, width: 10, height: 10 }, emptyCtx)
     expect(r.point.x).toBe(40)   // nearest multiple of 20
     expect(r.point.y).toBe(40)
+  })
+
+  it('leaves the position unchanged when the grid is outside the hit radius', () => {
+    const e = new SnapEngine({
+      ...baseSettings,
+      targets: { ...baseSettings.targets, objects: false, points: false, grid: true },
+    })
+    expect(e.snapRect({ x: 47, y: 33, width: 10, height: 10 }, emptyCtx).point).toEqual({ x: 47, y: 33 })
   })
 
   it('rounds to integer pixels when pixel snap is on', () => {

@@ -1,3 +1,4 @@
+import { validGridSpacing } from '../snap/gridSettings'
 // ── CanvasRenderer ────────────────────────────────────────────────────────────
 //
 // Registry-driven scene renderer. Successor to the monolithic renderScene()
@@ -40,7 +41,6 @@ import { LayerIndex, type LayerLookup, type LayerRelations } from '@/lib/scene/L
 
 import { PaintFrame, directPaint, type PaintStatistics } from './visibility/PaintFrame'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
-import { validGridSpacing } from '@/lib/snap/gridSettings'
 
 
 export interface CanvasRenderOptions {

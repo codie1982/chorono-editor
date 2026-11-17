@@ -8,11 +8,11 @@ import { emptyScene } from '../../defaults'
 describe('versioned MCP discovery and callable compatibility', () => {
   it('publishes focused workflows while retaining the historical discovery profile', async () => {
     const standard = await getToolCatalog(), legacy = await getToolCatalog('legacy')
-    expect(standard).toHaveLength(44)
-    expect(legacy).toHaveLength(81)
+    expect(standard).toHaveLength(45)
+    expect(legacy).toHaveLength(82)
     expect(new Set(standard.map(tool => tool.name)).size).toBe(standard.length)
     expect(standard.map(tool => tool.name)).toEqual(expect.arrayContaining([
-      'get_scene', 'get_layer', 'create_layer', 'upsert_keyframes', 'render_preview',
+      'get_handoff_context', 'get_scene', 'get_layer', 'create_layer', 'upsert_keyframes', 'render_preview',
       'evaluate_frame', 'batch_actions', 'import_asset', 'update_model3d', 'export_audio', 'undo',
     ]))
     expect(standard.some(tool => tool.name === 'get_scene_json')).toBe(false)
@@ -38,10 +38,10 @@ describe('versioned MCP discovery and callable compatibility', () => {
 
   it('separates lightweight and exact-schema discovery from the old full response', async () => {
     const full = await getCapabilities() as any
-    expect(full.tools).toHaveLength(81)
+    expect(full.tools).toHaveLength(82)
     expect(full.scripting).toContain('scene.add')
     expect(full.catalog).toMatchObject({ version: 1, profile: 'standard' })
-    expect(full.catalog.advertisedToolNames).toHaveLength(44)
+    expect(full.catalog.advertisedToolNames).toHaveLength(45)
     const summary = await getCapabilities('standard', { summary: true }) as any
     expect(summary.tools).toBeUndefined()
     expect(summary.scripting).toBeUndefined()

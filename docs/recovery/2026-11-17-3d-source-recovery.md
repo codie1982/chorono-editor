@@ -1,6 +1,6 @@
 # 3D kaynak kurtarması — 17 Kasım 2026
 
-Kurtarılan kaynak, ana reponun `codex/recovered-3d-20261117` dalında tutulur. Çalışan 2D `main` dalına birleştirilmemiştir. İnceleme ve derleme kaynağı ana repo altındaki `artifacts/3d-recovery-20261117/source` dizinidir; geçici eski çalışma ağacı üzerine yazılmamıştır.
+Kurtarılan kaynak, ana reponun `codex/developing-3d-mode` dalında tutulur. Çalışan 2D `main` dalına birleştirilmemiştir. İlk kurtarma inceleme ve derleme kaynağı ana repo altındaki `artifacts/3d-recovery-20261117/source` dizinidir; geçici eski çalışma ağacı üzerine yazılmamıştır. Aşağıdaki doğrulama sonuçları ilk kurtarma commitine aittir; dalın sonraki birleşmeleri ayrıca doğrulanır.
 
 ## Kaynak ve yöntem
 
@@ -38,6 +38,16 @@ Aynı değişikliğin hem taban committe hem sonradan oturum kaydında bulunmas�
 
 ## Kullanım ve sınırlar
 
-Bu dal, güncel 2D main ile yeni bir entegrasyon/release değildir. Main'e geçirilmeden önce iki dalın farkları ayrıca birleştirilmelidir. Yerel kurtarma kaynaklarını açmak için yeni bir dizine kaynak ZIP'i açılabilir; Node bağımlılıkları `npm ci`, ardından `npm test`, `npm run mcp:build`, `npm run cli:build`, `npm run build` ile hazırlanır. Kendi sunucusu çalışırken build yapılmaz.
+İlk kurtarma commiti, o tarihteki 2D `main` ile henüz bir entegrasyon/release değildi. Aşağıdaki senkronizasyon daha sonra yalnız 3D dalına uygulandı. Yerel kurtarma kaynaklarını açmak için yeni bir dizine kaynak ZIP'i açılabilir; Node bağımlılıkları `npm ci`, ardından `npm test`, `npm run mcp:build`, `npm run cli:build`, `npm run build` ile hazırlanır. Kendi sunucusu çalışırken build yapılmaz.
 
 Orijinal planın kapsam dışı maddeleri aynen geçerlidir: genel rig/weight editörü, native bone keylerinin ana Timeline'a topluca aktarılması, animasyonlu topoloji, tam modifier stack veya spline extrusion üretimi eklenmemiştir. Edit Poly/Extrusion alanlarının mevcut seçim/placeholder sınırları yeni yetenek gibi sunulmaz. Harici chorono-render servisinin gerçek ağdaki dağıtımı çalıştırılmadı; istemci sözleşme testleri ve yerel render eşliği doğrulandı. Telefonda/düşük ekran boyutunda çalışma desteği bu kurtarma ile genişletilmedi.
+
+## 17 Kasım 2026: `main` → 3D dalı senkronizasyonu
+
+`main` commit `9514b984`, yalnız `codex/developing-3d-mode` dalına alındı; `main` değiştirilmedi. 30 metin çatışması alan sahiplerine göre çözüldü:
+
+- 3D detail başlığı, yerel Scene Explorer, viewport, model panelleri ve 2D/3D Timeline ayrımı korundu. `main` içindeki agent handoff, Spline Modeling paneli, dock geri açma ve 2D snap/rotation davranışı da tutuldu. Varsayılan dock her iki spline panelini tanır; spline nokta özellikleri korumalı Spline & Boolean panelindeki ortak `SplinePointInspector` üzerinden düzenlenir.
+- MCP kataloğu 45 doğrudan `standard` araç ve 82 çağrılabilir ad içerir. `get_handoff_context` ile 3D `update_model3d` birlikte kalır. Senkron legacy offset/outline/chamfer/fillet script yöntemleri korunur ve ortak `SPLINE_SCRIPT_SURFACE` üzerinden QuickJS'e yansıtılır. Corner işlemleri `scriptSplineMutation` guard'ından geçer; keyli/referanslı geometrinin sessizce silinmesi veya animasyon track'inin otomatik budanması kabul edilmez. Ayrı native worker planları `prepare_spline_edit` üzerinden kullanılmaya devam eder.
+- Birleşme yalnız source/UI/dokümantasyon değişimidir. 3D primitive veya özel 3D klipleri MCP'de yapısal olarak yazma yeteneği eklemez.
+
+İzole worktree doğrulaması: TypeScript, **461 test dosyası / 3.541 test**, `mcp:build`, `cli:build` ve Next üretim build başarılı. Gerçek tarayıcıda 2D çalışma alanı, boş 3D sahne, Box ekleme, 3D viewport/Scene Explorer, Animation ve Render alanları açıldı; tarayıcı hata kaydı boştu. Bu turda harici render servisi çalışmadığından gerçek render kare üretimi yeniden sınanmadı.

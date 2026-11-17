@@ -53,6 +53,10 @@ import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGho
 import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
+import AgentHandoffDialog from '@/components/agentHandoff/AgentHandoffDialog'
+import { buildAgentHandoffPrompt, captureAgentHandoffContext, type AgentHandoffContext, type AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
+import { agentHandoffStore } from '@/lib/agentHandoff/store'
+import { editorDocumentEpoch } from '@/lib/mcp/source/EditorSourceIdentity'
 import ProjectMenu from '@/components/TopToolbar/ProjectMenu'
 import { SessionOutputProvider, useSessionIdentity } from '@/components/editorSession/SessionOutputContext'
 import { createChoronoDemo } from '@/lib/editor/demo/createChoronoDemo'
@@ -107,6 +111,7 @@ import { useSplineOutline } from '@/components/splineEdit/outline/useSplineOutli
 import { SplineToolsPanel } from '@/components/splineEdit/SplineToolsPanel'
 import type { SplineEditMode } from '@/lib/spline/selection'
 import { useSplineEditSelection, type SplineEditRequest } from '@/components/splineEdit/useSplineEditSelection'
+import SplineModelingPanel from '@/components/panels/SplineModelingPanel'
 import { NumericPropertyProvider } from '@/components/inputs/expressions/NumericPropertyContext'
 import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
 import { newSplineLayerFromData } from '@/lib/defaults'
@@ -245,7 +250,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets',
-    'particles', 'player', 'scriptConsole', 'resourceMonitor', 'motionKeys', 'splineTools',
+    'particles', 'player', 'scriptConsole', 'resourceMonitor', 'motionKeys', 'splineTools', 'splineModeling',
   ])
 
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
@@ -430,7 +435,45 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     selectTimeline, isolateTimelines: setMCPTimelineIds, seek: handleSeek, playToggle: handlePlayToggle, setSpeed: setPlaybackSpeed,
     setParameter: runtime.setParamOverride, dispatchEvent: runtime.dispatchSMEvent,
     getAudioState: () => audioTransport.getState(),
+    getAgentHandoff: id => agentHandoffStore.get(id),
   })
+  const [pendingAgentHandoff, setPendingAgentHandoff] = useState<{
+    intent: 'edit' | 'ask'; context: AgentHandoffContext
+  } | null>(null)
+  const copyAgentHandoff = useCallback(async (context: AgentHandoffContext, intent: AgentHandoffRequest['intent'], detail = '') => {
+    try {
+      const handoffId = agentHandoffStore.create(context)
+      await navigator.clipboard.writeText(buildAgentHandoffPrompt(context, intent, detail, handoffId))
+      toast.success('Agent prompt copied', { detail: 'Paste it into your connected agent chat.' })
+      return true
+    } catch (error) {
+      toast.error('Unable to copy agent prompt', { detail: error instanceof Error ? error.message : String(error) })
+      return false
+    }
+  }, [])
+  const handleAgentHandoff = useCallback((request: AgentHandoffRequest) => {
+    if (!mcp.connected || !mcp.sessionId) {
+      toast.warning('MCP bağlantısı gerekli', {
+        detail: mcp.enabled
+          ? 'Üst araç çubuğundaki MCP düğmesinden “Connect this editor” seçin.'
+          : 'MCP servisini başlatın, ardından üst araç çubuğundaki MCP düğmesinden editörü bağlayın.',
+      })
+      return
+    }
+    try {
+      if (editor.isTransactionActive()) throw new Error('Finish the current edit before copying an agent prompt.')
+      const context = captureAgentHandoffContext({
+        scene: editor.getScene(), sessionId: mcp.sessionId,
+        documentEpoch: editorDocumentEpoch(editor), revision: editor.getRevision(),
+        timelineId: selectedTlId || null, timeMs: currentTimeMs, target: request,
+      })
+      if (request.intent === 'edit' || request.intent === 'ask') setPendingAgentHandoff({ intent: request.intent, context })
+      else void copyAgentHandoff(context, request.intent)
+    } catch (error) {
+      toast.warning('Cannot prepare agent prompt', { detail: error instanceof Error ? error.message : String(error) })
+    }
+  }, [mcp.connected, mcp.enabled, mcp.sessionId, editor, selectedTlId, currentTimeMs, copyAgentHandoff])
+
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
@@ -1393,6 +1436,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       { id: 'stateMachine',   title: 'State Machine',  render: () => null },
       { id: 'properties',     title: 'Properties',     render: () => null },
       { id: 'splineTools',    title: 'Spline & Boolean', render: () => null },
+      { id: 'splineModeling', title: 'Spline Modeling', render: () => null },
+      { id: 'motionKeys', title: 'Motion Keys', render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
       { id: 'dopeSheet',      title: 'Dope Sheet',     render: () => null },
@@ -1576,6 +1621,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       dispatchCommand(cmd)
                     }}
                     onDuplicate={(layerId) => cloneSourceIds(selectedLayerIds.has(layerId) ? selectedCloneIds() : [layerId])}
+                    onAgentHandoff={handleAgentHandoff}
                   />
                 ),
               },
@@ -1601,6 +1647,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       if (command) dispatchCommand(command)
                     }}
                     onClearSelection={() => selectLayer(null)}
+                    onAgentHandoff={handleAgentHandoff}
                     contextHandlers={{
                       addLayer: addContextItem,
                       editContent: openItemDetail,
@@ -1675,6 +1722,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     assets={assetCache}
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
+                    onAgentHandoff={handleAgentHandoff}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
@@ -1859,6 +1907,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 id: 'properties', title: 'Properties',
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
+                    {selectedLayer?.type === 'spline' && <button type="button"
+                      onClick={() => dock.dispatchRestorePanel('splineModeling')}
+                      className="mx-3 mt-2 rounded border border-blue-600 px-2 py-1 text-left text-xs text-blue-200 hover:bg-blue-900/30">
+                      Open Spline Modeling · Offset / Outline / Chamfer / Fillet
+                    </button>}
                     <PropertiesPanel
                       expressionFrame={frame}
                       expressionExternalTime={expressionAuthoringClock}
@@ -1913,6 +1966,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       </NumericPropertyProvider>
                     )}
                 </SplineToolsPanel>,
+              },
+              {
+                id: 'splineModeling', title: 'Spline Modeling',
+                render: () => <SplineModelingPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
+                  getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
+                  isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
+                  onSelectLayer={id => selectLayer(id)} onClearPoint={splineEdit.clear} />,
               },
               {
                 id: 'motionKeys', title: 'Motion Keys',
@@ -2268,6 +2328,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       )}
 
       {/* ── Toast notifications (lives above everything) ───────────── */}
+      {pendingAgentHandoff && <AgentHandoffDialog
+        key={`${pendingAgentHandoff.context.sessionId}:${pendingAgentHandoff.intent}:${pendingAgentHandoff.context.timeMs}`}
+        intent={pendingAgentHandoff.intent}
+        context={pendingAgentHandoff.context}
+        onCopy={detail => copyAgentHandoff(pendingAgentHandoff.context, pendingAgentHandoff.intent, detail)}
+        onClose={() => setPendingAgentHandoff(null)}
+      />}
       <ToastContainer />
     </div>
   )

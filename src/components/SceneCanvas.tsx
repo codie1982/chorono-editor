@@ -48,6 +48,8 @@ import { SplineOutlineOverlay } from './splineEdit/outline/SplineOutlineOverlay'
 import { SplineCornerOverlay } from './splineEdit/preview/SplineCornerOverlay'
 import ContextMenu, { useContextMenu } from './ui/ContextMenu'
 import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
+import { agentHandoffMenu } from './agentHandoff/menu'
+import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
 import {
   rotate90CW, rotate90CCW, flipHorizontal, flipVertical, centerOrigin,
@@ -63,12 +65,13 @@ import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
 import { AnchorHandle } from './canvas/overlays/AnchorHandle'
 import { MoveAxisGizmo, ScaleAxisGizmo } from './canvas/overlays/AxisGizmos'
 import { RotateRing } from './canvas/overlays/RotateRing'
+import { SnapPointOverlay } from './canvas/overlays/SnapPointOverlay'
 import { TransformHUD } from './canvas/overlays/TransformHUD'
 import { CanvasGuideWorkspace } from './canvas/guides/CanvasGuideWorkspace'
 import { FitMenu } from './canvas/controls/FitMenu'
 import { SnapSettingsMenu } from './canvas/controls/SnapSettingsMenu'
+import { gridSnappingEnabled } from '@/lib/snap/gridSettings'
 import { ViewMenu } from './canvas/controls/ViewMenu'
-import { SnapPointOverlay } from './canvas/overlays/SnapPointOverlay'
 import { prepareSceneSnapContext } from '@/lib/snap/prepareSceneSnapContext'
 import { ViewportStatusBar } from './canvas/controls/ViewportStatusBar'
 import { useCanvasRenderer } from './canvas/hooks/useCanvasRenderer'
@@ -76,7 +79,6 @@ import { usePreviewDrag } from './canvas/hooks/usePreviewDrag'
 import { useSelectionTools } from './canvas/hooks/useSelectionTools'
 import { selectionRegionForTool, selectionModeForModifiers, type SelectionRegionStyle } from '@/lib/selection/selectionGesture'
 import { CanvasSelectionEligibility } from '@/lib/selection/CanvasSelectionEligibility'
-import { gridSnappingEnabled } from '@/lib/snap/gridSettings'
 import { useSplineDrawing } from './canvas/hooks/useSplineDrawing'
 import { splineContinuation } from '@/lib/spline'
 import { useZoomAndPan } from './canvas/hooks/useZoomAndPan'
@@ -118,6 +120,8 @@ interface Props {
   /** Multi-selection set — when set has >1 entries, drag operations move
    *  ALL of them together (group-style transform). */
   selectedLayerIds?: Set<string>
+  /** Copy a focused MCP task prompt from a canvas right-click. */
+  onAgentHandoff?: (request: AgentHandoffRequest) => void
   assets: AssetElementMap
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   /** One-shot request to edit a freshly inserted text layer in the viewport. */
@@ -273,9 +277,9 @@ interface Props {
   onSelectKeyframes?: (ids: Set<string>) => void
   onSeekKeyframe?: (localTimeMs: number) => void
   onMotionEditingChange?: (editing: boolean) => void
-  /** Dock host for trajectory controls; null means its tab is currently hidden. */
+  /** Dock host for trajectory controls; null means its tab is hidden. */
   motionControlsHost?: HTMLElement | null
-  /** Restore/select the Motion Keys dock tab when entering from object context. */
+  /** Open the Motion Keys tab without changing scene/history. */
   onOpenMotionControls?: () => void
   onEditMotionTiming?: (layerId: string) => void
   /** Transient bounded Array plan; source/history stays owned by the editor. */
@@ -294,7 +298,7 @@ const PADDING   = 24
 const NO_MOTION_KEYS: ReadonlySet<string> = new Set()
 
 export default function SceneCanvas({
-  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers,
+  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers, onAgentHandoff,
   textEditRequestId, onTextEditRequestDone,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
@@ -426,7 +430,6 @@ export default function SceneCanvas({
 
   // ── View options (rulers + grid front/back) ──────────────────────────────
   const [showRulers,  setShowRulers]  = useState(true)
-  const showGrid = snapSettings.grid.visible
   const gridInFront = snapSettings.grid.inFront
   const [showGuides,  setShowGuides]  = useState(true)
   const [showMeasurements, setShowMeasurements] = useState(true)
@@ -437,6 +440,7 @@ export default function SceneCanvas({
   // does, however, get updated so e.g. Animate can keyframe the right layer.
   const ctxMenu = useContextMenu()
   const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
+  const ctxPointRef = useRef<{ x: number; y: number } | null>(null)
   // ── Right-click on empty canvas area → fit / zoom shortcuts ──────────────
   const emptyCanvasCtx = useContextMenu()
   // ── Alignment guides (canvas-center / edges / other-layer snap) ─────────
@@ -953,8 +957,7 @@ export default function SceneCanvas({
   useCanvasRenderer(canvasRef, {
     viewportRef: containerRef, viewportScale: zoom, viewportKey: `${zoom}:${pan.x}:${pan.y}`,
     scene: displayScene, timeMs, selectedLayerId, selectedLayerIds, assets,
-    snapEnabled, snapToGridOn, gridSize,
-    gridVisible: showGrid, gridInFront,
+    snapEnabled, snapToGridOn, gridSize, gridVisible: snapSettings.grid.visible, gridInFront,
     overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
   })
@@ -1240,6 +1243,7 @@ export default function SceneCanvas({
               // operate on what the user pointed at — matches every other editor.
               if (hit !== selectedLayerId) onSelectLayer(hit)
               setCtxTargetLayerId(hit)
+              ctxPointRef.current = { x: Math.round(cx), y: Math.round(cy) }
               ctxMenu.open(e)
             }}
             onPointerMove={(e) => {
@@ -1347,6 +1351,8 @@ export default function SceneCanvas({
             )
           })()}
 
+          {!hideEditorUI && dragSnapPoint && <SnapPointOverlay point={dragSnapPoint} zoom={zoom} />}
+
           {/* Motion path — trajectory the selected layer follows over time,
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
@@ -1368,7 +1374,7 @@ export default function SceneCanvas({
               controlsHost={motionControlsHost}
               interactionDisabled={panMode}
               mode={motionMode}
-              onModeChange={setMotionMode}
+              onModeChange={mode => { if (mode !== 'off') setPanMode(false); setMotionMode(mode) }}
               snapWorldPoint={point => resolvePointerSnap(point).point}
               onEditPathSource={sourceId => {
                 setMotionMode('off'); onSelectLayer(sourceId); onToolModeChange?.('pen')
@@ -1657,10 +1663,10 @@ export default function SceneCanvas({
       <div data-viewport-cursor-block className="absolute top-3 right-3 flex items-center gap-2 select-none z-40">
         <DocumentationHelp topic="editor/canvas" compact className="bg-gray-900/90" />
         <ViewMenu
+          showGrid={snapSettings.grid.visible} onToggleGrid={() => snap.setGridVisible(!snapSettings.grid.visible)}
+          gridSize={gridSize} onGridSizeChange={snap.setGridSize}
           showRulers={showRulers}     onToggleRulers={() => setShowRulers((v) => !v)}
           gridInFront={gridInFront}   onToggleGridFront={() => snap.setGridInFront(!gridInFront)}
-          showGrid={showGrid} onToggleGrid={() => snap.setGridVisible(!showGrid)}
-          gridSize={gridSize} onGridSizeChange={snap.setGridSize}
           showGuides={showGuides}     onToggleGuides={() => setShowGuides((v) => !v)}
           showMeasurements={showMeasurements} onToggleMeasurements={() => setShowMeasurements(value => !value)}
         />
@@ -1835,6 +1841,10 @@ export default function SceneCanvas({
           handlers,
         })
         items.unshift(...(target.spline ? [{ kind: 'submenu' as const, label: 'Edit mode', items: (['point', 'edge', 'object'] as const).map(mode => ({ kind: 'action' as const, label: mode, onSelect: () => { splineEditController.enter(mode); onOpenSplineTools?.() } })) }] : []), ...splineDrawItems(target))
+        if (onAgentHandoff) items.unshift(agentHandoffMenu({
+          layerIds: selectedLayerIds?.has(target.id) ? Array.from(selectedLayerIds) : [target.id],
+          ...(ctxPointRef.current ? { point: ctxPointRef.current } : {}),
+        }, onAgentHandoff), { kind: 'separator' })
         return (
           <ContextMenu
             x={ctxMenu.state!.x}

@@ -126,7 +126,7 @@ export function SnapMenu(p: SnapMenuProps) {
           {(tab === 'snaps' || tab === 'options') && <><div className="h-px bg-gray-800 my-1" />
           <div className="flex items-center gap-1 pr-3"><label
             className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs
-                       text-gray-200 hover:bg-gray-800 cursor-pointer"
+                         text-gray-200 hover:bg-gray-800 cursor-pointer"
           >
             <span className="flex items-center gap-2">
               <input type="checkbox" checked={p.enabled} onChange={p.onToggleEnabled} className="accent-blue-500" />

@@ -8,6 +8,7 @@ export type { SplineElementIds } from './splineElements'
 import { prepareSplineSourceOperation } from '@/lib/editor/spline/operations/sourceOperation'
 import type { SplineSourceOperation } from '@/lib/editor/spline/operations/types'
 import { editableSplineLayer } from '@/lib/spline/edit/authoringGuard'
+import { makeAddLayerCmd } from '@/lib/editor/commands-layer'
 import { moveSplinePoint, moveSplineHandle, insertPointOnSegment, deleteSplinePoint,
   setSplinePointType, setSegmentType, setContourClosed, reverseContour } from '@/lib/spline/edit/mutations'
 import { createSplinePrimitive } from '@/lib/spline/factory/createSplinePrimitive'
@@ -19,6 +20,10 @@ import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { uid } from '@/lib/spline/util/uid'
 import { removeSplineContours } from '@/lib/spline/topology'
+import { createOffsetOutline, type OffsetDirection } from '@/lib/spline/modeling/offsetOutline'
+import { treatSplineCorners } from '@/lib/spline/modeling/cornerTreatment'
+import { assertContourAnimationSafe } from '@/lib/spline/modeling/animationGuard'
+import { modeledSplineLayer } from '@/lib/spline/modeling/modelingLayer'
 import { copyScriptData, assertSafeScriptData } from './scriptData'
 import { assertBoolean, assertCoordinates, assertPointType, assertSplineLocks,
   assertSplineTopology, markEditedSubShapes } from './splineHandleData'
@@ -248,6 +253,36 @@ export class SplineHandle {
   setFillRule(rule:'nonzero'|'evenodd'):void {
     if (!['nonzero','evenodd'].includes(rule)) throw new Error('Unknown spline fill rule.')
     this.change('Set fill rule',data=>({data:{...data,fillRule:rule},result:undefined}),{markEdited:false})
+  }
+  /** Create a new sibling spline from a contour's parallel offset. Distance is positive layer-local pixels. */
+  offsetContour(contourId:string,distance:number,direction:OffsetDirection):string {
+    return this.parallelContour(contourId,distance,direction,'offset')
+  }
+  /** Create a new sibling spline from both sides of a contour, using even-odd fill for closed bands. */
+  outlineContour(contourId:string,distance:number,direction:OffsetDirection):string {
+    return this.parallelContour(contourId,distance,direction,'outline')
+  }
+  private parallelContour(contourId:string,distance:number,direction:OffsetDirection,mode:'offset'|'outline'):string {
+    const source=this.layer(true)
+    const data=createOffsetOutline(source.spline,{contourId,distance,direction,mode})
+    const sibling=modeledSplineLayer(source,data,mode)
+    this.ctx.host.applyCommand(makeAddLayerCmd(sibling))
+    return sibling.id
+  }
+  /** Cut selected corners by a straight chamfer; replaces the target contour in one undo command. */
+  chamferCorners(contourId:string,pointIds:string[],distance:number):void {
+    this.cornerTreatment(contourId,pointIds,distance,'chamfer')
+  }
+  /** Round selected corners with a tangent cubic; line-line radius is exact. */
+  filletCorners(contourId:string,pointIds:string[],radius:number):void {
+    this.cornerTreatment(contourId,pointIds,radius,'fillet')
+  }
+  private cornerTreatment(contourId:string,pointIds:string[],amount:number,mode:'chamfer'|'fillet'):void {
+    const source=this.layer(true),scene=this.ctx.host.getScene()
+    assertContourAnimationSafe(scene,this.layerId,source.spline,contourId)
+    this.change(mode==='chamfer'?'Chamfer corners':'Fillet corners',data=>({
+      data:treatSplineCorners(data,{contourId,pointIds,amount,mode}),result:undefined,
+    }))
   }
   transform(affine:SplineAffineTransform,options:{subShapeId?:string}={}):void {
     assertCoordinates(affine.a,affine.b,affine.c,affine.d,affine.e,affine.f)

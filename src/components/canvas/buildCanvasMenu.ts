@@ -167,7 +167,7 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       kind: 'submenu', label: 'Animate', disabled: multi,
       items: buildAnimateSubmenu(args.layer, h.animateProperty),
     },
-    ...(!multi && h.editMotionKeys ? [action('Edit motion keys', undefined, h.editMotionKeys)] : []),
+    ...(h.editMotionKeys ? [action('Edit motion keys', undefined, h.editMotionKeys)] : []),
 
     // BL-67 — Pick a path layer on the canvas to drive this layer's position.
     action('Assign motion path…', undefined,

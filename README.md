@@ -13,9 +13,9 @@ The editing workspace requires at least **1280 × 720 CSS pixels** and a mouse o
 trackpad. Phones, smaller windows and touch-only tablets show a display-support
 screen. Exported players retain their responsive/mobile playback behavior.
 
-**v0.3.0:** viewport and Timeline authoring, typed expressions and baking,
-local session/history recovery, fresh-read MCP edits and contextual documentation.
-[Release notes](docs/releases/v0.3.0.md) · [Türkçe sürüm notları](docs/tr/releases/v0.3.0.md) · [Changelog](CHANGELOG.md)
+**v0.4.0:** editable spline Offset/Outline, Chamfer and Fillet; consolidated
+Snap controls, Agent handoff and restored 2D precision feedback.
+[Release notes](docs/releases/v0.4.0.md) · [Türkçe sürüm notları](docs/tr/releases/v0.4.0.md) · [Changelog](CHANGELOG.md)
 
 [Website](https://www.chorono.com/) · [Install Chorono](docs/en/installation.md) · [Türkçe kurulum](docs/tr/installation.md) · [Editable example](examples/first-animation/README.md) · [Documentation](docs/README.md) · [Get help](#support)
 

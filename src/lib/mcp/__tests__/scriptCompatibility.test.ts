@@ -33,7 +33,7 @@ describe('Script Console / QuickJS feature compatibility', () => {
     const actual = JSON.parse(result.logs[0])
     expect(actual.scene).toEqual(Object.getOwnPropertyNames(api).sort())
     expect(actual.layer).toEqual(publicNames(LayerHandle.prototype, ['_layer', '_audioTimeline', '_patchTransform', '_write']))
-    expect(actual.spline).toEqual([...publicNames(SplineHandle.prototype, ['id', 'layer', 'change', 'point', 'contour', 'segment', 'removeContours']), 'layerId'].sort())
+    expect(actual.spline).toEqual([...publicNames(SplineHandle.prototype, ['id', 'layer', 'change', 'point', 'contour', 'segment', 'removeContours', 'parallelContour', 'cornerTreatment']), 'layerId'].sort())
     expect(actual.timeline).toEqual(publicNames(TimelineHandle.prototype))
     expect(actual.machine).toEqual(publicNames(StateMachineHandle.prototype))
     expect(actual.particles).toEqual(publicNames(ParticleHandle.prototype, ['layer', 'commit', 'channel', 'lifeStops']))

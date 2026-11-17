@@ -33,6 +33,8 @@ import ContextMenu from '@/components/ui/ContextMenu'
 import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
 import { buildSceneExplorerMenu, duplicateExplorerSelection, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
 import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
+import { agentHandoffMenu } from '@/components/agentHandoff/menu'
+import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
 import SubtreeOperationsToolbar from './SubtreeOperationsToolbar'
 import { useLayerBranches } from '@/components/layerHierarchy/useLayerBranches'
@@ -73,6 +75,8 @@ interface Props {
 
   // BL-53 — Context-menu actions (omit any you don't want to expose)
   contextHandlers?: Partial<SceneExplorerMenuHandlers>
+  /** Copy a focused MCP task prompt from a scene row. */
+  onAgentHandoff?: (request: AgentHandoffRequest) => void
   /** BL-53 — called when the bulk toolbar's ✕ button is pressed. */
   onClearSelection?: () => void
 
@@ -95,7 +99,7 @@ export default function SceneExplorerPanel({
   layers, timeline, selectedId, selectedIds, layerScope,
   onSelect, onSelectLayers, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
-  contextHandlers, onClearSelection,
+  contextHandlers, onClearSelection, onAgentHandoff,
   isLayerAnimated, doesLayerHaveEffects,
   onFreezeSelection, onUnfreezeSelection, onSetSubtreeFlag,
 }: Props) {
@@ -705,12 +709,10 @@ export default function SceneExplorerPanel({
             x={menuState.x}
             y={menuState.y}
             onClose={() => setMenuState(null)}
-            items={buildSceneExplorerMenu({
-              target,
-              selectionIds: ids,
-              allLayers: layers,
-              handlers,
-            })}
+            items={[
+              ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: ids }, onAgentHandoff), { kind: 'separator' as const }] : []),
+              ...buildSceneExplorerMenu({ target, selectionIds: ids, allLayers: layers, handlers }),
+            ]}
           />
         )
       })()}

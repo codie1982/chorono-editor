@@ -9,6 +9,8 @@ import type { Layer } from '@/lib/types'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import ChoronoIcon from '@/components/ui/ChoronoIcon'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
+import { agentHandoffMenu } from '@/components/agentHandoff/menu'
+import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import { LAYER_TYPE_ICON, ADD_LAYER_GROUPS } from '@/lib/icons/iconMap'
 import { buildLegacyLayerRows } from '@/lib/sceneExplorer/legacyLayerRows'
 import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
@@ -75,6 +77,8 @@ interface Props {
   onDuplicate?: (layerId: string) => void
   onGroupSelected?: () => void
   onUngroupLayer?: (id: string) => void
+  /** Copy a focused MCP task prompt from a layer row. */
+  onAgentHandoff?: (request: AgentHandoffRequest) => void
 }
 
 type DropZone = 'before' | 'after' | 'into'
@@ -85,7 +89,7 @@ export default function LayerPanel({
   onAddImage, onAddVideo, onAddAudio, onImportSvg, onImportModel, getDocumentSignal,
   onDelete, onDeleteLayers, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
-  timelineLayerIds, onToggleInTimeline, onDuplicate,
+  timelineLayerIds, onToggleInTimeline, onDuplicate, onAgentHandoff,
   onGroupSelected, onUngroupLayer,
   onIsolateSelection, onExitIsolation, isolationActive = false,
   onEditContent, onIsolateLayers, onSplineEditMode, onEditOperation, isBooleanMember,
@@ -563,6 +567,7 @@ export default function LayerPanel({
             shortcut: '⌘D', disabled: !onDuplicate,
             onSelect: () => { onDuplicate?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
           },
+          ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id] }, onAgentHandoff)] : []),
           { kind: 'separator' as const },
           {
             kind: 'action' as const, label: multi ? `Delete ${ids.length} layers` : 'Delete',

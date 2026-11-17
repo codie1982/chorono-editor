@@ -95,7 +95,6 @@ export default function TimelineToolbar(props: Props) {
       <DocumentationHelp topic="editor/timeline" compact />
       <div role="group" aria-label="Playback controls" className="flex items-center gap-1 shrink-0">
       <TimelineTransport side="previous" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
-      <TimelineTransport side="previous" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
       <div className="relative" ref={playRef}>
         <button
           onKeyDown={event => {

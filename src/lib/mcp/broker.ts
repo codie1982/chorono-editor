@@ -132,9 +132,9 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
   if (name === 'list_projects') return { projects: await listProjects() }
   const session = chooseSession(args.sessionId)
   const sourceWrite = isSourceMutation(name)
-  if (sourceWrite || name === 'get_scene' || name === 'discard_spline_edit') clients.verify(client)
+  if (sourceWrite || name === 'get_scene' || name === 'discard_spline_edit' || name === 'get_handoff_context') clients.verify(client)
   const hash = createHash('sha256').update(JSON.stringify({ name: requestedName, args })).digest('hex')
-  const requestKey = args.requestId && name !== 'get_scene' ? `${client?.id ?? 'read-only'}:${args.requestId}` : undefined
+  const requestKey = args.requestId && name !== 'get_scene' && name !== 'get_handoff_context' ? `${client?.id ?? 'read-only'}:${args.requestId}` : undefined
   if (requestKey && session.results.has(requestKey)) {
     const cached = session.results.get(requestKey)!
     if (cached.hash !== hash) throw new Error('requestId was already used with different arguments')

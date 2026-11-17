@@ -10,6 +10,7 @@
 //   card.key('opacity', 600, 1)
 
 import { useState, useCallback, useRef } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import type { ChronoScene } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import { runScript } from '@/lib/script'
@@ -88,6 +89,7 @@ export default function ScriptConsolePanel({ getScene, dispatchCommand }: Props)
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 shrink-0">
         <span className="text-xs font-semibold text-gray-300">Script Console</span>
         <span className="text-[10px] text-gray-500">JS · scene API</span>
+        <DocumentationHelp topic="scripting/splines" compact />
         <div className="flex-1" />
         <button
           onClick={() => setOutput([])}

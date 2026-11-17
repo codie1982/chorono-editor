@@ -25,7 +25,7 @@ function preview(drag: RotateState | ScaleAxisState, x: number, y: number, cfg =
 describe('viewport transform snapping with Move disabled', () => {
   it('quantizes single local rotation from the evaluated starting angle', () => {
     const targets = prepare(['a']).targets, gesture = beginRotationGesture(a, base, 0, { x: 100, y: 0 })!
-    const drag: RotateState = { kind: 'rotate', originalRotation: 7, layerId: a.id, originalLayer: a, targets, gesture,
+    const drag: RotateState = { kind: 'rotate', originalRotation: a.transform.rotationDeg, layerId: a.id, originalLayer: a, targets, gesture,
       startClientX: 0, startClientY: 0, startAngle: 0, anchorWorldX: 0, anchorWorldY: 0 }
     const x = 100 * Math.cos(40 * Math.PI / 180), y = 100 * Math.sin(40 * Math.PI / 180)
     expect(preview(drag, x, y).scene.layers[0].transform.rotationDeg).toBe(45)
@@ -34,7 +34,7 @@ describe('viewport transform snapping with Move disabled', () => {
   })
   it('quantizes a multi-root world rotation delta without changing key data', () => {
     const prepared = prepare(['a', 'b'])
-    const drag: RotateState = { kind: 'rotate', originalRotation: 7, layerId: a.id, originalLayer: a, targets: prepared.targets,
+    const drag: RotateState = { kind: 'rotate', originalRotation: a.transform.rotationDeg, layerId: a.id, originalLayer: a, targets: prepared.targets,
       startClientX: 0, startClientY: 0, startAngle: 0, anchorWorldX: 50, anchorWorldY: 0 }
     const result = preview(drag, 50 + 100 * Math.cos(40 * Math.PI / 180), 100 * Math.sin(40 * Math.PI / 180))
     result.changes.forEach(change => expect(change.next.transform.rotationDeg).toBeCloseTo(52))

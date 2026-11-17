@@ -32,6 +32,7 @@ import {isSourceMutation} from './source/ToolSourcePolicy'
 import {SourceAccessError} from './source/SourceAccessError'
 import {summarizeSourceChanges} from './source/SourceChangeSummary'
 import {nativeToolArguments} from './source/NativeArguments'
+import type { AgentHandoffContext } from '../agentHandoff/prompt'
 
 export interface MCPHost {
   /** Optional platform adapters; production uses the native bounded workers. */
@@ -52,6 +53,7 @@ export interface MCPHost {
   setParameter: (id: string, value: any) => void
   dispatchEvent: (event: string, machineId?: string) => void
   getAudioState?: () => unknown
+  getAgentHandoff?: (id: string) => AgentHandoffContext | undefined
 }
 
 /** Legacy raw portable-scene handoff; construction is bounded, returned source
@@ -105,6 +107,17 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
         addedLayerIds: next.layers.filter(l => !before.layers.some(prev => prev.id === l.id)).map(l => l.id) }
     }
     if (method === 'snapshot') return snapshot()
+    if (method === 'get_handoff_context') {
+      if (transactionActive) throw new SourceAccessError('SOURCE_EDITOR_BUSY')
+      const focus = host.getAgentHandoff?.(args.handoffId)
+      if (!focus || focus.sessionId !== args.sessionId || focus.documentEpoch !== documentEpoch ||
+          focus.sceneId !== before.composition.id ||
+          focus.layers.some(layer => !before.layers.some(current => current.id === layer.id)) ||
+          (focus.timelineId && !before.timelines.some(timeline => timeline.id === focus.timelineId))) {
+        throw new Error('Agent handoff expired or its document/target changed; create a new handoff')
+      }
+      return { ...snapshot(), focus }
+    }
     if (method === 'portable_snapshot') {
       const scene=await portableSceneInScope(before,scope,signal);assertScene(scene)
       return {...snapshot(),scene}

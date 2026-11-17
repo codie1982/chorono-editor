@@ -1,6 +1,6 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.1.0: varsayılan `standard` keşif kataloğu 44 ortak aracı yayımlar.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 45 ortak aracı yayımlar.
 Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
@@ -37,6 +37,26 @@ Geliştirirken üretim sunucusunu durdurup `npm run dev:mcp` kullanabilirsiniz. 
 `mcp:setup`, bu bilgisayar için doğru Node ve dosya yollarıyla `.chorono/client-configs/` altında Claude Desktop JSON, Claude Code JSON ve Codex TOML üretir. `npm run mcp:setup -- --install`, mevcut ayarları yedekleyip koruyarak Claude Desktop ve Codex kullanıcı ayarlarına, Claude Code için de proje `.mcp.json` dosyasına `chorono` ekler; mevcut bir `chorono` kaydını değiştirmez. İstemciyi yeniden başlatın veya MCP bağlantılarını yeniden yükleyin.
 
 Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin veya `claude mcp add --transport stdio chorono -- /tam/node/yolu /tam/proje/yolu/dist/mcp/server.cjs` kullanın. Codex kaydı `[mcp_servers.chorono]` bölümünde `command`, `args`, `startup_timeout_sec` ve `tool_timeout_sec` içerir.
+
+## Editörden ajana odak metni kopyalama
+
+Tuvaldeki katmana, Katmanlar panelindeki satıra veya Sahne Gezgini satırına
+sağ tıklayın. MCP bağlı değilse seçenek yine görünür; seçildiğinde bağlantı
+uyarısı verir. **Send to Agent** alt menüsü
+açıklama, sorun bulma, iyileştirme önerisi, düzenleme isteği ve özel soru
+seçenekleri sunar. Seçenekler ajan sohbetine yapıştırılacak bir görev metni
+kopyalar; doğrudan sohbet başlatmaz. Düzenleme ve özel soru seçenekleri önce
+kısa bir metin ister. Kopyalanan metin yalnız editör oturumu ve süreli bir
+odak kimliği taşır. Seçili katmanlar, timeline, oynatma zamanı, tuval koordinatı,
+belge kimliği ve güncel sahne `get_handoff_context` ile MCP üzerinden okunur.
+Odak kaydı aynı tarayıcı sekmesinde en fazla on dakika tutulur; belge veya hedef
+değişirse okuma hata verir ve yeni bir aktarım gerekir. Araç kaynak yazma yetkisi
+vermez: her değişiklik öncesinde ayrıca `get_scene` okunur. Ajan gerçek
+`render_preview` PNG'lerini, gerekiyorsa `evaluate_frame` değerlerini ve
+`validate_scene` sonucunu inceleyip sahne revizyonu ile kanıtı raporlamalıdır.
+Kod ve loglar tek başına görsel doğruluğu kanıtlamaz. MCP kaynak yazmaları için
+güncel okuma teknik olarak zorunludur; salt okunur yanıtta bu akışa uyma
+sorumluluğu ajandadır.
 
 ## Araç kapsamı
 
@@ -96,7 +116,7 @@ Salt okuma, dosya ve playback/runtime taşıma araçları mutasyon batch'ine gir
 klibi düzenlemeleri bu uzman mutasyon yolunu kullanabilir; scriptte aynı domain
 işlemleri de vardır.
 
-`get_capabilities({})` kapsamlı yanıtı korur: `tools` eski 77 araç ve yeni `update_model3d` aracının
+`get_capabilities({})` kapsamlı yanıtı korur: `tools` eski 77 araç, `update_model3d`, üç spline plan aracı ve `get_handoff_context` dahil 82 adın
 uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
 Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
 `catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
@@ -133,7 +153,7 @@ Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
 
 Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
 `CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
-`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı ve `update_model3d` aracını yayımlar; `standard`
+`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı, `update_model3d`, üç spline plan aracı ve `get_handoff_context` adını yayımlar; `standard`
 varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
 değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
 bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.

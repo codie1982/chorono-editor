@@ -22,7 +22,7 @@ export const TOOL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
  * native mutations can be schema-discovered and invoked inside batch_actions;
  * clients needing every historical tool directly select the legacy profile. */
 export const STANDARD_TOOL_NAMES: readonly string[] = Object.freeze([
-  'list_sessions', 'get_capabilities', 'get_scene', 'list_layers', 'get_layer',
+  'list_sessions', 'get_capabilities', 'get_handoff_context', 'get_scene', 'list_layers', 'get_layer',
   'list_timelines', 'get_timeline', 'list_assets', 'create_layer', 'update_layer',
   'upsert_keyframes', 'create_timeline', 'update_timeline', 'clone_layer',
   'array_layer', 'group_layers', 'ungroup_layer', 'delete_layer', 'run_script',

@@ -87,7 +87,7 @@ Create paths with `scene.addPath(points,{role:'motion',name:...})` or `scene.add
 | Namespace | Structured script access |
 | --- | --- |
 | `scene.particlePresets`, `layer.particles` | Detached config/preset reads; validated deep config edits; emission, visuals, animation, randomness and rendering sections; deterministic integer/string seeds; scale/opacity/color life keys; native motion-modifier CRUD |
-| `layer.spline` | Detached geometry/bounds reads; primitive/contour creation; point and handle editing/locking; line/cubic/quadratic segment editing and splitting; contour closing/reversing; sub-shape removal/renaming; affine geometry transforms |
+| `layer.spline` | Detached geometry/bounds reads; primitive/contour creation; point and handle editing/locking; line/cubic/quadratic segment editing and splitting; contour closing/reversing; sub-shape removal/renaming; affine geometry transforms; `offsetContour`, `outlineContour`, `chamferCorners`, `filletCorners` (see [spline modeling](spline-modeling.md)) |
 | `scene.explorer` | Tree/node/relationship reads; faceted search; grouping, ungrouping and reparenting; sibling render order; rename and bulk visibility/lock/solo/pin flags |
 
 Use domain commands for structural edits and reuse returned ids. A spline's coordinates are layer-local; its transform, parent and pivot are preserved. Deleting spline elements also removes their animation tracks in the same undoable edit. Instance domain data is readable, while edits require explicitly opening the source layer. Point/handle locks and locked/frozen affected hierarchies are respected.
