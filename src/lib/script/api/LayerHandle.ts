@@ -19,6 +19,7 @@ import { dbToGain } from '../../audio/audioClip'
 import { makePatchAudioClipCmd, makeMoveAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd, makeSetAudioGainKeyCmd, type AudioClipCommandOptions } from '../../editor/commands-audio'
 import { ParticleHandle } from './ParticleHandle'
 import { SplineHandle } from './SplineHandle'
+import { makeScriptPatchCommand } from '../validation/ScriptPatchCommand'
 
 let splitSequence = 0
 
@@ -29,10 +30,16 @@ const VALID_EASINGS: ReadonlySet<EasingType> = new Set<EasingType>([
 /** Internal context shared by SceneAPI + handles. */
 export interface ApiContext {
   host: ScriptHost
+  /** Trusted native MCP composition only; unavailable in the script bridge. */
+  readonly nativeCommandAdapter?: boolean
   /** Resolve the timeline a keyframe should be written to (first timeline). */
   resolveTimelineId(): string | undefined
 }
 
+/** Script facade for one stable layer id. Borrows a per-run context, resolves
+ * fresh source for every read/write, and retains no evaluated/runtime data.
+ * Static writes use the shared 2D ownership/validation command; keys keep their
+ * native upsert semantics. Trusted native tool composition is host-owned. */
 export class LayerHandle {
   constructor(
     public readonly id: string,
@@ -56,20 +63,29 @@ export class LayerHandle {
 
   // ── Generic patch ─────────────────────────────────────────────────────────────
 
-  /** Apply a raw Partial<Layer> patch (escape hatch for advanced edits). */
+  /** Shallow replacement of supplied 2D fields. Locked/driven/invalid edits
+   * fail atomically; omitted siblings in a supplied container are removed. */
   set(patch: Partial<Layer>): this {
-    const prev = this._layer()
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, patch, prev))
+    this._write(patch)
     return this
   }
 
-  /** Recursive object merge; arrays replace. Use set() for explicit shallow replacement. */
+  /** Recursive record merge; arrays replace. Preserves unspecified siblings and
+   * rejects locked/driven/invalid edits before dispatch. Returns this handle. */
   patch(patch: DeepPartial<Omit<Layer, 'id' | 'type'>>): this {
     if ('id' in patch || 'type' in patch) throw new Error('Cannot change layer id or type.')
     const prev = this._layer()
-    const next = mergeScriptData<Layer>(prev, patch as DeepPartial<Layer>)
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, next, prev))
+    this.ctx.host.applyCommand(this.ctx.nativeCommandAdapter
+      ? makeUpdateLayerCmd(this.id, mergeScriptData<Layer>(prev, patch as DeepPartial<Layer>), prev)
+      : makeScriptPatchCommand(this.ctx.host.getScene(), this.id, patch, true))
     return this
+  }
+
+  /** All static convenience setters share the same source ownership policy. */
+  private _write(patch: Partial<Layer>): void {
+    this.ctx.host.applyCommand(this.ctx.nativeCommandAdapter
+      ? makeUpdateLayerCmd(this.id, patch, this._layer())
+      : makeScriptPatchCommand(this.ctx.host.getScene(), this.id, patch))
   }
 
   private _audioTimeline(options: AudioClipCommandOptions): AudioClipCommandOptions {
@@ -111,9 +127,7 @@ export class LayerHandle {
 
   private _patchTransform(delta: Partial<Layer['transform']>): void {
     const prev = this._layer()
-    this.ctx.host.applyCommand(
-      makeUpdateLayerCmd(this.id, { transform: { ...prev.transform, ...delta } }, prev),
-    )
+    this._write({ transform: { ...prev.transform, ...delta } })
   }
 
   // ── Position ────────────────────────────────────────────────────────────────
@@ -130,8 +144,7 @@ export class LayerHandle {
 
   get opacity(): number { return this._layer().opacity }
   set opacity(v: number) {
-    const prev = this._layer()
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { opacity: v }, prev))
+    this._write({ opacity: v })
   }
 
   // ── Rotation (degrees) ────────────────────────────────────────────────────────
@@ -156,10 +169,7 @@ export class LayerHandle {
     return sz ? [sz.width, sz.height] : [0, 0]
   }
   set size(s: [number, number]) {
-    const prev = this._layer()
-    this.ctx.host.applyCommand(
-      makeUpdateLayerCmd(this.id, { size: { width: s[0], height: s[1] } }, prev),
-    )
+    this._write({ size: { width: s[0], height: s[1] } })
   }
 
   // ── Fill colour ───────────────────────────────────────────────────────────────
@@ -174,7 +184,7 @@ export class LayerHandle {
       ...prev.style,
       fill: { ...(prev.style?.fill ?? { type: 'solid' as const }), type: 'solid' as const, color },
     }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { style }, prev))
+    this._write({ style })
   }
 
   // ── Text ────────────────────────────────────────────────────────────────────
@@ -183,7 +193,7 @@ export class LayerHandle {
   set text(content: string) {
     const prev = this._layer()
     const text = { fontSize: 24, color: '#FFFFFF', ...prev.text, value: content }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { text }, prev))
+    this._write({ text })
   }
 
   /** Typography options: handle.font({ family: 'Inter', weight: '700', size: 48 }). */
@@ -205,7 +215,7 @@ export class LayerHandle {
       ...(opts.underline     != null ? { underline:     opts.underline }     : {}),
       ...(opts.color         != null ? { color:         opts.color }         : {}),
     }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { text }, prev))
+    this._write({ text })
     return this
   }
 
@@ -223,7 +233,7 @@ export class LayerHandle {
         ...(opts.opacity != null ? { opacity: opts.opacity } : {}),
       },
     }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { style }, prev))
+    this._write({ style })
     return this
   }
 
@@ -233,7 +243,7 @@ export class LayerHandle {
   set cornerRadius(r: number) {
     const prev = this._layer()
     const style = { ...prev.style, cornerRadius: r }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { style }, prev))
+    this._write({ style })
   }
 
   // ── Shape params ──────────────────────────────────────────────────────────────
@@ -243,7 +253,7 @@ export class LayerHandle {
     const prev = this._layer()
     const kind = prev.shapeParams?.kind ?? prev.shapeKind ?? 'rect'
     const shapeParams = { kind, ...prev.shapeParams, [name]: value } as ShapeParams
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { shapeParams }, prev))
+    this._write({ shapeParams })
     return this
   }
 
@@ -253,17 +263,15 @@ export class LayerHandle {
     return this._layer().blendMode ?? 'source-over'
   }
   set blendMode(mode: GlobalCompositeOperation) {
-    const prev = this._layer()
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { blendMode: mode }, prev))
+    this._write({ blendMode: mode })
   }
 
   // ── Parent (scene graph) ──────────────────────────────────────────────────────
 
   /** Reparent under a group: handle.parent(groupHandle) or handle.parent(null) to detach. */
   parent(p: LayerHandle | string | null): this {
-    const prev = this._layer()
     const parentId = p == null ? undefined : (typeof p === 'string' ? p : p.id)
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { parentId }, prev))
+    this._write({ parentId })
     return this
   }
 
@@ -291,7 +299,7 @@ export class LayerHandle {
       ...(opts.scrubsTimeline!= null ? { scrubsTimeline: opts.scrubsTimeline }: {}),
     }
     if (Object.keys(drag).length) patch.dragConfig = drag
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, patch, prev))
+    this._write(patch)
     return this
   }
 
@@ -302,7 +310,6 @@ export class LayerHandle {
     progress?: number; orientToPath?: boolean
     rotationOffset?: number; perpendicularOffset?: number
   }): this {
-    const prev = this._layer()
     const followPath = {
       pathLayerId,
       progress: opts?.progress ?? 0,
@@ -310,7 +317,7 @@ export class LayerHandle {
       ...(opts?.rotationOffset != null ? { rotationOffset: opts.rotationOffset } : {}),
       ...(opts?.perpendicularOffset != null ? { perpendicularOffset: opts.perpendicularOffset } : {}),
     }
-    this.ctx.host.applyCommand(makeUpdateLayerCmd(this.id, { followPath }, prev))
+    this._write({ followPath })
     return this
   }
 

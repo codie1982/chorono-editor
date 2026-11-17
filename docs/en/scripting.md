@@ -32,6 +32,10 @@ scene.log(scene.snapshot().layers.length, scene.assets.length);
 
 `layer.patch(partial)` recursively merges objects and replaces arrays, preserving unspecified nested fields. `layer.set(partial)` keeps its original shallow replacement behavior: replacing `audio`, `style`, `transform` or another nested object replaces that whole object. Changing a detached snapshot does not edit the scene. Use handles or entity commands to commit edits. Layer identity cannot be changed through a patch.
 
+`set`, `patch` and static shortcuts share source guards: locked/frozen layers or ancestors, animated fields in any timeline, and existing bindings/wires/formulas/path drivers reject conflicting writes. Use `key()` to edit an animated value. Explicit unlocking must be a separate flag-only edit. Existing formula/binding records cannot be removed through raw replacement to bypass ownership. Changed values are checked without coercion; untouched legacy fields stay unchanged. Incomplete shallow containers such as `set({transform:{x:10}})` are refused; use a complete transform or a deep patch on an unowned field.
+
+Script writes are limited to 2D source. Existing boxed 3D layers may receive outer 2D transform/size/opacity edits and keys; their internal payloads, tracks and references remain read-only. Use native tools for creating/copying/deleting 3D content or changing its internal camera/model. Capabilities expose this distinction under `scriptAuthoring`. The manual console uses the same facade guards but remains a legacy JavaScript runner, not a security sandbox. See the [source-guard implementation contract](../tr/script-source-guards.md).
+
 ## Create a scene with several animations
 
 Adapt composition settings and ids when extending existing work. All times are milliseconds and rotations are degrees.

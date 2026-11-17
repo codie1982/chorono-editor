@@ -38,6 +38,11 @@ import { makeScriptEntityEditCmd, type ScriptEntityCollection, type ScriptEntity
 import { makeAddAudioClipCmd, type AddAudioClipOptions } from '../../editor/commands-audio'
 import { ExplorerAPI } from './ExplorerAPI'
 import { listScriptParticlePresets } from './ParticleHandle'
+import { ScriptSourceHost } from '../validation/ScriptSourceHost'
+
+/** Internal native-command composition only. Never exposed to script code or
+ * accepted from serialized arguments. Native tools retain their own policies. */
+export interface SceneAPIHostOptions { readonly nativeCommandAdapter?: boolean }
 
 export interface TriggerScriptOptions {
   layerId?: string
@@ -127,11 +132,15 @@ export interface SceneAPI {
  * Build the `scene` API object for one script run.
  * @param host       bridge to editor (getScene + applyCommand)
  * @param collectLog sink for scene.log() output
+ * @param options   internal native-command composition; scripts cannot set it
+ * @returns Fresh facade borrowing host; no runtime resources require disposal.
  */
 export function createSceneAPI(
   host: ScriptHost,
   collectLog: (line: string) => void,
+  options: SceneAPIHostOptions = {},
 ): SceneAPI {
+  if (!options.nativeCommandAdapter) host = new ScriptSourceHost(host)
   let activeTimelineId: string | undefined
   function uniqueLayer<T extends { id: string }>(layer: T): T {
     while (host.getScene().layers.some(l => l.id === layer.id)) layer = { ...layer, id: scriptUid('layer') }
@@ -139,6 +148,7 @@ export function createSceneAPI(
   }
   const ctx: ApiContext = {
     host,
+    nativeCommandAdapter: options.nativeCommandAdapter,
     resolveTimelineId: () => activeTimelineId ?? host.getScene().timelines[0]?.id,
   }
   const explorer = new ExplorerAPI(ctx)

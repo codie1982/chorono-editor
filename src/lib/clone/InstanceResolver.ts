@@ -26,7 +26,7 @@ import type { Layer } from '../types'
 import type { LayerLookup } from '@/lib/scene/LayerIndex'
 
 /** Visual fields cherry-picked from the source. */
-const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
+export const INSTANCE_SOURCE_FIELDS: ReadonlyArray<keyof Layer> = [
   'type',
   'shape',
   'shapeKind',
@@ -84,10 +84,10 @@ export function resolveInstanceLayer(
   const composed: Layer = {
     ...layer, // base = instance (transform / opacity / id / name / parentId / effects / etc.)
   }
-  for (const key of SOURCE_VISUAL_KEYS) {
+  for (const key of INSTANCE_SOURCE_FIELDS) {
     const value = resolvedSource[key]
     if (value !== undefined) {
-      // The cast is safe: SOURCE_VISUAL_KEYS lists Layer-typed keys.
+      // The cast is safe: INSTANCE_SOURCE_FIELDS lists Layer-typed keys.
       ;(composed as unknown as Record<string, unknown>)[key as string] = value
     }
   }

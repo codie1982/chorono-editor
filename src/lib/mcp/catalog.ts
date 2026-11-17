@@ -10,9 +10,11 @@ import { ToolCatalogIndex } from './tools/ToolCatalogIndex'
 import { implementationToolName, type ToolCatalogProfile } from './tools/ToolCatalogPolicy'
 import { assertSourceFields, isSourceMutation, SOURCE_EDITING_CAPABILITIES } from './source/ToolSourcePolicy'
 import { nativeToolArguments } from './source/NativeArguments'
+import { SCRIPT_AUTHORING_CAPABILITIES } from '../script/validation/Script2DScope'
 
 export const SCRIPT_HELP = `Chorono SceneAPI ${MCP_VERSION}. The outer run_script call requires expectedRevision/readToken from get_scene. A dry run returns a NEW plan-bound readToken and revision for apply_script_plan; never rerun code to commit a plan. These authorization fields are not SceneAPI methods or scene data.
 Scripts are synchronous authoring operations; they create editable layers/tracks rather than running every playback frame.
+Script writes are limited to 2D source. Existing boxed 3D layers retain their internal payload/tracks; only their outer 2D transform/size/opacity is editable here. Creating/copying/deleting model3d content or editing its internal fields/references requires native tools. Layer set/patch and static shortcuts reject locked/frozen ancestors, animated/driven field writes, malformed topology and invalid edited values. Use key() for an animated field, not a static setter. Explicit unlocking is a separate flag-only edit. Existing formula/binding records cannot be removed/replaced to bypass ownership. Unchanged legacy fields are preserved; optional clearing is subject to the owning data contract.
 scene.add(kind) -> Layer; scene.get(id), scene.find(name), scene.layers; scene.remove(handle)
 scene.snapshot() returns the complete current scene as detached JSON, including optional authoring v1 metadata. Creation and field writers differ; missing attribution is unknown. The ledger is editor-managed, not an animation parameter or actor setter API. scene.assets/assetCollections/parameters/triggers/bindings/parameterWires/stateMachines/initialState are detached JSON getters. Editing these copies never changes the editor; use command methods. scene.setInitialState(object) replaces initialState.
 Layer: id/name/type getters; pos=[x,y], size=[w,h], opacity, rotation, scale=[x,y], fill, text, cornerRadius, blendMode
@@ -104,10 +106,10 @@ export async function getCapabilities(profile: ToolCatalogProfile = 'standard', 
     const implementation = implementationToolName(options.toolName)
     const callableInBatch = implementation !== 'run_script' && !!actionRegistry.get(implementation)?.toCommand
     const result = catalog.describe(options.toolName, profile, callableInBatch)
-    return { version: MCP_VERSION, sourceEditing: SOURCE_EDITING_CAPABILITIES, ...result,
+    return { version: MCP_VERSION, sourceEditing: SOURCE_EDITING_CAPABILITIES, scriptAuthoring: SCRIPT_AUTHORING_CAPABILITIES, ...result,
       ...(callableInBatch ? { batchInputSchema: { ...result.tool.inputSchema, required: (result.tool.inputSchema.required ?? []).filter((field: string) => !['expectedRevision', 'readToken'].includes(field)) } } : {}) }
   }
-  const base = { version: MCP_VERSION, catalog: catalog.metadata(profile), sourceEditing: SOURCE_EDITING_CAPABILITIES,
+  const base = { version: MCP_VERSION, catalog: catalog.metadata(profile), sourceEditing: SOURCE_EDITING_CAPABILITIES, scriptAuthoring: SCRIPT_AUTHORING_CAPABILITIES,
     boxed3D: { version: 1, kind: 'model3d', sourceField: 'Layer.model3d', import: ['GLB 2', 'self-contained glTF 2'], sourceLimitBytes: 16 * 1024 ** 2, presentationUnits: 'imported bounding sphere radius = 1; original node transforms stay under a framing wrapper', camera: ['orbit', 'pan', 'dolly', 'numeric yaw/pitch/distance/target/FOV'], timeline: { scope: 'outer-2d', excludedLayerPaths: ['model3d'], internalPlacement: 'static-properties', isolatedContentEditor: 'planned', legacyInternalTracks: 'preserved but hidden/read-only in 2D authoring' }, output: ['portable source', 'prepared raster frame/sequence'], unsupported: ['external companion files', 'compressed codecs', 'clip playback', 'rig editing', '3D physics', 'basic/native runtime', 'standalone HTML'], maxRenderSide: 2048 },
     propertyExpressions: { sourceField: 'Layer.propertyExpressions', version: 1, resultTypes: ['number', 'boolean', 'string', 'color', 'vec2'], booleanTargets: ['text.uppercase', 'text.underline', 'path.closed'], booleanTargetsAreExamples: true, targetCapability: 'Schema-backed visual properties and stable spline coordinates; exact family/options/bounds apply. Lifecycle/configuration controls do not launch live jobs.', numericBakeOnly: false, timeVariables: ['timeMs', 'timeSec', 'timeNormalized'], constants: ['pi', 'e'],
       limits: { perScene: 512, perLayer: 128, namedSources: 16, formulaChars: 4096, cachedPrograms: 512 },

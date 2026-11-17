@@ -36,6 +36,7 @@ Ajanla kullanım için kurulumu tamamlayın, editörü başlatın, tarayıcıda 
 | State machines / Durum makineleri | [State machines](en/state-machines.md) | [Durum makineleri](tr/state-machines.md) |
 | Parameter wiring / Parametre bağlama | [Parameter wiring](en/parameter-wiring.md) | [Parametre bağlama](tr/parameter-wiring.md) |
 | JavaScript authoring / Betik yazımı | [Scripting](en/scripting.md) | [Betik yazımı](tr/scripting.md) |
+| Script source guards / Kaynak korumaları | — | [Teknik sözleşme](tr/script-source-guards.md) |
 | SDKs / SDK'lar | [SDKs](en/sdks.md) | [SDK'lar](tr/sdks.md) |
 
 ## Technical references / Teknik kaynaklar

@@ -89,6 +89,8 @@ For grouping, create a group and parent child handles with `child.parent(group)`
 
 Use `layer.patch({style:{stroke:{width:3}}})` to preserve sibling fields. `layer.set({style:...})` replaces the complete style object. Arrays are replaced by `patch`, not merged element by element. Do not change layer identity.
 
+Static writes refuse fields owned by keys/controllers in any timeline or by bindings/wires/formulas/path drivers. Use `key` to change an animated value. Existing formula and binding records cannot be erased by raw replacement; use their owning workflow. Locked/frozen ancestors block writes; unlock separately from geometry changes. Invalid edited values and incomplete required containers are refused without clamping. A new fill/stroke needs its source discriminator/required fields, e.g. `{fill:{type:'solid',color:'#526885',opacity:0}}` or `{stroke:{color:'#526885',width:2}}`.
+
 Animation overrides are applied to layer data before drawing, including shape, text, effect, mask, particle and repeater settings. Numbers interpolate with easing; color paths interpolate channels; ordinary strings and booleans switch at key boundaries; Vec2 values interpolate components. Numeric modifiers/controllers/bake operate on numbers. Use exact property paths from capabilities/data and inspect real frames. For geometry motion, key scalar coordinates of existing points/handles while preserving topology; whole-object geometry morphing is not supported.
 
 

@@ -26,7 +26,7 @@ const target = { type: 'string', description: 'Full track target, for example la
 function scripted(label: string, scene: ChronoScene, run: (api: SceneAPI) => void): EditorCommand {
   let working = scene
   const commands: EditorCommand[] = []
-  const api = createSceneAPI({ getScene: () => working, applyCommand: cmd => { commands.push(cmd); working = cmd.execute(working) } }, () => {})
+  const api = createSceneAPI({ getScene: () => working, applyCommand: cmd => { commands.push(cmd); working = cmd.execute(working) } }, () => {}, { nativeCommandAdapter: true })
   run(api)
   return makeBatchCmd(label, commands)
 }

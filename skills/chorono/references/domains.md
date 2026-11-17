@@ -84,7 +84,7 @@ scene.useTimeline(timeline.id);
 
 const guide = scene.addSpline('line',{x1:-140,y1:0,x2:140,y2:0},{x:360,y:260,name:'Emission guide'});
 if (!guide) throw new Error('Line spline unavailable');
-guide.patch({style:{fill:{opacity:0},stroke:{color:'#526885',width:2}}});
+guide.patch({style:{fill:{type:'solid',color:'#526885',opacity:0},stroke:{color:'#526885',width:2}}});
 const segmentId = Object.keys(guide.spline.data.segments)[0];
 guide.spline.setQuadraticControl(segmentId,{x:0,y:-110});
 const inserted = guide.spline.splitSegment(segmentId,0.5);
