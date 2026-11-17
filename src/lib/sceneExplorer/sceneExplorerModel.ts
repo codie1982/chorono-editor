@@ -65,6 +65,8 @@ export interface SceneExplorerSort {
 }
 
 export interface SceneExplorerFilterOptions {
+  /** Hard editor isolation boundary; Find cannot reveal outside it. */
+  layerScope?: ReadonlySet<string> | null
   /** Layer ids whose children are hidden (collapsed groups). */
   collapsedIds: Set<string>
   /** Layer ids whose info-sub-rows (animation/effects/constraints/masks)
@@ -110,10 +112,10 @@ export function buildSceneExplorerRows(
   options: SceneExplorerFilterOptions,
 ): SceneExplorerRow[] {
   const { collapsedIds, subInfoExpandedIds, timeline, textFilter, sort,
-    visibilityFilters, isAnimated, hasEffects, revealIds } = options
+    visibilityFilters, isAnimated, hasEffects, revealIds, layerScope } = options
   const query = parseSearchQuery(textFilter ?? ''), preds: SearchPredicates = { isAnimated, hasEffects }
-  const solo = editorSoloScope(layers)
-  const matches = new Set(layers.filter(layer => (!solo || solo.has(layer.id)) &&
+  const solo = layerScope ? null : editorSoloScope(layers)
+  const matches = new Set(layers.filter(layer => (!layerScope || layerScope.has(layer.id)) && (!solo || solo.has(layer.id)) &&
     (query.isEmpty || matchesQuery(layer, query, preds)) &&
     (!visibilityFilters || isPassThrough(visibilityFilters) || passesFilters(layer, visibilityFilters, isAnimated ?? (() => false), hasEffects ?? (() => false))))
     .map(layer => layer.id))
@@ -122,7 +124,7 @@ export function buildSceneExplorerRows(
     return sort.direction === 'desc' ? -result : result
   } : undefined
   const out: SceneExplorerRow[] = []
-  for (const row of buildEditorLayerRows(layers, { collapsedIds, matches, revealIds, compare })) {
+  for (const row of buildEditorLayerRows(layers, { collapsedIds, matches, revealIds, compare, layerScope })) {
     out.push({ ...row, id: row.layer.id, kind: 'layer', pinned: !!row.layer.pinned && row.depth === 0 })
     if (subInfoExpandedIds?.has(row.layer.id)) out.push(...buildLayerInfoRows(row.layer, row.depth + 1, timeline))
   }

@@ -11,7 +11,7 @@ export {
   hitTestSplinePoint, hitTestSplineHandle, hitTestSplineSegment, hitTestSplineContour,
 } from './geometry/hitTest'
 export type { SegmentHit, HandleHit } from './geometry/hitTest'
-export { splineParamsFromBox, isBoxDragKind, createPolylineSpline } from './creation'
+export { splineParamsFromBox, isBoxDragKind, createPolylineSpline, appendSplineObjects, shouldAutoClose } from './creation'
 export type { DrawBox, BoxSplineSpec } from './creation'
 export {
   moveSplinePoint, moveSplineHandle, insertPointOnSegment, deleteSplinePoint,

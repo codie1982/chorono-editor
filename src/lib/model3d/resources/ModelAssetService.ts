@@ -40,6 +40,9 @@ export class ModelAssetService {
     let resource: Model3DResource | undefined, ticket: ReturnType<typeof this.cache.reserve> | undefined
     try {
       const document = readModelDocument(input.buffer)
+      const digest = await crypto.subtle.digest('SHA-256', input.buffer)
+      if (signal.aborted) throw cancelledJobError()
+      const revision = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
       ticket = this.cache.reserve(document.estimatedBytes)
       const [{ GLTFLoader }, { LoadingManager, Light }, backend] = await Promise.all([
         import('three/addons/loaders/GLTFLoader.js'), import('three'), import('../render/ThreeModelBackend'),
@@ -57,10 +60,10 @@ export class ModelAssetService {
       const loader = new GLTFLoader(manager)
       let parser: import('three/addons/loaders/GLTFLoader.js').GLTFParser | undefined
       const pending = new Set<Promise<unknown>>()
-      // Keep authored clips in the source file; this static slice must not
-      // expand unsupported animation channels into unused runtime buffers.
-      loader.register(current => ({ name: 'CHORONO_static_slice', beforeRoot: () => {
-        parser = current; current.json.animations = []
+      // Decode bounded native clips without copying tracks into the scene.
+      // Observe every dependency so cancellation/failure retains correct ownership.
+      loader.register(current => ({ name: 'CHORONO_content', beforeRoot: () => {
+        parser = current
         const original = current.getDependency.bind(current)
         current.getDependency = (type, index) => {
           const result = original(type, index)
@@ -85,7 +88,7 @@ export class ModelAssetService {
         // Use the explicit first-slice lights; imported cameras remain source-only.
         gltf.scene.traverse(object => { if (object instanceof Light) object.visible = false })
         this.backend ??= new backend.ThreeModelBackend()
-        resource = this.backend.adopt(gltf.scene, gltf.scenes, document.estimatedBytes, Array.from(parser?.associations.keys() ?? []))
+        resource = this.backend.adopt(gltf.scene, gltf.scenes, document.estimatedBytes, Array.from(parser?.associations.keys() ?? []), { clips: gltf.animations, parser, revision })
       } catch (error) { backend.disposeModelTrees(gltf.scenes, Array.from(parser?.associations.keys() ?? [])); throw error }
       const lease = this.cache.admit(url, resource, resource.bytes, ticket, url)
       resource = undefined; ticket = undefined

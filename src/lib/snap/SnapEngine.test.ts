@@ -40,7 +40,7 @@ describe('SnapEngine.snapRect', () => {
       targets: { ...baseSettings.targets, objects: false, points: false, grid: true },
       grid:    { sizePx: 20, subdivisions: 4 },
     })
-    const r = e.snapRect({ x: 47, y: 33, width: 10, height: 10 }, emptyCtx)
+    const r = e.snapRect({ x: 44, y: 36, width: 10, height: 10 }, emptyCtx)
     expect(r.point.x).toBe(40)   // nearest multiple of 20
     expect(r.point.y).toBe(40)
   })
@@ -55,7 +55,7 @@ describe('SnapEngine.snapRect', () => {
     expect(r.point.y).toBe(43)
   })
 
-  it('applies snaps in the documented order: objects → grid → pixel', () => {
+  it('retains a coincident geometric hit when grid and pixel are also enabled', () => {
     // Object snap pulls x to canvas-centre alignment (centre of 100×100 rect
     // lands on 500 → rect.x becomes 450). Grid (size 50) keeps it there
     // since 450 is a multiple of 50. Pixel is irrelevant. Verifies the
@@ -125,5 +125,29 @@ describe('SnapEngine.setSettings', () => {
     expect(e.snapAngle(47)).toBe(47)
     e.setSettings({ ...baseSettings, angle: { enabled: true, stepDeg: 15 } })
     expect(e.snapAngle(47)).toBe(45)
+  })
+})
+
+describe('independent viewport snapping policies', () => {
+  it('disables hidden-grid point/rect snapping without discarding the stored target', () => {
+    const settings = { ...baseSettings, targets: { ...baseSettings.targets, objects: false, points: false, grid: true }, grid: { sizePx: 20, visible: false } }
+    const engine = new SnapEngine(settings)
+    expect(engine.snapPoint({ x: 44, y: 36 })).toEqual({ x: 44, y: 36 })
+    expect(engine.snapRect({ x: 44, y: 36, width: 10, height: 10 }, emptyCtx).snapped).toBe(false)
+    engine.setSettings({ ...settings, grid: { ...settings.grid, visible: true } })
+    expect(engine.snapPoint({ x: 44, y: 36 })).toEqual({ x: 40, y: 40 })
+    expect(engine.snapRect({ x: 44, y: 36, width: 10, height: 10 }, emptyCtx).point).toEqual({ x: 40, y: 40 })
+    expect(settings.targets.grid).toBe(true)
+  })
+  it('keeps rotation and scale enabled when Move is disabled, and independently bypasses each', () => {
+    const settings = { ...baseSettings, enabled: false, angle: { enabled: true, stepDeg: 45 }, scale: { enabled: true, stepPercent: 10 } }
+    const engine = new SnapEngine(settings)
+    expect(engine.snapPoint({ x: 44, y: 36 })).toEqual({ x: 44, y: 36 })
+    expect(engine.snapAngle(52)).toBe(45)
+    expect(engine.snapScale(1.16)).toBeCloseTo(1.2)
+    engine.setSettings({ ...settings, angle: { ...settings.angle, enabled: false } })
+    expect(engine.snapAngle(52)).toBe(52); expect(engine.snapScale(1.16)).toBeCloseTo(1.2)
+    engine.setSettings({ ...settings, scale: { ...settings.scale, enabled: false } })
+    expect(engine.snapAngle(52)).toBe(45); expect(engine.snapScale(1.16)).toBe(1.16)
   })
 })

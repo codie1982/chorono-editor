@@ -1,21 +1,33 @@
+import DropdownButton from '@/components/TopToolbar/DropdownButton'
 import type { TimelineNavigation } from '@/lib/timeline/authoring/timelineNavigation'
 
-const actions: readonly [TimelineNavigation, string, string][] = [
-  ['start', '|◀', 'Timeline start (Home)'], ['previousFrame', '◀F', 'Previous frame (Left)'],
-  ['previousKey', '◀◆', 'Previous keyframe (,)'], ['firstKey', '|◆', 'First keyframe (Shift+Home)'],
-  ['lastKey', '◆|', 'Last keyframe (Shift+End)'], ['nextKey', '◆▶', 'Next keyframe (.)'],
-  ['nextFrame', 'F▶', 'Next frame (Right)'], ['end', '▶|', 'Timeline end (End)'],
-]
+const actions = [
+  { side: 'previous', intent: 'start', label: '|◀', title: 'Timeline start (Home)',
+    options: [['start', 'Timeline start (Home)'], ['firstKey', 'First keyframe (Shift+Home)']] },
+  { side: 'previous', intent: 'previousFrame', label: '◀', title: 'Previous frame (Left)',
+    options: [['previousFrame', 'Previous frame (Left)'], ['previousKey', 'Previous keyframe (,)']] },
+  { side: 'next', intent: 'nextFrame', label: '▶', title: 'Next frame (Right)',
+    options: [['nextFrame', 'Next frame (Right)'], ['nextKey', 'Next keyframe (.)']] },
+  { side: 'next', intent: 'end', label: '▶|', title: 'Timeline end (End)',
+    options: [['end', 'Timeline end (End)'], ['lastKey', 'Last keyframe (Shift+End)']] },
+] as const
 
-/** Compact, labelled keyboard-accessible navigation. Native buttons preserve
- * Space/Enter activation; time/scope policy belongs solely to the domain. */
-export function TimelineTransport({ onNavigate, disabled, scope }: {
+/** Four navigation triggers flank Play as one aligned five-button transport.
+ * Short click performs the common frame/boundary action; hold, right-click or
+ * ArrowDown opens related key navigation. Existing shortcuts and the domain
+ * owner remain authoritative. Scope lives in menu/tooltip, without a text row.
+ */
+export function TimelineTransport({ onNavigate, disabled, scope, side }: {
   onNavigate: (intent: TimelineNavigation) => void; disabled: boolean; scope: string
+  side?: 'previous' | 'next'
 }) {
-  return <div className="flex flex-col shrink-0 gap-0.5" aria-label="Timeline navigation">
-    <div className="flex items-center rounded border border-gray-600" role="group" aria-label="Timeline transport">
-      {actions.map(([intent, label, title]) => <button key={intent} aria-label={title} title={title} disabled={disabled}
-        onClick={() => onNavigate(intent)} className="min-w-6 h-6 px-1 text-[10px] text-gray-200 hover:bg-gray-700 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">{label}</button>)}
-    </div><span className="text-[9px] text-gray-400">Keys: {scope}</span>
+  return <div className="flex items-center gap-1 shrink-0" role="group" aria-label={side ? `${side} Timeline navigation` : 'Timeline transport'}>
+    {actions.filter(action => !side || action.side === side).map(action => <DropdownButton key={action.intent}
+      label={action.label} ariaLabel={action.title} primaryAction={{ onSelect: () => onNavigate(action.intent), disabled,
+        title: `${action.title} · Hold for related actions · Keys: ${scope}`,
+        className: 'h-9 min-w-7 px-1.5 inline-flex items-center justify-center rounded border border-gray-600 bg-gray-800 text-xs text-gray-200 hover:bg-gray-700 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400',
+      }} sections={[{ label: 'Navigate', items: action.options.map(([intent, label]) => ({
+        kind: 'action', label, onSelect: () => onNavigate(intent),
+      })) }]} status={`Keys: ${scope}`} />)}
   </div>
 }

@@ -45,12 +45,27 @@ describe('drawText layout', () => {
     expect(fillText).toHaveBeenCalledWith('AB', -10, 0)
   })
 
+  it('keeps center alignment anchored on the layer origin', () => {
+    const { ctx, fillText } = context()
+    const layer = fixture('AB')
+    layer.text!.textAlign = 'center'
+    drawText(ctx, layer)
+    expect(fillText).toHaveBeenCalledWith('AB', -10, 0)
+  })
+
   it('reads animated letter spacing from timeline overrides', () => {
     const { ctx, fillText } = context()
     drawText(ctx, fixture('AB'), undefined,
       new Map([['layers.text1.text.letterSpacing', 5]]))
     expect(fillText).toHaveBeenCalledWith('A', 0, 0)
     expect(fillText).toHaveBeenCalledWith('B', 15, 0)
+  })
+
+  it('reads animated line height from timeline overrides', () => {
+    const { ctx, fillText } = context()
+    drawText(ctx, fixture('A\nB'), undefined,
+      new Map([['layers.text1.text.lineHeight', 2]]))
+    expect(fillText).toHaveBeenCalledWith('B', 0, 40)
   })
 
   it('reads animated line height from timeline overrides', () => {

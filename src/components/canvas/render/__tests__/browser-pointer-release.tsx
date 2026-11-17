@@ -33,7 +33,7 @@ function source(): ChronoScene {
 /** The mode buttons intentionally use ordinary click callbacks: switching
  * tools must not be mistaken for a missing pointer-up from the earlier drag. */
 function Subject({ properties = false }: { properties?: boolean }) {
-  const editor = useEditorState(source()), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(source()), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings({ persist: false })
   const [selected, select] = useState<string | null>(properties ? 'moving' : null)
   const { mode, setMode, setPan, chooseTool } = useToolMode()
   useKeyboard({ onUndo: editor.undo, onRedo: editor.redo, onPlayToggle: () => {}, onStepBack: () => {}, onStepForward: () => {},

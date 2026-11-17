@@ -10,6 +10,7 @@
 //   3. Registering both in registry/bootstrap.ts
 // No other file changes — open/closed principle satisfied.
 
+import { imagePaint, imagePaintAssetIds } from '../../paint/paintSource'
 import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry'
@@ -23,13 +24,13 @@ import { drawPathStrokeLayer } from '@/lib/runtime/pathStrokeRenderer'
 
 export const shapeRendererPlugin: LayerRendererPlugin = {
   id: 'shape',
-  nativeMediaFree: true,
-  mediaDependencies: () => ({}),
+  nativeMediaFree: layer => !layer.style?.fill?.image,
+  mediaDependencies: layer => ({ assetIds: imagePaintAssetIds(layer.style?.fill) }),
   // Outside stroke uses destination-over, which depends on the live backdrop.
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => layer.style?.stroke?.alignment !== 'outside', localBounds: nativePaintBounds },
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => layer.style?.stroke?.alignment !== 'outside' && !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'shape' && !!layer.size,
   render(ctx: RenderContext, layer: Layer): void {
-    drawShape(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+    drawShape(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)
   },
 }
 
@@ -89,12 +90,12 @@ export const pathStrokeRendererPlugin: LayerRendererPlugin = {
 
 export const bezierPathRendererPlugin: LayerRendererPlugin = {
   id: 'bezierPath',
-  nativeMediaFree: true,
-  mediaDependencies: () => ({}),
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: true, localBounds: nativePaintBounds },
+  nativeMediaFree: layer => !layer.style?.fill?.image,
+  mediaDependencies: layer => ({ assetIds: imagePaintAssetIds(layer.style?.fill) }),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'path' && !!layer.path,
   render(ctx: RenderContext, layer: Layer): void {
-    drawBezierPath(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+    drawBezierPath(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)
   },
 }
 
@@ -158,12 +159,12 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
 
 export const splineRendererPlugin: LayerRendererPlugin = {
   id: 'spline',
-  nativeMediaFree: true,
-  mediaDependencies: () => ({}),
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: true, localBounds: nativePaintBounds },
+  nativeMediaFree: layer => !layer.style?.fill?.image,
+  mediaDependencies: layer => ({ assetIds: imagePaintAssetIds(layer.style?.fill) }),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'spline' && !!layer.spline,
   render(ctx: RenderContext, layer: Layer): void {
-    drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+    drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)
   },
 }
 

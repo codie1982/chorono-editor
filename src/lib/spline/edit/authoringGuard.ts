@@ -1,0 +1,56 @@
+import type { ChronoScene, Layer } from '../../types'
+import { drivenChannelReason } from '../../timeline/authoring/keyableChannels'
+import { hasNativeExpressionOwner } from '../../editor/inputExpressions/ExpressionAuthoringGuard'
+
+/** Point moves can also change attached handle coordinates. Reject an edit
+ * touching any live/bound channel rather than stamping a rendered pose back to
+ * source. A whole-layer translation still uses the existing transform contract. */
+export function drivenSplineEditReason(layer: Layer, scene: ChronoScene, family: 'points' | 'handles', id: string): string | null {
+  const locked = family === 'points' ? layer.spline?.points[id]?.locked : layer.spline?.handles[id]?.locked
+  if (locked || family === 'handles' && !!layer.spline?.points[layer.spline?.handles[id]?.pointId ?? '']?.locked || family === 'points' && Object.values(layer.spline?.handles ?? {}).some(handle => handle.pointId === id && handle.locked)) return 'Unlock the spline point and handles before changing coordinates.'
+  const paths = ['spline.' + family + '.' + id]
+  if (family === 'points') for (const handle of Object.values(layer.spline?.handles ?? {})) if (handle.pointId === id) paths.push('spline.handles.' + handle.id)
+  if (paths.some(path => hasNativeExpressionOwner(scene, layer.id, path))) return 'Edit keyed spline coordinates on the timeline before changing source geometry.'
+  return paths.map(path => drivenChannelReason(scene, layer, path)).find(Boolean) ?? null
+}
+
+/** Topology changes may remove/remap several stable points and handles. Keep
+ * all coordinate drivers intact until an explicit native-key/source conversion. */
+export function drivenSplineTopologyReason(layer: Layer, scene: ChronoScene): string | null {
+  if (Object.values(layer.spline?.points ?? {}).some(point => point.locked) || Object.values(layer.spline?.handles ?? {}).some(handle => handle.locked)) return 'Unlock spline points and handles before editing topology.'
+  return hasNativeExpressionOwner(scene, layer.id, 'spline') ? 'Bake or remove keyed spline coordinates before editing topology.'
+    : drivenChannelReason(scene, layer, 'spline')
+}
+
+/** Targeted affine ownership guard. Unrelated animated objects remain editable;
+ * attached handles and explicit controls whose two endpoints participate cannot
+ * be overwritten if locked, keyframed, bound or expression-owned. */
+export function drivenSplineTransformReason(layer: Layer, scene: ChronoScene, pointIds: ReadonlySet<string>): string | null {
+  for (const id of Array.from(pointIds)) { const reason = drivenSplineEditReason(layer, scene, 'points', id); if (reason) return reason }
+  for (const segment of Object.values(layer.spline?.segments ?? {})) if (pointIds.has(segment.fromPointId) && pointIds.has(segment.toPointId)) {
+    const path = `spline.segments.${segment.id}`
+    if (hasNativeExpressionOwner(scene, layer.id, path)) return 'Edit keyed spline controls on the timeline before changing source geometry.'
+    const reason = drivenChannelReason(scene, layer, path); if (reason) return reason
+  }
+  return null
+}
+
+/** Native spline editing honors the complete ancestor chain. Instances are
+ * edited through their source. Cyclic/missing parents refuse rather than using
+ * a guessed matrix or bypassing a parent lock/visibility boundary. */
+export function editableSplineLayer(scene: ChronoScene, id: string): Layer & { spline: NonNullable<Layer['spline']> } {
+  const layer = scene.layers.find(item => item.id === id)
+  if (layer?.booleanResultFor) throw new Error('Generated Boolean topology is read-only. Use Edit Operation or animate the result/group transform.')
+  if (!layer?.spline || layer.type !== 'spline' || layer.instanceOf) throw new Error('Choose an editable source spline.')
+  let current: Layer | undefined = layer
+  const seen = new Set<string>()
+  while (current) {
+    if (seen.has(current.id)) throw new Error('Repair the cyclic spline parent hierarchy before editing.')
+    seen.add(current.id)
+    if (current.locked || current.frozen || current.hidden) throw new Error('Choose an editable source spline; unlock/show its parent hierarchy first.')
+    const parentId: string | undefined = current.parentId
+    current = parentId ? scene.layers.find(item => item.id === parentId) : undefined
+    if (parentId && !current) throw new Error('The spline parent is missing.')
+  }
+  return layer as Layer & { spline: NonNullable<Layer['spline']> }
+}

@@ -4,6 +4,7 @@ import { animatableColorToCss, isColorTarget, isColorValue, isVec2, parseAnimata
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import type { PropertySchema } from '@/lib/registry/PropertySchema'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
+import { projectBooleanOperations, isBooleanProjection, markBooleanProjection } from '../booleanOperations/projectOperations'
 
 type PropertyOverride = { path: string[]; value: AnimatableValue }
 type LayerOverrideIndex = Map<string, PropertyOverride[]>
@@ -144,6 +145,7 @@ export function materializeLayerOverrides(layer: Layer, overrides: OverrideMap, 
  * snapshot, index, scratch or output is retained internally between calls.
  */
 export function materializeRenderScene(scene: ChronoScene, overrides: OverrideMap, schemasForLayer?: RenderSchemaProvider): ChronoScene {
+  scene = projectBooleanOperations(scene)
   const index = indexOverrides(overrides)
   const copies: Array<object | undefined> = []
   // Source lookups stay separate from the projected frame so an instance
@@ -165,5 +167,7 @@ export function materializeRenderScene(scene: ChronoScene, overrides: OverrideMa
     if (projected !== layer) layers ??= scene.layers.slice(0, position)
     layers?.push(projected)
   }
-  return layers ? { ...scene, layers } : scene
+  const result = layers ? { ...scene, layers } : scene
+  if (isBooleanProjection(scene)) markBooleanProjection(result)
+  return result
 }

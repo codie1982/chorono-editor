@@ -27,7 +27,7 @@ const checks: Check[] = []
  * editor. UI callbacks supply selection only; the harness never reconstructs
  * Array settings, creates preview clones or replaces Apply's prepared command. */
 function Subject({ fixture }: { fixture: Fixture }) {
-  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings({ persist: false })
   const [selected, setSelected] = useState(new Set(fixture.selected)), [primary, setPrimary] = useState(fixture.primary)
   const timeMs = 500, ids = useMemo(() => selected, [selected])
   const array = useArrayAuthoring({ editor, scene: editor.scene, timeMs, selectedLayerIds: ids, selectedLayerId: primary,

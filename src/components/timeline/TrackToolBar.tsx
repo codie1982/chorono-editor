@@ -38,7 +38,7 @@ export default function TrackToolBar({
   const frameMs = frameRate > 0 ? 1000 / frameRate : 33.333
 
   return (
-    <div className="flex items-center gap-1.5 px-3 py-1 border-b border-gray-700/60 bg-gray-900 shrink-0">
+    <div className="flex flex-wrap items-center gap-1.5 px-3 py-1 border-b border-gray-700/60 bg-gray-900 shrink-0">
 
       {/* Selection actions */}
       <DocumentationHelp topic="editor/keyframes/timing" compact />

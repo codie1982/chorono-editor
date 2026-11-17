@@ -42,6 +42,7 @@ export type {
 export type {
   GradientStop, GradientFill,
   ShapeFill,
+  ImagePaint,
   StrokeAlignment, LineCap, LineJoin, ShapeStroke,
   TrimPathDefinition,
   ShapeStyle,

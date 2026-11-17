@@ -9,10 +9,14 @@ export interface LegacyLayerRow {
  * reverse-z siblings and strict undefined-parent roots (orphans/empty-string
  * parents are not promoted). Collapse never removes source data. Iterative,
  * guarded traversal handles deep imports without recursion/array-filter scans.
- * Valid scenes have unique ids; repeated object identities are visited once. */
-export function buildLegacyLayerRows(layers: Layer[], collapsed: ReadonlySet<string>): LegacyLayerRow[] {
-  const index = new LayerIndex(layers), positions = new Map(layers.map((layer, i) => [layer, i]))
-  const pending = index.roots.filter(layer => layer.parentId === undefined).map(layer => ({ layer, depth: 0 }))
+ * Optional isolation re-roots only the borrowed view, retaining full-source
+ * realIdx values for reorder callbacks. Valid scenes have unique ids; repeated object identities are visited once. */
+export function buildLegacyLayerRows(layers: Layer[], collapsed: ReadonlySet<string>, layerScope?: ReadonlySet<string> | null): LegacyLayerRow[] {
+  const sources = layerScope ? layers.filter(layer => layerScope.has(layer.id)) : layers
+  const index = new LayerIndex(sources), positions = new Map(layers.map((layer, i) => [layer, i]))
+  const roots = layerScope ? sources.filter(layer => !layer.parentId || !index.get(layer.parentId))
+    : index.roots.filter(layer => layer.parentId === undefined)
+  const pending = roots.map(layer => ({ layer, depth: 0 }))
   const visited = new Set<Layer>(), rows: LegacyLayerRow[] = []
   while (pending.length) {
     const { layer, depth } = pending.pop()!

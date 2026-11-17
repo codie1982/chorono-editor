@@ -55,5 +55,3 @@ Yeni source hata verirse QuickJS çalışma kopyası uygulanmaz. Dry-run planı 
 Bu paket genel script kapsama envanterindeki diğer işleri tamamlamaz: Clone/Array'nin tüm timeline'lar için genişletilmesi, expression oluşturma/düzenleme akışının yeni API'si ve diğer prosedürel eğri davranışlarının revizyonu ayrı işlerdir. Mevcut kayıtlı animasyonlar otomatik taşınmaz veya bake edilmez.
 
 16 Kasım 2026 doğrulaması: `npm test -- --maxWorkers=3` ile 379 dosyada 3.131 test; `npm run cli:test` ile 16 test geçti. `npm run mcp:build`, `npm run cli:build` ve `npm run build` başarılı. Read-only stdio katalog kontrolünde 40 standart / 77 legacy araç, 9 alias ve eksik parametre açıklaması bulunmaması doğrulandı. Production build mevcut `applicationBuildInfo.ts` JSON version named-export uyarısını bildiriyor; bu dosya değiştirilmedi.
-
-17 Kasım 2026 commit öncesi yeniden doğrulama: bu çalışma ağacında 379 dosya / 3.131 test, TypeScript, MCP/CLI ve production build başarılı. Mevcut 21 kaynak/belge dosyası kontrol öncesinde yedeklendi; test/derleme bu dosyaları değiştirmedi. Bu kayıt kendi 3D geliştirme dalındadır; main entegrasyonu veya push anlamına gelmez.

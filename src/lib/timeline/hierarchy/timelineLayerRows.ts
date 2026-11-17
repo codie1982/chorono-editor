@@ -3,6 +3,7 @@ import { LayerTrackIndex } from '../LayerTrackIndex'
 import { editorSoloScope } from '../../scene/visibility/editorSoloScope'
 import { buildEditorLayerRows, selectedBranchIds, type EditorLayerRow } from '../../scene/hierarchy/editorLayerRows'
 import { layerTimelineTracks } from '../authoring/timelinePropertyScope'
+import { assertTimelineContext, SCENE_TIMELINE_CONTEXT, type TimelineAuthoringContext } from '../authoring/TimelineAuthoringContext'
 
 export interface TimelineLayerRow extends EditorLayerRow {
   readonly tracks: readonly Track[]
@@ -10,6 +11,8 @@ export interface TimelineLayerRow extends EditorLayerRow {
   readonly showTracks: boolean
 }
 export interface TimelineLayerRowsOptions {
+  /** Hard UI isolation; outside solo and Find cannot enlarge it. */
+  readonly layerScope?: ReadonlySet<string> | null
   readonly collapsedIds?: ReadonlySet<string>
   readonly filter?: string
   readonly selectedOnly?: boolean
@@ -18,6 +21,8 @@ export interface TimelineLayerRowsOptions {
   readonly animatedOnly?: boolean
   readonly revealIds?: readonly string[]
   readonly trackIndex?: LayerTrackIndex
+  /** Active host scope; structural ancestors never gain content edit authority. */
+  readonly context?: TimelineAuthoringContext
 }
 
 /** Timeline adapter of the common editor hierarchy. Timeline membership and
@@ -31,13 +36,17 @@ export interface TimelineLayerRowsOptions {
  * Borrows source, returns caller-owned rows; Curve and Dope Sheet share it.
  */
 export function buildTimelineLayerRows(layers: readonly Layer[], timeline: Timeline | null, options: TimelineLayerRowsOptions = {}) {
+  const context = options.context ?? SCENE_TIMELINE_CONTEXT
+  assertTimelineContext({ layers, timelines: timeline ? [timeline] : [] }, timeline?.id ?? '', context)
   const tracks = options.trackIndex ?? new LayerTrackIndex(timeline?.tracks ?? [])
-  const visibleTracks = new Map(layers.map(layer => [layer.id, layerTimelineTracks(layer, tracks.forLayer(layer.id))]))
+  const visibleTracks = new Map(layers.map(layer => [layer.id, layerTimelineTracks(layer, tracks.forLayer(layer.id), context)]))
   const membership = timeline?.layerIds === undefined ? null : new Set(timeline.layerIds)
   const eligible = new Set(layers.filter(layer =>
+    (!options.layerScope || options.layerScope.has(layer.id)) &&
+    (context.kind === 'scene' || layer.id === context.ownerLayerId) &&
     (layer.type !== 'audio' || !layer.audio?.timelineId || layer.audio.timelineId === timeline?.id) &&
     (!membership || membership.has(layer.id) || layer.type === 'audio' && !layer.audio?.timelineId)).map(layer => layer.id))
-  const solo = editorSoloScope(layers), query = (options.filter ?? '').trim().toLowerCase()
+  const solo = options.layerScope ? null : editorSoloScope(layers), query = (options.filter ?? '').trim().toLowerCase()
   const selected = options.selectedOnly ? selectedBranchIds(layers, options.selectedId ?? null, options.selectedIds) : null
   const matches = new Set(layers.filter(layer => eligible.has(layer.id) && (!solo || solo.has(layer.id)) &&
     (!selected || selected.has(layer.id)) &&
@@ -45,7 +54,7 @@ export function buildTimelineLayerRows(layers: readonly Layer[], timeline: Timel
     (!query || layer.name.toLowerCase().includes(query) || layer.type.toLowerCase().includes(query) || visibleTracks.get(layer.id)!.some(track => track.target.toLowerCase().includes(query))))
     .map(layer => layer.id))
   const revealed = new Set(options.revealIds)
-  const rows: TimelineLayerRow[] = buildEditorLayerRows(layers, { matches, collapsedIds: options.collapsedIds, revealIds: options.revealIds }).map(row => {
+  const rows: TimelineLayerRow[] = buildEditorLayerRows(layers, { matches, collapsedIds: options.collapsedIds, revealIds: options.revealIds, layerScope: options.layerScope }).map(row => {
     const timelineEligible = eligible.has(row.layer.id)
     const showTracks = timelineEligible && (matches.has(row.layer.id) || revealed.has(row.layer.id))
     return { ...row, timelineEligible, showTracks, tracks: showTracks ? visibleTracks.get(row.layer.id)! : [] }

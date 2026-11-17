@@ -1,3 +1,4 @@
+import { makeUpdateCompositionCmd } from '../../editor/commands-composition'
 // ── SceneAPI (BL-76) ──────────────────────────────────────────────────────────
 // The `scene` object exposed to authoring scripts. Wraps the existing command
 // system so script edits get full undo/redo + scene consistency for free.
@@ -40,8 +41,9 @@ import { ExplorerAPI } from './ExplorerAPI'
 import { listScriptParticlePresets } from './ParticleHandle'
 import { ScriptSourceHost } from '../validation/ScriptSourceHost'
 
-/** Internal native-command composition only. Never exposed to script code or
- * accepted from serialized arguments. Native tools retain their own policies. */
+/** Trusted composition option for native MCP command adapters only. It is not
+ * a SceneAPI method/script argument. Native boxed-3D tools keep their published
+ * capability; both actual script engines always use the default 2D boundary. */
 export interface SceneAPIHostOptions { readonly nativeCommandAdapter?: boolean }
 
 export interface TriggerScriptOptions {
@@ -77,7 +79,10 @@ export interface SceneAPI {
   readonly initialState: ChronoScene['initialState']
   setInitialState(value: ChronoScene['initialState']): void
   editEntity(collection: ScriptEntityCollection, operation: ScriptEntityOperation, id: string, value?: Record<string, unknown>): void
-  composition(patch?: Partial<Composition>): Composition
+  /** Read/update validated composition settings in px/ms/FPS. Optional timelineId
+   * synchronizes only its duration when composition duration changes. Omission
+   * keeps legacy metadata-only behavior; FPS never retimes existing keys. */
+  composition(patch?: Partial<Composition>, options?: { timelineId?: string }): Composition
   readonly timelines: Timeline[]
   createTimeline(options: { id: string; durationMs?: number; loop?: boolean; autoplay?: boolean }): TimelineHandle
   timeline(id: string): TimelineHandle
@@ -199,9 +204,9 @@ export function createSceneAPI(
       host.applyCommand(makeAddAudioClipCmd(asset, { ...options, layer, timelineId: options.timelineId ?? ctx.resolveTimelineId() }))
       return new LayerHandle(options.layerId ?? layer.id, ctx)
     },
-    composition(patch) {
+    composition(patch, options = {}) {
       const prev = host.getScene().composition
-      if (patch) host.applyCommand({ label: 'Script composition', execute: scene => ({ ...scene, composition: { ...prev, ...patch } }), undo: scene => ({ ...scene, composition: prev }) })
+      if (patch) host.applyCommand(makeUpdateCompositionCmd({ ...prev, ...patch }, { ...options, label: 'Script composition' }))
       return copyScriptData(host.getScene().composition)
     },
     get timelines() { return copyScriptData(host.getScene().timelines) },

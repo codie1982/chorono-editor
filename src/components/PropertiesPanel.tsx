@@ -1,4 +1,8 @@
 'use client'
+import { ImagePaintControls } from './paint/ImagePaintControls'
+import { CompositionBackgroundControls } from './paint/CompositionBackgroundControls'
+import { withFillType, strokeType, withStrokeType } from '@/lib/paint/paintSource'
+import type { ShapeFill, ShapeStroke } from '@/lib/types'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { propertyHelpTopics, type DocumentationTopic } from '@/components/help/documentation'
 import { useEffect, useRef, useState } from 'react'
@@ -49,6 +53,7 @@ interface Props {
   composition: Composition
   onLayerChange: (layer: Layer) => void
   onCompositionChange: (comp: Composition) => void
+  onImportPaintImage?: (file: File, layerId?: string) => void
   /** Available scene parameters for property binding popovers. */
   parameters?: SceneParameter[]
   /** All scene layers — needed for Mask picker + Path Motion picker. */
@@ -334,7 +339,7 @@ function Section({ title, children, helpTopic }: { title: string; children: Reac
 // ── Ana bileşen ──────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({
-  layer, composition, onLayerChange, onCompositionChange,
+  layer, composition, onLayerChange, onCompositionChange, onImportPaintImage,
   parameters = [], allLayers = [], allTimelines = [],
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
@@ -430,45 +435,8 @@ export default function PropertiesPanel({
                   onChange={(v) => onCompositionChange({ ...composition, height: v })} />
               </Field>
             </Row2>
-            <Field label="Bg Type">
-              <select
-                value={composition.backgroundGradient ? 'gradient' : 'solid'}
-                onChange={(e) => {
-                  if (e.target.value === 'gradient') {
-                    onCompositionChange({
-                      ...composition,
-                      backgroundGradient: {
-                        type: 'linear', angle: 90,
-                        stops: [
-                          { offset: 0, color: composition.backgroundColor || '#1E293B' },
-                          { offset: 1, color: '#000000' },
-                        ],
-                      },
-                    })
-                  } else {
-                    const next = { ...composition }
-                    delete next.backgroundGradient
-                    onCompositionChange(next)
-                  }
-                }}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
-              >
-                <option value="solid">Solid</option>
-                <option value="gradient">Gradient</option>
-              </select>
-            </Field>
-            {!composition.backgroundGradient && (
-              <Field label="Bg Color">
-                <ColorInput value={composition.backgroundColor}
-                  onChange={(v) => onCompositionChange({ ...composition, backgroundColor: v })} />
-              </Field>
-            )}
-            {composition.backgroundGradient && (
-              <Field label="Bg Gradient">
-                <GradientInput value={composition.backgroundGradient}
-                  onChange={(g) => onCompositionChange({ ...composition, backgroundGradient: g })} />
-              </Field>
-            )}
+            <CompositionBackgroundControls composition={composition} assets={scene?.assets} onChange={onCompositionChange}
+              onImport={onImportPaintImage ? file => onImportPaintImage(file) : undefined} />
             <Field label="Duration (ms)">
               <NumInput value={composition.durationMs} min={100} step={100}
                 onChange={(v) => onCompositionChange({ ...composition, durationMs: v })} />
@@ -610,7 +578,7 @@ export default function PropertiesPanel({
                   {scene?.assets.filter(asset => asset.type === 'model3d').map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
                 </select>
               </label>
-              <SchemaPanel layer={layer} onLayerChange={onLayerChange} filterGroup={group => group.title !== 'Transform' && group.title !== 'Appearance'} />
+              <SchemaPanel layer={layer} scene={scene} onLayerChange={onLayerChange} filterGroup={group => group.title !== 'Transform' && group.title !== 'Appearance'} />
             </>}
 
             {/* ── Shape özellikleri ──────────────────────────────────── */}
@@ -628,34 +596,15 @@ export default function PropertiesPanel({
                 </Row2>
                 <Field label="Fill Type">
                   <select
-                    value={layer.style.fill?.type ?? 'solid'}
-                    onChange={(e) => {
-                      const t = e.target.value as 'solid' | 'gradient'
-                      if (t === 'gradient') {
-                        update({ style: { ...layer.style!, fill: {
-                          ...layer.style!.fill,
-                          type: 'gradient',
-                          gradient: layer.style!.fill?.gradient ?? {
-                            type: 'linear', angle: 90,
-                            stops: [
-                              { offset: 0, color: layer.style!.fill?.color ?? '#3B82F6' },
-                              { offset: 1, color: '#EC4899' },
-                            ],
-                          },
-                        } } })
-                      } else {
-                        update({ style: { ...layer.style!, fill: {
-                          ...layer.style!.fill, type: 'solid', color: layer.style!.fill?.color ?? '#3B82F6',
-                        } } })
-                      }
-                    }}
+                    aria-label="Fill Type" value={layer.style.fill?.type ?? 'none'}
+                    onChange={event => update({ style: { ...layer.style!, fill: withFillType(layer.style?.fill, event.target.value as ShapeFill['type']) } })}
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
                   >
-                    <option value="solid">Solid</option>
-                    <option value="gradient">Gradient</option>
+                    <option value="none">None</option><option value="solid">Color</option>
+                    <option value="gradient">Gradient</option><option value="image">Image</option>
                   </select>
                 </Field>
-                {layer.style.fill?.type !== 'gradient' && (
+                {layer.style.fill?.type === 'solid' && (
                   <ParamBindButton
                     label="Fill Color"
                     layer={layer}
@@ -683,6 +632,10 @@ export default function PropertiesPanel({
                     />
                   </Field>
                 )}
+                {layer.style.fill?.type === 'image' && layer.style.fill.image && <ImagePaintControls
+                  value={layer.style.fill.image} assets={scene?.assets ?? []}
+                  onImport={onImportPaintImage ? file => onImportPaintImage(file, layer.id) : undefined}
+                  onChange={image => update({ style: { ...layer.style!, fill: { ...layer.style!.fill!, image } } })} />}
                 {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
                   <ParamBindButton
                     label="Corner Radius" layer={layer} propertyPath="style.cornerRadius"
@@ -919,6 +872,12 @@ export default function PropertiesPanel({
             {/* ── Stroke (all shapes) ───────────────────────────────── */}
             {layer.type === 'shape' && (
               <Section title="Stroke">
+                <Field label="Stroke Type"><select aria-label="Stroke Type" value={strokeType(layer.style?.stroke)}
+                  onChange={event => update({ style: { ...layer.style, stroke: withStrokeType(layer.style?.stroke, event.target.value as NonNullable<ShapeStroke['type']>) } })}
+                  className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs text-gray-200">
+                  <option value="none">None</option><option value="solid">Color</option><option value="gradient">Gradient</option>
+                </select></Field>
+                {strokeType(layer.style?.stroke) !== 'none' && <>
                 <Row2>
                   <ParamBindButton
                     label="Color"
@@ -978,35 +937,10 @@ export default function PropertiesPanel({
                     </Field>
                   </Row2>
                 )}
-                {/* ── Stroke gradient toggle ── */}
+                {/* ── Active gradient stroke controls ── */}
                 {layer.style?.stroke && layer.style.stroke.width > 0 && (
                   <div className="border-t border-gray-700 pt-1.5 space-y-1.5">
-                    <label className="flex items-center gap-2 text-[10px] text-gray-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!layer.style.stroke.gradient}
-                        onChange={(e) => update({
-                          style: {
-                            ...layer.style!,
-                            stroke: {
-                              ...layer.style!.stroke!,
-                              gradient: e.target.checked
-                                ? (layer.style!.stroke!.gradient ?? {
-                                    type: 'linear', angle: 90,
-                                    stops: [
-                                      { offset: 0, color: layer.style!.stroke!.color },
-                                      { offset: 1, color: '#FFFFFF' },
-                                    ],
-                                  })
-                                : undefined,
-                            },
-                          },
-                        })}
-                        className="accent-blue-500"
-                      />
-                      Use gradient stroke
-                    </label>
-                    {layer.style.stroke.gradient && (
+                    {strokeType(layer.style.stroke) === 'gradient' && layer.style.stroke.gradient && (
                       <>
                         <Row2>
                           <Field label="Type">
@@ -1060,11 +994,12 @@ export default function PropertiesPanel({
                     )}
                   </div>
                 )}
+                </>}
               </Section>
             )}
 
             {/* ── Trim Path (only shows when stroke has width) ──────── */}
-            {layer.type === 'shape' && (layer.style?.stroke?.width ?? 0) > 0 && (
+            {layer.type === 'shape' && strokeType(layer.style?.stroke) !== 'none' && (layer.style?.stroke?.width ?? 0) > 0 && (
               <Section title="Trim Path">
                 <Row2>
                   <Field label="Start">
@@ -1551,13 +1486,13 @@ export default function PropertiesPanel({
                       ✓ <strong>Scrub mode active.</strong> Animate this layer&apos;s
                       <code className="text-amber-100"> transform.x </code>
                       or <code className="text-amber-100">transform.y</code> on the timeline above
-                      (e.g. 0 → 200). Click <strong>▶ Preview</strong> in the toolbar, then drag this
+                      (e.g. 0 → 200). Click <strong>Interact</strong> in the toolbar, then drag this
                       layer — it moves along its keyframe path AND scrubs the timeline. All other
                       layers&apos; animations on that timeline play in sync.
                     </div>
                   ) : (
                     <div className="text-[10px] text-amber-200/70 leading-snug">
-                      💡 Click <strong className="text-amber-100">▶ Preview</strong> in the toolbar,
+                      💡 Click <strong className="text-amber-100">Interact</strong> in the toolbar,
                       then drag — layer follows your cursor. Pick a timeline above to scrub-control
                       a full keyframe animation instead.
                     </div>

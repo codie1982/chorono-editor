@@ -1,3 +1,4 @@
+import { compositionFill, imagePaintAssetIds } from '../../paint/paintSource'
 import type { Asset, Layer } from '../../types'
 import { rendererRegistry } from '../../registry'
 import { createLayerWorldMatrixResolver } from '../../geometry/resolveLayerWorldMatrix'
@@ -40,7 +41,8 @@ export class VisualDemandResolver {
     const { frame, context, selected } = input, { scene, sourceScene, overrides, timeMs, index } = frame
     this.index(scene.assets)
     this.absent.clear()
-    if (!this.nativeAssets.length) {
+    const backgroundIds = input.includeBackground !== false && !input.rootIds ? imagePaintAssetIds(compositionFill(scene.composition)) : []
+    if (!this.nativeAssets.length && !backgroundIds.length) {
       if (this.sourceLayers !== sourceScene.layers) {
         this.sourceLayers = sourceScene.layers
         this.possible = sourceScene.layers.some(layer => layer.image || layer.video || layer.frameSequence
@@ -67,6 +69,7 @@ export class VisualDemandResolver {
       const old = result.get(key)
       result.set(key, { key, asset, layerId, required: required || !!old?.required })
     }
+    backgroundIds.forEach(id => add(id, undefined, true))
     const fonts=fontCatalog(scene.assets)
     const variants=fonts.fonts.length?fontFamilyVariants(sourceScene.timelines):new Map<string,readonly string[]>()
     const addFonts=(families:readonly string[],required:boolean)=>families.forEach(css=>fonts.find(css).forEach(font=>add(font.asset.id,undefined,required)))

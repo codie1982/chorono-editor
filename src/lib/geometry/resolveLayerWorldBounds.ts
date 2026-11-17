@@ -21,6 +21,10 @@ export type LayerWorldBoundsResolver = (layer: Layer) => PathBounds | null
 /** Optional scheduling policy; the geometric result and memo ownership are
  * unchanged. Callers must keep source/override inputs immutable for the scope. */
 export interface LayerWorldBoundsOptions {
+  /** Optional affine from world/composition coordinates to a requested space.
+   * Applied before analytic/path bounds, preserving exact rotated parent axes.
+   * Borrowed and never mutated; omitted keeps legacy composition-pixel bounds. */
+  worldToSpace?: Matrix2D
   /** Delay evaluation, scene projection and indexing until the first query.
    * Useful for editor frames with no visible bounds consumer. Default false
    * preserves eager callers' preparation/error timing. */
@@ -85,7 +89,7 @@ export function createLayerWorldBoundsResolver(
 ): LayerWorldBoundsResolver {
   if (options?.deferPreparation) {
     let prepared: LayerWorldBoundsResolver | undefined
-    return layer => (prepared ??= createLayerWorldBoundsResolver(scene, timeMs, overrides))(layer)
+    return layer => (prepared ??= createLayerWorldBoundsResolver(scene, timeMs, overrides, { worldToSpace: options.worldToSpace }))(layer)
   }
   const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   scene = materializeRenderScene(scene, frame)
@@ -123,7 +127,8 @@ export function createLayerWorldBoundsResolver(
       return bounds
     }
 
-    const matrix = resolveLayerWorldMatrix(effective, scene, timeMs, frame, layerIndex)
+    const world = resolveLayerWorldMatrix(effective, scene, timeMs, frame, layerIndex)
+    const matrix = options?.worldToSpace ? options.worldToSpace.multiply(world) : world
     if (effective.type === 'spline') {
       const data = effective.spline
       if (!data || !Object.values(data.subShapes).some(sub => sub.contourIds.some(id => {

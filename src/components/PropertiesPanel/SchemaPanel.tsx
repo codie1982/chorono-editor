@@ -11,6 +11,10 @@
 // schema-able.
 
 'use client'
+import { modelInstanceInputGroup } from '@/lib/model3d/content/modelInstanceInputs'
+import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
+import type { ChronoScene } from '@/lib/types'
+import { modelClipReadOnlyReason } from '@/lib/model3d/animation/modelClipOwnership'
 import type { Layer } from '@/lib/types'
 import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
@@ -26,6 +30,7 @@ import type { GradientFill } from '@/lib/types'
 
 interface Props {
   layer: Layer
+  scene?: ChronoScene
   onLayerChange: (layer: Layer) => void
   /**
    * Optional filter — return false to skip a section. Used by PropertiesPanel
@@ -42,10 +47,11 @@ interface Props {
 /** Render registered source schemas. Numeric fields retain their explicit source
  * path for formula commands; literal changes use the shared immutable writer.
  * No source is mutated or expression evaluated by rendering the inspector. */
-export default function SchemaPanel({ layer, onLayerChange, filterGroup, groups: suppliedGroups, disabledReason }: Props) {
+export default function SchemaPanel({ layer, onLayerChange, filterGroup, groups: suppliedGroups, disabledReason, scene }: Props) {
+  const readOnlyReason = (schema: PropertySchema) => disabledReason?.(schema) ?? modelClipReadOnlyReason(layer, schema.path)
   const def = layerRegistry.findForLayer(layer)
   if (!def?.getPropertyGroups && !suppliedGroups) return null
-  const groups = suppliedGroups ?? def!.getPropertyGroups(layer)
+  const groups = layer.type === 'model3d' && layer.instanceOf && scene ? [modelInstanceInputGroup(layer, resolveInstanceLayer(layer, scene.layers)?.model3d)] : suppliedGroups ?? def!.getPropertyGroups(layer)
 
   return (
     <>

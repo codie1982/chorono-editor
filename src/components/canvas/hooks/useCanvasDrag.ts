@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef,
+import { useCallback, useEffect, useRef, useState,
   type RefObject, type MutableRefObject, type Dispatch, type SetStateAction } from 'react'
 import type { ChronoScene, Layer } from '@/lib/types'
 import type { OverrideMap } from '@/lib/evaluator'
@@ -18,6 +18,8 @@ import { commitCanvasDrag } from './drag/commitCanvasDrag'
 import { prepareCloneDrag, previewCloneDrag } from './drag/cloneDragPreview'
 import type { CanvasLayerChange, CanvasPointerStart } from './drag/dragTypes'
 import { interactionTrace } from '../interactions/diagnostics'
+import { prepareSceneSnapContext } from '@/lib/snap/prepareSceneSnapContext'
+import { readSceneGuides } from '@/lib/geometry/guides/sceneGuideData'
 
 interface SnapState {
   master: boolean; grid: boolean; objects: boolean
@@ -54,6 +56,7 @@ export interface UseCanvasDragOptions {
 }
 
 export interface UseCanvasDragReturn {
+  snapPoint: { x: number; y: number } | null
   dragRef: MutableRefObject<ActiveDrag | null>
   /** Call after assigning dragRef and beginning the transaction. Supplying the
    * pointer-down event enables capture and rejects all other pointer ids. */
@@ -70,6 +73,7 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
   latest.current = opts
   const dragRef = useRef<ActiveDrag | null>(null)
   const sessionRef = useRef<CanvasDragSession | null>(null)
+  const [snapPoint, setSnapPoint] = useState<{ x: number; y: number } | null>(null)
   const cancelDrag = useCallback(() => { sessionRef.current?.cancel(false, 'host-cancel-drag') }, [])
 
   const startDrag = useCallback((pointer?: CanvasPointerStart) => {
@@ -116,17 +120,24 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
           if (drag.kind === 'move' || drag.kind === 'rotate' || drag.kind === 'scaleAxis') {
             const transformed = previewTransformDrag({ base: snapshot, drag, event, delta,
               pointerWorld,
-              dimensions: live.compositionRef.current, bounds, engine: live.engineRef.current })
+              dimensions: live.compositionRef.current, bounds, engine: live.engineRef.current,
+              zoom: Math.min(1 / scale.sx, 1 / scale.sy) })
             return drag.kind === 'move' && clonePlan
               ? previewCloneDrag(snapshot, drag, clonePlan, transformed, event) : transformed
           }
           const snap = live.snapRef.current
+          const zoom = Math.min(1 / scale.sx, 1 / scale.sy), engine = live.engineRef.current
+          const context = { canvasWidth: live.compositionRef.current.width, canvasHeight: live.compositionRef.current.height,
+            otherLayers: bounds.others, parentBounds: bounds.parents, customGuides: readSceneGuides(snapshot).guides, zoom }
           return previewGeometryDrag({ base: snapshot, drag, event, delta,
-            snap: { grid: snap.master && snap.grid, pixel: snap.master && snap.pixel, size: snap.size } })
+            snap: { grid: snap.master && snap.grid, pixel: snap.master && snap.pixel, size: snap.size },
+            resolveSnap: drag.kind === 'resize' && engine ? point => engine.resolvePoint(point, context) : undefined,
+            snapRadiusWorld: engine?.radiusWorld(zoom) })
         },
         show: (preview, event) => {
           const live = latest.current
           live.setGuides(preview.guides)
+          setSnapPoint(preview.snapPoint ?? null)
           live.setDragOverrides(preview.overrides)
           live.setDragHud(preview.label ? { x: event.clientX, y: event.clientY, label: preview.label } : null)
         },
@@ -138,6 +149,7 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
           dragRef.current = null; sessionRef.current = null
           const live = latest.current
           live.setGuides([]); live.setDragHud(null); live.setDragOverrides(new Map())
+          setSnapPoint(null)
         },
         warning: message => latest.current.onWarning?.(message),
       }, pointer)
@@ -155,30 +167,21 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
       nextContext: latest.current.contextKey ?? '', unmountedOrSameScope: opts.contextKey === latest.current.contextKey })
     sessionRef.current.cancel(false, 'scope-change-or-unmount')
   }, [opts.contextKey])
-  return { dragRef, startDrag, cancelDrag }
+  return { dragRef, startDrag, cancelDrag, snapPoint }
 }
 
 /** Resolve snap geometry once per gesture from its evaluated source frame. Both
  * selected subtrees and their ancestors are excluded from their own snap targets. */
 function prepareBounds(scene: ChronoScene, drag: ActiveDrag, timeMs: number, overrides?: OverrideMap, snapLayerIds?: ReadonlySet<string>): DragWorldBounds {
-  if (drag.kind !== 'move') return { moving: null, others: [] }
-  const roots = drag.targets?.map(target => target.id) ?? drag.movingLayers.map(mover => mover.id)
-  const index = new LayerIndex(scene.layers), excluded = index.subtreeIds(roots)
-  for (const id of roots) {
-    let parent = index.get(id)?.parentId
-    const visited = new Set<string>()
-    while (parent && !visited.has(parent)) { visited.add(parent); excluded.add(parent); parent = index.get(parent)?.parentId }
-  }
+  if (drag.kind !== 'move' && drag.kind !== 'resize' && !(drag.kind === 'scaleAxis' && drag.selectionResize)) return { moving: null, others: [] }
+  const roots = drag.kind === 'resize' ? [drag.layerId] : drag.targets?.map(target => target.id) ?? (drag.kind === 'move' ? drag.movingLayers.map(mover => mover.id) : [drag.layerId])
+  const index = new LayerIndex(scene.layers)
   const bounds = createLayerWorldBoundsResolver(scene, timeMs, overrides)
   const moving = roots.reduce<DragWorldBounds['moving']>((union, id) => {
     const layer = index.get(id)
     const value = layer ? bounds(layer) : null
     return value ? unionBounds(union, value) : union
   }, null)
-  const others = scene.layers.flatMap(layer => {
-    if (excluded.has(layer.id) || snapLayerIds && !snapLayerIds.has(layer.id)) return []
-    const value = bounds(layer)
-    return value ? [{ id: layer.id, ...value }] : []
-  })
-  return { moving, others }
+  const context = prepareSceneSnapContext(scene, timeMs, overrides, roots, snapLayerIds)
+  return { moving, others: context.otherLayers, parents: context.parentBounds }
 }

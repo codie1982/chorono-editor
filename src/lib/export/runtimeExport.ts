@@ -1,3 +1,5 @@
+import { flattenBooleanOperationsForOutput } from '../booleanOperations/projectOperations'
+import { compositionForOutput } from '../paint/paintSource'
 import { assertModelPlaybackExport } from '../model3d/source/modelCapabilities'
 // ── Runtime JSON Export ──────────────────────────────────────────────────────
 // Strips editor-only metadata so the resulting JSON is the minimal scene the
@@ -59,6 +61,7 @@ export interface RuntimeScene {
  *  - Optionally collapses redundant consecutive identical keyframes
  */
 export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions = {}): RuntimeScene {
+  scene = flattenBooleanOperationsForOutput(scene)
   assertModelPlaybackExport(scene)
   if (scene.layers.some(layer => Object.keys(layer.propertyExpressions?.fields ?? {}).length)) throw new Error('Basic runtime export cannot evaluate live property expressions. Bake them to keyframes first, or use the Chorono Web runtime package.')
   const {
@@ -73,7 +76,7 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
 
   return {
     formatVersion: scene.formatVersion,
-    composition:   scene.composition,
+    composition:   compositionForOutput(scene.composition),
     // Drop audio assets — runtime audio engine is out-of-band
     assets: scene.assets.filter((a) => a.type !== 'audio'),
     // Drop audio layers + strip editor meta from the rest
@@ -135,8 +138,9 @@ interface NormaliseTimelineOpts {
 }
 
 function normaliseTimeline(tl: Timeline, opts: NormaliseTimelineOpts): Timeline {
+  const { playKeyRange: _editorPlayKeyRange, ...runtime } = tl
   return {
-    ...tl,
+    ...runtime,
     tracks: tl.tracks.map((t) => normaliseTrack(t, opts)),
   }
 }

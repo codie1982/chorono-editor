@@ -6,7 +6,8 @@
 import type { ChronoScene, AnimatableValue, Layer } from '../types'
 import { upsertKeyframe } from '../timeline/keyframeOps'
 import { nextKfId } from '../defaults'
-import { isLayerTimelineProperty } from '../timeline/authoring/timelinePropertyScope'
+import { assertTimelineEditTarget, isLayerTimelineProperty } from '../timeline/authoring/timelinePropertyScope'
+import type { TimelineAuthoringContext } from '../timeline/authoring/TimelineAuthoringContext'
 
 interface Params {
   scene: ChronoScene
@@ -17,16 +18,21 @@ interface Params {
   value: AnimatableValue
   autoKeyframe: boolean
   timelineId: string
+  /** Supplied only by an isolated draft host; never stored on the layer. */
+  context?: TimelineAuthoringContext
 }
 
 /**
  * Mutate a layer property, optionally writing a keyframe at the current time.
  *
- * Returns the updated scene — never mutates in place. Properties owned by an
- * isolated editor remain static source edits even while 2D Auto Key is enabled.
+ * Returns an immutable scene. In scene context, isolated fields remain static
+ * source edits even while Auto Key is enabled. An explicit content host must
+ * own the Timeline and exact leaf before even a static draft write is allowed;
+ * its Auto Key uses the same native upsert policy. No host context is persisted.
  */
 export function setAnimatedPropertyValue(params: Params): ChronoScene {
   const { scene, layerId, propertyPath, timeMs, value, autoKeyframe, timelineId } = params
+  if (params.context?.kind === 'content') assertTimelineEditTarget(scene, timelineId, `layers.${layerId}.${propertyPath}`, params.context)
 
   // ── 1. Update the layer's static property value ──────────────────────────
   const nextScene = updateLayerProperty(scene, layerId, propertyPath, value)
@@ -34,7 +40,7 @@ export function setAnimatedPropertyValue(params: Params): ChronoScene {
   // ── 2. Upsert a keyframe if auto-keyframe is on ──────────────────────────
   if (!autoKeyframe) return nextScene
   const layer = scene.layers.find(item => item.id === layerId)
-  if (layer && !isLayerTimelineProperty(layer, propertyPath)) return nextScene
+  if (layer && !isLayerTimelineProperty(layer, propertyPath, params.context)) return nextScene
 
   const trackTarget = `layers.${layerId}.${propertyPath}`
   const kf = {
@@ -59,7 +65,7 @@ export function setAnimatedPropertyValue(params: Params): ChronoScene {
     ),
   }
 
-  return upsertKeyframe(sceneWithTrack, timelineId, trackTarget, kf)
+  return upsertKeyframe(sceneWithTrack, timelineId, trackTarget, kf, { context: params.context })
 }
 
 // ── Property path writer ──────────────────────────────────────────────────────

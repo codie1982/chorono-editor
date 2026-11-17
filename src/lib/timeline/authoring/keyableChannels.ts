@@ -7,6 +7,7 @@ import { readPropertyPath } from '../../scene/properties/readPropertyPath'
 import { splineCoordinateAddress } from '../../spline/animation/splineCoordinateAddress'
 import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
 import { isLayerTimelineProperty } from './timelinePropertyScope'
+import { SCENE_TIMELINE_CONTEXT, type TimelineAuthoringContext } from './TimelineAuthoringContext'
 
 export type KeysetMode = 'all' | 'transform' | 'animated' | 'selected'
 export interface KeyableChannel { path: string; value: AnimatableValue; track?: Track }
@@ -25,23 +26,27 @@ function supported(value: unknown): value is AnimatableValue {
  * chosen keyset narrows this same universe. No default payload is materialized.
  * Schema animationValueType can declare Vec2/color independently of input type.
  */
-export function keyableChannels(layer: Layer, tracks: readonly Track[], mode: KeysetMode, selectedTargets: ReadonlySet<string>): KeyableChannel[] {
+export function keyableChannels(layer: Layer, tracks: readonly Track[], mode: KeysetMode, selectedTargets: ReadonlySet<string>,
+  context: TimelineAuthoringContext = SCENE_TIMELINE_CONTEXT): KeyableChannel[] {
   const prefix = `layers.${layer.id}.`, metadata = new Map<string, PropertySchema>()
   const definition = layerRegistry.findForLayer(layer) ?? layerRegistry.get(layer.type)
   for (const group of definition?.getPropertyGroups(layer) ?? []) {
     if (group.showWhen && !group.showWhen(layer)) continue
     for (const schema of group.schemas) if (!schema.showWhen || schema.showWhen(layer)) metadata.set(schema.path, schema)
   }
-  const paths = new Set<string>(Array.from(metadata.values()).filter(schema => schema.animatable).map(schema => schema.path))
+  const paths = new Set<string>(Array.from(metadata.values()).filter(schema => schema.animatable
+    || context.kind === 'content' && isLayerTimelineProperty(layer, schema.path, context)).map(schema => schema.path))
+  if (context.kind === 'content') for (const path of definition?.getContentTimelinePaths?.(layer) ?? definition?.contentTimelinePaths ?? []) paths.add(path)
   for (const property of ANIMATABLE_PROPERTIES) if (isPropertyAnimatableOn(property, layer.type) && !metadata.has(property.path)) paths.add(property.path)
   for (const track of tracks) paths.add(track.target.slice(prefix.length))
   const byPath = new Map(tracks.map(track => [track.target.slice(prefix.length), track]))
   const result: KeyableChannel[] = []
   for (const path of Array.from(paths)) {
     const track = byPath.get(path), schema = metadata.get(path)
-    if (!isLayerTimelineProperty(layer, path) || structural.test(path) || mode === 'transform' && !path.startsWith('transform.') && path !== 'opacity'
+    if (!isLayerTimelineProperty(layer, path, context) || structural.test(path) || mode === 'transform' && !path.startsWith('transform.') && path !== 'opacity'
       || mode === 'animated' && !track || mode === 'selected' && !selectedTargets.has(prefix + path)) continue
-    const value = readPropertyPath(layer, path)
+    const value = context.kind === 'content' && definition?.readContentTimelineValue
+      ? definition.readContentTimelineValue(layer, path) : readPropertyPath(layer, path)
     let sample = value === undefined ? track?.keyframes[0]?.value : value
     const coordinate = splineCoordinateAddress(path)
     if (coordinate && !coordinate.component && isVec2(sample)) sample = {x:sample.x,y:sample.y}

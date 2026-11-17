@@ -1,3 +1,5 @@
+import { flattenBooleanOperationsForOutput } from '../../booleanOperations/projectOperations'
+import { compositionForOutput } from '../../paint/paintSource'
 import { assertModelPlaybackExport } from '../../model3d/source/modelCapabilities'
 import type {ChronoScene} from '../../types'
 import {assetSourcePool} from '../../asset/sources'
@@ -73,6 +75,8 @@ export async function sceneTextInScope(scene:ChronoScene,kind:SceneTextKind,scop
  * Optional strings are bounded to 4096 UTF-16 units before native replacement.
  */
 async function htmlInScope(scene:ChronoScene,scope:OutputScope,signal:AbortSignal|undefined,options:SceneTextOptions):Promise<TextOutputResult>{
+  scene = flattenBooleanOperationsForOutput(scene)
+  scene = { ...scene, composition: compositionForOutput(scene.composition) }
   const temporary=scope.child()
   try{
     const values=[options.html?.title??scene.composition.id??'',options.html?.runtimeUrl??'',options.html?.pageBackground??'']

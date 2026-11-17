@@ -41,9 +41,10 @@ describe('boxed 3D source admission', () => {
     const json = triangleDocument(); json.bufferViews[0].byteLength = 10000
     expect(() => readModelDocument(modelBytes(json))).toThrow('buffer view')
   })
-  it('validates fresh defaults and rejects incomplete/nonfinite/singular camera data', () => {
+  it('validates fresh defaults and exact pole views, rejecting out-of-range camera data', () => {
     const data = modelDefaults('asset'); expect(() => validateModel(data)).not.toThrow()
-    for (const camera of [{ ...data.camera, pitch: 90 }, { ...data.camera, distance: 0 }, { ...data.camera, fov: NaN }]) expect(() => validateModel({ ...data, camera })).toThrow()
+    expect(() => validateModel({ ...data, camera: { ...data.camera, pitch: 90 } })).not.toThrow()
+    for (const camera of [{ ...data.camera, pitch: 90.1 }, { ...data.camera, distance: 0 }, { ...data.camera, fov: NaN }]) expect(() => validateModel({ ...data, camera })).toThrow()
     expect(() => validateModel({ ...data, position: {} as any })).toThrow()
   })
 })
@@ -82,7 +83,7 @@ describe('native 3D integration', () => {
 describe('camera/2D separation and existing editing contracts', () => {
   it('orbits, pans in camera coordinates and dollies without changing source/model pose', () => {
     const data = modelDefaults('asset'), before = structuredClone(data)
-    expect(cameraGesture(data, 100, 1000, 'orbit').camera.pitch).toBe(89)
+    expect(cameraGesture(data, 100, 1000, 'orbit').camera.pitch).toBe(90)
     expect(cameraGesture(data, 0, 100000, 'dolly').camera.distance).toBe(1000)
     const pan = cameraGesture(data, 100, 0, 'pan')
     expect(pan.camera.targetX).not.toBe(0); expect(pan.position).toEqual(data.position); expect(data).toEqual(before)

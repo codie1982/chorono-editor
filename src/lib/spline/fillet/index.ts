@@ -1,0 +1,4 @@
+export { filletSpline } from './filletSpline'
+export { FilletWorkerClient } from './FilletWorkerClient'
+export { assertFilletSettings, FILLET_LIMITS } from './types'
+export type { FilletSettings, FilletRequest, FilletResult, FilletArc, FilletExecutor } from './types'

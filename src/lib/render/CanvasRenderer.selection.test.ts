@@ -13,6 +13,7 @@ function recordingCanvas() {
   let matrix = Matrix2D.identity()
   const rectangles: number[][] = []
   const fills: string[] = []
+  const events: string[] = []
   const states: Array<{ matrix: Matrix2D; alpha: number; fill: string; stroke: string; dash: number[] }> = []
   const ctx = {
     globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
@@ -46,10 +47,10 @@ function recordingCanvas() {
     },
     setLineDash(dash: number[]) { this.dash = dash },
     clearRect() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
-    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, closePath() {}, stroke() {},
-    fill() { fills.push(this.fillStyle) },
+    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, closePath() {}, stroke() { events.push('grid') },
+    fill() { fills.push(this.fillStyle); events.push('layer') },
   }
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, rectangles, fills, saveDepth:()=>states.length }
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, rectangles, fills, events, saveDepth:()=>states.length }
 }
 
 function triangle(): Layer {
@@ -74,6 +75,22 @@ function render(layers: Layer[], selectedId: string, options = {}) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CanvasRenderer selection outlines', () => {
+  it('draws editor grid on either side of opaque content and never in preview/export mode', () => {
+    const layer = triangle()
+    expect(render([layer], layer.id, { grid: { size: 20, inFront: false } }).events).toEqual(['grid', 'layer'])
+    expect(render([layer], layer.id, { grid: { size: 20, inFront: true } }).events).toEqual(['layer', 'grid'])
+    expect(render([layer], layer.id, { grid: { size: 20 } }).events).toEqual(['layer', 'grid'])
+    for (const inFront of [true, false]) expect(render([layer], layer.id,
+      { grid: { size: 20, inFront }, renderMode: 'preview' }).events).toEqual(['layer'])
+  })
+
+  it('rejects non-finite or pathological grid spacing without changing content', () => {
+    const layer = triangle()
+    for (const size of [NaN, Infinity, -1, 0, .001, 10001]) {
+      expect(render([layer], layer.id, { grid: { size } }).events).toEqual(['layer'])
+    }
+    expect(render([layer], layer.id, { grid: { size: 12.5 } }).events).toEqual(['layer', 'grid'])
+  })
   it('unwinds parent canvas state after scratch admission fails, keeping the next frame correctly positioned', () => {
     const pool=new CanvasSurfacePool({maxBytes:0}), renderer=new CanvasRenderer(pool)
     const group={...newRectLayer(),type:'group' as const}

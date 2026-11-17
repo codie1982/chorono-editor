@@ -45,7 +45,9 @@ Create a layer with `scene.addSpline(kind,params,options)`, then use `layer.spli
 
 Append/contour creation returns `{subShapeIds,contourIds,pointIds,handleIds,segmentIds}`; `addPoint` returns a point id; `splitSegment` returns `{pointId,segmentIds}`. Reuse these returned ids. Split progress must be strictly between 0 and 1. Read the resulting geometry after topology edits instead of guessing new ids.
 
-Geometry edits preserve the layer's transform, parent, pivot and size. Handle movement follows the native point-type constraints. Locked points/handles and locked or frozen ancestor layers are respected. Instance geometry can be read, but edits require explicitly opening the source layer. Destructive edits remove tracks targeting deleted spline elements in the same undoable operation, preventing stale animation data from recreating deleted points.
+Geometry edits preserve the layer's transform, parent, pivot and size. Handle movement follows the native point-type constraints. Hidden, locked or frozen ancestor layers and point/handle locks are respected. Instance geometry can be read, but edits require explicitly opening the source layer. Unsafe edits to keyed/driven geometry or removal of referenced element IDs refuse atomically; animation tracks are never implicitly deleted. This intentionally replaces the old destructive track-pruning behavior.
+
+`spline.edit(operation)` shares native simple command policies for explicit Point/Edge/Object topology, append, Continue/Auto Close drawing, transforms, paint and Attach/Detach. It returns detached result IDs, not UI selection. Heavy solvers use `prepare_spline_edit` → inspect → `apply_spline_edit` or `discard_spline_edit`; see [spline-editing.md](spline-editing.md). These asynchronous operations are not synchronous Console/QuickJS methods.
 
 For animated geometry, first establish the topology, then key scalar coordinates such as `spline.points.<pointId>.x` or `spline.handles.<handleId>.y` on an explicit timeline. Whole-object/topology morphing is not a keyframe feature. `layer.followPath(splineLayer.id,options)` attaches another object to an editable spline.
 

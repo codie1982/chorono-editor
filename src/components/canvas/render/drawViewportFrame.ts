@@ -18,7 +18,7 @@ import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor
 export function drawViewportFrame(canvas: HTMLCanvasElement, opts: CanvasRendererOptions): void {
   const {
     scene, timeMs, selectedLayerId, selectedLayerIds, assets, viewportRef, viewportScale,
-    snapEnabled, snapToGridOn, gridSize, overrides, paramValues, dragOverrides,
+    snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
   } = opts
   const ctx = canvas.getContext('2d')
@@ -43,10 +43,9 @@ export function drawViewportFrame(canvas: HTMLCanvasElement, opts: CanvasRendere
   canvasRenderer.render(
     ctx, scene, timeMs, selectedLayerId, assets,
     {
-      // Grid drawn only when both the master snap is on AND the "Snap to
-      // grid" type is enabled — matches the visual / behaviour contract
-      // ("grid açıksa snap olur, kapalıysa olmaz").
-      grid:        (snapEnabled && snapToGridOn) ? { size: gridSize } : undefined,
+      // New hosts separate visibility from snapping. Preserve old isolated
+      // consumers that have not supplied an explicit visual preference.
+      grid: (gridVisible ?? (snapEnabled && snapToGridOn)) ? { size: gridSize, inFront: gridInFront } : undefined,
       overrides:   mergedOverrides,
       paramValues,
       visibleArea,

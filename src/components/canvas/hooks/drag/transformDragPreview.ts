@@ -7,16 +7,18 @@ import { applyAxisLock } from '@/lib/canvas/math/moveMath'
 import { scaleFactorFromDelta, MIN_SCALE } from '@/lib/canvas/math/scaleMath'
 import { angleDegFromPivot, wrapAngle180 } from '@/lib/canvas/math/rotateMath'
 import { rotationFromPointer } from '@/lib/canvas/math/rotationGesture'
-import { selectionResize } from '@/lib/canvas/math/selectionResize'
+import { selectionResize, MIN_SELECTION_RESIZE_EXTENT } from '@/lib/canvas/math/selectionResize'
 import { sourceTransformChange } from '@/lib/canvas/math/sourceTransformChange'
 import type { SnapEngine } from '@/lib/snap/SnapEngine'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
 import { readSceneGuides } from '@/lib/geometry/guides/sceneGuideData'
+import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 
 export interface DragWorldBounds {
   moving: PathBounds | null
   others: Array<PathBounds & { id: string }>
+  parents?: readonly PathBounds[]
 }
 interface TransformPreviewInput {
   base: ChronoScene
@@ -27,6 +29,7 @@ interface TransformPreviewInput {
   dimensions: { width: number; height: number }
   bounds: DragWorldBounds
   engine: SnapEngine | null
+  zoom?: number
 }
 
 /** Apply only channels changed from the evaluated start pose. Unedited animated
@@ -61,6 +64,7 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
   const targets = drag.targets ?? []
   if (!targets.length) throw new Error('The drag has no editable transform roots.')
   let guides: Guide[] = []
+  let snapPoint: { x: number; y: number } | undefined
   let result: ReturnType<typeof translateTransformTargets>
   let label: string
   if (drag.kind === 'move') {
@@ -69,8 +73,10 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     if (bounds.moving && (dx !== 0 || dy !== 0)) {
       const rect = { ...bounds.moving, x: bounds.moving.x + dx, y: bounds.moving.y + dy }
       const snap = engine?.snapRect(rect, { canvasWidth: dimensions.width, canvasHeight: dimensions.height,
-        otherLayers: bounds.others, customGuides: readSceneGuides(base).guides })
-      if (snap) { dx = snap.point.x - bounds.moving.x; dy = snap.point.y - bounds.moving.y; guides = snap.guides }
+        otherLayers: bounds.others, parentBounds: bounds.parents, zoom: input.zoom,
+        customGuides: readSceneGuides(base).guides })
+      if (snap) { dx = snap.point.x - bounds.moving.x; dy = snap.point.y - bounds.moving.y; guides = snap.guides
+        if (guides.length) snapPoint = { x: guides.find(g => g.axis === 'v')?.position ?? snap.point.x, y: guides.find(g => g.axis === 'h')?.position ?? snap.point.y } }
       // Axis constraints survive object/grid snap as well as the raw pointer.
       if (drag.axisLock === 'x' || (event.shiftKey && locked.dy === 0)) dy = 0
       if (drag.axisLock === 'y' || (event.shiftKey && locked.dx === 0)) dx = 0
@@ -79,17 +85,38 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     label = `${drag.cloneMode ? drag.cloneMode === 'instance' ? '⧉ Instance   ' : '⧉ Copy   ' : ''}ΔX ${Math.round(dx)}   ΔY ${Math.round(dy)}`
   } else if (drag.kind === 'rotate') {
     if (targets.length === 1 && drag.gesture) {
-      const single = rotationFromPointer(drag.gesture, pointerWorld, event.shiftKey)
-      return transformPreview(base, targets, new Map([[targets[0].id, { ...targets[0].transform, rotationDeg: single.rotationDeg }]]), [], `${single.rotationDeg.toFixed(1)}°`)
+      const single = rotationFromPointer(drag.gesture, pointerWorld, event.shiftKey && !engine?.angleSnappingEnabled)
+      const rotationDeg = engine?.snapAngle(single.rotationDeg) ?? single.rotationDeg
+      return transformPreview(base, targets, new Map([[targets[0].id, { ...targets[0].transform, rotationDeg }]]), [], `${rotationDeg.toFixed(1)}°`)
     }
     let angle = wrapAngle180(angleDegFromPivot(drag.anchorWorldX, drag.anchorWorldY, pointerWorld.x, pointerWorld.y) - drag.startAngle)
-    if (event.shiftKey) angle = Math.round(angle / 15) * 15
+    if (engine?.angleSnappingEnabled) angle = engine.snapAngle(angle)
+    else if (event.shiftKey) angle = Math.round(angle / 15) * 15
     result = rotateTransformTargets(targets, { x: drag.anchorWorldX, y: drag.anchorWorldY }, angle)
     label = `${angle.toFixed(1)}°  (${targets.length} layers)`
   } else if (drag.selectionResize) {
-    const resize = selectionResize(drag.selectionResize.bounds, drag.selectionResize.handle, delta,
-      event.shiftKey || event.ctrlKey || event.metaKey)
+    const { bounds: box, handle } = drag.selectionResize, proportional = event.shiftKey || event.ctrlKey || event.metaKey
+    let resize = selectionResize(box, handle, delta, proportional)
     if (!resize) throw new Error('The selection bounds cannot be resized. Select geometry with nonzero bounds.')
+    const handleFor = (value: NonNullable<typeof resize>) => resizeHandlePoint({ x: value.pivot.x + (box.x - value.pivot.x) * value.factorX,
+      y: value.pivot.y + (box.y - value.pivot.y) * value.factorY, width: box.width * value.factorX, height: box.height * value.factorY }, handle)
+    // Explicit percentage scaling owns the final factors. Do not advertise a
+    // grid/edge hit that subsequent factor quantization would move away from.
+    if (engine?.scaleSnappingEnabled) {
+      resize = { ...resize,
+        factorX: proportional || /[ew]/.test(handle) ? Math.max(MIN_SCALE, MIN_SELECTION_RESIZE_EXTENT / box.width, engine.snapScale(resize.factorX)) : 1,
+        factorY: proportional || /[ns]/.test(handle) ? Math.max(MIN_SCALE, MIN_SELECTION_RESIZE_EXTENT / box.height, engine.snapScale(resize.factorY)) : 1 }
+    } else if (engine) {
+      const originalPoint = resizeHandlePoint(box, handle), point = handleFor(resize)
+      const direction = proportional ? { x: originalPoint.x - resize.pivot.x, y: originalPoint.y - resize.pivot.y }
+        : handle.length === 1 ? { x: 'ew'.includes(handle) ? 1 : 0, y: 'ns'.includes(handle) ? 1 : 0 } : null
+      const acquired = snapResizeHandle(point, direction, engine.radiusWorld(input.zoom), p => engine.resolvePoint(p, {
+        canvasWidth: dimensions.width, canvasHeight: dimensions.height, otherLayers: bounds.others, parentBounds: bounds.parents,
+        customGuides: readSceneGuides(base).guides, zoom: input.zoom }))
+      resize = selectionResize(box, handle, { x: acquired.point.x - originalPoint.x, y: acquired.point.y - originalPoint.y }, proportional)!
+      const reached = handleFor(resize)
+      guides = reachedResizeGuides(reached, acquired.guides); if (guides.length) snapPoint = reached
+    }
     result = scaleTransformTargets(targets, resize.pivot, resize.factorX, resize.factorY)
     label = `${(resize.factorX * 100).toFixed(0)}% × ${(resize.factorY * 100).toFixed(0)}%  (${targets.length} layers)`
   } else {
@@ -97,7 +124,8 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     const factor = scaleFactorFromDelta(delta.x, delta.y, axis)
     // Preserve reflections; clamp positive factors instead of forcing a negative
     // authored scale to positive via the legacy clampScale helper.
-    const fx = Math.max(MIN_SCALE, factor.factorX), fy = Math.max(MIN_SCALE, factor.factorY)
+    const fx = Math.max(MIN_SCALE, axis === 'y' ? 1 : engine?.snapScale(factor.factorX) ?? factor.factorX)
+    const fy = Math.max(MIN_SCALE, axis === 'x' ? 1 : engine?.snapScale(factor.factorY) ?? factor.factorY)
     if (targets.length === 1) {
       const transform = targets[0].transform
       return transformPreview(base, targets, new Map([[targets[0].id, { ...transform,
@@ -108,5 +136,5 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     label = `${(fx * 100).toFixed(0)}% × ${(fy * 100).toFixed(0)}%  (${targets.length} layers)`
   }
   if (!result.ok) throw new Error(result.reason)
-  return transformPreview(base, targets, new Map(result.changes.map(change => [change.id, change.transform])), guides, label)
+  return { ...transformPreview(base, targets, new Map(result.changes.map(change => [change.id, change.transform])), guides, label), snapPoint }
 }

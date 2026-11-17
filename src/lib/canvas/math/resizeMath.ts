@@ -93,9 +93,8 @@ export function calculateResize(input: ResizeInput): ResizeResult {
     if (h.includes('n')) ny = oy + oh - nh
   }
 
-  // Snap to Pixel during resize → integer position + integer dim. Grid/Object
-  // snap is intentionally NOT applied to resize (a moving edge has no canonical
-  // rect to snap against and per-axis grid-snap produces jarring jumps).
+  // Legacy local-pixel rounding. World grid/object acquisition belongs to the
+  // handle adapter, which disables rounding after an exact geometric hit.
   if (snapPixel) {
     nx = Math.round(nx); ny = Math.round(ny)
     nw = Math.round(nw); nh = Math.round(nh)

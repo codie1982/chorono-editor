@@ -1,0 +1,7 @@
+export { assertSplineTopology, assertSplineLocks, markEditedSubShapes } from './validation'
+export { retainSplineContours, removeSplineContours, extractSplineObjects } from './records'
+export { remapSplineData } from './remap'
+export type { SplineIdMaps } from './remap'
+export { deleteSplineObjects, copySplineObjects } from './objects'
+export { divideSplineEdges, deleteSplineEdges, deleteSplinePoints } from './edges'
+export { connectSplineEndpoints } from './connect'

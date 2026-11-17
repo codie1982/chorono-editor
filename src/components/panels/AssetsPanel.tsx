@@ -1,4 +1,5 @@
 'use client'
+import { AssetIndex } from '@/lib/asset/AssetIndex'
 import { newModelLayer } from '@/lib/model3d/source/modelDefaults'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── AssetsPanel ───────────────────────────────────────────────────────────────
@@ -75,18 +76,8 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
   // Width comes from the shared ResizeObserver; it does not follow playback.
   useEffect(() => { setGridWidth(windowed.viewport.width) }, [windowed.viewport.width])
 
-  // Track which layers reference each asset (so we know what gets deleted)
-  const layersByAsset = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const l of scene.layers) {
-      const aid = l.model3d?.assetId ?? l.image?.assetId ?? l.video?.assetId ?? l.audio?.assetId
-      if (!aid) continue
-      const list = map.get(aid) ?? []
-      list.push(l.id)
-      map.set(aid, list)
-    }
-    return map
-  }, [scene.layers])
+  const assetIndex = useMemo(() => { const index = new AssetIndex(); index.build(scene.layers, scene.composition); return index }, [scene.layers, scene.composition])
+  const layersByAsset = useMemo(() => new Map(scene.assets.map(asset => [asset.id, assetIndex.getLayerIds(asset.id)])), [scene.assets, assetIndex])
 
   // Inventory summary: total bytes + count of assets no layer references.
   const inventory = useMemo(() => {
@@ -94,10 +85,10 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
     let unused = 0
     for (const a of scene.assets) {
       totalBytes += a.metadata?.filesize ?? 0
-      if ((layersByAsset.get(a.id)?.length ?? 0) === 0) unused++
+      if (assetIndex.isOrphan(a.id)) unused++
     }
     return { totalBytes, unused }
-  }, [scene.assets, layersByAsset])
+  }, [scene.assets, assetIndex])
 
   // ── Import via the universal pipeline ────────────────────────────────────
   const handleImportClick = () => importInputRef.current?.click()
@@ -133,10 +124,10 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
     const refLayers   = scene.layers.filter(l => refLayerIds.includes(l.id))
     const layerCount  = refLayers.length
 
-    if (layerCount > 0) {
+    if (layerCount > 0 || assetIndex.hasCompositionReference(a.id)) {
       const ok = confirm(
         `Delete asset "${a.name}"?\n\n` +
-        `${layerCount} layer${layerCount === 1 ? '' : 's'} referencing it will also be removed.`,
+        `${layerCount} layer${layerCount === 1 ? '' : 's'} referencing it will also be removed.` + (assetIndex.hasCompositionReference(a.id) ? '\nThe composition background also uses this image.' : ''),
       )
       if (!ok) return
     }
@@ -159,7 +150,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
 
   // ── Discovery: remove all unused (orphan) assets in one undo step ────────
   const cleanupUnused = () => {
-    const orphans = scene.assets.filter(a => (layersByAsset.get(a.id)?.length ?? 0) === 0)
+    const orphans = scene.assets.filter(a => assetIndex.isOrphan(a.id))
     if (orphans.length === 0) return
     const ok = confirm(
       `Remove ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}?\n\n` +
@@ -242,7 +233,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
           renderRow={(index, attributes) => <div {...attributes} className="grid grid-cols-2 gap-2 items-start"
             style={{ height: rowHeight, paddingBottom: 8 }}>
         {scene.assets.slice(index * 2, index * 2 + 2).map(a => {
-          const refCount = layersByAsset.get(a.id)?.length ?? 0
+          const refCount = assetIndex.getRefCount(a.id)
           const badge    = TYPE_BADGES[a.type]
           return (
             <div

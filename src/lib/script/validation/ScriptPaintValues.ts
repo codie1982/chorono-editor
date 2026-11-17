@@ -28,7 +28,7 @@ export function assertScriptPaint(before: Layer | undefined, after: Layer): void
   if (fill && touched('fill.color') && fill.color !== undefined) { if (typeof fill.color !== 'string') throw new Error('Fill color must be CSS.'); validateExpressionResult('color', fill.color) }
   if (fill && touched('fill.opacity') && fill.opacity !== undefined && (typeof fill.opacity !== 'number' || !Number.isFinite(fill.opacity) || fill.opacity < 0 || fill.opacity > 100)) throw new Error('Fill opacity must be 0..100.')
   if (touched('cornerRadius') && after.style?.cornerRadius !== undefined && (typeof after.style.cornerRadius !== 'number' || !Number.isFinite(after.style.cornerRadius) || after.style.cornerRadius < 0)) throw new Error('Corner radius must be non-negative.')
-  if (fill && touched('fill.type') && !['solid','gradient'].includes(fill.type)) throw new Error('Invalid fill type.')
+  if (fill && touched('fill.type') && !['solid','gradient','image','none'].includes(fill.type)) throw new Error('Invalid fill type.')
   if (fill && (touched('fill.gradient') && fill.gradient !== undefined || touched('fill.type') && fill.type === 'gradient')) gradient(fill.gradient!)
   if (stroke) {
     if ((touched('stroke.color') || !before?.style?.stroke) && typeof stroke.color !== 'string') throw new Error('Stroke requires a CSS color.')

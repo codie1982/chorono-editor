@@ -1,3 +1,5 @@
+import { compositionForOutput } from '../paint/paintSource'
+import { flattenBooleanOperationsForOutput } from '../booleanOperations/projectOperations'
 import { assertModelPlaybackExport } from '../model3d/source/modelCapabilities'
 // ── RuntimeOptimizer ──────────────────────────────────────────────────────────
 //
@@ -18,6 +20,7 @@ import type { RuntimeAnimation } from '../types/runtime'
 
 export class RuntimeOptimizer {
   optimize(scene: ChronoScene): RuntimeAnimation {
+    scene = flattenBooleanOperationsForOutput(scene)
     assertModelPlaybackExport(scene)
     let s = withoutAuthoring(scene)
     s = this.removeEditorMetadata(s)
@@ -25,7 +28,7 @@ export class RuntimeOptimizer {
     s = this.removeRedundantKeyframes(s)
     return {
       formatVersion: '1.0.0',
-      composition:   s.composition,
+      composition:   compositionForOutput(s.composition),
       layers:        s.layers,
       timelines:     s.timelines,
       parameters:    s.parameters ?? [],

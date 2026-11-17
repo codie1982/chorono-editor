@@ -11,6 +11,7 @@ import { prepareClearKeyframes, type ClearKeyScope } from '@/lib/timeline/author
 import { applyKeyframeBatch } from '@/lib/timeline/authoring/keyframeBatch'
 import { registerScopedActions } from '@/lib/shortcuts/scopedActions'
 import { useTimelineAuthoring, type TimelineAuthoringControls } from './timeline/authoring/useTimelineAuthoring'
+import { TimelineTools } from './timeline/TimelineTools'
 import { BulkEditPolicyControl } from './timeline/authoring/BulkEditPolicyControl'
 import { SetKeyReview } from './timeline/authoring/SetKeyControls'
 import { toast as authoringToast } from '@/lib/toast/toast'
@@ -86,6 +87,7 @@ import type { TimelineRevealRequest } from '@/lib/timeline/hierarchy/TimelineRev
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import SubtreeOperationsToolbar from './layerHierarchy/SubtreeOperationsToolbar'
 import { FindSelectedButton, FoundSelectionNotice } from './layerHierarchy/FindSelectedControls'
+import { useTimelineMarquee } from './timeline/hooks/useTimelineMarquee'
 import { headerHeight, timelineKeysInBox, timelineSectionHeight } from './timeline/layout/timelineRows'
 
 // Preset palette for the layer "Color Label" submenu. `hex: null` clears
@@ -133,6 +135,8 @@ const LAYER_COLOR_LABELS: { label: string; hex: string | null }[] = [
 ]
 
 interface Props {
+  /** Hard isolation for rows, keys, range/marquee selection and bulk actions. */
+  layerScope?: ReadonlySet<string> | null
   revealRequest?: TimelineRevealRequest | null
   scene: ChronoScene
   editor: EditorStateReturn
@@ -176,18 +180,20 @@ interface Props {
 
 export default function TimelinePanel({
   scene, editor, settings, onSettingsChange,
-  selectedLayerId, selectedLayerIds, selectedTimelineId, selectedKfIds,
+  selectedLayerId, selectedLayerIds, selectedTimelineId, selectedKfIds: providedSelectedKfIds,
   currentTimeMs, isPlaying, playbackSpeed,
   onTimeChange, onPlayToggle, onSelectTimeline, onSelectKeyframes, onSelectLayer,
   onToggleLayerFlag, onPlaybackSpeedChange, onPlaySegment, activeSegmentId,
   ghostSettings, onGhostUpdate, onGhostToggle, onGhostPreset,
   onEditWire, onWireRequest, revealProperty, authoring: sharedAuthoring,
-  audioControls, revealRequest,
+  audioControls, revealRequest, layerScope,
 }: Props) {
   const { dispatchCommand, beginTransaction, previewTransaction, commitTransaction, cancelTransaction } = editor
 
   const timeline = scene.timelines.find((t) => t.id === selectedTimelineId) ?? null
-  const editorTracks = useMemo(() => timelineTracksInScope(scene.layers, timeline?.tracks ?? []), [scene.layers, timeline?.tracks])
+  const editorTracks = useMemo(() => timelineTracksInScope(scene.layers, timeline?.tracks ?? [], undefined, layerScope), [scene.layers, timeline?.tracks, layerScope])
+  const selectedKfIds = useMemo(() => layerScope ? new Set(editorTracks.flatMap(track => track.keyframes.filter(key => providedSelectedKfIds.has(key.id)).map(key => key.id)))
+    : providedSelectedKfIds, [layerScope, editorTracks, providedSelectedKfIds])
   const editorTimeline = useMemo(() => !timeline || editorTracks === timeline.tracks ? timeline : { ...timeline, tracks: editorTracks }, [timeline, editorTracks])
   const layerTracks = useMemo(() => new LayerTrackIndex(editorTracks), [editorTracks])
   const tracksByTimeline = useMemo(() => new Map(scene.timelines.map(item => [item.id, new LayerTrackIndex(item.tracks)])), [scene.timelines])
@@ -225,7 +231,7 @@ export default function TimelinePanel({
 
   // ── Per-layer expand state (default: all layers expanded) ────────────────
   const localAuthoring = useTimelineAuthoring({ scene, editor, timelineId: selectedTimelineId, selectedId: selectedLayerId,
-    selectedIds: selectedLayerIds, selectedKeyIds: selectedKfIds, currentTimeMs, isPlaying, onSeek: onTimeChange })
+    selectedIds: selectedLayerIds, selectedKeyIds: selectedKfIds, layerScope, currentTimeMs, isPlaying, onSeek: onTimeChange })
   const authoring = sharedAuthoring ?? localAuthoring
   /** Native UI errors stay visible; a rejected gesture restores its baseline. */
   const commitKeys = useCallback((command: import('@/lib/editor/commands-keyframe').EditorCommand, gesture = false) => {
@@ -325,9 +331,9 @@ export default function TimelinePanel({
     ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`timeline.bookmark.${i + 1}`, () => jumpToBookmark(i)])),
   }, () => !!keyboardPanelRef.current?.getClientRects().length), [jumpToAdjacentMarker, saveBookmark, jumpToBookmark])
   const hierarchy = useTimelineHierarchy({ scene, editor, timeline, trackIndex: layerTracks,
-    filter: layerFilter, selectedId: selectedLayerId, selectedIds: selectedLayerIds })
-  /** Explicit Find opens selected branches and their animation rows. Ordinary
-   * layer selection only updates the shared highlight, never Timeline scroll. */
+    layerScope, filter: layerFilter, selectedId: selectedLayerId, selectedIds: selectedLayerIds })
+  /** Find opens selected branches and animation rows, including requests from
+   * the post-gesture selection synchronizer. Hard isolation remains authoritative. */
   const findInTimeline = useCallback((ids?: readonly string[]) => {
     const roots = ids ?? Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : [])
     const scope = new LayerIndex(scene.layers).subtreeIds(roots)
@@ -372,7 +378,7 @@ export default function TimelinePanel({
 
   // ── Keyframe drag (multi-select bulk move) ───────────────────────────────
   const drag = useKeyframeDrag({
-    timeline, frameRate: scene.composition.frameRate, settings,
+    timeline: editorTimeline, frameRate: scene.composition.frameRate, settings,
     clientXToMs: vp.clientXToMs, durationMs: duration,
     onBegin: beginTransaction,
     onPreview: (moves) => {
@@ -396,8 +402,10 @@ export default function TimelinePanel({
   })
 
   // ── Timeline CRUD ────────────────────────────────────────────────────────
+  /** New main/draft Timelines inherit this host's composition duration, while
+   * explicit imported/existing Timeline durations retain their own contract. */
   const addTimeline = () => {
-    const tl = newTimeline()
+    const tl = { ...newTimeline(), durationMs: scene.composition.durationMs }
     dispatchCommand(makeAddTimelineCmd(tl))
     onSelectTimeline(tl.id)
   }
@@ -830,7 +838,7 @@ export default function TimelinePanel({
   // BL-11: Marker right-click target — set by MarkerOverlay's onContextMenu.
   const [ctxMarker, setCtxMarker] = useState<{ markerId: string } | null>(null)
 
-  useEffect(() => { setBakeTarget(null); setEditingKf(null); setStaggerModalOpen(false); setKeySheetOpen(false); setCtxKf(null); setCtxTrackArea(null) }, [selectedTimelineId])
+  useEffect(() => { setBakeTarget(null); setEditingKf(null); setStaggerModalOpen(false); setKeySheetOpen(false); setCtxKf(null); setCtxTrackArea(null) }, [selectedTimelineId, layerScope])
 
   const openLayerBarMenu = useCallback((layerId: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -862,53 +870,15 @@ export default function TimelinePanel({
     ctxMenu.open(e)
   }, [ctxMenu])
 
-  // ── Lasso selection ──────────────────────────────────────────────────────
-  // Alt+drag in the layer-sections container draws a rectangle; pointerup
-  // collects every `[data-kf-id]` element whose bbox intersects and adds
-  // them to the selection (Shift+Alt+drag adds to existing selection).
+  // Shared row-model hit testing retains virtualization, graph and audio geometry.
   const lassoContainerRef = useRef<HTMLDivElement | null>(null)
-  const lassoStartRef = useRef<{ x: number; y: number; addToExisting: boolean } | null>(null)
-  const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-
-  const onLassoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || !e.altKey) return
-    // Only start lasso if the pointer landed on the container itself
-    // or on a non-interactive child (not a kf, not a button).
-    const t = e.target as HTMLElement
-    if (t.closest('[data-kf-id]') || t.closest('button')) return
-    const el = lassoContainerRef.current
-    if (!el) return
-    e.preventDefault()
-    el.setPointerCapture(e.pointerId)
-    const rect = el.getBoundingClientRect()
-    lassoStartRef.current = {
-      x: e.clientX - rect.left + el.scrollLeft,
-      y: e.clientY - rect.top  + el.scrollTop,
-      addToExisting: e.shiftKey,
-    }
-    setLassoRect({ x: lassoStartRef.current.x, y: lassoStartRef.current.y, w: 0, h: 0 })
-  }
-
-  const onLassoPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const s = lassoStartRef.current
-    const el = lassoContainerRef.current
-    if (!s || !el) return
-    const rect = el.getBoundingClientRect()
-    const cx = e.clientX - rect.left + el.scrollLeft
-    const cy = e.clientY - rect.top  + el.scrollTop
-    setLassoRect({
-      x: Math.min(s.x, cx), y: Math.min(s.y, cy),
-      w: Math.abs(cx - s.x), h: Math.abs(cy - s.y),
-    })
-  }
-
-  const onLassoPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const s = lassoStartRef.current
-    const el = lassoContainerRef.current
-    if (!s || !el || !lassoRect) { lassoStartRef.current = null; setLassoRect(null); return }
-    const next = new Set<string>(s.addToExisting ? selectedKfIds : [])
-    const hits = timelineKeysInBox({ rows: sectionRows, layout: sectionLayout, graph: settings.timelineMode === 'curve',
-      box: lassoRect, labelWidth: labelColWidth, trackWidth: vp.trackWidth, offset: sectionWindow.viewport.offset,
+  const marquee = useTimelineMarquee({ container: lassoContainerRef, labelWidth: labelColWidth,
+    selectedIds: selectedKfIds, onSelect: onSelectKeyframes, context: selectedTimelineId, scope: layerScope,
+    hitTest: box => {
+      const el = lassoContainerRef.current
+      if (!el) return new Set<string>()
+    return timelineKeysInBox({ rows: sectionRows, layout: sectionLayout, graph: settings.timelineMode === 'curve',
+      box, labelWidth: labelColWidth, trackWidth: vp.trackWidth, offset: sectionWindow.viewport.offset,
       previewMs: drag.previewMs, msToX: vp.msToScreenPx,
       headerTop: index => {
         const row = sectionRows[index], top = sectionLayout.top(index) + sectionWindow.viewport.offset
@@ -925,12 +895,8 @@ export default function TimelinePanel({
           return time >= Math.max(window.startMs, vp.visibleStartMs) && time <= Math.min(window.endMs, vp.visibleEndMs)
         }) ?? []
       } })
-    hits.forEach(id => next.add(id))
-    onSelectKeyframes(next)
-    lassoStartRef.current = null
-    setLassoRect(null)
-    try { el.releasePointerCapture(e.pointerId) } catch { /* */ }
-  }
+    } })
+  const lassoRect = marquee.box
 
   const openKfInlineEdit = useCallback((trackTarget: string, kfId: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -1006,6 +972,7 @@ export default function TimelinePanel({
       {bakeTarget && selectedTimelineId && <TrackBakeDialog key={`${selectedTimelineId}:${bakeTarget}`} scene={scene} editor={editor} timelineId={selectedTimelineId} target={bakeTarget} onClose={() => setBakeTarget(null)} />}
       <TimelineToolbar
         timelines={scene.timelines}
+        frameRate={scene.composition.frameRate}
         selectedTimelineId={selectedTimelineId}
         selectedTimeline={timeline}
         currentTimeMs={currentTimeMs}
@@ -1047,6 +1014,8 @@ export default function TimelinePanel({
 
       {audioControls}
       <SetKeyReview controls={authoring} />
+      <TimelineTools selectedLayers={selectedLayerIds.size || (selectedLayerId ? 1 : 0)} selectedKeys={selectedKfIds.size}
+        revealed={hierarchy.find.revealIds.length > 0}>
       <TrackToolBar
         hasKeyframes={editorTracks.some((t) => t.keyframes.length > 0)}
         selectedCount={selectedKfIds.size}
@@ -1071,6 +1040,8 @@ export default function TimelinePanel({
         canSetFlag={() => true} onExpand={() => hierarchy.branches.setExpanded(hierarchy.branches.roots, true)}
         onCollapse={() => hierarchy.branches.setExpanded(hierarchy.branches.roots, false)}
         onSetFlag={(field, value) => hierarchy.branches.setFlag(hierarchy.branches.roots, field, value)} />}
+
+      </TimelineTools>
 
       {/* ── Ruler row (above the layer sections, share scroll horizontally) ── */}
       <div className="flex border-b border-gray-700 shrink-0">
@@ -1240,10 +1211,9 @@ export default function TimelinePanel({
         ref={lassoContainerRef}
         className="flex-1 min-h-[60px] overflow-y-auto relative"
         onClick={(e) => { if (e.target === e.currentTarget) onSelectKeyframes(new Set()) }}
-        onPointerDown={onLassoPointerDown}
-        onPointerMove={onLassoPointerMove}
-        onPointerUp={onLassoPointerUp}
-        onPointerCancel={onLassoPointerUp}
+        {...marquee.bindings}
+        aria-label="Timeline key selection area"
+        title="Drag empty space to select keys · Shift/Cmd/Ctrl adds · Escape cancels"
       >
         {scene.layers.length === 0 && (
           <div className="p-6 text-center text-xs text-gray-600">
@@ -1370,10 +1340,10 @@ export default function TimelinePanel({
           style={{ left: `${labelColWidth + 4 +vp.msToScreenPx(currentTimeMs)}px` }}
         />
 
-        {/* Lasso rectangle (visible while Alt+drag is active) */}
+        {/* Selection rectangle (plain empty-space drag; modifiers add) */}
         {lassoRect && (
           <div
-            className="absolute pointer-events-none z-30 border border-blue-400"
+            data-timeline-marquee="" className="absolute pointer-events-none z-30 border border-blue-400"
             style={{
               left: lassoRect.x, top: lassoRect.y,
               width: lassoRect.w, height: lassoRect.h,

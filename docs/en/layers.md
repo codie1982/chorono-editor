@@ -43,7 +43,11 @@ Available shapes:
 | **Wave** | Horizontal sine wave with adjustable amplitude and frequency. |
 | **Blob** | Organic irregular closed shape seeded by a noise function. |
 
-All shape layers support fill (solid or gradient), stroke, trim path, and all standard effects.
+Basic Shape fill modes are **None, Color, Gradient and Image**. Image paint clips a shared static image to the shape's actual contour, including ring holes. Choose an existing image or **Import image…**; this assigns paint without adding an Image layer. **Cover / Contain / Stretch**, local X/Y offset, uniform scale (%) and rotation (degrees) position the picture inside the shape. Contain and offset/scaled images can leave transparent regions. **Reset image placement** retains the source and fit mode. This is image placement, not mesh UV editing or video fill.
+
+Stroke has independent **None / Color / Gradient** modes. Switching fill or stroke to None retains inactive color/gradient/image values and animation keys. Existing gradient strokes without an explicit type keep their old appearance. Closed converted paths and splines use the same paint renderer.
+
+Composition Properties and Composition Settings reuse these background controls. **Include in export** is saved with the project (on by default). When off, the background remains visible in the editor but is transparent in PNG, sequences, SVG and exported runtime/HTML source. An explicit export color takes precedence. JPEG cannot represent alpha and uses the exporter's white fallback with a warning. Portable editor JSON retains the background and the preference. Static SVG embeds imported image paint; unsupported compositing retains the existing SVG warnings. Animated SVG freezes internal image placement at the selected time and reports a warning; use raster sequences for animated paint.
 
 ### Text
 
@@ -237,6 +241,61 @@ Select a group and press **Shift + Cmd/Ctrl + G** to ungroup. The children are p
 
 ## Spline Layers
 
+Select one spline and choose **Point / Edge / Object** in the separate **Spline & Boolean** dock panel.
+Double-clicking a spline or choosing Pen enters Point editing. Right-click also
+offers **Edit Mode → Point / Edge / Object** in the viewport, Layers and Scene Explorer;
+choosing a level reveals the same panel. **Done** / **Layer mode** returns to normal layer tools.
+Object selects a `SubShape`, including all its contours/holes; it is
+not a child layer. The tools panel shows point coordinates/types/handles, edge type
+and sampled local length, or object name and contour state respectively.
+
+Shift/Ctrl/Cmd toggles sub-objects; an empty drag uses the current region style
+and Inside/Touching setting. Empty click clears the sub-selection. Escape cancels
+a menu/gesture first, clears sub-selection, exits editing, then clears the layer.
+Point movement reuses the full parent inverse and commits one Undo; Pan cannot
+edit geometry. Key/wire/expression-owned coordinates remain selectable but source
+overwrites are refused. Move/Rotate/Scale and local numeric transforms apply to
+the selected geometry; Delete edits the active sub-object level and retains the root layer. Selections
+and overlays are excluded from project JSON/history and visual exports.
+
+While editing, **Add → Spline Objects** (or **Add to this spline** in Spline & Boolean)
+creates a new Object inside this layer. **Done** restores Add as a separate-layer
+workflow. **Continue selected endpoint** requires exactly one unlocked endpoint
+of an open contour in Point mode; it never joins another Object. Enter or
+right-click follows **Auto Close**. This option appears in **Spline & Boolean →
+Draw Line** as soon as the Line tool is armed, including a new layer without a
+selection. It is off by default and remembered locally. When enabled, right-click
+joins the last placed point to the first/opposite endpoint after at least three
+anchors; the pointer location adds no point. When disabled, the line stays open.
+Enter always finishes open; Escape cancels. Clicking within 10 screen pixels of
+this contour's start also closes it when Auto Close is enabled, without duplicating
+the endpoint.
+
+**Shared Fill / Stroke** remains available during editing. Fill None/Color/Gradient/Image
+and Stroke None/Color/Gradient are independent and retain inactive payloads and keys.
+Paint belongs to the whole layer; open contours show stroke, closed ones can show
+both. Local selection transforms preserve outer animation, stable IDs and all
+contours of objects with holes; viewport scale is uniform and Properties supports
+independent X/Y percentages. Each completed gesture/Apply is one Undo.
+
+Open the collapsible **Topology** section for mode-specific operations:
+
+- **Point:** select two open endpoints, then Join/Connect (straight bridge) or
+  Weld (composition-pixel tolerance; first point ID/position stays fixed).
+- **Edge:** Refine at a parameter percentage, Divide into 2–64 equal-parameter
+  parts, or Delete to cut the contour into open runs. Curves reuse De Casteljau
+  splitting; Delete never inserts an automatic bridge.
+- **Object:** Copy with local offsets (also Ctrl/Cmd+D), Detach to a sibling
+  layer preserving outer animation, or Attach another eligible spline layer.
+  Attach consumes the source layer and uses the active layer's shared paint.
+
+Each action is one Undo/Redo. Point/Edge/Object Delete targets the current level;
+empty Objects/orphan records are cleaned without deleting the spline layer.
+Attach currently requires static, unreferenced geometry; driven topology,
+ambiguous hole joins and unsupported relationship transfers report a reason
+instead of changing human-authored keys or dropping references. S2D-3 adds
+read-only Boolean preview; S2D-4 adds persisted operations with Apply/Cancel.
+
 Spline layers are Chorono's professional vector drawing system, inspired by the workflow of 3D application spline editors. They differ from basic shape layers in that every point on the path is directly editable.
 
 ### The Eight Core Primitives
@@ -279,14 +338,33 @@ Switch point types in the **Spline Point Inspector** that appears when a point i
 
 ### Combining Sub-Shapes
 
-A single Spline layer can hold multiple sub-shapes (contours). Each sub-shape can have a **Combine Mode**:
+A single Spline layer holds independently selectable Objects, each owning one
+or more contours. Holes follow the layer's evenodd/nonzero fill rule. Legacy
+`combineMode` metadata does not execute a Boolean operation.
 
-- **Add** — normal union (default).
-- **Subtract** — cuts a hole in the layers below it within the same spline.
-- **Intersect** — only the overlap is visible.
-- **Exclude** — XOR (shows non-overlapping areas).
+For **S2D-3 Boolean preview**, select 2–8 closed Basic Shape/Spline layers or
+Object-mode spline Objects. Open Spline & Boolean → Boolean preview, or use the
+viewport's **Boolean preview…** context action. Union, Subtract and Intersect
+produce a purple area overlay. A names the active layer/first selected Object;
+B contains the remaining inputs. Subtraction explicitly offers A−B and B−A.
+Curve tolerance is in composition pixels, independent of zoom/FPS.
 
-This lets you create complex compound shapes — like a letter O with a hole — in a single layer.
+Preview preserves source, manual keys and Undo/Redo; it is not saved/exported.
+Source/selection/time/context changes discard stale results. Open/invalid paths,
+instances and mixed-winding contours that cross/touch report limitations.
+
+**Apply Boolean** creates a normal group containing original input layers and a
+generated spline result. Right-click the group, source or result → **Edit Operation**
+opens the same dock panel. Apply/Edit is one Undo; Cancel changes no source.
+Inputs must be static, unreferenced, contiguous siblings with a common lifetime;
+common parent animation is retained. Unsupported independent input keys are
+refused rather than flattened. The result uses A's style. Animate the group or
+result transform/style; generated vertex targets are read-only. Whole-group Copy
+retargets the recipe; partial copies and linked instances are refused.
+Portable projects retain the recipe and sources. Raster/SVG and runtime/HTML
+outputs evaluate the result; runtime/HTML emit ordinary group/spline data.
+MCP Boolean authoring uses prepare_spline_edit / apply_spline_edit / discard_spline_edit and re-edits by recipe ownerId. There is no editable-path bake yet. See the
+[technical contract](../tr/boolean-operation.md).
 
 ### Text-to-Spline Conversion
 
@@ -339,25 +417,27 @@ Available array types:
 
 ## Smart Selection
 
-When you have many layers on the canvas, selecting the right ones quickly is essential. Chorono provides four canvas selection tools plus modifiers for filtering.
+Chorono provides four region styles for selecting multiple layers, independently of the current manipulation tool.
 
 ### Selection Tools
 
-Activate these tools from the Top Toolbar or with their keyboard shortcuts:
+Choose a style from the Top Toolbar or with its shortcut. **Box is selected by default.** Select, Move, Rotate, Scale and Anchor all start a region when you drag from empty canvas or pasteboard space. Starting on an object selects/moves that object instead. Pan, drawing, camera and motion-key tools keep their own gestures.
 
 | Tool | Shortcut | How it works |
 |---|---|---|
 | **Box Select** | B | Drag a rectangle. Layers within the box are selected. |
 | **Lasso Select** | L | Draw a freehand closed shape. Layers inside are selected. |
 | **Circle Select** | O | Drag to define a circle. Layers within the circle are selected. |
-| **Paint Select** | W | Click and drag like a brush. Layers you paint over are added to the selection. |
+| **Paint Select** | W | Start in empty space and sweep a brush across the layers to select. |
 
 ### Inside vs. Touching
 
-At the top of the canvas when a selection tool is active, you will see a toggle:
+The toolbar has one icon-only containment switch. Click, Space or Enter toggles Inside/Touching; its tooltip describes the current mode and its accessible checked state means Inside. The preference applies to region selection with every ordinary manipulation tool:
 
 - **Inside** — only selects layers whose entire bounding box fits within the selection shape. Useful when you want to avoid accidentally grabbing large background layers.
 - **Touching** — selects any layer whose bounding box overlaps the selection shape at all.
+
+Paint uses Touching regardless of the containment preference. Region tests use evaluated world bounds, rather than individual painted pixels. Hidden, locked, frozen, transparent, inactive and non-solo branches are excluded, including inherited parent restrictions. These restrictions apply to viewport picking, while Layers/Scene Explorer remain available for inspecting objects.
 
 ### Select Similar
 
@@ -369,9 +449,10 @@ Also in the right-click menu: **Select by Transform** lets you select all layers
 
 ### Adding and Removing from Selection
 
-- Hold **Shift** and click a layer to add it to the current selection.
-- Hold **Shift** and click a selected layer to deselect it.
-- Click on an empty area of the canvas to deselect everything.
+- In the viewport, **Shift-click** toggles an object in the current selection.
+- Start a region with **Shift** (or Ctrl/Cmd) to add; **Alt** subtracts; no modifier replaces the selection.
+- Click and release empty canvas/pasteboard space, or press **Esc** while idle, to deselect everything. During a gesture, Esc first cancels its preview.
+- In Layers/Scene Explorer, **Shift-click** selects a displayed row range; **Ctrl-click** (Cmd on macOS) toggles individual rows.
 
 ---
 

@@ -1,3 +1,6 @@
+import { emptyModelSceneDocument } from '../source/emptyModelScene'
+import { contentInstance } from '../content/modelContent'
+import { addPrimitive, removePrimitive, PRIMITIVE_SELECTION_INSTANCE } from '../modeling/poly/primitiveSource'
 import { releaseImportSources } from '@/lib/import/resources/importSources'
 import { interactionTrace } from '@/components/canvas/interactions/diagnostics'
 import { useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -23,6 +26,7 @@ import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
 import { VisualMediaSession } from '@/lib/render/media/VisualMediaSession'
 import { glbBytes } from './fixtures'
 import { modelAssetService } from '../resources/ModelAssetService'
+import type { AssetElementMap } from '@/lib/asset/visual/AssetElementMap'
 import '@/lib/registry/bootstrap'
 
 /** Actual editor/Properties/renderer host. No connection to the user's editor,
@@ -40,7 +44,7 @@ const status = document.getElementById('status')!
 interactionTrace.setEnabled(true)
 function Host() {
   const trace = useSyncExternalStore(interactionTrace.subscribe, interactionTrace.getSnapshot)
-  const state = useEditorState(initial), assets = useAssetCache(state.scene.assets, { managed: true }), snap = useSnapSettings()
+  const state = useEditorState(initial), assets = useAssetCache(state.scene.assets, { managed: true }), snap = useSnapSettings({ persist: false })
   const [selected, select] = useState<string | null>('test-model'), ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
   const [timelineSettings, setTimelineSettings] = useState(DEFAULT_TIMELINE_SETTINGS), [keySelection, setKeySelection] = useState(new Set<string>()), [time, setTime] = useState(0)
   const noop = () => {}
@@ -90,6 +94,39 @@ createRoot(document.getElementById('app')!).render(<Host />)
   assert(red > 1000, 'Real WebGL model pixels reach the final 2D compositor')
   assert(green > 10000, 'Transparent model surroundings preserve the 2D background')
   document.getElementById('output')?.replaceChildren(canvas)
+  const empty = await new ModelHandler().handle(new File([JSON.stringify(emptyModelSceneDocument())], 'Empty 3D Scene.gltf', { type: 'model/gltf+json' }))
+  assert(empty.layers[0].model3d?.version === 3 && !!empty.layers[0].model3d.content, 'Empty 3D scene creates editable content without a model file picker')
+  const emptyPin = await modelAssetService.acquire(empty.assets[0]), trianglePin = await modelAssetService.acquire(scene.assets[0])
+  const blank = document.createElement('canvas'); blank.width = blank.height = 128; const blankContext = blank.getContext('2d')!
+  try {
+    const preview = document.createElement('canvas'); preview.width = preview.height = 400
+    const previewScene = emptyScene(); previewScene.composition = { ...previewScene.composition, width: 400, height: 400 }
+    previewScene.layers = [empty.layers[0]]; previewScene.assets = empty.assets
+    const previewAssets: AssetElementMap = new Map(); previewAssets.modelForAsset = id => id === empty.assets[0].id ? emptyPin.value : undefined
+    new CanvasRenderer().render(preview.getContext('2d')!, previewScene, 0, empty.layers[0].id, previewAssets, { renderMode: 'editor' })
+    document.getElementById('output')?.append(preview)
+    const previewPixel = preview.getContext('2d')!.getImageData(200, 200, 1, 1).data
+    assert(previewPixel[0] < 100 && previewPixel[1] < 100 && previewPixel[2] < 120, 'Empty 3D scene has a dark viewport card in the 2D editor')
+    emptyPin.value.draw(blankContext, empty.layers[0].model3d!, 128, 128)
+    assert(!blankContext.getImageData(0, 0, 128, 128).data.some((value, index) => index % 4 === 3 && value > 0), 'Real GPU render of an empty scene stays transparent')
+    const primitive = addPrimitive(empty.layers[0].model3d!, emptyPin.value.inventory!, 'box', 'boxA')
+    emptyPin.value.draw(blankContext, primitive, 128, 128)
+    assert(blankContext.getImageData(0, 0, 128, 128).data.some((value, index) => index % 4 === 3 && value > 0), 'A procedural Box renders in the formerly empty scene')
+    const view = { camera: { ...primitive.camera, projection: 'perspective' as const, orthoHeight: 2.8 } }
+    const picked = emptyPin.value.inspector?.pick(primitive, 64, 64, 128, 128, view)
+    assert(picked?.instanceId === PRIMITIVE_SELECTION_INSTANCE && picked.nodeId === 'boxA', 'Viewport ray picks a procedural Box by stable object ID')
+    blankContext.clearRect(0, 0, 128, 128)
+    emptyPin.value.draw(blankContext, removePrimitive(primitive, 'boxA'), 128, 128)
+    assert(!blankContext.getImageData(0, 0, 128, 128).data.some((value, index) => index % 4 === 3 && value > 0), 'Removing the Box releases its rendered geometry')
+    const assembly = structuredClone(empty.layers[0].model3d!)
+    assembly.content!.instances.added = contentInstance(scene.assets[0].id, trianglePin.value.inventory!, 'Added triangle')
+    emptyPin.value.draw(blankContext, assembly, 128, 128, id => id === scene.assets[0].id ? trianglePin.value : emptyPin.value)
+    assert(blankContext.getImageData(0, 0, 128, 128).data.some((value, index) => index % 4 === 3 && value > 0), 'A model added later renders inside the formerly empty scene')
+    const original = editor.getScene(); editor.dispatchCommand(new ImportTransactionBuilder().build(empty))
+    const saved = await acquirePortableScene(editor.getScene())
+    try { assert(parseSceneJson(JSON.stringify(saved.value), true).layers.some(layer => layer.id === empty.layers[0].id && layer.model3d?.version === 3), 'Empty scene survives portable save/open') } finally { saved.release() }
+    editor.undo(); assert(editor.getScene() === original, 'One Undo restores the project after empty 3D scene creation')
+  } finally { emptyPin.release(); trianglePin.release(); releaseImportSources(empty) }
   const file = new File([JSON.stringify(triangleDocument())], 'Triangle.gltf', { type: 'model/gltf+json' })
   const imported = await new ModelHandler().handle(file)
   const command = new ImportTransactionBuilder().build(imported)

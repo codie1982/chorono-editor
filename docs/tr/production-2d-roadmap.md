@@ -1,22 +1,34 @@
 # Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 13 Kasım 2026. **Güncel ve onaylanan sıra:**
+Tarih: 4 Kasım 2026. Güncelleme: 14 Kasım 2026. **Güncel ve onaylanan sıra:**
 tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
 tamamlanan E−1.Q/E−1.1/E−1.2/E−1.3 MCP açıklığı/güvenli düzenleme/köken/ortak hiyerarşi, E−1.4 Set Key/transport ve
 E−1.5 prosedürel eğri/bake, E−1.5A input expression, viewport/ortak araç kabulü,
 dar entegrasyon ve ilk kutulu 3D dilimi tamamlandı. 13 Kasım'da dar ortak
-detay/izolasyon DET0–DET1 de uygulandı. Sırada Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
+detay/izolasyon DET0–DET1 de uygulandı. 14 Kasım kullanıcı önceliğindeki 3D serisi tamamlandı:
+**3D-T0–T2 ve 3D0–3D6 tamamlandı → sıradaki Editable Poly → UV/material → 2D bileşen/karakter → fizik**,
 kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
 ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
 [Ayrıntılı sıra ve bağımlılık sınırları](plans/geometry-material-boxed3d-sequence.md)
 bu sıranın uygulama rehberidir. Önceki sıra kayıtları §12'de tarihsel kanıttır;
 güncel iş kuyruğu bu bölüm ve bağlantılı sıra belgesidir.
 
+**13 Kasım — animasyonlu komponent uygulama bölümü:** Gerekli nesne-içi
+animasyon, parametrik örnekler ve türe göre detay araçları **§3.1** altında
+somut iş paketlerine dönüştürüldü. **14 Kasım sırası §3.2'de:** IA0'ın dar
+3D kontratı ve native klip/yerel key IA2a/IA2b öne alınır; 2D parametrik
+saat/komponent IA1a/IA1b, library/karakter IA3 ve particle IA-P kendi aşamasında kalır.
+Kontrollü recursive IA4 ilk teslimi veya çoklu formatı bekletmez. Tamamlanan
+DET0–DET1'in statik host'u korunur. 14 Kasım'da 3D-T0 ve T1 model/kamera
+klip authoring'i ve 3D-T2 ortak kabulü tamamlandı; 3D0–3D6 model detay araçları da tamamlandı; sırada Editable Poly vardır. [Gerçek kapsam ve kabul](model-detail-3d-packages.md).
+[Teknik tasarım](plans/item-owned-animation-plan.md) ve
+[risk incelemesi](plans/internal-animation-risk-review.md) bu bölüme bağlıdır.
+
 **11 Kasım sonraki faz kaydı:** [CFX — ileri katman/kompozisyon/efekt, video
 kurgu, yerel tracking ve 3D compositing](plans/advanced-compositing-tracking-plan.md)
 mevcut serinin son optimizasyon ve birleşik kabulünden **sonraki ayrı faza**
 eklenmiştir. Bu kayıttaki E−1.5A sonraki kabulde tamamlandı; güncel sıradaki iş
-DET0–DET1 sonrasında Poly 2D'dir. CFX sonraki ayrı faz olarak kalır, yeni bir ara iş değildir.
+DET0–DET1 sonrasında 14 Kasım bağımlılık düzeltmesiyle 3D-T'dir. CFX sonraki ayrı faz olarak kalır, yeni bir ara iş değildir.
 
 Genel optimizasyonun ilk kabulü §12.37'de, viewport V1/V2 §12.40'ta ve V3
 position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
@@ -43,7 +55,7 @@ D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, ger�
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
 hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
-E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake (§12.58) tamamlandı. E−1.5A ve kalan ortak araç kabulü de [12 Kasım kapısında](plans/pre3d-completion-audit.md) kapandı; ilk 3D ve dar DET0–DET1 sonrasında sırada Poly 2D vardır.**
+E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake (§12.58) tamamlandı. E−1.5A ve kalan ortak araç kabulü de [12 Kasım kapısında](plans/pre3d-completion-audit.md) kapandı; ilk 3D ve dar DET0–DET1 sonrasında 14 Kasım önceliğindeki §3.2 3D0–3D6 da tamamlandı; sıra Editable Poly’ye geçti.**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -66,10 +78,10 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. [Sözleşme](pre3d-frame-contract.md). |
 | Tamamlandı — ilk dar 3D dilim | Kutulu model ve kamera | GLB/self-contained glTF, Properties ve toggle ile Orbit/Pan/Dolly; 2D taşıma korunur, portable/raster. Imported clip/rig/kamera ve gelişmiş material UI ileri dilimde. [Sözleşme ve kabul](boxed-3d-first-slice.md). |
 | Tamamlandı — dar DET0–DET1 | Ortak detay düzenleyicisi ve izolasyon akışı | Mevcut dock korunarak detay ortamı; çift tık + sağ tık, tek seviyeli breadcrumb/Back, bounded draft, Apply/Cancel ve tek Undo. Shape/Path + model3d sabit yerleşim. [Gerçek sözleşme/kabul](item-detail-editor.md); nested/iç Timeline ve ileri medya araçları sonraki kapsam. |
-| Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
-| Sonra 4 | Texture, vertex color, UV ve basit material | Texture gizmo ve UV paneli; dokulu/deforme mesh adapter'ı. |
-| Sonra 5 | Ortak host üzerinde kutulu 3D ileri düzenleme | Önceden teslim edilen DET0–DET1 host'u kullanılır; diğer adapter'lar domain teslimleriyle eklenir. 3D iç Timeline/kamera/material kendi adapter'ında; ana Timeline dış kutuyu yönetir, temel sabit Properties kalır. [Ortak plan](plans/shared-item-detail-editor.md), [3D planı](plans/boxed3d-isolated-editor.md). Çoklu model, imported rig/clip/morph; rig oluşturma/IK ayrı dilimler. |
-| Sonra 6 | Bileşen kütüphanesi ve Character Motion | Source component/local clock; 2D rig/FK/IK/sprite/state-machine. |
+| Tamamlandı — 3D-T ve 3D0–3D6 | Önce Timeline/iç animasyon temeli, sonra 3D detay yetenekleri | §3.2: ana/iç bağlam ve key sınırı → detayda yerel klip authoring'i/zaman/kabul → node/seçim/gizmo → kamera → materyal/ışık → native klip → ileri iç Timeline → çoklu model → açık kontroller. Poly/UV ve 2D saat authoring'i bu dar temelin önkoşulu değildir. [3D planı](plans/boxed3d-isolated-editor.md). |
+| Sonra 4 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
+| Sonra 5 | Texture, vertex color, UV ve basit 2D material | Texture gizmo ve UV paneli; dokulu/deforme mesh adapter'ı. Mevcut 3D model UV'sini kullanmak bu yeni editörü beklemez. |
+| Sonra 6 | Bileşen kütüphanesi ve Character Motion | §3.1 IA3 mevcut definition/instance/klip kontratını genişletir; katalog/sürüm/kontroller ve 2D rig/FK/IK/sprite/state-machine. İkinci animasyon sistemi kurulmaz. |
 | Sonra 7 | Simulation Core, rigid, Voronoi ve particle fiziği | Poly kaynaklı kırılma; sabit adım, gravity/field/collision, cache/bake. |
 | Sonra 8 | Fabric/kumaş | Poly rest mesh/UV; gravity/wind/pin/collision ve bake. |
 | Sonra 9 | Blob Surface, sıvı, akış/duman | Değişken topoloji, contour/mesh görünümü; alanlar/collision ve bake. |
@@ -101,10 +113,11 @@ flowchart TD
     H --> I[Dar source / time / resource sözleşmeleri]
     I --> B[Kutulu 3D ilk sürüm]
     B --> D[Ortak detay / izolasyon DET0–DET1]
-    D --> G[Poly 2D]
+    D --> TL[Timeline ve iç animasyon temeli 3D-T]
+    TL --> B2[3D detay yetenekleri 3D0–3D6]
+    B2 --> G[Poly 2D]
     G --> U[UV / vertex color / material]
-    U --> B2[Ortak host üzerinde ileri kutulu 3D]
-    B2 --> C[Bileşen ve karakter]
+    U --> C[2D bileşen ve karakter]
     C --> S[Simulation core / rigid / Voronoi / particle]
     G --> S
     S --> CL[Kumaş]
@@ -127,8 +140,9 @@ aynı host/oturum/Apply-Cancel yaşam döngüsünü, türe özel araç ve render
 adapter'larıyla paylaşır. Mevcut Isolate yalnız geçici görünüm filtresi olarak
 korunur; her öğeye yeni iç Timeline eklenmez. Sonraki kullanıcı önceliğiyle dar
 ortak host DET0–DET1, Poly/UV'den önce alındı ve 13 Kasım'da uygulandı: çift tık/sağ tık ve
-breadcrumb ile aynı uygulamada detay ortamı açılır. Sonra Poly → UV → ileri
-kutulu 3D sırası, CFX ve bağımsız 3D/Game Engine sınırı korunur.
+breadcrumb ile aynı uygulamada detay ortamı açılır. 14 Kasım kararı bu teslimden
+sonrasını 3D detay → Poly → UV olarak günceller; CFX ve bağımsız 3D/Game Engine
+sınırı korunur.
 
 **12 Kasım — 3D authoring tek sahibi:**
 [3D İçerik Editörü](plans/boxed3d-isolated-editor.md) ortak detay host'unda
@@ -165,11 +179,210 @@ Cache türleri birbirine karıştırılmaz: component çözümü, layout, PCM fe
 
 Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; prosedürel konum ile fizik konumu aynı anda iki kez uygulanmaz. İlk temas particle–collider içindir; particle–particle katı temas veya sıvı yoğunluk çözümü olduğu iddia edilmez. Sabit collider'larla başlayan akışa sonradan bake edilmiş hareketli collider girdileri eklenir. İlk çözüm düzlemseldir; kumaşın yerel yüzey derinliği ve model katmanının 3D render'ı genel 3D fizik dünyası oluşturmaz.
 
+### 3.1. Animasyonlu komponentler, alt animasyon ve türe göre detay düzenleme
+
+**Durum: planlandı, uygulama bekliyor.** Bu bölüm ana iş kuyruğudur;
+[ayrıntılı teknik plan](plans/item-owned-animation-plan.md) veri, zaman, adapter,
+UI ve test kontratlarını açıklar. Tamamlanan statik DET0–DET1 geriye dönük
+animasyonlu komponent teslimi sayılmaz. Yeni bağımsız 3D/Game Engine modu veya
+ikinci Timeline motoru kurulmaz; mevcut 2D/2.5D davranışları korunur.
+**14 Kasım sıra değişikliği:** Bu tablodaki IA kimlikleri yetenek kimliğidir,
+zorunlu sayısal teslim sırası değildir. §3.2 3D0–3D6 şimdi öndedir; native klip
+IA2a, IA0'ın dar 3D kaynak/instance/zaman kontratıyla çalışır. Önce 2D saat,
+Poly veya UV editörünü teslim etmeye bağlanmaz. Ortak kontrat daha sonra
+IA1a/IA1b ve library/karakter tarafından genişletilir.
+
+#### 3.1.1. Uygulanacak ürün davranışı
+
+- **Isolate selection:** Geçici görünüm filtresi; mevcut parent bağlamı ve
+  source komutları korunur. Yeni klip/komponent veya Apply/Cancel yaratmaz.
+- **Edit content:** Tek hedefin türüne uygun araçlar; bounded draft,
+  breadcrumb/Back, Apply/Cancel ve tek ana Undo. Statik içerikte boş Timeline
+  zorunlu değildir.
+- **Animasyonlu komponent:** Bir sürümlü tanımda içerik/parçalar, scoped klipler,
+  açık parametreler ve asset referansları. Örnekler kaynağı paylaşır; kendi
+  parametreleri, dış transform'u ve başlangıç/fazıyla oynar.
+- **Ana/iç animasyon:** Ana Timeline dış hareket ve açık kontrolleri gösterir.
+  İç keyler detayda kalır; native 3D import bütün bone/node track'lerini ana
+  listeye çevirmek zorunda değildir. Ortak Timeline tipi/evaluator kullanılır;
+  bütün kliplerin tek global dizide olması gerekmez.
+
+#### 3.1.2. Yapım iş paketleri
+
+Her iş önceki dilimin kontratını genişletir. Aşağıdaki işler henüz tamamlanmadı:
+
+| İş | Sıradaki yeri / bağımlılık | Somut çıktı ve bitiş koşulu |
+| --- | --- | --- |
+| IA0 — kaynak ve zaman kontratı | 3D0 ile teslim edilen dar ortak temel; DET0–DET1 ve mevcut frame/resource sahipleri | 3D kaynak/instance, scoped hedef/klip, kesin ms ve version/commit sınırı; bütün girişlerin envanteri ve eski sahne fixture'ları. Genel 2D definition kataloğu peşinen kurulmaz. |
+| IA1a — minimal komponent kaynağı ve örneği | 3D önceliği sonrasında 2D bileşen aşaması; IA0'ın gerçek tüketicili kontratı | Sürüm pin'li ortak içerik, bağımsız number parametresi ve yerel ID/asset çözümü. İki saat aynı kaynağı paylaşır; clone, kaydet/aç, history ve asgari raster kayıp üretmez. Yalnız şema/registry eklemek yeterli değildir. |
+| IA1b — detayda gerçek iç animasyon | IA1a + tür/zaman/commit capability'leri | Yerel klip oluşturma/seçme, Set Key, Curve/Dope Sheet, scrub ve oynatma. Dış hareket sürerken iç hareket çalışır; iki saat farklı değer/hız gösterir. Apply/Cancel/tek Undo, insan keyleri ve preview/raster eşliği birlikte kabul edilir. |
+| IA2a — native 3D klip oynatma | Öne alınan 3D3; IA0 ortak owner/zaman hattı + model asset/pose adapter'ı | Asset+clip referansı, seçim/trim/speed/loop, iki bağımsız model pozu ve prepared raster. Native klip ana 2D Timeline'da bone track yığını üretmez; desteksiz kanal raporlanır. IA1 saat authoring'i önkoşul değildir. |
+| IA2b — detayda yerel 3D keyler | IA2a + 3D authoring capability | Kamera/model yerleşim keyleri aynı detail transport'uyla düzenlenir. İnceleme kamerası source'a key yazmaz; native pose ile authored kanalın sahipliği açık olur. Tam rig/weight editörü bu teslim değildir. |
+| IA3 — kütüphane ve karakter bağlantısı | Genel sıradaki bileşen/Character Motion aşaması; IA1 kontratı | Katalog/sürüm/kontrol akışı ve parça/FK/klip entegrasyonu mevcut tanımı kullanır. IK/skin/SM ayrı capability/kabul dilimleridir; duplicate definition/clock motoru kurulmaz. |
+| IA-P — komponentten particle üretme | Genel sıradaki particle/fizik aşaması + çalışan parametrik komponent | Emitter komponenti kaynak alır; doğumda seed/spawn kimliğinden parametre/faz üretir, içerik zamanı age veya açık scene-sync politikasından gelir. Scrub/export deterministiktir; particle sayısıyla kalıcı Layer/Track sayısı artmaz. |
+| IA4 — kontrollü iç içe içerik | İlk çalışan teslimden sonraki ileri kapsam; C2 ile birlikte | Cycle/depth/toplam iş bütçesi, scoped kontrol ve yerel SM/event/audio kontratları ayrı kabul edilir. İlk saat/3D klibi ve çoklu format bu kapsamın tamamını beklemez. |
+
+**IA1a + IA1b tek kullanıcı kabulü oluşturur:** detayda tasarlanan bir saatten
+farklı parametreli iki örnek, dış hareketleriyle beraber oynatılır, Undo/Redo
+ve reload sonrası aynı görüntüyü verir. Her alt işi kod/test/gerçek render
+kanıtıyla ayrı kapatabiliriz; yalnız veri modelini ilk ürün teslimi saymayız.
+Zaman tahmini ölçüm yapılmadan bu plana süre taahhüdü olarak yazılmaz.
+
+#### 3.1.3. Nesne türüne göre bağlanacak araçlar
+
+| Hedef | Detay / animasyon kapsamı | Bağlandığı aşama |
+| --- | --- | --- |
+| Shape / Path / Spline | İzinli geometri/stil/parça keyleri; mevcut Pen/Spline ve stable nokta kimliği korunur | IA1b; bir defalık grupta mevcut key filtresi de kullanılabilir |
+| Poly / texture / material | Vertex/face, UV, vertex color ve slot parametreleri; kaynak/UV/material sahipleri ayrı | İlgili Poly/UV teslimi + tür adapter'ı; yeni geometri motoru IA içinde gizlenmez |
+| Image | Crop/kadraj ve desteklenen görünüm; statik içerikte Timeline kapalı | Asset/detail adapter'ı; piksel boyama ayrı Drawing kapsamı |
+| Video | Kaynak önizleme, in/out, temel clip/source zamanı | Video adapter'ı; çoklu video/chroma/despill/tracking CFX'te kalır |
+| Komponent / karakter | Parça ağacı, parametre ve gerçek yerel klip; rig kendi domain'inde | IA1/IA3 |
+| Kutulu 3D | Native klip, kamera/model keyleri; materyal/ışık/node araçları ayrı capability | IA2; bone authoring ve tam rig ayrı ileri kabul |
+| Particle | Kaynak komponent, kontrol dağılımları ve doğum/yaş/faz | IA-P; her particle'a ayrı kaynak editörü/Timeline açılmaz |
+
+#### 3.1.4. Her teslimde zorunlu korumalar
+
+1. Source/type/runtime/cache ayrılır; eski proje kendiliğinden migrate edilmez.
+   Desteksiz reader/exporter içeriği sessizce atlayamaz. Format değişimi açık
+   converter ve eski sürüm fixture'larıyla yapılır.
+2. Dış root transform ve iç parça transform'u ayrı hedeflerdir. Private iç
+   kanallar ana Timeline'a açılmaz; inline geçiş/exposed control durumunda tek
+   yazıcı guard'ı UI, native komut, MCP/script, Wire/Expression'da aynıdır.
+3. Parent/pivot, insan keyleri/ID/easing, referanslar, parametreler, clone/array,
+   autosave/sessionId, portable ve bütçeli Undo/Redo korunur. Stale Apply yeni
+   insan düzenlemesini ezmez; Apply tek ana transaction'dır.
+4. Kaynak edit'i yeni sürüm üretir; ilk politika yalnız açıldığı instance'ın
+   pin'ini günceller. Diğer örnekler kendiliğinden değişmez. Instance parametresi,
+   Make unique ve ortak kaynak edit'i açık farklı kapsamlardır.
+5. Seek/loop/geri scrub ve offline örnekleme aynı zamanı aynı frame'e taşır.
+   Bounds/hit-test, demand, mask/efekt/temporal örnekler ve raster aynı sonucu
+   kullanır. Her nesneye ayrı rAF veya her kare source/track kopyası kurulmaz.
+6. Pose/decode/yüzey kaynakları mevcut bütçe/lease/abort sistemine bağlanır;
+   kapat/sil/Cancel sonrası bırakılır. SOLID, feature sahipliği, sınıf boyutu
+   ve açıklama kuralları geçerlidir. Yeni yetenekle birlikte test, gerçek render,
+   API/skill ve mevcut helper içeriği güncellenir; son optimizasyon bunları ertelemez.
+
+### 3.2. Öncelikli 3D detay editörü yapım kuyruğu — 14 Kasım 2026
+
+Kullanıcı sıradaki işleri 3D yeteneklerini geliştirmek üzere öne aldı. §3.1
+ortak animasyon tasarımı korunur; genel teslim sırası artık **3D-T → 3D0–3D6 → Poly →
+UV/material → 2D komponent/library/karakter → simülasyonlar** olur. Geri kalan
+export/otomasyon/son optimizasyon ve CFX sırası değişmez.
+[3D domain planı](plans/boxed3d-isolated-editor.md) bu tablonun teknik ayrıntı sahibidir.
+
+| Sıra | Yapılacak iş | Somut kabul |
+| --- | --- | --- |
+| 3D-T — T0/T1/T2 tamamlandı | Ana/iç Timeline bağlamı, scoped key authoring'i, detayda yerel klip ve kesin zaman/commit hattı | Aşağıdaki 3D-T0–T2 kapısı geçer. Mevcut global `model3d.*` yasağı, iç editörde key oluşturmayı desteklemiş sayılmaz. |
+| 3D0 — tamamlandı | IA0'ın dar 3D kaynak/kimlik/commit temelini node'lara genişletme; ağaç/seçim/Frame Selection ve XYZ gizmo | Seçilen parça hem ağaçta hem 3D görünümde belli olur. İç parça edit'i ana 2D kutuyu değiştirmez; tek Undo/Apply/Cancel, reload ve raster korunur. Kaynak node referansı asset sürümüne bağlıdır. |
+| 3D1 — tamamlandı | İnceleme/çıktı kamerası ayrımı, perspektif/orthographic, front/top/side/isometric ve kadraj/target araçları | İnceleme hareketi source'a key yazmaz. Mevcut orbit/pan/dolly ve 2D taşıma çalışır; çıktı seçili kameradan üretilir. |
+| 3D2 — tamamlandı | Materyal override, texture slotları, ışık konumu/rengi/şiddeti, ortam/exposure ve kontrollü gölge | Renk/roughness/metalness/opacity gibi desteklenen alanlar modelin mevcut UV'siyle işler. Diğer instance kazara değişmez; kaynaklar bütçelenir, preview/raster karşılaştırılır. |
+| 3D3 / IA2a — tamamlandı | Native GLB/glTF klip seçimi, play/scrub, trim, hız/loop ve desteklenen skeleton/morph oynatma | İki model örneğinin pozu bağımsızdır; ileri/geri seek ve offline zaman eşleşir. Bone/node keyleri ana 2D Timeline'a dökülmez. |
+| 3D4 / IA2b genişlemesi — tamamlandı | 3D-T'deki yerel Timeline'ı yeni node kanalları ve native klip/pose authoring bağlamıyla genişletme | Temel Set Key/Curve motoru tekrar yazılmaz. Native klip/authoring sahipliği ve iki bağımsız pose doğrulanır. Tam rig/bone key editörü ayrı ileri araçtır. |
+| 3D5 — tamamlandı | Aynı içerikte çoklu model, parça hiyerarşisi, ortak kamera/ışık/depth | İki model + kamera fixture'ı kaynak birimi, bounds/seçim, clone/save/raster ve bellek bütçesiyle geçer. Ayrı 2D model kutuları kendiliğinden ortak dünyaya çevrilmez. |
+| 3D6 — tamamlandı | Typed açık parametreler, instance override, Wire/Expression; turntable ve uygun node ağacında explode | Kontroller iç sonuca ikinci yazıcı olmaz; pin'li kaynak korunur. Minimal kaynak/instance kullanımı sonraki 2D komponent/library tarafından genişletilir. |
+
+**3D0–3D6 teslimi — 14 Kasım:** [Gerçek kaynak/UI/lifecycle ve kabul](model-detail-3d-packages.md).
+Model v3; SHA-256/index-bound node/material/clip kimliği, ortak detay tree/XYZ,
+inceleme/çıktı kamerası, PBR/gömülü texture slotları/ışık, native skin+morph klibi,
+private node/native-time keys, sekiz modelli shared-depth içerik ve typed input/
+Wire/expression/instance/turntable/explode tamamlandı. Eski v1/v2 source ve 2D
+araçlar korunur. 382 dosyada 3.116 test, TypeScript/MCP/CLI/Next build geçti;
+9 kare / 24 native render kontrolünde viewport/MCP/raster RGBA farkı 0.
+512 MiB yönetilen bütçede tepe 4,37 MiB, temizlikte charge/entry 0. Eski statik
+ve numeric detail browser akışlarının 6+6 kontrolü; yeni gizmo/assembly/material/
+private key/Curve/tek Undo/Redo/Cancel akışı geçti. Tam rig/UV/HDRI/imported camera
+ve yeni dosya importer'ları bu teslimin kapsamına eklenmedi. **Sırada Poly vardır.**
+
+#### 3.2.1. Timeline/iç animasyon kapısı — T0/T1/T2 tamamlandı
+
+14 Kasım T0 öncesi kod denetimi: `timelinePropertyScope.ts` ve model registry'si ana
+2D Timeline'da `model3d.*` alanlarını gizler/yeni key edit'ini reddeder. Set Key,
+Auto Key, bulk/clear, script ve Curve/Dope Sheet projeksiyonları bunu kullanır;
+eski iç track'ler source'ta korunur. **Buna karşılık** detayda yerel Timeline,
+klip owner modeli ve scoped Timeline commit'i henüz yoktur. Statik
+`ItemDetailSession` başka öğe/Timeline değişimini bilinçli reddeder.
+Bu incelemede model Timeline scope, statik detay oturumu, Set Key, bulk ve clear
+için 5 dosyada **47 mevcut test geçti**. Bu, aşağıdaki eksik 3D-T yeteneğinin
+uygulandığı veya kabul kapısını geçtiği anlamına gelmez.
+
+| Alt iş | Yapılacak iş ve kabul |
+| --- | --- |
+| 3D-T0 / IA0 — tamamlandı, 14 Kasım | Açık scene/content authoring context, owner/Timeline/exact-leaf doğrulaması; context-aware native komut ve track projeksiyonları. Public UI/MCP/script varsayılanı scene kalır. [Gerçek sözleşme](timeline-authoring-context.md); bu teslim iç Timeline UI'sı veya runtime saati değildir. |
+| 3D-T1 / IA2b'nin dar başlangıcı — tamamlandı, 14 Kasım | Mevcut model yerleşim/kamera alanlarında yerel klip oluşturma/seçme, Set Key, zaman gezinme ve scoped Curve/Dope Sheet. Root listesine key kopyalama yoktur. Bounded detay taslağı için ayrı izinli Timeline patch/commit capability; Apply tek Undo, Cancel ve stale revision source'u korur. |
+| 3D-T2 / ortak kabul — tamamlandı, 14 Kasım | Dış kutu hareketi + yerel klip aynı anda; kesin içerik zamanı/loop/geri scrub, iki bağımsız kullanım, preview/MCP/raster eşliği, save/open/clone/history ve kaynak bırakma. Her içerik ayrı rAF başlatmaz; iç klip global olarak ikinci kez örneklenmez. |
+
+**T0 uygulama kanıtı:** `TimelineAuthoringContext.ts` geçici readonly host
+bağlamını sağlar; layer registry'sindeki `contentTimelinePaths` yalnız izinli
+exact leaf'leri açar. `assertTimelineEditTarget` hedefin yanı sıra güncel owner
+ve Timeline bağını doğrular. Set Key/Auto Key, native key/track/batch/clear,
+script host ve ortak projection aynı policy'yi kullanır. Eski scene formatı,
+statik Properties, mevcut ana UI ve evaluator değişmez; context serialize edilmez.
+İç bağlam yalnız izole draft host'una aittir; MCP'ye yeni bir context parametresi
+veya root authoring izni eklenmedi. T0 teslimi yeni UI/clock sağlamıyordu; T1 bu sınırın üzerinde tamamlandı.
+
+**T1 uygulaması:** [Model içerik klipleri](model-content-clips.md): yerel klip
+lifecycle, Keys/Curve/Set Key, değerlendirilen Properties, kendi transport'u ve
+ayrı scoped projection/Apply. Root Timeline ve mevcut elle düzenlemeler korunur;
+Apply tek ana Undo'dur. Kaynak `model3d.version:2` ile sürümlenir; v1 model
+kendiliğinden çevrilmez. Native imported GLB klip/bone key importu eklenmedi.
+T2 ortak kabulü tamamlandı. Devamındaki **3D0–3D6** [model detay araçları](model-detail-3d-packages.md) ile teslim edildi.
+T1 kabulü: 379 dosya / 3.072 test, TypeScript, MCP/CLI/Next build ve altı
+model-klip + altı mevcut statik detay browser akışı geçti. Native ilk key
+sürüklemesi ve Bézier kolu kontrol edildi. T2 sonucu aşağıda ayrıdır.
+
+**T2 kabulü:** [Kapsam, fixture ve tekrar çalıştırma](model-clip-acceptance.md).
+Dış kutu + iç numeric klip, copy/live instance yerel zamanları, lineer/Bézier/Hold,
+loop/geri scrub ve aynı-browser viewport/MCP PNG/raster eşliği doğrulandı.
+Kaynak/revision/history korunur; pinler bırakılınca yönetilen rezervasyonlar kapanır.
+Native GLB klip/rig ve genel komponent sistemi bu kapıyla etkinleştirilmedi.
+T2 kabul sonucu: 380 dosyada 3.089 test; 58 native browser kontrolünde 11
+kare için en büyük piksel farkı 0; 512 MiB ledger tepe 2,80 MiB, son yük 0.
+TypeScript/MCP/Next build geçti. Ölçüm bu küçük, aynı-browser fixture ile sınırlıdır.
+
+Doğrulama: yeni 9 bağlam testi; tam **377 dosya / 3.042 test**, `tsc --noEmit`,
+`npm run mcp:build` ve `npm run build` geçti. Render algoritması değiştirilmedi.
+Kod ve kullanım örneği [T0 bakım belgesindedir](timeline-authoring-context.md).
+
+Key kapsamı hem hedef hem zaman içindir: yeni key yalnız aktif owner/klibin
+izinli kanalına ve kendi yerel süre aralığına yazılır. Ana kompozisyon süresi
+iç klip süresinin yerine kullanılmaz; mevcut key-time doğrulama helper'ları
+doğru Timeline bağlamıyla yeniden kullanılır. Eski dosyadaki gizli veya aralık
+dışı keyler bu filtreyi kurarken otomatik silinmez/yeniden zamanlanmaz.
+
+Bu kapı genel recursive komponent/SM motoru veya 2D saat editor'ü değildir.
+3D4 işi bütün temel Timeline'ı sonraya bırakmak yerine hazır temeli yeni node
+ve imported pose kanallarına genişletir. Statik node/kamera araçları teknik
+olarak animasyonsuz geliştirilebilir; ortak kaynak/key sınırını yeniden
+yazmamak için bu kuyrukta önce 3D-T teslim edilir.
+
+**Poly/UV beklemeyen işler:** Hazır modelin node ağacı, mevcut UV/material'ı,
+kamera/ışık ve imported klipleri kullanılabilir. Yeni vertex/topoloji üretimi,
+UV unwrap/paint veya mesh skin üretme bu tabloya gizlenmez. 3D0/IA0'da gerçek
+3D tüketici için gereken dar kaynak ve lifecycle kontratı çıkarılır; önce
+genel 2D komponent motoru veya parametrik saat ekranı kurmak şart değildir.
+
+**3D-T sonrasındaki 3D0'ın uygulama sınırı:** Tek model asset'inde node kimliği ve
+non-destructive transform override'ı uçtan uca teslim edilir. Native Three
+objeleri JSON/history'ye girmez; mevcut shared statik tree başka instance'ın
+editinden etkilenemez. Read-only inspection seçimi ile source node transform
+edit'i ayrılır. Gesture/cancel, source revision ve asset değişimi aynı testte
+kontrol edilir. Çoklu model, material editor ve clip oynatma aynı ilk commit'e
+doldurulmaz.
+
+OBJ/MTL, FBX, 3DS importer'ları; sıfırdan rig/weight/IK/modelleme; 3D
+particle/fizik/kumaş/sıvı ve CFX ortak kamera/depth compositing ileri listede
+kalır. Format başına gerçek destek ve kayıp matrisi olmadan destek iddiası
+yapılmaz. Film üretimi kullanım örneğidir; yeni hedef/kabul kapısı değildir.
+
 ## 4. Mevcut karakter ve fizik planları
 
 [Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5, komşu mesafesi/cetvel/guide ve D0–D2 sade hata özeti/sürüm ara işi tamamlandı; sırada kalan E−1 ortak düzenleme var. Ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
+Güncel uygulama kuyruğu §1, animasyonlu komponent alt işleri §3.1 ve onaylanan
+sıra belgesindedir. E−1/ortak araç kabulü, ilk kutulu 3D ve dar DET0–DET1
+tamamlandı. 14 Kasım bağımlılık düzeltmesiyle sırada §3.2 3D-T, sonra 3D0–3D6 işleri, ardından
+Poly → UV, §3.1'in 2D bileşen/karakter işleri ve simülasyonlar vardır. Tam export ve ikinci genel
+optimizasyon sona taşınmıştır; dar frame/asset/resource kabulü her teslimde sürer.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
@@ -2392,3 +2605,114 @@ MCP build ve production build geçti. Önceden var olan 47 çalışma dosyası k
 Kullanıcının “3D geliştirmesinden önceki işleri bitir” sınırında duruldu.
 Poly, material/UV, fizik/kumaş/Blob, Export E0, CFX ve ikinci genel optimizasyon
 [onaylı sırayı](plans/geometry-material-boxed3d-sequence.md) korur.
+
+### Spline alt obje edit ve sınırlı 2D combine planı — 15 Kasım 2026
+
+[Üç modlu spline edit planı](plans/spline-2d-operations-plan.md): tek spline
+katmanında Point / Edge (Segment) / Object (Sub-spline). Edit içinde Add yeni
+SubShape ekler; ilk çizim ayrı Object olarak korunur. Continue açık ucu uzatır,
+Attach kayıtları toplar, Join uçları bağlar; kapalı Boolean ayrı hesaplanır.
+Fill/Stroke bağımsızdır; açık stroke-only çizim ve kullanıcı kontrollü Auto Close
+S2D-1 kapsamındadır.
+Sıra: edit bağlamı → compound/çoklu edit → temel topoloji → Boolean preview →
+recipe Apply/Cancel/tek Undo. Ayrıntılı referans araçları modlara dağıtılmıştır;
+2D sade kalır, gelişmiş modifier/kesit/UV araçları 3D içerik detayına ayrılır.
+Mevcut combineMode metadata'sı çalışan Boolean motoru kabul edilmez. Kaynaklar,
+key'ler ve stable kimlikler korunur; uyumsuz animasyonda açıklamalı ret uygulanır.
+Bu plan mevcut Image/None teslimini, Poly veya 3D öncelik sırasını değiştirmez.
+
+
+### S2D-0 tamamlandı — 15 Kasım 2026
+
+[Spline alt obje düzenleme](spline-subobject-editing.md): Point/Edge/Object seçim
+bağlamı, ayrı ID bankaları, moda göre viewport/Properties/sağ tık ve mevcut region
+seçim araçları bağlandı. Seçim/mod değişikliği source/history yazmaz; eski spline
+ve key verileri korunur. Nokta hareketi tam parent inverse ve tek Undo ile çalışır;
+key/driver/kilit çakışması source'u ezmeden reddedilir. Edge/Object Delete kök
+katmana sızmaz. S2D-1 compound edit/Auto Close ve sonraki topoloji/Boolean aşamaları
+ayrı plan olarak kalır; yeni 3D workspace/modifier kapsamı açılmadı.
+
+16 Kasım eki: [S2D-5 kapsamı](plans/spline-2d-operations-plan.md#s2d-5--vertex-snap-çizerek-bağlama-ve-sınırlı-köşeoutline-araçları)
+önce Vertex snap + aynı spline'da açık uçları çizerek Connect (5A), ardından
+gerçek Offset/Outline (5B), Chamfer (5C) ve Fillet (5D) olarak ayrılır. Offset,
+normal X/Y kopyalama değildir. Yeni köşe araçları planlıdır; bu teslimde yalnız
+5A geliştirilir. Kullanıcı kabul örneği çeyreği kesilmiş circle'ın iç paraleli,
+iki uç bağlantısı ve sonradan yuvarlatılmış köşeleridir.
+
+**16 Kasım S2D-5B teslimi:** [Offset / Outline](spline-outline.md) artık mevcut
+Spline & Boolean panelindedir. Edge/Object tam kontur seçimi, composition-px
+paralel hesap, açık Left/Right/Both, kapalı Inside/Outside, miter/bevel/round,
+CPU worker önizleme, Apply/Cancel ve tek Undo; eski geometry/key'ler korunur.
+Çıktı statik, yeni ID'li düzenlenebilir spline Object'idir. Chamfer ve Fillet
+ayrı 5C/5D paketleri olarak planlı kalır; 3D/Poly işi bu teslimle açılmaz.
+
+
+### S2D-1 tamamlandı — 15 Kasım 2026
+
+[Spline compound edit](spline-subobject-editing.md#s2d-1--aynı-katmanda-üretim-ve-dönüşüm):
+Edit'te Add yeni SubShape, Done sonrasında Add ayrı katmandır. Continue açık seçili
+ucu uzatır. Point/Edge/Object yerel dönüşümleri, delikli konturların birlikte
+hareketi, tek Undo, Auto Close ve bağımsız ortak Fill/Stroke uygulanmıştır.
+Katılan canlı koordinatlar source üzerinden ezilmez; eski ID/track/key/time verisi
+korunur. Çizim target/revision/document/time bağlamı yakalanır ve stale up reddedilir.
+Sıradaki spline dilimi S2D-2 topoloji/Boolean'dır; bu teslim yeni 3D workspace açmaz.
+
+
+### S2D-2 tamamlandı — 15 Kasım 2026
+
+[Spline temel topoloji](spline-subobject-editing.md#s2d-2--temel-topoloji): ortak
+validation/ID remap/ownership temizliği, Object Copy/Detach/Attach, Point
+Join/Connect/Weld, Edge Refine/Divide ve üç modda Delete uygulandı. Properties'te
+katlanır Topology ve aktif moda özel sağ tık/kısayollar kullanılır. Her işlem tek
+Undo; outer animasyonlar ve ilgisiz insan düzenlemeleri korunur. Referans/driver,
+child graph, dinamik Attach veya belirsiz hole ownership dönüşümleri açıklamalı
+ret verir. Yeni source şeması veya 3D çalışma modu açılmaz. Sıradaki spline paketi
+**S2D-3 Boolean preview**, ardından **S2D-4 recipe / Apply / Cancel**'dır.
+
+
+### S2D-3 tamamlandı — 15 Kasım 2026
+
+Kapalı Shape/Spline ve spline Object girdileri için Union/Subtract/Intersect
+önizlemesi Properties ve viewport sağ tık akışına bağlandı. A−B/B−A, aktif girdi
+ve kompozisyon-piksel toleransı görünür; delik/winding ve bounded worker hesap
+sözleşmesi [Boolean önizleme belgesindedir](boolean-preview.md). Source/key,
+Undo/Redo ve final export değişmez. Kalıcı sonuç henüz yoktur.
+
+Sıradaki dilim **S2D-4 — sürümlü recipe, Apply/Cancel ve işlem düzenleme**.
+Mevcut kaynaklar korunacak; clone/reference/bounds/hit/save/load ve export
+eşliği tamamlanmadan Boolean layer tamamlandı sayılmayacak.
+
+
+### Spline edit / Boolean panel düzenlemesi — 15 Kasım 2026
+
+Spline alt seçim ve Boolean önizleme kontrolleri **Spline & Boolean** dock
+paneline taşındı. Genel Properties ayrı kaldı. Viewport, Layers ve Scene Explorer
+sağ tık **Edit Mode → Point / Edge / Object** ortak seçim sahibini kullanır ve
+paneli öne getirir. Eski layout ve kaynak/Undo/animasyonlar korunur. Bu UI işi
+S2D-4 recipe / Apply / Cancel sırasını değiştirmez; kalıcı Boolean sonucu eklemez.
+
+### S2D-4 tamamlandı — kaynakları koruyan Boolean recipe
+
+Apply/Cancel, sağ tık Edit Operation ve tek Undo/Redo; ortak renderer/bounds/SVG
+değerlendirmesi; portable recipe/source ve bağımsız forest Copy uygulanmıştır.
+Girdiler statik/eş ömürlü ve contiguous kardeştir; bağımsız key/ref/instance
+sessizce kaybedilmez. Generated spline noktaları salt okunur; grup ve sonuç
+transform/style animasyonu açıktır. Türetilmiş geometri JSON/history dışında,
+8 kayıt / 16 MiB tahmini önbellekle sınırlıdır.
+[Sözleşme ve test girişleri](boolean-operation.md). Mevcut 3D/Poly öncelikleri
+yeniden sıralanmaz; editable path bake ve linked operation Instance etkin değildir.
+
+**16 Kasım S2D-5C teslimi:** [Chamfer / pah](spline-chamfer.md) Point modunda
+seçili köşelere uygulanır. Line/quadratic/cubic edge trim, world-px mesafe,
+worker preview, Apply/Cancel ve tek Undo/Redo tamamlandı. Offset ile ortak preview
+yaşam döngüsü kullanılır. Fillet S2D-5D sıradaki ayrı pakettir; ana sıra değişmez.
+
+**16 Kasım S2D-5D teslimi:** [Fillet / yuvarlatma](spline-fillet.md) Point
+modunda radius ile çalışır. Düzenli line/quadratic/cubic komşuluklarında teğet
+yay, worker preview, Apply/Cancel ve tek Undo/Redo tamamlandı. Chamfer ile ortak
+topoloji ve source/driver/reference koruması kullanılır. S2D-5A–5D yerel sırası
+tamamlandı; diğer ana paketlerin önceliği değişmedi.
+
+### Spline MCP ve script eşliği — 16 Kasım 2026
+
+Son S2D araçları [ortak MCP plan akışı](mcp-spline-editing.md) ile açılır. Point/Edge/Object, append/Continue/Auto Close, topology/Attach/Detach/paint ve Offset/Chamfer/Fillet/Boolean aynı native koruma ve hesaplamaları kullanır. Basit işlemler `.spline.edit` içinde de kullanılabilir; CPU solverlar async MCP planıdır. [Script uyumluluk incelemesi](script-api-compatibility-audit.md) gerçek kapsamı, düzeltilen animation silme davranışını ve özel 3D API sınırlarını kaydeder. Ana geliştirme sırası değiştirilmez.

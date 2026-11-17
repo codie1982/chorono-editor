@@ -102,6 +102,7 @@ export function makeGroupCmd(layerIds: string[]): GroupCmdResult {
 export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorCommand | null {
   const groupSnapshot = scene.layers.find(l => l.id === groupId && l.type === 'group')
   if (!groupSnapshot) return null
+  if (groupSnapshot.booleanOperation) throw new Error('Use Edit Operation for a Boolean group; ordinary Ungroup cannot discard its recipe and protected sources.')
 
   const newParentId = groupSnapshot.parentId
   // Full child snapshots (so undo can restore parentId AND transform)

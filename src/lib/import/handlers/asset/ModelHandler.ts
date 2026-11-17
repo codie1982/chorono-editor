@@ -1,3 +1,4 @@
+import { withModelContent } from '../../../model3d/content/modelContent'
 import { BaseImportHandler } from '../BaseHandler'
 import type { ImportFormat, ImportOptions, ImportResult, ImportPreflight, ImportProgress } from '../../types'
 import { checkImportExecution, type ImportExecution } from '../../resources/ImportExecution'
@@ -11,7 +12,7 @@ import type { Asset } from '../../../types'
 
 /** Single-source GLB/self-contained glTF import, using existing atomic import,
  * cancellation, source URL ownership and model residency. Companion-file glTF,
- * compressed codecs and clip playback are explicitly outside this first slice. */
+ * compressed codecs remain unsupported; native clips are chosen in the detail editor. */
 export class ModelHandler extends BaseImportHandler {
   readonly kind = 'asset' as const
   readonly supportedFormats: ImportFormat[] = ['model/gltf-binary', 'model/gltf+json']
@@ -22,14 +23,14 @@ export class ModelHandler extends BaseImportHandler {
     checkImportExecution(execution)
     if (file.size > MAX_MODEL_BYTES) throw new Error('3D models must be at most 16 MiB.')
     const input = await this.reader.readResponse(new Response(file.stream()), execution)
-    try { checkImportExecution(execution); const info = readModelDocument(input.buffer); return { estimatedBytes: info.estimatedBytes, warnings: info.warnings } } finally { input.release() }
+    try { checkImportExecution(execution); const info = readModelDocument(input.buffer); return { estimatedBytes: info.estimatedBytes, warnings: info.warnings, emptyScene: info.json.scenes?.[info.json.scene ?? 0]?.extras?.choronoEmptyScene === true } } finally { input.release() }
   }
   /** Return workload/feature limits before the user commits an import. */
   async preflight(file: File, _options?: ImportOptions, execution?: ImportExecution): Promise<ImportPreflight> {
     const info = await this.inspect(file, execution)
     return { source: this.makeSource(file), format: this.format(file), kind: 'asset',
       summary: { estimatedLayers: 1, estimatedAssets: 1, estimatedGroups: 0, estimatedTracks: 0, estimatedMemoryBytes: info.estimatedBytes,
-        detectedFeatures: ['3D model hierarchy', 'PBR materials', 'embedded textures'], unsupportedFeatures: ['clip playback', 'external companion files'] },
+        detectedFeatures: ['3D model hierarchy', 'PBR materials', 'embedded textures', 'native clip inventory'], unsupportedFeatures: ['external companion files', 'rig/weight authoring'] },
       availableOptions: { centerInComposition: true }, defaultOptions: { centerInComposition: true }, warnings: info.warnings }
   }
   /** Validate actual parser readiness before publishing one model asset/layer.
@@ -41,8 +42,13 @@ export class ModelHandler extends BaseImportHandler {
       const asset: Asset = { id: this.generateAssetId(), name: file.name, type: 'model3d', url,
         storage: { mode: 'external', originalFileName: file.name }, runtime: { objectUrl: url }, metadata: { filesize: file.size, importedAt: Date.now() } }
       const lease = await modelAssetService.acquire(asset, execution)
+      const inventory = lease.value.inventory
       lease.release(); checkImportExecution(execution)
       const layer = newModelLayer(`model3d_${crypto.randomUUID()}`, asset.id, file.name)
+      if (info.emptyScene) {
+        if (!inventory) throw new Error('The prepared empty model has no inventory.')
+        layer.model3d = withModelContent(layer.model3d!, inventory)
+      }
       const warnings: ImportResult['warnings'] = info.warnings.map(message => ({ code: 'unsupported_feature', severity: 'info', message }))
       this.reportProgress(progress, 'complete', '3D model imported', 1)
       return { id: this.generateId(), source: this.makeSource(file), format: this.format(file), kind: 'asset', assets: [asset], layers: [layer], groups: [], tracks: [], timelines: [], commands: [], warnings, errors: [], unsupportedFeatures: [],

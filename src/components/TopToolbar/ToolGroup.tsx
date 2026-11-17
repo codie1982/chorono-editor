@@ -1,5 +1,6 @@
 'use client'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { legacySelectionStyle, selectionRegionForTool, type SelectionRegionStyle } from '@/lib/selection/selectionGesture'
 
 export type ToolMode =
   | 'select' | 'pan' | 'pen'
@@ -13,12 +14,11 @@ export type ToolMode =
 
 /** True for any of the four canvas-shape selection tools. */
 export function isSelectionTool(m: ToolMode): boolean {
-  return m === 'selection-box' || m === 'selection-lasso'
-      || m === 'selection-circle' || m === 'selection-paint'
+  return legacySelectionStyle(m) !== null
 }
 
-/** Selection containment mode (BL-60 Faz 3). Applies only when a canvas
- *  selection tool is active. `'inside'` = layer's bounds must fit fully
+/** Selection containment preference for every ordinary viewport tool.
+ * `'inside'` = layer's bounds must fit fully
  *  in the dragged shape; `'touching'` = any overlap counts. */
 export type SelectionContainMode = 'inside' | 'touching'
 
@@ -27,6 +27,9 @@ interface ToolGroupProps {
   onChange: (m: ToolMode) => void
   /** Shared toggle restores the editor's previous tool instead of Select. */
   onPanToggle?: () => void
+  /** Always-selected region preference, independent of the manipulation tool. */
+  selectionStyle?: SelectionRegionStyle
+  onSelectionStyleChange?: (style: SelectionRegionStyle) => void
   /** When true, pen tool is auto-active because a path layer is selected. */
   penAuto?: boolean
   /** BL-60 Faz 3 — Current containment mode for canvas selection tools. */
@@ -46,6 +49,7 @@ function ToolBtn({ active, hint, shortcut, onClick, children }: ToolBtnProps) {
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       title={`${hint} (${shortcut})`}
       className={`w-9 h-9 flex items-center justify-center rounded transition-colors text-base
         ${active
@@ -65,15 +69,18 @@ function Divider() {
  * Tool group — 3DS Max-style isolated transform modes plus the legacy
  * Select / Pan / Pen utilities. Move/Rotate/Scale/Anchor each hide all
  * other gizmos so the user always sees only the handles relevant to the
- * current operation.
+ * current operation. Region style and containment are independent preferences
+ * for empty-space selection, not exclusive manipulation tools.
  */
 export default function ToolGroup({
-  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange,
+  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange, selectionStyle = 'box', onSelectionStyleChange,
 }: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
-  const showContainToggle = isSelectionTool(mode) && containMode != null && onContainModeChange != null
+  const style = legacySelectionStyle(mode) ?? selectionStyle
+  const chooseStyle = (value: SelectionRegionStyle) => onSelectionStyleChange ? onSelectionStyleChange(value) : onChange(`selection-${value}` as ToolMode)
+  const showContainToggle = selectionRegionForTool(mode, style) != null && containMode != null && onContainModeChange != null
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1">
       <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/splines' : 'editor/canvas/tools'} compact />
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -117,65 +124,47 @@ export default function ToolGroup({
 
       <Divider />
 
-      {/* BL-60 Faz 3 — Canvas selection tools */}
-      <ToolBtn active={mode === 'selection-box'} hint="Box Select" shortcut="B" onClick={() => onChange('selection-box')}>
+      {/* Independent region preference: one style always stays selected. */}
+      <div role="group" aria-label="Selection region style" className="flex items-center gap-1">
+      <ToolBtn active={style === 'box'} hint="Box Select" shortcut="B" onClick={() => chooseStyle('box')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect x="2.5" y="2.5" width="11" height="11" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-lasso'} hint="Lasso Select" shortcut="L" onClick={() => onChange('selection-lasso')}>
+      <ToolBtn active={style === 'lasso'} hint="Lasso Select" shortcut="L" onClick={() => chooseStyle('lasso')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 6 Q2 2 7 2 Q12 2 13 6 Q13 11 7 11 Q4 11 4 13 L6 14" strokeDasharray="1.5 1" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-circle'} hint="Circle Select" shortcut="O" onClick={() => onChange('selection-circle')}>
+      <ToolBtn active={style === 'circle'} hint="Circle Select" shortcut="O" onClick={() => chooseStyle('circle')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="5.5" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-paint'} hint="Paint Select" shortcut="W" onClick={() => onChange('selection-paint')}>
+      <ToolBtn active={style === 'paint'} hint="Paint Select" shortcut="W" onClick={() => chooseStyle('paint')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 13 L10 6 L11 5 L13 7 L12 8 L5 15 L2 14 Z" fill="currentColor" fillOpacity="0.15" />
         </svg>
       </ToolBtn>
 
-      {/* BL-60 Faz 3 — Containment mode toggle (visible only with a selection
-          tool active). Two-button segmented switch: Inside / Touching. */}
+      </div>
+      {/* Shared containment for all ordinary manipulation tools. */}
       {showContainToggle && (
         <>
           <Divider />
-          <div className="flex items-center border border-gray-700 rounded overflow-hidden h-7">
-            <button
-              onClick={() => onContainModeChange!('inside')}
-              title="Inside — layer's bounding box must lie fully within the selection shape (3ds Max Window)"
-              className={`px-2 h-full text-[10px] font-mono flex items-center gap-1 transition-colors ${
-                containMode === 'inside'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-              }`}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <rect x="1" y="1" width="8" height="8" />
-                <rect x="3" y="3" width="4" height="4" fill="currentColor" fillOpacity="0.6" />
-              </svg>
-              Inside
-            </button>
-            <button
-              onClick={() => onContainModeChange!('touching')}
-              title="Touching — any layer overlapping the selection shape counts (3ds Max Crossing)"
-              className={`px-2 h-full text-[10px] font-mono flex items-center gap-1 transition-colors ${
-                containMode === 'touching'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-              }`}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <rect x="1" y="1" width="8" height="8" strokeDasharray="1.5 1" />
-                <rect x="4" y="4" width="5" height="5" fill="currentColor" fillOpacity="0.6" />
-              </svg>
-              Touching
-            </button>
-          </div>
+          <button type="button" role="switch" aria-label="Select fully enclosed objects"
+            aria-checked={containMode === 'inside'}
+            title={containMode === 'inside'
+              ? 'Inside — select only fully enclosed objects. Click for Touching.'
+              : 'Touching — select overlapping objects. Click for Inside.'}
+            onClick={() => onContainModeChange!(containMode === 'inside' ? 'touching' : 'inside')}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 ${containMode === 'inside' ? 'border-blue-500 bg-blue-600 text-white' : 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'}`}>
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <rect x="2" y="2" width="11" height="11" strokeDasharray={containMode === 'inside' ? undefined : '2 1.5'} />
+              {containMode === 'inside' ? <rect x="5" y="5" width="5" height="5" fill="currentColor" fillOpacity="0.65" />
+                : <rect x="8" y="8" width="6" height="6" fill="currentColor" fillOpacity="0.65" />}
+            </svg>
+          </button>
         </>
       )}
     </div>

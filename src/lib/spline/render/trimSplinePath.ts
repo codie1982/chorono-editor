@@ -1,3 +1,4 @@
+import { evaluateBezier as pointAt, trimBezier } from '../../geometry/bezier/curves'
 import type { NormalizedPathCommand, PathDefinition } from '@/lib/geometry/PathCommand'
 import { C, L, M, Q } from '@/lib/geometry/PathCommand'
 
@@ -8,30 +9,6 @@ interface Segment {
   startLength: number
   length: number
   samples: number[]
-}
-
-const lerp = (a: Point, b: Point, t: number): Point => ({
-  x: a.x + (b.x - a.x) * t,
-  y: a.y + (b.y - a.y) * t,
-})
-
-/** Split a line, quadratic or cubic without flattening its geometry. */
-function split(points: Point[], t: number): [Point[], Point[]] {
-  const left = [points[0]]
-  const right = [points[points.length - 1]]
-  let row = points
-  while (row.length > 1) {
-    row = row.slice(1).map((p, i) => lerp(row[i], p, t))
-    left.push(row[0])
-    right.unshift(row[row.length - 1])
-  }
-  return [left, right]
-}
-
-function pointAt(points: Point[], t: number): Point {
-  let row = points
-  while (row.length > 1) row = row.slice(1).map((p, i) => lerp(row[i], p, t))
-  return row[0]
 }
 
 function buildSegments(path: PathDefinition): { segments: Segment[]; length: number } {
@@ -87,8 +64,7 @@ function parameterAtLength(segment: Segment, length: number): number {
 function subcurve(segment: Segment, start: number, end: number): Point[] {
   const t0 = parameterAtLength(segment, start)
   const t1 = parameterAtLength(segment, end)
-  const left = t1 === 1 ? segment.points : split(segment.points, t1)[0]
-  return t0 === 0 ? left : split(left, t0 / t1)[1]
+  return trimBezier(segment.points, t0, t1)
 }
 
 function curveCommand(points: Point[]): NormalizedPathCommand {

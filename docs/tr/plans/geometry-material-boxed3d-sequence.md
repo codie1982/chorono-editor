@@ -1,4 +1,4 @@
-# Poly, materyal ve kutulu 3D için güncel geliştirme sırası
+# 3D detay, Poly ve materyal için güncel geliştirme sırası
 
 8 Kasım 2026; ara iş sadeleştirmesi 10 Kasım 2026. Kullanıcı tarafından onaylandı.
 Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi tamamlandı.
@@ -9,6 +9,11 @@ E−1.4 Set Key/transport, E−1.5 prosedürel eğri/bake ve
 12 Kasım kapanış: input expression A1–A5, V6/E−1.7 ortak araç kabulü ve dar entegrasyon tamamlandı. Kullanıcının **3D başlamadan önceki işler** hedefi kapandı; sonraki geliştirme ilk kutulu 3D dikey dilimidir. Bu pre-3D kabulde 3D geliştirilmedi. 12 Kasım sonraki kullanıcı onayıyla aşağıdaki dar model/kamera dilimi başlatıldı. [Kapı/kabul kaydı](pre3d-completion-audit.md).
 Bu belge uygulama teslimi değildir; tam bağımsız 3D Modeling/Game Engine modunu
 etkinleştirmez. Ana çalışma alanı 2D Animation olarak kalır.
+**14 Kasım kullanıcı önceliği:** sıradaki işler 3D yetenekleridir. [Ana plan §3.2](../production-2d-roadmap.md)
+3D-T Timeline/iç animasyon kapısını ve 3D0–3D6'yı Poly/UV önüne alır; kapıdan
+sonra node/parça düzenleme, ardından kamera,
+materyal/ışık, native klip, iç keyler, çoklu model ve açık kontroller gelir.
+13 Kasım Poly-önce sırası bu yeni kararla güncellenmiştir.
 
 **Ek öncelik tamamlandı:** V5 sonrası [komşu mesafeleri ve cetvel/guide araçları](../viewport-layout-editing.md)
 uygulandı. Genel 3D/Poly sırasından önceki ortak düzenleme/araç kabulü de kapandı.
@@ -24,6 +29,14 @@ satır/tekrar ve kalıcı New / Investigating / Fixed. Public servis yayını ay
 
 ## Erteleme sınırı
 
+**İç animasyon ve 14 Kasım sıra sınırı:** [Ana plan §3.1–3.2](../production-2d-roadmap.md)
+IA kontratlarını ve öncelikli 3D iş paketlerini taşır; [teknik tasarım](item-owned-animation-plan.md)
+ortak host, private klip ve parametrik source/instance'ı birleştirir. IA0'ın
+dar 3D kontratı → 3D0–3D6/IA2a–IA2b öndedir. IA1a/IA1b'nin 2D saat authoring'i
+ve tam library/karakter 3D → Poly → UV sonrasındaki kendi sırasında kalır. Component
+particle tüketicisi particle aşamasındadır. Bu alt adımlar genel sırayı veya
+tamamlanan dar DET0–DET1 kabulünü değiştirmez; henüz kod teslimi değildir.
+
 Önceki optimizasyon kabulü korunur. Yeni özelliklerden sonra bütün alanları
 kapsayan ikinci ölçüm/iyileştirme turu yapılır. Her yeni feature kendi kaynak
 sahipliği, bütçe, release/dispose, cache invalidation ve cancellation kontrolleriyle
@@ -36,6 +49,10 @@ runtime/export capability. Her katman kaydet/aç/undo/clone ve asgari raster
 çıktı veya açık bake/fallback kontrolünden geçer. Mevcut exporter'ların yeni
 katmanları sessizce atlamasına izin verilmez. Bileşen kütüphanesi source modeli
 export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonradır.
+
+14 Kasım teslim güncellemesi: 3D-T ve yedi 3D0–3D6 paketi tamamlandı.
+[Uygulama, sınırlar ve kabul](../model-detail-3d-packages.md). Sıradaki paket
+Editable Poly'dir; UV, komponent, solver ve export sırası değiştirilmedi.
 
 ## Onaylanan sıra
 
@@ -56,9 +73,9 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 | 1 — tamamlandı | Ortak dar entegrasyon sözleşmeleri | Asset/source kimliği, kesin yerel saat, aynı parameter frame'i, readiness/ownership ve açık output capability. [Sözleşme](../pre3d-frame-contract.md). |
 | 2 — ilk dar dilim tamamlandı | Kutulu 3D model/kamera | 12 Kasım kullanıcı kararı: GLB/self-contained glTF, Properties XYZ/dönüş/ölçek, toggle ile Orbit/Pan/Dolly; kapalıyken normal 2D hareket. Portable/raster, bounds, copy/instance ve tek Undo. Imported clip/camera/rig kontrolü ileri dilime taşındı. [Gerçek sözleşme ve kabul](../boxed-3d-first-slice.md). |
 | 2a — dar DET0–DET1 tamamlandı | Ortak detay düzenleyicisi ve izolasyon akışı | Aynı uygulamada ana dock mounted/inert korunur; sağ tık, Shape/model çift tık, tek seviyeli breadcrumb/Back, bounded draft, Apply/Cancel ve tek Undo. Shape/Path + model3d sabit yerleşim. [Gerçek sözleşme/kabul](../item-detail-editor.md), [ileriki plan](shared-item-detail-editor.md). Nested/iç Timeline/ileri medya araçları bu dar kabulde yoktur. |
-| 3 | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
-| 4 | Poly görünümü | UV, vertex color, basit 2D material ve dokulu/deforme triangle çizimi; texture transform ve UV düzenleyicisi. |
-| 5 | Ortak host üzerinde kutulu 3D ileri düzenleme | DET0–DET1'de kurulan host kullanılır; image/texture/Poly adapter'ları ilgili domain teslimleriyle eklenir. 3D iç Timeline, inceleme/çıktı kamerası ayrımı, malzeme, imported skeleton/clip/morph kendi adapter'ındadır. Ana 2D Timeline dış kutuyu yönetir; temel sabit Properties kalır. [Ortak aşamalar](shared-item-detail-editor.md), [3D sınırı](boxed3d-isolated-editor.md). Rig üretme/weight painting/IK ayrı dilimlerdir. |
+| 3 — tamamlandı | 3D-T ve 3D detay 3D0–3D6 | Ana/iç Timeline ve key kapsamı, detayda yerel authoring/zaman/kabul → node ağacı/seçim/gizmo → kamera → materyal/ışık → native klip IA2a → ileri iç authoring IA2b → çoklu model → açık kontroller. [Ana plan §3.2–3.2.1](../production-2d-roadmap.md), [3D ayrıntısı](boxed3d-isolated-editor.md). Yeni Poly/UV veya 2D saat önkoşul değildir. |
+| 4 — sıradaki | Editable Poly 2D | Shape-to-Poly dönüşümü, sabit ID/topoloji, vertex/edge/tri/quad düzenleme, grid ve triangulation; renderer ve hit-test dahil. |
+| 5 | Poly görünümü | UV, vertex color, basit 2D material ve dokulu/deforme triangle çizimi; texture transform ve UV düzenleyicisi. |
 | 6 | Yeni katmanların ortak araç adapter kabulü | Tamamlanan clone/array/ortak düzenleme sözleşmeleri Poly ve kutulu 3D için de doğrulanır; ikinci clone algoritması yazılmaz. |
 | 7 | Bileşen kütüphanesi ve karakter | Source component/local clock, 2D karakter rig/sprite/state-machine; ortak parametre/expression'a bağlı Canvas Slider/Switch/Checkbox/Input bileşenleri ve yeniden kullanılabilir üretim kontrolleri. |
 | 8 | Fizik ve kırılma | Sabit adım/core, collision/force fields/bake; Poly kaynaklı Voronoi kırılma, particle entegrasyonu. |
@@ -71,7 +88,7 @@ export compiler'a zorunlu bağımlı olmadan tasarlanır; runtime derlemesi sonr
 
 V3 viewport position key authoring, V4 native clone ve V5 forest Array tamamlandı.
 Komşu mesafesi/ruler-guide araçları ve D0–D2 ara işi de tamamlandı. Yeni
-3D/Poly bloğundan önce kalan E−1 ortak düzenleme/araç kabulü tamamlanır. Soft selection/connected-loop konuşması
+3D/Poly bloğundan önceki E−1 ortak düzenleme/araç kabulü 12 Kasım'da tamamlandı. Soft selection/connected-loop konuşması
 kullanıcının önceki isteğine göre en son tartışılacak ayrı başlıktır.
 
 ## Sonraki faz kaydı — 11 Kasım 2026

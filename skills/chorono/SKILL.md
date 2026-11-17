@@ -1,6 +1,6 @@
 ---
 name: chorono
-description: Create, edit and preview editable 2D animations in a connected Chorono editor through its MCP tools. Use for Chorono scenes, objects, timelines, particles and interactive animations.
+description: Create, edit and preview editable 2D/2.5D animations and boxed 3D model layers in a connected Chorono editor through MCP. Use for scenes, objects, timelines, models, particles and interactive animations.
 ---
 
 # Chorono authoring
@@ -25,6 +25,7 @@ Generated scripts run only through the isolated MCP sandbox. It exposes synchron
 - Read [collaborative-editing.md](references/collaborative-editing.md) when continuing or revising existing work, especially after manual changes, uncertain retries or overlapping edits.
 - Read [animation.md](references/animation.md) for keyframes, multiple timelines, modifiers, cloning, paths and procedural scripts.
 - Read [domains.md](references/domains.md) for particle configuration and life channels, spline points/handles/contours, and Scene Explorer hierarchy queries and edits.
+- Read [spline-editing.md](references/spline-editing.md) for explicit Point/Edge/Object edits, Continue/Auto Close, Attach/Detach, Offset/Chamfer/Fillet and Boolean plans.
 - Read [interaction.md](references/interaction.md) for state machines, runtime events, parameters, bindings and wiring.
 - Read [media-and-output.md](references/media-and-output.md) for asset import, typography, effects, masks, portable projects and exports.
 
@@ -33,6 +34,16 @@ For code-driven scene design, read the complete scene with `scene.snapshot()`, a
 Script writes are 2D-only. Existing boxed 3D content permits outer 2D placement/keys; use native tools for its internal payload or creation/copy/deletion. Static setters and set/patch reject locked ancestors, animated/driven fields and invalid edited values. Use key() for animated values. Unlock separately with a flag-only edit; preserve existing formula/binding records. A shallow replacement must retain required container fields. Read `get_capabilities().scriptAuthoring` for the connected version's policy.
 
 Use the domain handles for structured edits: `layer.particles` validates emitter/preset/life/modifier settings, `layer.spline` preserves native topology and locks, and `scene.explorer` queries and edits the actual hierarchy. Use returned element/group ids. Instance domain data is readable; modify its source explicitly. These APIs operate on editable scene data and do not control ephemeral panel selection/collapse state.
+
+Use `prepare_spline_edit` for native spline/Boolean work. Read source first and
+authorize preparation; inspect the draft PNG and change summary, then commit
+with `apply_spline_edit` using its NEW plan-bound token/revision, or release it
+with `discard_spline_edit`. Apply uses the prepared IDs once as one Undo. Simple
+synchronous scripts may use `layer.spline.edit(operation)`; CPU solvers use the
+native plan workflow. Keyed/referenced geometry refuses unsafe topology edits;
+never remove tracks merely to force an edit. Boolean recipes retain protected
+inputs and a generated spline child. Re-edit by ownerId rather than replacing
+their source records. See [spline-editing.md](references/spline-editing.md).
 
 When updating an existing key at the same time, omit easing unless changing it is intended. Native upsert and script key updates preserve its ID and unspecified curve metadata; nearby fractional keys remain independent. Read [animation.md](references/animation.md) for exact-time and driven-channel limits. The editor's Set Key keysets are UI controls, not an additional MCP tool.
 

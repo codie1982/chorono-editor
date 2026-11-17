@@ -8,12 +8,14 @@ import type { ImportResult, ImportProgress, ImportPreflight, SpriteImportOptions
 import { releaseImportSources } from '@/lib/import/resources/importSources'
 import { ImportActivity, type ImportOperation } from '@/lib/import/lifecycle/ImportActivity'
 import { editorSceneDocumentLoader, type SceneDocumentSource } from '@/lib/editor/document'
+import { makeImportImagePaintCmd, imagePaintTargetSignature } from '@/lib/editor/commands-image-paint'
 import type { ChronoScene } from '@/lib/types'
 import { reportImportResult } from './import/reportImportResult'
 
 type ImportPort = Pick<ImportManager, 'importFile' | 'importFileAs' | 'importUrl' | 'importClipboardItem' | 'preflight' | 'canImport'>
 export interface UseImportOptions {
   dispatchCommand: (command: EditorCommand) => void
+  getScene?: () => ChronoScene
   onSelectLayer?: (id: string) => void
   selectedTimelineId?: string | null
   currentTimeMs?: number
@@ -29,6 +31,7 @@ export interface UseImportReturn {
   /** Latest open wins; onOpen is synchronous and may reset the document. */
   openScene: (file: File, onOpen: (scene: ChronoScene) => void, onError?: (error: Error) => void) => Promise<boolean>
   importFile: (file: File) => Promise<ImportResult | null>
+  importPaintImage: (file: File, layerId?: string) => Promise<ImportResult | null>
   importFiles: (files: FileList | File[]) => Promise<ImportResult[]>
   importUrl: (url: string) => Promise<ImportResult | null>
   importFromClipboard: () => Promise<ImportResult | null>
@@ -122,6 +125,25 @@ export function useImport(options: UseImportOptions): UseImportReturn {
   const importFile = useCallback((file: File) => run<ImportResult | null>(file.name, null, async (op, port, placement) =>
     commit(await port.importFile(file, placement, op.report, { signal: op.signal }), file.name, op)), [run, commit])
 
+  /** Reuse bounded static-image probing, URL leases and document cancellation;
+   * only the final transaction differs from ordinary image-layer insertion. */
+  const importPaintImage = useCallback((file: File, layerId?: string) => run<ImportResult | null>(file.name, null, async (op, port) => {
+    const source = optionsRef.current.getScene?.()
+    if (!source) throw new Error('Image paint import requires the current scene host.')
+    const expected = imagePaintTargetSignature(source, layerId)
+    const result = await port.importFile(file, {}, op.report, { signal: op.signal })
+    try {
+      if (!op.isCurrent()) return null
+      const error = result.errors.find(item => item.fatal)
+      if (error) throw new Error(error.message)
+      const asset = result.assets.length === 1 ? result.assets[0] : undefined
+      if (!asset || asset.type !== 'image') throw new Error('Choose a static PNG, JPEG, WebP or AVIF image.')
+      optionsRef.current.dispatchCommand(makeImportImagePaintCmd(asset, expected, layerId))
+      if (op.isCurrent()) toast.success(`Image paint imported: ${file.name}`)
+      return result
+    } finally { releaseImportSources(result) }
+  }), [run])
+
   const importFiles = useCallback((files: FileList | File[]) => run<ImportResult[]>('Files', [], async (op, port, placement) => {
     const results: ImportResult[] = []
     for (const file of Array.from(files)) {
@@ -170,7 +192,7 @@ export function useImport(options: UseImportOptions): UseImportReturn {
     return op.isCurrent() && result.supported
   }), [run])
 
-  return { openScene, importFile, importFiles, importUrl, importFromClipboard, importSpriteSheet, preview, canImport,
+  return { openScene, importFile, importPaintImage, importFiles, importUrl, importFromClipboard, importSpriteSheet, preview, canImport,
     importing: status.active > 0, activeCount: status.active, settlingCount: status.settling,
     label: status.label, progress: status.progress, cancel: activity.cancel }
 }

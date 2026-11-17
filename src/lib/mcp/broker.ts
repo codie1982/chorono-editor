@@ -1,3 +1,4 @@
+import { PreparedPlanStore, type PreparedPlan } from './plans/PreparedPlanStore'
 import type { AuthoringHints } from '../types/authoring'
 import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import { getCapabilities, validateToolCall } from './catalog'
@@ -14,15 +15,17 @@ import { summarizeSourceChanges } from './source/SourceChangeSummary'
 
 interface Pending { job: BridgeJob; resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
 interface Session { id: string; token: string; label: string; seenAt: number; queue: Pending[]; pending: Map<string, Pending>; wake?: () => void; tail: Promise<unknown>; results: Map<string, { hash: string; result: Promise<any> }> }
-interface Plan { clientId: string; sessionId: string; documentEpoch: string; revision: number; scene: Snapshot['scene']; expiresAt: number; logs: string[]; commandCount: number; authoringHints?: AuthoringHints }
+type Plan = PreparedPlan
 interface BrokerState { sessions: Map<string, Session>; plans: Map<string, Plan>; reads?: ReadAccessRegistry; clients?: ClientConnections }
 const globalBroker = globalThis as typeof globalThis & { __choronoBroker?: BrokerState }
 const state: BrokerState = globalBroker.__choronoBroker ??= { sessions: new Map(), plans: new Map() }
 const reads = state.reads ??= new ReadAccessRegistry(() => randomBytes(32).toString('hex'))
 const clients = state.clients ??= new ClientConnections(() => randomBytes(32).toString('hex'), id => {
   reads.revoke({ clientId: id })
-  for (const [planId, plan] of Array.from(state.plans)) if (plan.clientId === id) state.plans.delete(planId)
+  for (const [planId, plan] of Array.from(state.plans)) if (plan.clientId === id) plans.delete(planId)
 })
+
+const plans = new PreparedPlanStore(state.plans, id => reads.revoke({ planId: id }))
 
 /** Authenticated local-transport registration. The supplied name is audit text,
  * never authority. Only the resulting private connection credential resolves
@@ -38,7 +41,7 @@ export const closeClientConnection = (token: string): void => clients.close(toke
 
 function cleanup() {
   for (const [id, session] of Array.from(state.sessions)) if (Date.now() - session.seenAt > 120000) disconnect(id, session.token)
-  for (const [id, plan] of Array.from(state.plans)) if (plan.expiresAt < Date.now()) { state.plans.delete(id); reads.revoke({ planId: id }) }
+  for (const [id, plan] of Array.from(state.plans)) if (plan.expiresAt < Date.now()) { plans.delete(id) }
 }
 
 export function pairEditor(label: string) {
@@ -62,7 +65,7 @@ export function disconnect(id: string, token: string) {
   session.wake?.()
   state.sessions.delete(id)
   reads.revoke({ sessionId: id })
-  for (const [planId, plan] of Array.from(state.plans)) if (plan.sessionId === id) state.plans.delete(planId)
+  for (const [planId, plan] of Array.from(state.plans)) if (plan.sessionId === id) plans.delete(planId)
 }
 
 export function listSessions() {
@@ -129,7 +132,7 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
   if (name === 'list_projects') return { projects: await listProjects() }
   const session = chooseSession(args.sessionId)
   const sourceWrite = isSourceMutation(name)
-  if (sourceWrite || name === 'get_scene') clients.verify(client)
+  if (sourceWrite || name === 'get_scene' || name === 'discard_spline_edit') clients.verify(client)
   const hash = createHash('sha256').update(JSON.stringify({ name: requestedName, args })).digest('hex')
   const requestKey = args.requestId && name !== 'get_scene' ? `${client?.id ?? 'read-only'}:${args.requestId}` : undefined
   if (requestKey && session.results.has(requestKey)) {
@@ -149,10 +152,27 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
       const scope = { clientId: identity.id, sessionId: session.id, documentEpoch: before.documentEpoch, revision: before.revision }
       if (name === 'get_scene') return { ...before, ...reads.issue(scope) }
       if (args.expectedRevision !== before.revision) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')
-      reads.consume(args.readToken, scope, name === 'apply_script_plan' ? args.planId : undefined)
+      reads.consume(args.readToken, scope, ['apply_script_plan', 'apply_spline_edit'].includes(name) ? args.planId : undefined)
       authorization = { documentEpoch: before.documentEpoch, expectedRevision: before.revision,
         authoring: { actor: { kind: 'agent', name: identity.label }, transactionId: randomUUID(), ...(args.requestId ? { requestId: args.requestId } : {}) },
         ...(name === 'load_project' ? { sourceMode: 'restore' } : name === 'import_asset' ? { sourceMode: 'import' } : {}) }
+    }
+    if (name === 'discard_spline_edit') {
+      const plan = plans.get(args.planId)
+      if (!plan) return { discarded: false }
+      if (plan.kind !== 'spline' || plan.clientId !== client?.id || plan.sessionId !== session.id) throw new Error('Spline plan belongs to another client/session or is not a spline plan.')
+      plans.delete(args.planId); return { discarded: true }
+    }
+    if (name === 'prepare_spline_edit') {
+      const source = before!, prepared = await ask(session, name, args, 60000, authorization)
+      clients.verify(client)
+      if (prepared.revision !== source.revision || prepared.documentEpoch !== source.documentEpoch) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')
+      const planId = randomUUID(), access = reads.issue({ clientId: client!.id, sessionId: session.id, documentEpoch: source.documentEpoch, revision: source.revision }, planId)
+      try { plans.put(planId, { kind: 'spline', clientId: client!.id, sessionId: session.id, documentEpoch: source.documentEpoch, revision: source.revision,
+        scene: prepared.scene, result: prepared.result, authoringHints: prepared.authoringHints, commandCount: prepared.commandCount, logs: [], expiresAt: access.readTokenExpiresAtMs }) }
+      catch (error) { reads.revoke({ planId }); throw error }
+      const { scene: _scene, authoringHints: _hints, revision: _revision, documentEpoch: _epoch, ...metadata } = prepared
+      return { ...metadata, planId, revision: source.revision, documentEpoch: source.documentEpoch, ...access, dryRun: true, changeSummary: summarizeSourceChanges(source.scene, prepared.scene) }
     }
     if (name === 'run_script') {
       const source = before!
@@ -162,23 +182,23 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
         changeSummary: summarizeSourceChanges(source.scene, generated.scene) }
       if (args.dryRun) {
         const planId = randomUUID()
-        if (state.plans.size >= 50) throw new Error('Too many uncommitted script plans')
         const access = reads.issue({ clientId: client!.id, sessionId: session.id, documentEpoch: source.documentEpoch, revision: source.revision }, planId)
-        state.plans.set(planId, { clientId: client!.id, sessionId: session.id, documentEpoch: source.documentEpoch, revision: source.revision,
-          ...generated, expiresAt: access.readTokenExpiresAtMs })
+        try { plans.put(planId, { kind: 'script', clientId: client!.id, sessionId: session.id, documentEpoch: source.documentEpoch, revision: source.revision,
+          ...generated, expiresAt: access.readTokenExpiresAtMs }) }
+        catch (error) { reads.revoke({ planId }); throw error }
         return { planId, revision: source.revision, documentEpoch: source.documentEpoch, ...access, dryRun: true, ...summary }
       }
       const applied = generated.commandCount ? await ask(session, 'apply_scene', { scene: generated.scene, authoringHints: generated.authoringHints, expectedRevision: source.revision, label: 'MCP script' }, 30000, authorization) : { revision: source.revision }
       return { ...applied, ...summary }
     }
-    if (name === 'apply_script_plan') {
-      const plan = state.plans.get(args.planId)
+    if (name === 'apply_script_plan' || name === 'apply_spline_edit') {
+      const plan = plans.get(args.planId)
       if (!plan || plan.sessionId !== session.id || plan.clientId !== client?.id || plan.expiresAt < Date.now()) throw new Error('Script plan expired or belongs to a different client/session')
+      if ((plan.kind ?? 'script') !== (name === 'apply_spline_edit' ? 'spline' : 'script')) throw new Error('Use the matching script/spline Apply tool for this plan.')
       if (plan.documentEpoch !== before!.documentEpoch || plan.revision !== before!.revision) throw new SourceAccessError('SOURCE_REVISION_CONFLICT')
-      const result = plan.commandCount ? await ask(session, 'apply_scene', { scene: plan.scene, authoringHints: plan.authoringHints, expectedRevision: plan.revision, label: 'MCP script plan' }, 30000, authorization) : { revision: plan.revision }
-      state.plans.delete(args.planId)
-      reads.revoke({ planId: args.planId })
-      return { ...result, logs: plan.logs, commandCount: plan.commandCount, ...summarize(plan.scene) }
+      const result = plan.commandCount ? await ask(session, 'apply_scene', { scene: plan.scene, authoringHints: plan.authoringHints, expectedRevision: plan.revision, label: name === 'apply_spline_edit' ? 'MCP spline edit' : 'MCP script plan' }, 30000, authorization) : { revision: plan.revision }
+      plans.delete(args.planId)
+      return { ...result, logs: plan.logs, commandCount: plan.commandCount, ...(plan.kind === 'spline' ? { result: plan.result } : {}), ...summarize(plan.scene) }
     }
     if (name === 'save_project') {
       const before: Snapshot = await ask(session, 'portable_snapshot')

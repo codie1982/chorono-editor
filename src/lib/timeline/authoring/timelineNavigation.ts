@@ -4,6 +4,7 @@ import { selectedBranchIds } from '../../scene/hierarchy/editorLayerRows'
 import { parseTrackTarget } from '../TrackTargetParser'
 import { KEY_TIME_EPSILON_MS } from './keyTimePolicy'
 import { isLayerTimelineProperty } from './timelinePropertyScope'
+import { assertTimelineContext, SCENE_TIMELINE_CONTEXT, type TimelineAuthoringContext } from './TimelineAuthoringContext'
 
 export type TimelineNavigation = 'start' | 'end' | 'previousFrame' | 'nextFrame' | 'previousKey' | 'nextKey' | 'firstKey' | 'lastKey'
 
@@ -19,9 +20,13 @@ export function authoringTime(timeline: Timeline, timeMs: number, basis: 'global
  * of source subtrees; absent selection addresses the active timeline. Explicit
  * membership and foreign audio routing remain constraints. Off-grid keys and
  * fractional FPS are retained. No source, selection or playback state changes.
+
+ * Explicit content context restricts key search to the bound owner/Timeline. Returned local milliseconds never advance a playback clock.
  */
 export function navigateTimeline(scene: ChronoScene, timelineId: string, localTimeMs: number,
-  intent: TimelineNavigation, selectedIds: ReadonlySet<string>, frames = 1): number {
+  intent: TimelineNavigation, selectedIds: ReadonlySet<string>, frames = 1, context?: TimelineAuthoringContext): number {
+  const activeContext = context ?? SCENE_TIMELINE_CONTEXT
+  assertTimelineContext(scene, timelineId, activeContext)
   const timeline = scene.timelines.find(item => item.id === timelineId)
   if (!timeline) return 0
   const time = authoringTime(timeline, localTimeMs), duration = timeline.durationMs
@@ -39,7 +44,7 @@ export function navigateTimeline(scene: ChronoScene, timelineId: string, localTi
     const owner = parseTrackTarget(track.target)
     if (owner?.entityType === 'layer') {
       const layer = byId.get(owner.entityId)
-      if (!layer || !isLayerTimelineProperty(layer, owner.propertyPath) || scope && !scope.has(layer.id) || layer.type === 'audio' && layer.audio?.timelineId && layer.audio.timelineId !== timeline.id
+      if (!layer || !isLayerTimelineProperty(layer, owner.propertyPath, activeContext) || scope && !scope.has(layer.id) || layer.type === 'audio' && layer.audio?.timelineId && layer.audio.timelineId !== timeline.id
         || membership && !membership.has(layer.id) && !(layer.type === 'audio' && !layer.audio?.timelineId)) continue
     } else if (scope) continue
     for (const key of track.keyframes) if (Number.isFinite(key.timeMs) && key.timeMs >= 0 && key.timeMs <= duration) times.push(key.timeMs)

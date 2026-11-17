@@ -77,6 +77,8 @@ Use ordinary synchronous loops for repeated objects and staggered keyframe times
 
 For path motion, create `scene.addPath(points,{role:'motion',name:...})` or an appropriate spline, then `layer.followPath(path.id,{orientToPath:true})` and key `followPath.progress` from 0 to 1. Use capability definitions for spline parameters, trim and repeater properties.
 
+Manual viewport edits use object right-click → Edit motion keys and the Motion Keys dock panel. Segment/node menus and control handles edit the same native X/Y keys; preserve optional `motionTangentMode` node linkage when revising existing keys. This is separate from per-segment temporal `tangentMode`. Native easing handles cannot bend an axis whose endpoint values are equal; use an intermediate position key or an explicit spline Follow Path for that case. `Timeline.playKeyRange` is an editor-only playback preference, not an animation/export trim instruction.
+
 For particles, select a real preset from `get_capabilities`, then use `scene.addEmitter(preset,options)` and `configureParticles`, or the native particle tools. Bound particle counts to the intended scene; inspect frames and avoid increasing counts merely to hide composition problems.
 
 For deeper editing, use `layer.particles` for validated preset/config/life-gradient/motion-modifier operations, `layer.spline` for native point/handle/contour editing, and `scene.explorer` for hierarchy queries, grouping and reparenting. See [domains.md](domains.md) for signatures, returned ids, coordinate spaces and a complete path-emitter example.
@@ -84,6 +86,22 @@ For deeper editing, use `layer.particles` for validated preset/config/life-gradi
 For grouping, create a group and parent child handles with `child.parent(group)` or use the native `group_layers` / `ungroup_layer` tools. Check how parenting affects the existing transforms before moving an established hierarchy.
 
 ## Read, merge and animate data
+
+Native S2D-3 Boolean preview is transient: select 2–8 closed Shape/Spline
+layers or spline Objects, then Spline & Boolean panel / viewport context menu → Boolean
+preview. Union/Subtract/Intersect, explicit A−B/B−A and composition-pixel curve
+tolerance do not alter source, keys or history. It is excluded from exports and
+session JSON. S2D-4 UI Apply persists a normal group recipe with original inputs
+and a generated spline child. MCP uses `prepare_spline_edit` with
+`operation.kind:'boolean'`, followed by `apply_spline_edit`; `ownerId` re-edits
+an existing recipe. See [spline-editing.md](spline-editing.md).
+`combineMode` metadata is not a solver. Never emulate Apply by replacing human
+sources, delete/reparent a protected child, key generated vertex topology or
+create linked operation instances. Outer group/result transform and style edits
+and whole-group independent Copy remain supported. Existing input drivers reject
+Apply rather than lose keys. See `docs/tr/boolean-operation.md` for ownership,
+sampling, cache/output limits and lifecycle; preview limits remain documented in
+`docs/tr/boolean-preview.md`.
 
 `scene.snapshot()` returns the full editable scene as detached JSON. `scene.assets`, `assetCollections`, `parameters`, `triggers`, `bindings`, `parameterWires`, `stateMachines` and `initialState` expose copies. A layer's `data` contains its complete settings, and `get('style.fill.color')` reads one nested value. Modify the scene with handles rather than changing these copies.
 

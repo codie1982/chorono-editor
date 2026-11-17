@@ -8,10 +8,29 @@ Sonraki kullanıcı kararıyla ekran Shape/Poly, image/texture, video ve compone
 için de kullanılacak [ortak öğe detay host'unun](shared-item-detail-editor.md)
 3D adapter'ıdır. Ayrı kopyalanmış bir 3D editör uygulaması kurulmaz; ortak
 host/oturum ve 3D domain araçları farklı sorumluluklarda kalır.
-Dar ortak detay host'u DET0–DET1 sonraki kullanıcı kararıyla Poly/UV öncesinde
-öne alınıp dar teslimi tamamlandı; temel sabit model yerleşimi adapter'ını içerir. Sonra Poly → UV
-→ ileri kutulu 3D sırası korunur; bağımsız tam 3D Modeling
-veya Game Engine çalışma alanı bu kararla etkinleşmez.
+Dar ortak detay host'u DET0–DET1 tamamlandı; temel sabit model yerleşimini içerir.
+**14 Kasım kullanıcı önceliği:** sıradaki işler 3D içerik editörünü geliştirmeye
+odaklanır. Önce Timeline/iç animasyon kapısı 3D-T, sonra 3D0–3D6 Poly/UV önüne
+alınır. Editable Poly ve UV
+authoring daha sonra kalır; bağımsız tam 3D Modeling/Game Engine modu açılmaz.
+
+**13 Kasım risk sınırı:** [İç animasyon incelemesi](internal-animation-risk-review.md)
+sonrasında genel nested motor bu planın zorunlu önkoşulu değildir. Statik
+node/materyal/ışık/kamera araçları ayrı ilerler; tek seviyeli imported clip
+oynatma önce per-instance pose, kesin zaman, kaynak ve çıktı kabulü ister.
+Recursive sahne/klip/yerel SM daha ileri kapsamda bekler. Aşağıdaki iç Timeline
+ve animasyonlu alt içerik tasvirleri uygulanmış destek değil, bu kapılara bağlı
+planlardır; mevcut statik GLB yükleme ve ana 2D evaluator değişmez.
+İç animasyon kapsamdan çıkarılmaz: [owned Timeline tasarımının](item-owned-animation-plan.md)
+IA2 diliminde model/kamera iç keyleri ve imported clip adapter'ı geliştirilir.
+Owner/kanal koruması ve zaman orchestration'ı IA1 ile paylaşılır; ana 2D
+Timeline'a modelin iç bone/node keyleri aktarılmaz.
+Native GLB/glTF kliplerinin bütün keylerini Chorono root Timeline'ına çevirmek
+varsayılan import yolu değildir. Model asset + clip referansı ve detayda klip
+seçimi kullanılır; yeni yerleşim/kamera keyleri kendi iç bağlamında yazılır.
+Desteksiz kanal/extension açık raporlanır, orijinal dosya korunur; destek varmış
+gibi eksik dönüşüm veya otomatik bake yapılmaz. Native source kullanımı bütün
+uzantılarda otomatik görünüm eşliği vaat etmez.
 
 ## Mimari yön — ayrı bir ikinci 3D editör yerine ortak içerik editörü
 
@@ -48,7 +67,7 @@ maliyetinin aynı kalacağı peşinen vaat edilmez.
 | Yetenek | Ortak 3D İçerik Editörü içindeki yeri |
 | --- | --- |
 | Temel model yerleşimi | DET1'de mevcut iç XYZ/dönüş/ölçek/kamera Properties'inin adapter'ı. Çift tık/sağ tık, breadcrumb ve Apply/Cancel; henüz klip/rig düzenleme değil. |
-| Sahne, materyal ve ışık | Poly/UV'den sonraki ileri 3D dilimi: model/node ağacı, çoklu model, imported material override, ışık/ortam/gölge ve kamera yetenekleri. |
+| Sahne, materyal ve ışık | 14 Kasım'da öne alınan 3D dilimi: node seçimi, çoklu model, imported material override, ışık/ortam/gölge ve kamera. Hazır modelin mevcut UV'sini kullanmak editable Poly/UV editörünü beklemez. |
 | 3D animasyon | Aynı içerik belgesinin iç Timeline'ı: model/node/camera TRS ve imported clip/morph/pose. Ana 2D Timeline'a bone/node keyleri açılmaz. |
 | Rig üretme, weight painting, IK, ileri modelleme | Aynı editörün isteğe bağlı ileriki araç modülleri olarak planlanabilir. İlk ortak host veya klip oynatma tesliminin önkoşulu değildir; bugün desteklenmiş sayılmaz. |
 | 3D particle/fizik/kumaş/sıvı | İleride açık solver/renderer adapter'ları ve bake manifestleriyle bağlanabilecek modüller. Mevcut düzlemsel 2D solver planı otomatik 3D solver sayılmaz; ayrı ileriki kapsam/kabul kararı gerekir. |
@@ -102,12 +121,42 @@ parametre ve node referansları oyun component'lerine açık binding'lerle bağl
 ## Geliştirme sırası üzerindeki etkisi
 
 DET0–DET1 ortak detay host'u ve dar Shape/Path + sabit model yerleşimi
-adapter'ı 13 Kasım'da uygulandı. Sonra Poly → UV → aynı host üzerinde ileri 3D içerik araçları gelir.
+adapter'ı 13 Kasım'da uygulandı. 14 Kasım kararıyla **aynı host üzerinde ileri
+3D-T temeli → 3D içerik araçları → Poly → UV → 2D komponent/library/karakter** sırası uygulanır.
 İleri 3D işleri ayrı bir workspace motoruna taşınmaz. Bileşen/2D asset yeniden
 kullanımı ilgili dilimde, video/tracking/compositing CFX sırasında kalır.
 Game Engine ve 3D solver geliştirmesi bu mimari yönle başlatılmış olmaz; sonraki
 ayrı ürün kapsamıdır. `EditorMode` değerleri veya mevcut source şemaları yalnız
 bu planı yazmak için silinmez/değiştirilmez.
+
+### 14 Kasım — 3D odaklı yapım sırası
+
+Ana kuyruk [üretim yol haritası §3.2'dedir](../production-2d-roadmap.md).
+**14 Kasım T0 durumu:** [Ana/iç authoring context ve hedef doğrulaması](../timeline-authoring-context.md)
+uygulandı; 3D-T1 iç Timeline UI/clip commit de tamamlandı. T2 zaman/çıktı ortak kabulü de [tamamlandı](../model-clip-acceptance.md); 3D0–3D6 da [tamamlandı](../model-detail-3d-packages.md); sırada Poly vardır.
+T1 numeric model/kamera kliplerini [ayrı source](../model-content-clips.md) olarak düzenler; imported native GLB klip oynatımı 3D3'tedir.
+Aşağıdaki kuyruk 14 Kasım’da tamamlandı. Gerçek API, UI, sürüm ve destek sınırlarının
+sahibi [uygulama/kabul belgesidir](../model-detail-3d-packages.md):
+
+| Paket | 3D detay alanındaki çıktı | Bağımlılık / kabul |
+| --- | --- | --- |
+| 3D-T — önce Timeline/iç animasyon | Ana/iç scope ve owner guard'ı; mevcut model/kamera alanlarında yerel klip/Set Key/Curve/Dope Sheet; zaman ve scoped commit | Ana plan §3.2.1'deki T0–T2 geçer: dış key ve iç key ayrımı, tek Undo/Cancel, eski source, iki kullanım, scrub/loop ve raster eşliği. Mevcut ana Timeline dışlama filtresi bu teslimin tamamı değildir. |
+| 3D0 — kaynak ve parça düzenleme — tamamlandı | IA0'ın dar 3D kaynak/kimlik/instance/commit sınırını node'lara genişletme; ağaç/seçim/Frame Selection ve XYZ gizmo | 3D-T sonrasında. Imported kaynak korunur; node override'ı asset sürümü/stable referansla saklanır. 2D kutu hareketinden ayrıdır; tek Undo/Apply/Cancel, reload ve prepared raster birlikte doğrulanır. |
+| 3D1 — kamera — tamamlandı | İnceleme ve çıktı kamerası ayrımı, perspektif/orthographic, front/top/side/isometric preset, hedef/kadraj ve mevcut orbit/pan/dolly | 3D0; inceleme kamera değişimi sahne keyine dönüşmez. Imported kamerayı kullanma varsa açık seçim ve capability'dir; bütün kamera animasyonunu otomatik çevirmek değildir. |
+| 3D2 — materyal, ışık ve gölge — tamamlandı | Imported material override: renk, roughness/metalness, opacity ve desteklenen texture slotları; ışık konumu/rengi/şiddeti, ortam/exposure ve kontrollü gölge | 3D0/1; modelin mevcut UV'si kullanılır. Texture/HDRI/shadow kaynakları bütçelenir, shared material kazara bütün örnekleri değiştirmez. Ayrı 2D kutular arasında ortak ışık/depth vaat edilmez. |
+| 3D3 — native klip (IA2a) — tamamlandı | GLB/glTF clip seçme, play/scrub, in/out, hız/loop; desteklenen imported skeleton/morph animasyonu | IA0'ın owner/zaman kontratı + 3D instance pose adapter'ı. İki örneğin pozu bağımsız; backwards seek ve raster aynı frame'i verir. Bütün bone keyleri ana Timeline'a aktarılmaz. IA1'in 2D saat demosu veya Poly/UV önkoşul değildir. |
+| 3D4 — detay Timeline genişlemesi (IA2b) — tamamlandı | 3D-T'deki temel yerel key authoring'ini yeni node'lar ve native clip/pose kanallarına genişletme | 3D-T + 3D3. Set Key/Curve/Dope Sheet tekrar yazılmaz; native klip/authoring sahipliği doğrulanır. Native bone keylerini tam düzenleme, rig kurma ve weight paint ayrı ileri araçlardır. |
+| 3D5 — çoklu model içerik — tamamlandı | Tek 3D içerikte birden fazla model, parça hiyerarşisi, ortak kamera/ışık/depth ve instance seçimi | Önceki kaynak/render kontratları; farklı asset ölçüleri/dünya birimleri açık adapter ile eşlenir. İki model + kamera fixture'ı save/clone/raster ve kaynak bütçesiyle kabul edilir. Farklı model kutularını ortak 3D dünyaya çevirmek değildir. |
+| 3D6 — açık kontroller ve yeniden kullanım — tamamlandı | Seçili model/klip/kamera alanları için typed parametreler ve instance override; Wire/Expression bağlantısı, turntable ve uygun parça ağacında explode | Mevcut parametre/driver sözleşmeleri kullanılır; iç pose ikinci yazıcıyla ezilmez. Minimal 3D kaynak/instance reuse edilir; tam 2D library, saat authoring'i veya particle adapter'ı bu dilimin önkoşulu değildir. |
+
+OBJ/MTL, FBX ve 3DS importer'ları, gelişmiş rig/weight/IK/modelleme ve 3D
+particle/fizik/kumaş/sıvı önerileri korunur; yukarıdaki ilk kuyruğu bekletmeyen
+ayrı ileri capability'lerdir. Her format kendi materyal/kamera/klip kayıp
+matrisiyle değerlendirilir; destekleniyor diye henüz ilan edilmez.
+
+Poly → UV bundan sonra 2D mesh authoring'i için gelir. Ortak saat/owner/asset
+ve commit kontratları bu araçlardan önce gerçek 3D tüketiciyle dar biçimde
+çıkarılır; sırf yeniden kullanım için genel recursive motor inşa edilmez.
 
 ## Kullanım örneği — 3D çekimlerin 2D kompozisyonda birleşmesi
 
@@ -122,8 +171,8 @@ Bağımsız kutular arasında ortak derinlik/ışık kendiliğinden oluşmaz.
 
 Örneğin ihtiyaç duyduğu scene/clip/local-clock, kaynak sahipliği ve final render
 yetenekleri zaten kendi onaylı aşamalarında değerlendirilir; yalnız bu örnek
-üzerinden yeni zorunluluk veya bitmiş özellik iddiası çıkarılmaz. Ortak detay →
-Poly/UV → ileri 3D içerik → bileşen/karakter ve mevcut devam sırası korunur.
+üzerinden yeni zorunluluk veya bitmiş özellik iddiası çıkarılmaz. Güncel sıra
+14 Kasım 3D önceliğidir; film örneği bu sıraya ek iş veya kapı eklemez.
 
 ## Şimdi çalışan sınır
 

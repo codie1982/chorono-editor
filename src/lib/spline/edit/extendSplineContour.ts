@@ -1,4 +1,5 @@
 import type { SplinePathData } from '@/lib/types/spline'
+import { setContourClosed } from './mutations'
 import { uid } from '../util/uid'
 
 /** Find an editable open endpoint. Explicit points must be endpoints; without
@@ -19,13 +20,14 @@ export function splineContinuation(data: SplinePathData, pointId?: string | null
  * At the start, clicked points are prepended in reverse order so the existing
  * contour direction stays unchanged. New edges are straight lines. Optional
  * closure joins the resulting last/first points; no other contour is welded.
+ * With no new points, optional closure reuses the existing contour closure helper.
  * Pure conversion except allocating fresh IDs; callers own one undo command.
  */
 export function extendSplineContour(data: SplinePathData, endpointId: string,
   positions: readonly { x: number; y: number }[], closed = false): SplinePathData {
   const endpoint = splineContinuation(data, endpointId)
   if (!endpoint) throw new Error('Choose an unlocked endpoint of an open spline.')
-  if (!positions.length) return data
+  if (!positions.length) return closed && data.contours[endpoint.contourId].pointIds.length >= 3 ? setContourClosed(data, endpoint.contourId, true) : data
   if (positions.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) throw new Error('Spline points must be finite local coordinates.')
   const contour = data.contours[endpoint.contourId]
   const points = { ...data.points }, segments = { ...data.segments }

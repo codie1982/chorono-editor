@@ -2,7 +2,9 @@
   "name": "chorono-editor",
   "version": "0.3.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev -p 2000",
     "build": "next build",
@@ -33,9 +35,11 @@
     "mongodb": "^6.0.0",
     "next": "14.2.35",
     "opentype.js": "^2.0.0",
+    "polygon-clipping": "0.15.7",
     "quickjs-emscripten": "^0.32.0",
     "react": "^18",
     "react-dom": "^18",
+    "robust-predicates": "3.0.2",
     "three": "^0.187.0"
   },
   "devDependencies": {

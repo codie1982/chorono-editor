@@ -1,4 +1,6 @@
+import { modelAssetIds } from '../content/modelContent'
 import type { LayerRendererPlugin } from '../../registry/LayerRendererRegistry'
+import { drawEmptyModelScenePreview, isEmptyModelScene } from './EmptyModelScenePreview'
 /** Composite a prepared transparent 3D surface through the ordinary 2D paint
  * pipeline (affine, opacity, masks, effects and stacking). Preparation ownership
  * is the same media session used by viewport/final jobs. No lazy async work or
@@ -6,14 +8,19 @@ import type { LayerRendererPlugin } from '../../registry/LayerRendererRegistry'
 export const modelRendererPlugin: LayerRendererPlugin = {
   id: 'model3d',
   supports: layer => layer.type === 'model3d',
-  mediaDependencies: layer => ({ assetIds: layer.model3d?.assetId ? [layer.model3d.assetId] : [] }),
+  mediaDependencies: layer => ({ assetIds: modelAssetIds(layer.model3d) }),
   paint: { alphaSafe: true, regionSafe: true, localBounds: layer => layer.size ? { x: 0, y: 0, width: layer.size.width, height: layer.size.height } : null },
   render: (ctx, layer) => {
     const data = layer.model3d, size = layer.size
     const model = data && ctx.assets.modelForAsset?.(data.assetId)
     let renderError: string | undefined
     if (model && data && size) {
-      try { model.draw(ctx.canvas, data, size.width, size.height); return }
+      try {
+        if (ctx.renderMode === 'editor' && !ctx.assets.finalOutput && isEmptyModelScene(data, model))
+          drawEmptyModelScenePreview(ctx.canvas, data, model, size.width, size.height, ctx.assets.modelForAsset)
+        else model.draw(ctx.canvas, data, size.width, size.height, ctx.assets.modelForAsset)
+        return
+      }
       catch (error) { if (ctx.assets.finalOutput) throw error; renderError = error instanceof Error ? error.message : String(error) }
     }
     if (ctx.assets.finalOutput) throw new Error(`3D model '${layer.name}' is not prepared; use the media-frame output pipeline.`)

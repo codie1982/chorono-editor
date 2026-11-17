@@ -136,6 +136,10 @@ export interface Keyframe {
   easing: EasingDefinition
   /** Bezier-handle linkage mode. Defaults to 'broken' when undefined. */
   tangentMode?: TangentMode
+  /** Viewport position-handle linkage at this node. Distinct from tangentMode,
+   * which links temporal easing handles within a scalar segment. Evaluation
+   * still uses the ordinary X/Y customBezier easing; absent means independent. */
+  motionTangentMode?: 'aligned' | 'broken'
   /** BL-46 — modifiers scoped to the segment from THIS keyframe to the
    *  NEXT keyframe in time. Empty / undefined = no modifiers on this
    *  segment. The last keyframe's segmentModifiers is unused (no next
@@ -231,6 +235,10 @@ export interface Timeline {
   tracks: Track[]
   workAreaInMs?: number
   workAreaOutMs?: number
+  /** Editor playback only: derive the play span from this Timeline's first and
+   * last finite in-duration keys. Overrides Work Area without modifying it;
+   * runtime/export duration and key data remain unchanged. Default false. */
+  playKeyRange?: boolean
   markers?: TimelineMarker[]
   segments?: TimelineSegment[]
   /** BL-36 — discrete event markers fired when the playhead crosses them
@@ -271,8 +279,14 @@ export interface Transform {
 //   UI: right-click layer → "Add Modifier ▶" submenu in LayerPanel.
 
 export interface Layer {
+  /** Non-destructive Boolean group recipe; original child geometry stays source. */
+  booleanOperation?: import('./booleanOperation').BooleanOperationData
+  /** Generated spline child. Point topology is evaluated, never directly keyed. */
+  booleanResultFor?: string
   /** Versioned source for the boxed 3D adapter; independent of the 2D transform. */
   model3d?: Model3DData
+  /** Thin 3D instance exposed-input overrides; shared node/clip definitions remain inherited. */
+  model3dInputValues?: Record<string, number | boolean>
   id: string
   /** Human-friendly display name, e.g. "Logo", "Background" */
   name: string
@@ -705,6 +719,11 @@ export interface Composition {
   /** Optional gradient background. When set (≥2 stops), it is painted instead of
    *  backgroundColor. backgroundColor remains the fallback for solid mode. */
   backgroundGradient?: GradientFill
+  /** Optional modern background paint. Omitted preserves legacy color/gradient. */
+  backgroundFill?: import('./style').ShapeFill
+  /** False keeps the scene background visible only in the editor. Export and
+   * runtime adapters omit it unless an explicit output background is chosen. */
+  backgroundInExport?: boolean
 }
 
 // ── Root Scene ────────────────────────────────────────────────────────────────

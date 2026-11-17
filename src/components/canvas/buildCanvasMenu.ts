@@ -9,9 +9,12 @@
 import type { Layer } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
 import { itemDetailMenu } from '@/components/detail/detailMenu'
 
 export interface CanvasMenuHandlers {
+  /** Main editor Add dispatcher; absent in private detail hosts. */
+  addLayer?: (kind: string, origin?: { x: number; y: number }) => void
   editContent?: () => void
   isolateSelection?: () => void
   // Clipboard
@@ -53,6 +56,9 @@ export interface CanvasMenuHandlers {
    *  canvas becomes this layer's followPath target. Auto-creates a
    *  followPath.progress 0→1 animation across the layer's lifetime. */
   assignMotionPath?: () => void
+  /** Enter the clicked object's existing viewport trajectory editor. UI-only;
+   * caller selects the target and supplies the active Timeline context. */
+  editMotionKeys?: () => void
   convertToPath?:   () => void
   saveToLibrary?:   () => void
   createClippingPath?: () => void
@@ -74,6 +80,7 @@ export interface CanvasMenuHandlers {
   flipVertical?:  () => void
 
   // Align (only meaningful with multi-select — caller decides)
+  fitParent?: () => void
   alignLeft?:   () => void
   alignCenter?: () => void
   alignRight?:  () => void
@@ -110,10 +117,10 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
     {
       kind: 'submenu', label: 'Copy / Paste',
       items: [
-        action('Cut',       '⌘X', h.cut),
-        action('Copy',      '⌘C', h.copy),
+        action(multi ? `Cut ${args.multiCount} layers` : 'Cut', '⌘X', h.cut),
+        action(multi ? `Copy ${args.multiCount} layers` : 'Copy', '⌘C', h.copy),
         action('Paste',     '⌘V', h.paste, !args.canPaste),
-        action('Duplicate', '⌘D', h.duplicate),
+        action(multi ? `Duplicate ${args.multiCount} layers` : 'Duplicate', '⌘D', h.duplicate),
       ],
     },
 
@@ -147,52 +154,55 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       ],
     },
 
-    action('Group',       '⌘G',     h.group,   !multi),
-    action('Ungroup',     '⇧⌘G',   h.ungroup,  !isGroup),
-    action('Delete',      '⌫',      h.deleteLayer),
+    ...(multi && h.group ? [action('Group', '⌘G', h.group)] : []),
+    ...(!multi && isGroup && h.ungroup ? [action('Ungroup', '⇧⌘G', h.ungroup)] : []),
+    action(multi ? `Delete ${args.multiCount} layers` : 'Delete', '⌫', h.deleteLayer),
 
     sep(),
 
-    action('Center origin', '⇧⌘O', h.centerOrigin),
+    action('Center origin', '⇧⌘O', h.centerOrigin, multi),
 
     // ── Animate submenu — every animatable property for this layer type ───
     {
-      kind: 'submenu', label: 'Animate',
+      kind: 'submenu', label: 'Animate', disabled: multi,
       items: buildAnimateSubmenu(args.layer, h.animateProperty),
     },
+    ...(!multi && h.editMotionKeys ? [action('Edit motion keys', undefined, h.editMotionKeys)] : []),
 
     // BL-67 — Pick a path layer on the canvas to drive this layer's position.
     action('Assign motion path…', undefined,
-      args.layer.type === 'path' ? undefined : h.assignMotionPath),
-    action('Convert to Spline', undefined, h.convertToPath),
-    action('Save to library',  undefined, h.saveToLibrary),
+      args.layer.type === 'path' || multi ? undefined : h.assignMotionPath),
+    action('Convert to Spline', undefined, h.convertToPath, multi),
+    action('Save to library',  undefined, h.saveToLibrary, multi),
 
     sep(),
 
-    action('Create clipping path', undefined, h.createClippingPath),
-    action('Create mask',          undefined, h.createMask),
+    action('Create clipping path', undefined, h.createClippingPath, multi),
+    action('Create mask',          undefined, h.createMask, multi),
 
     sep(),
 
     // ── Align (multi-select only) ─────────────────────────────────────────
     {
-      kind: 'submenu', label: 'Align', disabled: !multi,
+      kind: 'submenu', label: 'Align', disabled: !multi && !h.fitParent,
       items: [
-        action('Align Left',    undefined, h.alignLeft),
-        action('Align Center',  undefined, h.alignCenter),
-        action('Align Right',   undefined, h.alignRight),
-        action('Align Top',     undefined, h.alignTop),
-        action('Align Middle',  undefined, h.alignMiddle),
-        action('Align Bottom',  undefined, h.alignBottom),
+        action('Align Left',    undefined, h.alignLeft, !multi),
+        action('Align Center',  undefined, h.alignCenter, !multi),
+        action('Align Right',   undefined, h.alignRight, !multi),
+        action('Align Top',     undefined, h.alignTop, !multi),
+        action('Align Middle',  undefined, h.alignMiddle, !multi),
+        action('Align Bottom',  undefined, h.alignBottom, !multi),
         sep(),
         action('Distribute Horizontally', undefined, h.distributeHorizontally, args.multiCount < 3),
         action('Distribute Vertically',   undefined, h.distributeVertically,   args.multiCount < 3),
+        sep(),
+        action('Fit Parent', undefined, h.fitParent, isLocked),
       ],
     },
 
     // ── Arrange (z-order) ─────────────────────────────────────────────────
     {
-      kind: 'submenu', label: 'Arrange',
+      kind: 'submenu', label: 'Arrange', disabled: multi,
       items: [
         action('Bring forward',  '⌘↑',  h.bringForward),
         action('Bring to front', '⇧⌘↑', h.bringToFront),
@@ -201,17 +211,18 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       ],
     },
 
-    action(isLocked ? 'Unlock' : 'Lock', '⌘L', h.toggleLock),
+    action(isLocked ? 'Unlock' : 'Lock', '⌘L', h.toggleLock, multi),
 
     sep(),
 
-    action('Rotate 90° right', undefined, h.rotate90CW),
-    action('Rotate 90° left',  undefined, h.rotate90CCW),
+    action('Rotate 90° right', undefined, h.rotate90CW, multi),
+    action('Rotate 90° left',  undefined, h.rotate90CCW, multi),
 
     sep(),
 
-    action('Flip horizontal', undefined, h.flipHorizontal),
-    action('Flip vertical',   undefined, h.flipVertical),
+    action('Flip horizontal', undefined, h.flipHorizontal, multi),
+    action('Flip vertical',   undefined, h.flipVertical, multi),
+    ...(h.addLayer ? [sep(), ...buildAddLayerMenu(h.addLayer)] : []),
   ]
 }
 

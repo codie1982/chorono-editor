@@ -3,6 +3,8 @@ import { evaluateTimelines, type OverrideMap } from '../evaluator'
 import { applyParamBindingsToOverrides, buildParamValues, type ParamValueMap } from './paramResolver'
 import { evaluateBindings } from './bindingEvaluator'
 import { propertyExpressionEvaluator, type ExpressionClock, type SceneDriverResult } from '../expression/properties/evaluatePropertyExpressions'
+import { modelContentClock, modelParameterFrame } from '../model3d/animation/modelContentClock'
+import { modelContentFrame } from '../model3d/animation/modelClipFrame'
 
 export interface SceneFrameOptions extends Omit<ExpressionClock, 'globalTimeMs'> {
   /** Stateful host's already evaluated SM/timeline map; never ticked again. */
@@ -16,15 +18,16 @@ export interface SceneFrameResult extends SceneDriverResult {
 }
 
 /** Deterministic shared scene-property frame in composition milliseconds.
- * Order: timelines/host base → parameter bindings → linear bindings → jointly
- * planned Wire/live-expression drivers. Does not advance a clock, SM or event
+ * Order: timelines/host base → owner-local model clips → parameter bindings →
+ * linear bindings → jointly planned Wire/live-expression drivers. Does not advance a clock, SM or event
  * queue and never writes source/history. Hosts own any stateful base/parameters;
  * offline renderer/export uses explicit time and authored defaults. */
 export function evaluateSceneFrame(scene: ChronoScene, timeMs: number, options: SceneFrameOptions = {}): SceneFrameResult {
-  const base = options.baseOverrides ?? evaluateTimelines(scene.timelines, timeMs, options.externalTime)
+  const base = modelContentFrame(scene, timeMs, options.baseOverrides ?? evaluateTimelines(scene.timelines, timeMs, options.externalTime))
   const paramValues = options.paramValues ?? buildParamValues(scene.parameters ?? [], new Map())
-  const parameters = applyParamBindingsToOverrides(scene.layers, paramValues, base)
+  const parameters = applyParamBindingsToOverrides(scene.layers, paramValues, modelContentClock(scene, timeMs, base))
   const bindings = evaluateBindings(scene.bindings ?? [], parameters, paramValues, scene)
-  return { ...propertyExpressionEvaluator.evaluate(scene, bindings, paramValues, { ...options, globalTimeMs: timeMs }),
+  const evaluated = propertyExpressionEvaluator.evaluate(scene, bindings, paramValues, { ...options, globalTimeMs: timeMs })
+  return { ...evaluated, overrides: modelParameterFrame(scene, evaluated.overrides),
     wireSourceOverrides: bindings, paramValues }
 }

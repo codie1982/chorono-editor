@@ -1,3 +1,4 @@
+import { makeScriptPatchCommand } from '../validation/ScriptPatchCommand'
 // ── LayerHandle (BL-76) ───────────────────────────────────────────────────────
 // Script-facing wrapper around a single layer id. Property setters translate to
 // makeUpdateLayerCmd; key() translates to makeAddKfCmd. All mutations flow through
@@ -14,12 +15,12 @@ import { makeUpdateLayerCmd } from '../../editor/commands-layer'
 import { upsertKeyframe, ensureLayerInTimeline } from '../../timeline/keyframeOps'
 import { nextKfId } from '../../defaults'
 import { copyScriptData, mergeScriptData, readScriptPath, type DeepPartial } from './scriptData'
-import { assertTimelineTargetInScope } from '../../timeline/authoring/timelinePropertyScope'
+import { assertTimelineEditTarget } from '../../timeline/authoring/timelinePropertyScope'
+import type { TimelineAuthoringContext } from '../../timeline/authoring/TimelineAuthoringContext'
 import { dbToGain } from '../../audio/audioClip'
 import { makePatchAudioClipCmd, makeMoveAudioClipCmd, makeTrimAudioClipCmd, makeSplitAudioClipCmd, makeSetAudioGainKeyCmd, type AudioClipCommandOptions } from '../../editor/commands-audio'
 import { ParticleHandle } from './ParticleHandle'
 import { SplineHandle } from './SplineHandle'
-import { makeScriptPatchCommand } from '../validation/ScriptPatchCommand'
 
 let splitSequence = 0
 
@@ -30,8 +31,11 @@ const VALID_EASINGS: ReadonlySet<EasingType> = new Set<EasingType>([
 /** Internal context shared by SceneAPI + handles. */
 export interface ApiContext {
   host: ScriptHost
-  /** Trusted native MCP composition only; unavailable in the script bridge. */
+  /** Trusted native composition only; scripts cannot supply this capability. */
   readonly nativeCommandAdapter?: boolean
+  /** Internal host scope for isolated draft commands, never a script argument.
+   * Public MCP/QuickJS hosts omit it and retain outer scene authoring. */
+  timelineContext?: TimelineAuthoringContext
   /** Resolve the timeline a keyframe should be written to (first timeline). */
   resolveTimelineId(): string | undefined
 }
@@ -63,9 +67,9 @@ export class LayerHandle {
 
   // ── Generic patch ─────────────────────────────────────────────────────────────
 
-  /** Shallow replacement of supplied 2D fields. Locked/driven/invalid edits
-   * fail atomically; omitted siblings in a supplied container are removed. */
+  /** Apply a raw Partial<Layer> patch (escape hatch for advanced edits). */
   set(patch: Partial<Layer>): this {
+    const prev = this._layer()
     this._write(patch)
     return this
   }
@@ -81,7 +85,7 @@ export class LayerHandle {
     return this
   }
 
-  /** All static convenience setters share the same source ownership policy. */
+  /** Static setters share validated 2D source ownership; native adapters keep their explicit command boundary. */
   private _write(patch: Partial<Layer>): void {
     this.ctx.host.applyCommand(this.ctx.nativeCommandAdapter
       ? makeUpdateLayerCmd(this.id, patch, this._layer())
@@ -364,7 +368,7 @@ export class LayerHandle {
     const cmd: EditorCommand = {
       label: 'Script Keyframe',
       execute: (scene) => {
-        assertTimelineTargetInScope(scene.layers, target)
+        assertTimelineEditTarget(scene, timelineId, target, this.ctx.timelineContext)
         before = scene
         let s = scene
         // 1. Ensure the timeline exists (auto-create a sensible default).
@@ -404,7 +408,7 @@ export class LayerHandle {
         // 3. Ensure the layer shows in the dope sheet (B4).
         s = ensureLayerInTimeline(s, timelineId, this.id)
         // 4. Upsert the keyframe.
-        const next = upsertKeyframe(s, timelineId, target, kf, { updateEasing: easing !== undefined })
+        const next = upsertKeyframe(s, timelineId, target, kf, { updateEasing: easing !== undefined, context: this.ctx.timelineContext })
         return { ...next, composition: { ...next.composition, durationMs: Math.max(next.composition.durationMs, timeMs) } }
       },
       undo: (scene) => before ? { ...scene, timelines: before.timelines, composition: before.composition } : scene,

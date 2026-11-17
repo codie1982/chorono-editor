@@ -13,6 +13,7 @@ import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import SceneCanvas from '@/components/SceneCanvas'
 import LayerPanel from '@/components/LayerPanel'
 import { checkItemDetail } from './checkItemDetail'
+import { checkModelClips } from './checkModelClips'
 
 /** Actual source/dock-like parent and production detail UI. Local fixture bytes
  * only: never reads/writes a user scene, session recovery or MCP connection.
@@ -37,13 +38,14 @@ function Host() {
   const [selected, setSelected] = useState<string | null>('card'), [report, setReport] = useState('Ready')
   const ids = useMemo(() => new Set(selected ? [selected] : []), [selected])
   const background = useInactiveDetailSurface<HTMLDivElement>(!!detail.session)
-  const assets = useAssetCache(main.scene.assets, { managed: true }), snap = useSnapSettings()
+  const assets = useAssetCache(main.scene.assets, { managed: true }), snap = useSnapSettings({ persist: false })
   const isolation = useLayerIsolation(main.scene, main.getDocumentSignal())
   useLayoutEffect(() => { current = main })
   const select = (id: string | null) => setSelected(id)
   const noop = () => {}
   return <div style={{ height: 760 }} className="flex flex-col bg-gray-950 text-gray-200">
     <div className="flex gap-3 p-2"><button id="run-detail" onClick={async () => setReport(await checkItemDetail())}>Run detail acceptance</button>
+      <button id="run-model-clips" onClick={async () => setReport(await checkModelClips())}>Run model clip acceptance</button>
       <button id="external-edit" onClick={() => { const layer = main.getScene().layers[0]; main.dispatchCommand(makeUpdateLayerCmd(layer.id, { name: 'Manual update while detail open' }, layer)) }}>External source edit</button>
       <button id="reset-document" onClick={() => main.resetScene(fixture())}>Replace document</button>
       <button id="main-undo" onClick={main.undo}>Main Undo</button><button id="main-redo" onClick={main.redo}>Main Redo</button>

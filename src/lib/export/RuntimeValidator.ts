@@ -7,6 +7,8 @@
 //   - Excessive layer counts (host runtime may struggle)
 //   - Empty / invalid composition
 
+import { imagePaintAssetIds, compositionFill, compositionForOutput } from '../paint/paintSource'
+import { assertScenePaint } from '../paint/validatePaint'
 import type { ChronoScene, Layer } from '../types'
 import type { RuntimeValidationResult, RuntimeError, RuntimeWarning } from '../types/runtime'
 import { SceneTraversal } from '../scene/SceneTraversal'
@@ -25,6 +27,10 @@ export class RuntimeValidator {
     const warnings: RuntimeWarning[] = []
     try { assertScenePropertyExpressions(scene) } catch (error) {
       errors.push({ code: 'INVALID_EXPRESSION', message: error instanceof Error ? error.message : String(error) })
+    }
+
+    try { assertScenePaint(scene) } catch (error) {
+      errors.push({ code: 'INVALID_PAINT', message: error instanceof Error ? error.message : String(error) })
     }
 
     // ── Composition sanity ──────────────────────────────────────────────────
@@ -49,6 +55,7 @@ export class RuntimeValidator {
       const refs: { kind: string; id?: string }[] = [
         { kind: 'model3d', id: layer.model3d?.assetId },
         { kind: 'image', id: layer.image?.assetId },
+        { kind: 'image paint', id: imagePaintAssetIds(layer.style?.fill)[0] },
         { kind: 'video', id: layer.video?.assetId },
         { kind: 'audio', id: layer.audio?.assetId },
       ]
@@ -62,6 +69,8 @@ export class RuntimeValidator {
         }
       }
     }
+
+    for (const id of imagePaintAssetIds(compositionFill(compositionForOutput(scene.composition)))) if (!assetIds.has(id)) errors.push({ code: 'MISSING_ASSET', message: `Composition background references missing image asset "${id}"` })
 
     // ── Cyclic group references ────────────────────────────────────────────
     const cycles = this.findGroupCycles(scene.layers)

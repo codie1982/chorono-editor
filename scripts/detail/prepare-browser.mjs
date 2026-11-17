@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 
 // Same flat loopback fixture protocol as the renderer/model acceptance hosts.
-const output = '/private/tmp/chorono-detail-browser'
+const output = process.argv[2] ?? '/private/tmp/chorono-detail-browser'
 await mkdir(output, { recursive: true })
 await build({ entryPoints: ['src/components/detail/__tests__/browser-detail.tsx'], bundle: true, platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic',
   tsconfig: 'tsconfig.json', define: { 'process.env.NODE_ENV': '"production"', 'process.env': '{}' }, outfile: `${output}/check.js`, loader: { '.wasm': 'empty' } })

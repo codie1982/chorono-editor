@@ -51,6 +51,15 @@ describe('measureTextLayout (estimate path)', () => {
     expect(two.height).toBe(one.height)
   })
 
+  it('measures vertical columns and character spacing on the correct axes', () => {
+    const one = measureTextLayout({ ...base, value: 'AB', direction: 'vertical' })
+    const two = measureTextLayout({ ...base, value: 'AB\nCD', direction: 'vertical', lineHeight: 2 })
+    const spaced = measureTextLayout({ ...base, value: 'AB', direction: 'vertical', letterSpacing: 10 })
+    expect(two.width).toBeGreaterThan(one.width)
+    expect(spaced.height).toBeGreaterThan(one.height)
+    expect(two.height).toBe(one.height)
+  })
+
   it('uppercase widens single-char width vs lowercase estimate baseline', () => {
     // estimate uses char count, so uppercasing keeps count but the function
     // must not throw and must stay positive.

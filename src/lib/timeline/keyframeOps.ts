@@ -4,7 +4,8 @@
 
 import { sameKeyTime, compareKeyTime } from './authoring/keyTimePolicy'
 import type { ChronoScene, Keyframe, EasingDefinition, AnimatableValue } from '../types'
-import { assertTimelineTargetInScope } from './authoring/timelinePropertyScope'
+import { assertTimelineEditTarget } from './authoring/timelinePropertyScope'
+import type { TimelineAuthoringContext } from './authoring/TimelineAuthoringContext'
 
 // ── Internal helper ───────────────────────────────────────────────────────────
 
@@ -29,16 +30,17 @@ function mapTimeline(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** Immutable outer-channel insertion. Callers validate bounds/collisions via
- * the batch contract; registry-owned internal tracks reject before publication.
+/** Immutable scoped channel insertion. Callers validate bounds/collisions via
+ * the batch contract; internal tracks require an explicit owning draft context.
  * Serializer/evaluator/undo restoration preserve earlier internal source data. */
 export function insertKf(
   scene: ChronoScene,
   timelineId: string,
   target: string,
   kf: Keyframe,
+  context?: TimelineAuthoringContext,
 ): ChronoScene {
-  assertTimelineTargetInScope(scene.layers, target)
+  assertTimelineEditTarget(scene, timelineId, target, context)
   return mapTimeline(scene, timelineId, target, (kfs) =>
     [...kfs, kf].sort(compareKeyTime)
   )
@@ -125,11 +127,12 @@ export function ensureLayerInTimeline(
  * requested. Neighbouring sub-ms keys are distinct; ambiguous coincident keys
  * throw instead of deleting several. Existing authoring callers need not sort
  * or implement a second tolerance policy. New key values remain caller-owned.
- * New authoring must satisfy the layer's outer Timeline scope.
+ * New authoring satisfies the active host scope; omission means outer scene.
+ * A content context additionally validates its current owner/Timeline binding.
  */
 export function upsertKeyframe(scene: ChronoScene, timelineId: string, target: string,
-  kf: Keyframe, options: { updateEasing?: boolean } = {}): ChronoScene {
-  assertTimelineTargetInScope(scene.layers, target)
+  kf: Keyframe, options: { updateEasing?: boolean; context?: TimelineAuthoringContext } = {}): ChronoScene {
+  assertTimelineEditTarget(scene, timelineId, target, options.context)
   if (!Number.isFinite(kf.timeMs) || kf.timeMs < 0) throw new Error('Key time must be finite and non-negative.')
   return mapTimeline(scene, timelineId, target, keys => {
     const matching = keys.filter(key => sameKeyTime(key.timeMs, kf.timeMs))

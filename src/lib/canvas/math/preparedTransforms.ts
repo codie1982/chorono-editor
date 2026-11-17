@@ -2,6 +2,7 @@ import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, Transform } from '@/lib/types'
 import { type OverrideMap } from '@/lib/evaluator'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { layerTransformMatrix as transformMatrix } from '@/lib/geometry/layerTransformMatrix'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
@@ -39,13 +40,6 @@ export type TransformEditResult = TransformDiagnostic | { ok: true; changes: Tra
 /** Return a diagnostic instead of partially preparing/applying a selection. */
 function failure(reason: string, layerId?: string): TransformDiagnostic {
   return { ok: false, reason, ...(layerId ? { layerId } : {}) }
-}
-
-/** Compose Chorono's parent-local T(position + anchor) R S T(-anchor). */
-function transformMatrix(transform: Readonly<Transform>): Matrix2D {
-  return Matrix2D.translation(transform.x + transform.anchorX, transform.y + transform.anchorY)
-    .rotate(transform.rotationDeg).scale(transform.scaleX, transform.scaleY)
-    .translate(-transform.anchorX, -transform.anchorY)
 }
 
 /** Identify target-owned drivers whose rendered output cannot safely become a
@@ -164,7 +158,7 @@ function matrixTransform(matrix: Matrix2D, previous: Readonly<Transform>): Trans
 
 /** Apply one world affine to captured roots; never return a partly transformed
  * selection. Parent inverses are fixed at gesture start, not preview-dependent. */
-function applyWorldTransform(targets: readonly PreparedTransformTarget[], world: Matrix2D): TransformEditResult {
+export function applyWorldTransform(targets: readonly PreparedTransformTarget[], world: Matrix2D): TransformEditResult {
   const changes: TransformChange[] = []
   for (const target of targets) {
     const transform = matrixTransform(target.worldToParent.multiply(world).multiply(target.worldMatrix), target.transform)

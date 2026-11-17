@@ -196,6 +196,7 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
   {
     title: '3D Objects',
     items: [
+      { label: 'Empty 3D Scene', type: 'empty3dScene', icon: 'group', available: true },
       { label: 'Import GLB / glTF', type: 'model3d', icon: 'group', available: true },
     ],
   },

@@ -1,5 +1,6 @@
 'use client'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+export { useInactiveSurface as useInactiveDetailSurface } from '@/components/ui/useInactiveSurface'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { ItemDetailSession } from '@/lib/editor/detail'
 
@@ -30,20 +31,4 @@ export function useItemDetail(editor: EditorStateReturn) {
     return () => { session.document.removeEventListener('abort', close); session.close() }
   }, [session, close])
   return { session, open, close }
-}
-
-/** Keep the main DOM mounted to retain dock state, scrolling and viewport view.
- * Native inert blocks pointer/focus access; previous ownership is restored on
- * cleanup. The main keyboard dispatcher is separately suspended by its owner.
- */
-export function useInactiveDetailSurface<T extends HTMLElement>(inactive: boolean) {
-  const ref = useRef<T | null>(null)
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const previous = element.inert
-    element.inert = inactive
-    return () => { element.inert = previous }
-  }, [inactive])
-  return ref
 }

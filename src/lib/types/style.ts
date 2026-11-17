@@ -21,13 +21,29 @@ export interface GradientFill {
 // ── Fill ──────────────────────────────────────────────────────────────────────
 
 export interface ShapeFill {
-  type: 'solid' | 'gradient'
+  type: 'solid' | 'gradient' | 'image' | 'none'
   /** Solid fill colour (hex) */
   color?: string
   /** Fill opacity 0–100, independent of layer opacity. Default 100. */
   opacity?: number
   /** Used when type === 'gradient' */
   gradient?: GradientFill
+  /** Shared static image paint; inactive mode data is retained for switching. */
+  image?: ImagePaint
+}
+
+/** Serializable image placement inside a local paint box. Fit is applied first,
+ * then uniform scale/rotation around the box centre plus offsets in local px.
+ * `fill` means Stretch in the UI. Assets are shared registry IDs, never decoded
+ * pixels/URLs. Positive rotation is clockwise in Canvas coordinates. */
+export interface ImagePaint {
+  version: 1
+  assetId: string
+  fit?: 'cover' | 'contain' | 'fill'
+  offsetX?: number
+  offsetY?: number
+  scale?: number
+  rotationDeg?: number
 }
 
 // ── Stroke ────────────────────────────────────────────────────────────────────
@@ -68,6 +84,9 @@ export interface TrimPathDefinition {
 }
 
 export interface ShapeStroke {
+  /** Omitted preserves legacy gradient-if-present behavior. None retains the
+   * authored width/color/gradient/trim so existing keys survive re-enabling. */
+  type?: 'solid' | 'gradient' | 'none'
   color: string
   /** Stroke thickness in px */
   width: number

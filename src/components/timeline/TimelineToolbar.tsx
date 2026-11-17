@@ -10,6 +10,7 @@ import type { Timeline, TimelineMode, AutoKeyMode } from '@/lib/types'
 import type { TimelineGhostSettings } from '@/lib/types/editor'
 import TimelineGhostControl from './TimelineGhostControl'
 import { useClickOutside } from './hooks/useClickOutside'
+import { keyframePlaybackRange } from '@/lib/timeline/keyframePlaybackRange'
 
 interface Props {
   authoring: TimelineAuthoringControls
@@ -18,6 +19,8 @@ interface Props {
   selectedTimeline: Timeline | null
   currentTimeMs: number
   duration: number
+  /** Shared composition FPS; Timelines keep key times in milliseconds. */
+  frameRate: number
   isPlaying: boolean
   zoomFactor: number
   playbackSpeed: number
@@ -69,6 +72,7 @@ export default function TimelineToolbar(props: Props) {
     onGhostUpdate, onGhostToggle, onGhostPreset,
     onToggleWorkArea, workAreaActive,
   } = props
+  const keyRange = keyframePlaybackRange(selectedTimeline)
 
   // ── Play-type dropdown (long-press the Play button) ──────────────────────
   const [playMenuOpen, setPlayMenuOpen] = useState(false)
@@ -89,20 +93,37 @@ export default function TimelineToolbar(props: Props) {
     <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
 
       <DocumentationHelp topic="editor/timeline" compact />
+      <div role="group" aria-label="Playback controls" className="flex items-center gap-1 shrink-0">
+      <TimelineTransport side="previous" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
+      <TimelineTransport side="previous" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
       <div className="relative" ref={playRef}>
         <button
-          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) onPlayToggle() } }}
-          onPointerDown={onPlayPointerDown}
-          onPointerUp={onPlayPointerUp}
+          onKeyDown={event => {
+            if (event.key === 'ArrowDown') { event.preventDefault(); setPlayMenuOpen(true) }
+            if (event.key === 'Escape') setPlayMenuOpen(false)
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) onPlayToggle() }
+          }}
+          onContextMenu={event => { event.preventDefault(); setPlayMenuOpen(true) }}
+          aria-haspopup="dialog" aria-expanded={playMenuOpen}
+          onPointerDown={event => { if (event.button === 0) onPlayPointerDown() }}
+          onPointerUp={event => { if (event.button === 0) onPlayPointerUp() }}
           onPointerLeave={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null } }}
-          className="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-mono w-14 text-center"
+          className="h-9 px-2 inline-flex items-center justify-center gap-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-mono min-w-14 text-center"
           title="Play / Pause (Space) · long-press for play mode"
         >
           {isPlaying ? '⏸ Pause' : '▶ Play'}
         </button>
         {playMenuOpen && selectedTimeline && (
-          <div className="absolute left-0 top-full mt-1 z-50 bg-gray-900 border border-gray-700 rounded shadow-xl p-2 flex flex-col gap-1 text-xs text-gray-300 w-44">
+          <div role="dialog" aria-label="Play mode" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setPlayMenuOpen(false) } }}
+            className="absolute left-0 top-full mt-1 z-50 bg-gray-900 border border-gray-700 rounded shadow-xl p-2 flex flex-col gap-1 text-xs text-gray-300 w-56">
             <div className="text-[10px] text-gray-500 uppercase tracking-wide px-1 pb-0.5">Play Mode</div>
+            <label className="flex items-center gap-2 cursor-pointer px-1 py-0.5 hover:bg-gray-800 rounded"
+              title="Play only the active Timeline's key span. Overrides Work Area without changing keys or export duration.">
+              <input type="checkbox" checked={!!selectedTimeline.playKeyRange} disabled={!keyRange && !selectedTimeline.playKeyRange}
+                onChange={event => onTimelineFieldChange('playKeyRange', event.target.checked)} className="accent-blue-500" />
+              First to last key
+            </label>
+            <p className="px-1 text-[10px] text-gray-400">{keyRange ? `${keyRange.startMs}–${keyRange.endMs} ms · active Timeline` : 'No keys in the active Timeline'}</p>
             <label className="flex items-center gap-2 cursor-pointer px-1 py-0.5 hover:bg-gray-800 rounded">
               <input type="checkbox" checked={selectedTimeline.autoplay}
                 onChange={(e) => onTimelineFieldChange('autoplay', e.target.checked)}
@@ -133,12 +154,14 @@ export default function TimelineToolbar(props: Props) {
         )}
       </div>
 
-      <TimelineTransport onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
+      <TimelineTransport side="next" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
+      </div>
       <SetKeyControls controls={authoring} />
 
-      <span className="text-xs font-mono text-gray-400 w-24">
+      <span className="text-xs font-mono text-gray-400 whitespace-nowrap">
         {Math.round(currentTimeMs)} / {duration} ms
       </span>
+      <span aria-label="Timeline frame rate" title="From composition settings · frame interval = 1000 / FPS ms" className="text-[10px] font-mono text-gray-500 whitespace-nowrap">{props.frameRate} fps</span>
 
       {/* Auto-key / Record mode selector (BL-41) */}
       <div className="flex items-center rounded overflow-hidden border border-gray-600 shrink-0">

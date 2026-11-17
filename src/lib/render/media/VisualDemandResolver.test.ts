@@ -74,3 +74,25 @@ describe('canonical frame media dependency demand', () => {
     expect(ids(input)).toEqual([]); expect(ids({ ...input, rootIds: [l.id] })).toEqual(['sheet'])
   })
 })
+
+describe('shape and background image paint demand', () => {
+  it('uses active paint only while preserving the sparse native-free vector path', () => {
+    const layer = { ...newRectLayer(), id: 'paint', transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 0, anchorY: 0 }, size: { width: 20, height: 20 },
+      style: { fill: { type: 'image' as const, image: { version: 1 as const, assetId: 'picture' } } } }
+    const { scene, input } = setup([layer], [asset('picture')])
+    expect(ids(input)).toEqual(['picture'])
+    const hiddenPaint = { ...scene, layers: [{ ...layer, style: { fill: { ...layer.style.fill, type: 'none' as const } } }] }
+    expect(ids({ ...input, frame: prepareRenderFrame(hiddenPaint, 0) })).toEqual([])
+    const moved = { ...scene, layers: [{ ...layer, transform: { ...layer.transform, x: 900 } }] }
+    expect(ids({ ...input, frame: prepareRenderFrame(moved, 0) })).toEqual([])
+    expect(ids({ ...input, frame: prepareRenderFrame(moved, 0), selected: new Set(['paint']) })).toEqual(['picture'])
+  })
+  it('loads a background with no layers and suppresses it for explicit/disabled output backgrounds', () => {
+    const { scene, input } = setup([], [asset('picture')])
+    scene.composition.backgroundFill = { type: 'image', image: { version: 1, assetId: 'picture' } }
+    const frame = prepareRenderFrame(scene, 0)
+    expect(ids({ ...input, frame })).toEqual(['picture'])
+    expect(ids({ ...input, frame, includeBackground: false })).toEqual([])
+    expect(ids({ ...input, frame, rootIds: [] })).toEqual([])
+  })
+})

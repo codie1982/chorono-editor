@@ -14,6 +14,23 @@ function registeredPanels(): Set<string> {
 }
 
 describe('resource panel dock integration', () => {
+  it('restores Spline & Boolean into old layouts without replacing their arrangement', () => {
+    const old = removePanel(defaultLayout(), 'splineTools'), before = JSON.stringify(old)
+    expect(isValidLayout(old, registeredPanels())).toBe(true)
+    const opened = addPanelToLayout(old, 'splineTools', 'properties')
+    expect(findLeafOfPanel(opened, 'splineTools')?.id).toBe(findLeafOfPanel(old, 'properties')?.id)
+    expect(findLeafOfPanel(opened, 'splineTools')?.panels.filter(id => id === 'splineTools')).toHaveLength(1)
+    expect(JSON.stringify(old)).toBe(before)
+    expect(addPanelToLayout(opened, 'splineTools', 'canvas')).toBe(opened)
+  })
+  it('restores a new motion panel beside Properties and respects an existing moved tab', () => {
+    const before = defaultLayout(), saved = JSON.stringify(before)
+    const opened = addPanelToLayout(before, 'motionKeys', 'properties')
+    expect(findLeafOfPanel(opened, 'motionKeys')?.id).toBe(findLeafOfPanel(opened, 'properties')?.id)
+    expect(findLeafOfPanel(opened, 'motionKeys')?.panels.filter(id => id === 'motionKeys')).toHaveLength(1)
+    expect(JSON.stringify(before)).toBe(saved)
+    expect(addPanelToLayout(opened, 'motionKeys', 'layers')).toBe(opened)
+  })
   it('accepts old saved layouts missing the new panel and preserves closed panels', () => {
     const old = removePanel(defaultLayout(), 'resourceMonitor')
     const closed = removePanel(old, 'properties')

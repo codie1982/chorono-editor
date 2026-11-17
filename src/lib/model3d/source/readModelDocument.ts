@@ -93,6 +93,6 @@ export function readModelDocument(buffer: ArrayBuffer): ModelDocument {
     estimate += header.width * header.height * 12 // bitmap + GPU + mip policy estimate
   }
   if (estimate > 96 * 1024 ** 2) throw new Error('3D decoded resource estimate exceeds 96 MiB.')
-  const warnings = ['Imported node hierarchy and materials are preserved. This slice uses its own camera/lights and displays the default pose; clip playback/rig editing are later work.']
+  const warnings = ['Imported hierarchy, materials and native clips are preserved. The default import shows the rest pose; enable part editing and choose a native clip in Edit content. Bone keys are not copied to the 2D Timeline.']
   return { json, binary, estimatedBytes: Math.max(estimate, 1024), warnings }
 }

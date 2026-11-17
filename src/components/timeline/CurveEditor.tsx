@@ -1,4 +1,5 @@
 'use client'
+import type { TimelineAuthoringContext } from '@/lib/timeline/authoring/TimelineAuthoringContext'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { BulkEditPolicyControl } from './authoring/BulkEditPolicyControl'
@@ -35,6 +36,16 @@ import {
 } from './keyframeMenuItems'
 
 interface Props {
+  /** Optional host labels/colors; omitted preserves the 2D curve editor. */
+  trackPresentation?: (target: string, index: number) => { label: string; color: string }
+  /** Optional exact targets for object-scoped hosts; omitted preserves 2D behavior. */
+  trackScope?: ReadonlySet<string>
+  /** Dense host with its own channel browser; removes the duplicate legend. */
+  compact?: boolean
+  /** Hard editor isolation; does not alter the complete command source. */
+  layerScope?: ReadonlySet<string> | null
+  /** Omitted for main UI; isolated hosts bind the owner and local clip. */
+  context?: TimelineAuthoringContext
   scene:              ChronoScene
   editor:             EditorStateReturn
   selectedLayerId:    string | null
@@ -68,8 +79,10 @@ const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 } as const
  */
 export default function CurveEditor({
   scene, editor, selectedLayerId, selectedLayerIds, selectedTimelineId,
-  currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes, collisionPolicy, onCollisionPolicyChange,
+  currentTimeMs, onTimeChange, selectedKfIds, onSelectKeyframes, collisionPolicy, onCollisionPolicyChange, context, layerScope,
+  trackPresentation, trackScope, compact = false,
 }: Props) {
+  const curveColor = (target: string, index: number) => trackPresentation?.(target, index).color ?? pickTrackColor(target, index)
   const [localPolicy, setLocalPolicy] = useState<KeyCollisionPolicy>('reject')
   const bulkPolicy = collisionPolicy ?? localPolicy
   const setBulkPolicy = onCollisionPolicyChange ?? setLocalPolicy
@@ -87,9 +100,10 @@ export default function CurveEditor({
   const tracks: Track[] = useMemo(() => {
     if (!timeline) return []
     return buildTimelineLayerRows(scene.layers, timeline, { selectedOnly: true,
-      selectedId: selectedLayerId, selectedIds: selectedLayerIds }).rows
-      .flatMap(row => row.tracks).filter(track => (track.keyframes.length > 0 || track.controller && track.controller.type !== 'keyframe') && isScalarNumericTrack(track))
-  }, [timeline, scene.layers, selectedLayerId, selectedLayerIds])
+      selectedId: selectedLayerId, selectedIds: selectedLayerIds, context, layerScope }).rows
+      .flatMap(row => row.tracks).filter(track => (!trackScope || trackScope.has(track.target))
+        && (track.keyframes.length > 0 || track.controller && track.controller.type !== 'keyframe') && isScalarNumericTrack(track))
+  }, [timeline, scene.layers, selectedLayerId, selectedLayerIds, context, layerScope, trackScope])
   const layerNames = useMemo(() => new Map(scene.layers.map(item => [item.id, item.name])), [scene.layers])
 
   const multipleOwners = useMemo(() => new Set(tracks.map(track => parseTrackTarget(track.target)?.entityId)).size > 1, [tracks])
@@ -205,6 +219,7 @@ export default function CurveEditor({
   // chart less noisy when scrubbing; toggle from the toolbar when shaping
   // easing curves.
   const [showHandles, setShowHandles] = useState(true)
+  const [showCompactKeyTools, setShowCompactKeyTools] = useState(false)
 
   // ── Right-click context menu ─────────────────────────────────────────────
   // One menu state shared across all three flavours (empty area / keyframe
@@ -400,11 +415,11 @@ export default function CurveEditor({
       setNotice(result.reason)
       return
     }
-    editor.dispatchCommand(makeReplaceCurveKeysCmd(selectedTimelineId, tr, result.track))
+    editor.dispatchCommand(makeReplaceCurveKeysCmd(selectedTimelineId, tr, result.track, context))
     setSelectedSegment(null)
     onSelectKeyframes(new Set(result.insertedIds))
     setNotice(result.message ?? null)
-  }, [selectedTimelineId, editor, onSelectKeyframes])
+  }, [selectedTimelineId, editor, onSelectKeyframes, context])
 
   // Freeze value ranges during an edit so auto-fit cannot move the plot under
   // the pointer. Each hook also captures the same per-track viewport.
@@ -414,12 +429,12 @@ export default function CurveEditor({
   }
   const releaseRanges = () => setFrozenRanges(null)
   const drag = useCurveDrag({
-    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal, collisionPolicy: bulkPolicy,
+    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal, context, collisionPolicy: bulkPolicy,
     onDragStart: freezeRanges, onDragEnd: releaseRanges, onWarning: setNotice,
   })
   const bezierDrag = useBezierHandleDrag({
-    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal,
-    onDragStart: freezeRanges, onDragEnd: releaseRanges,
+    editor, timelineId: selectedTimelineId, getTrackViewport, clientToLocal, context,
+    onDragStart: freezeRanges, onDragEnd: releaseRanges, onWarning: setNotice,
   })
   const beginBezierDrag = (event: React.PointerEvent<SVGElement>, a: Keyframe, b: Keyframe,
     target: string, handle: 'p1' | 'p2') => {
@@ -613,7 +628,7 @@ export default function CurveEditor({
       <div className="flex flex-col border-b border-gray-800 bg-gray-900/70 shrink-0">
 
         {/* ── Row 1: toolbar + curve legend ──────────────────────────── */}
-        <div className="flex items-center gap-1 px-2 py-1 flex-wrap">
+        <div className={`flex items-center gap-1 px-2 py-1 ${compact ? 'overflow-x-auto whitespace-nowrap' : 'flex-wrap'}`}>
           <DocumentationHelp topic="editor/timeline/curves" compact />
           <ToolbarBtn
             title="Fit all curves to view (A)"
@@ -640,19 +655,18 @@ export default function CurveEditor({
             onClick={selectAllKfs}
             disabled={visibleTracks.length === 0}
           >All</ToolbarBtn>
+          {compact && <ToolbarBtn title="Show easing, tangent and delete controls for selected keys"
+            onClick={() => setShowCompactKeyTools(value => !value)} active={showCompactKeyTools} disabled={selectedKfIds.size === 0}>Key tools</ToolbarBtn>}
 
           <BulkEditPolicyControl policy={bulkPolicy} onChange={setBulkPolicy} />
-          <span className="w-px h-4 bg-gray-700 mx-1.5 shrink-0" />
-
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mr-1 shrink-0">
-            Curves
-          </span>
+          {!compact && <><span className="w-px h-4 bg-gray-700 mx-1.5 shrink-0" />
+          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mr-1 shrink-0">Curves</span>
           {tracks.map((t, i) => {
-            const color = pickTrackColor(t.target, i)
+            const color = curveColor(t.target, i)
             const isHidden = hidden.has(t.target)
             const isIso    = isolatedTrack === t.target
             const owner = parseTrackTarget(t.target)
-            const label = owner ? multipleOwners ? `${layerNames.get(owner.entityId) ?? owner.entityId} · ${owner.propertyPath}` : owner.propertyPath : t.target
+            const label = trackPresentation?.(t.target, i).label ?? (owner ? multipleOwners ? `${layerNames.get(owner.entityId) ?? owner.entityId} · ${owner.propertyPath}` : owner.propertyPath : t.target)
             // BL-45: OOR badge — shown only if before/after has any non-constant mode
             const oor = t.outOfRange
             const oorBefore = oor?.before ?? 'constant'
@@ -696,16 +710,16 @@ export default function CurveEditor({
                   </span>
                 )}
               </button>
-              <button onClick={() => setBakeTarget(t.target)} aria-label={`Bake ${label}`} title="Preview and convert this signal to editable keys"
-                disabled={editor.isTransactionActive?.()} className="px-1 text-[10px] text-amber-300 rounded hover:bg-gray-800 focus-visible:outline disabled:opacity-40">Bake…</button>
+              {context?.kind !== 'content' && <button onClick={() => setBakeTarget(t.target)} aria-label={`Bake ${label}`} title="Preview and convert this signal to editable keys"
+                disabled={editor.isTransactionActive?.()} className="px-1 text-[10px] text-amber-300 rounded hover:bg-gray-800 focus-visible:outline disabled:opacity-40">Bake…</button>}
               </span>
             )
-          })}
+          })}</>}
         </div>
 
         {/* Selection changes enable actions without changing chart geometry.
             Keep one fixed-height row; narrow panels can scroll its actions. */}
-          <div role="toolbar" aria-label="Keyframe actions"
+          {(!compact || showCompactKeyTools && selectedKfIds.size > 0) && <div role="toolbar" aria-label="Keyframe actions"
             className="flex items-center gap-1 h-7 shrink-0 px-2 py-0.5 bg-gray-900/90 border-t border-gray-800/60 whitespace-nowrap overflow-x-auto overflow-y-hidden [&>button]:shrink-0">
             <span className="text-[9px] uppercase tracking-wider text-gray-600 font-semibold pr-1 shrink-0">
               Easing
@@ -764,7 +778,7 @@ export default function CurveEditor({
             <span className="ml-auto text-[9px] font-mono text-gray-600 shrink-0">
               {selectedKfIds.size} selected
             </span>
-          </div>
+          </div>}
       </div>
 
       <div ref={containerCb} className="flex-1 min-h-0 relative">
@@ -857,7 +871,7 @@ export default function CurveEditor({
               2. The visible coloured curve.                                */}
         <g transform={`translate(${LEFT_GUTTER} ${TOP_GUTTER})`}>
           {visibleTracks.map((t, i) => {
-            const color = pickTrackColor(t.target, i)
+            const color = curveColor(t.target, i)
             const tvp = getTrackViewport(t.target)
             const d = buildCurvePath(t, tvp)
             const handleDblClick = (e: React.MouseEvent) => {
@@ -1096,7 +1110,7 @@ export default function CurveEditor({
         {/* ── Keyframe nodes ───────────────────────────────────────────── */}
         <g transform={`translate(${LEFT_GUTTER} ${TOP_GUTTER})`}>
           {visibleTracks.flatMap((t, i) => {
-            const color = pickTrackColor(t.target, i)
+            const color = curveColor(t.target, i)
             const tvp = getTrackViewport(t.target)
             return t.keyframes.map((kf) => {
               const isDragged = drag.preview?.kfId === kf.id
@@ -1199,7 +1213,7 @@ export default function CurveEditor({
       </svg>
       </div>
 
-      {bakeTarget && <TrackBakeDialog key={`${timeline.id}:${bakeTarget}`} scene={scene} editor={editor} timelineId={timeline.id} target={bakeTarget} onClose={() => setBakeTarget(null)} />}
+      {context?.kind !== 'content' && bakeTarget && <TrackBakeDialog key={`${timeline.id}:${bakeTarget}`} scene={scene} editor={editor} timelineId={timeline.id} target={bakeTarget} onClose={() => setBakeTarget(null)} />}
       {!!signalPreview.diagnostics.size && <p role="status" className="text-[10px] text-red-300 px-2">{Array.from(signalPreview.diagnostics.values()).slice(0, 3).join(' ')}</p>}
 
       {/* Inline value-edit input (kf double-click) ─────────────────────────
@@ -1218,7 +1232,7 @@ export default function CurveEditor({
           const v = Number(editingKf.draft)
           if (Number.isFinite(v) && v !== k.value && typeof k.value === 'number') {
             editor.dispatchCommand(makeUpdateKfValueCmd(
-              selectedTimelineId, editingKf.trackTarget, k.id, k.value, v,
+              selectedTimelineId, editingKf.trackTarget, k.id, k.value, v, context,
             ))
           }
           setEditingKf(null)
@@ -1257,7 +1271,7 @@ export default function CurveEditor({
       )}
 
       {/* Status bar — drag readout / hover info / hint ─────────────────────── */}
-      <div className="flex items-center gap-0 px-2 h-5 text-[9px] font-mono border-t border-gray-800
+      {!compact && <div className="flex items-center gap-0 px-2 h-5 text-[9px] font-mono border-t border-gray-800
                       bg-gray-950/80 text-gray-600 shrink-0 select-none overflow-hidden">
         {notice ? <span role="status" title={notice} className="text-amber-300 truncate">{notice}</span> : drag.preview ? (
           // Active drag — show time + value
@@ -1284,7 +1298,7 @@ export default function CurveEditor({
             Drag=scrub · Ctrl+drag=pan · Shift+drag=zoom · Alt+drag=lasso · Dbl-click curve=add kf · F/A/H
           </span>
         )}
-      </div>
+      </div>}
     </div>
   )
 
@@ -1297,7 +1311,7 @@ export default function CurveEditor({
       const next = type === 'customBezier'
         ? { type, bezier: kf.easing?.bezier ?? DEFAULT_BEZIER }
         : { type }
-      editor.dispatchCommand(makeUpdateEasingCmd(selectedTimelineId!, trackTarget, kf.id, kf.easing, next))
+      editor.dispatchCommand(makeUpdateEasingCmd(selectedTimelineId!, trackTarget, kf.id, kf.easing, next, context))
     }
 
     if (ctxData.kind === 'kf') {
@@ -1317,14 +1331,14 @@ export default function CurveEditor({
           })
         },
         setEasing:     (k, t) => setEasingFor(k, ctxData.trackTarget, t),
-        deleteKf:      () => editor.dispatchCommand(makeDeleteKfCmd(selectedTimelineId!, ctxData.trackTarget, kf)),
+        deleteKf:      () => editor.dispatchCommand(makeDeleteKfCmd(selectedTimelineId!, ctxData.trackTarget, kf, context)),
         duplicateKf:   (k) => {
           const step = Math.max(2, frameMs || 100)
           let ms = k.timeMs + Math.max(100, frameMs)
           while (track.keyframes.some(key => Math.abs(key.timeMs - ms) <= 1)) ms += step
           if (ms > tl.durationMs) { setNotice('No free time remains after this keyframe. Alt-drag it into a free time instead.'); return }
           const clone = { ...k, id: nextKfId(), timeMs: ms }
-          editor.dispatchCommand(makeCurveKeyframeChangesCmd(editor.getScene(), selectedTimelineId!, [{ target: ctxData.trackTarget, keyframe: clone, duplicate: true }]))
+          editor.dispatchCommand(makeCurveKeyframeChangesCmd(editor.getScene(), selectedTimelineId!, [{ target: ctxData.trackTarget, keyframe: clone, duplicate: true }], { context }))
           onSelectKeyframes(new Set([clone.id]))
         },
         alignToFrame:  frameMs > 0 ? () => {
@@ -1345,7 +1359,7 @@ export default function CurveEditor({
               if (selectedKfIds.has(k.id)) refs.push({ kfId: k.id, target: tr.target, timelineId: selectedTimelineId! })
             }
           }
-          const cmd = makeMirrorTimingCmd(scene, refs, { collisionPolicy: bulkPolicy })
+          const cmd = makeMirrorTimingCmd(scene, refs, { collisionPolicy: bulkPolicy, context })
           if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         } : undefined,
         reverseValues: selectedKfIds.size > 1 ? () => {
@@ -1355,7 +1369,7 @@ export default function CurveEditor({
               if (selectedKfIds.has(k.id)) refs.push({ kfId: k.id, target: tr.target, timelineId: selectedTimelineId! })
             }
           }
-          const cmd = makeReverseValuesCmd(scene, refs)
+          const cmd = makeReverseValuesCmd(scene, refs, context)
           if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         } : undefined,
         setTangentMode: (k, mode) => {
@@ -1395,7 +1409,7 @@ export default function CurveEditor({
           const idx = sorted.findIndex((k) => k.id === seg.id)
           const kfB = sorted[idx + 1]
           if (!kfB) return
-          const cmd = makeFlattenSegmentCmd(scene, tl.id, ctxData.trackTarget, seg.id, kfB.id)
+          const cmd = makeFlattenSegmentCmd(scene, tl.id, ctxData.trackTarget, seg.id, kfB.id, context)
           if (cmd) { try { editor.dispatchCommand(cmd) } catch (error) { setNotice((error as Error).message) } }
         },
       })

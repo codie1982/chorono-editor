@@ -5,6 +5,7 @@
 // shows the exact frame. The canvas is already translated to the layer origin
 // by CanvasRenderer (top-left of the layer box).
 
+import { fitImage } from '../../paint/imagePlacement'
 import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry/LayerRendererRegistry'
@@ -18,19 +19,7 @@ function fitRect(
   boxW: number, boxH: number,
   frameW: number, frameH: number,
 ): { dx: number; dy: number; dw: number; dh: number } {
-  if (!frameW || !frameH || fit === 'fill') {
-    return { dx: 0, dy: 0, dw: boxW, dh: boxH }
-  }
-  if (fit === 'none') {
-    return { dx: (boxW - frameW) / 2, dy: (boxH - frameH) / 2, dw: frameW, dh: frameH }
-  }
-  // contain (default) or cover
-  const scale = fit === 'cover'
-    ? Math.max(boxW / frameW, boxH / frameH)
-    : Math.min(boxW / frameW, boxH / frameH)
-  const dw = frameW * scale
-  const dh = frameH * scale
-  return { dx: (boxW - dw) / 2, dy: (boxH - dh) / 2, dw, dh }
+  return fitImage(fit ?? 'contain', boxW, boxH, frameW, frameH) ?? { dx: 0, dy: 0, dw: boxW, dh: boxH }
 }
 
 function renderFrameSequence(ctx: RenderContext, layer: Layer): void {

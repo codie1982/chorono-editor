@@ -38,7 +38,7 @@ async function seek(element: HTMLVideoElement, seconds: number): Promise<void> {
  * `work`, so resource selection cannot evaluate a different default-param frame.
  */
 export async function withMediaFrame<T>(scene: ChronoScene, timeMs: number, context: CanvasRenderingContext2D,
-  options: { overrides?: OverrideMap;paramValues?:ParamValueMap;signal?:AbortSignal }, work: (assets: AssetElementMap, overrides: OverrideMap) => T | Promise<T>,
+  options: { includeBackground?: boolean; overrides?: OverrideMap;paramValues?:ParamValueMap;signal?:AbortSignal }, work: (assets: AssetElementMap, overrides: OverrideMap) => T | Promise<T>,
   supplied?: VisualMediaSession): Promise<T> {
   return assetSourcePool.withAssets(scene.assets, async () => {
     const owner = supplied ?? new VisualMediaSession()
@@ -50,7 +50,7 @@ export async function withMediaFrame<T>(scene: ChronoScene, timeMs: number, cont
     try {
       check()
       const frame = prepareRenderFrame(scene, timeMs, options.overrides, options.paramValues)
-      owner.request({ frame, context })
+      owner.request({ frame, context, includeBackground: options.includeBackground })
       await owner.ready()
       preparing=false;check()
       const assets = owner.elements()

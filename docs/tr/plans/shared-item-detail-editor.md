@@ -3,18 +3,34 @@
 12 Kasım 2026 kullanıcı kararı. **13 Kasım: DET0–DET1'in dar ortak host'u
 Shape/Path ve sabit model yerleşimiyle uygulandı**; [gerçek sözleşme ve kabul](../item-detail-editor.md).
 Kalan yetenekler plandır; burada önerilen bütün alanlar çağrılabilir API değildir.
+**13 Kasım birleştirme:** Animasyonlu izole nesne, alt klip, tür bazlı araçlar
+ve parametrik definition/instance için [koordinasyon planı](item-owned-animation-plan.md)
+esas alınır. Bu belge ortak host ve etkileşim sahipliğini ayrıntılandırır;
+aynı kapsam için ikinci bir animasyon veya oturum sistemi tanımlamaz.
 Shape/Path/Poly, image/resim, texture, video,
 group/component ve kutulu 3D için yeniden kullanılabilir detay açma yapısı
 planlanır. Texture bir katman türü olmak zorunda değildir; bir materyalin veya
 Poly görünümünün image asset referansı da detay hedefi olabilir.
 
-Sonraki kullanıcı önceliği: **DET0–DET1 ortak detay/izolasyon akışı sıradaki
-olarak öne alındı ve dar teslimi tamamlandı; Poly/UV'den önce gelir.** Sonrası Poly → UV/görünüm → ileri kutulu 3D
-→ bileşen/karakter → simülasyonlar → export → son optimizasyon → sonraki CFX
-olarak kalır. İlk ortak host, ileri 3D model/rig/clip araçlarının tamamını erkene çekmez.
+DET0–DET1 ortak detay/izolasyon akışı öne alındı ve dar teslimi tamamlandı.
+**14 Kasım kullanıcı önceliği:** sırada [ana plan §3.2](../production-2d-roadmap.md)
+önce 3D-T Timeline/iç animasyon temeli, sonra 3D0–3D6; ardından Poly → UV/görünüm → 2D bileşen/karakter → simülasyonlar →
+export → son optimizasyon → sonraki CFX vardır. Ortak host yeniden yazılmaz;
+3D adapter node/kamera/material/klip araçlarıyla kademeli genişler.
 Bağımsız 3D Modeling, Video Editor veya Game Engine modunu etkinleştirmez.
 
+3D native klip ve yerel key IA2a/IA2b için IA0'ın dar owner/zaman kontratı
+kullanılır; önce 2D saat/IA1 authoring'ini teslim etmek şart değildir. Ancak
+3D-T'de ana/iç bağlam, temel yerel key düzenleme, scoped commit ve zaman kabulü
+3D0'dan önce tamamlanır; statik ana Timeline filtresi tek başına yeterli değildir. 13 Kasım
+alt bölümündeki sıra yorumlarını bu yeni öncelik günceller; gerçek DET0–DET1
+teslim sınırı değişmez.
+
 ## Mevcut kod ve tekrar kullanım sınırı
+
+**14 Kasım T0 teslimi:** [Scene/content Timeline bağlamı ve key hedef policy'si](../timeline-authoring-context.md)
+native komut/projection temelinde uygulandı. Statik detay host'u key UI'sına
+dönüştürülmedi; sırada T1 scoped klip/commit ve T2 runtime zaman/çıktı kabulü vardır.
 
 - `src/lib/scene/visibility/isolationView.ts` ve
   `src/app/hooks/useLayerIsolation.ts`: kaynak hidden/solo değerlerini
@@ -65,7 +81,7 @@ Bu bir workspace **görünümüdür**; ModeRegistry'de yeni ürün modu değildi
 | Sol panel | Yalnız aktif içeriğin ağacı/alt öğeleri veya ilgili araçları. Ana sahnenin uzun Layers/Explorer listesi geçici olarak geri planda kalır. |
 | Orta alan | Aktif öğenin detay viewport'u; gerekirse ana kompozisyon bağlamını göster seçeneği. Bu bağlam görüntüsü editleme hedefini genişletmez. |
 | Sağ panel | Aktif adapter'ın Properties'i. 3D yerleşim/kamera, shape konturu veya image crop aynı panel alanını kullanır. |
-| Alt panel | Statik image/texture gibi zaman gerektirmeyen içerikte varsayılan katlıdır. Shape için mevcut ilgili keylerin filtreli görünümü; iç 3D Timeline yalnız kendi capability'si teslim edilince açılır. |
+| Alt panel | Statik image/texture'da varsayılan katlı. Bir defalık Shape/group'ta mevcut key filtresi olabilir; animasyonlu komponentte gerçek yerel klip/Set Key/Curve görünümü açılır. İç 3D Timeline kendi capability'si teslim edilince gelir. |
 | İlgisiz paneller | Main State Machine, Events/Wires ve diğer paneller kapatılıp silinmez; detay görünümünden geçici çıkarılır. Detay parametre bağlantısı gerekiyorsa capability ile erişilir. |
 
 `src/components/dock/DockLayout.tsx`, `types.ts` ve mevcut panel registry yeniden
@@ -121,12 +137,12 @@ renderer ve iş politikaları composition ile verilir.
 
 | Hedef | Detay içeriği ve kapsam | Zaman/ana sahne sınırı |
 | --- | --- | --- |
-| Shape / Path / Spline | Desteklenen ölçüler, kontur/nokta/tutamaç ve stil; mevcut nokta edit araçları kullanılır. | Mevcut ana Timeline geometri/style keyleri korunur. Aynı key için ikinci kopya veya zorunlu iç Timeline yaratılmaz. |
+| Shape / Path / Spline | Desteklenen ölçüler, kontur/nokta/tutamaç ve stil; mevcut nokta edit araçları kullanılır. | Bir defalık içerikte mevcut key filtresi; parametrik komponent kaynağında scoped iç klip authoring'i. Ana keyler otomatik taşınmaz, kaynak keyleri instance başına çoğaltılmaz. |
 | Editable Poly | Vertex/edge/face ve topoloji; ilgili dilimde UV/vertex color. | Stable vertex/face kimliği ve topology invalidation korunur; iç mesh key/bake formatı kendi domain'indedir. |
 | Image / resim | Kadraj/crop ve desteklenen non-destructive görünüm ayarları. | Kaynak piksel dosyası değiştirilmez. 2D layer transform'u ve keyleri yerinde kalır; Timeline zorunlu değildir. |
 | Texture / material slot | Asset seçimi, texture offset/rotation/scale/wrap ve UV görünümü; UV düzenleme ilgili Poly adapter'ını kullanır. | Image kaynağı, materyal parametresi ve mesh UV'sinin sahipleri ayrıdır. Bu bir texture-paint veya PBR material editörü teslimi sayılmaz. |
 | Video | Kaynak önizleme, in/out, poster ve desteklenen mevcut clip kontrolleri. | Kaynak zamanı ile kompozisyon zamanı adapter ile ayrılır. Çoklu decode/cache, ileri kurgu/keying CFX7/7K'de kalır. |
-| Group / component | Alt ağaç ve varsa reusable source içeriği. | Parent bağlamı ve referanslar korunur. Group'a sırf detay açıldı diye yeni saat eklenmez; component local-clock kendi dilimindedir. |
+| Group / component | Alt ağaç, reusable source, açık kontroller ve iç klipler. | Isolate grupta yalnız görünüm filtresidir; komponent açık komutla yaratılır. Minimal source/instance IA1a, gerçek yerel authoring IA1b; saat örneği ikisi birlikte kabul edilir. |
 | Kutulu 3D | Node ağacı, model/materyal/ışık/çıktı kamerası ve ileride iç klip/key araçları. | Ana Timeline yalnız dış 2D kutuyu yönetir. İç 3D Timeline ve inceleme/çıktı kamerası ayrımı 3D adapter'ına aittir. |
 
 Statik image/detail açılması ücretsiz bir piksel boyama, video kurgu, mesh
@@ -143,6 +159,9 @@ bilgisini verir ve özgün kaynağı korur.
    seçimi görünürdür. Sadece bu kullanım için mevcut desteklenen override veya
    Make unique yolu kullanılır; diğer kullanıcılar/instance'lar sessizce değişmez.
    Import edilen GLB/image/video bytes'ı yerinde üzerine yazılmaz.
+   Definition edit'i yeni immutable sürüm üretir. İlk uygulamada yalnız edit'in
+   açıldığı instance yeni sürüme pin'lenir; diğer instance'ların sürümü korunur.
+   Kütüphane kaynağından edit yeni sürümü kaydeder, toplu güncelleme ayrı işlemdir.
 3. Apply revision'ı yeniden denetler. Arada değişiklik varsa hedef yeniden okunur;
    yalnız çakışmadığı doğrulanan alanlar yeniden hazırlanabilir. Aynı alandaki
    insan/ajan değişikliği sessizce ezilmez. Silinmiş hedefe veya değişmiş asset
@@ -223,6 +242,73 @@ sırasında animations dizisini boşaltır; ilk dilim sabit pozu gösterir. İç
 model/kamera keyleri de ana 2D authoring'de kapalıdır. Source alanlarını açmak
 tek başına bir klip oynatıcısı veya bone/rig düzenleyicisi sağlamaz.
 
+### Risk incelemesi — zorunlu ortak motor yerine ayrı kabul kapıları
+
+**Güncel ürün kararı:** İç animasyon detay ekranının gerekli yeteneğidir.
+[Ayrıntılı owned animasyon planı](item-owned-animation-plan.md), `Timeline[]`
+yapısını koruyup owner, tek property yazıcısı, yerel saat ve gerçek detay
+Timeline authoring'iyle IA1/IA2 teslimlerini tanımlar. Bütün nesnenin dış
+animasyonunu kapatmak yerine yalnız içeriğin sahip olduğu kanallar korunur;
+dış kök transform/opacity açık kalır. Genel recursive motorun ertelenmesi
+bu ilk teslimlerin ertelendiği veya statik ekranın yeterli olduğu anlamına gelmez.
+Koordinasyon planındaki IA1a/IA1b ve IA2a/IA2b, burada toplu IA1/IA2 diye anılan
+teslimlerin alt adımlarıdır. Tür bazlı araç matrisi aynı belgenin §5.1'inde,
+oturum/registry genişleme sınırı §5.2–5.4'ündedir.
+
+Sonraki saat/3D örneğiyle ortaklık sınırı netleştirildi: aynı Timeline tipi ve
+evaluator, bütün içerik kliplerinin tek global dizide durmasını gerektirmez.
+Basit izolasyonda mevcut Timeline filtrelenebilir. Native 3D klip içerikte,
+animasyonlu komponent klibi sürümlü definition'da kalır; ana görünüm yalnız
+dış hareket ve açık kontrolleri taşır. Minimal parametrik definition/instance
+IA1'in parçasıdır; tam library tarayıcısı ve component particle adapter'ı kendi
+aşamalarında eklenir. Saat örneği sadece filtreli Timeline ile tamamlanmış sayılmaz.
+
+[İç animasyon risk incelemesi](internal-animation-risk-review.md), mevcut düz
+evaluator/clock ve instance sahipliği nedeniyle genel nested çekirdeğin
+doğrudan entegrasyonunu riskli bulur. Önceki başarısız denemeye ait kesin
+uygulama/revert kaydı bulunamadı; tarihsel plan zaten nested bileşenleri C2'ye
+ayırır. Ortak iç animasyon motoru ileri 3D veya temel rig/FK için zorunlu bir
+önkoşul değildir. Aşağıdakiler ayrı ihtiyaçlardır, tek seferde teslim taahhüdü
+değildir:
+
+1. **Bağımsız klip için kaynak ve değerlendirme:** Stable ID'li alt içerik ve
+   instance referansı, iç Timeline/klip, ana zaman → içerik zamanı eşlemesi
+   (başlangıç, offset, hız, loop/hold politikası), scoped hedefler ve döngüsel
+   referans koruması. 2D affine ve 3D TRS payload'ları ayrı adapter'lardır.
+2. **Detayda authoring:** Yerel playhead/scrub/Set Key ve iç animasyon listesi.
+   Ana Timeline kutu/instance'ın dış hareketini kontrol eder; iç keyler aynı
+   source alanlarına kopyalanmaz. Apply/Cancel, revision, Undo, instance override,
+   portable ve final-frame zaman eşliği birlikte teslim edilir.
+3. **Rig araçları:** 2D için parça/joint/attachment ve FK/IK; mesh deformasyonu
+   gerektiğinde Poly/UV + skin weights/rest pose. 3D için imported skeleton/clip
+   oynatma ve pose düzenleme ile sıfırdan rig/weight/IK üretme ayrı capability'lerdir.
+   Aynı detay host'u araçları barındırır; aynı skeleton/solver formatı iki boyuta
+   zorla uygulanmaz. Oyun runtime'ına otomatik entity/physics üretmez.
+
+DET0–DET1 statik kalır. Mevcut grup/karakter keylerinin filtreli detay görünümü
+ve normal transform keyleriyle rigid FK genel nested motor gerektirmez. Tek
+ithal 3D klibi için önce tek seviyeli, yaprak model adapter'ı araştırılabilir;
+per-instance pose, kesin zaman, bütçe ve çıktı kabulü olmadan açılmaz. Recursive
+alt sahne, yerel SM/olay/ses ayrı ileri kapsamda bekler. Ortaklık kanıtlanan
+track/math ve lifecycle sözleşmelerinden çıkarılır; legacy evaluator'ın genel
+semantiği değiştirilmez. Bu 13 Kasım denetiminin Poly/UV-önce sırası 14 Kasım
+§3.2 3D önceliğiyle güncellenmiştir; denetim klip/rig uygulaması sayılmaz.
+
+### 13 Kasım kod denetimi — iç animasyon ve rig henüz yok
+
+DET0–DET1 ortak statik detay host'udur; animasyon içinde animasyon veya
+karakter rig editörü teslimi değildir. `src/lib/types/core.ts` içindeki
+Timeline'lar düz scene listesinde durur; `evaluator.ts/evaluateTimelines`
+bunları ortak overrides map'inde değerlendirir. Mevcut local-time/loop ve SM
+saatleri yeniden kullanım temelidir, fakat nested source/instance/child Timeline
+anlamına gelmez. `LayerType` içinde reusable component/subscene veya skeleton
+source türü ve detayda ayrı oynatma/Timeline UI'sı henüz bulunmaz.
+
+3D importta `ModelAssetService.ts` kaynak GLB bytes'ını korurken runtime parse
+sırasında animations dizisini boşaltır; ilk dilim sabit pozu gösterir. İç
+model/kamera keyleri de ana 2D authoring'de kapalıdır. Source alanlarını açmak
+tek başına bir klip oynatıcısı veya bone/rig düzenleyicisi sağlamaz.
+
 Mevcut ileri detay/3D ve bileşen/karakter dilimlerinin açık bağımlılığı:
 
 1. **Ortak iç animasyon kaynağı ve değerlendirme:** Stable ID'li alt içerik ve
@@ -247,9 +333,9 @@ ve mevcut genel sıra değişmez; bu denetim kod veya rig sistemi uygulaması de
 | Dilim | Onaylı sıradaki yeri ve sınırı |
 | --- | --- |
 | DET0 — dar sözleşme uygulandı | Mevcut ContextMenu/Isolate/komut sahipleri üzerinden capability catalog, hedef, revision ve taslak sınırı. [Gerçek sözleşme](../item-detail-editor.md). |
-| DET1 — ilk host uygulandı | Shape, Bézier Path ve model3d sabit yerleşim; Layers/Explorer/viewport sağ tık, Shape/model çift tık, tek seviyeli breadcrumb/Back, bounded draft, Apply/Cancel ve tek Undo. Ana dock mounted/inert korunur. Path eski çift tık/Pen ve ad Rename korunur. Nested detay, filtreli iç Timeline ve ileri 3D klip/rig henüz yoktur. |
+| DET1 — ilk statik host uygulandı; T1 model genişlemesi ayrı | Shape, Bézier Path ve model3d sabit yerleşim; Layers/Explorer/viewport sağ tık, Shape/model çift tık, tek seviyeli breadcrumb/Back, bounded draft, Apply/Cancel ve tek Undo. Ana dock mounted/inert korunur. Path eski çift tık/Pen ve ad Rename korunur. Nested detay ve ileri native GLB klip/rig henüz yoktur. 14 Kasım T1, model/kamera için private klip/Keys/Curve ekler: [gerçek sözleşme](../model-content-clips.md). |
 | DET2 — image / texture / Poly | Poly/UV ve asset araçları ilgili dilimleri teslim edildiğinde aynı host'a bağlanır; yeni UV algoritması veya texture-paint DET1'e gizlenmez. |
-| DET3 — ileri kutulu 3D | Aynı host üzerinde node seçimi, materyal override, ışık/ortam, gölge, kamera preset/perspective/orthographic; sonra iç Timeline/clip ve açık zaman senkronu. Her biri ayrı capability/kabul dilimidir. |
+| DET3 — ileri kutulu 3D | Aynı host üzerinde node seçimi, materyal override, ışık/ortam, gölge, kamera preset/perspective/orthographic; iç Timeline/clip ayrıca risk kapısına tabidir. Genel nested motor bu statik araçların önkoşulu değildir. Her biri ayrı capability/kabul dilimidir. |
 | DET4 — reusable kontroller | Bileşen/karakter diliminde group/component adapter, typed exposed parameters, slider/bool/Wire/Expression ve gerekirse parça etkileşimleri. Turntable ve explode gibi hazır hareketler iç zaman/parametre altyapısından sonra gelir. |
 | DET5 — video ve compositing | Mevcut dar video kontrolleri adapter ile açılabilir; çoklu video/cache/kurgu/chroma/despill CFX7/7K, depth/part-mask/holdout ve ortak kamera CFX10 teslimidir. Yeni format importer'ları ayrı kabul edilir; ilk adapter kapısını bekletmez. |
 

@@ -12,6 +12,8 @@ import { INITIAL_DOPE_SHEET_STATE } from './types'
 import './DopeSheetPanel.css'
 
 interface Props {
+  /** Hard row/key isolation; source scene and edit commands remain complete. */
+  layerScope?: ReadonlySet<string> | null
   collisionPolicy?: KeyCollisionPolicy
   onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
   scene: ChronoScene
@@ -37,7 +39,7 @@ export default function DopeSheetPanel({
   selectedLayerId,
   selectedLayerIds,
   selectedTimelineId,
-  selectedKfIds,
+  selectedKfIds, layerScope,
   currentTimeMs,
   isPlaying,
   onTimeChange,
@@ -93,7 +95,7 @@ export default function DopeSheetPanel({
         settings={settings}
         onSettingsChange={onSettingsChange}
       />
-      <DopeSheetContainer collisionPolicy={bulkPolicy} onCollisionPolicyChange={setBulkPolicy}
+      <DopeSheetContainer layerScope={layerScope} collisionPolicy={bulkPolicy} onCollisionPolicyChange={setBulkPolicy}
         scene={scene}
         selectedTimeline={selectedTimeline}
         editor={editor}

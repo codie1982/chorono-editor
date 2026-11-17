@@ -158,7 +158,7 @@ describe('SplineHandle normalized geometry edits',()=>{
     expect(getLayer().transform).toEqual(transform)
   })
 
-  it('removes topology and matching animation tracks atomically, restoring all records and key identities on undo',()=>{
+  it('refuses removing keyed topology and preserves all human key identities without a history write',()=>{
     const {handle,getScene,setScene,commands,undo}=setup()
     const point=first(handle.data.points)
     const target=`layers.${handle.layerId}.spline.points.${point.id}.x`
@@ -168,12 +168,10 @@ describe('SplineHandle normalized geometry edits',()=>{
       {target,keyframes:[key]},{target:unrelated,keyframes:[{...key,id:'keep'}]},
     ]}]})
     const before=structuredClone(getScene())
-    handle.removePoint(point.id)
-    expect(getScene().timelines[0].tracks.map(track=>track.target)).toEqual([unrelated])
-    expect(handle.getPoint(point.id)).toBeNull()
-    expect(commands).toHaveLength(1)
-    assertSplineTopology(handle.data)
-    undo();expect(getScene()).toEqual(before)
+    expect(()=>handle.removePoint(point.id)).toThrow(/keyed|timeline|reference/)
+    expect(getScene()).toEqual(before)
+    expect(commands).toHaveLength(0)
+    expect(handle.getPoint(point.id)).toBeDefined()
   })
 
   it('removes complete contours/sub-shapes without orphaned handles or contour owners',()=>{
@@ -200,14 +198,14 @@ describe('SplineHandle invalid edits and locks',()=>{
     const out=handle.setHandle(point.id,'out',{x:20,y:50})
     handle.setHandleLocked(out,true)
     const before=handle.data,count=commands.length
-    expect(()=>handle.movePoint(point.id,20,30)).toThrow(/locked/)
-    expect(()=>handle.splitSegment(first(before.segments).id,0.4)).toThrow(/locked/)
-    expect(()=>handle.setHandle(point.id,'out',{x:30,y:30,locked:false})).toThrow(/locked/)
+    expect(()=>handle.movePoint(point.id,20,30)).toThrow(/locked|unlock/)
+    expect(()=>handle.splitSegment(first(before.segments).id,0.4)).toThrow(/locked|unlock/)
+    expect(()=>handle.setHandle(point.id,'out',{x:30,y:30,locked:false})).toThrow(/locked|unlock/)
     expect(handle.data).toEqual(before)
     expect(commands).toHaveLength(count)
     handle.setHandleLocked(out,false)
     handle.setPointLocked(point.id,true)
-    expect(()=>handle.transform({a:1,b:0,c:0,d:1,e:10,f:0})).toThrow(/locked/)
+    expect(()=>handle.transform({a:1,b:0,c:0,d:1,e:10,f:0})).toThrow(/locked|unlock/)
     handle.setPointLocked(point.id,false)
     handle.movePoint(point.id,5,6)
     expect(handle.getPoint(point.id)).toMatchObject({x:5,y:6})
@@ -218,7 +216,7 @@ describe('SplineHandle invalid edits and locks',()=>{
     layer.parentId=parent.id
     const locked=setup(layer,[parent]),point=first(layer.spline!.points)
     expect(locked.handle.data).toBeDefined()
-    expect(()=>locked.handle.movePoint(point.id,0,0)).toThrow(/locked/)
+    expect(()=>locked.handle.movePoint(point.id,0,0)).toThrow(/locked|unlock/)
     expect(locked.commands).toHaveLength(0)
     const invalid=setup(newRectLayer())
     expect(()=>invalid.handle.data).toThrow(/not an editable spline/)

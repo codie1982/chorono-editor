@@ -1,3 +1,4 @@
+import { strokeType } from '../../paint/paintSource'
 import type { Layer } from '@/lib/types'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
 import { computePathBounds } from '@/lib/geometry/computePathBounds'
@@ -27,7 +28,7 @@ export function nativePaintBounds(layer: Layer, context: CanvasRenderingContext2
   // Outside-aligned strokes double the native width. Miter joins and square
   // caps can extend beyond half-width. Zero/invalid Canvas lineWidth preserves
   // the inherited width; include it rather than treating zero as no paint.
-  const padding = stroke ? Math.max(Math.abs(stroke.width), context.lineWidth)
+  const padding = stroke && strokeType(stroke) !== 'none' ? Math.max(Math.abs(stroke.width), context.lineWidth)
     * Math.max(2, context.miterLimit) : 0
   if (!Number.isFinite(padding)) return null
   return { x: bounds.x - padding, y: bounds.y - padding,

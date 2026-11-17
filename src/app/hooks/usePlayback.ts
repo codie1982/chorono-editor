@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { PlaybackClock, playbackWindow } from '@/lib/timeline/playbackClock'
+import { PlaybackClock, playbackWindow, type PlaybackRange } from '@/lib/timeline/playbackClock'
 
 interface UsePlaybackReturn {
   currentTimeMs: number
@@ -30,6 +30,11 @@ interface UsePlaybackOptions {
    */
   workAreaInMs?: number
   workAreaOutMs?: number
+  /** Explicit local span and cycle policy. Overrides, but does not edit, Work Area. */
+  range?: PlaybackRange | null
+  /** A hidden/unsupported workspace pauses its clock and refuses Play until
+   * available. Re-enabling never resumes automatically or resets the playhead. */
+  enabled?: boolean
 }
 
 /**
@@ -46,6 +51,7 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
   const [isPlaying, setPlaying]      = useState(false)
   const [playbackSpeed, setSpeed]    = useState(1)
   const rafRef = useRef<number | null>(null)
+  const enabled = useRef(opts.enabled !== false); enabled.current = opts.enabled !== false
   const publish = useCallback(() => {
     setTimeMs(clock.current!.timeMs)
     setPlaying(clock.current!.playing)
@@ -57,7 +63,8 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
     publish()
     // Scalar bounds describe the playback window independently of renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [window.durationMs, window.startMs, window.endMs, window.wrapAtEnd, publish])
+  }, [window.durationMs, window.startMs, window.endMs, window.wrapAtEnd, window.rangeCycle?.durationMs,
+    window.rangeCycle?.loop, window.rangeCycle?.pingPong, window.rangeCycle?.loopCount, publish])
 
   const tick = useCallback((now: number) => {
     rafRef.current = null
@@ -75,6 +82,7 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
   }, [isPlaying, tick])
 
   const handlePlayToggle = useCallback(() => {
+    if (!enabled.current) return
     const current = clock.current!
     if (current.playing) current.pause(performance.now())
     else current.play(performance.now())
@@ -92,6 +100,7 @@ export function usePlayback(opts: UsePlaybackOptions): UsePlaybackReturn {
     clock.current!.pause(performance.now())
     publish()
   }, [publish])
+  useEffect(() => { if (opts.enabled === false) handlePause() }, [opts.enabled, handlePause])
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     clock.current!.setSpeed(speed, performance.now())

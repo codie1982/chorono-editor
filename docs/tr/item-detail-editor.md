@@ -1,22 +1,40 @@
 # Ortak öğe detay düzenleyicisi — DET0–DET1
 
+14 Kasım 2026 UI kapsamı: **Edit content** ve çift tık ile detay girişi yalnız
+`model3d` nesnelerinde açıktır. 2D nesnelerde bu giriş kapalıdır; Properties,
+text/path araçları ve Timeline ana editörde çalışmaya devam eder. Ortak 2D
+adapter/session altyapısı kaynak uyumluluğu için içeride korunur.
+`hasItemDetailEntry` UI giriş politikasını, `detailUnavailableReason` ise kilit,
+instance ve gerçek adapter yeteneklerini kontrol eder. Canvas, Layers ve Scene
+Explorer aynı politikayı kullanır. Aşağıdaki 2D adapter örnekleri public UI
+özelliği değil, ortak altyapının teknik sözleşmesidir.
+
+
+> 14 Kasım güncellemesi: ilk teslimin tarihli kapsamı aşağıdadır. Node, kamera,
+> material, native klip, çoklu model ve açık input'ların güncel sözleşmesi
+> [3D0–3D6 model detay araçları](model-detail-3d-packages.md) belgesindedir.
+
+14 Kasım eki: Bu belgedeki statik Shape/Path sözleşmesi korunur. Model adapter'ı
+3D-T1'de [private klip ve yerel Keys/Curve Timeline](model-content-clips.md) ile
+genişledi; aşağıdaki ilk DET teslimi tam 3D/rig editörü olarak yorumlanmamalıdır.
+
 13 Kasım 2026. İlk çalışan ortak detay host'u; Shape, Bézier Path ve kutulu
 modelin sabit 3D yerleşim ayarları desteklenir. İleri image/video/UV editörleri,
 3D scene/rig/clip ve iç Timeline bu teslimde uygulanmış değildir.
 
 ## Kullanım ve görünen sınır
 
-1. Tek, kilitli/donmuş olmayan, source bir Shape/Path/model katmanı seçin.
-   Layers → **Edit content** veya Layers/Explorer/viewport sağ tık →
-   **Edit content…** kullanın. Shape/model viewport çift tık da aynı host'u açar.
+1. Tek, kilitli/donmuş olmayan, source bir model katmanı seçin.
+   Layers/Explorer/viewport sağ tık → **Edit content…** veya model viewport
+   çift tık ile host açılır. 2D nesnelerde detay girişi kapalıdır.
    Path'in eski çift tık → Pen akışı ve katman adı çift tık → Rename korunur.
 2. Mevcut çalışma alanı içinde üst bağlam satırı, **Scene › öğe** breadcrumb'ı,
    Back, Undo/Redo, Focus view, Cancel ve Apply & return görünür. İlk host tek
    seviyedir; nested detay henüz yoktur. Dış ana toolbar inert olur, ana dock
    unmount edilmeden gizlenir; localStorage layout'u yeni detay düzeniyle yazılmaz.
-3. Shape ölçü/geometri/fill/stroke, Path stil/closed ve tek noktanın local X/Y'si,
-   model iç XYZ/dönüş/ölçek/kamera/ışık mevcut authoritative schema'dan düzenlenir.
-   Point taşıma eski `moveAnchor` hesabını kullanır ve handle offset'lerini korur.
+3. Model iç XYZ/dönüş/ölçek/kamera/ışık mevcut authoritative schema'dan düzenlenir.
+   Ortak 2D adapter'lar iç teknik kullanım için korunur; Shape/Path düzenlemeleri
+   ana viewport ve Properties üzerinden yapılır.
 4. Detay viewport'u seçili içeriği ana kompozisyon koordinatlarında ve açılış
    zamanında izole gösterir. Pan/zoom açıktır; dış 2D sürükleme/resize, guide ve
    motion-key authoring kapalıdır. Model kamera aracı varsa **taslağın kayıtlı
@@ -104,7 +122,7 @@ adapter yalnız mevcut schema alanlarını çizer. Media/UV/painter/rig aracı s
 register edildiği için var sayılmaz. Component/3D iç saat, nested belge ve oyun
 runtime'ı bu ilk sözleşmeye zorunlu metot olarak eklenmez.
 
-## Doğrulama
+## İlk DET tesliminin tarihli doğrulaması
 
 - Domain/menü testleri: 12 yeni test; gerçek source command, history/Undo/Redo,
   portable, key/parent-child kimliği, driver ve CAS/disposal sınırları.

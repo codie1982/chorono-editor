@@ -43,6 +43,7 @@ export function cloneSingleLayer<L extends Layer>(
       `CloneMode "${mode}" not implemented yet. Use 'copy' or 'instance'.`,
     )
   }
+  if (mode === 'instance' && (source.booleanOperation || source.booleanResultFor)) throw new Error('Boolean operation content requires independent Copy, including its protected source tree.')
 
   // 'copy' = full deep clone with independent visual fields.
   // 'instance' (Phase 3) = thin reference layer: visual fields STRIPPED;
@@ -54,6 +55,7 @@ export function cloneSingleLayer<L extends Layer>(
   const clonedLayer = cloneLayerForDuplicate(source) as L
 
   if (mode === 'instance') {
+    if (source.model3d?.content) clonedLayer.model3dInputValues = Object.fromEntries(Object.entries(source.model3d.content.parameters).map(([id, p]) => [id, p.value]))
     // Reference the source.
     clonedLayer.instanceOf = source.id
     // Strip ALL visual fields — they'll be resolved from the source at

@@ -1,6 +1,6 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.1.0: varsayılan `standard` keşif kataloğu 40 ortak aracı yayımlar.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 44 ortak aracı yayımlar.
 Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
@@ -43,7 +43,7 @@ Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin vey
 Claude Code ve Codex için araç kullanım iş akışları ayrıca `skills/` altında dağıtılır. Skill kurulum CLI'si, yerel deneme ve npm paketleme için [skill rehberini](skills.md) okuyun. Skill kurulumu bu MCP bağlantısının yerine geçmez.
 
 Sunucu aynı ActionRegistry/domain komutlarını kullanır. Varsayılan STDIO
-`tools/list` yüzeyi sık kullanılan 40 aracı gösterir; uzman eylemler tekil şema
+`tools/list` yüzeyi sık kullanılan 41 aracı gösterir; uzman eylemler tekil şema
 keşfi ve `batch_actions` ile kullanılabilir. Bu ayrım katman/kompozisyon,
 keyframe/timeline, clone/array, spline/path, particle ve state-machine
 kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları kullanır:
@@ -51,12 +51,33 @@ kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları k
 | Alan | Araçlar |
 | --- | --- |
 | Keşif | `list_sessions`, `get_capabilities`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
-| Nesneler | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
+| Nesneler | `create_layer`, `update_layer`, `update_model3d`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
 | Animasyon | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Script | `run_script`, `apply_script_plan`, `batch_actions` |
 | İzleme | `render_preview`, `evaluate_frame`, `control_playback`, `control_runtime`, `get_runtime`, `undo`, `redo` |
 | Dosyalar | `save_project`, `list_projects`, `load_project`, `export_runtime`, `export_svg`, `export_sequence` |
 | Ses | `get_audio_state`, `render_audio_preview`, `export_audio` |
+
+### Kutulu 3D model
+
+`import_asset` ile `.glb` için `model/gltf-binary`, kaynakları gömülü `.gltf`
+için `model/gltf+json` MIME türünü ve ham base64 içeriğini gönderin. Dosya yolu
+veya `data:` URL'si gönderilmez. Şema, 16 MiB ham modelin base64 karşılığını
+kabul eder; import parser'ı dosya boyutu, bağımlılıklar ve çözülecek iş yükünü
+ayrıca denetler. Dönen `addedLayerIds` içindeki gerçek model katmanı id'sini
+kullanın.
+
+Statik iç model konumu/dönüşü/ölçeği, kamera ve ışık için `update_model3d`
+şemasını `get_capabilities({toolName:'update_model3d'})` ile okuyun. Örnek
+işlem argümanları: `{layerId:'MODEL_ID',patch:{rotation:{y:30},camera:{yaw:45}},box:{width:600}}`.
+`box` dış 2D piksel boyutudur; iç konum/kamera hedefi normalize sunum
+birimlerindedir, açılar derecedir. Patch eksik kardeş alanları ve asset kimliğini
+korur. Değişiklikten hemen önce `get_scene` okuyup dış çağrıya onun
+`expectedRevision` ve `readToken` değerlerini ekleyin. Ana 2D Timeline'da
+`model3d.*` kanalları keylenmez. Native **Edit content** UI'sı private model/kamera
+klipleri için ayrı Content Timeline/Keys/Curve sunar; MCP/script klip authoring
+API'si açılmadı. v2 klipleri ve sahipli base kanallarını generic patch ile
+değiştirmeyin; ilgili içerik editörünü kullanın. [Kaynak ve sınırlar](model-content-clips.md).
 
 ### Keşif ve uzman araçlar
 
@@ -75,7 +96,7 @@ Salt okuma, dosya ve playback/runtime taşıma araçları mutasyon batch'ine gir
 klibi düzenlemeleri bu uzman mutasyon yolunu kullanabilir; scriptte aynı domain
 işlemleri de vardır.
 
-`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` eski 77 aracın
+`get_capabilities({})` kapsamlı yanıtı korur: `tools` eski 77 araç ve yeni `update_model3d` aracının
 uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
 Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
 `catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
@@ -112,7 +133,7 @@ Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
 
 Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
 `CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
-`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı yayımlar; `standard`
+`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı ve `update_model3d` aracını yayımlar; `standard`
 varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
 değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
 bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.
@@ -256,3 +277,10 @@ Kullanıcıya ait authoring/hermes animasyon verileri korunur. Kayıt sınırlı
 istenmeyen değişiklik izni değildir. Genel key upsert semantiği değişmedi.
 2.1.0 için editör/STDIO birlikte yeniden başlatılıp bağlanır; source argümanları
 2.0.0 ile aynıdır. [Bakım sözleşmesi](../../src/lib/editor/authoring/README.md).
+
+
+3D0–3D6 native detail tools use model source v3. Node/clip structural authoring remains a native UI workflow; MCP import/static presentation edits and prepared preview/portable output keep their existing revision/token contracts. See [model detail implementation](model-detail-3d-packages.md).
+
+## Spline düzenleme ve script eşliği
+
+`prepare_spline_edit` → önizleme inceleme → `apply_spline_edit` / `discard_spline_edit` akışı Point/Edge/Object, çizerek birleştirme, Offset, Chamfer, Fillet ve Boolean işlemlerini kapsar. Hazırlama kaynak okuma yetkisi ister; uygulama hazırlamanın döndürdüğü **yeni plan tokenını** kullanır. [Sözleşme ve örnekler](mcp-spline-editing.md), [script uyumluluk incelemesi](script-api-compatibility-audit.md).

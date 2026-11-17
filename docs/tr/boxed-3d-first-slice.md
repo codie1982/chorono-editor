@@ -1,5 +1,18 @@
 # Kutulu 3D — ilk model ve kamera dilimi
 
+> 14 Kasım güncellemesi: ilk teslimin tarihli kapsamı aşağıdadır. Node, kamera,
+> material, native klip, çoklu model ve açık input'ların güncel sözleşmesi
+> [3D0–3D6 model detay araçları](model-detail-3d-packages.md) belgesindedir.
+
+15 Kasım altyapı notu: Boş 3D sahne ayrıntı editöründe açılır. 3D inspection
+gridi boş ve dolu sahnelerde Modeling/Animation/Texture-Material alanlarında
+görünür; Render ve şeffaf çıktı karesine eklenmez. Sağ üst yön küpü 26 hazır
+bakış ve sürükleyerek orbit sağlar. Model
+ayrıntısı geçici Modelleme, Animasyon, Render ve Texture/Material çalışma alanlarına
+ayrılır. Seçim, kamera, taslak ve Undo geçmişi alan değişiminde korunur; alan
+tercihi sahne JSON'una yazılmaz. Mevcut kontroller ilgili alanda görünür; bu
+ayrım yeni geometri/UV düzenleme veya ayrı bir üst düzey 3D belge modu sunmaz.
+
 12 Kasım 2026. Kullanıcının daralttığı ilk teslim: GLB/glTF import, Properties
 ayarları ve açık toggle ile fareden kamera kontrolü. Çalışma alanı hâlâ 2D'dir.
 Bu belge ilk dilimin gerçek sözleşmesidir; tam 3D workspace/solver planı değildir.
@@ -45,8 +58,10 @@ seçimde veya thin instance üzerinde kamera aracı açılmaz; source model düz
   hiyerarşisi, pivot/transform veya dosya içeriği yeniden yazılmaz.
 - İç konum ve kamera hedef/mesafesi bu normalize sunum birimlerini kullanır.
   Bu bir fizik dünyası/metre birimi değildir. Source asset her zaman özgün kalır.
-- Kamera perspective'tir: yaw/pitch derece, pitch −89..89, distance .1..1000,
-  FOV 5..150. Orthographic, roll ve imported camera seçimi ileri dilimdedir.
+- Kamera perspective'tir: yaw/pitch derece, pitch −90..90, distance .1..1000,
+  FOV 5..150. Bu ilk dilimde orthographic, roll ve imported camera seçimi yoktu;
+  orthographic ve roll sonraki model detay diliminde eklendi (bkz.
+  [model detay araçları](model-detail-3d-packages.md)). Imported camera seçimi açık kalır.
 - Ana Timeline mevcut milisaniye ve ortak evaluated-frame sözleşmesiyle yalnız
   dış 2D kutunun kanallarını yönetir. `model3d.*` iç kanalları burada keylenmez.
   Daha önce kaydedilmiş iç kanallar save/open ve eski değerlendirmede korunur;
@@ -134,8 +149,12 @@ ve portable source ilk dilimin desteklenen teslim yollarıdır.
 ## MCP örneği
 
 Önce normal `import_asset` çağrısıyla dosya bytes'ını içe aktarın ve dönen gerçek
-id'leri kullanın. Her source değişiminden önce `get_scene` + revision/readToken
-zorunludur. Gerçek schema `get_capabilities` ile keşfedilir:
+id'leri kullanın. Base64 şeması 16 MiB ham modelin kodlanmış uzunluğunu kabul
+eder; import parser'ı kendi kaynak sınırını uygular. Her source değişiminden önce
+`get_scene` + revision/readToken zorunludur. Statik model, kamera, ışık ve dış
+2D kutu düzenlemeleri için `update_model3d` şemasını `get_capabilities` ile
+keşfedin. Örneğin `patch:{rotation:{y:30},camera:{yaw:45}},box:{width:600}`
+yalnız bu alanları değiştirir. Scriptte aynı derin birleştirme mümkündür:
 
 ```js
 // run_script gövdesi; dış çağrının güncel source authorization alanları ayrıdır.
@@ -266,3 +285,24 @@ bir desteklenen 2D keyleme API'si sayılmaz.
 
 Referanslar: [Three GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html),
 [WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html).
+
+### Boş 3D sahne oluşturma — 15 Kasım 2026
+
+**Add → 3D Objects → Empty 3D Scene**, model dosyası seçmeden boş bir kutulu
+3D içerik oluşturur. **Import GLB / glTF** ayrı kalır. Yeni çalışma modu değildir;
+aynı 2D kutu, Properties, detay ekranı ve kamera sistemi kullanılır.
+
+`emptyModelSceneDocument` gömülü, taşınabilir bir glTF üretir. Boş root,
+`extras.choronoEmptyScene=true` ile açıkça işaretlenir. Mevcut ModelHandler,
+import komutu, source owner ve residency bütçesi kullanılır. Yalnız bu yeni
+oluşturma yolu v3 content'i baştan kurar; sıradan eski import'lar otomatik
+migrate edilmez. Detay ekranındaki mevcut Add model akışıyla sonradan var olan
+import edilmiş asset'ler sahneye eklenebilir.
+
+`modelFraming` ortak renderer hazırlığıdır: işaretli ve gerçekten çocuksuz root
+orijinde birim framing alır; rastgele boş/bozuk/sıfır geometri import'ları yine
+reddedilir. Empty sahne saydam render edilir. Kamera/ışık ayarları 3D payload'da,
+2D transform ve key'ler dış katmanda kalır. Import, clone, kaynak manifesti,
+portable save/open, export ve Undo mevcut model katmanı sözleşmesini izler.
+Gerçek GLTFLoader, GPU'da saydam çıktı, sonradan model çizimi ve portable
+save/open + tek Undo ayrı test fixture'ında doğrulanır.

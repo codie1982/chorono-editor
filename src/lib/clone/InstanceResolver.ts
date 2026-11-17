@@ -22,11 +22,12 @@
 //   effectsChain, startMs, endMs, hidden, locked, solo, pinned,
 //   frozen, colorLabel, tappable, draggable, dragConfig, paramBindings
 
+import { applyModelInstanceInputs } from '../model3d/content/modelInstanceInputs'
 import type { Layer } from '../types'
 import type { LayerLookup } from '@/lib/scene/LayerIndex'
 
 /** Visual fields cherry-picked from the source. */
-export const INSTANCE_SOURCE_FIELDS: ReadonlyArray<keyof Layer> = [
+export const INSTANCE_SOURCE_FIELDS: readonly (keyof Layer)[] = [
   'type',
   'shape',
   'shapeKind',
@@ -87,7 +88,7 @@ export function resolveInstanceLayer(
   for (const key of INSTANCE_SOURCE_FIELDS) {
     const value = resolvedSource[key]
     if (value !== undefined) {
-      // The cast is safe: INSTANCE_SOURCE_FIELDS lists Layer-typed keys.
+      // The cast is safe: SOURCE_VISUAL_KEYS lists Layer-typed keys.
       ;(composed as unknown as Record<string, unknown>)[key as string] = value
     }
   }
@@ -96,6 +97,7 @@ export function resolveInstanceLayer(
   // forbids.)
   if (!composed.type) composed.type = resolvedSource.type
 
+  if (composed.type === 'model3d') composed.model3d = applyModelInstanceInputs(composed.model3d, layer.model3dInputValues)
   return composed
 }
 

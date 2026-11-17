@@ -36,6 +36,15 @@ export function detailUnavailableReason(layer: Layer | undefined, registry = ite
   return null
 }
 
+/** Public editor entry policy: 2D content stays in the main viewport/Properties.
+ * Shared source adapters remain available internally without enabling their
+ * context-menu or double-click entry. Model content retains its private editor.
+ * Lock/instance/multi-selection restrictions are checked separately.
+ */
+export function hasItemDetailEntry(layer: Layer | undefined): boolean {
+  return layer?.type === 'model3d'
+}
+
 /** Build a stateless schema adapter. Its owning domain keeps geometry/model
  * semantics; source schemas provide field constraints and inspector groups.
  */

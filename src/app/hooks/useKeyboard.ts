@@ -23,6 +23,8 @@ interface Handlers {
   onNudgeSelected?: (dx: number, dy: number) => void
   onDeleteSelected: () => void
   onDuplicateSelected: () => void
+  /** Canvas/list selection only. Active tools keep first refusal on Escape. */
+  onClearSelection?: () => void
   onCopy?: () => void
   onPaste?: () => void
   onShowHelp?: () => void
@@ -83,7 +85,7 @@ export function useKeyboard(handlers: Handlers) {
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected,
+    onDeleteSelected, onDuplicateSelected, onClearSelection,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
@@ -120,6 +122,7 @@ export function useKeyboard(handlers: Handlers) {
       'canvas.nudge.down10':  onNudgeSelected ? () => onNudgeSelected(0, 10) : undefined,
 
       'canvas.select.duplicate':  onDuplicateSelected,
+      'canvas.select.clear': onClearSelection,
       'canvas.select.cloneQuick': onCloneQuick,
       'canvas.select.copy':       onCopy,
       'canvas.select.paste':      onPaste,
@@ -188,7 +191,7 @@ export function useKeyboard(handlers: Handlers) {
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected,
+    onDeleteSelected, onDuplicateSelected, onClearSelection,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,

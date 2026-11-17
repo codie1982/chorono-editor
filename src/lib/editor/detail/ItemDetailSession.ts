@@ -3,6 +3,8 @@ import type { EditorCommand } from '../commands-keyframe'
 import { makeUpdateLayerCmd } from '../commands-layer'
 import { itemDetailRegistry, detailUnavailableReason, detailDrivenReason } from './detailAdapters'
 import type { ItemDetailAdapter, ItemDetailRegistry } from './ItemDetailRegistry'
+import { assertModelSourceDrivers } from './ModelSourceDrivers'
+import { ModelClipDraft } from './ModelClipDraft'
 
 /** One ephemeral draft authorization. Borrows immutable source references;
  * native handles and dense media are owned by existing resource services.
@@ -14,6 +16,7 @@ export class ItemDetailSession {
   readonly id = crypto.randomUUID()
   readonly adapter: ItemDetailAdapter
   readonly layer: Layer
+  readonly animation?: ModelClipDraft
   private closed = false
 
   constructor(readonly source: ChronoScene, readonly revision: number, readonly document: AbortSignal,
@@ -23,6 +26,7 @@ export class ItemDetailSession {
     if (reason || !layer) throw new Error(reason ?? 'Missing detail target.')
     this.layer = layer
     this.adapter = registry.find(layer)!
+    if (layer.type === 'model3d') this.animation = new ModelClipDraft(source, layer)
   }
 
   /** Require a live, exact document/revision and no competing gesture. A failed
@@ -44,7 +48,8 @@ export class ItemDetailSession {
     for (const key of Array.from(new Set([...Object.keys(this.layer), ...Object.keys(next)] as (keyof Layer)[]))) {
       if (Object.is(this.layer[key], next[key]) || JSON.stringify(this.layer[key]) === JSON.stringify(next[key])) continue
       if (!fields.includes(key)) throw new Error(`The detail editor cannot change ${key}.`)
-      const reason = detailDrivenReason(this.source, this.layer, key)
+      const reason = key === 'model3d' ? null : detailDrivenReason(this.source, this.layer, key)
+      if (key === 'model3d') assertModelSourceDrivers(this.source, this.layer, next)
       if (reason) throw new Error(reason)
       Object.assign(patch, { [key]: next[key] })
     }
@@ -75,6 +80,25 @@ export class ItemDetailSession {
         if (scene !== current || this.document.aborted || this.closed) throw new Error('The detail source is stale.')
         return native.execute(scene)
       }, undo: native.undo }
+  }
+
+  /** Publish only a validated model payload from the private clip draft. Static
+   * source validation, stale source identity and the final synchronous CAS stay
+   * authoritative; local draft attribution never replaces the main ledger.
+   */
+  prepareClipApply(draft: ChronoScene, current: ChronoScene, revision: number, document: AbortSignal): EditorCommand | null {
+    this.assertCurrent(revision, document)
+    if (!this.animation) throw new Error('This item does not support private model clips.')
+    if (current.layers.find(layer => layer.id === this.layer.id) !== this.layer) throw new Error('The detail source changed or was removed.')
+    const model = this.animation!.model(draft)
+    this.animation!.assertPrepared(model)
+    const next = { ...this.layer, model3d: model }, patch = this.validate(next)
+    if (!Object.keys(patch).length) return null
+    const native = makeUpdateLayerCmd(this.layer.id, patch, this.layer, { contentOwnerId: this.layer.id })
+    return { label: `Edit ${this.layer.name} content`, execute: scene => {
+      if (scene !== current || this.document.aborted || this.closed) throw new Error('The detail source is stale.')
+      return native.execute(scene)
+    }, undo: native.undo }
   }
 
   /** Invalidate once. Borrowed immutable source is released with this owner. */

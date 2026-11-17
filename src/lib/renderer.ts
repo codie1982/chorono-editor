@@ -1,4 +1,5 @@
 import { evaluateSceneFrame } from './runtime/evaluateSceneFrame'
+import { CanvasSelectionEligibility } from './selection/CanvasSelectionEligibility'
 import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor, Asset } from './types'
 import { buildPathOnCanvas } from './geometry/PathCommand'
 import { splineToPathDefinition } from './spline/splineToPath'
@@ -20,6 +21,10 @@ import { hitTestSegment as hitTestSegmentLocal } from './path/pathOps'
 import { measureTextLayout } from './text/measureText'
 import { buildShapePath, computeShapeLength } from './render/shapeRenderer'
 import { buildGradient } from './render/buildGradient'
+import { drawPathFill } from './render/paint/drawPathFill'
+import { strokeType } from './paint/paintSource'
+import { drawCompositionBackground } from './render/drawCompositionBackground'
+import { fitImage } from './paint/imagePlacement'
 import { resolveRenderColor, materializeRenderScene } from './render/materializeOverrides'
 import { videoForLayer } from './asset/visual/AssetElementMap'
 import type { AssetElementMap } from './asset/visual/AssetElementMap'
@@ -53,6 +58,7 @@ export function drawShape(
   layer: Layer,
   overrides: ReturnType<typeof evaluateTimelines>,
   paramValues?: ParamValueMap,
+  assets?: AssetElementMap,
 ) {
   const w = layer.size?.width  ?? 0
   const h = layer.size?.height ?? 0
@@ -81,27 +87,7 @@ export function drawShape(
 
   buildShapePath(ctx, effectiveShape, w, h, cornerRadius, resolvedParams)
 
-  // ── Fill (optional) ──────────────────────────────────────────────────────
-  if (style.fill) {
-    const fillOpacity = getLayerValue(overrides, layer.id, 'style.fill.opacity', style.fill.opacity ?? 100)
-    ctx.save()
-    ctx.globalAlpha *= fillOpacity / 100
-
-    const gradient = buildCanvasGradient(ctx, style.fill, w, h)
-    if (gradient) {
-      ctx.fillStyle = gradient
-    } else {
-      // Priority: paramBinding (string color) → numeric wire override → static
-      const boundFill = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
-      if (boundFill) {
-        ctx.fillStyle = boundFill
-      } else {
-        ctx.fillStyle = resolveRenderColor(overrides, layer.id, 'style.fill.color', style.fill.color ?? '#000000')
-      }
-    }
-    ctx.fill()
-    ctx.restore()
-  }
+  drawPathFill(ctx, layer, overrides, { x: 0, y: 0, width: w, height: h }, assets, paramValues, 'nonzero', '#000000')
 
   // ── Inner grid (clipped to the shape path, drawn over the fill) ─────────
   if (layer.internalGrid && layer.internalGrid.size > 0 && w > 0 && h > 0) {
@@ -114,7 +100,7 @@ export function drawShape(
   }
 
   // ── Stroke (optional) ────────────────────────────────────────────────────
-  if (style.stroke) {
+  if (style.stroke && strokeType(style.stroke) !== 'none') {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
     const { color: staticStrokeColor, alignment = 'center', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
@@ -151,7 +137,7 @@ export function drawShape(
     ctx.globalAlpha *= so / 100
     // Stroke can be solid colour OR a gradient. Reuse the fill gradient
     // builder — same math (linear angle / radial from centre).
-    const strokeStyle: string | CanvasGradient = style.stroke.gradient
+    const strokeStyle: string | CanvasGradient = (strokeType(style.stroke) === 'gradient' && style.stroke.gradient)
       ? (buildCanvasGradient(ctx, { type: 'gradient', gradient: style.stroke.gradient } as any, w, h) ?? color)
       : color
     ctx.strokeStyle    = strokeStyle
@@ -222,6 +208,7 @@ export function drawBezierPath(
   layer: Layer,
   overrides: ReturnType<typeof evaluateTimelines>,
   paramValues?: ParamValueMap,
+  assets?: AssetElementMap,
 ) {
   if (!layer.path) return
   const style: ShapeStyle = layer.style ?? {}
@@ -234,20 +221,10 @@ export function drawBezierPath(
 
   buildBezierPath(ctx, layer.path)
 
-  // ── Fill ──
-  if (style.fill && layer.path.closed) {
-    const fillOpacity = getLayerValue(overrides, layer.id, 'style.fill.opacity', style.fill.opacity ?? 100)
-    ctx.save()
-    ctx.globalAlpha *= fillOpacity / 100
-    const boundFill = paramValues ? getStringParamBinding(layer, 'style.fill.color', paramValues) : undefined
-    ctx.fillStyle = buildGradient(ctx, style.fill.gradient, w, h, bb.x, bb.y)
-      ?? boundFill ?? resolveRenderColor(overrides, layer.id, 'style.fill.color', style.fill.color ?? '#3B82F6')
-    ctx.fill()
-    ctx.restore()
-  }
+  if (layer.path.closed) drawPathFill(ctx, layer, overrides, { x: bb.x, y: bb.y, width: w, height: h }, assets, paramValues)
 
   // ── Stroke (with trim support) ──
-  if (style.stroke) {
+  if (style.stroke && strokeType(style.stroke) !== 'none') {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
     if (sw <= 0) return
     const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
@@ -278,7 +255,7 @@ export function drawBezierPath(
     ctx.globalAlpha *= so / 100
     // Stroke can be solid colour OR a gradient. Reuse the fill gradient
     // builder — same math (linear angle / radial from centre).
-    const strokeStyle: string | CanvasGradient = style.stroke.gradient
+    const strokeStyle: string | CanvasGradient = (strokeType(style.stroke) === 'gradient' && style.stroke.gradient)
       ? (buildCanvasGradient(ctx, { type: 'gradient', gradient: style.stroke.gradient } as any, w, h) ?? color)
       : color
     ctx.strokeStyle    = strokeStyle
@@ -305,6 +282,7 @@ export function drawSplineLayer(
   layer:       Layer,
   overrides:   ReturnType<typeof evaluateTimelines>,
   paramValues?: ParamValueMap,
+  assets?: AssetElementMap,
 ) {
   if (!layer.spline) return
   const style: ShapeStyle = layer.style ?? {}
@@ -317,22 +295,12 @@ export function drawSplineLayer(
     return resolveRenderColor(overrides, layer.id, property, fallback)
   }
 
-  // Only fill closed paths — open paths (arcs, lines) are stroke-only
-  if (style.fill && pathDef.closed) {
-    // A compound spline can contain closed shapes AND open arcs. Canvas fill
-    // implicitly closes open subpaths, so keep them out of the fill pass.
+  if (pathDef.closed) {
     buildPathOnCanvas(ctx, splineToPathDefinition(layer.spline, { closedOnly: true }))
-    const fillOpacity = getLayerValue(overrides, layer.id, 'style.fill.opacity', style.fill.opacity ?? 100)
-    ctx.save()
-    ctx.globalAlpha *= fillOpacity / 100
-    ctx.fillStyle = (style.fill.type === 'gradient'
-      ? buildGradient(ctx, style.fill.gradient, bounds.width, bounds.height, bounds.x, bounds.y)
-      : null) ?? resolveColor('style.fill.color', style.fill.color ?? '#3B82F6')
-    ctx.fill(fillRule)
-    ctx.restore()
+    drawPathFill(ctx, layer, overrides, bounds, assets, paramValues, fillRule)
   }
 
-  if (style.stroke) {
+  if (style.stroke && strokeType(style.stroke) !== 'none') {
     const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
     // A default closed spline has width 0; its width can still be animated.
     if (sw <= 0) return
@@ -351,7 +319,7 @@ export function drawSplineLayer(
     buildPathOnCanvas(ctx, strokePath)
     ctx.save()
     ctx.globalAlpha   *= so / 100
-    ctx.strokeStyle = buildGradient(ctx, style.stroke.gradient, bounds.width, bounds.height, bounds.x, bounds.y)
+    ctx.strokeStyle = (strokeType(style.stroke) === 'gradient' ? buildGradient(ctx, style.stroke.gradient, bounds.width, bounds.height, bounds.x, bounds.y) : null)
       ?? resolveColor('style.stroke.color', color)
     ctx.lineWidth      = sw
     ctx.lineCap        = lineCap
@@ -443,14 +411,9 @@ function drawFitted(
     return
   }
 
-  // contain / cover share aspect-fit math
-  const scale = fit === 'cover'
-    ? Math.max(w / srcW, h / srcH)
-    : Math.min(w / srcW, h / srcH)
-  const dw = srcW * scale
-  const dh = srcH * scale
-  const dx = (w - dw) / 2
-  const dy = (h - dh) / 2
+  const placement = fitImage(fit, w, h, srcW, srcH)
+  if (!placement) return
+  const { dx, dy, dw, dh } = placement
 
   if (fit === 'cover') {
     // Clip to box so overflow is hidden
@@ -679,7 +642,7 @@ function renderLayer(
   // renderer.ts). The CanvasRenderer module (5.0.10) will replace this whole
   // block using the registry. Until then, the legacy switch stays.
   if (layer.type === 'shape' && layer.size) {
-    drawShape(ctx, layer, overrides, paramValues)
+    drawShape(ctx, layer, overrides, paramValues, assets)
   } else if (layer.type === 'text') {
     drawText(ctx, layer, paramValues, overrides, assets)
   } else if (layer.type === 'image') {
@@ -689,7 +652,7 @@ function renderLayer(
   } else if (layer.type === 'pathStroke') {
     drawPathStrokeLayer(ctx, layer, overrides)
   } else if (layer.type === 'path' && layer.path) {
-    drawBezierPath(ctx, layer, overrides, paramValues)
+    drawBezierPath(ctx, layer, overrides, paramValues, assets)
   }
   // audio: no canvas rendering (handled by an AudioEngine)
 
@@ -820,9 +783,7 @@ export function renderScene(
   const { width, height, backgroundColor } = scene.composition
   const overrides = opts.overrides ?? evaluateSceneFrame(scene, timeMs).overrides
 
-  ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = backgroundColor
-  ctx.fillRect(0, 0, width, height)
+  drawCompositionBackground(ctx, scene.composition, 'scene', assets)
 
   // If any layer is solo'd, only render solo layers.
   const anySolo = scene.layers.some((l) => l.type !== 'audio' && l.solo)
@@ -924,14 +885,13 @@ export function hitTestLayersAt(
   // Query the same typed/instance text values as drawing. Ready aliases may be
   // projected by the caller; ordinary source metrics use the explicit asset scope.
   scene = materializeRenderScene(scene, overrides)
+  const eligibility = new CanvasSelectionEligibility(scene.layers, timeMs, overrides)
   const hits: string[] = []
   const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
 
   for (let i = scene.layers.length - 1; i >= 0; i--) {
     const layer = scene.layers[i]
-    if (layer.hidden || layer.locked) continue
-    if (layer.frozen) continue   // BL-55 — frozen layers render but aren't selectable
-    if (layer.type === 'audio') continue
+    if (!eligibility.accepts(layer)) continue
     if (layer.type === 'group') continue   // groups are tested via children union below
 
     const matrix = resolveLayerWorldMatrix(layer, scene, timeMs, overrides)
@@ -959,7 +919,7 @@ export function hitTestLayersAt(
   for (let i = scene.layers.length - 1; i >= 0; i--) {
     const layer = scene.layers[i]
     if (layer.type !== 'group') continue
-    if (layer.hidden || layer.locked || layer.frozen) continue
+    if (!eligibility.accepts(layer)) continue
     const bounds = boundsForFrame(layer)
     if (!bounds) continue
     if (canvasX >= bounds.x && canvasX <= bounds.x + bounds.width &&

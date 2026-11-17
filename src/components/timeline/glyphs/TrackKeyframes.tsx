@@ -35,7 +35,7 @@ export default function TrackKeyframes(props: Props) {
     props.onBeginDrag({ kfId: key.id, trackTarget: track.target, timelineId: '', originalMs: key.timeMs },
       !props.selected.has(key.id) && !event.shiftKey, event.shiftKey)(event)
   }
-  return <KeyGlyphLayer points={points} width={props.width} height={height} label={track.target} selected={props.selected}
+  return <KeyGlyphLayer pointerCursor={props.locked ? 'not-allowed' : 'ew-resize'} points={points} width={props.width} height={height} label={track.target} selected={props.selected}
     onPointerDown={(point, event) => pointerDown(point.sourceIndex, event)}
     onSelect={(point, event) => props.onSelect(point.id, event.shiftKey)}
     onContextMenu={props.onContextMenu ? (point, event) => props.onContextMenu!(track.target, point.id, event) : undefined}
