@@ -2,7 +2,7 @@
 
 ## Dal ve sürüm durumu
 
-GitHub `codie1982/chorono-editor` üzerindeki `main`, yerel `main` ve `origin/main` aynı commit'te: `a4e123f2` (**0 ileri / 0 geri**). Son yayımlanan etiket hâlâ `v0.3.0` (`7305ba8`, 12 Kasım 2026); `package.json` sürümü `0.3.0`. İlk inceleme sırasında uzak `main` `a4d4e64f` idi. Modelleme, Agent Handoff ve precision değişiklikleri [PR #13](https://github.com/codie1982/chorono-editor/pull/13) ile `2c135949` commit'ine; devamındaki 2D Snap/rotate düzeltmeleri [PR #14](https://github.com/codie1982/chorono-editor/pull/14) ile `a4e123f2` commit'ine alındı. Her iki PR'ın zorunlu “Tests and builds” kontrolü geçti. Yeni GitHub release veya `v0.4.0` etiketi henüz oluşturulmadı.
+Release hazırlığı başında GitHub `main`, yerel `main` ve `origin/main` aynı commit'teydi: `a4e123f2` (**0 ileri / 0 geri**). Son yayımlanan etiket `v0.3.0` (`7305ba8`, 12 Kasım 2026) idi; hazırlık dalında `package.json` sürümü `0.4.0`'a çıkarıldı. İlk inceleme sırasında uzak `main` `a4d4e64f` idi. Modelleme, Agent Handoff ve precision değişiklikleri [PR #13](https://github.com/codie1982/chorono-editor/pull/13) ile `2c135949` commit'ine; devamındaki 2D Snap/rotate düzeltmeleri [PR #14](https://github.com/codie1982/chorono-editor/pull/14) ile `a4e123f2` commit'ine alındı. Her iki PR'ın zorunlu “Tests and builds” kontrolü geçti. Bu rapor bir hazırlık anını kaydeder; güncel yayın durumu için GitHub release sayfası esas alınır.
 
 ## Kullanıcının bildirdiği spline paketi
 
@@ -51,4 +51,4 @@ Script/QuickJS/MCP yüzeyine `offsetContour`, `outlineContour`, `chamferCorners`
 - Tarayıcıda Offset önizlemesi ve Apply ile ikinci katmanın oluşması görüldü; tek Undo ile katman sayısı 2'den 1'e döndü.
 - Kaynak değişiklikleri GitHub `main`e alındı; ancak `v0.4.0` tag/release yok. Modelleme dışındaki işler ve kullanıcı tarafından bildirilen diğer spline araçları release kapsamı için ayrı değerlendirilmeli.
 
-`v0.4.0` **taslak** release metni [burada](../../releases/v0.4.0-draft.md). Üç yeni araç için metin hazırlanabilir; kullanıcının bildirdiği diğer özellikler kaynak entegrasyonu ve kabul testleri tamamlanmadan yayımlanmış özellik olarak listelenmemeli. Sonraki adım, `main`deki modelleme dışı değişiklikleri ve kurtarılmış spline kaynak farkını değerlendirmek, portable save/load ve export görsel kabulünü tamamlamak, sürüm/changelog girdilerini güncellemek ve doğrulanmış `main` commit'ine GitHub release taslağı bağlamaktır.
+`v0.4.0` için hazırlanan [sürüm notları](../../releases/v0.4.0.md), doğrulanan modelleme araçlarını listeler; kullanıcının bildirdiği diğer özellikleri tamamlanmış özellik olarak sunmaz. Bu karşılaştırma raporu, ilk inceleme ve PR entegrasyonu sırasındaki kararları kaydeder. Release yayımlama durumu için sürüm notları ve GitHub release sayfası esas alınmalıdır.
