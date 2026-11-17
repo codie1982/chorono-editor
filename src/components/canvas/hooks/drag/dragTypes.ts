@@ -14,6 +14,8 @@ export interface CanvasDragPreview {
   overrides: Map<string, number>
   guides: Guide[]
   label?: string
+  /** Actually reached handle/anchor in composition pixels; editor feedback only. */
+  snapPoint?: { x: number; y: number }
   /** Exact prepared forest command behind a clone preview; IDs stay fixed. */
   cloneCommand?: CloneForestCommand
 }
