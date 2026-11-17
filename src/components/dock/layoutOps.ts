@@ -271,19 +271,22 @@ export function isValidLayout(node: DockNode, expectedPanels: Set<string>): bool
 
 /**
  * Opens a panel without duplicating it. An existing tab is selected and its
- * leaf expanded. A missing panel is appended to the first leaf and expanded;
+ * leaf expanded. A missing panel joins nearPanelId's leaf when available,
+ * otherwise the first leaf; that leaf is expanded.
  * if no leaf exists a minimal single-leaf tree is returned. Input is immutable.
  */
-export function addPanelToLayout(tree: DockNode, panelId: string): DockNode {
+export function addPanelToLayout(tree: DockNode, panelId: string, nearPanelId?: string): DockNode {
   const existing = findLeafOfPanel(tree, panelId)
   if (existing) {
     const selected = setActiveTab(tree, existing.id, panelId)
     return existing.collapsed ? setLeafCollapsed(selected, existing.id, false) : selected
   }
+  const preferred = nearPanelId ? findLeafOfPanel(tree, nearPanelId) : null
   let inserted = false
   const result = mapNode(tree, (n) => {
     if (inserted) return n
     if (n.kind !== 'leaf') return n
+    if (preferred && n.id !== preferred.id) return n
     inserted = true
     return { ...n, panels: [...n.panels, panelId], activeIndex: n.panels.length, collapsed: false }
   })
@@ -311,7 +314,7 @@ export function defaultLayout(): DockNode {
               { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas', 'stateMachine'], activeIndex: 0 },
               {
                 kind: 'leaf', id: 'properties-leaf',
-                panels: ['properties', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'snap', 'shortcuts'],
+                panels: ['properties', 'splineModeling', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview',  'shortcuts'],
                 activeIndex: 0,
               },
             ],

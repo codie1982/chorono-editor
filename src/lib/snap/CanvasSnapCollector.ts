@@ -25,6 +25,10 @@ export interface CanvasSnapContext {
   customGuides?: readonly SceneGuide[]
   /** Engine-supplied policy; defaults preserve existing direct callers. */
   includeObjects?: boolean
+  includePoints?: boolean
+  parentBounds?: readonly Rect[]
+  /** CSS pixels per composition pixel; the engine converts screen hit radius. */
+  zoom?: number
 }
 
 /** Pluggable collector contract — every future collector implements this. */
@@ -34,9 +38,10 @@ export interface SnapCollector<TInput, TOutput> {
 
 export class CanvasSnapCollector implements SnapCollector<CanvasSnapContext, SnapTarget[]> {
   collect(ctx: CanvasSnapContext): SnapTarget[] {
-    return [...(ctx.includeObjects === false ? [] : buildSnapTargets(ctx.canvasWidth, ctx.canvasHeight, ctx.otherLayers)),
-      ...(ctx.customGuides ?? []).filter(guide => !guide.hidden && Number.isFinite(guide.position))
-        .map(guide => ({ axis: guide.axis, position: guide.position, source: 'custom-guide' as const }))]
+    return [...(ctx.customGuides ?? []).filter(guide => !guide.hidden && Number.isFinite(guide.position))
+        .map(guide => ({ axis: guide.axis, position: guide.position, source: 'custom-guide' as const })),
+      ...buildSnapTargets(ctx.canvasWidth, ctx.canvasHeight, ctx.otherLayers, {
+        edges: ctx.includeObjects !== false, centers: ctx.includePoints ?? (ctx.includeObjects !== false), parents: ctx.parentBounds })]
   }
 
   /** Apply object-snap (canvas + layer edges/centres) to a rectangle. */

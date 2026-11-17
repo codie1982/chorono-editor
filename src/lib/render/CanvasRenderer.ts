@@ -1,3 +1,4 @@
+import { validGridSpacing } from '../snap/gridSettings'
 // ── CanvasRenderer ────────────────────────────────────────────────────────────
 //
 // Registry-driven scene renderer. Successor to the monolithic renderScene()
@@ -56,8 +57,9 @@ export interface CanvasRenderOptions {
   overrides?:   OverrideMap
   /** Parameter values for text / colour resolution. */
   paramValues?: ParamValueMap
-  /** Optional canvas grid overlay (pixels). */
-  grid?:        { size: number }
+  /** Editor-only grid in composition pixels. inFront defaults to true for
+   * existing callers; false draws after the background and before layers. */
+  grid?:        { size: number; inFront?: boolean }
   /** Multi-selection set — when present, EVERY id gets a selection outline. */
   selectedLayerIds?: Set<string>
   /** False when the editor's DOM overlay owns the selection frame. Plugins
@@ -154,6 +156,7 @@ export class CanvasRenderer {
     let completed = false
     try {
     drawCompositionBackground(ctx, composition, options.background ?? 'scene')
+    if (editorChrome && options.grid?.inFront === false) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
 
     const visibility = new LayerDrawVisibility(layers, timeMs)
     assets.media?.request({ frame: prepared, context: ctx, area: options.visibleArea,
@@ -171,7 +174,7 @@ export class CanvasRenderer {
     }
 
     // ── Optional grid overlay (editor only) ───────────────────────────────
-    if (editorChrome && options.grid) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
+    if (editorChrome && options.grid && options.grid.inFront !== false) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
     completed = this._renderedLayerCount <= 100000
     } finally { this.paintStatistics = paint.snapshot(completed) }
   }
@@ -384,8 +387,10 @@ export class CanvasRenderer {
     } finally { ctx.restore() }
   }
 
+  /** Draw origin-aligned lines in composition pixels, borrowing and restoring
+   * caller state. Invalid or subpixel spacing is rejected to bound traversal. */
   private drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, step: number): void {
-    if (step <= 0) return
+    if (!validGridSpacing(step)) return
     ctx.save()
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)'
     ctx.lineWidth   = 1

@@ -83,7 +83,7 @@ Easing başlangıç keyframe'ine aittir: `linear`, `hold`, `easeIn`, `easeOut`, 
 | Arayüz | Kod ile yapılan işlemler |
 | --- | --- |
 | `scene.particlePresets`, `layer.particles` | Bağımsız config/preset okuma; doğrulanan derin ayar birleştirme; emission, visual, animation, random ve rendering bölümleri; sayı/metin ile deterministik seed; scale/opacity/color yaşam key'leri; yerel hareket modifier'larını ekleme/düzenleme/silme |
-| `layer.spline` | Tam geometri ve yerel bounds okuma; primitive/contour ekleme; nokta/handle düzenleme ve kilitleme; line/cubic/quadratic segment düzenleme/bölme; contour kapatma/ters çevirme; sub-shape silme/adlandırma; affine geometri dönüşümü |
+| `layer.spline` | Tam geometri ve yerel bounds okuma; primitive/contour ekleme; nokta/handle düzenleme ve kilitleme; line/cubic/quadratic segment düzenleme/bölme; contour kapatma/ters çevirme; sub-shape silme/adlandırma; affine geometri dönüşümü; `offsetContour`, `outlineContour`, `chamferCorners`, `filletCorners` ([spline modelleme](spline-modeling.md)) |
 | `scene.explorer` | Ağaç/nesne/ilişki okuma; alanlı arama; gruplama, gruptan çıkarma ve parent değiştirme; kardeşlerin çizim sırası; adlandırma ve toplu görünürlük/kilit/solo/pin bayrakları |
 
 Yapısal düzenlemelerde domain komutlarını ve dönen kimlikleri kullanın. Spline koordinatları katmana yereldir; transform, parent ve pivot korunur. Silinen spline elemanlarının animasyon track'leri de aynı geri alınabilir işlemde temizlenir. Instance verisi okunabilir; düzenlemek için kaynak katmanı açıkça açın. Nokta/handle kilitleri ile etkilenen hiyerarşinin kilit/frozen durumu korunur.

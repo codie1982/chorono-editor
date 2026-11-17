@@ -4,6 +4,7 @@ import { executeEditorJob } from '../editor'
 import { openClientConnection } from '../broker'
 import { emptyScene } from '../../defaults'
 import { SourceAccessError } from '../source/SourceAccessError'
+import { editorDocumentEpoch } from '../source/EditorSourceIdentity'
 import { assetSourcePool } from '../../asset/sources'
 
 /** Explicit source authority; these tests never use the compatibility fixture's
@@ -11,6 +12,17 @@ import { assetSourcePool } from '../../asset/sources'
 const access = (read: any) => ({ expectedRevision: read.revision, readToken: read.readToken })
 
 describe('mandatory source read and compare-and-swap', () => {
+  it('returns the same document identity that the browser handoff captures', async () => {
+    const editor = fakeEditor()
+    try {
+      const read = await editor.rawCall('get_scene')
+      expect(read.documentEpoch).toBe(editorDocumentEpoch(editor.host.editor))
+      editor.replaceDocument(emptyScene(), read.revision)
+      const next = await editor.rawCall('get_scene')
+      expect(next.documentEpoch).not.toBe(read.documentEpoch)
+    } finally { await editor.close() }
+  })
+
   it('rejects missing revision, missing read, guessed token, forged arguments and unregistered old clients', async () => {
     const editor = fakeEditor()
     try {

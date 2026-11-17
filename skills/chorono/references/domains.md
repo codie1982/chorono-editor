@@ -47,6 +47,8 @@ Append/contour creation returns `{subShapeIds,contourIds,pointIds,handleIds,segm
 
 Geometry edits preserve the layer's transform, parent, pivot and size. Handle movement follows the native point-type constraints. Locked points/handles and locked or frozen ancestor layers are respected. Instance geometry can be read, but edits require explicitly opening the source layer. Destructive edits remove tracks targeting deleted spline elements in the same undoable operation, preventing stale animation data from recreating deleted points.
 
+Modeling methods: `offsetContour(contourId,distance,direction)` and `outlineContour(contourId,distance,direction)` return a new sibling layer ID; use outward/inward for closed contours and left/right for open contours. `chamferCorners(contourId,pointIds,distance)` and `filletCorners(contourId,pointIds,radius)` replace one contour and refuse conflicting animation. Distances are positive layer-local pixels. Curves are sampled to 0.25 local pixels; curved fillets are tangent cubic approximations. Use the Spline Modeling dock tab for Preview/Apply/Cancel.
+
 For animated geometry, first establish the topology, then key scalar coordinates such as `spline.points.<pointId>.x` or `spline.handles.<handleId>.y` on an explicit timeline. Whole-object/topology morphing is not a keyframe feature. `layer.followPath(splineLayer.id,options)` attaches another object to an editable spline.
 
 ## Scene Explorer hierarchy

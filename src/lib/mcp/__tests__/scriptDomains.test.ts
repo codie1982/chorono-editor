@@ -126,6 +126,22 @@ describe('QuickJS native script domains', () => {
     assertScene(result.scene)
   })
 
+  it('runs offset, outline, chamfer and fillet through the isolated scripting bridge', async () => {
+    const result = await runSafeScript(`
+      const layer=scene.addSpline('rectangle',{width:100,height:60});
+      const spline=layer.spline, contour=Object.values(spline.data.contours)[0];
+      const offsetId=spline.offsetContour(contour.id,5,'outward');
+      const outlineId=spline.outlineContour(contour.id,4,'outward');
+      if(!scene.get(offsetId) || !scene.get(outlineId)) throw new Error('Modeled sibling was not returned');
+      spline.chamferCorners(contour.id,[contour.pointIds[0]],3);
+      const updated=spline.data.contours[contour.id];
+      spline.filletCorners(contour.id,[updated.pointIds[1]],2);
+    `, emptyScene())
+    expect(result.scene.layers).toHaveLength(3)
+    result.scene.layers.forEach(layer => assertSplineTopology(layer.spline!))
+    expect(Object.values(result.scene.layers[2].spline!.contours)).toHaveLength(2)
+  })
+
   it('cleans animation targets for removed spline elements without removing unrelated tracks', async () => {
     const result = await runSafeScript(`
       const timeline=scene.createTimeline({id:'geometry',durationMs:1000});

@@ -42,3 +42,9 @@ Yeni doküman sayfaları ayrı web deposunda hazırdır. Kontrol sırasında mev
 `ExpressionDialog` çağırandan zorunlu typed `helpTopic` alır. Native dialog odak yönetimi korunur. Track bake, guide ve gap pencerelerinin Escape işlemi capture aşamasında çalışır; DOM containment kontrolü portalla açılan Calculate once penceresinin Escape olayının dış pencereyi kapatmasını önler. Track bake odak döngüsü Help bağlantısını da içerir. LocalRecoveryStatus yardımı canlı status bölgesinin dışındadır.
 
 Web içerikleri mevcut 21 rehbere eklenir; URL, title, description, eski başlıklar ve sitemap uygunluğu korunur. Ayrıntılı araştırma ve sayfa/kelime eşlemesi chorono-web `docs/plans/pre3d-content-review-2026-11-12.md` ve yanındaki CSV'dedir. Editor kaynak sözleşmeleri değiştirilmedi.
+
+## 17 Kasım 2026: spline yardımı ve trafik kaynağı
+
+Spline Modeling panelindeki Help düğmesi `/docs/editor/canvas/spline-modeling` rehberine gider. Spline çizimi ve nokta düzenleyicisi compound spline rehberine, Script Console ise spline scripting rehberine bağlanır. Bu üç yeni rota web sitesindeki spline dokümantasyon dalı yayımlandığında canlı olur.
+
+Ortak `documentationUrl` üreticisi editörden açılan bütün Help bağlantılarına `utm_source=chorono_editor`, `utm_medium=referral` ve `utm_campaign=editor_help` ekler. Başlık fragmenti varsa parametreler `#` işaretinden önce yerleştirilir. Böylece Google Analytics'te editör yardımı ayrı kaynak olarak görülebilir; URL'nin kanonik doküman yolu değişmez.

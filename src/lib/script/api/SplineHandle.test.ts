@@ -21,6 +21,33 @@ function setup(layer=newSplineLayerFromPrimitive('rectangle',{width:100,height:6
 const line=()=>newSplineLayerFromPrimitive('line',{x1:0,y1:0,x2:100,y2:0})!
 const first=<T>(record:Record<string,T>)=>Object.values(record)[0]
 
+describe('SplineHandle modeling operations',()=>{
+  it('creates an offset sibling with one undo command while preserving the source',()=>{
+    const {handle,getScene,commands,undo,redo}=setup()
+    const before=handle.data,contourId=first(before.contours).id
+    const id=handle.offsetContour(contourId,10,'outward')
+    const sibling=getScene().layers.find(layer=>layer.id===id)!
+    expect(sibling.spline).toBeDefined()
+    expect(sibling.transform).toEqual(getScene().layers[0].transform)
+    expect(handle.data).toEqual(before)
+    expect(commands).toHaveLength(1)
+    undo();expect(getScene().layers.find(layer=>layer.id===id)).toBeUndefined()
+    redo();expect(getScene().layers.find(layer=>layer.id===id)).toBeDefined()
+  })
+
+  it('chamfers and fillets a selected contour through native undo and valid topology',()=>{
+    for (const operation of ['chamfer','fillet'] as const) {
+      const {handle,commands,undo}=setup()
+      const before=handle.data,contour=first(before.contours)
+      if (operation==='chamfer') handle.chamferCorners(contour.id,[contour.pointIds[0]],5)
+      else handle.filletCorners(contour.id,[contour.pointIds[0]],5)
+      assertSplineTopology(handle.data)
+      expect(commands).toHaveLength(1)
+      undo();expect(handle.data).toEqual(before)
+    }
+  })
+})
+
 describe('SplineHandle reads and command integration',()=>{
   it('returns detached normalized geometry, element reads and local bounds',()=>{
     const {handle,getLayer,commands}=setup()
