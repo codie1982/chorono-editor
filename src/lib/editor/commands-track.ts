@@ -222,6 +222,7 @@ export function makeUpdateTrackCurvesCmd(
 
 import { bakeTrack, validateBakeOptions } from '../animation/baking/bake'
 import type { BakeOptions } from '../animation/baking/bake'
+import { isSameTrackBakeSource } from '../animation/baking/TrackBakeSource'
 
 /** Prepare a bounded numeric bake and return one undoable source replacement.
  * The selected window becomes linear keys; outside authored keys and unrelated
@@ -248,7 +249,7 @@ export function makeApplyTrackBakeCmd(timelineId: string, target: string, prevTr
       validateBakeOptions(options)
       const timeline = scene.timelines.find(item => item.id === timelineId)
       const live = timeline?.tracks.find(track => track.target === target)
-      if (!timeline || !live || JSON.stringify(live) !== JSON.stringify(prevTrack)) throw new Error('Track changed. Preview the current source before baking.')
+      if (!timeline || !isSameTrackBakeSource(prevTrack, live)) throw new Error('Track changed. Preview the current source before baking.')
       if (baked.target !== target || !isScalarNumericTrack(baked)) throw new Error('The prepared bake must belong to this numeric source track.')
       if (options.endMs > timeline.durationMs || options.startMs < 0 || options.signal?.aborted) throw new Error('Bake range is outside this timeline, or the operation was cancelled.')
       before = timeline
