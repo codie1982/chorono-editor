@@ -607,7 +607,7 @@ export default function PropertiesPanel({
                 shared hand-written sections above. */}
             {layer.type === 'mesh2d' && (
               <>
-                <Mesh2DSourcePanel layer={layer} allLayers={allLayers} onLayerChange={onLayerChange} />
+                <Mesh2DSourcePanel layer={layer} allLayers={allLayers} allAssets={scene?.assets} onLayerChange={onLayerChange} />
                 <SchemaPanel
                   layer={layer}
                   onLayerChange={onLayerChange}

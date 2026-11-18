@@ -98,9 +98,40 @@ export interface Mesh2DGeometry {
   readonly topology: Mesh2DTopology
 }
 
+/**
+ * Portable appearance reference for one fixed-topology mesh.
+ *
+ * The image bytes remain owned by the scene asset registry. UV coordinates are
+ * read from `Mesh2DGeometry`; sampling is a renderer hint and never changes
+ * topology or source generation. A missing/undecoded asset must use the
+ * renderer's explicit solid-fill fallback rather than pretending the texture
+ * rendered successfully.
+ */
+export interface Mesh2DAppearance {
+  readonly schemaVersion: 1
+  readonly kind: 'solid' | 'texture'
+  readonly textureAssetId?: string
+  readonly sampling: 'linear' | 'nearest'
+}
+
+/**
+ * Small authoring record for cloth/deformation pin selection.
+ *
+ * Pins address stable topology vertex ids, never array offsets. The captured
+ * topology hash makes regeneration invalidation explicit: callers may keep a
+ * stale selection for diagnosis, but solvers must not silently remap it.
+ */
+export interface Mesh2DPinSelection {
+  readonly schemaVersion: 1
+  readonly topologyHash: string
+  readonly vertexIds: readonly string[]
+}
+
 /** Versioned source payload stored by a future `mesh2d` layer. */
 export interface Mesh2DData {
   readonly schemaVersion: 1
   readonly source: Mesh2DSource
   readonly geometry: Mesh2DGeometry
+  readonly appearance?: Mesh2DAppearance
+  readonly pins?: Mesh2DPinSelection
 }

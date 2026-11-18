@@ -119,6 +119,9 @@ export class AssetIndex {
     if (layer.image?.assetId)  ids.push(layer.image.assetId)
     if (layer.video?.assetId)  ids.push(layer.video.assetId)
     if (layer.audio?.assetId)  ids.push(layer.audio.assetId)
+    if (layer.mesh2d?.appearance?.kind === 'texture' && layer.mesh2d.appearance.textureAssetId) {
+      ids.push(layer.mesh2d.appearance.textureAssetId)
+    }
     return ids
   }
 }

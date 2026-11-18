@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
-import { drawMesh2DLayer, drawMesh2DWireframe } from './mesh2dRenderer'
+import { drawMesh2DLayer, drawMesh2DPins, drawMesh2DWireframe } from './mesh2dRenderer'
 import { emptyScene } from '@/lib/defaults'
 import { hitTestLayer } from '@/lib/renderer'
 
@@ -8,23 +8,30 @@ function recordingContext() {
   let path: unknown[][] = []
   const fills: Array<{ path: unknown[][]; style: unknown; alpha: number }> = []
   const strokes: Array<{ path: unknown[][]; width: number; dash: number[] }> = []
+  const draws: unknown[][] = []
+  const transforms: number[][] = []
+  const circles: number[][] = []
   const state: Array<Record<string, unknown>> = []
   const ctx = {
-    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, filter: 'none', dash: [] as number[],
+    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, filter: 'none', dash: [] as number[], imageSmoothingEnabled: true,
     save() { state.push({ globalAlpha: this.globalAlpha, fillStyle: this.fillStyle, strokeStyle: this.strokeStyle,
-      lineWidth: this.lineWidth, filter: this.filter, dash: this.dash }) },
+      lineWidth: this.lineWidth, filter: this.filter, dash: this.dash, imageSmoothingEnabled: this.imageSmoothingEnabled }) },
     restore() { Object.assign(this, state.pop()) },
     beginPath() { path = [] },
     moveTo(...values: number[]) { path.push(['M', ...values]) },
     lineTo(...values: number[]) { path.push(['L', ...values]) },
     closePath() { path.push(['Z']) },
+    arc(...values: number[]) { circles.push(values) },
+    clip() {},
+    transform(...values: number[]) { transforms.push(values) },
+    drawImage(...values: unknown[]) { draws.push(values) },
     setLineDash(dash: number[]) { this.dash = dash },
     fill() { fills.push({ path: [...path], style: this.fillStyle, alpha: this.globalAlpha }) },
     stroke() { strokes.push({ path: [...path], width: this.lineWidth, dash: [...this.dash] }) },
     createLinearGradient() { return { addColorStop() {} } },
     createRadialGradient() { return { addColorStop() {} } },
   }
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, fills, strokes }
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, fills, strokes, draws, transforms, circles }
 }
 
 describe('Mesh2D canvas rendering', () => {
@@ -75,5 +82,39 @@ describe('Mesh2D canvas rendering', () => {
     const { ctx, fills } = recordingContext()
     expect(() => drawMesh2DLayer(ctx, layer, new Map())).not.toThrow()
     expect(fills[0].path.filter(command => command[0] === 'M')).toHaveLength(1)
+  })
+
+  it('maps a ready texture through every triangle UV and honors nearest sampling', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    layer.mesh2d = { ...layer.mesh2d!, appearance: {
+      schemaVersion: 1, kind: 'texture', textureAssetId: 'fabric', sampling: 'nearest',
+    } }
+    const texture = { naturalWidth: 240, naturalHeight: 160 } as unknown as CanvasImageSource
+    const recorded = recordingContext()
+    drawMesh2DLayer(recorded.ctx, layer, new Map(), texture)
+    expect(recorded.draws).toHaveLength(8 * 6 * 2)
+    expect(recorded.transforms).toHaveLength(8 * 6 * 2)
+    expect(recorded.fills).toHaveLength(0)
+  })
+
+  it('uses the complete solid fallback when texture UVs are invalid', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    layer.mesh2d = {
+      ...layer.mesh2d!,
+      appearance: { schemaVersion: 1, kind: 'texture', textureAssetId: 'fabric', sampling: 'linear' },
+      geometry: { ...layer.mesh2d!.geometry, uvs: layer.mesh2d!.geometry.uvs.map(() => 0) },
+    }
+    const recorded = recordingContext()
+    drawMesh2DLayer(recorded.ctx, layer, new Map(), { naturalWidth: 2, naturalHeight: 2 } as unknown as CanvasImageSource)
+    expect(recorded.draws).toHaveLength(0)
+    expect(recorded.fills).toHaveLength(1)
+  })
+
+  it('draws current and stale pins as editor-only point markers', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    const recorded = recordingContext()
+    drawMesh2DPins(recorded.ctx, layer.mesh2d!.geometry, layer.mesh2d!.geometry.topology.vertexIds.slice(0, 3), 2)
+    expect(recorded.circles).toHaveLength(3)
+    expect(recorded.circles[0][2]).toBe(2)
   })
 })

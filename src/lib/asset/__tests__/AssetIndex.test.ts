@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { AssetIndex } from '../AssetIndex'
 import type { Layer } from '../../types/core'
 import type { Asset } from '../types'
+import { newStructuredGridMesh2DLayer } from '../../registry/definitions/mesh2d/Mesh2DDefinition'
+import { setMesh2DTexture } from '../../mesh2d'
 
 // ── Test fixtures ───────────────────────────────────────────────────────────────
 
@@ -66,6 +68,13 @@ describe('AssetIndex', () => {
       expect(idx.getLayerIds('a1')).toEqual(['l1'])
       expect(idx.getLayerIds('a2')).toEqual(['l2'])
       expect(idx.getLayerIds('a3')).toEqual(['l3'])
+    })
+
+    it('indexes a Mesh2D texture asset reference', () => {
+      const idx = new AssetIndex()
+      const mesh = setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric')
+      idx.build([mesh])
+      expect(idx.getLayerIds('fabric')).toEqual([mesh.id])
     })
 
     it('maps multiple layers to the same asset', () => {

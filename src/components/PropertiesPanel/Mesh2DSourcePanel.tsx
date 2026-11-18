@@ -8,11 +8,19 @@ import {
   regenerateShapeBoundaryMesh2DLayer,
   regenerateSplineBoundaryMesh2DLayer,
 } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
-import type { Layer } from '@/lib/types'
+import {
+  isMesh2DPinSelectionCurrent,
+  selectMesh2DPinPreset,
+  setMesh2DPins,
+  setMesh2DTexture,
+  type Mesh2DPinPreset,
+} from '@/lib/mesh2d'
+import type { Asset, Layer } from '@/lib/types'
 
 interface Props {
   readonly layer: Layer
   readonly allLayers: readonly Layer[]
+  readonly allAssets?: readonly Asset[]
   readonly onLayerChange: (layer: Layer) => void
 }
 
@@ -24,7 +32,8 @@ interface Props {
  * plus derived geometry form one undo step. Errors stay adjacent to the source
  * controls and never partially update the selected layer.
  */
-export default function Mesh2DSourcePanel({ layer, allLayers, onLayerChange }: Props) {
+export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], onLayerChange }: Props) {
+  const mesh = layer.mesh2d
   const source = layer.mesh2d?.source
   const boundarySource = source?.kind === 'splineBoundary' || source?.kind === 'shapeBoundary'
   const sourceLayer = boundarySource
@@ -38,10 +47,10 @@ export default function Mesh2DSourcePanel({ layer, allLayers, onLayerChange }: P
   )
   const [error, setError] = useState<string | null>(null)
   useEffect(() => setError(null), [layer.id, sourceLayer?.id])
-  if (!boundarySource || (source.kind !== 'splineBoundary' && source.kind !== 'shapeBoundary')) return null
+  if (!mesh) return null
 
   const regenerate = (flattenTolerance: number) => {
-    if (!sourceLayer) return
+    if (!sourceLayer || (source?.kind !== 'splineBoundary' && source?.kind !== 'shapeBoundary')) return
     try {
       onLayerChange(source.kind === 'shapeBoundary'
         ? regenerateShapeBoundaryMesh2DLayer(layer, sourceLayer, { flattenTolerance })
@@ -52,7 +61,7 @@ export default function Mesh2DSourcePanel({ layer, allLayers, onLayerChange }: P
     }
   }
 
-  const missing = source.kind === 'shapeBoundary'
+  const missing = source?.kind === 'shapeBoundary'
     ? sourceLayer?.type !== 'shape' || !sourceLayer.size
     : sourceLayer?.type !== 'spline' || !sourceLayer.spline
   const status = missing
@@ -60,51 +69,125 @@ export default function Mesh2DSourcePanel({ layer, allLayers, onLayerChange }: P
     : current
       ? { label: 'Source up to date', classes: 'border-emerald-800/60 bg-emerald-950/30 text-emerald-300' }
       : { label: 'Source changed — regenerate', classes: 'border-amber-700/60 bg-amber-950/30 text-amber-200' }
+  const visualAssets = allAssets.filter(asset => asset.type === 'image' || asset.type === 'spriteSheet')
+  const textureAssetId = mesh.appearance?.kind === 'texture' ? mesh.appearance.textureAssetId : undefined
+  const textureAsset = visualAssets.find(asset => asset.id === textureAssetId)
+  const textureMissing = !!textureAssetId && !textureAsset
+  const pinsCurrent = isMesh2DPinSelectionCurrent(layer)
+  const pinCount = mesh.pins?.vertexIds.length ?? 0
+
+  const chooseTexture = (assetId: string) => {
+    onLayerChange(setMesh2DTexture(layer, assetId || null))
+  }
+
+  const chooseSampling = (sampling: 'linear' | 'nearest') => {
+    onLayerChange(setMesh2DTexture(layer, textureAssetId ?? null, sampling))
+  }
+
+  const choosePins = (preset: Mesh2DPinPreset) => {
+    try {
+      onLayerChange(selectMesh2DPinPreset(layer, preset))
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Pin selection could not be updated')
+    }
+  }
 
   return (
-    <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
-      <h3 id="mesh2d-source-heading" className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
-        {source.kind === 'shapeBoundary' ? 'Shape Source' : 'Spline Source'}
-      </h3>
-      <div className="rounded border border-gray-700 bg-gray-950/40 px-2.5 py-2 text-[11px]">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-gray-500">Source layer</span>
-          <span className="truncate text-right text-gray-200" title={sourceLayer?.name ?? source.sourceLayerId}>
-            {sourceLayer?.name ?? source.sourceLayerId}
+    <div className="flex flex-col gap-3">
+      {boundarySource && (source.kind === 'splineBoundary' || source.kind === 'shapeBoundary') && <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
+        <h3 id="mesh2d-source-heading" className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
+          {source.kind === 'shapeBoundary' ? 'Shape Source' : 'Spline Source'}
+        </h3>
+        <div className="rounded border border-gray-700 bg-gray-950/40 px-2.5 py-2 text-[11px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-gray-500">Source layer</span>
+            <span className="truncate text-right text-gray-200" title={sourceLayer?.name ?? source.sourceLayerId}>
+              {sourceLayer?.name ?? source.sourceLayerId}
+            </span>
+          </div>
+          <div role={missing ? 'alert' : 'status'} aria-live="polite" className={`mt-2 rounded border px-2 py-1.5 font-medium ${status.classes}`}>
+            {status.label}
+          </div>
+        </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Flatten tolerance (local px)</span>
+          <ScrubInput
+            value={source.flattenTolerance}
+            min={0.01}
+            max={10}
+            step={0.05}
+            disabled={missing}
+            onChange={regenerate}
+          />
+          <span className="text-[10px] leading-snug text-gray-500">
+            Lower values follow curves more closely and create more triangles. Viewport zoom does not affect this value.
+          </span>
+        </label>
+
+        <button
+          type="button"
+          disabled={missing || current}
+          onClick={() => regenerate(source.flattenTolerance)}
+          className="min-h-9 w-full rounded border border-blue-700 bg-blue-950/30 px-3 py-2 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800/40 disabled:text-gray-500"
+        >
+          {current ? 'Mesh2D is up to date' : 'Regenerate Mesh2D'}
+        </button>
+        <p className="text-[10px] leading-snug text-gray-600">
+          Earcut 3.2.4 · {mesh.geometry.topology.triangleIndices.length / 3} triangles
+        </p>
+      </section>}
+
+      <section aria-labelledby="mesh2d-texture-heading" className="flex flex-col gap-2">
+        <h3 id="mesh2d-texture-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Mesh Appearance</h3>
+        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
+          Texture asset
+          <select aria-label="Texture asset" value={textureAssetId ?? ''} onChange={event => chooseTexture(event.target.value)}
+            className="min-h-9 rounded border border-gray-700 bg-gray-900 px-2 text-xs normal-case tracking-normal text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+            <option value="">Solid fill</option>
+            {visualAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-gray-500">
+          Sampling
+          <select aria-label="Texture sampling" value={mesh.appearance?.sampling ?? 'linear'} onChange={event => chooseSampling(event.target.value as 'linear' | 'nearest')}
+            className="min-h-9 min-w-28 rounded border border-gray-700 bg-gray-900 px-2 text-xs normal-case tracking-normal text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+            <option value="linear">Linear</option>
+            <option value="nearest">Nearest</option>
+          </select>
+        </label>
+        <div role={textureMissing ? 'alert' : 'status'} aria-live="polite"
+          className={`min-h-8 rounded border px-2 py-1.5 text-[10px] ${textureMissing ? 'border-red-800/60 bg-red-950/30 text-red-300' : 'border-gray-700 bg-gray-950/40 text-gray-400'}`}>
+          {textureMissing ? 'Texture asset is missing; renderer uses solid fill.' : textureAsset ? `Texture linked: ${textureAsset.name}` : 'Solid fill fallback active.'}
+        </div>
+      </section>
+
+      <section aria-labelledby="mesh2d-pins-heading" className="flex flex-col gap-2">
+        <div className="flex items-center justify-between border-t border-gray-700 pt-2">
+          <h3 id="mesh2d-pins-heading" className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Pins</h3>
+          <span role="status" aria-live="polite" className={`text-[10px] ${pinsCurrent ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {pinsCurrent ? `${pinCount} selected` : `${pinCount} stale`}
           </span>
         </div>
-        <div role={missing ? 'alert' : 'status'} aria-live="polite" className={`mt-2 rounded border px-2 py-1.5 font-medium ${status.classes}`}>
-          {status.label}
+        <div className="grid grid-cols-2 gap-1.5" aria-label="Pin selection presets">
+          {([['topEdge', 'Top edge'], ['corners', 'Corners'], ['boundary', 'Boundary']] as const).map(([preset, label]) => (
+            <button key={preset} type="button" onClick={() => choosePins(preset)}
+              className="min-h-9 rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-200 hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+              {label}
+            </button>
+          ))}
+          <button type="button" onClick={() => onLayerChange(setMesh2DPins(layer, []))}
+            className="min-h-9 rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-300 hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+            Clear
+          </button>
         </div>
-      </div>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] text-gray-500 uppercase tracking-wide">Flatten tolerance (local px)</span>
-        <ScrubInput
-          value={source.flattenTolerance}
-          min={0.01}
-          max={10}
-          step={0.05}
-          disabled={missing}
-          onChange={regenerate}
-        />
-        <span className="text-[10px] leading-snug text-gray-500">
-          Lower values follow curves more closely and create more triangles. Viewport zoom does not affect this value.
-        </span>
-      </label>
+        <p className="min-h-8 text-[10px] leading-snug text-gray-500">
+          Pins use stable vertex ids. Green markers are current; amber markers require reselection after topology changes.
+        </p>
+      </section>
 
       {error && <p role="alert" className="rounded border border-red-800/60 bg-red-950/30 px-2 py-1.5 text-[10px] leading-snug text-red-300">{error}</p>}
-      <button
-        type="button"
-        disabled={missing || current}
-        onClick={() => regenerate(source.flattenTolerance)}
-        className="min-h-9 w-full rounded border border-blue-700 bg-blue-950/30 px-3 py-2 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800/40 disabled:text-gray-500"
-      >
-        {current ? 'Mesh2D is up to date' : 'Regenerate Mesh2D'}
-      </button>
-      <p className="text-[10px] leading-snug text-gray-600">
-        Earcut 3.2.4 · {layer.mesh2d!.geometry.topology.triangleIndices.length / 3} triangles
-      </p>
-    </section>
+    </div>
   )
 }
