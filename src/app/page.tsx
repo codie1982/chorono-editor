@@ -147,7 +147,11 @@ import { prepareCloneForest } from '@/lib/editor/commands-clone-forest'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import { makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
-import { newSplineBoundaryMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
+import {
+  canCreateShapeBoundaryMesh2D,
+  newShapeBoundaryMesh2DLayer,
+  newSplineBoundaryMesh2DLayer,
+} from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 // ── Mode system bootstrap ─────────────────────────────────────────────────────
 import '@/lib/modes/bootstrap'
@@ -648,6 +652,20 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       toast.success(`Created "${mesh.name}" — source spline was preserved`)
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Spline could not be converted to Mesh2D')
+    }
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
+
+  /** Create a separate, source-linked Mesh2D from a supported closed shape. */
+  const createMesh2DFromShape = useCallback(() => {
+    const source = scene.layers.find(layer => layer.id === selectedLayerId)
+    if (!source || !canCreateShapeBoundaryMesh2D(source)) return
+    try {
+      const mesh = newShapeBoundaryMesh2DLayer(source)
+      dispatchCommand(makeAddLayerCmd(mesh))
+      selectLayer(mesh.id)
+      toast.success(`Created "${mesh.name}" — source shape was preserved`)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Shape could not be converted to Mesh2D')
     }
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
@@ -1778,6 +1796,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                         onClick={createMesh2DFromSpline}
                         className="min-h-9 rounded border border-cyan-700 bg-cyan-950/20 px-3 py-2 text-left text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
                         Create Mesh2D from closed spline
+                      </button>
+                    </div>}
+                    {canCreateShapeBoundaryMesh2D(selectedLayer ?? undefined) && <div className="mx-3 mt-2 grid gap-2">
+                      <button type="button"
+                        onClick={createMesh2DFromShape}
+                        className="min-h-9 rounded border border-cyan-700 bg-cyan-950/20 px-3 py-2 text-left text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+                        Create Mesh2D from closed shape
                       </button>
                     </div>}
                     <PropertiesPanel

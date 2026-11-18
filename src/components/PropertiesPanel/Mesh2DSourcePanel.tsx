@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import ScrubInput from '@/components/inputs/ScrubInput'
 import {
+  isShapeBoundaryMesh2DCurrent,
   isSplineBoundaryMesh2DCurrent,
+  regenerateShapeBoundaryMesh2DLayer,
   regenerateSplineBoundaryMesh2DLayer,
 } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import type { Layer } from '@/lib/types'
@@ -15,7 +17,7 @@ interface Props {
 }
 
 /**
- * Shows the persisted source contract for spline-derived Mesh2D layers.
+ * Shows the persisted source contract for spline/shape-derived Mesh2D layers.
  *
  * Source lookup and fingerprint comparison are read-only. Regeneration returns
  * one complete layer snapshot to the owning editor command path, so tolerance
@@ -24,28 +26,35 @@ interface Props {
  */
 export default function Mesh2DSourcePanel({ layer, allLayers, onLayerChange }: Props) {
   const source = layer.mesh2d?.source
-  const sourceLayer = source?.kind === 'splineBoundary'
+  const boundarySource = source?.kind === 'splineBoundary' || source?.kind === 'shapeBoundary'
+  const sourceLayer = boundarySource
     ? allLayers.find(candidate => candidate.id === source.sourceLayerId)
     : undefined
   const current = useMemo(
-    () => isSplineBoundaryMesh2DCurrent(layer, sourceLayer),
-    [layer, sourceLayer],
+    () => source?.kind === 'shapeBoundary'
+      ? isShapeBoundaryMesh2DCurrent(layer, sourceLayer)
+      : isSplineBoundaryMesh2DCurrent(layer, sourceLayer),
+    [layer, source, sourceLayer],
   )
   const [error, setError] = useState<string | null>(null)
   useEffect(() => setError(null), [layer.id, sourceLayer?.id])
-  if (source?.kind !== 'splineBoundary') return null
+  if (!boundarySource || (source.kind !== 'splineBoundary' && source.kind !== 'shapeBoundary')) return null
 
   const regenerate = (flattenTolerance: number) => {
     if (!sourceLayer) return
     try {
-      onLayerChange(regenerateSplineBoundaryMesh2DLayer(layer, sourceLayer, { flattenTolerance }))
+      onLayerChange(source.kind === 'shapeBoundary'
+        ? regenerateShapeBoundaryMesh2DLayer(layer, sourceLayer, { flattenTolerance })
+        : regenerateSplineBoundaryMesh2DLayer(layer, sourceLayer, { flattenTolerance }))
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Mesh2D could not be regenerated')
     }
   }
 
-  const missing = sourceLayer?.type !== 'spline' || !sourceLayer.spline
+  const missing = source.kind === 'shapeBoundary'
+    ? sourceLayer?.type !== 'shape' || !sourceLayer.size
+    : sourceLayer?.type !== 'spline' || !sourceLayer.spline
   const status = missing
     ? { label: 'Source missing', classes: 'border-red-800/60 bg-red-950/30 text-red-300' }
     : current
@@ -55,7 +64,7 @@ export default function Mesh2DSourcePanel({ layer, allLayers, onLayerChange }: P
   return (
     <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
       <h3 id="mesh2d-source-heading" className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
-        Spline Source
+        {source.kind === 'shapeBoundary' ? 'Shape Source' : 'Spline Source'}
       </h3>
       <div className="rounded border border-gray-700 bg-gray-950/40 px-2.5 py-2 text-[11px]">
         <div className="flex items-center justify-between gap-2">

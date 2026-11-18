@@ -1,5 +1,12 @@
 import { DEFAULT_TRANSFORM } from '@/lib/defaults'
-import { computeMesh2DLocalBounds, SplineBoundaryMesh2DGenerator, StructuredGridMesh2DGenerator } from '@/lib/geometry'
+import {
+  computeMesh2DLocalBounds,
+  ShapeBoundaryMesh2DGenerator,
+  SplineBoundaryMesh2DGenerator,
+  StructuredGridMesh2DGenerator,
+  type Mesh2DShapeKind,
+  type ShapeBoundaryInput,
+} from '@/lib/geometry'
 import { writePropertyPath } from '@/lib/scene/properties/writePropertyPath'
 import type { Layer } from '@/lib/types'
 import type { StructuredGridMesh2DSource } from '@/lib/types/mesh2d'
@@ -10,6 +17,7 @@ import { appearanceGroup, fillGroup, geometryGroup, transformGroup } from '../sh
 let mesh2DCounter = 0
 const generator = new StructuredGridMesh2DGenerator()
 const splineGenerator = new SplineBoundaryMesh2DGenerator()
+const shapeGenerator = new ShapeBoundaryMesh2DGenerator()
 
 /** Creates a complete, portable structured-grid Mesh2D layer. */
 export function newStructuredGridMesh2DLayer(): Layer {
@@ -116,6 +124,96 @@ export function isSplineBoundaryMesh2DCurrent(layer: Layer, sourceLayer: Layer |
   if (layer.type !== 'mesh2d' || layer.mesh2d?.source.kind !== 'splineBoundary') return false
   if (sourceLayer?.type !== 'spline' || !sourceLayer.spline || sourceLayer.id !== layer.mesh2d.source.sourceLayerId) return false
   return splineGenerator.isCurrent(layer.mesh2d, sourceLayer.spline)
+}
+
+/** Returns whether a layer is a closed parametric shape supported by Mesh2D. */
+export function canCreateShapeBoundaryMesh2D(sourceLayer: Layer | undefined): boolean {
+  if (sourceLayer?.type !== 'shape' || !sourceLayer.size) return false
+  return shapeGenerator.supports(shapeKindOf(sourceLayer))
+}
+
+/**
+ * Creates a separate source-linked Mesh2D from a closed parametric shape.
+ *
+ * Shape parameters remain editable on the original layer. The mesh receives a
+ * portable geometry snapshot plus a fingerprint link for explicit stale-state
+ * detection and regeneration.
+ */
+export function newShapeBoundaryMesh2DLayer(
+  sourceLayer: Layer,
+  options: { flattenTolerance?: number } = {},
+): Layer {
+  const input = shapeBoundaryInput(sourceLayer)
+  mesh2DCounter++
+  const mesh2d = shapeGenerator.generate(sourceLayer.id, input, options)
+  const bounds = computeMesh2DLocalBounds(mesh2d.geometry)
+  if (!bounds) throw new Error('Shape boundary produced no finite Mesh2D bounds')
+  return {
+    id: `mesh2d_${Date.now().toString(36)}_${mesh2DCounter}`,
+    name: `${sourceLayer.name} Mesh2D`,
+    type: 'mesh2d',
+    transform: { ...sourceLayer.transform },
+    opacity: sourceLayer.opacity,
+    size: { width: bounds.width, height: bounds.height },
+    style: copyMeshStyle(sourceLayer),
+    blendMode: sourceLayer.blendMode,
+    parentId: sourceLayer.parentId,
+    startMs: sourceLayer.startMs,
+    endMs: sourceLayer.endMs,
+    mesh2d,
+  }
+}
+
+/** Regenerates shape-derived geometry while preserving Mesh2D styling and placement. */
+export function regenerateShapeBoundaryMesh2DLayer(
+  layer: Layer,
+  sourceLayer: Layer,
+  options: { flattenTolerance?: number } = {},
+): Layer {
+  if (layer.type !== 'mesh2d' || layer.mesh2d?.source.kind !== 'shapeBoundary') {
+    throw new Error('Expected a shape-boundary Mesh2D layer')
+  }
+  if (sourceLayer.id !== layer.mesh2d.source.sourceLayerId) {
+    throw new Error('Mesh2D source shape is missing or does not match the stored source id')
+  }
+  const input = shapeBoundaryInput(sourceLayer)
+  const mesh2d = shapeGenerator.generate(sourceLayer.id, input, {
+    flattenTolerance: options.flattenTolerance ?? layer.mesh2d.source.flattenTolerance,
+  })
+  const bounds = computeMesh2DLocalBounds(mesh2d.geometry)
+  if (!bounds) throw new Error('Shape boundary produced no finite Mesh2D bounds')
+  return { ...layer, size: { width: bounds.width, height: bounds.height }, mesh2d }
+}
+
+/** Returns false for a missing, open, invalid or changed bound shape. */
+export function isShapeBoundaryMesh2DCurrent(layer: Layer, sourceLayer: Layer | undefined): boolean {
+  if (layer.type !== 'mesh2d' || layer.mesh2d?.source.kind !== 'shapeBoundary') return false
+  if (sourceLayer?.id !== layer.mesh2d.source.sourceLayerId) return false
+  try {
+    return shapeGenerator.isCurrent(layer.mesh2d, shapeBoundaryInput(sourceLayer))
+  } catch {
+    return false
+  }
+}
+
+function shapeBoundaryInput(sourceLayer: Layer): ShapeBoundaryInput {
+  if (sourceLayer.type !== 'shape' || !sourceLayer.size) {
+    throw new Error('Mesh2D boundary source must be a parametric shape layer')
+  }
+  const kind = shapeKindOf(sourceLayer)
+  if (!shapeGenerator.supports(kind)) {
+    throw new Error(`Shape "${kind}" is open or unsupported as a Mesh2D boundary`)
+  }
+  return {
+    kind,
+    size: sourceLayer.size,
+    params: sourceLayer.shapeParams,
+    cornerRadius: sourceLayer.style?.cornerRadius,
+  }
+}
+
+function shapeKindOf(sourceLayer: Layer): Mesh2DShapeKind {
+  return sourceLayer.shapeKind ?? sourceLayer.shape ?? 'rect'
 }
 
 function copyMeshStyle(sourceLayer: Layer): NonNullable<Layer['style']> {

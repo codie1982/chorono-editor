@@ -44,8 +44,29 @@ export interface SplineBoundaryMesh2DSource {
   readonly generatorVersion: 1
 }
 
+/**
+ * Serializable recipe for a Mesh2D derived from a closed parametric shape.
+ *
+ * The shape layer remains authoritative and editable. Its current size,
+ * parameters and corner radius are converted through the shared shape-path
+ * contract before entering the same validated boundary triangulation used by
+ * splines. The fingerprint therefore detects every geometry-affecting edit.
+ */
+export interface ShapeBoundaryMesh2DSource {
+  readonly kind: 'shapeBoundary'
+  readonly sourceLayerId: string
+  readonly sourceFingerprint: string
+  readonly flattenTolerance: number
+  readonly uvFit: 'bounds'
+  readonly triangulation: {
+    readonly algorithm: 'earcut'
+    readonly algorithmVersion: '3.2.4'
+  }
+  readonly generatorVersion: 1
+}
+
 /** Persisted source recipes supported by the 2D mesh subsystem. */
-export type Mesh2DSource = StructuredGridMesh2DSource | SplineBoundaryMesh2DSource
+export type Mesh2DSource = StructuredGridMesh2DSource | SplineBoundaryMesh2DSource | ShapeBoundaryMesh2DSource
 
 /**
  * Fixed connectivity for a Mesh2D source.

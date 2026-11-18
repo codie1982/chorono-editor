@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canCreateShapeBoundaryMesh2D,
+  isShapeBoundaryMesh2DCurrent,
   isSplineBoundaryMesh2DCurrent,
   mesh2DDefinition,
+  newShapeBoundaryMesh2DLayer,
   newSplineBoundaryMesh2DLayer,
   newStructuredGridMesh2DLayer,
+  regenerateShapeBoundaryMesh2DLayer,
   regenerateSplineBoundaryMesh2DLayer,
   regenerateStructuredGridMesh2DLayer,
 } from './Mesh2DDefinition'
-import { newSplineLayerFromData } from '@/lib/defaults'
+import { newLineLayer, newRectLayer, newRingLayer, newSplineLayerFromData } from '@/lib/defaults'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 
 describe('structured-grid Mesh2D layer definition', () => {
@@ -101,5 +105,40 @@ describe('spline-boundary Mesh2D layer definition', () => {
       throw new Error('Expected spline-boundary sources')
     }
     expect(regenerated.mesh2d.source.sourceFingerprint).not.toBe(mesh.mesh2d.source.sourceFingerprint)
+  })
+})
+
+describe('shape-boundary Mesh2D layer definition', () => {
+  it('creates a separate linked layer while preserving the parametric source', () => {
+    const source = newRectLayer()
+    source.name = 'Parametric Badge'
+    const before = JSON.stringify(source)
+    const mesh = newShapeBoundaryMesh2DLayer(source)
+
+    expect(canCreateShapeBoundaryMesh2D(source)).toBe(true)
+    expect(mesh.name).toBe('Parametric Badge Mesh2D')
+    expect(mesh.transform).toEqual(source.transform)
+    expect(mesh.mesh2d?.source.kind).toBe('shapeBoundary')
+    if (mesh.mesh2d?.source.kind !== 'shapeBoundary') throw new Error('Expected shape-boundary source')
+    expect(mesh.mesh2d.source.sourceLayerId).toBe(source.id)
+    expect(isShapeBoundaryMesh2DCurrent(mesh, source)).toBe(true)
+    expect(JSON.stringify(source)).toBe(before)
+  })
+
+  it('preserves ring holes and regenerates after parametric edits', () => {
+    const source = newRingLayer()
+    const mesh = newShapeBoundaryMesh2DLayer(source)
+    const edited = { ...source, shapeParams: { ...source.shapeParams!, innerRadius: 20 } }
+
+    expect(isShapeBoundaryMesh2DCurrent(mesh, edited)).toBe(false)
+    const regenerated = regenerateShapeBoundaryMesh2DLayer(mesh, edited)
+    expect(regenerated).not.toBe(mesh)
+    expect(isShapeBoundaryMesh2DCurrent(regenerated, edited)).toBe(true)
+  })
+
+  it('does not advertise open line shapes as Mesh2D surfaces', () => {
+    const line = newLineLayer()
+    expect(canCreateShapeBoundaryMesh2D(line)).toBe(false)
+    expect(() => newShapeBoundaryMesh2DLayer(line)).toThrow(/open or unsupported/)
   })
 })

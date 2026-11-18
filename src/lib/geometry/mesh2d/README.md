@@ -11,6 +11,10 @@ constraints or simulation state.
 - `SplineBoundaryMesh2DGenerator` implements the first MESH1 source adapter. It
   flattens closed spline contours at a recorded local-pixel tolerance, validates
   ring topology, classifies holes and triangulates them through Earcut 3.2.4.
+- `ShapeBoundaryMesh2DGenerator` adapts supported closed parametric shapes
+  through `ShapeToPathConverter` and the same spline boundary validator. Open
+  stroke primitives are rejected; a full ring remains an outer contour plus a
+  real hole.
 - `SplineBoundaryRingBuilder` owns contour admission, intersection checks and
   even-odd/nonzero fill-role classification. It does not triangulate or render.
 - `Mesh2DTopologyValidator` validates serialized or generated geometry without
@@ -34,6 +38,8 @@ structured-grid settings ──→ StructuredGridMesh2DGenerator ──┐
 closed spline + tolerance ─→ SplineBoundaryRingBuilder       ├─→ Mesh2DData
                                       ↓                      │
                          SplineBoundaryMesh2DGenerator ───────┘
+                                     ↑
+closed shape → ShapeToPathConverter → ShapeBoundary adapter
                                                              ↓
         ├── Mesh2DTopologyValidator
         ├── Mesh2DAdjacencyBuilder (derived, not persisted)
@@ -67,12 +73,16 @@ cloth rest/constraint state do not belong in `Mesh2DData`.
   unsupported boolean combine modes and ambiguous nonzero nesting fail before
   Earcut. Earcut output is area-checked and passed through the shared validator;
   it is boundary triangulation, not a conforming or quality remesher.
+- Shape-derived meshes use the renderer's authoritative parametric path
+  conversion. Shape size, geometry parameters and corner radius affect the
+  fingerprint; transforms and viewport zoom do not alter local topology.
 
 ## Minimal usage
 
 ```ts
 import {
   SplineBoundaryMesh2DGenerator,
+  ShapeBoundaryMesh2DGenerator,
   StructuredGridMesh2DGenerator,
 } from '@/lib/geometry'
 
@@ -88,6 +98,16 @@ const splineMesh = new SplineBoundaryMesh2DGenerator().generate(
   sourceLayer.spline,
   { flattenTolerance: 0.25 },
 )
+
+const shapeMesh = new ShapeBoundaryMesh2DGenerator().generate(
+  shapeLayer.id,
+  {
+    kind: shapeLayer.shapeKind ?? shapeLayer.shape ?? 'rect',
+    size: shapeLayer.size,
+    params: shapeLayer.shapeParams,
+    cornerRadius: shapeLayer.style?.cornerRadius,
+  },
+)
 ```
 
 Users create the same source through **Add Layer → Mesh & Surface → Structured
@@ -100,14 +120,15 @@ wireframe as editor-only chrome. It is off by default, is not serialized, and
 never appears in preview or export. Save/load, copy and live instances use the
 ordinary Layer JSON contracts and keep runtime/GPU buffers out of source data.
 
-For a selected spline, **Create Mesh2D from closed spline** creates a new layer
-and preserves the source. The Mesh2D inspector reports missing/changed/current
-source state. Regeneration and tolerance edits replace the full validated
-geometry in one undoable layer update. The persisted fingerprint is the stale
-signal that later topology-bound pin/cache/bake consumers must include.
+For a selected spline or supported closed parametric shape, the corresponding
+**Create Mesh2D from closed …** action creates a new layer and preserves the
+source. The Mesh2D inspector reports missing/changed/current source state.
+Regeneration and tolerance edits replace the full validated geometry in one
+undoable layer update. The persisted fingerprint is the stale signal that
+later topology-bound pin/cache/bake consumers must include.
 
 This slice deliberately does not expose vertex/edge/face editing and does not
-share a 3D modeling object. The parametric-shape source adapter remains the next
-MESH1 increment; it must route through the same boundary contracts rather than
-silently converting the source layer. Cloth rest data and variable-topology
-Blob/fluid surfaces remain separate later subsystems.
+share a 3D modeling object. It supports boundary triangulation for closed
+spline/shape sources, not quality remeshing or interior refinement. Cloth rest
+data and variable-topology Blob/fluid surfaces remain separate later
+subsystems.
