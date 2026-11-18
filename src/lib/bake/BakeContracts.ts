@@ -63,6 +63,9 @@ export interface BakeJobSpec<TPreview> {
   readonly documentSignal?: AbortSignal
   readonly isSourceCurrent: () => boolean
   readonly prepare: (context: BakePreparationContext) => Promise<TPreview> | TPreview
+  /** Releases buffers/native handles when an unpublished preview leaves the
+   * job. Must be idempotent and non-throwing; ordinary GC-only values omit it. */
+  readonly discardPreview?: (preview: TPreview) => void
 }
 
 /** Public control surface for one typed bake. Disposal cancels unpublished work

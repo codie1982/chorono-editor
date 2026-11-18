@@ -73,10 +73,10 @@ export class BakeJob<TPreview> implements BakeJobHandle<TPreview> {
         if (!this.isUsableSource()) throw new BakeSourceStaleError()
         this.publish({ status: 'running', progress: { value: 0.02, phase: 'prepare', message: 'Preparing bake preview.' } })
         const result = await this.spec.prepare({ signal, reportProgress: this.reportProgress })
-        if (signal.aborted) throw cancelledJobError()
-        if (!this.isUsableSource()) throw new BakeSourceStaleError()
+        if (signal.aborted) { this.discardPrepared(result); throw cancelledJobError() }
+        if (!this.isUsableSource()) { this.discardPrepared(result); throw new BakeSourceStaleError() }
         return result
-      }, { signal: this.controller.signal })
+      }, { signal: this.controller.signal, discard: preview => this.discardPrepared(preview) })
       if (this.snapshot.status === 'stale' || this.snapshot.status === 'cancelled' || this.disposed) return
       this.publish({ status: 'preview-ready', preview, error: undefined,
         progress: { value: 1, phase: 'preview', message: 'Bake preview is ready.' } })
@@ -129,12 +129,14 @@ export class BakeJob<TPreview> implements BakeJobHandle<TPreview> {
       // Publication must be one synchronous transaction. Any async asset/cache
       // preparation belongs to `prepare`, before this source-write boundary.
       publish(preview)
+      this.discardSnapshotPreview()
       this.publish({ status: 'completed', progress: { value: 1, phase: 'completed', message: 'Bake completed.' } })
     } catch (error) {
       if (!this.isUsableSource()) {
         this.markStale('Bake source changed before the preview could be applied.')
         throw new BakeSourceStaleError(this.snapshot.error)
       }
+      this.discardSnapshotPreview()
       this.publish({ status: 'failed', error: errorMessage(error),
         progress: { value: 1, phase: 'failed', message: 'Bake commit failed.' } })
       throw error
@@ -144,6 +146,7 @@ export class BakeJob<TPreview> implements BakeJobHandle<TPreview> {
   /** Cancels unpublished work and releases all runtime listeners/references. */
   dispose(): void {
     if (this.disposed) return
+    this.discardSnapshotPreview()
     this.disposed = true
     this.controller.abort()
     this.spec.documentSignal?.removeEventListener('abort', this.handleDocumentAbort)
@@ -169,11 +172,13 @@ export class BakeJob<TPreview> implements BakeJobHandle<TPreview> {
   private markStale(message: string): void {
     if (this.disposed || isTerminal(this.snapshot.status)) return
     this.controller.abort()
+    this.discardSnapshotPreview()
     this.publish({ status: 'stale', preview: undefined, error: message,
       progress: { ...this.snapshot.progress, phase: 'stale', message: 'Bake source is stale.' } })
   }
 
   private publishCancelled(): void {
+    this.discardSnapshotPreview()
     this.publish({ status: 'cancelled', preview: undefined, error: undefined,
       progress: { ...this.snapshot.progress, phase: 'cancelled', message: 'Bake preview was cancelled.' } })
   }
@@ -182,6 +187,17 @@ export class BakeJob<TPreview> implements BakeJobHandle<TPreview> {
     if (this.disposed) return
     this.snapshot = { ...this.snapshot, ...patch }
     this.listeners.forEach(listener => listener())
+  }
+
+  private discardSnapshotPreview(): void {
+    const preview = this.snapshot.preview
+    if (preview === undefined) return
+    this.snapshot = { ...this.snapshot, preview: undefined }
+    this.discardPrepared(preview)
+  }
+
+  private discardPrepared(preview: TPreview): void {
+    this.spec.discardPreview?.(preview)
   }
 }
 

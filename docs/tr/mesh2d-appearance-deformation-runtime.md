@@ -22,6 +22,11 @@ kumaş solver'ı bu dilimin parçası değildir.
   decode, cache, iptal ve pin/release sahipliği. Platform `fetch` çağrısı gerçek
   browser receiver'ına bağlıdır; Blob URL yüklemesi Chrome/WebKit'te aynı
   sözleşmeyi kullanır.
+- `src/lib/bake/adapters/MeshDeformationBakeAdapter.ts`: solver/prosedürel
+  sample buffer'ını bütçeli clip ve encoded asset preview'una dönüştürür.
+- `src/lib/editor/commands-mesh-deformation-bake.ts`: kaynak rest geometrisini
+  commit anında tekrar doğrular; asset ile playback binding'ini tek undo
+  transaction'ında ekler.
 - `src/lib/import/handlers/asset/MeshDeformationHandler.ts`: `.chmd2d` magic,
   boyut ve codec doğrulamasını import sırasında yapar; portable Blob kaynağı ve
   scalar metadata üretir, sahneye kendiliğinden layer eklemez.
@@ -113,7 +118,9 @@ key-pose azaltma ayrı codec sürümü gerektirir; v1 anlamı sessizce değişti
 `application/x-chorono-mesh-deformation` MIME türü veya `.chmd2d` uzantısı genel
 import pipeline'ından geçer. Import yalnız asset kaydını üretir; hedef Mesh2D
 katmanına bağlama, topology hash doğrulamasını koruyan ayrı bir authoring
-işlemidir.
+işlemidir. Bake üretim, sahiplik ve atomik bağlama sözleşmesi
+[`mesh-deformation-bake-adapter.md`](mesh-deformation-bake-adapter.md) içinde
+tanımlıdır.
 
 ## Kısa kullanım örneği
 

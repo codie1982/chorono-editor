@@ -1,10 +1,11 @@
 # Typed BakeService temeli
 
 Bu belge BAKE0 ortak kontrol düzleminin gerçek uygulama sözleşmesini tanımlar.
-İlk çalışan adapter sayısal Track Bake'tir. Mesh deformasyonu, rigid,
-fracture, particle/grid/surface ve raster sonuçları aynı yaşam döngüsüne daha
-sonra kendi typed recipe/payload adapter'larıyla eklenir. Bu temel 2D üretim
-sırasına aittir; 3D workspace, 3D renderer veya Character/IK payload'ı açmaz.
+İlk çalışan adapter sayısal Track Bake'tir. BAKE1 sabit topolojili Mesh2D
+deformasyonunu aynı yaşam döngüsüne ekler. Rigid, fracture,
+particle/grid/surface ve raster sonuçları daha sonra kendi typed
+recipe/payload adapter'larıyla eklenir. Bu temel 2D üretim sırasına aittir; 3D
+workspace, 3D renderer veya Character/IK payload'ı açmaz.
 
 ## Giriş noktaları ve sorumluluklar
 
@@ -19,6 +20,8 @@ sırasına aittir; 3D workspace, 3D renderer veya Character/IK payload'ı açmaz
   JSON'una veya undo snapshot'ına yazılmaz.
 - `src/lib/bake/adapters/TrackBakeAdapter.ts`: mevcut bounded numeric baker'ı
   kullanır. Yeni bir evaluator veya simplification algoritması kurmaz.
+- `src/lib/bake/adapters/MeshDeformationBakeAdapter.ts`: solver'ın örneklediği
+  sabit topolojili vertex pozisyonlarını mevcut clip/codec runtime'ına bağlar.
 - `src/components/timeline/baking/useTrackBakeJob.ts`: canlı editör track'i,
   document lifetime ve var olan tek-undo komutu arasındaki UI adapter'ıdır.
 
@@ -105,17 +108,18 @@ olması feature komutunun sorumluluğudur. BAKE0 Track adapter'ı mevcut
 değiştirir, bağımsız scene düzenlemelerini korur ve undo'da önceki timeline'ı
 geri getirir.
 
-BAKE0 henüz şunları sağlamaz:
+BAKE0/BAKE1 henüz şunları sağlamaz:
 
 - persisted `BakeRecord` veya generated-asset garbage collection,
-- mesh deformation cache/decoder ve topology hash manifesti,
 - physics simulation worker'ı, checkpoint veya re-bake ownership eşlemesi,
 - ortak Jobs & Bake paneli veya MCP async job araçları,
 - Character/IK ve 3D payload adapter'ları.
 
-Bir sonraki dikey dilim sabit topolojili Mesh2D deformation preview/cache
-adapter'ıdır. O dilim source topology hash'i, Float32 payload bütçesi, decoder
-capability ve solver olmadan playback'i bu sözleşmeye eklemelidir.
+Sabit topolojili Mesh2D preview/cache adapter'ının kaynak, bütçe, sahiplik ve
+solver-free playback sözleşmesi
+[`mesh-deformation-bake-adapter.md`](mesh-deformation-bake-adapter.md) içinde
+belgelenmiştir. Ana sıradaki dikey dilim Simulation Core ile ilk rigid/Voronoi
+adapter'ıdır; değişken topolojili Blob/sıvı yüzeyi ayrı cache biçimi kullanır.
 
 ## Doğrulama
 
