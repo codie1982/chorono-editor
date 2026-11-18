@@ -165,6 +165,10 @@ export function hashRigidBodyBakeRecipe(recipe: Omit<RigidBodyBakeRecipe, 'recip
     `ppm:${recipe.pixelsPerMeter}`,
     `gravity:${recipe.gravityMetersPerSecondSquared.x},${recipe.gravityMetersPerSecondSquared.y}`,
     `solver:${recipe.solverId}@${recipe.solverVersion}`,
+    ...(recipe.fractureEvents ?? []).flatMap(event => [
+      `fracture:${event.id}`, `fracture-time:${event.timeMs}`, `fracture-tick:${event.tick}`,
+      `fracture-source:${event.sourceBodyId}`, `fracture-fragments:${event.fragmentBodyIds.join(',')}`,
+    ]),
   ])
 }
 
@@ -175,7 +179,10 @@ export function hashRigidBodySource(timelineId: string, bodies: readonly RigidBo
       `body:${body.bodyId}`, `layer:${body.layerId}`, `motion:${body.motionType}`, `collider:${body.collider}`,
       `center:${body.centerPx.x},${body.centerPx.y}`, `angle:${body.angleDeg}`,
       `size:${body.widthPx},${body.heightPx}`,
+      ...(body.colliderVerticesPx ? [`vertices:${body.colliderVerticesPx.map(point => `${point.x},${point.y}`).join(';')}`] : []),
+      ...(body.activation ? [`activation:${body.activation.kind},${body.activation.eventId},${body.activation.sourceBodyId},${body.activation.sourceLocalOffsetPx.x},${body.activation.sourceLocalOffsetPx.y}`] : []),
       `visual:${body.visual.widthPx},${body.visual.heightPx},${body.visual.anchorX},${body.visual.anchorY},${body.visual.uniformScale}`,
+      ...(body.visual.centerOfMassLocalPx ? [`visual-com:${body.visual.centerOfMassLocalPx.x},${body.visual.centerOfMassLocalPx.y}`] : []),
       `material:${body.material.densityKgPerSquareMeter},${body.material.friction},${body.material.restitution},${body.material.airFriction}`,
       `velocity:${body.initialVelocityPxPerSecond.x},${body.initialVelocityPxPerSecond.y},${body.initialAngularVelocityDegPerSecond}`,
     ]),

@@ -30,6 +30,9 @@ export function makeApplyRigidBodyBakeCmd(input: {
   return {
     label: `Bake Rigid Bodies (${input.sampleCount} samples)`,
     execute(scene: ChronoScene): ChronoScene {
+      if (input.recipe.fractureEvents?.length) {
+        throw new Error('Fracture recipes require the atomic Voronoi fracture bake command')
+      }
       if (!isRigidBodyBakeSourceCurrent(input.recipe, scene)) {
         throw new Error('Rigid body source changed. Prepare a new bake preview.')
       }

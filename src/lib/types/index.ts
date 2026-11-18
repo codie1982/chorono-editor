@@ -89,15 +89,26 @@ export type {
 
 export type {
   RigidBodyMotionType,
+  RigidBodyCollider,
   RigidBodyMaterial,
   RigidBodyAuthoring,
   RigidBodySnapshot,
   RigidBodyBakeRecipe,
+  RigidFractureEvent,
   RigidPoseCacheHeader,
   RigidBakeTrackOwnership,
   RigidBakeRecord,
   PhysicsSceneData,
 } from './physics'
+
+export type {
+  FracturePoint2D,
+  FractureBounds2D,
+  FractureSeedPoint,
+  FragmentGeometry,
+  FractureSourceGeometry,
+  FractureGeneration,
+} from './fracture'
 
 export type {
   LayerEffects,

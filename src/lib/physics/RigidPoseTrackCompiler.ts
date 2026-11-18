@@ -16,7 +16,9 @@ export class RigidPoseTrackCompiler {
   compile(recipe: RigidBodyBakeRecipe, clip: RigidPoseClip): Track[] {
     if (clip.header.recipeHash !== recipe.recipeHash) throw new Error('Rigid pose clip does not belong to this recipe')
     const times = clip.sampleTimesMs()
-    return recipe.bodies.filter(body => body.motionType === 'dynamic').flatMap(body => this.compileBody(recipe, clip, body, times))
+    const transforms = recipe.bodies.filter(body => body.motionType === 'dynamic')
+      .flatMap(body => this.compileBody(recipe, clip, body, times))
+    return [...transforms, ...this.compileFractureVisibility(recipe)]
   }
 
   private compileBody(recipe: RigidBodyBakeRecipe, clip: RigidPoseClip, body: RigidBodySnapshot, times: Float64Array): Track[] {
@@ -37,6 +39,56 @@ export class RigidPoseTrackCompiler {
       })),
     }))
   }
+
+  private compileFractureVisibility(recipe: RigidBodyBakeRecipe): Track[] {
+    return (recipe.fractureEvents ?? []).flatMap(event => {
+      const eventTimeMs = recipe.startTimeMs + event.timeMs
+      const participants = [
+        { bodyId: event.sourceBodyId, from: 1, to: 0 },
+        ...event.fragmentBodyIds.map(bodyId => ({ bodyId, from: 0, to: 1 })),
+      ]
+      return participants.map(participant => {
+        const body = recipe.bodies.find(candidate => candidate.bodyId === participant.bodyId)
+        if (!body) throw new Error(`Rigid fracture visibility body is missing: ${participant.bodyId}`)
+        return {
+          target: `layers.${body.layerId}.opacity`,
+          label: `Rigid Bake · Fracture Visibility`,
+          kind: 'property' as const,
+          keyframes: [
+            {
+              id: `rigid:${recipe.recipeHash}:${body.layerId}:opacity:before`,
+              timeMs: recipe.startTimeMs,
+              value: participant.from,
+              easing: { type: 'hold' as const },
+            },
+            {
+              id: `rigid:${recipe.recipeHash}:${body.layerId}:opacity:event`,
+              timeMs: eventTimeMs,
+              value: participant.to,
+              easing: { type: 'hold' as const },
+            },
+          ],
+        }
+      })
+    })
+  }
+}
+
+/** Returns the complete track target set owned by an ordinary/fracture bake. */
+export function rigidBakeTrackTargets(recipe: RigidBodyBakeRecipe): string[] {
+  const targets = recipe.bodies.filter(body => body.motionType === 'dynamic').flatMap(body => [
+    `layers.${body.layerId}.transform.x`,
+    `layers.${body.layerId}.transform.y`,
+    `layers.${body.layerId}.transform.rotationDeg`,
+  ])
+  for (const event of recipe.fractureEvents ?? []) {
+    for (const bodyId of [event.sourceBodyId, ...event.fragmentBodyIds]) {
+      const body = recipe.bodies.find(candidate => candidate.bodyId === bodyId)
+      if (!body) throw new Error(`Rigid fracture track body is missing: ${bodyId}`)
+      targets.push(`layers.${body.layerId}.opacity`)
+    }
+  }
+  return targets
 }
 
 /** Hashes the generated fields owned by a rigid bake record. */

@@ -2,6 +2,7 @@ import { MatterPhysicsBackend } from '@/lib/physics/MatterPhysicsBackend'
 import type { PhysicsBackendFactory } from '@/lib/physics/PhysicsBackend'
 import { RigidPoseClip } from '@/lib/physics/RigidPoseClip'
 import { RigidPoseTrackCompiler } from '@/lib/physics/RigidPoseTrackCompiler'
+import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource } from '@/lib/physics/RigidBodySceneCompiler'
 import { editorResourceBudget, type ResourceAllocator, type ResourceReservation } from '@/lib/resources/budget'
 import { cancelledJobError } from '@/lib/resources/jobs'
@@ -110,9 +111,13 @@ export class RigidBodyBakeAdapter implements BakeAdapter<RigidBodyBakeRecipe, Ri
     const clock = new SimulationClock(recipe)
     const dynamicCount = recipe.bodies.filter(body => body.motionType === 'dynamic').length
     const poseValues = safeProduct(clock.sampleCount, recipe.bodies.length, 3)
-    const keyframeCount = safeProduct(clock.sampleCount, dynamicCount, 3)
+    const visibilityKeyframeCount = (recipe.fractureEvents ?? [])
+      .reduce((count, event) => count + (event.fragmentBodyIds.length + 1) * 2, 0)
+    const keyframeCount = safeAdd(safeProduct(clock.sampleCount, dynamicCount, 3), visibilityKeyframeCount)
     const posePayloadBytes = safeAdd(safeProduct(poseValues, Float64Array.BYTES_PER_ELEMENT), safeProduct(clock.sampleCount, Float64Array.BYTES_PER_ELEMENT))
-    const estimatedTrackBytes = safeAdd(safeProduct(keyframeCount, ESTIMATED_KEY_BYTES), safeProduct(dynamicCount, 3, ESTIMATED_TRACK_BYTES))
+    const trackCount = dynamicCount * 3 + (recipe.fractureEvents ?? [])
+      .reduce((count, event) => count + event.fragmentBodyIds.length + 1, 0)
+    const estimatedTrackBytes = safeAdd(safeProduct(keyframeCount, ESTIMATED_KEY_BYTES), safeProduct(trackCount, ESTIMATED_TRACK_BYTES))
     const retainedEstimate = safeAdd(posePayloadBytes, estimatedTrackBytes)
     if (retainedEstimate > this.maxRetainedBytes) throw new RangeError(`Rigid bake preview exceeds ${this.maxRetainedBytes} retained bytes`)
     checkCancelled(context.signal)
@@ -181,6 +186,7 @@ export class RigidBodyBakeAdapter implements BakeAdapter<RigidBodyBakeRecipe, Ri
     if (hashRigidBodySource(recipe.timelineId, recipe.bodies) !== recipe.source.revision) throw new Error('Rigid body bake source hash is stale')
     if (!recipe.bodies.length || !recipe.bodies.some(body => body.motionType === 'dynamic')) throw new Error('Rigid body bake requires dynamic bodies')
     if (new Set(recipe.bodies.map(body => body.bodyId)).size !== recipe.bodies.length) throw new Error('Rigid body ids must be unique')
+    assertRigidFractureEvents(recipe)
   }
 }
 

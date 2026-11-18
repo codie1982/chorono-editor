@@ -1,6 +1,9 @@
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
 import type { PhysicsSceneData, RigidBodyBakeRecipe } from '@/lib/types/physics'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource } from './RigidBodySceneCompiler'
+import { rigidBakeTrackTargets } from './RigidPoseTrackCompiler'
+import { assertRigidFractureEvents } from './RigidFractureValidation'
+import { FractureManifestValidator } from '@/lib/fracture/FractureManifestValidator'
 
 const HASH = /^[0-9a-f]{16}$/
 
@@ -13,9 +16,16 @@ const HASH = /^[0-9a-f]{16}$/
  */
 export function assertPhysicsSceneData(value: PhysicsSceneData | undefined): void {
   if (value === undefined) return
-  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.rigidBakes) || value.rigidBakes.length > 128) {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.rigidBakes) || value.rigidBakes.length > 128
+    || (value.fractureGenerations !== undefined && (!Array.isArray(value.fractureGenerations) || value.fractureGenerations.length > 128))) {
     throw new Error('Invalid physics scene envelope')
   }
+  const fractureIds = new Set<string>()
+  value.fractureGenerations?.forEach(generation => {
+    if (fractureIds.has(generation.generationId)) throw new Error('Duplicate fracture generation id')
+    new FractureManifestValidator().validate(generation)
+    fractureIds.add(generation.generationId)
+  })
   const recordIds = new Set<string>()
   value.rigidBakes.forEach(record => {
     if (!isRecord(record) || record.schemaVersion !== 1 || !boundedText(record.id) || recordIds.has(record.id)
@@ -29,11 +39,9 @@ export function assertPhysicsSceneData(value: PhysicsSceneData | undefined): voi
     if (hashRigidBodySource(recipe.timelineId, recipe.bodies) !== recipe.source.revision
       || hashRigidBodyBakeRecipe(withoutHash) !== recipeHash) throw new Error('Rigid bake provenance hash is stale')
     if (new SimulationClock(recipe).sampleCount !== record.sampleCount) throw new Error('Rigid bake sample count does not match its recipe')
-    const expectedTrackCount = recipe.bodies.filter(body => body.motionType === 'dynamic').length * 3
+    const expectedTrackCount = rigidBakeTrackTargets(recipe).length
     if (record.tracks.length !== expectedTrackCount) throw new Error('Invalid rigid bake track ownership')
-    const expectedTargets = new Set(recipe.bodies.filter(body => body.motionType === 'dynamic').flatMap(body => [
-      `layers.${body.layerId}.transform.x`, `layers.${body.layerId}.transform.y`, `layers.${body.layerId}.transform.rotationDeg`,
-    ]))
+    const expectedTargets = new Set(rigidBakeTrackTargets(recipe))
     const targets = new Set<string>()
     record.tracks.forEach(track => {
       if (!isRecord(track) || !boundedText(track.target) || !HASH.test(String(track.contentHash)) || targets.has(track.target)) {
@@ -65,7 +73,7 @@ function assertRecipe(value: unknown): void {
   let dynamic = 0
   value.bodies.forEach(body => {
     if (!isRecord(body) || !boundedText(body.bodyId) || !boundedText(body.layerId) || bodyIds.has(body.bodyId) || layerIds.has(body.layerId)
-      || !['dynamic', 'static'].includes(String(body.motionType)) || body.collider !== 'rectangle'
+      || !['dynamic', 'static'].includes(String(body.motionType)) || !['rectangle', 'convexPolygon'].includes(String(body.collider))
       || !isRecord(body.centerPx) || !isRecord(body.visual) || !isRecord(body.material) || !isRecord(body.initialVelocityPxPerSecond)) {
       throw new Error('Invalid rigid body snapshot')
     }
@@ -74,6 +82,25 @@ function assertRecipe(value: unknown): void {
       body.visual.widthPx, body.visual.heightPx, body.visual.anchorX, body.visual.anchorY, body.visual.uniformScale,
       body.material.densityKgPerSquareMeter, body.material.friction, body.material.restitution, body.material.airFriction,
       body.initialVelocityPxPerSecond.x, body.initialVelocityPxPerSecond.y, body.initialAngularVelocityDegPerSecond]) assertFiniteNumber(number)
+    if (body.visual.centerOfMassLocalPx !== undefined) {
+      if (!isRecord(body.visual.centerOfMassLocalPx)) throw new Error('Invalid rigid centre of mass')
+      assertFiniteNumber(body.visual.centerOfMassLocalPx.x); assertFiniteNumber(body.visual.centerOfMassLocalPx.y)
+    }
+    if (body.collider === 'convexPolygon') {
+      if (!Array.isArray(body.colliderVerticesPx) || body.colliderVerticesPx.length < 3 || body.colliderVerticesPx.length > 128) {
+        throw new Error('Invalid convex rigid collider')
+      }
+      body.colliderVerticesPx.forEach(vertex => {
+        if (!isRecord(vertex)) throw new Error('Invalid convex rigid vertex')
+        assertFiniteNumber(vertex.x); assertFiniteNumber(vertex.y)
+      })
+      if (!isRecord(body.activation) || body.activation.kind !== 'fractureFragment'
+        || !boundedText(body.activation.eventId) || !boundedText(body.activation.sourceBodyId)
+        || !isRecord(body.activation.sourceLocalOffsetPx)) throw new Error('Invalid rigid fragment activation')
+      assertFiniteNumber(body.activation.sourceLocalOffsetPx.x); assertFiniteNumber(body.activation.sourceLocalOffsetPx.y)
+    } else if (body.colliderVerticesPx !== undefined || body.activation !== undefined) {
+      throw new Error('Rectangle rigid body cannot carry fragment collider data')
+    }
     if ((body.widthPx as number) <= 0 || (body.heightPx as number) <= 0
       || (body.visual.widthPx as number) <= 0 || (body.visual.heightPx as number) <= 0
       || (body.visual.uniformScale as number) <= 0 || (body.material.densityKgPerSquareMeter as number) <= 0) {
@@ -87,6 +114,7 @@ function assertRecipe(value: unknown): void {
   })
   if (!dynamic) throw new Error('Rigid bake recipe requires a dynamic body')
   new SimulationClock(value as unknown as RigidBodyBakeRecipe)
+  assertRigidFractureEvents(value as unknown as RigidBodyBakeRecipe)
 }
 
 function assertFiniteNumber(value: unknown): asserts value is number {

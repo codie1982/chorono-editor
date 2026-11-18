@@ -38,9 +38,10 @@ export function visualTransformFromRigidPose(body: RigidBodySnapshot, pose: Rigi
   x: number; y: number; rotationDeg: number
 } {
   const visual = body.visual
+  const center = visual.centerOfMassLocalPx ?? { x: visual.widthPx / 2, y: visual.heightPx / 2 }
   const offset = rotate(
-    (visual.widthPx / 2 - visual.anchorX) * visual.uniformScale,
-    (visual.heightPx / 2 - visual.anchorY) * visual.uniformScale,
+    (center.x - visual.anchorX) * visual.uniformScale,
+    (center.y - visual.anchorY) * visual.uniformScale,
     pose.angleDeg,
   )
   return {
