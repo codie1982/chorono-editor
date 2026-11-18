@@ -12,6 +12,7 @@ export interface MediaElement {
 export interface MediaElementMap extends ReadonlyMap<string, MediaElement> {
   media?: { snapshot(): { loading: readonly string[]; errors: Readonly<Record<string, string>> } }
   fonts?: { state(asset: Asset): 'ready' | 'loading' | 'error' | 'notResident' }
+  meshDeformations?: { get(assetId: string): { byteLength: number } | undefined }
 }
 export interface MediaQuery { page: number; search: string }
 export interface MediaResourceRow {
@@ -91,6 +92,11 @@ export function summarizeMediaResources(
       // Native glyph/face storage is opaque. Admission policy charges are not
       // decoded memory estimates and must never enter this row's byte total.
       state = elements.fonts?.state(asset) ?? 'untracked'
+    } else if (asset.type === 'meshDeformation') {
+      const clip = elements.meshDeformations?.get(asset.id)
+      bytes = clip?.byteLength ?? null
+      state = clip ? 'ready' : managed?.errors[asset.id] ? 'error'
+        : loadingVisual ? loadingVisual.has(asset.id) ? 'loading' : 'notResident' : 'loading'
     }
     if (sameSource) seen.add(element)
     if (state === 'ready') result.ready++

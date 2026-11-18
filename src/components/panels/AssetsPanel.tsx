@@ -55,6 +55,7 @@ const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> =
   lottie:      { bg: 'bg-indigo-900/50',  fg: 'text-indigo-300',  icon: '◎' },
   spriteSheet: { bg: 'bg-teal-900/50',    fg: 'text-teal-300',    icon: '⊞' },
   gif:         { bg: 'bg-pink-900/50',    fg: 'text-pink-300',    icon: '⟳' },
+  meshDeformation: { bg: 'bg-cyan-900/50', fg: 'text-cyan-300', icon: '⌁' },
 }
 
 export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles, selectedTimelineId, currentTimeMs = 0 }: Props) {
@@ -77,11 +78,18 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
   const layersByAsset = useMemo(() => {
     const map = new Map<string, string[]>()
     for (const l of scene.layers) {
-      const aid = l.image?.assetId ?? l.video?.assetId ?? l.audio?.assetId
-      if (!aid) continue
-      const list = map.get(aid) ?? []
-      list.push(l.id)
-      map.set(aid, list)
+      const assetIds = [
+        l.image?.assetId,
+        l.video?.assetId,
+        l.audio?.assetId,
+        l.mesh2d?.appearance?.kind === 'texture' ? l.mesh2d.appearance.textureAssetId : undefined,
+        l.mesh2d?.deformation?.assetId,
+      ].filter((assetId): assetId is string => !!assetId)
+      assetIds.forEach(assetId => {
+        const list = map.get(assetId) ?? []
+        list.push(l.id)
+        map.set(assetId, list)
+      })
     }
     return map
   }, [scene.layers])

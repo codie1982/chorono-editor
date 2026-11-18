@@ -3,7 +3,7 @@ import { AssetIndex } from '../AssetIndex'
 import type { Layer } from '../../types/core'
 import type { Asset } from '../types'
 import { newStructuredGridMesh2DLayer } from '../../registry/definitions/mesh2d/Mesh2DDefinition'
-import { setMesh2DTexture } from '../../mesh2d'
+import { setMesh2DDeformation, setMesh2DTexture } from '../../mesh2d'
 
 // ── Test fixtures ───────────────────────────────────────────────────────────────
 
@@ -75,6 +75,13 @@ describe('AssetIndex', () => {
       const mesh = setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric')
       idx.build([mesh])
       expect(idx.getLayerIds('fabric')).toEqual([mesh.id])
+    })
+
+    it('indexes a Mesh2D deformation clip reference', () => {
+      const idx = new AssetIndex()
+      const mesh = setMesh2DDeformation(newStructuredGridMesh2DLayer(), 'clip')
+      idx.build([mesh])
+      expect(idx.getLayerIds('clip')).toEqual([mesh.id])
     })
 
     it('maps multiple layers to the same asset', () => {

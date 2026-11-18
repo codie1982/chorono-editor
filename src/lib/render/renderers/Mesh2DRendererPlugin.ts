@@ -2,16 +2,19 @@ import { computeMesh2DLocalBounds } from '@/lib/geometry/mesh2d'
 import type { LayerRendererPlugin } from '@/lib/registry/LayerRendererRegistry'
 import type { Layer } from '@/lib/types'
 import type { RenderContext } from '../RenderContext'
-import { isMesh2DPinSelectionCurrent } from '@/lib/mesh2d'
+import { isMesh2DPinSelectionCurrent, resolveMesh2DDeformation } from '@/lib/mesh2d'
 import { drawMesh2DLayer, drawMesh2DPins, drawMesh2DWireframe } from '../mesh2dRenderer'
 
 /** Canvas2D adapter for portable fixed-topology Mesh2D layers. */
 export const mesh2DRendererPlugin: LayerRendererPlugin = {
   id: 'mesh2d',
   mediaDependencies: layer => ({
-    assetIds: layer.mesh2d?.appearance?.kind === 'texture' && layer.mesh2d.appearance.textureAssetId
-      ? [layer.mesh2d.appearance.textureAssetId]
-      : [],
+    assetIds: [
+      ...(layer.mesh2d?.appearance?.kind === 'texture' && layer.mesh2d.appearance.textureAssetId
+        ? [layer.mesh2d.appearance.textureAssetId]
+        : []),
+      ...(layer.mesh2d?.deformation?.assetId ? [layer.mesh2d.deformation.assetId] : []),
+    ],
   }),
   paint: {
     alphaSafe: true,
@@ -24,11 +27,23 @@ export const mesh2DRendererPlugin: LayerRendererPlugin = {
     const assetId = layer.mesh2d?.appearance?.kind === 'texture'
       ? layer.mesh2d.appearance.textureAssetId
       : undefined
-    drawMesh2DLayer(ctx.canvas, layer, ctx.overrides, assetId ? ctx.assets.get(assetId) : undefined)
+    const deformationAssetId = layer.mesh2d?.deformation?.assetId
+    const deformation = resolveMesh2DDeformation(
+      layer,
+      deformationAssetId ? ctx.assets.meshDeformations?.get(deformationAssetId) : undefined,
+      ctx.timeMs,
+    )
+    drawMesh2DLayer(ctx.canvas, layer, ctx.overrides, assetId ? ctx.assets.get(assetId) : undefined, deformation.positions)
   },
   renderEditorOverlay(ctx: RenderContext, layer: Layer, preferences): void {
+    const deformationAssetId = layer.mesh2d?.deformation?.assetId
+    const deformation = resolveMesh2DDeformation(
+      layer,
+      deformationAssetId ? ctx.assets.meshDeformations?.get(deformationAssetId) : undefined,
+      ctx.timeMs,
+    )
     if (preferences.meshTriangles && layer.mesh2d) {
-      drawMesh2DWireframe(ctx.canvas, layer.mesh2d.geometry, ctx.displayScale)
+      drawMesh2DWireframe(ctx.canvas, layer.mesh2d.geometry, ctx.displayScale, deformation.positions)
     }
     if (layer.mesh2d?.pins?.vertexIds.length) {
       drawMesh2DPins(
@@ -37,6 +52,7 @@ export const mesh2DRendererPlugin: LayerRendererPlugin = {
         layer.mesh2d.pins.vertexIds,
         ctx.displayScale,
         !isMesh2DPinSelectionCurrent(layer),
+        deformation.positions,
       )
     }
   },

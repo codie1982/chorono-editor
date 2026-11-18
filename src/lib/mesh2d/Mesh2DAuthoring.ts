@@ -1,5 +1,5 @@
 import type { Layer } from '@/lib/types'
-import type { Mesh2DAppearance, Mesh2DPinSelection } from '@/lib/types/mesh2d'
+import type { Mesh2DAppearance, Mesh2DDeformationBinding, Mesh2DPinSelection } from '@/lib/types/mesh2d'
 
 export type Mesh2DPinPreset = 'topEdge' | 'corners' | 'boundary'
 
@@ -20,6 +20,27 @@ export function setMesh2DTexture(
     ? { schemaVersion: 1, kind: 'texture', textureAssetId, sampling }
     : { schemaVersion: 1, kind: 'solid', sampling }
   return { ...layer, mesh2d: { ...layer.mesh2d, appearance } }
+}
+
+/** Sets or clears one binary deformation clip playback reference. */
+export function setMesh2DDeformation(
+  layer: Layer,
+  assetId: string | null,
+  options: Partial<Omit<Mesh2DDeformationBinding, 'schemaVersion' | 'assetId'>> = {},
+): Layer {
+  if (layer.type !== 'mesh2d' || !layer.mesh2d) throw new Error('Expected a Mesh2D layer')
+  if (!assetId) return { ...layer, mesh2d: { ...layer.mesh2d, deformation: undefined } }
+  const previous = layer.mesh2d.deformation
+  const deformation: Mesh2DDeformationBinding = {
+    schemaVersion: 1,
+    assetId,
+    startTimeMs: options.startTimeMs ?? previous?.startTimeMs ?? 0,
+    playbackRate: options.playbackRate ?? previous?.playbackRate ?? 1,
+    loop: options.loop ?? previous?.loop ?? false,
+  }
+  if (!Number.isFinite(deformation.startTimeMs)) throw new RangeError('Mesh deformation start time must be finite')
+  if (!Number.isFinite(deformation.playbackRate) || deformation.playbackRate <= 0) throw new RangeError('Mesh deformation playback rate must be positive')
+  return { ...layer, mesh2d: { ...layer.mesh2d, deformation } }
 }
 
 /**

@@ -122,6 +122,7 @@ export class AssetIndex {
     if (layer.mesh2d?.appearance?.kind === 'texture' && layer.mesh2d.appearance.textureAssetId) {
       ids.push(layer.mesh2d.appearance.textureAssetId)
     }
+    if (layer.mesh2d?.deformation?.assetId) ids.push(layer.mesh2d.deformation.assetId)
     return ids
   }
 }

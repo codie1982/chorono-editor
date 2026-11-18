@@ -127,6 +127,21 @@ export interface Mesh2DPinSelection {
   readonly vertexIds: readonly string[]
 }
 
+/**
+ * Portable playback reference to a binary `meshDeformation` asset.
+ *
+ * Times are composition milliseconds. `startTimeMs` maps composition time to
+ * clip-local zero; playback rate is a dimensionless positive multiplier. Dense
+ * samples and typed arrays stay in the referenced asset, outside scene JSON.
+ */
+export interface Mesh2DDeformationBinding {
+  readonly schemaVersion: 1
+  readonly assetId: string
+  readonly startTimeMs: number
+  readonly playbackRate: number
+  readonly loop: boolean
+}
+
 /** Versioned source payload stored by a future `mesh2d` layer. */
 export interface Mesh2DData {
   readonly schemaVersion: 1
@@ -134,4 +149,5 @@ export interface Mesh2DData {
   readonly geometry: Mesh2DGeometry
   readonly appearance?: Mesh2DAppearance
   readonly pins?: Mesh2DPinSelection
+  readonly deformation?: Mesh2DDeformationBinding
 }

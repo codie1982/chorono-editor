@@ -18,10 +18,11 @@ export function drawMesh2DLayer(
   layer: Layer,
   overrides: OverrideMap,
   texture?: CanvasImageSource,
+  positions: ArrayLike<number> = layer.mesh2d?.geometry.positions ?? [],
 ): void {
   const geometry = layer.mesh2d?.geometry
   if (!geometry) return
-  const triangles = collectMesh2DTriangles(geometry)
+  const triangles = collectMesh2DTriangles(geometry, positions)
   if (triangles.length === 0) return
 
   const fill = layer.style?.fill
@@ -53,8 +54,9 @@ export function drawMesh2DWireframe(
   ctx: CanvasRenderingContext2D,
   geometry: Mesh2DGeometry,
   displayScale = 1,
+  positions: ArrayLike<number> = geometry.positions,
 ): void {
-  const triangles = collectMesh2DTriangles(geometry)
+  const triangles = collectMesh2DTriangles(geometry, positions)
   if (triangles.length === 0) return
   const scale = Math.max(Math.abs(displayScale), 1e-6)
   ctx.save()
@@ -75,6 +77,7 @@ export function drawMesh2DPins(
   pinVertexIds: readonly string[],
   displayScale = 1,
   stale = false,
+  positions: ArrayLike<number> = geometry.positions,
 ): void {
   if (!pinVertexIds.length) return
   const selected = new Set(pinVertexIds)
@@ -88,7 +91,7 @@ export function drawMesh2DPins(
   ctx.lineWidth = 1 / scale
   for (let index = 0; index < geometry.topology.vertexIds.length; index++) {
     if (!selected.has(geometry.topology.vertexIds[index])) continue
-    const x = geometry.positions[index * 2], y = geometry.positions[index * 2 + 1]
+    const x = positions[index * 2], y = positions[index * 2 + 1]
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue
     ctx.beginPath()
     ctx.arc(x, y, radius, 0, Math.PI * 2)
@@ -104,8 +107,7 @@ interface MeshTriangle {
 }
 
 /** Collects finite, non-degenerate triangles without retaining source arrays. */
-function collectMesh2DTriangles(geometry: Mesh2DGeometry): MeshTriangle[] {
-  const positions = geometry.positions
+function collectMesh2DTriangles(geometry: Mesh2DGeometry, positions: ArrayLike<number>): MeshTriangle[] {
   const indices = geometry.topology.triangleIndices
   const vertexCount = positions.length / 2
   if (!Number.isInteger(vertexCount)) return []

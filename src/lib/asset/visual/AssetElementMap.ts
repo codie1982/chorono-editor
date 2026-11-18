@@ -1,5 +1,6 @@
 import type { MediaFrameBridge } from '../../render/media/types'
 import type { FontBindings } from '../fonts'
+import type { MeshDeformationBindings } from '../meshDeformation'
 
 /** Compatibility Map surface. Managed consumers additionally resolve video by
  * clip identity; absence of the optional method means legacy per-asset lookup.
@@ -8,6 +9,7 @@ export interface AssetElementMap extends Map<string, HTMLImageElement | HTMLVide
   videoForLayer?(layerId: string, assetId: string): HTMLVideoElement | undefined
   readonly media?: MediaFrameBridge
   readonly fonts?: FontBindings
+  readonly meshDeformations?: MeshDeformationBindings
 }
 /** Read a clip-specific element without accidentally falling back to a different
  * clip of the same URL in a managed map. Legacy Map callers remain supported. */

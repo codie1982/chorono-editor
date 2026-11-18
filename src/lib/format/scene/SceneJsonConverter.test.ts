@@ -5,6 +5,7 @@ import {
   newShapeBoundaryMesh2DLayer,
   newStructuredGridMesh2DLayer,
 } from '../../registry/definitions/mesh2d/Mesh2DDefinition'
+import { selectMesh2DPinPreset, setMesh2DDeformation, setMesh2DTexture } from '../../mesh2d'
 
 it('preserves IDs/unknown data and distinguishes merge-source minimum from full editor arrays', () => {
   const original = { ...emptyScene(), extension: { value: 'preserved' } }, text = JSON.stringify(original)
@@ -21,14 +22,26 @@ it('rejects wrong roots/versions/null composition without hiding syntax errors',
 
 it('round-trips portable Mesh2D source, topology and stable vertex ids', () => {
   const scene = emptyScene()
-  const layer = newStructuredGridMesh2DLayer()
+  const layer = setMesh2DDeformation(
+    selectMesh2DPinPreset(setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric'), 'corners'),
+    'deformation',
+    { startTimeMs: 250, playbackRate: 0.5, loop: true },
+  )
   const shape = newRectLayer()
   const linked = newShapeBoundaryMesh2DLayer(shape)
   scene.layers = [layer, shape, linked]
+  scene.assets = [
+    { id: 'fabric', name: 'Fabric', type: 'image', url: 'project:fabric.png' },
+    { id: 'deformation', name: 'Flag motion', type: 'meshDeformation', url: 'project:flag.chmd' },
+  ]
   const loaded = parseSceneJson(JSON.stringify(scene), true)
   expect(loaded.layers[0]).toEqual(layer)
   expect(loaded.layers[0].mesh2d?.geometry.topology.topologyHash)
     .toBe(layer.mesh2d?.geometry.topology.topologyHash)
+  expect(loaded.layers[0].mesh2d?.appearance?.textureAssetId).toBe('fabric')
+  expect(loaded.layers[0].mesh2d?.pins?.vertexIds).toHaveLength(4)
+  expect(loaded.layers[0].mesh2d?.deformation).toEqual(layer.mesh2d?.deformation)
+  expect(loaded.assets[1].type).toBe('meshDeformation')
   expect(loaded.layers[2]).toEqual(linked)
   expect(loaded.layers[2].mesh2d?.source).toMatchObject({
     kind: 'shapeBoundary', sourceLayerId: shape.id,

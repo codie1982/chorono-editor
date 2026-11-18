@@ -3,6 +3,7 @@ import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/
 import {
   isMesh2DPinSelectionCurrent,
   selectMesh2DPinPreset,
+  setMesh2DDeformation,
   setMesh2DPins,
   setMesh2DTexture,
 } from './Mesh2DAuthoring'
@@ -19,6 +20,16 @@ describe('Mesh2D authoring', () => {
     })
     expect(textured.mesh2d?.geometry).toBe(layer.mesh2d?.geometry)
     expect(setMesh2DTexture(textured, null).mesh2d?.appearance?.kind).toBe('solid')
+  })
+
+  it('stores only a small deformation asset playback binding on the layer', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    const bound = setMesh2DDeformation(layer, 'clip-a', { startTimeMs: 250, playbackRate: 0.5, loop: true })
+    expect(bound.mesh2d?.deformation).toEqual({
+      schemaVersion: 1, assetId: 'clip-a', startTimeMs: 250, playbackRate: 0.5, loop: true,
+    })
+    expect(setMesh2DDeformation(bound, null).mesh2d?.deformation).toBeUndefined()
+    expect(() => setMesh2DDeformation(layer, 'clip-a', { playbackRate: 0 })).toThrow('positive')
   })
 
   it('selects deterministic structured-grid pin presets by stable vertex id', () => {

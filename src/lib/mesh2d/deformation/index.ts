@@ -1,0 +1,5 @@
+export { MeshDeformationClip } from './MeshDeformationClip'
+export type { MeshDeformationClipInput } from './MeshDeformationClip'
+export { MeshDeformationBinaryCodec } from './MeshDeformationBinaryCodec'
+export { resolveMesh2DDeformation } from './resolveMesh2DDeformation'
+export type { Mesh2DDeformationResolution, Mesh2DDeformationStatus } from './resolveMesh2DDeformation'

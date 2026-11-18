@@ -4,6 +4,8 @@ import type { Asset, Layer } from '../../types'
 import { prepareRenderFrame } from '../prepareRenderFrame'
 import { VisualDemandResolver } from './VisualDemandResolver'
 import type { MediaFrameInput } from './types'
+import { newStructuredGridMesh2DLayer } from '../../registry/definitions/mesh2d/Mesh2DDefinition'
+import { setMesh2DDeformation, setMesh2DTexture } from '../../mesh2d'
 
 const asset = (id: string, type: Asset['type'] = 'image'): Asset => ({ id, name: id, type, url: id, width: 20, height: 20 })
 function image(id: string, x = 0): Layer { const l = newImageLayer(id, 20, 20); l.id = id; l.transform = { ...l.transform, x, y: 0 }; return l }
@@ -72,5 +74,10 @@ describe('canonical frame media dependency demand', () => {
     l.hidden = true
     const { input } = setup([l], [asset('sheet', 'spriteSheet')])
     expect(ids(input)).toEqual([]); expect(ids({ ...input, rootIds: [l.id] })).toEqual(['sheet'])
+  })
+  it('requests Mesh2D texture and deformation assets through the same frame closure', () => {
+    const mesh = setMesh2DDeformation(setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric'), 'clip')
+    const { input } = setup([mesh], [asset('fabric'), asset('clip', 'meshDeformation')])
+    expect(ids(input)).toEqual(['clip', 'fabric'])
   })
 })

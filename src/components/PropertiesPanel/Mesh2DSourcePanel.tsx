@@ -11,6 +11,7 @@ import {
 import {
   isMesh2DPinSelectionCurrent,
   selectMesh2DPinPreset,
+  setMesh2DDeformation,
   setMesh2DPins,
   setMesh2DTexture,
   type Mesh2DPinPreset,
@@ -73,6 +74,10 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
   const textureAssetId = mesh.appearance?.kind === 'texture' ? mesh.appearance.textureAssetId : undefined
   const textureAsset = visualAssets.find(asset => asset.id === textureAssetId)
   const textureMissing = !!textureAssetId && !textureAsset
+  const deformationAssets = allAssets.filter(asset => asset.type === 'meshDeformation')
+  const deformationAssetId = mesh.deformation?.assetId
+  const deformationAsset = deformationAssets.find(asset => asset.id === deformationAssetId)
+  const deformationMissing = !!deformationAssetId && !deformationAsset
   const pinsCurrent = isMesh2DPinSelectionCurrent(layer)
   const pinCount = mesh.pins?.vertexIds.length ?? 0
 
@@ -82,6 +87,20 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
 
   const chooseSampling = (sampling: 'linear' | 'nearest') => {
     onLayerChange(setMesh2DTexture(layer, textureAssetId ?? null, sampling))
+  }
+
+  const chooseDeformation = (assetId: string) => {
+    onLayerChange(setMesh2DDeformation(layer, assetId || null))
+  }
+
+  const updateDeformation = (options: Parameters<typeof setMesh2DDeformation>[2]) => {
+    if (!deformationAssetId) return
+    try {
+      onLayerChange(setMesh2DDeformation(layer, deformationAssetId, options))
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Deformation playback could not be updated')
+    }
   }
 
   const choosePins = (preset: Mesh2DPinPreset) => {
@@ -160,6 +179,44 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
         <div role={textureMissing ? 'alert' : 'status'} aria-live="polite"
           className={`min-h-8 rounded border px-2 py-1.5 text-[10px] ${textureMissing ? 'border-red-800/60 bg-red-950/30 text-red-300' : 'border-gray-700 bg-gray-950/40 text-gray-400'}`}>
           {textureMissing ? 'Texture asset is missing; renderer uses solid fill.' : textureAsset ? `Texture linked: ${textureAsset.name}` : 'Solid fill fallback active.'}
+        </div>
+      </section>
+
+      <section aria-labelledby="mesh2d-deformation-heading" className="flex flex-col gap-2">
+        <h3 id="mesh2d-deformation-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Deformation Clip</h3>
+        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
+          Binary clip asset
+          <select aria-label="Deformation clip asset" value={deformationAssetId ?? ''} onChange={event => chooseDeformation(event.target.value)}
+            className="min-h-9 rounded border border-gray-700 bg-gray-900 px-2 text-xs normal-case tracking-normal text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+            <option value="">Rest mesh</option>
+            {deformationAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
+            Start (ms)
+            <ScrubInput value={mesh.deformation?.startTimeMs ?? 0} step={10} disabled={!deformationAssetId}
+              onChange={startTimeMs => updateDeformation({ startTimeMs })} />
+          </label>
+          <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
+            Speed
+            <ScrubInput value={mesh.deformation?.playbackRate ?? 1} min={0.01} max={16} step={0.05} disabled={!deformationAssetId}
+              onChange={playbackRate => updateDeformation({ playbackRate })} />
+          </label>
+        </div>
+        <label className="flex min-h-9 items-center justify-between gap-3 rounded border border-gray-700 bg-gray-900 px-2.5 text-xs text-gray-300">
+          Loop clip
+          <input type="checkbox" aria-label="Loop deformation clip" disabled={!deformationAssetId}
+            checked={mesh.deformation?.loop ?? false} onChange={event => updateDeformation({ loop: event.target.checked })}
+            className="size-4 accent-blue-500" />
+        </label>
+        <div role={deformationMissing ? 'alert' : 'status'} aria-live="polite"
+          className={`min-h-8 rounded border px-2 py-1.5 text-[10px] ${deformationMissing ? 'border-red-800/60 bg-red-950/30 text-red-300' : 'border-gray-700 bg-gray-950/40 text-gray-400'}`}>
+          {deformationMissing
+            ? 'Clip asset is missing; renderer uses the rest mesh.'
+            : deformationAsset
+              ? `Clip linked: ${deformationAsset.name}. Topology is validated during decode.`
+              : 'Rest mesh playback active.'}
         </div>
       </section>
 
