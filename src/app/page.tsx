@@ -2166,9 +2166,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           currentTimeMs={currentTimeMs}
           documentSignal={importDocument}
           onClose={() => setShowRenderSettings(false)}
-          onTransferred={(intent, result, warnings) => {
-            const output = intent === 'still' ? 'current frame' : `${result.frameCount}-frame video source`
-            toast.success(`Opened ${output} in Chorono Render`, warnings.length ? { detail: warnings.join(' ') } : undefined)
+          onCompleted={(completion, warnings) => {
+            const message = completion.backend === 'chorono'
+              ? `Opened ${completion.intent === 'still' ? 'current frame' : `${completion.frameCount}-frame video source`} in Chorono Render`
+              : `Rendered ${completion.filename ?? (completion.artifact === 'png' ? 'PNG' : 'PNG sequence')} with the built-in renderer`
+            toast.success(message, warnings.length ? { detail: warnings.join(' ') } : undefined)
           }}
           onError={(message) => toast.error('Render failed', { detail: message })}
         />
