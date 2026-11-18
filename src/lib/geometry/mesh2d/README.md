@@ -70,9 +70,11 @@ Users create the same source through **Add Layer → Mesh & Surface → Structur
 Grid**. Its Geometry inspector changes call the registered derived-data edit
 strategy, which validates and regenerates source plus geometry as one immutable
 layer snapshot. That snapshot is one ordinary editor update/undo operation.
-The Canvas2D plugin renders content in editor, preview and export; selected
-wireframe is editor-only. Save/load, copy and live instances use the ordinary
-Layer JSON contracts and keep runtime/GPU buffers out of source data.
+The Canvas2D plugin renders content in editor, preview and export. The
+viewport's **View → Show mesh triangles** option draws the selected mesh
+wireframe as editor-only chrome. It is off by default, is not serialized, and
+never appears in preview or export. Save/load, copy and live instances use the
+ordinary Layer JSON contracts and keep runtime/GPU buffers out of source data.
 
 Spline/shape flattening and triangulation belong to MESH1 and must reuse the
 validator instead of changing MESH0 semantics silently. Cloth rest data and

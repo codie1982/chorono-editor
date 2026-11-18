@@ -19,7 +19,9 @@ export const mesh2DRendererPlugin: LayerRendererPlugin = {
   render(ctx: RenderContext, layer: Layer): void {
     drawMesh2DLayer(ctx.canvas, layer, ctx.overrides)
   },
-  renderEditorOverlay(ctx: RenderContext, layer: Layer): void {
-    if (layer.mesh2d) drawMesh2DWireframe(ctx.canvas, layer.mesh2d.geometry, ctx.displayScale)
+  renderEditorOverlay(ctx: RenderContext, layer: Layer, preferences): void {
+    if (preferences.meshTriangles && layer.mesh2d) {
+      drawMesh2DWireframe(ctx.canvas, layer.mesh2d.geometry, ctx.displayScale)
+    }
   },
 }

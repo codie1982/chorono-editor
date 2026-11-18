@@ -370,6 +370,7 @@ export default function SceneCanvas({
   const gridInFront = snapSettings.grid.inFront
   const [showGuides,  setShowGuides]  = useState(true)
   const [showMeasurements, setShowMeasurements] = useState(true)
+  const [showMeshTriangles, setShowMeshTriangles] = useState(false)
 
   // ── Right-click context menu — opens at cursor on a layer hit ────────────
   // Targets the right-clicked layer (not necessarily the selected one) so
@@ -976,6 +977,7 @@ export default function SceneCanvas({
     viewportRef: containerRef, viewportScale: zoom, viewportKey: `${zoom}:${pan.x}:${pan.y}`,
     scene: displayScene, timeMs, selectedLayerId, selectedLayerIds, assets,
     snapEnabled, snapToGridOn, gridSize, gridVisible: snapSettings.grid.visible, gridInFront,
+    meshTrianglesVisible: showMeshTriangles,
     overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
   })
@@ -1677,6 +1679,7 @@ export default function SceneCanvas({
           gridInFront={gridInFront}   onToggleGridFront={() => snap.setGridInFront(!gridInFront)}
           showGuides={showGuides}     onToggleGuides={() => setShowGuides((v) => !v)}
           showMeasurements={showMeasurements} onToggleMeasurements={() => setShowMeasurements(value => !value)}
+          showMeshTriangles={showMeshTriangles} onToggleMeshTriangles={() => setShowMeshTriangles(value => !value)}
         />
         <SnapSettingsMenu snap={snap} />
       </div>

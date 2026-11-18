@@ -7,6 +7,7 @@ interface ViewMenuProps extends ViewportGridSettingsProps {
   showRulers:    boolean; onToggleRulers:    () => void
   showGuides:    boolean; onToggleGuides:    () => void
   showMeasurements?: boolean; onToggleMeasurements?: () => void
+  showMeshTriangles?: boolean; onToggleMeshTriangles?: () => void
 }
 
 /** View toggles and a compact settings popover share one outside-click boundary.
@@ -41,6 +42,7 @@ export function ViewMenu(p: ViewMenuProps) {
     { label: 'Show guides',          value: p.showGuides,  onToggle: p.onToggleGuides,    kbd: 'Alt + L' },
   ]
   if (p.onToggleMeasurements) rows.push({ label: 'Show selection gaps', value: !!p.showMeasurements, onToggle: p.onToggleMeasurements })
+  if (p.onToggleMeshTriangles) rows.push({ label: 'Show mesh triangles', value: !!p.showMeshTriangles, onToggle: p.onToggleMeshTriangles })
 
   return (
     <div ref={ref} className="relative">
@@ -62,7 +64,7 @@ export function ViewMenu(p: ViewMenuProps) {
               aria-pressed={r.value}
               onClick={r.onToggle}
               className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs
-                         text-gray-200 hover:bg-gray-800 cursor-pointer"
+                         text-gray-200 hover:bg-gray-800 cursor-pointer focus-visible:outline focus-visible:outline-blue-400"
             >
               <span className="flex items-center gap-2">
                 <span className="w-3 inline-block">{r.value ? '✓' : ''}</span>

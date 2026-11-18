@@ -77,12 +77,22 @@ function render(layers: Layer[], selectedId: string, options = {}) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CanvasRenderer selection outlines', () => {
-  it('keeps selected Mesh2D wireframe in editor chrome and out of preview frames', () => {
+  it('shows selected Mesh2D triangles only for the enabled editor diagnostic', () => {
     const layer = newStructuredGridMesh2DLayer()
-    const editor = render([layer], layer.id, { selectionOutline: false })
-    expect(editor.fills).toHaveLength(1)
-    expect(editor.strokeCount()).toBe(1)
-    const preview = render([layer], layer.id, { selectionOutline: false, renderMode: 'preview' })
+    const cleanEditor = render([layer], layer.id, { selectionOutline: false })
+    expect(cleanEditor.fills).toHaveLength(1)
+    expect(cleanEditor.strokeCount()).toBe(0)
+    const topologyEditor = render([layer], layer.id, {
+      selectionOutline: false,
+      editorOverlays: { meshTriangles: true },
+    })
+    expect(topologyEditor.fills).toHaveLength(1)
+    expect(topologyEditor.strokeCount()).toBe(1)
+    const preview = render([layer], layer.id, {
+      selectionOutline: false,
+      renderMode: 'preview',
+      editorOverlays: { meshTriangles: true },
+    })
     expect(preview.fills).toHaveLength(1)
     expect(preview.strokeCount()).toBe(0)
   })
