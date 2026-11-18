@@ -40,6 +40,8 @@ const MAGIC_SIGNATURES: MagicEntry[] = [
   { bytes: [0x77, 0x4F, 0x46, 0x32],                   format: 'font/woff2' }, // wOF2
   { bytes: [0x00, 0x01, 0x00, 0x00],                   format: 'font/ttf'   }, // TTF/OTF
   { bytes: [0x4F, 0x54, 0x54, 0x4F],                   format: 'font/otf'   }, // OTTO
+  // Chorono fixed-topology Mesh2D deformation clip (CHMD2D01)
+  { bytes: [0x43, 0x48, 0x4D, 0x44, 0x32, 0x44, 0x30, 0x31], format: 'application/x-chorono-mesh-deformation' },
   // PDF
   { bytes: [0x25, 0x50, 0x44, 0x46],                   format: 'application/pdf' }, // %PDF
   // dotLottie (zip)
@@ -73,6 +75,7 @@ const EXTENSION_MAP: Record<string, ImportFormat> = {
   '.woff2': 'font/woff2',
   '.ttf':   'font/ttf',
   '.otf':   'font/otf',
+  '.chmd2d': 'application/x-chorono-mesh-deformation',
   // Documents
   '.pdf':   'application/pdf',
   '.lottie': 'application/dotlottie',
@@ -106,6 +109,7 @@ const MIME_MAP: Record<string, ImportFormat> = {
   'font/woff2':              'font/woff2',
   'font/ttf':                'font/ttf',
   'font/otf':                'font/otf',
+  'application/x-chorono-mesh-deformation': 'application/x-chorono-mesh-deformation',
   'application/pdf':         'application/pdf',
   'application/json':        'unknown', // resolved by content
   'application/octet-stream': 'unknown', // resolved by magic bytes
@@ -253,6 +257,7 @@ export class FileTypeDetector {
       'font/woff2': 'WOFF2 Font',
       'font/ttf':   'TrueType Font',
       'font/otf':   'OpenType Font',
+      'application/x-chorono-mesh-deformation': 'Chorono Mesh2D Deformation',
       'application/lottie+json': 'Lottie Animation',
       'application/dotlottie':   'dotLottie Package',
       'application/chorono+json': 'Chorono Scene',
@@ -277,6 +282,7 @@ export class FileTypeDetector {
       'video/mp4', 'video/mov', 'video/webm',
       'audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg',
       'font/woff', 'font/woff2', 'font/ttf', 'font/otf',
+      'application/x-chorono-mesh-deformation',
       'application/lottie+json', 'application/dotlottie',
       'application/chorono+json',
     ]

@@ -45,7 +45,10 @@ export class MeshDeformationAssetService {
       dispose: () => undefined,
     })
     this.reader = options.reader ?? new BoundedBinaryReader({ maxBytes, budget: options.budget })
-    this.fetcher = options.fetcher ?? fetch
+    // Browser fetch is a Web IDL method and some runtimes reject calls whose
+    // receiver is the service instance. Bind both the platform implementation
+    // and injected compatible implementations to the global platform object.
+    this.fetcher = (options.fetcher ?? globalThis.fetch).bind(globalThis)
     this.queue = new SharedPreparationQueue({
       concurrency: options.maxConcurrent ?? 2,
       maxQueued: options.maxQueued ?? 64,

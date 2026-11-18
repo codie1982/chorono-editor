@@ -2,7 +2,7 @@ export interface GpuWorkSnapshot {
   backend: string
   contextLost: boolean
   /** Absent preserves the legacy instanced-particle diagnostic contract. */
-  drawKind?: 'instanced' | 'effect'
+  drawKind?: 'instanced' | 'effect' | 'mesh'
   /** Explicit managed texture stores, excluding the tracked default canvas. */
   textureBytes?: number
   cleanupFailed?: boolean

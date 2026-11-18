@@ -115,7 +115,9 @@ export const ChoronoView = forwardRef<ChoronoViewHandle, ChoronoViewProps>(funct
     const y = (e.clientY - rect.top - offY) / s
     if (x < 0 || y < 0 || x > cw || y > ch) return
 
-    const stack = hitTestLayersAt(scene, player.currentTimeMs, x, y)
+    const stack = hitTestLayersAt(scene, player.currentTimeMs, x, y, undefined, {
+      meshDeformations: assetsRef.current?.meshDeformations,
+    })
     const hitId = stack.find((id) => scene.layers.find((l) => l.id === id)?.tappable)
     if (hitId) player.fireEvent({ type: 'click', layerId: hitId })
   }

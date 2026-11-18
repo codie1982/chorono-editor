@@ -319,6 +319,7 @@ export default function SceneCanvas({
   // the authored scene/ref, keeping runtime names out of history and save data.
   const geometryScene = useMemo(() => projectFrameFonts(displayScene, assets.fonts), [displayScene, assets])
   const geometryOverrides = useMemo(() => overrides && projectFrameFontOverrides(scene, overrides, assets.fonts), [scene, overrides, assets])
+  const meshFrameQuery = useMemo(() => ({ meshDeformations: assets.meshDeformations }), [assets])
   const geometrySceneRef = useRef(geometryScene)
   useEffect(() => { geometrySceneRef.current = geometryScene }, [geometryScene])
   const { width, height } = scene.composition
@@ -329,7 +330,8 @@ export default function SceneCanvas({
     zoom, pan, panDragRef, isPanning, cancelPan,
     fitAll, fitWidth, fitHeight, actualSize, zoomTo, fitSelection, centreSelection,
     zoomIn, zoomOut, beginPan, handleWheel,
-  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene: geometryScene, selectedLayerId, timeMs, overrides: geometryOverrides })
+  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene: geometryScene,
+    selectedLayerId, timeMs, overrides: geometryOverrides, ...meshFrameQuery })
 
   // ── Snap config — owned upstream by useSnapSettings ─────────────────────
   // Mirror to a ref so pointermove closures see fresh values without being
@@ -476,7 +478,7 @@ export default function SceneCanvas({
   // BL-60 Faz 3 — Canvas marquee selection tools (box / lasso / circle / paint).
   const { selectionOverlay, beginSelectionDrag } = useSelectionTools({
     canvasRef, sceneRef: geometrySceneRef, width, height,
-    frame: { timeMs, overrides: geometryOverrides },
+    frame: { timeMs, overrides: geometryOverrides, ...meshFrameQuery },
     selectionContainMode, onSelectByGeometry,
   })
 
@@ -511,7 +513,8 @@ export default function SceneCanvas({
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
-    timeMs, overrides, contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
+    timeMs, overrides, ...meshFrameQuery,
+    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
     onWarning: setTransformWarning,
   })
 
@@ -669,7 +672,7 @@ export default function SceneCanvas({
     //    instead of changing selection. Lets the author exercise layer-click
     //    rules without leaving the builder.
     if (previewMode) {
-      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides)
+      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       // Prefer draggable layer over tappable when both are set, since drag
       // requires the drag-start handler to capture the pointer immediately.
       for (const id of stack) {
@@ -764,7 +767,7 @@ export default function SceneCanvas({
     const requestedCloneMode = resolveCloneDragMode(e)
     let hit: string | null
     if (e.altKey && !requestedCloneMode) {
-      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides)
+      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       if (stack.length === 0) hit = null
       else {
         const cur = selectedLayerId ?? ''
@@ -772,7 +775,7 @@ export default function SceneCanvas({
         hit = idx === -1 ? stack[0] : stack[(idx + 1) % stack.length]
       }
     } else {
-      hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+      hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       hit = canvasSelectionPickTarget(hit, layerIndex,
         selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), !!requestedCloneMode && e.altKey)
     }
@@ -797,7 +800,7 @@ export default function SceneCanvas({
       ? Array.from(selectedLayerIds) : [layer.id]
     beginMoveForSelection(ids, layer.id, e, null, requestedCloneMode)
   }, [scene, geometryScene, geometryOverrides, timeMs, width, height, overrides, onSelectLayer,
-    editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode,
+    editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode, meshFrameQuery,
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
     beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan])
@@ -914,7 +917,7 @@ export default function SceneCanvas({
     const ids = selectedLayerIds?.size ? Array.from(selectedLayerIds) : [selectedLayerId]
     const prepared = prepareTransformTargets(scene, ids, timeMs, overrides, { activeId: selectedLayerId, pivotMode })
     if (!prepared.ok) { setTransformWarning(prepared.reason); return }
-    const resolveBounds = createLayerWorldBoundsResolver(geometryScene, timeMs, geometryOverrides)
+    const resolveBounds = createLayerWorldBoundsResolver(geometryScene, timeMs, geometryOverrides, meshFrameQuery)
     const bounds = prepared.targets.reduce<PathBounds | null>((value, target) => {
       const layer = geometryScene.layers.find(item => item.id === target.id)
       const item = layer && resolveBounds(layer)
@@ -932,7 +935,7 @@ export default function SceneCanvas({
       selectionResize: { bounds, handle } }
     startDrag(event)
   }, [scene, geometryScene, geometryOverrides, timeMs, overrides, selectedLayerId, selectedLayerIds,
-    pivotMode, editor, dragRef, startDrag])
+    pivotMode, editor, dragRef, startDrag, meshFrameQuery])
 
   // ── Preview-mode drag (fires dragStart/Move/End on draggable layers) ──────
   const { beginPreviewDrag } = usePreviewDrag({
@@ -1034,7 +1037,8 @@ export default function SceneCanvas({
   // scope lazy instead of materializing/indexing every layer just to discard
   // the resolver. Visible rulers still need their selected extents in playback.
   const boundsForFrame = useMemo(() => createLayerWorldBoundsResolver(geometryScene, timeMs,
-    frameGeometryOverrides, { deferPreparation: true }), [geometryScene, timeMs, frameGeometryOverrides])
+    frameGeometryOverrides, { deferPreparation: true, ...meshFrameQuery }),
+  [geometryScene, timeMs, frameGeometryOverrides, meshFrameQuery])
   const selectedWorldBounds = useMemo(() => rawSelectedLayer && (!hideEditorUI || showRulers)
     ? boundsForFrame(rawSelectedLayer)
     : null, [rawSelectedLayer, boundsForFrame, hideEditorUI, showRulers])
@@ -1219,7 +1223,7 @@ export default function SceneCanvas({
               const sy = height / rect.height
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
-              const hitId = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+              const hitId = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
               const hitLayer = hitId ? scene.layers.find((l) => l.id === hitId) : null
               if (hitLayer?.type === 'path' && !hitLayer.locked) {
                 onSelectLayer(hitId!)
@@ -1258,7 +1262,7 @@ export default function SceneCanvas({
                 }
               }
 
-              const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+              const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
               if (!hit) {
                 e.preventDefault()
                 emptyCanvasCtx.open(e)
@@ -1287,7 +1291,7 @@ export default function SceneCanvas({
                 const sy = height / rect.height
                 const cx = (clientX - rect.left) * sx
                 const cy = (clientY - rect.top)  * sy
-                const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+                const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
                 const target = canvasSelectionPickTarget(hit, layerIndex,
                   selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), deepPick)
                 setHoveredLayerId((cur) => (cur === target ? cur : target))

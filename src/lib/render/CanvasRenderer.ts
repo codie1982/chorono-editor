@@ -141,7 +141,9 @@ export class CanvasRenderer {
     const editorChrome = renderMode === 'editor'
     const boundsForFrame = editorChrome && options.selectionOutline !== false
       && (selectedLayerId || options.selectedLayerIds?.size)
-      ? createLayerWorldBoundsResolver(scene, timeMs, overrides) : undefined
+      ? createLayerWorldBoundsResolver(scene, timeMs, overrides, {
+        meshDeformations: assets.meshDeformations,
+      }) : undefined
 
     // Unknown caller state can expand paint or modify destination outside bounds.
     const safeCaller = (!ctx.filter || ctx.filter === 'none')

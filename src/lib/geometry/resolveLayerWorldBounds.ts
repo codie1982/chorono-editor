@@ -16,6 +16,8 @@ import type { Vec2 } from './CoordinateSystem'
 import { materializeRenderScene } from '@/lib/render/materializeOverrides'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
+import type { MeshDeformationBindings } from '@/lib/asset/meshDeformation'
+import { resolveMesh2DDeformation } from '@/lib/mesh2d'
 
 export type LayerWorldBoundsResolver = (layer: Layer) => PathBounds | null
 
@@ -26,6 +28,9 @@ export interface LayerWorldBoundsOptions {
    * Useful for editor frames with no visible bounds consumer. Default false
    * preserves eager callers' preparation/error timing. */
   deferPreparation?: boolean
+  /** Borrowed decoded deformation clips for this exact media frame. Missing,
+   * stale and mismatched clips intentionally resolve to rest geometry. */
+  meshDeformations?: MeshDeformationBindings
 }
 
 function pointBounds(points: Vec2[]): PathBounds {
@@ -46,11 +51,15 @@ function rectangleBounds(width: number, height: number, matrix: Matrix2D, left =
 }
 
 /** Exact transformed position bounds for fixed-topology Mesh2D geometry. */
-function mesh2DBounds(geometry: Mesh2DGeometry, matrix: Matrix2D): PathBounds | null {
-  if (geometry.positions.length < 2 || geometry.positions.length % 2 !== 0) return null
+function mesh2DBounds(
+  geometry: Mesh2DGeometry,
+  matrix: Matrix2D,
+  positions: ArrayLike<number> = geometry.positions,
+): PathBounds | null {
+  if (positions.length < 2 || positions.length % 2 !== 0) return null
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (let index = 0; index < geometry.positions.length; index += 2) {
-    const x = geometry.positions[index], y = geometry.positions[index + 1]
+  for (let index = 0; index < positions.length; index += 2) {
+    const x = positions[index], y = positions[index + 1]
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null
     const point = matrix.applyToPoint({ x, y })
     minX = Math.min(minX, point.x); minY = Math.min(minY, point.y)
@@ -76,8 +85,9 @@ export function resolveLayerWorldBounds(
   scene: ChronoScene,
   timeMs = 0,
   overrides?: OverrideMap,
+  options?: LayerWorldBoundsOptions,
 ): PathBounds | null {
-  return createLayerWorldBoundsResolver(scene, timeMs, overrides)(layer)
+  return createLayerWorldBoundsResolver(scene, timeMs, overrides, options)(layer)
 }
 
 /** Prepare one immutable scene/frame for bulk operations such as marquee
@@ -100,7 +110,10 @@ export function createLayerWorldBoundsResolver(
 ): LayerWorldBoundsResolver {
   if (options?.deferPreparation) {
     let prepared: LayerWorldBoundsResolver | undefined
-    return layer => (prepared ??= createLayerWorldBoundsResolver(scene, timeMs, overrides))(layer)
+    return layer => (prepared ??= createLayerWorldBoundsResolver(scene, timeMs, overrides, {
+      ...options,
+      deferPreparation: false,
+    }))(layer)
   }
   const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
   scene = materializeRenderScene(scene, frame)
@@ -148,7 +161,11 @@ export function createLayerWorldBoundsResolver(
       return computeSplineBounds(data, matrix)
     }
     if (effective.type === 'mesh2d') {
-      return effective.mesh2d ? mesh2DBounds(effective.mesh2d.geometry, matrix) : null
+      if (!effective.mesh2d) return null
+      const assetId = effective.mesh2d.deformation?.assetId
+      const clip = assetId ? options?.meshDeformations?.get(assetId) : undefined
+      const positions = resolveMesh2DDeformation(effective, clip, timeMs).positions
+      return mesh2DBounds(effective.mesh2d.geometry, matrix, positions)
     }
     if (effective.type === 'path') {
       if (!effective.path?.anchors.length) return null

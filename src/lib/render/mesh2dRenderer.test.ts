@@ -3,6 +3,7 @@ import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/
 import { drawMesh2DLayer, drawMesh2DPins, drawMesh2DWireframe } from './mesh2dRenderer'
 import { emptyScene } from '@/lib/defaults'
 import { hitTestLayer } from '@/lib/renderer'
+import { MeshDeformationClip } from '@/lib/mesh2d'
 
 function recordingContext() {
   let path: unknown[][] = []
@@ -47,6 +48,26 @@ describe('Mesh2D canvas rendering', () => {
     scene.layers = [layer]
     expect(hitTestLayer(scene, 0, 10, 10)).toBe(layer.id)
     expect(hitTestLayer(scene, 0, 80, 80)).toBeNull()
+  })
+
+  it('picks the displayed deformation frame and rejects the abandoned rest position', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    layer.transform = { x: 0, y: 0, anchorX: 0, anchorY: 0, rotationDeg: 0, scaleX: 1, scaleY: 1 }
+    layer.mesh2d = { ...layer.mesh2d!, geometry: {
+      positions: [0, 0, 100, 0, 0, 100],
+      uvs: [0, 0, 1, 0, 0, 1],
+      topology: { schemaVersion: 1, vertexIds: ['a', 'b', 'c'], triangleIndices: [0, 1, 2], topologyHash: 'moving' },
+    }, deformation: { schemaVersion: 1, assetId: 'clip', startTimeMs: 0, playbackRate: 1, loop: false } }
+    const clip = new MeshDeformationClip({
+      topologyHash: 'moving', vertexCount: 3, componentCount: 2,
+      sampleTimesMs: Float64Array.from([0, 100]),
+      positions: Float32Array.from([0, 0, 100, 0, 0, 100, 200, 0, 300, 0, 200, 100]),
+    })
+    const scene = emptyScene(); scene.layers = [layer]
+    const options = { meshDeformations: { get: (id: string) => id === 'clip' ? clip : undefined } }
+    expect(hitTestLayer(scene, 100, 210, 10, undefined, options)).toBe(layer.id)
+    expect(hitTestLayer(scene, 100, 10, 10, undefined, options)).toBeNull()
+    expect(hitTestLayer(scene, 100, 10, 10)).toBe(layer.id)
   })
 
   it('draws all triangles in one path and honors animated fill color/opacity', () => {

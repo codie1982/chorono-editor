@@ -7,6 +7,7 @@ import { clamp } from '@/lib/canvas/math/coordinateMath'
 import type { OverrideMap } from '@/lib/evaluator'
 import { resolveLayerWorldBounds } from '@/lib/geometry/resolveLayerWorldBounds'
 import { PointerGestureSession, type PointerGestureSample } from '../interactions/PointerGestureSession'
+import type { MeshDeformationBindings } from '@/lib/asset/meshDeformation'
 
 export const MIN_ZOOM  = 0.1
 export const MAX_ZOOM  = 8
@@ -26,6 +27,7 @@ export interface UseZoomAndPanOptions {
   selectedLayerId: string | null
   timeMs?: number
   overrides?: OverrideMap
+  meshDeformations?: MeshDeformationBindings
 }
 
 export interface UseZoomAndPanReturn {
@@ -61,7 +63,7 @@ export interface UseZoomAndPanReturn {
  * interaction — so it's fully decoupled from the drag/transform system.
  */
 export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
-  const { width, height, padding, containerRef, scene, selectedLayerId, timeMs = 0, overrides } = opts
+  const { width, height, padding, containerRef, scene, selectedLayerId, timeMs = 0, overrides, meshDeformations } = opts
 
   const [zoom, setZoom] = useState(1)
   const [maxSide, setMaxSide] = useState({ w: 0, h: 0 })
@@ -125,7 +127,7 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
   const fitSelection = useCallback(() => {
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
     if (!layer) return
-    const box = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+    const box = resolveLayerWorldBounds(layer, scene, timeMs, overrides, { meshDeformations })
     if (!box) return
     const PAD = 40
     const z = clamp(
@@ -135,18 +137,18 @@ export function useZoomAndPan(opts: UseZoomAndPanOptions): UseZoomAndPanReturn {
     const cx = box.x + box.width / 2
     const cy = box.y + box.height / 2
     setZoom(z); setPan(panToCentre(cx, cy, z))
-  }, [scene, selectedLayerId, maxSide, panToCentre, timeMs, overrides])
+  }, [scene, selectedLayerId, maxSide, panToCentre, timeMs, overrides, meshDeformations])
 
   // Re-centre selected layer in the viewport without changing zoom.
   const centreSelection = useCallback(() => {
     const layer = scene.layers.find((l) => l.id === selectedLayerId)
     if (!layer) return
-    const box = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+    const box = resolveLayerWorldBounds(layer, scene, timeMs, overrides, { meshDeformations })
     if (!box) return
     const cx = box.x + box.width / 2
     const cy = box.y + box.height / 2
     setPan(panToCentre(cx, cy, zoom))
-  }, [scene, selectedLayerId, zoom, panToCentre, timeMs, overrides])
+  }, [scene, selectedLayerId, zoom, panToCentre, timeMs, overrides, meshDeformations])
 
   const zoomIn  = useCallback(() => setZoom((z) => clamp(z * ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)), [])
   const zoomOut = useCallback(() => setZoom((z) => clamp(z / ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)), [])

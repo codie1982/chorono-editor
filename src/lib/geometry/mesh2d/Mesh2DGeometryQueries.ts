@@ -9,7 +9,17 @@ import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
  * and never mutated or retained.
  */
 export function computeMesh2DLocalBounds(geometry: Mesh2DGeometry): PathBounds | null {
-  const positions = geometry.positions
+  return computeMesh2DPositionBounds(geometry.positions)
+}
+
+/**
+ * Computes the finite layer-local enclosure of a rest or evaluated position buffer.
+ *
+ * Values are borrowed synchronously as interleaved x/y composition pixels. This
+ * keeps fixed topology separate from a deformation frame and lets render,
+ * selection and culling-related callers share the same validation semantics.
+ */
+export function computeMesh2DPositionBounds(positions: ArrayLike<number>): PathBounds | null {
   if (positions.length < 2 || positions.length % 2 !== 0) return null
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (let index = 0; index < positions.length; index += 2) {
@@ -35,9 +45,9 @@ export function containsMesh2DPoint(
   x: number,
   y: number,
   tolerance = 1e-9,
+  positions: ArrayLike<number> = geometry.positions,
 ): boolean {
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(tolerance) || tolerance < 0) return false
-  const { positions } = geometry
   const indices = geometry.topology.triangleIndices
   const vertexCount = positions.length / 2
   if (!Number.isInteger(vertexCount)) return false

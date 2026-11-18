@@ -10,7 +10,7 @@ export type {
   Mesh2DValidationResult,
   Mesh2DValidationSeverity,
 } from './Mesh2DTopologyValidator'
-export { computeMesh2DLocalBounds, containsMesh2DPoint } from './Mesh2DGeometryQueries'
+export { computeMesh2DLocalBounds, computeMesh2DPositionBounds, containsMesh2DPoint } from './Mesh2DGeometryQueries'
 export { SplineBoundaryRingBuilder } from './SplineBoundaryRings'
 export type { SplineBoundaryPoint, SplineBoundaryRing } from './SplineBoundaryRings'
 export { SplineBoundaryMesh2DGenerator } from './SplineBoundaryMesh2DGenerator'

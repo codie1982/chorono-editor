@@ -15,6 +15,7 @@ import { evaluateTimelines, type OverrideMap } from '../evaluator'
 import { resolveLayerWorldBounds, createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
 import { resolveLayerWorldMatrix } from '../geometry/resolveLayerWorldMatrix'
 import type { PathBounds } from '../geometry/computePathBounds'
+import type { MeshDeformationBindings } from '../asset/meshDeformation'
 
 interface Vec2 { x: number; y: number }
 interface AABB { x: number; y: number; w: number; h: number }
@@ -30,6 +31,8 @@ export type SelectionContainMode = 'inside' | 'touching'
 export interface SelectionFrameOptions {
   timeMs?: number
   overrides?: OverrideMap
+  /** Borrowed clips used to measure the displayed Mesh2D deformation frame. */
+  meshDeformations?: MeshDeformationBindings
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +61,9 @@ export function layerAnchorWorldPos(scene: ChronoScene, layer: Layer): Vec2 {
  * input scene, overrides and geometry are never mutated. */
 export function getLayerWorldBounds(scene: ChronoScene, layer: Layer, options: SelectionFrameOptions = {}): AABB {
   const { timeMs, overrides } = resolveSelectionFrame(scene, options)
-  const b = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+  const b = resolveLayerWorldBounds(layer, scene, timeMs, overrides, {
+    meshDeformations: options.meshDeformations,
+  })
   return asSelectionBounds(scene, layer, b, timeMs, overrides)
 }
 
@@ -252,7 +257,9 @@ function resolveSelectionFrame(scene: ChronoScene, options: SelectionFrameOption
 /** Share frame evaluation and canonical bounds preparation across one query. */
 function selectLayersByBounds(scene: ChronoScene, options: SelectionFrameOptions, matches: (bounds: AABB) => boolean): Set<string> {
   const { timeMs, overrides } = resolveSelectionFrame(scene, options)
-  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides, {
+    meshDeformations: options.meshDeformations,
+  })
   const out = new Set<string>()
   for (const layer of scene.layers) {
     if (!isSelectable(layer, overrides)) continue

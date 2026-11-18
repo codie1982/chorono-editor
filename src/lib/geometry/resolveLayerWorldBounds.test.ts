@@ -6,6 +6,7 @@ import { cloneSingleLayer } from '@/lib/clone/CloneSingleLayer'
 import { Matrix2D } from './Matrix2D'
 import { createLayerWorldBoundsResolver, resolveLayerWorldBounds } from './resolveLayerWorldBounds'
 import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
+import { MeshDeformationClip } from '@/lib/mesh2d'
 
 const zero: Transform = { x: 0, y: 0, anchorX: 0, anchorY: 0, rotationDeg: 0, scaleX: 1, scaleY: 1 }
 const matrix = (t: Transform) => Matrix2D.translation(t.x + t.anchorX, t.y + t.anchorY)
@@ -25,6 +26,27 @@ describe('resolveLayerWorldBounds', () => {
     } }
     scene.layers = [layer]
     expect(resolveLayerWorldBounds(layer, scene)).toEqual({ x: 90, y: 195, width: 50, height: 55 })
+  })
+
+  it('measures a ready Mesh2D deformation frame without mutating rest geometry', () => {
+    const scene = emptyScene()
+    const layer = newStructuredGridMesh2DLayer()
+    layer.transform = { ...zero, x: 10, y: 20 }
+    layer.mesh2d = { ...layer.mesh2d!, geometry: {
+      positions: [0, 0, 100, 0, 0, 100], uvs: [0, 0, 1, 0, 0, 1],
+      topology: { schemaVersion: 1, vertexIds: ['a', 'b', 'c'], triangleIndices: [0, 1, 2], topologyHash: 'moving' },
+    }, deformation: { schemaVersion: 1, assetId: 'clip', startTimeMs: 0, playbackRate: 1, loop: false } }
+    const clip = new MeshDeformationClip({
+      topologyHash: 'moving', vertexCount: 3, componentCount: 2,
+      sampleTimesMs: Float64Array.from([0, 100]),
+      positions: Float32Array.from([0, 0, 100, 0, 0, 100, -50, -20, 200, -20, -50, 180]),
+    })
+    scene.layers = [layer]
+    const bounds = resolveLayerWorldBounds(layer, scene, 100, undefined, {
+      meshDeformations: { get: id => id === 'clip' ? clip : undefined },
+    })
+    expect(bounds).toEqual({ x: -40, y: 0, width: 250, height: 200 })
+    expect(layer.mesh2d.geometry.positions).toEqual([0, 0, 100, 0, 0, 100])
   })
 
   it('measures the triangle geometry at a custom pivot instead of a default inner rectangle', () => {

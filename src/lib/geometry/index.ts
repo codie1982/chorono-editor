@@ -21,6 +21,7 @@ export {
   Mesh2DAdjacencyBuilder,
   Mesh2DTopologyValidator,
   computeMesh2DLocalBounds,
+  computeMesh2DPositionBounds,
   containsMesh2DPoint,
 } from './mesh2d'
 export type {

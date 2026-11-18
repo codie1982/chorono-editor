@@ -8,6 +8,8 @@ import { hitTestSplineFill, hitTestSplineSegment } from './spline/geometry/hitTe
 import { resolveLayerWorldMatrix } from './geometry/resolveLayerWorldMatrix'
 import { createLayerWorldBoundsResolver } from './geometry/resolveLayerWorldBounds'
 import { containsMesh2DPoint } from './geometry/mesh2d'
+import type { MeshDeformationBindings } from './asset/meshDeformation'
+import { resolveMesh2DDeformation } from './mesh2d'
 import { buildEffectsFilter } from './types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from './evaluator'
 import { evaluateMotionPath } from './motionPath'
@@ -845,8 +847,15 @@ export function hitTestLayer(
   canvasX: number,
   canvasY: number,
   overrides?: OverrideMap,
+  options?: HitTestOptions,
 ): string | null {
-  return hitTestLayersAt(scene, timeMs, canvasX, canvasY, overrides)[0] ?? null
+  return hitTestLayersAt(scene, timeMs, canvasX, canvasY, overrides, options)[0] ?? null
+}
+
+/** Runtime resources used by synchronous geometry picking. */
+export interface HitTestOptions {
+  /** Borrowed decoded deformation clips for the displayed media frame. */
+  meshDeformations?: MeshDeformationBindings
 }
 
 /**
@@ -860,6 +869,7 @@ export function hitTestLayersAt(
   canvasX: number,
   canvasY: number,
   frameOverrides?: OverrideMap,
+  options?: HitTestOptions,
 ): string[] {
   // Hit-test the same frame the canvas displays (timeline isolation, state
   // machines and parameter bindings may replace the normal timeline values).
@@ -868,7 +878,9 @@ export function hitTestLayersAt(
   // projected by the caller; ordinary source metrics use the explicit asset scope.
   scene = materializeRenderScene(scene, overrides)
   const hits: string[] = []
-  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides, {
+    meshDeformations: options?.meshDeformations,
+  })
 
   for (let i = scene.layers.length - 1; i >= 0; i--) {
     const layer = scene.layers[i]
@@ -891,7 +903,7 @@ export function hitTestLayersAt(
       hitLayer = resolved
     }
 
-    if (hitTestLayerLocal(hitLayer, lx, ly, scene.assets)) hits.push(layer.id)
+    if (hitTestLayerLocal(hitLayer, lx, ly, scene.assets, timeMs, options)) hits.push(layer.id)
   }
 
   // BL-03: Group AABB hit-test. After per-leaf hits are collected, walk
@@ -919,9 +931,20 @@ export function hitTestLayersAt(
  * Text uses shared ready-face metrics and textAlign in local pixels; imported
  * font storage is borrowed from the supplied source scope, never loaded here.
  */
-function hitTestLayerLocal(layer: Layer, lx: number, ly: number, assets: readonly Asset[]): boolean {
+function hitTestLayerLocal(
+  layer: Layer,
+  lx: number,
+  ly: number,
+  assets: readonly Asset[],
+  timeMs: number,
+  options?: HitTestOptions,
+): boolean {
   if (layer.type === 'mesh2d') {
-    return !!layer.mesh2d && containsMesh2DPoint(layer.mesh2d.geometry, lx, ly)
+    if (!layer.mesh2d) return false
+    const assetId = layer.mesh2d.deformation?.assetId
+    const clip = assetId ? options?.meshDeformations?.get(assetId) : undefined
+    const positions = resolveMesh2DDeformation(layer, clip, timeMs).positions
+    return containsMesh2DPoint(layer.mesh2d.geometry, lx, ly, 1e-9, positions)
   }
   if (layer.type === 'text' && layer.text) {
     const size = measureTextLayout(layer.text, assets)

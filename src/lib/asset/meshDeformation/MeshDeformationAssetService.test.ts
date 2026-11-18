@@ -31,6 +31,19 @@ describe('MeshDeformationAssetService', () => {
     second.release(); first.release()
   })
 
+  it('invokes the transport with the global platform receiver', async () => {
+    const bytes = encoded()
+    const fetcher = async function(this: unknown): Promise<Response> {
+      if (this !== globalThis) throw new TypeError('Illegal invocation')
+      return new Response(bytes.slice(0))
+    }
+    const service = new MeshDeformationAssetService({ maxBytes: 1024 * 1024, fetcher })
+    services.push(service)
+    const lease = await service.acquire({ id: 'clip', name: 'Clip', type: 'meshDeformation', url: 'memory:clip' })
+    expect(lease.value.topologyHash).toBe('fixture')
+    lease.release()
+  })
+
   it('rejects non-deformation assets before transport', async () => {
     const service = new MeshDeformationAssetService({ maxBytes: 1024, fetcher: async () => new Response() })
     services.push(service)

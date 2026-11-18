@@ -1,8 +1,8 @@
 # Mesh2D görünüm ve deformasyon runtime'ı
 
-Bu belge, MESH2'nin ilk çalışan dikey diliminin gerçek kaynak sözleşmesini
-tanımlar. Genel Poly 2D modelleme, kumaş solver'ı ve GPU mesh backend'i bu
-dilimin parçası değildir.
+Bu belge, MESH2'nin çalışan görünüm, playback, seçim ve GPU/Canvas render
+dikey diliminin gerçek kaynak sözleşmesini tanımlar. Genel Poly 2D modelleme ve
+kumaş solver'ı bu dilimin parçası değildir.
 
 ## Giriş noktaları ve sorumluluklar
 
@@ -19,9 +19,20 @@ dilimin parçası değildir.
 - `src/lib/mesh2d/deformation/MeshDeformationBinaryCodec.ts`: ham binary
   serializer/decoder.
 - `src/lib/asset/meshDeformation/MeshDeformationAssetService.ts`: bounded fetch,
-  decode, cache, iptal ve pin/release sahipliği.
+  decode, cache, iptal ve pin/release sahipliği. Platform `fetch` çağrısı gerçek
+  browser receiver'ına bağlıdır; Blob URL yüklemesi Chrome/WebKit'te aynı
+  sözleşmeyi kullanır.
+- `src/lib/import/handlers/asset/MeshDeformationHandler.ts`: `.chmd2d` magic,
+  boyut ve codec doğrulamasını import sırasında yapar; portable Blob kaynağı ve
+  scalar metadata üretir, sahneye kendiliğinden layer eklemez.
 - `src/lib/render/renderers/Mesh2DRendererPlugin.ts`: media demand, clip playback,
-  UV texture ve rest-mesh fallback'i.
+  UV texture, GPU dispatch ve rest-mesh/Canvas fallback'i.
+- `src/lib/render/gpu/mesh2d`: portable geometriyi de-index edilmiş GPU vertex
+  akışına dönüştürür; WebGL1/2 kaynaklarını bütçeler ve transparan tam-backing
+  sonucu mevcut Canvas2D kompozitörüne aktarır.
+- `src/lib/geometry/resolveLayerWorldBounds.ts` ve `src/lib/renderer.ts`:
+  hazır deformation clip'i varsa render ile aynı frame pozisyonlarını bounds ve
+  triangle hit-test için kullanır.
 - `src/components/PropertiesPanel/Mesh2DSourcePanel.tsx`: asset seçimi, playback
   zamanı/hızı/loop, pin preset'leri ve eksik kaynak tanısı.
 - `src/components/PropertiesPanel/Mesh2DTextureControls.tsx`: Stretch, Contain,
@@ -46,6 +57,25 @@ buffer kullanılmaz. Asset soğuk, eksik, bozuk veya stale ise renderer bütün
 rest mesh'i çizer. Texture hazır değilse ya da bir UV triangle dejenereyse
 bütün mesh solid fill'e düşer; kısmi texture/boş üçgen üretilmez. Final render
 media hazırlığı eksik asset'i başarı kabul etmez.
+
+Bounds, point picking, marquee/paint seçimi, selection gizmo, Fit Selection ve
+sürükleme başlangıç bounds'u aynı borrowed `MeshDeformationBindings` snapshot'ı
+üzerinden aynı clip resolver'ını çağırır. Bu snapshot yoksa veya clip stale ise
+hepsi rest mesh'e döner. Deformation'ın zamana/asset'e bağlı bounds'u mevcut
+statik paint capability sözleşmesinden güvenle hesaplanamadığı için viewport
+culling bu katmanlarda kapatılır; rest bounds ile yanlışlıkla görünür bir frame'i
+elemek yerine çizim korunur.
+
+Texture ve UV yerleşimi doğrulandığında WebGL backend deforme x/y pozisyonları
+ile kaynak-normalize UV'leri tek triangle stream'e çevirir. Güncel Canvas affine
+matrisi parent/repeater/zoom/backing ölçeklerini GPU clip-space'e taşır; layer ve
+fill opacity GPU pass'ine bir kez uygulanır. Transparan WebGL canvas identity
+transform ile mevcut Canvas2D hedefe kompozitlenir; böylece scene blend, mask ve
+effect-chain orkestrasyonu tek renderer girişinde kalır. WebGL yokluğu/context
+loss, max texture sınırı, invalid UV/placement, hazır olmayan texture veya legacy
+Canvas filter durumunda katmanın tamamı mevcut triangle Canvas2D yoluyla çizilir.
+GPU bütçe admission hatası kaliteyi sessizce değiştirmez ve açık hata olarak
+yükselir.
 
 ## Koordinat ve zaman sözleşmesi
 
@@ -80,6 +110,10 @@ Ham v1 dosyası şu sıradadır:
 Decoder desteklenmeyen sürümü, taşan boyutu, trailing/truncated byte'ı,
 non-finite pozisyonu ve yanlış buffer uzunluğunu reddeder. Compression ve
 key-pose azaltma ayrı codec sürümü gerektirir; v1 anlamı sessizce değiştirilmez.
+`application/x-chorono-mesh-deformation` MIME türü veya `.chmd2d` uzantısı genel
+import pipeline'ından geçer. Import yalnız asset kaydını üretir; hedef Mesh2D
+katmanına bağlama, topology hash doğrulamasını koruyan ayrı bir authoring
+işlemidir.
 
 ## Kısa kullanım örneği
 
@@ -99,13 +133,11 @@ yazılır; layer'a dense array yerine asset kimliği bağlanır.
 
 ## Bilinen sınırlar
 
-Texture renderer şu anda doğrulanmış Canvas triangle fallback'idir. Canvas
-tutamaçları offset, uniform scale ve rotation sunar; eksenleri ayrı ölçekleme,
-pivot, flip ve kesin değerler inspector'dadır. Texture crop maskesi Mesh2D
-triangle yüzeyidir; ayrı editable crop-rect veya UV vertex boyama bu dilimde
-yoktur. WebGL
-offscreen mesh pass'i ve GPU→Canvas2D compositing adapter'ı sonraki MESH2
-dilimidir. Deforme frame dinamik bounds/hit-test'e henüz yansıtılmaz; seçim
-bounds'u rest mesh'tir. Pin authoring şu anda top edge, corners ve boundary
-preset'leri sunar; tekil vertex canvas seçimi ayrı UI dilimidir. Bu sınırlar
-native GPU/deformasyon parity'si varmış gibi raporlanmamalıdır.
+Canvas tutamaçları offset, uniform scale ve rotation sunar; eksenleri ayrı
+ölçekleme, pivot, flip ve kesin değerler inspector'dadır. Texture crop maskesi
+Mesh2D triangle yüzeyidir; ayrı editable crop-rect veya UV vertex boyama bu
+dilimde yoktur. GPU yolu yalnız texture görünümünü hızlandırır; solid/gradient,
+legacy Canvas filter ve başarısız doğrulama Canvas2D'de kalır. Deforme layer için
+frame-aware konservatif paint bounds sözleşmesi eklenene kadar viewport culling
+bilinçli olarak devre dışıdır. Pin authoring şu anda top edge, corners ve
+boundary preset'leri sunar; tekil vertex canvas seçimi ayrı UI dilimidir.

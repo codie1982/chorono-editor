@@ -4,6 +4,7 @@ import type { Layer } from '@/lib/types'
 import type { RenderContext } from '../RenderContext'
 import { isMesh2DPinSelectionCurrent, resolveMesh2DDeformation } from '@/lib/mesh2d'
 import { drawMesh2DLayer, drawMesh2DPins, drawMesh2DWireframe } from '../mesh2dRenderer'
+import { renderMesh2DOnGPU } from '../gpu/mesh2d/Mesh2DGPUDispatch'
 
 /** Canvas2D adapter for portable fixed-topology Mesh2D layers. */
 export const mesh2DRendererPlugin: LayerRendererPlugin = {
@@ -20,7 +21,10 @@ export const mesh2DRendererPlugin: LayerRendererPlugin = {
     alphaSafe: true,
     regionSafe: true,
     staticRasterSafe: true,
-    localBounds: layer => layer.mesh2d ? computeMesh2DLocalBounds(layer.mesh2d.geometry) : null,
+    // A deformation frame is asset/time dependent while this conservative
+    // paint contract is not. Opt out instead of culling against rest bounds.
+    localBounds: layer => layer.mesh2d && !layer.mesh2d.deformation
+      ? computeMesh2DLocalBounds(layer.mesh2d.geometry) : null,
   },
   supports: (layer: Layer) => layer.type === 'mesh2d' && !!layer.mesh2d,
   render(ctx: RenderContext, layer: Layer): void {
@@ -33,7 +37,10 @@ export const mesh2DRendererPlugin: LayerRendererPlugin = {
       deformationAssetId ? ctx.assets.meshDeformations?.get(deformationAssetId) : undefined,
       ctx.timeMs,
     )
-    drawMesh2DLayer(ctx.canvas, layer, ctx.overrides, assetId ? ctx.assets.get(assetId) : undefined, deformation.positions)
+    const texture = assetId ? ctx.assets.get(assetId) : undefined
+    if (!texture || renderMesh2DOnGPU(ctx, layer, texture, deformation.positions ?? layer.mesh2d?.geometry.positions ?? []) !== 'rendered') {
+      drawMesh2DLayer(ctx.canvas, layer, ctx.overrides, texture, deformation.positions)
+    }
   },
   renderEditorOverlay(ctx: RenderContext, layer: Layer, preferences): void {
     const deformationAssetId = layer.mesh2d?.deformation?.assetId

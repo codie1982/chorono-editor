@@ -20,6 +20,7 @@ import type { CanvasLayerChange, CanvasPointerStart } from './drag/dragTypes'
 import { interactionTrace } from '../interactions/diagnostics'
 import { prepareSceneSnapContext } from '@/lib/snap/prepareSceneSnapContext'
 import { readSceneGuides } from '@/lib/geometry/guides/sceneGuideData'
+import type { MeshDeformationBindings } from '@/lib/asset/meshDeformation'
 
 interface SnapState {
   master: boolean; grid: boolean; objects: boolean
@@ -50,6 +51,8 @@ export interface UseCanvasDragOptions {
   onSelectLayers?: (ids: readonly string[]) => void
   timeMs?: number
   overrides?: OverrideMap
+  /** Borrowed clips used only for displayed fixed-topology bounds. */
+  meshDeformations?: MeshDeformationBindings
   /** Timeline/playhead/playback scope. Changing it cancels the current gesture. */
   contextKey?: string
   onWarning?: (message: string) => void
@@ -90,7 +93,7 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         if (!prepared.ok) throw new Error(prepared.reason)
         drag.targets = prepared.targets
       }
-      const bounds = prepareBounds(base, drag, start.timeMs ?? 0, start.overrides, start.snapLayerIds)
+      const bounds = prepareBounds(base, drag, start.timeMs ?? 0, start.overrides, start.snapLayerIds, start.meshDeformations)
       const clonePlan = drag.kind === 'move' && drag.cloneMode ? prepareCloneDrag(base, drag) : null
       const initialRect = start.canvasRef.current?.getBoundingClientRect(), initialScale = start.readScale()
       const initialWorld = initialRect ? { x: (drag.startClientX - initialRect.left) * initialScale.sx,
@@ -172,11 +175,18 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
 
 /** Resolve snap geometry once per gesture from its evaluated source frame. Both
  * selected subtrees and their ancestors are excluded from their own snap targets. */
-function prepareBounds(scene: ChronoScene, drag: ActiveDrag, timeMs: number, overrides?: OverrideMap, snapLayerIds?: ReadonlySet<string>): DragWorldBounds {
+function prepareBounds(
+  scene: ChronoScene,
+  drag: ActiveDrag,
+  timeMs: number,
+  overrides?: OverrideMap,
+  snapLayerIds?: ReadonlySet<string>,
+  meshDeformations?: MeshDeformationBindings,
+): DragWorldBounds {
   if (drag.kind !== 'move' && drag.kind !== 'resize' && !(drag.kind === 'scaleAxis' && drag.selectionResize)) return { moving: null, others: [] }
   const roots = drag.kind === 'resize' ? [drag.layerId] : drag.targets?.map(target => target.id) ?? (drag.kind === 'move' ? drag.movingLayers.map(mover => mover.id) : [drag.layerId])
   const index = new LayerIndex(scene.layers)
-  const bounds = createLayerWorldBoundsResolver(scene, timeMs, overrides)
+  const bounds = createLayerWorldBoundsResolver(scene, timeMs, overrides, { meshDeformations })
   const moving = roots.reduce<DragWorldBounds['moving']>((union, id) => {
     const layer = index.get(id)
     const value = layer ? bounds(layer) : null
