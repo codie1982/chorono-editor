@@ -14,3 +14,14 @@ export function selectionGeometry(layer: Layer, frame: OverrideMap, assets: read
   return visual.text && textLayoutFields.some(path => frame.has('layers.' + layer.id + '.text.' + path))
     ? { ...visual, size: measureTextLayout(visual.text, assets) } : visual
 }
+
+/**
+ * Identifies layers whose authored geometry, rather than `size`, owns the
+ * editor selection frame. Mesh2D source controls regenerate their triangles;
+ * exposing a generic size-box resize would move only retained metadata and
+ * desynchronise the visible mesh. Call this with an instance-resolved layer.
+ */
+export function usesGeometryDrivenSelectionFrame(layer: Layer | null | undefined): boolean {
+  return layer?.type === 'path' || layer?.type === 'spline'
+    || layer?.type === 'mesh2d' || layer?.type === 'group'
+}

@@ -8,6 +8,11 @@ constraints or simulation state.
 
 - `StructuredGridMesh2DGenerator` creates the deterministic MESH0 rectangle/grid
   topology, positions and normalized UVs.
+- `SplineBoundaryMesh2DGenerator` implements the first MESH1 source adapter. It
+  flattens closed spline contours at a recorded local-pixel tolerance, validates
+  ring topology, classifies holes and triangulates them through Earcut 3.2.4.
+- `SplineBoundaryRingBuilder` owns contour admission, intersection checks and
+  even-odd/nonzero fill-role classification. It does not triangulate or render.
 - `Mesh2DTopologyValidator` validates serialized or generated geometry without
   repairing it silently.
 - `Mesh2DAdjacencyBuilder` derives edge, vertex and triangle relationships for
@@ -24,11 +29,12 @@ barrel.
 ## Data flow and ownership
 
 ```text
-structured-grid settings
-        ↓
-StructuredGridMesh2DGenerator
-        ↓
-JSON-compatible Mesh2DData
+structured-grid settings ──→ StructuredGridMesh2DGenerator ──┐
+                                                             │
+closed spline + tolerance ─→ SplineBoundaryRingBuilder       ├─→ Mesh2DData
+                                      ↓                      │
+                         SplineBoundaryMesh2DGenerator ───────┘
+                                                             ↓
         ├── Mesh2DTopologyValidator
         ├── Mesh2DAdjacencyBuilder (derived, not persisted)
         ├── Mesh2D layer definition + atomic property regeneration
@@ -52,11 +58,23 @@ cloth rest/constraint state do not belong in `Mesh2DData`.
   triangle ordering and topology hash. Width/height changes move vertices but
   do not change connectivity or the topology hash.
 - Requests above the generator's vertex budget fail before array allocation.
+- Spline flatten tolerance is persisted in local pixels. Viewport zoom never
+  changes derived positions, vertex count or topology.
+- Spline contour/sample ids provide stable vertex ids. A separate source
+  fingerprint includes flattened positions and settings, so moving an existing
+  point can mark the derived mesh stale even when connectivity is unchanged.
+- Intersecting/touching rings, self-intersections, open/zero-area boundaries,
+  unsupported boolean combine modes and ambiguous nonzero nesting fail before
+  Earcut. Earcut output is area-checked and passed through the shared validator;
+  it is boundary triangulation, not a conforming or quality remesher.
 
 ## Minimal usage
 
 ```ts
-import { StructuredGridMesh2DGenerator } from '@/lib/geometry'
+import {
+  SplineBoundaryMesh2DGenerator,
+  StructuredGridMesh2DGenerator,
+} from '@/lib/geometry'
 
 const mesh = new StructuredGridMesh2DGenerator().generate({
   width: 320,
@@ -64,6 +82,12 @@ const mesh = new StructuredGridMesh2DGenerator().generate({
   columns: 8,
   rows: 4,
 })
+
+const splineMesh = new SplineBoundaryMesh2DGenerator().generate(
+  sourceLayer.id,
+  sourceLayer.spline,
+  { flattenTolerance: 0.25 },
+)
 ```
 
 Users create the same source through **Add Layer → Mesh & Surface → Structured
@@ -76,6 +100,14 @@ wireframe as editor-only chrome. It is off by default, is not serialized, and
 never appears in preview or export. Save/load, copy and live instances use the
 ordinary Layer JSON contracts and keep runtime/GPU buffers out of source data.
 
-Spline/shape flattening and triangulation belong to MESH1 and must reuse the
-validator instead of changing MESH0 semantics silently. Cloth rest data and
-variable-topology Blob/fluid surfaces remain separate later subsystems.
+For a selected spline, **Create Mesh2D from closed spline** creates a new layer
+and preserves the source. The Mesh2D inspector reports missing/changed/current
+source state. Regeneration and tolerance edits replace the full validated
+geometry in one undoable layer update. The persisted fingerprint is the stale
+signal that later topology-bound pin/cache/bake consumers must include.
+
+This slice deliberately does not expose vertex/edge/face editing and does not
+share a 3D modeling object. The parametric-shape source adapter remains the next
+MESH1 increment; it must route through the same boundary contracts rather than
+silently converting the source layer. Cloth rest data and variable-topology
+Blob/fluid surfaces remain separate later subsystems.

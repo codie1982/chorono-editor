@@ -22,20 +22,31 @@ export class Mesh2DTopologyHasher {
    * ambiguous canonical encodings.
    */
   hash(topology: Pick<Mesh2DTopology, 'schemaVersion' | 'vertexIds' | 'triangleIndices'>): string {
-    const separator = '\u001f'
-    if (topology.vertexIds.some(id => id.includes(separator))) {
-      throw new Error('Mesh2D vertex id contains a reserved separator')
-    }
-    const canonical = [
-      `mesh2d-topology-v${Mesh2DTopologyHasher.algorithmVersion}`,
+    return hashMesh2DCanonical(`mesh2d-topology-v${Mesh2DTopologyHasher.algorithmVersion}`, [
       `schema:${topology.schemaVersion}`,
       `vertices:${topology.vertexIds.length}`,
       ...topology.vertexIds,
       `triangles:${topology.triangleIndices.length}`,
       ...topology.triangleIndices.map(String),
-    ].join(separator)
-    return `${fnv1a32(canonical, 0x811c9dc5)}${fnv1a32(canonical, 0x9e3779b9)}`
+    ])
   }
+}
+
+/**
+ * Hashes a named sequence of canonical Mesh2D records.
+ *
+ * Callers own number formatting and field order. Scope and records may not
+ * contain the reserved separator, preventing two record sequences from
+ * producing the same byte stream by concatenation ambiguity. This remains a
+ * deterministic change detector, not a cryptographic integrity checksum.
+ */
+export function hashMesh2DCanonical(scope: string, records: readonly string[]): string {
+  const separator = '\u001f'
+  if (scope.includes(separator) || records.some(record => record.includes(separator))) {
+    throw new Error('Mesh2D canonical hash input contains a reserved separator')
+  }
+  const canonical = [scope, ...records].join(separator)
+  return `${fnv1a32(canonical, 0x811c9dc5)}${fnv1a32(canonical, 0x9e3779b9)}`
 }
 
 /** FNV-1a over UTF-16 code units; output is a fixed-width lowercase hex word. */

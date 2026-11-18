@@ -9,7 +9,7 @@ import { projectFrameFonts, projectFrameFontOverrides } from '@/lib/render/media
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
-import { selectionGeometry } from './canvas/overlays/selectionGeometry'
+import { selectionGeometry, usesGeometryDrivenSelectionFrame } from './canvas/overlays/selectionGeometry'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import { drivenChannelReason } from '@/lib/timeline/authoring/keyableChannels'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
@@ -1101,9 +1101,11 @@ export default function SceneCanvas({
     const dx = dragHud.x - center.x, dy = dragHud.y - center.y, distance = Math.hypot(dx, dy) || 1
     hudPoint = { ...dragHud, x: center.x + dx / distance * rotationRingRadius, y: center.y + dy / distance * rotationRingRadius }
   }
-  // Vector geometry wins over retained size metadata; groups use the union
-  // of visible children. Regular sized objects keep their resize frame.
-  const usesWorldFrame = selectedLayer?.type === 'path' || selectedLayer?.type === 'spline' || selectedLayer?.type === 'group'
+  // Vector and mesh geometry wins over retained size metadata; groups use the
+  // union of visible children. Mesh2D source controls own geometry dimensions,
+  // so a generic size-box resize would desynchronise the persisted triangles.
+  // Regular raster/parametric sized objects keep their resize frame.
+  const usesWorldFrame = usesGeometryDrivenSelectionFrame(selectedLayer)
   const hasFrameGeometry = !!selectedLayer && (usesWorldFrame ? !!selectedWorldBounds : !!selectedLayer.size)
   const showFrame =
     !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.frozen && !selectedLayer.hidden

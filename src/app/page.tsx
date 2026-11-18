@@ -147,6 +147,7 @@ import { prepareCloneForest } from '@/lib/editor/commands-clone-forest'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import { makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
+import { newSplineBoundaryMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 // ── Mode system bootstrap ─────────────────────────────────────────────────────
 import '@/lib/modes/bootstrap'
@@ -635,6 +636,20 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       toast.error('Text → Spline failed: ' + (err as Error).message)
     }
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer,editor.getDocumentSignal])
+
+  /** Create a separate, source-linked Mesh2D from the selected closed spline. */
+  const createMesh2DFromSpline = useCallback(() => {
+    const source = scene.layers.find(layer => layer.id === selectedLayerId)
+    if (source?.type !== 'spline' || !source.spline) return
+    try {
+      const mesh = newSplineBoundaryMesh2DLayer(source)
+      dispatchCommand(makeAddLayerCmd(mesh))
+      selectLayer(mesh.id)
+      toast.success(`Created "${mesh.name}" — source spline was preserved`)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Spline could not be converted to Mesh2D')
+    }
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -1753,11 +1768,18 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 id: 'properties', title: 'Properties',
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
-                    {selectedLayer?.type === 'spline' && <button type="button"
-                      onClick={() => dock.dispatchRestorePanel('splineModeling')}
-                      className="mx-3 mt-2 rounded border border-blue-600 px-2 py-1 text-left text-xs text-blue-200 hover:bg-blue-900/30">
-                      Open Spline Modeling · Offset / Outline / Chamfer / Fillet
-                    </button>}
+                    {selectedLayer?.type === 'spline' && <div className="mx-3 mt-2 grid gap-2">
+                      <button type="button"
+                        onClick={() => dock.dispatchRestorePanel('splineModeling')}
+                        className="min-h-9 rounded border border-blue-600 px-3 py-2 text-left text-xs text-blue-200 transition-colors hover:bg-blue-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+                        Open Spline Modeling · Offset / Outline / Chamfer / Fillet
+                      </button>
+                      <button type="button"
+                        onClick={createMesh2DFromSpline}
+                        className="min-h-9 rounded border border-cyan-700 bg-cyan-950/20 px-3 py-2 text-left text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+                        Create Mesh2D from closed spline
+                      </button>
+                    </div>}
                     <PropertiesPanel
                       expressionFrame={frame}
                       expressionExternalTime={expressionAuthoringClock}

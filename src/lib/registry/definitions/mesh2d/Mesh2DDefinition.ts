@@ -1,5 +1,5 @@
 import { DEFAULT_TRANSFORM } from '@/lib/defaults'
-import { StructuredGridMesh2DGenerator } from '@/lib/geometry'
+import { computeMesh2DLocalBounds, SplineBoundaryMesh2DGenerator, StructuredGridMesh2DGenerator } from '@/lib/geometry'
 import { writePropertyPath } from '@/lib/scene/properties/writePropertyPath'
 import type { Layer } from '@/lib/types'
 import type { StructuredGridMesh2DSource } from '@/lib/types/mesh2d'
@@ -9,6 +9,7 @@ import { appearanceGroup, fillGroup, geometryGroup, transformGroup } from '../sh
 
 let mesh2DCounter = 0
 const generator = new StructuredGridMesh2DGenerator()
+const splineGenerator = new SplineBoundaryMesh2DGenerator()
 
 /** Creates a complete, portable structured-grid Mesh2D layer. */
 export function newStructuredGridMesh2DLayer(): Layer {
@@ -40,6 +41,7 @@ export function regenerateStructuredGridMesh2DLayer(
 ): Layer {
   if (layer.type !== 'mesh2d' || !layer.mesh2d) throw new Error('Expected a structured-grid Mesh2D layer')
   const previous = layer.mesh2d.source
+  if (previous.kind !== 'structuredGrid') throw new Error('Expected a structured-grid Mesh2D source')
   const mesh2d = generator.generate(source)
   const centeredX = Math.abs(layer.transform.anchorX - previous.width / 2) <= 1e-9
   const centeredY = Math.abs(layer.transform.anchorY - previous.height / 2) <= 1e-9
@@ -52,6 +54,81 @@ export function regenerateStructuredGridMesh2DLayer(
       anchorY: centeredY ? source.height / 2 : layer.transform.anchorY,
     },
     mesh2d,
+  }
+}
+
+/**
+ * Creates an independent Mesh2D layer from one closed spline layer.
+ *
+ * The spline is not replaced or mutated. Geometry and the initial transform
+ * use the spline's local/source spaces, while source id + fingerprint retain a
+ * regeneration link. Only serializable layer data is copied.
+ */
+export function newSplineBoundaryMesh2DLayer(
+  sourceLayer: Layer,
+  options: { flattenTolerance?: number } = {},
+): Layer {
+  if (sourceLayer.type !== 'spline' || !sourceLayer.spline) {
+    throw new Error('Mesh2D boundary source must be a spline layer')
+  }
+  mesh2DCounter++
+  const mesh2d = splineGenerator.generate(sourceLayer.id, sourceLayer.spline, options)
+  const bounds = computeMesh2DLocalBounds(mesh2d.geometry)
+  if (!bounds) throw new Error('Spline boundary produced no finite Mesh2D bounds')
+  return {
+    id: `mesh2d_${Date.now().toString(36)}_${mesh2DCounter}`,
+    name: `${sourceLayer.name} Mesh2D`,
+    type: 'mesh2d',
+    transform: { ...sourceLayer.transform },
+    opacity: sourceLayer.opacity,
+    size: { width: bounds.width, height: bounds.height },
+    style: copyMeshStyle(sourceLayer),
+    blendMode: sourceLayer.blendMode,
+    parentId: sourceLayer.parentId,
+    startMs: sourceLayer.startMs,
+    endMs: sourceLayer.endMs,
+    mesh2d,
+  }
+}
+
+/** Regenerates spline-derived geometry while preserving Mesh2D layer styling and placement. */
+export function regenerateSplineBoundaryMesh2DLayer(
+  layer: Layer,
+  sourceLayer: Layer,
+  options: { flattenTolerance?: number } = {},
+): Layer {
+  if (layer.type !== 'mesh2d' || layer.mesh2d?.source.kind !== 'splineBoundary') {
+    throw new Error('Expected a spline-boundary Mesh2D layer')
+  }
+  if (sourceLayer.type !== 'spline' || !sourceLayer.spline || sourceLayer.id !== layer.mesh2d.source.sourceLayerId) {
+    throw new Error('Mesh2D source spline is missing or does not match the stored source id')
+  }
+  const mesh2d = splineGenerator.generate(sourceLayer.id, sourceLayer.spline, {
+    flattenTolerance: options.flattenTolerance ?? layer.mesh2d.source.flattenTolerance,
+  })
+  const bounds = computeMesh2DLocalBounds(mesh2d.geometry)
+  if (!bounds) throw new Error('Spline boundary produced no finite Mesh2D bounds')
+  return { ...layer, size: { width: bounds.width, height: bounds.height }, mesh2d }
+}
+
+/** Returns false for a missing, invalid or changed bound spline. */
+export function isSplineBoundaryMesh2DCurrent(layer: Layer, sourceLayer: Layer | undefined): boolean {
+  if (layer.type !== 'mesh2d' || layer.mesh2d?.source.kind !== 'splineBoundary') return false
+  if (sourceLayer?.type !== 'spline' || !sourceLayer.spline || sourceLayer.id !== layer.mesh2d.source.sourceLayerId) return false
+  return splineGenerator.isCurrent(layer.mesh2d, sourceLayer.spline)
+}
+
+function copyMeshStyle(sourceLayer: Layer): NonNullable<Layer['style']> {
+  const fill = sourceLayer.style?.fill
+  if (!fill) return { fill: { type: 'solid', color: '#3B82F6', opacity: 100 } }
+  return {
+    fill: {
+      ...fill,
+      gradient: fill.gradient ? {
+        ...fill.gradient,
+        stops: fill.gradient.stops.map(stop => ({ ...stop })),
+      } : undefined,
+    },
   }
 }
 
@@ -85,8 +162,9 @@ export const mesh2DDefinition: LayerDefinition = {
   iconKey: 'box3d',
   category: 'Mesh & Surface',
   createDefault: newStructuredGridMesh2DLayer,
-  propertyGroupsAreStatic: true,
-  getPropertyGroups: () => [transformGroup(), appearanceGroup(), meshGeometryGroup(), fillGroup()],
+  getPropertyGroups: layer => layer.mesh2d?.source.kind === 'structuredGrid'
+    ? [transformGroup(), appearanceGroup(), meshGeometryGroup(), fillGroup()]
+    : [transformGroup(), appearanceGroup(), fillGroup()],
   applyPropertyChange(layer, path, value) {
     const updated = writePropertyPath(layer, path, value, true)
     if (!regeneratedPaths.has(path)) return updated

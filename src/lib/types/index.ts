@@ -79,6 +79,8 @@ export type {
 export type {
   Mesh2DGridDiagonal,
   StructuredGridMesh2DSource,
+  SplineBoundaryMesh2DSource,
+  Mesh2DSource,
   Mesh2DTopology,
   Mesh2DGeometry,
   Mesh2DData,

@@ -23,6 +23,31 @@ export interface StructuredGridMesh2DSource {
 }
 
 /**
+ * Serializable recipe for a Mesh2D derived from closed spline boundaries.
+ *
+ * The spline remains an independent scene layer. `sourceFingerprint` records
+ * the exact flattened boundary used for this mesh so authoring UI and future
+ * bake consumers can detect stale derived geometry without storing runtime
+ * objects in scene JSON. Flatten tolerance is expressed in source-layer local
+ * pixels and therefore never changes with viewport zoom.
+ */
+export interface SplineBoundaryMesh2DSource {
+  readonly kind: 'splineBoundary'
+  readonly sourceLayerId: string
+  readonly sourceFingerprint: string
+  readonly flattenTolerance: number
+  readonly uvFit: 'bounds'
+  readonly triangulation: {
+    readonly algorithm: 'earcut'
+    readonly algorithmVersion: '3.2.4'
+  }
+  readonly generatorVersion: 1
+}
+
+/** Persisted source recipes supported by the 2D mesh subsystem. */
+export type Mesh2DSource = StructuredGridMesh2DSource | SplineBoundaryMesh2DSource
+
+/**
  * Fixed connectivity for a Mesh2D source.
  *
  * Triangle indices address `Mesh2DGeometry.positions` and use positive signed
@@ -55,6 +80,6 @@ export interface Mesh2DGeometry {
 /** Versioned source payload stored by a future `mesh2d` layer. */
 export interface Mesh2DData {
   readonly schemaVersion: 1
-  readonly source: StructuredGridMesh2DSource
+  readonly source: Mesh2DSource
   readonly geometry: Mesh2DGeometry
 }

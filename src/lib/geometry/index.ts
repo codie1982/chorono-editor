@@ -14,6 +14,8 @@ export { ShapeToPathConverter } from './ShapeToPathConverter'
 export type { Size } from './ShapeToPathConverter'
 export {
   StructuredGridMesh2DGenerator,
+  SplineBoundaryMesh2DGenerator,
+  SplineBoundaryRingBuilder,
   Mesh2DTopologyHasher,
   Mesh2DAdjacencyBuilder,
   Mesh2DTopologyValidator,
@@ -22,6 +24,9 @@ export {
 } from './mesh2d'
 export type {
   StructuredGridMesh2DOptions,
+  SplineBoundaryMesh2DOptions,
+  SplineBoundaryPoint,
+  SplineBoundaryRing,
   Mesh2DAdjacency,
   Mesh2DEdgeAdjacency,
   Mesh2DValidationDiagnostic,
