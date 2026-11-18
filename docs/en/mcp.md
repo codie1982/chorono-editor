@@ -1,7 +1,7 @@
 # Chorono MCP catalog and compatibility
 
 Chorono MCP 2.1.0 controls the connected editor through STDIO. The default
-`standard` catalog exposes 40 common tools. All 77 original tool names remain
+`standard` catalog exposes 41 common tools. All 78 tool names remain
 callable with their existing domain payload and default semantics. Source mutations now require the authorization envelope described below. Tool
 discovery and call resolution are separate; this update does not replace the
 editor's native commands or undo system.
@@ -10,6 +10,26 @@ For installation, local server setup and connection checks, see the
 [installation guide](installation.md). The full [Turkish MCP reference](../tr/mcp.md)
 covers persistence, audio, limits and security. The distributable authoring
 instructions are [skills/chorono](../../skills/chorono/SKILL.md).
+
+## Copy focused context from the editor
+
+Right-click a canvas layer, a Layers row, or a Scene Explorer row and choose
+**Send to Agent**. The menu remains available when MCP is disconnected and
+shows a connection warning if selected. The submenu copies a
+task prompt for explanation, diagnosis, suggestions, an edit request or a custom
+question. Edit and custom-question actions first ask for short text. Paste the
+result into your agent chat; this action does not start a conversation. The
+prompt carries only the editor session and a short-lived focus ID. The agent
+reads the captured selection, timeline, playhead time, canvas point, document
+identity and current full scene through `get_handoff_context` over MCP. The
+focus remains in that browser tab for at most ten minutes; a changed document
+or missing target requires a new handoff. This read does not authorize edits:
+the agent must call `get_scene` before each source mutation. The agent should
+inspect actual `render_preview` PNGs, use `evaluate_frame` for values and
+`validate_scene` for structural/runtime checks, then report revision, preview
+times and observations. Code and logs alone do not establish visual correctness.
+MCP enforces fresh reads for source writes; read-only answers still depend on
+the agent following the copied request.
 
 ## Discover only what you need
 
@@ -29,7 +49,7 @@ instructions are [skills/chorono](../../skills/chorono/SKILL.md).
    cannot be nested in a mutation batch.
 
 The original `get_capabilities({})` response still returns the full property
-schemas, scripting reference and `tools` compatibility inventory of 77 original
+schemas, scripting reference and `tools` compatibility inventory of 78
 names. Its `tools` array is not the current client's direct discovery surface.
 Read `catalog: {version:1,profile,advertisedToolNames,aliases}` for that surface;
 each alias is `{name,implementationName}`. `chorono://capabilities` remains the
@@ -40,7 +60,7 @@ original full discovery call.
 
 | Task | Preferred standard tools |
 | --- | --- |
-| Read source and inspect records | `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets` |
+| Read source and inspect records | `get_handoff_context`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets` |
 | Create or edit ordinary layers | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition` |
 | Create/edit animation | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Procedural work or native batches | `run_script`, `apply_script_plan`, `batch_actions` |

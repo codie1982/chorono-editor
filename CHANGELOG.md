@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] — 2026-11-17
+
+Added editable spline modeling and restored 2D precision workflows.
+
+- Offset/Outline creates independent parallel contours and bands; Chamfer/Fillet trims selected corners. A Spline Modeling panel provides Preview, Apply and Cancel with one-step Undo, stale-source checks and animation conflict rejection.
+- Matching `layer.spline` scripting/MCP calls reuse the modeling geometry and return a sibling layer ID for Offset/Outline.
+- Selection-based Agent handoff copies a short-lived MCP focus prompt without changing scene authorization.
+- Unified Snap/Grid controls, independent Rotate/Scale settings, Shortcuts window, Motion Keys dock and corrected 2D move/resize/rotate feedback.
+- Existing editable spline storage/render paths are reused. Curved edges are sampled; curved Fillet uses a tangent cubic approximation. Other reported Point/Edge/Object, Boolean and topology workflows are outside this release claim.
+
+[Release notes](docs/releases/v0.4.0.md) · [Türkçe](docs/tr/releases/v0.4.0.md) · [Validation and limitations](docs/releases/v0.4.0-validation.md)
+
 ## [0.3.0] — 2026-11-12
 
 Completed pre-3D editing and agent collaboration workflows.
@@ -59,3 +71,4 @@ CLI lifecycle, bundled skills, editable example and English/Turkish setup guides
 [0.1.0]: https://github.com/codie1982/chorono-editor/releases/tag/v0.1.0
 
 [0.3.0]: https://github.com/codie1982/chorono-editor/compare/v0.2.0...v0.3.0
+[0.4.0]: https://github.com/codie1982/chorono-editor/compare/v0.3.0...v0.4.0

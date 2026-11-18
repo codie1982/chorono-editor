@@ -33,6 +33,10 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
       summary: { type: 'boolean', description: 'Lightweight discovery without full schemas/property groups/script help. Cannot combine true with toolName.' },
       toolName: { type: 'string', description: 'Exact canonical or historical tool name to inspect; no editor operation runs.' },
     }, [], true),
+  extra('get_handoff_context',
+    'Read the selected focus captured by Send to Agent together with the current complete scene and revision. The handoff is tab-local, expires after ten minutes, and fails if the document or selected target changed. This read does not issue a source-edit readToken; call get_scene before every mutation. Inspect render_preview PNGs and validate_scene to verify results.', {
+      handoffId: { type: 'string', minLength: 1, maxLength: 100, description: 'Opaque ID copied by the Send to Agent menu in this editor tab.' },
+    }, ['handoffId'], true),
   extra('get_scene',
     'Read the complete scene, revision, selectedTimelineId and currentTimeMs from a connected editor as JSON text. Use before editing existing data and for full nested fields; list_layers/describe_layer give shorter summaries. Returns a one-use readToken for source edits at this revision in this connection, valid five minutes. Reading does not embed temporary blob media; save_project creates a portable file.', {}, [], true),
   extra('run_script',

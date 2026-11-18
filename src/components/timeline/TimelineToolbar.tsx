@@ -89,13 +89,14 @@ export default function TimelineToolbar(props: Props) {
     <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-gray-700 shrink-0">
 
       <DocumentationHelp topic="editor/timeline" compact />
+      <TimelineTransport side="previous" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
       <div className="relative" ref={playRef}>
         <button
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!event.repeat) onPlayToggle() } }}
           onPointerDown={onPlayPointerDown}
           onPointerUp={onPlayPointerUp}
           onPointerLeave={() => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null } }}
-          className="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-mono w-14 text-center"
+          className="h-9 px-2 inline-flex items-center justify-center gap-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-mono min-w-14 text-center"
           title="Play / Pause (Space) · long-press for play mode"
         >
           {isPlaying ? '⏸ Pause' : '▶ Play'}
@@ -133,7 +134,7 @@ export default function TimelineToolbar(props: Props) {
         )}
       </div>
 
-      <TimelineTransport onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
+      <TimelineTransport side="next" onNavigate={authoring.navigate} disabled={authoring.disabled} scope={authoring.scopeLabel} />
       <SetKeyControls controls={authoring} />
 
       <span className="text-xs font-mono text-gray-400 w-24">

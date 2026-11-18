@@ -37,6 +37,13 @@ export function RotateRing({ x, y, radius, isDragging, onPointerDown }: RotateRi
         className="absolute"
         style={{ left: -outer, top: -outer, overflow: 'visible' }}
       >
+        <g transform={`translate(${outer} ${outer})`} style={{ pointerEvents: 'none' }} aria-hidden="true">
+          <path d={`M ${-radius} 0 H ${radius}`} stroke="#f87171" strokeWidth="1" strokeDasharray="3 4" opacity="0.5" />
+          <path d={`M 0 ${-radius} V ${radius}`} stroke="#60a5fa" strokeWidth="1" strokeDasharray="3 4" opacity="0.5" />
+          {[0, 90, 180, 270].map(angle => <g key={angle} data-rotation-direction transform={`rotate(${angle}) translate(${radius} 0)`}>
+            <path d="M 0 -11 V 11 M -4 -7 L 0 -11 L 4 -7 M -4 7 L 0 11 L 4 7" fill="none" stroke="#fb923c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>)}
+        </g>
         <circle
           data-testid="rotation-ring"
           cx={outer} cy={outer} r={radius}
@@ -45,7 +52,7 @@ export function RotateRing({ x, y, radius, isDragging, onPointerDown }: RotateRi
           strokeWidth={BAND * 2}
           style={{ pointerEvents: 'stroke', cursor: 'grab' }}
           onPointerDown={onPointerDown}
-        />
+        ><title>Rotate around pivot</title></circle>
       </svg>
     </div>
   )

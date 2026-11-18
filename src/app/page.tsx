@@ -1,4 +1,5 @@
 'use client'
+import { MotionKeysPanel } from '@/components/canvas/motion/MotionKeysPanel'
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import type { Layer, ChronoScene, TimelineSettings } from '@/lib/types'
 import { DEFAULT_TIMELINE_SETTINGS } from '@/lib/types'
@@ -42,6 +43,10 @@ import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGho
 import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
 import MCPConnection from '@/components/MCPConnection'
+import AgentHandoffDialog from '@/components/agentHandoff/AgentHandoffDialog'
+import { buildAgentHandoffPrompt, captureAgentHandoffContext, type AgentHandoffContext, type AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
+import { agentHandoffStore } from '@/lib/agentHandoff/store'
+import { editorDocumentEpoch } from '@/lib/mcp/source/EditorSourceIdentity'
 import ProjectMenu from '@/components/TopToolbar/ProjectMenu'
 import { SessionOutputProvider, useSessionIdentity } from '@/components/editorSession/SessionOutputContext'
 import { createChoronoDemo } from '@/lib/editor/demo/createChoronoDemo'
@@ -50,11 +55,13 @@ import { EditorSessionBoundary } from '@/components/editorSession/EditorSessionB
 import { LocalRecoveryStatus } from '@/components/editorSession/LocalRecoveryStatus'
 import { useSceneSessionRecovery } from './hooks/useSceneSessionRecovery'
 import type { BrowserRecoverySession } from '@/lib/editor/persistence/recovery/browserSessionRecovery'
-import ExportMenu from '@/components/TopToolbar/ExportMenu'
+import { InteractivePreviewButton } from '@/components/TopToolbar/InteractivePreviewButton'
 import WelcomeScreen from '@/components/welcome/WelcomeScreen'
+import ReleaseNotesDialog from '@/components/releaseNotes/ReleaseNotesDialog'
 import ResourceMonitorPanel from '@/components/resources/ResourceMonitorPanel'
 import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor'
 import { useWelcomeScreen } from '@/components/welcome/useWelcomeScreen'
+import { useReleaseNotes } from '@/components/releaseNotes/useReleaseNotes'
 import { createWelcomeProject, type WelcomeProjectSettings } from '@/lib/editor/welcomeProject'
 import {
   makeAddLayerCmd, makeDeleteLayerCmd, makeUpdateLayerCmd, makeToggleLayerCmd,
@@ -86,6 +93,7 @@ import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import SplinePointInspector from '@/components/SplinePointInspector'
+import SplineModelingPanel from '@/components/panels/SplineModelingPanel'
 import { NumericPropertyProvider } from '@/components/inputs/expressions/NumericPropertyContext'
 import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
 import { newSplineLayerFromData } from '@/lib/defaults'
@@ -120,9 +128,7 @@ import SelectionPanel      from '@/components/panels/SelectionPanel'
 import RuntimePreviewPanel from '@/components/panels/RuntimePreviewPanel'
 import ChronoPlayerPanel from '@/components/panels/ChronoPlayerPanel'
 import AssetsPanel         from '@/components/panels/AssetsPanel'
-import SnapPanel               from '@/components/panels/SnapPanel'
 import StateMachinePanel       from '@/components/panels/StateMachinePanel'
-import KeyboardShortcutsPanel  from '@/components/panels/KeyboardShortcutsPanel'
 import ScriptConsolePanel      from '@/components/panels/ScriptConsolePanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
 import DockLayout       from '@/components/dock/DockLayout'
@@ -173,6 +179,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     layerMetaById, getSiblingsInArray,
   } = editor
   const welcome = useWelcomeScreen(session.restored)
+  const releaseNotes = useReleaseNotes(welcome.isReady, welcome.isOpen)
 
   // ── File versioning (browser-based scene persistence) ────────────────────
   // Writes scene to a user-chosen folder via the File System Access API:
@@ -220,8 +227,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const dock = useDockLayout([
     'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
-    'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets', 'snap',
-    'particles', 'shortcuts', 'player', 'scriptConsole', 'resourceMonitor',
+    'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets',
+    'particles', 'player', 'scriptConsole', 'resourceMonitor', 'splineModeling', 'motionKeys',
   ])
 
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
@@ -264,6 +271,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [selectedKfIds,   setSelectedKfIds] = useState<Set<string>>(() => new Set())
   /** A motion-key tool owns canvas arrows/delete while editing its selection. */
   const [motionKeyEditing, setMotionKeyEditing] = useState(false)
+  const [motionControlsHost, setMotionControlsHost] = useState<HTMLDivElement | null>(null)
   const selectTimeline = useCallback((id: string) => {
     setSelectedTl(id)
     setSelectedKfIds(new Set())
@@ -372,7 +380,45 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     selectTimeline, isolateTimelines: setMCPTimelineIds, seek: handleSeek, playToggle: handlePlayToggle, setSpeed: setPlaybackSpeed,
     setParameter: runtime.setParamOverride, dispatchEvent: runtime.dispatchSMEvent,
     getAudioState: () => audioTransport.getState(),
+    getAgentHandoff: id => agentHandoffStore.get(id),
   })
+  const [pendingAgentHandoff, setPendingAgentHandoff] = useState<{
+    intent: 'edit' | 'ask'; context: AgentHandoffContext
+  } | null>(null)
+  const copyAgentHandoff = useCallback(async (context: AgentHandoffContext, intent: AgentHandoffRequest['intent'], detail = '') => {
+    try {
+      const handoffId = agentHandoffStore.create(context)
+      await navigator.clipboard.writeText(buildAgentHandoffPrompt(context, intent, detail, handoffId))
+      toast.success('Agent prompt copied', { detail: 'Paste it into your connected agent chat.' })
+      return true
+    } catch (error) {
+      toast.error('Unable to copy agent prompt', { detail: error instanceof Error ? error.message : String(error) })
+      return false
+    }
+  }, [])
+  const handleAgentHandoff = useCallback((request: AgentHandoffRequest) => {
+    if (!mcp.connected || !mcp.sessionId) {
+      toast.warning('MCP bağlantısı gerekli', {
+        detail: mcp.enabled
+          ? 'Üst araç çubuğundaki MCP düğmesinden “Connect this editor” seçin.'
+          : 'MCP servisini başlatın, ardından üst araç çubuğundaki MCP düğmesinden editörü bağlayın.',
+      })
+      return
+    }
+    try {
+      if (editor.isTransactionActive()) throw new Error('Finish the current edit before copying an agent prompt.')
+      const context = captureAgentHandoffContext({
+        scene: editor.getScene(), sessionId: mcp.sessionId,
+        documentEpoch: editorDocumentEpoch(editor), revision: editor.getRevision(),
+        timelineId: selectedTlId || null, timeMs: currentTimeMs, target: request,
+      })
+      if (request.intent === 'edit' || request.intent === 'ask') setPendingAgentHandoff({ intent: request.intent, context })
+      else void copyAgentHandoff(context, request.intent)
+    } catch (error) {
+      toast.warning('Cannot prepare agent prompt', { detail: error instanceof Error ? error.message : String(error) })
+    }
+  }, [mcp.connected, mcp.enabled, mcp.sessionId, editor, selectedTlId, currentTimeMs, copyAgentHandoff])
+
   // Per-frame evaluation: merges timeline + binding + param overrides and
   // dispatches lifecycle / trigger events. Re-runs whenever the playhead or
   // any runtime input changes.
@@ -1269,6 +1315,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       { id: 'canvas',         title: 'Canvas',         render: () => null },
       { id: 'stateMachine',   title: 'State Machine',  render: () => null },
       { id: 'properties',     title: 'Properties',     render: () => null },
+      { id: 'splineModeling', title: 'Spline Modeling', render: () => null },
+      { id: 'motionKeys', title: 'Motion Keys', render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
       { id: 'dopeSheet',      title: 'Dope Sheet',     render: () => null },
@@ -1281,10 +1329,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       { id: 'runtimePreview', title: 'Preview',        render: () => null },
       { id: 'player',         title: 'Player',         render: () => null },
       { id: 'assets',         title: 'Assets',         render: () => null },
-      { id: 'snap',           title: 'Snap',           render: () => null },
+
       { id: 'particles',      title: 'Particle',       render: () => null },
       { id: 'scriptConsole',  title: 'Script',         render: () => null },
-      { id: 'shortcuts',      title: 'Shortcuts',      render: () => null },
+
       { id: 'resourceMonitor', title: 'Resources & Performance', render: () => null },
     ]
     return makeRegistry(defs)
@@ -1294,13 +1342,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden">
 
-      <DiagnosticConsentPrompt visible={!welcome.isOpen} />
+      <DiagnosticConsentPrompt visible={releaseNotes.isReady && !welcome.isOpen && !releaseNotes.isOpen} />
 
       <ImportActivityBar activeCount={importActiveCount} settlingCount={importSettlingCount}
         label={importLabel} progress={importProgress} onCancel={cancelImports} />
 
       {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <header data-panel="canvas" className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
+      <header data-panel="canvas" data-testid="editor-toolbar" className="flex min-w-0 flex-nowrap items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 shrink-0">
         <FileMenu
           filename={scene.composition.id}
           onRename={(next) => updateComposition({ ...scene.composition, id: next })}
@@ -1318,6 +1366,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
+          onShowReleaseNotes={releaseNotes.open}
           onShowWelcome={welcome.open}
           onShowResources={() => dock.dispatchRestorePanel('resourceMonitor')}
           onResetLayout={dock.resetLayout}
@@ -1367,41 +1416,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >↷</button>
 
-        {/* ── Group / Ungroup ────────────────────────────────────────────────
-            Always rendered (so the toolbar layout doesn't reflow as the
-            selection changes) but disabled when not actionable. Group needs
-            2+ selected layers; Ungroup needs the primary selection to be
-            a group layer. */}
-        <div className="w-px h-6 bg-gray-700 mx-1" />
-        <button
-          onClick={groupSelected}
-          disabled={selectedLayerIds.size < 2}
-          title="Group selected (Cmd+G)"
-          className="px-2 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300
-                     disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-        >
-          <span className="text-[11px]">▣</span>
-          <span>Group</span>
-        </button>
-        <button
-          onClick={ungroupSelected}
-          disabled={selectedLayer?.type !== 'group'}
-          title="Ungroup (Cmd+Shift+G) — animations preserved"
-          className="px-2 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300
-                     disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-        >
-          <span className="text-[11px]">⊟</span>
-          <span>Ungroup</span>
-        </button>
-
-        <span className="text-xs text-gray-500 font-mono ml-auto">
+        <span className="hidden 2xl:inline text-xs text-gray-500 font-mono ml-auto whitespace-nowrap">
           {scene.composition.width}×{scene.composition.height}
           {' · '}{scene.layers.length} layers
           {' · '}{scene.timelines.length} timelines
         </span>
 
         {/* File versioning: choose folder + auto-save + timestamped snapshots */}
-        <LocalRecoveryStatus status={recovery} sessionId={sessionIdentity.id} history={editor.committedHistory} budget={editor.historyBudget} />
+        <div className="ml-auto shrink-0 2xl:ml-0"><LocalRecoveryStatus status={recovery} sessionId={sessionIdentity.id} history={editor.committedHistory} budget={editor.historyBudget} /></div>
         <ProjectMenu
           sessionInfo={{id:sessionIdentity.id,undo:editor.committedHistory.past.length,redo:editor.committedHistory.future.length}}
           mounted={fileVersioning.mounted}
@@ -1415,26 +1437,12 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onSaveSceneJson={saveSceneJson}
           onCopySceneJson={copySceneJson}
           onInspectJson={() => setShowJson(true)}
+          exports={{ onExportRuntime: exportRuntimeJson, onExportImage: () => setShowRasterExport(true),
+            onExportSvg: () => setShowSvgExport(true), onExportSequence: () => setShowSequenceExport(true), onExportHtml: exportSceneHtml }}
         />
 
-        {/* Preview Mode toggle — when ON, draggable/tappable layers respond
-            interactively on the canvas (no segment / preview tab needed). */}
-        <button
-          onClick={() => setManualPreview(v => !v)}
-          title={manualPreview
-            ? 'Exit preview — back to editing'
-            : 'Enter preview — draggable / tappable layers become interactive on the canvas'}
-          className={`px-3 py-1.5 text-xs rounded font-medium transition-colors flex items-center gap-1.5
-            ${manualPreview
-              ? 'bg-amber-600 hover:bg-amber-500 text-white animate-pulse'
-              : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}
-        >
-          {manualPreview ? <>⏹ Exit Preview</> : <>▶ Preview</>}
-        </button>
-
-        <ExportMenu onExportRuntime={exportRuntimeJson} onExportImage={() => setShowRasterExport(true)}
-          onExportSvg={() => setShowSvgExport(true)} onExportSequence={() => setShowSequenceExport(true)}
-          onExportHtml={exportSceneHtml} />
+        <InteractivePreviewButton layers={scene.layers} active={manualPreview}
+          onToggle={() => { if (!editor.isTransactionActive()) setManualPreview(value => !value) }} />
       </header>
 
       {/* ── Dockable work area ─────────────────────────────────────── */}
@@ -1479,6 +1487,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       dispatchCommand(cmd)
                     }}
                     onDuplicate={(layerId) => cloneSourceIds(selectedLayerIds.has(layerId) ? selectedCloneIds() : [layerId])}
+                    onAgentHandoff={handleAgentHandoff}
                   />
                 ),
               },
@@ -1503,6 +1512,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       if (command) dispatchCommand(command)
                     }}
                     onClearSelection={() => selectLayer(null)}
+                    onAgentHandoff={handleAgentHandoff}
                     contextHandlers={{
                       // Rename re-uses the inline editor — selecting the
                       // layer first lets the panel know which row to put
@@ -1570,6 +1580,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     assets={assetCache}
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
+                    onAgentHandoff={handleAgentHandoff}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}
@@ -1637,6 +1648,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onSelectKeyframes={setSelectedKfIds}
                     onSeekKeyframe={handleSeek}
                     onMotionEditingChange={setMotionKeyEditing}
+                    motionControlsHost={motionControlsHost}
+                    onOpenMotionControls={() => dock.dispatchRestorePanel('motionKeys', 'properties')}
                     onEditMotionTiming={(layerId) => {
                       selectLayer(layerId)
                       revealTimelineProperty('all')
@@ -1740,6 +1753,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 id: 'properties', title: 'Properties',
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
+                    {selectedLayer?.type === 'spline' && <button type="button"
+                      onClick={() => dock.dispatchRestorePanel('splineModeling')}
+                      className="mx-3 mt-2 rounded border border-blue-600 px-2 py-1 text-left text-xs text-blue-200 hover:bg-blue-900/30">
+                      Open Spline Modeling · Offset / Outline / Chamfer / Fillet
+                    </button>}
                     <PropertiesPanel
                       expressionFrame={frame}
                       expressionExternalTime={expressionAuthoringClock}
@@ -1784,6 +1802,17 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     )}
                   </div>
                 ),
+              },
+              {
+                id: 'splineModeling', title: 'Spline Modeling',
+                render: () => <SplineModelingPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splinePointId}
+                  getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
+                  isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
+                  onSelectLayer={id => selectLayer(id)} onClearPoint={() => setSplinePointId(null)} />,
+              },
+              {
+                id: 'motionKeys', title: 'Motion Keys',
+                render: () => <MotionKeysPanel active={motionKeyEditing} layerName={selectedLayer?.name} controlsRef={setMotionControlsHost} />,
               },
               {
                 id: 'timeline', title: 'Timeline',
@@ -1941,14 +1970,6 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 ),
               },
               {
-                id: 'snap', title: 'Snap',
-                render: () => <SnapPanel snap={snap} />,
-              },
-              {
-                id: 'shortcuts', title: 'Shortcuts',
-                render: () => <KeyboardShortcutsPanel />,
-              },
-              {
                 id: 'particles', title: 'Particle',
                 render: () => (
                   <ParticlePanel
@@ -2016,6 +2037,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
         showOnStartup={welcome.showOnStartup} onStartupChange={welcome.changeStartup}
         error={welcome.error} onCreate={newScene} onOpenProject={openSceneJson} onContinue={welcome.close}
       />}
+      {releaseNotes.isOpen && !welcome.isOpen && <ReleaseNotesDialog onClose={releaseNotes.close} />}
 
       {showJson && <JsonModal scene={scene} onSaveProject={saveSceneJson} documentSignal={importDocument} onClose={() => setShowJson(false)} />}
 
@@ -2138,6 +2160,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       )}
 
       {/* ── Toast notifications (lives above everything) ───────────── */}
+      {pendingAgentHandoff && <AgentHandoffDialog
+        key={`${pendingAgentHandoff.context.sessionId}:${pendingAgentHandoff.intent}:${pendingAgentHandoff.context.timeMs}`}
+        intent={pendingAgentHandoff.intent}
+        context={pendingAgentHandoff.context}
+        onCopy={detail => copyAgentHandoff(pendingAgentHandoff.context, pendingAgentHandoff.intent, detail)}
+        onClose={() => setPendingAgentHandoff(null)}
+      />}
       <ToastContainer />
     </div>
   )

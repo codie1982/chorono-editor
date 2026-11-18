@@ -50,6 +50,9 @@ export interface CanvasMenuHandlers {
    *  canvas becomes this layer's followPath target. Auto-creates a
    *  followPath.progress 0→1 animation across the layer's lifetime. */
   assignMotionPath?: () => void
+  /** Enter the clicked object's existing viewport trajectory editor. UI-only;
+   * caller selects the target and supplies the active Timeline context. */
+  editMotionKeys?: () => void
   convertToPath?:   () => void
   saveToLibrary?:   () => void
   createClippingPath?: () => void
@@ -156,6 +159,7 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       kind: 'submenu', label: 'Animate',
       items: buildAnimateSubmenu(args.layer, h.animateProperty),
     },
+    ...(h.editMotionKeys ? [action('Edit motion keys', undefined, h.editMotionKeys)] : []),
 
     // BL-67 — Pick a path layer on the canvas to drive this layer's position.
     action('Assign motion path…', undefined,

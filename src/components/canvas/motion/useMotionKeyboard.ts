@@ -23,7 +23,7 @@ export function useMotionKeyboard(options: Options) {
           || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
           || target.closest?.('[role="menu"], [role="dialog"], [aria-modal="true"]') || hasVisibleKeyboardScope()) return
       const panel = target.closest?.<HTMLElement>('[data-panel]')?.dataset.panel
-      if (panel && panel !== 'canvas') return
+      if (panel && panel !== 'canvas' && panel !== 'motionKeys') return
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); options.cancel(); return }
       if (!options.canEdit || !options.hasSelection || event.metaKey || event.ctrlKey || event.altKey) return
       const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }

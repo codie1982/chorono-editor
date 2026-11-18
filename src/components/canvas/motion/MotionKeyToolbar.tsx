@@ -15,15 +15,15 @@ interface Props {
   onDelete: () => void
 }
 
-/** Explicit authoring modes keep motion-key picking distinct from object and
- * geometry picking. Every action has a named native button and focus outline;
- * source editing stays disabled when the trajectory capability is read-only. */
+/** Contextually opened authoring tools keep motion-key picking distinct from
+ * geometry picking. This toolbar is mounted only during motion editing; Done
+ * returns to object editing. Source actions respect read-only capability. */
 export function MotionKeyToolbar(props: Props) {
   const { mode, onModeChange, timelineId, selectedCount, editable } = props
   return <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Motion keys">
     <button type="button" className={`${button} ${mode !== 'off' ? 'bg-sky-800 border-sky-400' : 'bg-slate-900'}`}
-      aria-label="Motion Keys" aria-pressed={mode !== 'off'} disabled={!timelineId}
-      onClick={() => onModeChange(mode === 'off' ? 'select' : 'off')}>Motion Keys</button>
+      aria-label="Exit motion keys" disabled={!timelineId}
+      onClick={() => onModeChange('off')}>Done</button>
     <DocumentationHelp topic="editor/canvas/motion-keys" compact />
     {mode !== 'off' && <>
       <span className="text-xs text-slate-300 px-1">{timelineId} · {selectedCount} selected</span>

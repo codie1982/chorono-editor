@@ -23,7 +23,9 @@ interface PrimaryAction {
  * Shift+F10 provide the same menu without a pointer. The portal flips above
  * low triggers and escapes dock clipping. Listeners exist only while needed.
  */
-export default function DropdownButton({ label, sections, status, primaryAction }: {
+export default function DropdownButton({ label, sections, status, primaryAction, ariaLabel }: {
+  /** Accessible name for compact symbolic triggers; visible label stays short. */
+  ariaLabel?: string
   label: string; sections: readonly ToolbarMenuSection[]; status?: string; primaryAction?: PrimaryAction
 }) {
   const [open, setOpen] = useState(false)
@@ -63,7 +65,7 @@ export default function DropdownButton({ label, sections, status, primaryAction 
     return () => { document.removeEventListener('pointerdown', outside, true); window.removeEventListener('resize', dismiss) }
   }, [open])
   return <div ref={root} className="relative shrink-0">
-    <button ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
+    <button ref={trigger} type="button" aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       disabled={primaryAction?.disabled} title={primaryAction?.title}
       className={primaryAction?.className ?? 'h-9 px-3 inline-flex items-center gap-2 whitespace-nowrap rounded bg-gray-700 text-xs font-medium text-gray-100 hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400'}
       onPointerDown={event => {

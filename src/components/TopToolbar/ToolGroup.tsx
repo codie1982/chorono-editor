@@ -74,7 +74,7 @@ export default function ToolGroup({
   const showContainToggle = isSelectionTool(mode) && containMode != null && onContainModeChange != null
   return (
     <div className="flex items-center gap-1">
-      <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/splines' : 'editor/canvas/tools'} compact />
+      <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/compound-splines' : 'editor/canvas/tools'} compact />
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
           <path d="M2 1 L2 12 L5 9 L7 13 L9 12 L7 8 L11 8 Z" />
@@ -140,42 +140,23 @@ export default function ToolGroup({
       </ToolBtn>
 
       {/* BL-60 Faz 3 — Containment mode toggle (visible only with a selection
-          tool active). Two-button segmented switch: Inside / Touching. */}
+          tool active). One icon switch selects Inside / Touching. */}
       {showContainToggle && (
         <>
           <Divider />
-          <div className="flex items-center border border-gray-700 rounded overflow-hidden h-7">
-            <button
-              onClick={() => onContainModeChange!('inside')}
-              title="Inside — layer's bounding box must lie fully within the selection shape (3ds Max Window)"
-              className={`px-2 h-full text-[10px] font-mono flex items-center gap-1 transition-colors ${
-                containMode === 'inside'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-              }`}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <rect x="1" y="1" width="8" height="8" />
-                <rect x="3" y="3" width="4" height="4" fill="currentColor" fillOpacity="0.6" />
-              </svg>
-              Inside
-            </button>
-            <button
-              onClick={() => onContainModeChange!('touching')}
-              title="Touching — any layer overlapping the selection shape counts (3ds Max Crossing)"
-              className={`px-2 h-full text-[10px] font-mono flex items-center gap-1 transition-colors ${
-                containMode === 'touching'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-              }`}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <rect x="1" y="1" width="8" height="8" strokeDasharray="1.5 1" />
-                <rect x="4" y="4" width="5" height="5" fill="currentColor" fillOpacity="0.6" />
-              </svg>
-              Touching
-            </button>
-          </div>
+          <button type="button" role="switch" aria-label="Select fully enclosed objects"
+            aria-checked={containMode === 'inside'}
+            title={containMode === 'inside'
+              ? 'Inside — select only fully enclosed objects. Click for Touching.'
+              : 'Touching — select overlapping objects. Click for Inside.'}
+            onClick={() => onContainModeChange!(containMode === 'inside' ? 'touching' : 'inside')}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 ${containMode === 'inside' ? 'border-blue-500 bg-blue-600 text-white' : 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'}`}>
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <rect x="2" y="2" width="11" height="11" strokeDasharray={containMode === 'inside' ? undefined : '2 1.5'} />
+              {containMode === 'inside' ? <rect x="5" y="5" width="5" height="5" fill="currentColor" fillOpacity="0.65" />
+                : <rect x="8" y="8" width="6" height="6" fill="currentColor" fillOpacity="0.65" />}
+            </svg>
+          </button>
         </>
       )}
     </div>
