@@ -9,3 +9,4 @@ export type {
   Mesh2DValidationResult,
   Mesh2DValidationSeverity,
 } from './Mesh2DTopologyValidator'
+export { computeMesh2DLocalBounds, containsMesh2DPoint } from './Mesh2DGeometryQueries'

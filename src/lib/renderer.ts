@@ -7,6 +7,7 @@ import { trimSplinePath } from './spline/render/trimSplinePath'
 import { hitTestSplineFill, hitTestSplineSegment } from './spline/geometry/hitTest'
 import { resolveLayerWorldMatrix } from './geometry/resolveLayerWorldMatrix'
 import { createLayerWorldBoundsResolver } from './geometry/resolveLayerWorldBounds'
+import { containsMesh2DPoint } from './geometry/mesh2d'
 import { buildEffectsFilter } from './types'
 import { evaluateTimelines, getLayerValue, type OverrideMap } from './evaluator'
 import { evaluateMotionPath } from './motionPath'
@@ -933,6 +934,9 @@ export function hitTestLayersAt(
  * font storage is borrowed from the supplied source scope, never loaded here.
  */
 function hitTestLayerLocal(layer: Layer, lx: number, ly: number, assets: readonly Asset[]): boolean {
+  if (layer.type === 'mesh2d') {
+    return !!layer.mesh2d && containsMesh2DPoint(layer.mesh2d.geometry, lx, ly)
+  }
   if (layer.type === 'text' && layer.text) {
     const size = measureTextLayout(layer.text, assets)
     const left = layer.text.textAlign === 'center' ? -size.width / 2 : layer.text.textAlign === 'right' ? -size.width : 0

@@ -77,6 +77,7 @@ export class LayerRegistry {
         ?? this.getByCategory('Spline Objects')[0]
     }
     if (layer.type === 'pathStroke') return this.byKind.get('pathStroke')
+    if (layer.type === 'mesh2d')     return this.byKind.get('mesh2d')
     if (layer.type === 'text')       return this.byKind.get('text')
     if (layer.type === 'image')      return this.byKind.get('image')
     if (layer.type === 'video')      return this.byKind.get('video')

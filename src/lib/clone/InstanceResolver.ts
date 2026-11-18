@@ -13,7 +13,7 @@
 //                                     bounds cycles/deep imported chains)
 //
 // Fields that come from SOURCE at render time:
-//   type, shape, shapeKind, shapeParams, path, spline, style, size,
+//   type, shape, shapeKind, shapeParams, path, spline, mesh2d, style, size,
 //   text, image, video, audio, pathStroke, motionPath, followPath,
 //   masks, internalGrid
 //
@@ -33,6 +33,7 @@ const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
   'shapeParams',
   'path',
   'spline',
+  'mesh2d',
   'particleEmitter',
   'style',
   'size',

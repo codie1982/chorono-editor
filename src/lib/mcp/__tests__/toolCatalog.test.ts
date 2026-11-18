@@ -44,6 +44,9 @@ describe('versioned MCP discovery and callable compatibility', () => {
     expect(summary.tools).toBeUndefined()
     expect(summary.scripting).toBeUndefined()
     expect(summary.objectKinds.every((kind: any) => kind.properties === undefined)).toBe(true)
+    expect(summary.objectKinds).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'mesh2d', category: 'Mesh & Surface' }),
+    ]))
     const detail = await getCapabilities('standard', { toolName: 'replace_layer_fields' }) as any
     expect(detail).toMatchObject({ implementationName: 'patch_object', canonicalName: 'replace_layer_fields', advertised: false, callableInBatch: true })
     expect(detail.tool.description.toLowerCase()).toContain('replac')

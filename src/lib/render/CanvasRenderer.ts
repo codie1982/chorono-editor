@@ -348,6 +348,7 @@ export class CanvasRenderer {
             if (rot   !== 0)                   ctx.rotate((rot * Math.PI) / 180)
             if (scaleX !== 1 || scaleY !== 1)  ctx.scale(scaleX, scaleY)
             ctx.translate(-anchorX, -anchorY)
+            if (isSelected && renderMode === 'editor') plugin.renderEditorOverlay?.(renderContextFor(ctx), layer)
             if (isSelected && selectionOutline) this.drawSelection(ctx, layer, scene, timeMs, overrides, boundsForFrame, layerIndex)
           } finally { ctx.restore() }
           return
@@ -356,6 +357,7 @@ export class CanvasRenderer {
         if (!lod?.draw(layer, ctx, target => plugin.render(renderContextFor(target, false, false), layer), 100000 - this._renderedLayerCount)) {
           plugin.render(renderContext, layer)
         }
+        if (isSelected && renderMode === 'editor') plugin.renderEditorOverlay?.(renderContext, layer)
       }
 
       // ── Selection outline ─────────────────────────────────────────────────

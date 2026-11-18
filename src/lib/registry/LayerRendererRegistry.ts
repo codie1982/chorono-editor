@@ -54,6 +54,15 @@ export interface LayerRendererPlugin<T extends Layer = Layer> {
    * the plugin draws in LAYER-LOCAL coordinates.
    */
   render(ctx: RenderContext, layer: T): void
+
+  /**
+   * Optional selected-layer editor chrome drawn after content/effects.
+   *
+   * CanvasRenderer calls this only in editor mode for the selected layer and
+   * never while producing masks, preview/export frames or static proxies.
+   * Implementations must not mutate source data or retain the frame context.
+   */
+  renderEditorOverlay?(ctx: RenderContext, layer: T): void
 }
 
 export class LayerRendererRegistry {

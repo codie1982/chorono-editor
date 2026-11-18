@@ -15,6 +15,7 @@ import type { Matrix2D } from './Matrix2D'
 import type { Vec2 } from './CoordinateSystem'
 import { materializeRenderScene } from '@/lib/render/materializeOverrides'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
+import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
 
 export type LayerWorldBoundsResolver = (layer: Layer) => PathBounds | null
 
@@ -42,6 +43,20 @@ function rectangleBounds(width: number, height: number, matrix: Matrix2D, left =
     { x: left, y: 0 }, { x: left + width, y: 0 },
     { x: left, y: height }, { x: left + width, y: height },
   ].map(point => matrix.applyToPoint(point)))
+}
+
+/** Exact transformed position bounds for fixed-topology Mesh2D geometry. */
+function mesh2DBounds(geometry: Mesh2DGeometry, matrix: Matrix2D): PathBounds | null {
+  if (geometry.positions.length < 2 || geometry.positions.length % 2 !== 0) return null
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (let index = 0; index < geometry.positions.length; index += 2) {
+    const x = geometry.positions[index], y = geometry.positions[index + 1]
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+    const point = matrix.applyToPoint({ x, y })
+    minX = Math.min(minX, point.x); minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x); maxY = Math.max(maxY, point.y)
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
 /** Canvas renders circles/ellipses as native arcs, so use their analytic
@@ -131,6 +146,9 @@ export function createLayerWorldBoundsResolver(
         return contour && contour.pointIds.length > 0 && !!data.points[contour.pointIds[0]]
       }))) return null
       return computeSplineBounds(data, matrix)
+    }
+    if (effective.type === 'mesh2d') {
+      return effective.mesh2d ? mesh2DBounds(effective.mesh2d.geometry, matrix) : null
     }
     if (effective.type === 'path') {
       if (!effective.path?.anchors.length) return null

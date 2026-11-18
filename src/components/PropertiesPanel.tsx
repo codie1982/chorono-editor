@@ -601,6 +601,17 @@ export default function PropertiesPanel({
               />
             )}
 
+            {/* Mesh2D source settings regenerate validated positions and
+                topology atomically. Transform & Appearance remain in the
+                shared hand-written sections above. */}
+            {layer.type === 'mesh2d' && (
+              <SchemaPanel
+                layer={layer}
+                onLayerChange={onLayerChange}
+                filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance'}
+              />
+            )}
+
             {/* ── Shape özellikleri ──────────────────────────────────── */}
             {layer.type === 'shape' && layer.style && layer.size && (
               <Section title="Shape" helpTopic="editor/layers/basic-shapes">

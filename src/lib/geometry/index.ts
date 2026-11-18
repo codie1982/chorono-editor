@@ -17,6 +17,8 @@ export {
   Mesh2DTopologyHasher,
   Mesh2DAdjacencyBuilder,
   Mesh2DTopologyValidator,
+  computeMesh2DLocalBounds,
+  containsMesh2DPoint,
 } from './mesh2d'
 export type {
   StructuredGridMesh2DOptions,

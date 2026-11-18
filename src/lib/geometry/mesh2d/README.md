@@ -14,6 +14,8 @@ constraints or simulation state.
   later selection and solver adapters.
 - `Mesh2DTopologyHasher` identifies connectivity changes. It is a stale/cache
   change detector, not a cryptographic integrity primitive.
+- `computeMesh2DLocalBounds` and `containsMesh2DPoint` provide renderer/editor
+  queries without an AABB fallback that would hide holes.
 
 The package is exported through `src/lib/geometry/index.ts`. Serializable
 records live in `src/lib/types/mesh2d.ts` and are re-exported by the types
@@ -29,7 +31,9 @@ StructuredGridMesh2DGenerator
 JSON-compatible Mesh2DData
         ├── Mesh2DTopologyValidator
         ├── Mesh2DAdjacencyBuilder (derived, not persisted)
-        └── future scene/render/solver adapters
+        ├── Mesh2D layer definition + atomic property regeneration
+        ├── Canvas2D renderer / bounds / triangle hit testing
+        └── future solver adapters
 ```
 
 Source arrays use ordinary numbers so portable JSON, clone and undo do not
@@ -62,7 +66,14 @@ const mesh = new StructuredGridMesh2DGenerator().generate({
 })
 ```
 
-The next integration step must add a complete layer path—schema/default,
-command, selection/bounds, renderer and portable round-trip—rather than only a
-registry entry. Spline/shape flattening and triangulation belong to MESH1 and
-must reuse the validator instead of changing MESH0 semantics silently.
+Users create the same source through **Add Layer → Mesh & Surface → Structured
+Grid**. Its Geometry inspector changes call the registered derived-data edit
+strategy, which validates and regenerates source plus geometry as one immutable
+layer snapshot. That snapshot is one ordinary editor update/undo operation.
+The Canvas2D plugin renders content in editor, preview and export; selected
+wireframe is editor-only. Save/load, copy and live instances use the ordinary
+Layer JSON contracts and keep runtime/GPU buffers out of source data.
+
+Spline/shape flattening and triangulation belong to MESH1 and must reuse the
+validator instead of changing MESH0 semantics silently. Cloth rest data and
+variable-topology Blob/fluid surfaces remain separate later subsystems.

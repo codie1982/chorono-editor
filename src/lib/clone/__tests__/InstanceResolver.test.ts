@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolveInstanceLayer, isInstanceLayer } from '../InstanceResolver'
 import { cloneSingleLayer } from '../CloneSingleLayer'
 import type { Layer } from '../../types'
+import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 
 function makeRect(
   id: string,
@@ -94,6 +95,17 @@ describe('resolveInstanceLayer', () => {
 })
 
 describe('CloneSingleLayer + instance mode', () => {
+  it('keeps Mesh2D source data on copies and resolves it live for instances', () => {
+    const source = newStructuredGridMesh2DLayer()
+    const copy = cloneSingleLayer(source, { mode: 'copy' }).clonedLayer
+    expect(copy.mesh2d).toEqual(source.mesh2d)
+    expect(copy.mesh2d).not.toBe(source.mesh2d)
+
+    const instance = cloneSingleLayer(source, { mode: 'instance' }).clonedLayer
+    expect(instance.mesh2d).toBeUndefined()
+    expect(resolveInstanceLayer(instance, [source, instance])?.mesh2d).toBe(source.mesh2d)
+  })
+
   it('strips visual fields and sets instanceOf when mode=instance', () => {
     const source = makeRect('src')
     const { clonedLayer, metadata } = cloneSingleLayer(source, { mode: 'instance' })
