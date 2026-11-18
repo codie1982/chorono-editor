@@ -2,8 +2,8 @@
 
 Bu belge BAKE0 ortak kontrol düzleminin gerçek uygulama sözleşmesini tanımlar.
 İlk çalışan adapter sayısal Track Bake'tir. BAKE1 sabit topolojili Mesh2D
-deformasyonunu aynı yaşam döngüsüne ekler. Rigid, fracture,
-particle/grid/surface ve raster sonuçları daha sonra kendi typed
+deformasyonunu, BAKE2 ilk rectangle rigid-body simülasyonunu aynı yaşam
+döngüsüne ekler. Fracture, particle/grid/surface ve raster sonuçları daha sonra kendi typed
 recipe/payload adapter'larıyla eklenir. Bu temel 2D üretim sırasına aittir; 3D
 workspace, 3D renderer veya Character/IK payload'ı açmaz.
 
@@ -22,6 +22,9 @@ workspace, 3D renderer veya Character/IK payload'ı açmaz.
   kullanır. Yeni bir evaluator veya simplification algoritması kurmaz.
 - `src/lib/bake/adapters/MeshDeformationBakeAdapter.ts`: solver'ın örneklediği
   sabit topolojili vertex pozisyonlarını mevcut clip/codec runtime'ına bağlar.
+- `src/lib/bake/adapters/RigidBodyBakeAdapter.ts`: ortak integer-tick saati ve
+  Matter backend'i ile pose preview üretir; sonucu normal transform track'lerine
+  derler. Engine ömrü yalnız prepare aşamasıdır.
 - `src/components/timeline/baking/useTrackBakeJob.ts`: canlı editör track'i,
   document lifetime ve var olan tek-undo komutu arasındaki UI adapter'ıdır.
 
@@ -108,18 +111,21 @@ olması feature komutunun sorumluluğudur. BAKE0 Track adapter'ı mevcut
 değiştirir, bağımsız scene düzenlemelerini korur ve undo'da önceki timeline'ı
 geri getirir.
 
-BAKE0/BAKE1 henüz şunları sağlamaz:
+BAKE0–BAKE2 henüz şunları sağlamaz:
 
-- persisted `BakeRecord` veya generated-asset garbage collection,
-- physics simulation worker'ı, checkpoint veya re-bake ownership eşlemesi,
+- generated-asset garbage collection,
+- physics simulation worker'ı, checkpoint veya tam re-bake ownership eşlemesi
+  (rigid track ownership manifesti persist edilir, replacement akışı henüz yoktur),
 - ortak Jobs & Bake paneli veya MCP async job araçları,
 - Character/IK ve 3D payload adapter'ları.
 
 Sabit topolojili Mesh2D preview/cache adapter'ının kaynak, bütçe, sahiplik ve
 solver-free playback sözleşmesi
 [`mesh-deformation-bake-adapter.md`](mesh-deformation-bake-adapter.md) içinde
-belgelenmiştir. Ana sıradaki dikey dilim Simulation Core ile ilk rigid/Voronoi
-adapter'ıdır; değişken topolojili Blob/sıvı yüzeyi ayrı cache biçimi kullanır.
+belgelenmiştir. İlk rigid-body sözleşmesi
+[`rigid-body-bake-foundation.md`](rigid-body-bake-foundation.md) içindedir. Ana
+sıradaki fizik dilimi Voronoi source geometry + cluster/fracture adapter'ıdır;
+değişken topolojili Blob/sıvı yüzeyi ayrı cache biçimi kullanır.
 
 ## Doğrulama
 
@@ -128,4 +134,6 @@ sonuç, source/document stale ve commit yarışı invariant'larını kapsar.
 `TrackBakeAdapter.test.ts` source immutability, bounded recipe, cancellation ve
 mevcut baker kullanımını doğrular. Render/UI değişiklikleri gerçek Bake
 penceresinde normal, running/cancelled, ready, stale ve failed durumlarıyla
-incelenmelidir.
+incelenmelidir. Rigid adapter/commit testleri gerçek Matter collision sonucu,
+budget release, portable save/load, runtime-export track'leri ve exact undo'yu
+kapsar.

@@ -26,3 +26,11 @@ export type {
 } from './adapters/MeshDeformationBakeAdapter'
 export { createMeshDeformationBakeAsset, MESH_DEFORMATION_MIME } from './meshDeformation/MeshDeformationBakeAsset'
 export type { MeshDeformationBakeAssetResult } from './meshDeformation/MeshDeformationBakeAsset'
+export {
+  RigidBodyBakeAdapter,
+  RigidBodyBakePreview,
+} from './adapters/RigidBodyBakeAdapter'
+export type {
+  RigidBodyBakeAdapterOptions,
+  RigidBodyBakeReport,
+} from './adapters/RigidBodyBakeAdapter'

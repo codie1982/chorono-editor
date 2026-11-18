@@ -88,6 +88,18 @@ export type {
 } from './mesh2d'
 
 export type {
+  RigidBodyMotionType,
+  RigidBodyMaterial,
+  RigidBodyAuthoring,
+  RigidBodySnapshot,
+  RigidBodyBakeRecipe,
+  RigidPoseCacheHeader,
+  RigidBakeTrackOwnership,
+  RigidBakeRecord,
+  PhysicsSceneData,
+} from './physics'
+
+export type {
   LayerEffects,
   MotionPath,
   PluginEffect,

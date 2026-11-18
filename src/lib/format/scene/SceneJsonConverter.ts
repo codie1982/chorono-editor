@@ -3,6 +3,7 @@ import { assertScenePropertyExpressions } from '../../expression/properties/Prop
 import type { ChronoScene } from '../../types'
 import { assertAuthoringData } from '../../editor/authoring/AuthoringValidation'
 import { assertSceneGuides } from '../../geometry/guides/sceneGuideData'
+import { assertPhysicsSceneData } from '../../physics/PhysicsSceneValidation'
 
 /** Shared recognition for an editable scene source. Merge keeps the historical
  * 1.x/layers/composition minimum; complete document opening additionally requires
@@ -31,5 +32,6 @@ export function parseSceneJson(text: string, complete = false): ChronoScene {
   assertScenePropertyExpressions(scene)
   assertSceneGuides(scene.editorGuides)
   assertAuthoringData(scene.authoring)
+  assertPhysicsSceneData(scene.physics)
   return scene
 }

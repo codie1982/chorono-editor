@@ -20,6 +20,11 @@ it('rejects wrong roots/versions/null composition without hiding syntax errors',
   expect(() => parseSceneJson('{}')).toThrow('valid Chorono scene')
 })
 
+it('rejects malformed persisted physics envelopes without creating a solver', () => {
+  const scene = { ...emptyScene(), physics: { schemaVersion: 2, rigidBakes: [] } }
+  expect(() => parseSceneJson(JSON.stringify(scene), true)).toThrow(/physics scene envelope/)
+})
+
 it('round-trips portable Mesh2D source, topology and stable vertex ids', () => {
   const scene = emptyScene()
   const layer = setMesh2DDeformation(

@@ -739,6 +739,9 @@ export interface ChronoScene {
   /** Optional sparse editor attribution. Missing legacy data means unknown;
    * portable saves/history preserve it, runtime exporters explicitly omit it. */
   authoring?: import('./authoring').SceneAuthoring
+  /** Optional 2D simulation recipes and bake ownership. Dense caches and
+   * engine objects are runtime-only and must not be serialized here. */
+  physics?: import('./physics').PhysicsSceneData
   initialState: Record<string, unknown>
 }
 
