@@ -107,6 +107,7 @@ import FileMenu        from '@/components/TopToolbar/FileMenu'
 import RasterExportDialog from '@/components/export/RasterExportDialog'
 import SVGExportDialog   from '@/components/export/SVGExportDialog'
 import SequenceExportDialog from '@/components/export/SequenceExportDialog'
+import RenderSettingsDialog from '@/components/export/RenderSettingsDialog'
 import {useSceneOutputActions} from './hooks/useSceneOutputActions'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
@@ -1163,6 +1164,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [showSvgExport, setShowSvgExport] = useState(false)
   // BL-83 — image sequence (ZIP) export dialog visibility.
   const [showSequenceExport, setShowSequenceExport] = useState(false)
+  const [showRenderSettings, setShowRenderSettings] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
   const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(editor.committedScene,importDocument,editor.getCommittedHistory)
@@ -1396,6 +1398,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onExportImage={() => setShowRasterExport(true)}
           onExportSvg={() => setShowSvgExport(true)}
           onExportSequence={() => setShowSequenceExport(true)}
+          onRender={() => setShowRenderSettings(true)}
           onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
@@ -1471,7 +1474,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onCopySceneJson={copySceneJson}
           onInspectJson={() => setShowJson(true)}
           exports={{ onExportRuntime: exportRuntimeJson, onExportImage: () => setShowRasterExport(true),
-            onExportSvg: () => setShowSvgExport(true), onExportSequence: () => setShowSequenceExport(true), onExportHtml: exportSceneHtml }}
+            onExportSvg: () => setShowSvgExport(true),
+            onExportSequence: () => setShowSequenceExport(true),
+            onRender: () => setShowRenderSettings(true),
+            onExportHtml: exportSceneHtml }}
         />
 
         <InteractivePreviewButton layers={scene.layers} active={manualPreview}
@@ -2150,6 +2156,21 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
             else toast.success(base)
           }}
           onError={(message) => toast.error('Sequence export failed', { detail: message })}
+        />
+      )}
+
+      {showRenderSettings && (
+        <RenderSettingsDialog
+          scene={scene}
+          assets={assetCache}
+          currentTimeMs={currentTimeMs}
+          documentSignal={importDocument}
+          onClose={() => setShowRenderSettings(false)}
+          onTransferred={(intent, result, warnings) => {
+            const output = intent === 'still' ? 'current frame' : `${result.frameCount}-frame video source`
+            toast.success(`Opened ${output} in Chorono Render`, warnings.length ? { detail: warnings.join(' ') } : undefined)
+          }}
+          onError={(message) => toast.error('Render failed', { detail: message })}
         />
       )}
 

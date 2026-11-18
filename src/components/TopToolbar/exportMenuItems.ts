@@ -5,6 +5,7 @@ export interface ExportActions {
   onExportImage?: () => void
   onExportSvg?: () => void
   onExportSequence?: () => void
+  onRender?: () => void
   onExportHtml?: () => void
 }
 
@@ -16,6 +17,7 @@ export function exportMenuItems(actions: ExportActions): MenuActionItem[] {
     ['Image (PNG / WEBP / JPEG)…', actions.onExportImage],
     ['SVG (vector)…', actions.onExportSvg],
     ['Image Sequence (ZIP)…', actions.onExportSequence],
+    ['Render with Chorono Render…', actions.onRender],
     ['Standalone HTML (self-playing)', actions.onExportHtml],
     ['Runtime JSON (lean)', actions.onExportRuntime],
   ]

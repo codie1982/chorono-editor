@@ -36,19 +36,25 @@ interface Props {
 export default function BaseExportDialog({
   title, helpTopic, onClose, closeDisabled = false, maxWidth = 'max-w-md', children, footer,
 }: Props) {
+  const titleId = `export-dialog-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={closeDisabled ? undefined : onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={`bg-gray-900 border border-gray-700 rounded-lg shadow-2xl ${maxWidth} w-full mx-4 p-5`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wider">{title}</h2>
+          <h2 id={titleId} className="text-sm font-semibold text-gray-200 uppercase tracking-wider">{title}</h2>
           <DocumentationHelp topic={helpTopic} className="ml-auto mr-2" />
           <button
+            type="button"
+            aria-label={`Close ${title}`}
             onClick={onClose}
             disabled={closeDisabled}
             className="text-gray-500 hover:text-gray-300 text-lg leading-none disabled:opacity-40"

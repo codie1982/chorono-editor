@@ -27,6 +27,8 @@ interface FileMenuProps {
   onExportSvg?:    () => void
   /** BL-83 — open the image sequence (PNG/JPEG/WEBP → ZIP) export dialog. */
   onExportSequence?: () => void
+  /** Open the dedicated single-frame/video Chorono Render settings flow. */
+  onRender?: () => void
   /** Standalone self-playing HTML (CDN runtime + embedded scene). */
   onExportHtml?:   () => void
   onCopySceneJson: () => void
