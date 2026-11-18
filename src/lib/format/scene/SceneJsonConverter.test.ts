@@ -5,7 +5,7 @@ import {
   newShapeBoundaryMesh2DLayer,
   newStructuredGridMesh2DLayer,
 } from '../../registry/definitions/mesh2d/Mesh2DDefinition'
-import { selectMesh2DPinPreset, setMesh2DDeformation, setMesh2DTexture } from '../../mesh2d'
+import { selectMesh2DPinPreset, setMesh2DDeformation, setMesh2DTexture, setMesh2DTextureTransform } from '../../mesh2d'
 
 it('preserves IDs/unknown data and distinguishes merge-source minimum from full editor arrays', () => {
   const original = { ...emptyScene(), extension: { value: 'preserved' } }, text = JSON.stringify(original)
@@ -23,7 +23,10 @@ it('rejects wrong roots/versions/null composition without hiding syntax errors',
 it('round-trips portable Mesh2D source, topology and stable vertex ids', () => {
   const scene = emptyScene()
   const layer = setMesh2DDeformation(
-    selectMesh2DPinPreset(setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric'), 'corners'),
+    selectMesh2DPinPreset(setMesh2DTextureTransform(
+      setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric'),
+      { fit: 'cover', offsetX: 12, rotationDeg: 8 },
+    ), 'corners'),
     'deformation',
     { startTimeMs: 250, playbackRate: 0.5, loop: true },
   )
@@ -39,6 +42,7 @@ it('round-trips portable Mesh2D source, topology and stable vertex ids', () => {
   expect(loaded.layers[0].mesh2d?.geometry.topology.topologyHash)
     .toBe(layer.mesh2d?.geometry.topology.topologyHash)
   expect(loaded.layers[0].mesh2d?.appearance?.textureAssetId).toBe('fabric')
+  expect(loaded.layers[0].mesh2d?.appearance?.textureTransform).toMatchObject({ fit: 'cover', offsetX: 12, rotationDeg: 8 })
   expect(loaded.layers[0].mesh2d?.pins?.vertexIds).toHaveLength(4)
   expect(loaded.layers[0].mesh2d?.deformation).toEqual(layer.mesh2d?.deformation)
   expect(loaded.assets[1].type).toBe('meshDeformation')

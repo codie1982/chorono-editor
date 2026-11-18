@@ -97,6 +97,23 @@ describe('Mesh2D canvas rendering', () => {
     expect(recorded.fills).toHaveLength(0)
   })
 
+  it('applies portable aspect-fit placement before mapping UV triangles', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    layer.mesh2d = { ...layer.mesh2d!, appearance: {
+      schemaVersion: 1, kind: 'texture', textureAssetId: 'fabric', sampling: 'linear',
+      textureTransform: {
+        schemaVersion: 1, fit: 'contain', offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1,
+        rotationDeg: 0, pivotU: 0.5, pivotV: 0.5, flipX: false, flipY: false,
+      },
+    } }
+    const recorded = recordingContext()
+    drawMesh2DLayer(recorded.ctx, layer, new Map(), { naturalWidth: 100, naturalHeight: 100 } as unknown as CanvasImageSource)
+    expect(recorded.transforms[0][0]).toBeCloseTo(1.6)
+    expect(recorded.transforms[0][3]).toBeCloseTo(1.6)
+    expect(recorded.transforms[0][4]).toBeCloseTo(40)
+    expect(recorded.transforms[0][5]).toBeCloseTo(0)
+  })
+
   it('uses the complete solid fallback when texture UVs are invalid', () => {
     const layer = newStructuredGridMesh2DLayer()
     layer.mesh2d = {

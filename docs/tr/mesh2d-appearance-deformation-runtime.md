@@ -9,8 +9,11 @@ dilimin parçası değildir.
 - `src/lib/types/mesh2d.ts`: portable appearance, pin ve deformasyon asset
   bağlantıları. Dense sample buffer burada veya normal timeline keyframe'lerinde
   tutulmaz.
-- `src/lib/mesh2d/Mesh2DAuthoring.ts`: texture, pin preset'i ve deformation
-  bağlantısını saf/undo-uygun tam layer snapshot'ı olarak üretir.
+- `src/lib/mesh2d/Mesh2DAuthoring.ts`: texture, portable texture yerleşimi,
+  pin preset'i ve deformation bağlantısını saf/undo-uygun tam layer snapshot'ı
+  olarak üretir.
+- `src/lib/mesh2d/Mesh2DTextureMapping.ts`: renderer ve canvas tutamaçlarının
+  ortak fit/offset/scale/rotation/pivot/flip matrisini üretir.
 - `src/lib/mesh2d/deformation/MeshDeformationClip.ts`: doğrulanmış runtime clip
   ve zamana göre x/y interpolasyonu.
 - `src/lib/mesh2d/deformation/MeshDeformationBinaryCodec.ts`: ham binary
@@ -21,11 +24,18 @@ dilimin parçası değildir.
   UV texture ve rest-mesh fallback'i.
 - `src/components/PropertiesPanel/Mesh2DSourcePanel.tsx`: asset seçimi, playback
   zamanı/hızı/loop, pin preset'leri ve eksik kaynak tanısı.
+- `src/components/PropertiesPanel/Mesh2DTextureControls.tsx`: Stretch, Contain,
+  Cover, Fit X/Y, Original fit seçenekleri ile sayısal texture yerleşimi.
+- `src/components/canvas/mesh2d/Mesh2DTextureOverlay.tsx`: `T` aracıyla move,
+  uniform scale ve rotation tutamaçları; işlem başına tek undo kaydı.
 
 ## Veri akışı ve yaşam döngüsü
 
-Katman yalnız `textureAssetId`, pin vertex kimlikleri/topology hash'i ve küçük
-bir deformation playback kaydı saklar. Renderer frame talebi image ve
+Katman `textureAssetId` yanında küçük bir `textureTransform` kaydı, pin vertex
+kimlikleri/topology hash'i ve küçük bir deformation playback kaydı saklar.
+Transform yokluğu eski projelerin tam-bounds Stretch davranışıdır. Texture
+yerleşimi geometri, UV, topology hash, pin veya deformasyon clip'ini değiştirmez.
+Renderer frame talebi image ve
 `meshDeformation` asset'lerini mevcut media closure'a ekler. Binary loader,
 fetch input'u ile decoded typed buffer'ı dönüşüm sırasında ayrı ayrı bütçeye
 alır; başarılı clip cache pin'i bırakılana kadar kullanılabilir. Eski frame
@@ -39,7 +49,18 @@ media hazırlığı eksik asset'i başarı kabul etmez.
 
 ## Koordinat ve zaman sözleşmesi
 
-Pozisyonlar layer-local kompozisyon pikselidir. Clip 2 veya 3 component
+Pozisyonlar ve texture offset'leri layer-local kompozisyon pikselidir. Texture
+scale değerleri boyutsuz ve pozitiftir; yansıtma ayrı `flipX/Y` bayraklarıyla
+saklanır. Rotation x-sağ/y-aşağı ekran uzayında saat yönündedir. Pivot kaynak
+görselin normalize `u/v` uzayındadır. Fit sözleşmeleri şunlardır:
+
+- `stretch`: mesh bounds'unu iki eksende doldurur (legacy varsayılan);
+- `contain`: oranı koruyarak bütünü gösterir;
+- `cover`: oranı koruyarak bounds'u kaplar, taşan bölüm mesh tarafından kırpılır;
+- `fitX` / `fitY`: oranı koruyup seçilen ekseni eşler;
+- `original`: bir kaynak pikselini bir layer-local kompozisyon pikseli kabul eder.
+
+Clip 2 veya 3 component
 saklayabilir; Canvas2D yolu x/y'yi kullanır, z verisini korur fakat çizmez.
 Sample zamanları sıfırdan başlayan, kesin artan yerel milisaniyelerdir.
 Katman `startTimeMs`, pozitif `playbackRate` ve `loop` ile kompozisyon zamanını
@@ -78,7 +99,11 @@ yazılır; layer'a dense array yerine asset kimliği bağlanır.
 
 ## Bilinen sınırlar
 
-Texture renderer şu anda doğrulanmış Canvas triangle fallback'idir. WebGL
+Texture renderer şu anda doğrulanmış Canvas triangle fallback'idir. Canvas
+tutamaçları offset, uniform scale ve rotation sunar; eksenleri ayrı ölçekleme,
+pivot, flip ve kesin değerler inspector'dadır. Texture crop maskesi Mesh2D
+triangle yüzeyidir; ayrı editable crop-rect veya UV vertex boyama bu dilimde
+yoktur. WebGL
 offscreen mesh pass'i ve GPU→Canvas2D compositing adapter'ı sonraki MESH2
 dilimidir. Deforme frame dinamik bounds/hit-test'e henüz yansıtılmaz; seçim
 bounds'u rest mesh'tir. Pin authoring şu anda top edge, corners ve boundary

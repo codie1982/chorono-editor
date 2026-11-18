@@ -13,10 +13,10 @@ import {
   selectMesh2DPinPreset,
   setMesh2DDeformation,
   setMesh2DPins,
-  setMesh2DTexture,
   type Mesh2DPinPreset,
 } from '@/lib/mesh2d'
 import type { Asset, Layer } from '@/lib/types'
+import Mesh2DTextureControls from './Mesh2DTextureControls'
 
 interface Props {
   readonly layer: Layer
@@ -70,24 +70,12 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
     : current
       ? { label: 'Source up to date', classes: 'border-emerald-800/60 bg-emerald-950/30 text-emerald-300' }
       : { label: 'Source changed — regenerate', classes: 'border-amber-700/60 bg-amber-950/30 text-amber-200' }
-  const visualAssets = allAssets.filter(asset => asset.type === 'image' || asset.type === 'spriteSheet')
-  const textureAssetId = mesh.appearance?.kind === 'texture' ? mesh.appearance.textureAssetId : undefined
-  const textureAsset = visualAssets.find(asset => asset.id === textureAssetId)
-  const textureMissing = !!textureAssetId && !textureAsset
   const deformationAssets = allAssets.filter(asset => asset.type === 'meshDeformation')
   const deformationAssetId = mesh.deformation?.assetId
   const deformationAsset = deformationAssets.find(asset => asset.id === deformationAssetId)
   const deformationMissing = !!deformationAssetId && !deformationAsset
   const pinsCurrent = isMesh2DPinSelectionCurrent(layer)
   const pinCount = mesh.pins?.vertexIds.length ?? 0
-
-  const chooseTexture = (assetId: string) => {
-    onLayerChange(setMesh2DTexture(layer, assetId || null))
-  }
-
-  const chooseSampling = (sampling: 'linear' | 'nearest') => {
-    onLayerChange(setMesh2DTexture(layer, textureAssetId ?? null, sampling))
-  }
 
   const chooseDeformation = (assetId: string) => {
     onLayerChange(setMesh2DDeformation(layer, assetId || null))
@@ -158,29 +146,7 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
         </p>
       </section>}
 
-      <section aria-labelledby="mesh2d-texture-heading" className="flex flex-col gap-2">
-        <h3 id="mesh2d-texture-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Mesh Appearance</h3>
-        <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
-          Texture asset
-          <select aria-label="Texture asset" value={textureAssetId ?? ''} onChange={event => chooseTexture(event.target.value)}
-            className="min-h-9 rounded border border-gray-700 bg-gray-900 px-2 text-xs normal-case tracking-normal text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
-            <option value="">Solid fill</option>
-            {visualAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-gray-500">
-          Sampling
-          <select aria-label="Texture sampling" value={mesh.appearance?.sampling ?? 'linear'} onChange={event => chooseSampling(event.target.value as 'linear' | 'nearest')}
-            className="min-h-9 min-w-28 rounded border border-gray-700 bg-gray-900 px-2 text-xs normal-case tracking-normal text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
-            <option value="linear">Linear</option>
-            <option value="nearest">Nearest</option>
-          </select>
-        </label>
-        <div role={textureMissing ? 'alert' : 'status'} aria-live="polite"
-          className={`min-h-8 rounded border px-2 py-1.5 text-[10px] ${textureMissing ? 'border-red-800/60 bg-red-950/30 text-red-300' : 'border-gray-700 bg-gray-950/40 text-gray-400'}`}>
-          {textureMissing ? 'Texture asset is missing; renderer uses solid fill.' : textureAsset ? `Texture linked: ${textureAsset.name}` : 'Solid fill fallback active.'}
-        </div>
-      </section>
+      <Mesh2DTextureControls layer={layer} allAssets={allAssets} onLayerChange={onLayerChange} onDiagnostic={setError} />
 
       <section aria-labelledby="mesh2d-deformation-heading" className="flex flex-col gap-2">
         <h3 id="mesh2d-deformation-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Deformation Clip</h3>

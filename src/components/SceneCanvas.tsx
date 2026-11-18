@@ -88,6 +88,7 @@ import { selectionResize } from '@/lib/canvas/math/selectionResize'
 import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
 import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
 import type { ShortcutContext } from '@/lib/shortcuts'
+import { Mesh2DTextureOverlay } from './canvas/mesh2d/Mesh2DTextureOverlay'
 
 interface Props {
   scene: ChronoScene
@@ -143,12 +144,13 @@ interface Props {
    *    pan     → canvas drag mode (no gizmos)
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
+    | 'texture'
     | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
     | 'spline-draw' | 'shape-draw'
   /** BL-66 — Push a tool-mode change up to the page (e.g. double-clicking a
    *  path enters pen mode so the user can immediately edit it; cancelling
    *  path pick mode returns to 'select'). */
-  onToolModeChange?: (next: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor') => void
+  onToolModeChange?: (next: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor' | 'texture') => void
   /** BL-73 — Active spline primitive being drawn (null = not in draw mode). */
   splineDrawKind?: SplinePrimitiveKind | null
   /** BL-73 — When set, drawn splines append into this layer instead of a new one. */
@@ -1023,6 +1025,11 @@ export default function SceneCanvas({
     if (!selectedLayer || hideEditorUI) return null
     return resolveLayerWorldMatrix(selectedLayer, scene, timeMs, displayOverrides)
   }, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI])
+  const selectedMeshTexture = useMemo(() => {
+    if (rawSelectedLayer?.type !== 'mesh2d' || rawSelectedLayer.mesh2d?.appearance?.kind !== 'texture') return null
+    const assetId = rawSelectedLayer.mesh2d.appearance.textureAssetId
+    return assetId ? assets.get(assetId) ?? null : null
+  }, [rawSelectedLayer, assets])
   // Most playback frames have no selection/hover bounds consumer. Keep this
   // scope lazy instead of materializing/indexing every layer just to discard
   // the resolver. Visible rulers still need their selected extents in playback.
@@ -1065,7 +1072,7 @@ export default function SceneCanvas({
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
-    frame:     toolMode !== 'anchor' && toolMode !== 'pan' && toolMode !== 'pen',
+    frame:     toolMode !== 'anchor' && toolMode !== 'pan' && toolMode !== 'pen' && toolMode !== 'texture',
     resize:    toolMode === 'select' || toolMode === 'scale',
     cornerRot: toolMode === 'select',
     ring:      toolMode === 'rotate',
@@ -1338,7 +1345,7 @@ export default function SceneCanvas({
           {shapePlacement.draft && <ShapePlacementOutline bounds={boundsForFrame(shapePlacement.draft)}
             width={width} height={height} zoom={zoom} />}
 
-          {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
+          {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && toolMode !== 'texture' && containerRef.current && <OffArtboardOverlay
             scene={displayScene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
             cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
@@ -1375,7 +1382,7 @@ export default function SceneCanvas({
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
           {selectedLayer && !selectedLayer.hidden && (!selectedLayerIds || selectedLayerIds.has(selectedLayer.id))
-            && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && (
+            && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && toolMode !== 'texture' && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1402,6 +1409,12 @@ export default function SceneCanvas({
           )}
 
           {arrayAuthoring?.active && !hideEditorUI && <ArrayViewportOverlay authoring={arrayAuthoring} canvasRef={canvasRef} zoom={zoom} />}
+
+          {toolMode === 'texture' && rawSelectedLayer?.type === 'mesh2d' && selectedMeshTexture && selectedWorldMatrix
+            && !hideEditorUI && !arrayEditing && !motionEditing && !placingShape && (
+            <Mesh2DTextureOverlay layer={rawSelectedLayer} texture={selectedMeshTexture}
+              worldMatrix={selectedWorldMatrix} zoom={zoom} canvasRef={canvasRef} editor={editor} />
+          )}
 
           {/* BL-66 / BL-67 — Dashed editor overlay for motion-role path layers
               (hidden in CanvasRenderer) + clickable pick targets when the user

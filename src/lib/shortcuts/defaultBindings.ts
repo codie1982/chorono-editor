@@ -15,6 +15,7 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.tool.rotate',           label: 'Rotate Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'r' } },
   { id: 'canvas.tool.scale',            label: 'Scale Tool',         contexts: ['canvas'], binding: { type: 'keyboard', key: 's' } },
   { id: 'canvas.tool.anchor',           label: 'Anchor Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'a' } },
+  { id: 'canvas.tool.texture',          label: 'Texture Tool',       contexts: ['canvas'], binding: { type: 'keyboard', key: 't' } },
   { id: 'canvas.tool.box-select',       label: 'Box Select',         contexts: ['canvas'], binding: { type: 'keyboard', key: 'b' } },
   { id: 'canvas.tool.lasso-select',     label: 'Lasso Select',       contexts: ['canvas'], binding: { type: 'keyboard', key: 'l' } },
   { id: 'canvas.tool.circle-select',    label: 'Circle Select',      contexts: ['canvas'], binding: { type: 'keyboard', key: 'o' } },

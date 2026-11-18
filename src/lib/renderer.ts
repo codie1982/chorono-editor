@@ -22,6 +22,7 @@ import { measureTextLayout } from './text/measureText'
 import { buildShapePath, computeShapeLength } from './render/shapeRenderer'
 import { buildGradient } from './render/buildGradient'
 import { resolveRenderColor, materializeRenderScene } from './render/materializeOverrides'
+import { resolveFitRect } from './render/media/resolveFitRect'
 import { videoForLayer } from './asset/visual/AssetElementMap'
 import type { AssetElementMap } from './asset/visual/AssetElementMap'
 
@@ -434,24 +435,9 @@ function drawFitted(
   const srcW = el instanceof HTMLImageElement ? el.naturalWidth  : el.videoWidth
   const srcH = el instanceof HTMLImageElement ? el.naturalHeight : el.videoHeight
   if (srcW === 0 || srcH === 0 || w === 0 || h === 0) return
-
-  if (fit === 'fill') {
-    ctx.drawImage(el, 0, 0, w, h)
-    return
-  }
-  if (fit === 'none') {
-    ctx.drawImage(el, 0, 0, srcW, srcH)
-    return
-  }
-
-  // contain / cover share aspect-fit math
-  const scale = fit === 'cover'
-    ? Math.max(w / srcW, h / srcH)
-    : Math.min(w / srcW, h / srcH)
-  const dw = srcW * scale
-  const dh = srcH * scale
-  const dx = (w - dw) / 2
-  const dy = (h - dh) / 2
+  const rect = resolveFitRect(fit, w, h, srcW, srcH, fit === 'none' ? 0 : 0.5, fit === 'none' ? 0 : 0.5)
+  if (!rect) return
+  const { dx, dy, dw, dh } = rect
 
   if (fit === 'cover') {
     // Clip to box so overflow is hidden

@@ -98,6 +98,33 @@ export interface Mesh2DGeometry {
   readonly topology: Mesh2DTopology
 }
 
+/** Ways a texture's source rectangle can be fitted into Mesh2D local bounds. */
+export type Mesh2DTextureFit = 'stretch' | 'contain' | 'cover' | 'fitX' | 'fitY' | 'original'
+
+/**
+ * Portable, topology-independent placement of a Mesh2D texture.
+ *
+ * Offsets use layer-local composition pixels. Scale is dimensionless and must
+ * stay positive; reflections are represented by the explicit flip flags so
+ * scale handles and serialization have one unambiguous meaning. Rotation is
+ * clockwise in Chorono's x-right/y-down screen convention. The pivot is stored
+ * in normalized source-image coordinates and therefore survives asset-size and
+ * mesh-resolution changes.
+ */
+export interface Mesh2DTextureTransform {
+  readonly schemaVersion: 1
+  readonly fit: Mesh2DTextureFit
+  readonly offsetX: number
+  readonly offsetY: number
+  readonly scaleX: number
+  readonly scaleY: number
+  readonly rotationDeg: number
+  readonly pivotU: number
+  readonly pivotV: number
+  readonly flipX: boolean
+  readonly flipY: boolean
+}
+
 /**
  * Portable appearance reference for one fixed-topology mesh.
  *
@@ -112,6 +139,8 @@ export interface Mesh2DAppearance {
   readonly kind: 'solid' | 'texture'
   readonly textureAssetId?: string
   readonly sampling: 'linear' | 'nearest'
+  /** Missing on legacy scenes; absence is exactly the historical stretch fit. */
+  readonly textureTransform?: Mesh2DTextureTransform
 }
 
 /**

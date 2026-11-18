@@ -1,5 +1,11 @@
 import type { Layer } from '@/lib/types'
-import type { Mesh2DAppearance, Mesh2DDeformationBinding, Mesh2DPinSelection } from '@/lib/types/mesh2d'
+import type {
+  Mesh2DAppearance,
+  Mesh2DDeformationBinding,
+  Mesh2DPinSelection,
+  Mesh2DTextureTransform,
+} from '@/lib/types/mesh2d'
+import { resolveMesh2DTextureTransform } from './Mesh2DTextureMapping'
 
 export type Mesh2DPinPreset = 'topEdge' | 'corners' | 'boundary'
 
@@ -16,9 +22,43 @@ export function setMesh2DTexture(
   sampling: Mesh2DAppearance['sampling'] = layer.mesh2d?.appearance?.sampling ?? 'linear',
 ): Layer {
   if (layer.type !== 'mesh2d' || !layer.mesh2d) throw new Error('Expected a Mesh2D layer')
+  const textureTransform = layer.mesh2d.appearance?.textureTransform
   const appearance: Mesh2DAppearance = textureAssetId
-    ? { schemaVersion: 1, kind: 'texture', textureAssetId, sampling }
-    : { schemaVersion: 1, kind: 'solid', sampling }
+    ? { schemaVersion: 1, kind: 'texture', textureAssetId, sampling, ...(textureTransform ? { textureTransform } : {}) }
+    : { schemaVersion: 1, kind: 'solid', sampling, ...(textureTransform ? { textureTransform } : {}) }
+  return { ...layer, mesh2d: { ...layer.mesh2d, appearance } }
+}
+
+/**
+ * Updates only portable texture placement while preserving geometry/topology.
+ *
+ * The patch is merged over the resolved legacy default and validated before a
+ * new layer snapshot is returned. It may be prepared while solid fill is
+ * active; selecting a texture later reuses the saved placement.
+ */
+export function setMesh2DTextureTransform(
+  layer: Layer,
+  patch: Partial<Omit<Mesh2DTextureTransform, 'schemaVersion'>>,
+): Layer {
+  if (layer.type !== 'mesh2d' || !layer.mesh2d) throw new Error('Expected a Mesh2D layer')
+  const previous = resolveMesh2DTextureTransform(layer.mesh2d.appearance?.textureTransform)
+  const textureTransform = resolveMesh2DTextureTransform({ ...previous, ...patch, schemaVersion: 1 })
+  const appearance: Mesh2DAppearance = {
+    schemaVersion: 1,
+    kind: layer.mesh2d.appearance?.kind ?? 'solid',
+    textureAssetId: layer.mesh2d.appearance?.textureAssetId,
+    sampling: layer.mesh2d.appearance?.sampling ?? 'linear',
+    textureTransform,
+  }
+  return { ...layer, mesh2d: { ...layer.mesh2d, appearance } }
+}
+
+/** Restores the implicit legacy stretch placement without changing the asset. */
+export function resetMesh2DTextureTransform(layer: Layer): Layer {
+  if (layer.type !== 'mesh2d' || !layer.mesh2d) throw new Error('Expected a Mesh2D layer')
+  const previous = layer.mesh2d.appearance
+  if (!previous) return layer
+  const { textureTransform: _textureTransform, ...appearance } = previous
   return { ...layer, mesh2d: { ...layer.mesh2d, appearance } }
 }
 

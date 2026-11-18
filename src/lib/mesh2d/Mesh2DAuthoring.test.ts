@@ -6,6 +6,8 @@ import {
   setMesh2DDeformation,
   setMesh2DPins,
   setMesh2DTexture,
+  setMesh2DTextureTransform,
+  resetMesh2DTextureTransform,
 } from './Mesh2DAuthoring'
 
 describe('Mesh2D authoring', () => {
@@ -20,6 +22,20 @@ describe('Mesh2D authoring', () => {
     })
     expect(textured.mesh2d?.geometry).toBe(layer.mesh2d?.geometry)
     expect(setMesh2DTexture(textured, null).mesh2d?.appearance?.kind).toBe('solid')
+  })
+
+  it('edits portable texture placement without mutating mesh geometry', () => {
+    const layer = setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric')
+    const transformed = setMesh2DTextureTransform(layer, {
+      fit: 'cover', offsetX: 12, scaleX: 1.5, rotationDeg: 15,
+    })
+    expect(transformed.mesh2d?.appearance?.textureTransform).toMatchObject({
+      schemaVersion: 1, fit: 'cover', offsetX: 12, scaleX: 1.5, rotationDeg: 15,
+    })
+    expect(transformed.mesh2d?.geometry).toBe(layer.mesh2d?.geometry)
+    const relinked = setMesh2DTexture(setMesh2DTexture(transformed, null), 'other')
+    expect(relinked.mesh2d?.appearance?.textureTransform).toEqual(transformed.mesh2d?.appearance?.textureTransform)
+    expect(resetMesh2DTextureTransform(relinked).mesh2d?.appearance?.textureTransform).toBeUndefined()
   })
 
   it('stores only a small deformation asset playback binding on the layer', () => {

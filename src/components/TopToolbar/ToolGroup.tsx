@@ -4,6 +4,8 @@ import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 export type ToolMode =
   | 'select' | 'pan' | 'pen'
   | 'move' | 'rotate' | 'scale' | 'anchor'
+  /** Mesh2D texture placement handles; does not transform the layer itself. */
+  | 'texture'
   // BL-60 Faz 3 — Canvas selection tools (drag a shape, select layers inside)
   | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
   // BL-73 — Spline drawing (drag-to-create / multi-click line)
@@ -45,7 +47,10 @@ interface ToolBtnProps {
 function ToolBtn({ active, hint, shortcut, onClick, children }: ToolBtnProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-label={`${hint} tool`}
+      aria-pressed={active}
       title={`${hint} (${shortcut})`}
       className={`w-9 h-9 flex items-center justify-center rounded transition-colors text-base
         ${active
@@ -112,6 +117,13 @@ export default function ToolGroup({
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="3" />
           <path d="M8 1 L8 4 M8 12 L8 15 M1 8 L4 8 M12 8 L15 8" strokeLinecap="round" />
+        </svg>
+      </ToolBtn>
+      <ToolBtn active={mode === 'texture'} hint="Texture" shortcut="T" onClick={() => onChange('texture')}>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2.5 2.5 H13.5 V13.5 H2.5 Z" />
+          <path d="M2.5 10 L6 6.5 L8.5 9 L10 7.5 L13.5 11" />
+          <circle cx="10.8" cy="5.2" r="1.2" />
         </svg>
       </ToolBtn>
 

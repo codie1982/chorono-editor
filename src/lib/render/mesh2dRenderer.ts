@@ -1,7 +1,12 @@
 import { getLayerValue, type OverrideMap } from '@/lib/evaluator'
 import { computeMesh2DLocalBounds } from '@/lib/geometry/mesh2d'
+import {
+  mesh2DTextureSourceDimensions,
+  resolveMesh2DTexturePlacement,
+  type Mesh2DTexturePlacement,
+} from '@/lib/mesh2d/Mesh2DTextureMapping'
 import type { Layer } from '@/lib/types'
-import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
+import type { Mesh2DGeometry, Mesh2DTextureTransform } from '@/lib/types/mesh2d'
 import { buildGradient } from './buildGradient'
 import { resolveRenderColor } from './materializeOverrides'
 
@@ -31,7 +36,9 @@ export function drawMesh2DLayer(
   if (appearance?.kind === 'texture' && texture) {
     ctx.save()
     ctx.globalAlpha *= Math.max(0, Math.min(100, opacity)) / 100
-    const textured = drawTexturedTriangles(ctx, geometry, triangles, texture, appearance.sampling)
+    const textured = drawTexturedTriangles(
+      ctx, geometry, triangles, texture, appearance.sampling, appearance.textureTransform,
+    )
     ctx.restore()
     if (textured) return
   }
@@ -151,10 +158,18 @@ function drawTexturedTriangles(
   triangles: readonly MeshTriangle[],
   texture: CanvasImageSource,
   sampling: 'linear' | 'nearest',
+  textureTransform?: Mesh2DTextureTransform,
 ): boolean {
-  const dimensions = sourceDimensions(texture)
+  const dimensions = mesh2DTextureSourceDimensions(texture)
   if (!dimensions) return false
-  const transforms = triangles.map(triangle => textureTransform(geometry, triangle, dimensions.width, dimensions.height))
+  let placement: Mesh2DTexturePlacement | null
+  try {
+    placement = resolveMesh2DTexturePlacement(geometry, dimensions.width, dimensions.height, textureTransform)
+  } catch {
+    return false
+  }
+  if (!placement) return false
+  const transforms = triangles.map(triangle => triangleTextureTransform(geometry, triangle, placement))
   if (transforms.some(transform => transform === null)) return false
   ctx.imageSmoothingEnabled = sampling === 'linear'
   triangles.forEach((triangle, index) => {
@@ -169,25 +184,20 @@ function drawTexturedTriangles(
   return true
 }
 
-function sourceDimensions(source: CanvasImageSource): { width: number; height: number } | null {
-  const candidate = source as CanvasImageSource & { naturalWidth?: number; naturalHeight?: number; videoWidth?: number; videoHeight?: number; width?: number; height?: number }
-  const width = candidate.naturalWidth ?? candidate.videoWidth ?? candidate.width ?? 0
-  const height = candidate.naturalHeight ?? candidate.videoHeight ?? candidate.height ?? 0
-  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : null
-}
-
-function textureTransform(
+function triangleTextureTransform(
   geometry: Mesh2DGeometry,
   triangle: MeshTriangle,
-  width: number,
-  height: number,
+  placement: Mesh2DTexturePlacement,
 ): { a: number; b: number; c: number; d: number; e: number; f: number } | null {
   const [i0, i1, i2] = triangle.indices
-  const source = [
-    geometry.uvs[i0 * 2] * width, geometry.uvs[i0 * 2 + 1] * height,
-    geometry.uvs[i1 * 2] * width, geometry.uvs[i1 * 2 + 1] * height,
-    geometry.uvs[i2 * 2] * width, geometry.uvs[i2 * 2 + 1] * height,
-  ]
+  const source = [i0, i1, i2].flatMap(index => {
+    const local = {
+      x: placement.bounds.x + geometry.uvs[index * 2] * placement.bounds.width,
+      y: placement.bounds.y + geometry.uvs[index * 2 + 1] * placement.bounds.height,
+    }
+    const point = placement.localToSource.applyToPoint(local)
+    return [point.x, point.y]
+  })
   if (!source.every(Number.isFinite)) return null
   const [sx0, sy0, sx1, sy1, sx2, sy2] = source
   const [dx0, dy0, dx1, dy1, dx2, dy2] = triangle.positions
