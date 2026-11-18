@@ -77,6 +77,14 @@ export type {
 } from './media'
 
 export type {
+  Mesh2DGridDiagonal,
+  StructuredGridMesh2DSource,
+  Mesh2DTopology,
+  Mesh2DGeometry,
+  Mesh2DData,
+} from './mesh2d'
+
+export type {
   LayerEffects,
   MotionPath,
   PluginEffect,
