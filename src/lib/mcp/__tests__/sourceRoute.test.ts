@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 import { POST } from '@/app/api/mcp/route'
 import { fakeEditor } from './support/fakeEditor'
 import { MCP_VERSION } from '../protocol'
+import { emptyScene, newRectLayer } from '../../defaults'
 
 vi.mock('../storage', () => ({
   getLocalToken: async () => 'a'.repeat(64), tokenEquals: (a: string, b: string) => a === b,
@@ -16,6 +17,24 @@ const post = (body: unknown, connection?: string) => POST(new NextRequest('http:
 }))
 
 describe('source access at the authenticated HTTP boundary', () => {
+  it('serializes selected identity metadata alongside unchanged source and read authorization', async () => {
+    vi.stubEnv('CHORONO_MCP_ENABLED', '1')
+    const editor = fakeEditor(), scene = emptyScene()
+    try {
+      scene.layers = [{ ...newRectLayer(), id: 'selected', name: 'Selected rectangle' }]
+      editor.replaceDocument(scene)
+      editor.setLayerSelection(['selected'])
+      const response = await post({ op: 'call', name: 'get_scene', arguments: { sessionId: editor.paired.id } }, editor.connectionToken)
+      expect(response.status).toBe(200)
+      const { result } = await response.json()
+      expect(result.selected).toMatchObject({ primaryLayerId: 'selected', layerIds: ['selected'],
+        layers: [{ address: ['layer', 'selected'], name: 'Selected rectangle', parentId: null }] })
+      expect(result.scene).toEqual(scene)
+      expect(result.readToken).toMatch(/^[a-f0-9]{64}$/)
+      expect(editor.historyLength()).toBe(0)
+    } finally { await editor.close() }
+  })
+
   it('keeps credentials in the connection header and rejects display-name impersonation', async () => {
     vi.stubEnv('CHORONO_MCP_ENABLED', '1')
     const editor = fakeEditor(), connections: string[] = []

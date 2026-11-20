@@ -23,7 +23,7 @@ describe('agent handoff prompt', () => {
   })
 
   it('requires a fresh MCP focus read and visual evidence for every question type', () => {
-    for (const intent of ['explain', 'diagnose', 'suggest', 'edit', 'ask'] as const) {
+    for (const intent of ['context', 'explain', 'diagnose', 'suggest', 'edit', 'ask'] as const) {
       const prompt = buildAgentHandoffPrompt(context, intent, 'What changed?', 'handoff-1')
       expect(prompt).toContain('Before any scene-specific answer')
       expect(prompt).toContain('call get_scene again')
@@ -37,5 +37,12 @@ describe('agent handoff prompt', () => {
     expect(() => buildAgentHandoffPrompt(context, 'explain', '', '')).toThrow('Missing MCP handoff ID')
     expect(buildAgentHandoffPrompt(context, 'edit', 'Move it left', 'handoff-1')).toContain('Move it left')
     expect(buildAgentHandoffPrompt(context, 'ask', 'Why is it hidden?', 'handoff-1')).toContain('Do not change the scene')
+  })
+
+  it('copies selection context without granting an edit or requiring a question', () => {
+    const prompt = buildAgentHandoffPrompt(context, 'context', '', 'handoff-1')
+    expect(prompt).toContain('wait for my instruction')
+    expect(prompt).toContain('Do not change the scene')
+    expect(prompt).toContain('get_handoff_context with sessionId')
   })
 })

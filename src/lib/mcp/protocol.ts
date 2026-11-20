@@ -7,12 +7,15 @@ import { assertAuthoringData } from '../editor/authoring/AuthoringValidation'
 import type { SourceAuthorization } from './source/EditorSourceIdentity'
 import { assertScenePropertyExpressions } from '../expression/properties/PropertyExpression'
 import { assertNumericInputExpressions } from '../editor/inputExpressions/NumericInputExpression'
+import type { SceneSelection } from './selection/SceneSelection'
 
 export const MCP_VERSION = '2.1.0'
 export const LIMITS = { layers: CLONE_WORKLOAD_LIMITS.layers, timelines: 100, keyframes: CLONE_WORKLOAD_LIMITS.keyframes, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
 export type JsonObject = Record<string, any>
 export interface BridgeJob { id: string; method: string; args: JsonObject; sourceAuthorization?: SourceAuthorization }
-export interface Snapshot { scene: ChronoScene; revision: number; documentEpoch: string; transactionActive: boolean; selectedTimelineId?: string; currentTimeMs?: number }
+/** Source and read-time editor context. Older browser bridges may omit selected;
+ * null means selection is unavailable, while empty arrays mean no selection. */
+export interface Snapshot { scene: ChronoScene; revision: number; documentEpoch: string; transactionActive: boolean; selectedTimelineId?: string; currentTimeMs?: number; selected?: SceneSelection | null }
 export interface ToolDefinition { name: string; description: string; inputSchema: JsonObject; annotations?: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } }
 
 export function assertJson(value: unknown): void {

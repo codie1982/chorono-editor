@@ -71,6 +71,8 @@ interface Props {
   contextHandlers?: Partial<SceneExplorerMenuHandlers>
   /** Copy a focused MCP task prompt from a scene row. */
   onAgentHandoff?: (request: AgentHandoffRequest) => void
+  /** Open the shared Claude/Codex/other MCP client connection dialog. */
+  onAgentConnections?: () => void
   /** BL-53 — called when the bulk toolbar's ✕ button is pressed. */
   onClearSelection?: () => void
 
@@ -93,7 +95,7 @@ export default function SceneExplorerPanel({
   layers, timeline, selectedId, selectedIds,
   onSelect, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
-  contextHandlers, onClearSelection, onAgentHandoff,
+  contextHandlers, onClearSelection, onAgentHandoff, onAgentConnections,
   isLayerAnimated, doesLayerHaveEffects,
   onFreezeSelection, onUnfreezeSelection, onSetSubtreeFlag,
 }: Props) {
@@ -688,7 +690,7 @@ export default function SceneExplorerPanel({
             y={menuState.y}
             onClose={() => setMenuState(null)}
             items={[
-              ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: ids }, onAgentHandoff), { kind: 'separator' as const }] : []),
+              ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: ids }, onAgentHandoff, onAgentConnections), { kind: 'separator' as const }] : []),
               ...buildSceneExplorerMenu({ target, selectionIds: ids, allLayers: layers, handlers }),
             ]}
           />

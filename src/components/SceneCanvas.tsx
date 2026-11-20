@@ -102,6 +102,8 @@ interface Props {
   selectedLayerIds?: Set<string>
   /** Copy a focused MCP task prompt from a canvas right-click. */
   onAgentHandoff?: (request: AgentHandoffRequest) => void
+  /** Open the shared Claude/Codex/other MCP client connection dialog. */
+  onAgentConnections?: () => void
   assets: AssetElementMap
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   /** Replace selection atomically with every new forest root after drag-copy. */
@@ -260,7 +262,7 @@ const PADDING   = 24
 const NO_MOTION_KEYS: ReadonlySet<string> = new Set()
 
 export default function SceneCanvas({
-  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers, onAgentHandoff,
+  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers, onAgentHandoff, onAgentConnections,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
@@ -1847,7 +1849,7 @@ export default function SceneCanvas({
         if (onAgentHandoff) items.unshift(agentHandoffMenu({
           layerIds: selectedLayerIds?.has(target.id) ? Array.from(selectedLayerIds) : [target.id],
           ...(ctxPointRef.current ? { point: ctxPointRef.current } : {}),
-        }, onAgentHandoff), { kind: 'separator' })
+        }, onAgentHandoff, onAgentConnections), { kind: 'separator' })
         return (
           <ContextMenu
             x={ctxMenu.state!.x}

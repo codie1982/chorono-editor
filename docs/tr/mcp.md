@@ -42,7 +42,11 @@ Claude Code için üretilen JSON'u proje `.mcp.json` dosyanıza birleştirin vey
 
 Tuvaldeki katmana, Katmanlar panelindeki satıra veya Sahne Gezgini satırına
 sağ tıklayın. MCP bağlı değilse seçenek yine görünür; seçildiğinde bağlantı
-uyarısı verir. **Send to Agent** alt menüsü
+uyarısı verir. **Agent** alt menüsündeki **Copy selection context** seçili
+nesneleri sonraki soru veya düzenleme için odak metni olarak kopyalar.
+**Agent → Agent connections…**, üst araç çubuğundaki MCP düğmesiyle aynı
+bağlantı penceresini açar. Claude Code, Claude Desktop, Codex ve diğer MCP
+istemcileri aynı editör bağlantısını kullanır. Aktarım seçenekleri
 açıklama, sorun bulma, iyileştirme önerisi, düzenleme isteği ve özel soru
 seçenekleri sunar. Seçenekler ajan sohbetine yapıştırılacak bir görev metni
 kopyalar; doğrudan sohbet başlatmaz. Düzenleme ve özel soru seçenekleri önce
@@ -57,6 +61,69 @@ vermez: her değişiklik öncesinde ayrıca `get_scene` okunur. Ajan gerçek
 Kod ve loglar tek başına görsel doğruluğu kanıtlamaz. MCP kaynak yazmaları için
 güncel okuma teknik olarak zorunludur; salt okunur yanıtta bu akışa uyma
 sorumluluğu ajandadır.
+
+### MCP sahne yanıtında güncel seçim
+
+`get_scene`, tam kaynak ve revizyonun yanında üst düzey `selected` alanını
+döndürür. Seçim, kaydedilen `scene` verisine veya undo geçmişine eklenmez.
+
+```json
+{
+  "selected": {
+    "primaryLayerId": "hero-title",
+    "layerIds": ["hero-title"],
+    "layers": [{
+      "id": "hero-title",
+      "name": "Başlık",
+      "type": "text",
+      "address": ["layer", "hero-title"],
+      "parentId": "intro-group"
+    }]
+  }
+}
+```
+
+Tam özellikler aynı yanıttaki `scene.layers` içinde kimlikle bulunur.
+`address`, mevcut kaynak kimliği tuple sözleşmesidir; değişebilen dizi indisi
+değildir. Listeler seçim ekleme sırasını korur. Silinmiş kimlikler elenir;
+birincil nesne silinmişse kalan ilk seçili nesne birincil olur. Boş seçimde
+`primaryLayerId:null`, `layerIds:[]`, `layers:[]` döner. Seçim sağlayamayan
+gömülü host `selected:null` döndürür; eski tarayıcı köprüleri alanı atlayabilir.
+
+Veri akışı: `src/app/page.tsx` mevcut `LayerSelection` kaydını MCP hostuna
+salt okunur getter ile verir. `src/lib/mcp/selection/SceneSelection.ts`,
+`retainLayerSelection` politikasını yeniden kullanarak kimlik özetini üretir.
+Editör snapshot'ı kaynak ve seçimi asenkron çıktı hazırlığından önce yakalar;
+broker mevcut revizyon/readToken sözleşmesiyle bu zarfı iletir. Ek abonelik,
+kalıcı önbellek veya yeni araç yoktur.
+
+“Bunu büyüt” veya “seçili nesne neden görünmüyor?” isteklerinde ajan önce güncel
+`get_scene` okur ve seçili kimliği çözer. Açık nesne hedefi ve
+`get_handoff_context.focus` ile sabitlenmiş hedef önceliklidir. Seçim kaynak
+revizyonunu artırmadan değişebilir; ajan devam eden işi sonradan seçilen başka
+nesneye kendiliğinden yönlendirmez. Animasyonun o anki değerleri için
+`evaluate_frame`, görsel kanıt için `render_preview` gerekir. Seçim metadatası
+kaynak yazma yetkisi vermez.
+
+Otomatik regresyonlar `selectionContext.test.ts`, `sourceRoute.test.ts`,
+`agentHandoff/menu.test.ts` ve `agentHandoff/prompt.test.ts` içindedir.
+Elle kabul: tek nesne ve Shift ile çoklu seçimde `get_scene.selected` kimliklerini
+doğrulayın; seçimi temizleyip boş listeleri kontrol edin; seçim değişirken
+revizyonun aynı kaldığını doğrulayın. Tuval, Katmanlar ve Sahne Gezgini sağ tık
+menülerinde **Agent** seçeneklerini, bağlam kopyalamayı, soru/düzenleme diyaloğunu
+ve aynı bağlantı penceresinin açıldığını kontrol edin. Bağlantısız editörde
+aktarım uyarısı görünmeli ve bağlantı penceresi erişilebilir kalmalıdır.
+**Agent** satırını Enter ile açıp imleci menüden uzak tutun; klavye odağı
+menüdeyken alt menü kapanmamalı, Tab ile aktarım seçeneklerine ulaşılmalıdır.
+
+Gerçek STDIO/HTTP/tarayıcı kontrolü için izole test editörünü bağlayıp
+`node scripts/mcp-selection-context-check.mjs --expected demo_card --output artifacts/selection-single.json`
+çalıştırın. UI'da seçimi değiştirdikten sonra `--previous artifacts/selection-single.json`
+ile yeniden çağırmak belge, kaynak özeti ve revizyonun aynı kaldığını doğrular.
+`--expected ""` boş seçimi denetler. Port için `--origin`, birden fazla
+editörde `--session` kullanın. Kopyalanan aktarımı `--handoff <id> --focus <id-listesi>`
+ile okuyarak canlı seçimden bağımsız kaldığını kontrol edebilirsiniz. Rapor
+readToken veya bağlantı kimlik bilgilerini kaydetmez; araç yalnız okuma yapar.
 
 ## Araç kapsamı
 
