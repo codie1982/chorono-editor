@@ -2,6 +2,9 @@
  * indexed paths intact; UI grouping must never manufacture a new URL. Fragment
  * entries point at stable task headings in the corresponding guide. */
 export const documentationPages = {
+  'ai/mcp#open-agent-connections': 'Agent connections',
+  'ai/edit-selection#use-the-agent-menu': 'Selection & agent menu',
+  'ai/edit-selection#edit-or-ask-about-the-selection': 'Edit or ask about the selection',
   'editor/projects': 'Projects & saving',
   'editor/canvas': 'Canvas',
   'editor/canvas/tools': 'Drawing & transform tools',
