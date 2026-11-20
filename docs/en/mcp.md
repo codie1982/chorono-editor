@@ -13,8 +13,18 @@ instructions are [skills/chorono](../../skills/chorono/SKILL.md).
 
 ## Copy focused context from the editor
 
+`get_scene.selected` reports the current primary and selected layer IDs with
+name/type/stable address/parent metadata. Full properties remain in
+`scene.layers`. Selection is ephemeral and may change without a scene revision
+change; explicit targets and captured handoff focus take precedence. See the
+[selection contract](mcp-tool-contracts.md#results-and-files).
+
 Right-click a canvas layer, a Layers row, or a Scene Explorer row and choose
-**Send to Agent**. The menu remains available when MCP is disconnected and
+**Agent**. Copy selection context prepares a focus-only prompt; the other
+transfer actions support explanation, diagnosis, suggestions, edits and questions.
+**Agent → Agent connections…** opens the existing shared MCP connection dialog
+for Claude Code, Claude Desktop, Codex and other compatible clients.
+The menu remains available when MCP is disconnected and
 shows a connection warning if selected. The submenu copies a
 task prompt for explanation, diagnosis, suggestions, an edit request or a custom
 question. Edit and custom-question actions first ask for short text. Paste the

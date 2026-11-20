@@ -1,6 +1,6 @@
 import type { ChronoScene } from '@/lib/types'
 
-export type AgentHandoffIntent = 'explain' | 'diagnose' | 'suggest' | 'edit' | 'ask'
+export type AgentHandoffIntent = 'context' | 'explain' | 'diagnose' | 'suggest' | 'edit' | 'ask'
 
 export interface AgentHandoffTarget {
   layerIds: readonly string[]
@@ -59,6 +59,7 @@ export function buildAgentHandoffPrompt(context: AgentHandoffContext, intent: Ag
   if (!handoffId) throw new Error('Missing MCP handoff ID.')
   if ((intent === 'edit' || intent === 'ask') && !detail) throw new Error('Enter a question or change request.')
   const task: Record<AgentHandoffIntent, string> = {
+    context: 'Read this focused selection as context for my next question or edit request. Identify the focused layer(s) and wait for my instruction. Do not change the scene.',
     explain: 'Explain how the focused layer(s) are built and animated at this time. Do not change the scene.',
     diagnose: 'Investigate visual or animation problems at this focus. Explain the likely cause and evidence. Do not change the scene.',
     suggest: 'Suggest concrete visual or animation improvements for this focus. Do not change the scene.',

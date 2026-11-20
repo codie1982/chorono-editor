@@ -9,12 +9,14 @@ import { emptyScene } from '../../../defaults'
 import type { ChronoScene } from '../../../types'
 import { getCallableTool } from '../../catalog'
 import type { BridgeJob } from '../../protocol'
+import { createLayerSelection } from '../../../selection/layerSelection'
 
 /** Real broker/browser-dispatch harness over a tiny in-memory editor. Existing
  * behavior tests use call() to acquire fresh authority automatically; access
  * tests use rawCall() explicitly so missing/stale reads cannot be hidden. */
 export function fakeEditor(label = 'MCP tester') {
   let scene = emptyScene(), revision = 0, transactionActive = false
+  let selection = createLayerSelection([])
   const history: ChronoScene[] = [], future: ChronoScene[] = [], document = new EditorDocumentLifetime()
   const host = { editor: {
     getScene: () => scene, getRevision: () => revision, getDocumentSignal: () => document.signal,
@@ -22,7 +24,7 @@ export function fakeEditor(label = 'MCP tester') {
     dispatchCommand: (command: any) => { const next = executeAuthoredCommand(command, scene); history.push(scene); scene = next; revision++; future.length = 0 },
     undo: () => { if (history.length) { future.push(scene); scene = history.pop()!; revision++ } },
     redo: () => { if (future.length) { history.push(scene); scene = future.pop()!; revision++ } },
-  }, assets: new Map(), selectedTimelineId: '', currentTimeMs: 0, selectTimeline: () => {}, seek: () => {}, playToggle: () => {}, setSpeed: () => {} } as unknown as MCPHost
+  }, assets: new Map(), selectedTimelineId: '', currentTimeMs: 0, getLayerSelection: () => selection, selectTimeline: () => {}, seek: () => {}, playToggle: () => {}, setSpeed: () => {} } as unknown as MCPHost
   const paired = pairEditor('Test editor'), controller = new AbortController(), tokens: string[] = []
   /** Independent authenticated identity, even when labels are identical. */
   const createClient = (name = label) => {
@@ -55,6 +57,7 @@ export function fakeEditor(label = 'MCP tester') {
       return client.rawCall(name, { ...access, ...args })
     },
     setTransactionActive: (active: boolean) => { transactionActive = active },
+    setLayerSelection: (ids: Iterable<string>, primaryId: string | null = null) => { selection = createLayerSelection(ids, primaryId) },
     interceptJobs: (callback?: (job: BridgeJob) => void) => { beforeJob = callback },
     replaceDocument: (next: ChronoScene, nextRevision = 0) => { scene = next; revision = nextRevision; document.replace(); history.length = 0; future.length = 0 },
     historyLength: () => history.length,

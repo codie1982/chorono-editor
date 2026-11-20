@@ -62,6 +62,8 @@ interface Props {
   onDuplicate?: (layerId: string) => void
   /** Copy a focused MCP task prompt from a layer row. */
   onAgentHandoff?: (request: AgentHandoffRequest) => void
+  /** Open the shared Claude/Codex/other MCP client connection dialog. */
+  onAgentConnections?: () => void
 }
 
 type DropZone = 'before' | 'after' | 'into'
@@ -72,7 +74,7 @@ export default function LayerPanel({
   onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
   onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
-  timelineLayerIds, onToggleInTimeline, onDuplicate, onAgentHandoff,
+  timelineLayerIds, onToggleInTimeline, onDuplicate, onAgentHandoff, onAgentConnections,
   onShowInTimeline, onIsolateSelection, onExitIsolation, isolationActive = false,
 }: Props) {
   // ── Right-click context menu — layer rows ────────────────────────────────
@@ -590,7 +592,7 @@ export default function LayerPanel({
             shortcut: '⌘D', disabled: !onDuplicate,
             onSelect: () => { onDuplicate?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
           },
-          ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id] }, onAgentHandoff)] : []),
+          ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id] }, onAgentHandoff, onAgentConnections)] : []),
           { kind: 'separator' as const },
           {
             kind: 'action' as const, label: 'Delete',

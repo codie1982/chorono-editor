@@ -7,7 +7,7 @@ import type { ChronoScene } from '../types'
 import { actionRegistry } from '../ai/ActionRegistry'
 import { bootstrapMCPActions } from './actions'
 import { validateToolCall } from './catalog'
-import { assertCloneBudget, assertScene, LIMITS, summarize, type BridgeJob, type JsonObject } from './protocol'
+import { assertCloneBudget, assertScene, LIMITS, summarize, type BridgeJob, type JsonObject, type Snapshot } from './protocol'
 import { ChronoPlayer } from '../player/ChronoPlayer'
 import type { OverrideMap } from '../evaluator'
 import type { ParamValueMap } from '../runtime/paramResolver'
@@ -31,6 +31,8 @@ import {SourceAccessError} from './source/SourceAccessError'
 import {summarizeSourceChanges} from './source/SourceChangeSummary'
 import {nativeToolArguments} from './source/NativeArguments'
 import type { AgentHandoffContext } from '../agentHandoff/prompt'
+import type { LayerSelection } from '../selection/layerSelection'
+import { captureSceneSelection } from './selection/SceneSelection'
 
 export interface MCPHost {
   editor: EditorStateReturn
@@ -50,6 +52,9 @@ export interface MCPHost {
   dispatchEvent: (event: string, machineId?: string) => void
   getAudioState?: () => unknown
   getAgentHandoff?: (id: string) => AgentHandoffContext | undefined
+  /** Borrow the current UI selection synchronously. Omit for embedded hosts
+   * without selection support; their snapshot reports selected:null. */
+  getLayerSelection?: () => LayerSelection
 }
 
 /** Legacy raw portable-scene handoff; construction is bounded, returned source
@@ -84,6 +89,8 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
   const before = editor.getScene()
   const revision = editor.getRevision(), documentEpoch = editorDocumentEpoch(editor)
   const transactionActive = editor.isTransactionActive()
+  const readsSnapshot = method === 'snapshot' || method === 'get_handoff_context' || method === 'portable_snapshot'
+  const selected = readsSnapshot ? captureSceneSelection(before, host.getLayerSelection?.()) : null
   const ensureWritable = () => {
     if (signal?.aborted) throw new Error('MCP connection closed; operation cancelled')
     assertEditorSourceAuthorization(job.sourceAuthorization, { documentEpoch: editorDocumentEpoch(editor), revision: editor.getRevision(), transactionActive: editor.isTransactionActive() })
@@ -91,7 +98,7 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
   }
   if (isSourceMutation(method)) ensureWritable()
   return assetSourcePool.withAssets(before.assets, async () => {
-    const snapshot = () => ({ scene: before, revision, documentEpoch, transactionActive, selectedTimelineId: host.selectedTimelineId, currentTimeMs: host.currentTimeMs })
+    const snapshot = (): Snapshot => ({ scene: before, revision, documentEpoch, transactionActive, selectedTimelineId: host.selectedTimelineId, currentTimeMs: host.currentTimeMs, selected })
     const commit = (next: ChronoScene, label: string, hints: AuthoringHints = {}) => {
       ensureWritable()
       if (editor.getRevision() !== revision) throw new Error('Scene changed while preparing the operation; read and retry')

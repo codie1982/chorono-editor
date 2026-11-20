@@ -12,7 +12,7 @@ arguments. Script signatures remain in `chorono://scripting`.
 
 | Goal | Preferred standard tool | Important distinction |
 | --- | --- | --- |
-| Read current editable source | `get_scene` | Includes scene revision and editor context. Legacy `get_scene_json` returns only scene JSON. |
+| Read current editable source and UI selection | `get_scene` | Includes revision, `selected` layer identities, timeline and playhead. Full selected-layer properties stay in `scene.layers`. Legacy `get_scene_json` returns only scene JSON. |
 | List or inspect layers | `list_layers`, `get_layer` | Find ids and read a formatted summary. Legacy inspection is `describe_layer`; neither returns every nested Layer field. |
 | Inspect one timeline | `get_timeline` | Reads its tracks and keys. Legacy name is `describe_timeline`. |
 | Create a registered layer kind | `create_layer` | Takes the existing registry `kind` and optional layer `patch`; legacy name is `create_object`. Use real kinds from capabilities. |

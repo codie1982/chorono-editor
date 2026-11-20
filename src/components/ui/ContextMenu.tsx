@@ -3,6 +3,7 @@ import {
   useEffect, useRef, useState, useCallback, type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { placeContextMenu } from './ContextMenuPlacement'
 
 // ── Menu item types ─────────────────────────────────────────────────────────
 //
@@ -72,13 +73,15 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
 interface LayerProps {
   x: number
   y: number
+  /** Parent row's viewport left edge, used to open constrained submenus left. */
+  parentLeft?: number
   items: MenuItem[]
   onClose: () => void
   /** True only for the outermost menu — drives the global click/escape listeners. */
   root?: boolean
   /** Provided by a parent MenuLayer to its child submenu. The child invokes
-   *  it whenever its OWN hover state changes (self-hover OR descendant
-   *  sub-tree hover). Parent treats `true` as "submenu is alive — don't
+   *  it whenever its pointer/focus state changes (self OR descendant).
+   *  Parent treats `true` as "submenu is alive — don't
    *  close me". */
   reportHover?: (hovered: boolean) => void
 }
@@ -86,7 +89,7 @@ interface LayerProps {
 const SUBMENU_CLOSE_DELAY_MS = 220   // grace window after losing hover
 
 function MenuLayer({
-  x, y, items, onClose, root, reportHover,
+  x, y, parentLeft, items, onClose, root, reportHover,
 }: LayerProps) {
   const ref = useRef<HTMLDivElement>(null)
   /** Which submenu item is currently expanded (by index in `items`). */
@@ -95,30 +98,31 @@ function MenuLayer({
   const [subAnchor, setSubAnchor] = useState<DOMRect | null>(null)
   /** True while cursor is anywhere inside THIS layer's div. */
   const [selfHovered, setSelfHovered] = useState(false)
-  /** True when the open child submenu reports it's hovered (self or deeper). */
+  /** Keyboard focus also keeps an open submenu alive without pointer hover. */
+  const [selfFocused, setSelfFocused] = useState(false)
+  /** True when the open child submenu has pointer hover or focus, including descendants. */
   const [childHovered, setChildHovered] = useState(false)
   /** Adjusted position after flip-on-overflow measurement. */
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y })
 
   // ── Hover-driven submenu auto-close ────────────────────────────────────
   // Replaces the prior timer-juggling between parent/child layers. The new
-  // model: we keep the open submenu alive as long as EITHER our own layer
-  // is hovered OR the open submenu reports it's hovered (any descendant).
+  // model: we keep the open submenu alive while this layer or a descendant
+  // has pointer hover or keyboard focus.
   // When both go false, we wait one grace window before closing — that
   // gives the cursor room to transit across the small gap from a parent
   // row to the submenu's outer div without losing it.
   useEffect(() => {
     if (openSub == null) return
-    if (selfHovered || childHovered) return
+    if (selfHovered || selfFocused || childHovered) return
     const t = window.setTimeout(() => setOpenSub(null), SUBMENU_CLOSE_DELAY_MS)
     return () => window.clearTimeout(t)
-  }, [openSub, selfHovered, childHovered])
+  }, [openSub, selfHovered, selfFocused, childHovered])
 
-  // Report our combined hover state to the parent (if any). Lets the
-  // grandparent keep US alive while we're hovered.
+  // Report combined pointer/focus state to keep every ancestor menu alive.
   useEffect(() => {
-    reportHover?.(selfHovered || childHovered)
-  }, [selfHovered, childHovered, reportHover])
+    reportHover?.(selfHovered || selfFocused || childHovered)
+  }, [selfHovered, selfFocused, childHovered, reportHover])
 
   const cancelClose = useCallback(() => { /* no-op — kept for API */ }, [])
   const scheduleClose = useCallback(() => { /* no-op — kept for API */ }, [])
@@ -128,13 +132,9 @@ function MenuLayer({
     const el = ref.current
     if (!el) return
     const r  = el.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    let left = x, top = y
-    if (left + r.width  > vw - 4) left = Math.max(4, vw - r.width  - 4)
-    if (top  + r.height > vh - 4) top  = Math.max(4, vh - r.height - 4)
-    setPos({ left, top })
-  }, [x, y])
+    setPos(placeContextMenu({ x, y, parentLeft, width: r.width, height: r.height,
+      viewportWidth: window.innerWidth, viewportHeight: window.innerHeight }))
+  }, [x, y, parentLeft])
 
   // ── Global listeners (root only): click-outside + Escape ─────────────────
   useEffect(() => {
@@ -189,6 +189,10 @@ function MenuLayer({
         onContextMenu={(e) => e.preventDefault()}
         onMouseLeave={handleLeaveLayer}
         onMouseEnter={handleEnterLayer}
+        onFocusCapture={() => setSelfFocused(true)}
+        onBlurCapture={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setSelfFocused(false)
+        }}
       >
         {items.map((item, i) => {
           if (item.kind === 'separator') {
@@ -201,13 +205,15 @@ function MenuLayer({
               item={item}
               isOpen={isOpen}
               onEnter={(e) => handleRowEnter(i, item, e.currentTarget as HTMLElement)}
-              onActivate={() => {
+              onActivate={row => {
                 if (item.kind === 'action' && !item.disabled) {
                   item.onSelect()
                   onClose()
                 } else if (item.kind === 'submenu' && !item.disabled) {
-                  // Click → toggle the submenu (helps with touch / keyboard)
-                  setOpenSub(isOpen ? null : i)
+                  // Pointer entry may already have opened this submenu. Keep
+                  // click/Enter idempotently open and anchor keyboard activation.
+                  setSubAnchor(row.getBoundingClientRect())
+                  setOpenSub(i)
                 }
               }}
             />
@@ -218,12 +224,13 @@ function MenuLayer({
       {/* Submenu — sibling fixed-positioned layer so it can overflow the
           parent rect. We overlap the parent rect by a few px (subAnchor.right
           - 4) so the cursor never falls into a true "no-menu" gap mid-transit.
-          reportHover lets the child tell us when it's hovered (anywhere in
-          its subtree) so we keep our own openSub alive. */}
+          reportHover reports pointer/focus activity anywhere in the child
+          subtree so we keep our own openSub alive. */}
       {openSub != null && subAnchor && items[openSub].kind === 'submenu' && (
         <MenuLayer
           x={subAnchor.right - 4}
           y={subAnchor.top}
+          parentLeft={subAnchor.left}
           items={(items[openSub] as MenuSubmenuItem).items}
           onClose={onClose}
           reportHover={setChildHovered}
@@ -238,8 +245,8 @@ function MenuLayer({
 function Row({ item, isOpen, onEnter, onActivate }: {
   item:       MenuActionItem | MenuSubmenuItem
   isOpen:     boolean
-  onEnter:    (e: React.MouseEvent<HTMLDivElement>) => void
-  onActivate: () => void
+  onEnter:    (e: React.MouseEvent<HTMLButtonElement>) => void
+  onActivate: (row: HTMLElement) => void
 }) {
   const disabled = item.disabled === true
   // Theme: idle = gray-200 text on transparent; hover/active = white on blue-600.
@@ -252,12 +259,16 @@ function Row({ item, isOpen, onEnter, onActivate }: {
       : 'text-gray-200 cursor-default hover:bg-blue-600 hover:text-white'
 
   return (
-    <div
+    <button
+      type="button"
       role="menuitem"
+      disabled={disabled}
       aria-disabled={disabled}
-      className={`group flex items-center gap-2 px-3 py-1 text-[13px] ${rowClass}`}
+      aria-haspopup={item.kind === 'submenu' ? 'menu' : undefined}
+      aria-expanded={item.kind === 'submenu' ? isOpen : undefined}
+      className={`group flex w-full items-center gap-2 px-3 py-1 text-left text-[13px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 ${rowClass}`}
       onMouseEnter={onEnter}
-      onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate() } }}
+      onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate(e.currentTarget) } }}
     >
       {'icon' in item && item.icon ? <span className="w-4 text-center">{item.icon}</span> : null}
       <span className="flex-1 truncate">{item.label}</span>
@@ -272,7 +283,7 @@ function Row({ item, isOpen, onEnter, onActivate }: {
       {item.kind === 'submenu'
         ? <span className={`text-[10px] ${disabled ? 'text-gray-700' : 'text-gray-400 group-hover:text-white'}`}>▶</span>
         : null}
-    </div>
+    </button>
   )
 }
 

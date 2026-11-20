@@ -42,7 +42,7 @@ import { useInteractiveRuntime } from './hooks/useInteractiveRuntime'
 import { useTimelineGhost }     from '@/components/timeline/hooks/useTimelineGhost'
 import { useFileVersioning } from './hooks/useFileVersioning'
 import { useMCPBridge } from './hooks/useMCPBridge'
-import MCPConnection from '@/components/MCPConnection'
+import MCPConnection, { type MCPConnectionHandle } from '@/components/MCPConnection'
 import AgentHandoffDialog from '@/components/agentHandoff/AgentHandoffDialog'
 import { buildAgentHandoffPrompt, captureAgentHandoffContext, type AgentHandoffContext, type AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import { agentHandoffStore } from '@/lib/agentHandoff/store'
@@ -374,6 +374,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const playbackScene = useMemo(() => mcpTimelineIds ? { ...scene, timelines: scene.timelines.filter(t => mcpTimelineIds.includes(t.id)), stateMachines: [] } : scene, [scene, mcpTimelineIds])
   const runtime = useInteractiveRuntime(playbackScene, { playbackDriven: isPlaying })
   const mcp = useMCPBridge({ editor, assets: assetCache, selectedTimelineId: selectedTlId, currentTimeMs, isPlaying,
+    getLayerSelection: () => layerSelection,
     getLiveFrame: () => frame,
     getRuntimeState: () => ({ parameters: Object.fromEntries(runtime.paramValues), stateMachines: Array.from(runtime.smRuntimes.values(), rt => ({id:rt.sm.id,stateId:rt.currentStateId,stateName:rt.currentState?.name,timelineId:rt.activeTimelineId})) }),
     setRuntimeTest: runtime.setSMTestActive,
@@ -385,6 +386,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [pendingAgentHandoff, setPendingAgentHandoff] = useState<{
     intent: 'edit' | 'ask'; context: AgentHandoffContext
   } | null>(null)
+  const agentConnection = useRef<MCPConnectionHandle>(null)
+  const openAgentConnections = useCallback(() => agentConnection.current?.open(), [])
   const copyAgentHandoff = useCallback(async (context: AgentHandoffContext, intent: AgentHandoffRequest['intent'], detail = '') => {
     try {
       const handoffId = agentHandoffStore.create(context)
@@ -400,8 +403,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     if (!mcp.connected || !mcp.sessionId) {
       toast.warning('MCP bağlantısı gerekli', {
         detail: mcp.enabled
-          ? 'Üst araç çubuğundaki MCP düğmesinden “Connect this editor” seçin.'
-          : 'MCP servisini başlatın, ardından üst araç çubuğundaki MCP düğmesinden editörü bağlayın.',
+          ? 'Agent → Agent connections veya üst araç çubuğundaki MCP düğmesinden “Connect this editor” seçin.'
+          : 'MCP servisini başlatın, ardından Agent → Agent connections veya üst araç çubuğundaki MCP düğmesinden editörü bağlayın.',
       })
       return
     }
@@ -1375,7 +1378,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onRestorePanel={dock.dispatchRestorePanel}
         />
 
-        <MCPConnection {...mcp} />
+        <MCPConnection ref={agentConnection} {...mcp} />
         <div className="w-px h-6 bg-gray-700 mx-1" />
 
         <ToolGroup
@@ -1488,6 +1491,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     }}
                     onDuplicate={(layerId) => cloneSourceIds(selectedLayerIds.has(layerId) ? selectedCloneIds() : [layerId])}
                     onAgentHandoff={handleAgentHandoff}
+                    onAgentConnections={openAgentConnections}
                   />
                 ),
               },
@@ -1513,6 +1517,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     }}
                     onClearSelection={() => selectLayer(null)}
                     onAgentHandoff={handleAgentHandoff}
+                    onAgentConnections={openAgentConnections}
                     contextHandlers={{
                       // Rename re-uses the inline editor — selecting the
                       // layer first lets the panel know which row to put
@@ -1581,6 +1586,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
                     onAgentHandoff={handleAgentHandoff}
+                    onAgentConnections={openAgentConnections}
                     overrides={frame.overrides}
                     paramValues={frame.paramValues}
                     previewMode={!!runtime.segmentState || manualPreview}

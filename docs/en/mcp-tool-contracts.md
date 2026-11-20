@@ -76,6 +76,24 @@ preserve outside keys; procedural signal fields are removed globally.
 
 ## Results and files
 
+`get_scene` adds read-time UI focus in the top-level `selected` field, outside
+`scene`. It contains `primaryLayerId`, insertion-ordered `layerIds` and matching
+`layers` metadata: `id`, `name`, `type`, stable `address: ['layer', id]` and
+nullable `parentId`. Resolve full authored properties by id in `scene.layers`;
+the address is an identity tuple, not a JSON array index. Missing/deleted ids are
+filtered using the editor selection policy. A removed primary falls back to the
+first surviving selection. An empty selection has null primary and empty arrays;
+`selected:null` means the host has no provider, and older bridges may omit it.
+
+Selection is captured with the source snapshot before asynchronous output work.
+It is not stored in source, undo, portable projects or runtime output, and changing
+selection does not change source revision. A new `get_scene` call reads it fresh
+even with the same `requestId`. For selection-relative requests use this context;
+explicit user targets and a frozen `get_handoff_context.focus` take precedence.
+Later UI selection changes must not silently retarget an ongoing task. Selection
+does not grant source-write authority or evaluate animated properties; use the
+ordinary revision/readToken guard and `evaluate_frame` / `render_preview`.
+
 Native reads return MCP text containing JSON `{revision, content}`; `content`
 is a string, sometimes itself JSON-encoded. Native mutations return text JSON
 with `revision`, `composition`, layer/timeline summaries and `addedLayerIds`.
