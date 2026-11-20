@@ -1,5 +1,6 @@
 'use client'
 import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react'
+import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
 interface Props { enabled: boolean; connected: boolean; sessionId?: string; status: string; error: string; connect: () => Promise<void>; disconnect: () => Promise<void> }
 
@@ -20,7 +21,10 @@ const MCPConnection = forwardRef<MCPConnectionHandle, Props>(function MCPConnect
       <span aria-hidden="true" className={props.connected ? 'text-emerald-400' : 'text-gray-500'}>● </span>MCP
     </button>
     <dialog ref={dialog} aria-labelledby="mcp-title" className="w-full max-w-md rounded-lg border border-gray-700 bg-gray-900 p-5 text-gray-200 backdrop:bg-black/60">
-      <h2 id="mcp-title" className="text-base font-semibold">Agent connections</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="mcp-title" className="text-base font-semibold">Agent connections</h2>
+        <DocumentationHelp topic="ai/mcp#open-agent-connections" />
+      </div>
       <p className="mt-3 text-sm text-gray-300">Claude Code, Claude Desktop, Codex and other MCP-compatible agents share this editor connection.</p>
       <p className="mt-3 text-sm text-gray-300">Connected AI clients can read this scene, create objects and animations, run isolated scripts, capture previews and save projects.</p>
       <p role="status" className="mt-3 text-sm">{props.status}</p>

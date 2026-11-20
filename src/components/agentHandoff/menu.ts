@@ -1,4 +1,5 @@
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import { documentationUrl } from '@/components/help/documentation'
 import type { AgentHandoffIntent, AgentHandoffRequest, AgentHandoffTarget } from '@/lib/agentHandoff/prompt'
 
 const choices: ReadonlyArray<{ intent: AgentHandoffIntent; label: string }> = [
@@ -13,7 +14,8 @@ const choices: ReadonlyArray<{ intent: AgentHandoffIntent; label: string }> = [
 /** Build the shared Agent submenu for canvas/layer/explorer targets. Handoff
  * actions copy an isolated target and optional composition-space point to the
  * caller; connection management opens the existing shared MCP dialog. This
- * builder neither opens chats nor pairs an editor or mutates scene/selection. */
+ * builder neither opens chats nor pairs an editor or mutates scene/selection.
+ * Its help action opens the canonical selection guide without an opener. */
 export function agentHandoffMenu(
   target: AgentHandoffTarget,
   onChoose: (request: AgentHandoffRequest) => void,
@@ -29,6 +31,12 @@ export function agentHandoffMenu(
     })), ...(openConnections ? [
       { kind: 'separator' as const },
       { kind: 'action' as const, label: 'Agent connections…', onSelect: openConnections },
-    ] : [])],
+    ] : []),
+    { kind: 'separator' as const },
+    {
+      kind: 'action' as const,
+      label: 'Selection & agent help…',
+      onSelect: () => { window.open(documentationUrl('ai/edit-selection#use-the-agent-menu'), '_blank', 'noopener,noreferrer') },
+    }],
   }
 }
