@@ -1,8 +1,14 @@
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
 import type { ChronoScene } from '@/lib/types'
 import type { FractureGeneration, FragmentGeometry } from '@/lib/types/fracture'
-import type { RigidBodyAuthoring, RigidBodyBakeRecipe, RigidBodySnapshot } from '@/lib/types/physics'
+import type {
+  RigidBodyAuthoring,
+  RigidBodyBakeRecipe,
+  RigidBodySnapshot,
+  RigidFractureExplosion,
+} from '@/lib/types/physics'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource, RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
+import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
 import { FractureManifestValidator } from './FractureManifestValidator'
 
 export interface FractureRigidRecipeInput {
@@ -10,8 +16,17 @@ export interface FractureRigidRecipeInput {
   readonly timelineId: string
   readonly startTimeMs: number
   readonly durationMs: number
-  /** Local simulation time, quantized to one fixed solver tick. */
-  readonly fractureTimeMs: number
+  /** Local simulation time, required by the default timed trigger. */
+  readonly fractureTimeMs?: number
+  readonly fractureTrigger?:
+    | { readonly kind: 'time' }
+    | {
+      readonly kind: 'impact'
+      readonly minimumRelativeNormalSpeedPxPerSecond: number
+      /** Layer ids from the explicit static environment; omitted means all static bodies. */
+      readonly colliderLayerIds?: readonly string[]
+    }
+  readonly explosion?: RigidFractureExplosion
   readonly sourceBody: RigidBodyAuthoring
   readonly staticBodies: readonly RigidBodyAuthoring[]
   readonly stepHz?: number
@@ -32,6 +47,7 @@ export interface FractureRigidRecipeInput {
 export class FractureRigidRecipeCompiler {
   private readonly rigidCompiler = new RigidBodySceneCompiler()
   private readonly manifestValidator = new FractureManifestValidator()
+  private readonly appearanceCompiler = new FractureAppearanceCompiler()
 
   /** Compiles an immutable one-generation recipe without mutating the scene. */
   compile(scene: ChronoScene, input: FractureRigidRecipeInput): RigidBodyBakeRecipe {
@@ -44,11 +60,8 @@ export class FractureRigidRecipeCompiler {
       throw new Error('First-slice fracture environment supports static rectangles only')
     }
     const sourceLayer = scene.layers.find(layer => layer.id === input.sourceBody.layerId)
-    if (!sourceLayer || sourceLayer.type !== 'shape' || (sourceLayer.shapeKind ?? sourceLayer.shape ?? 'rect') !== 'rect'
-      || !sourceLayer.size) throw new Error('Fracture source layer must be a rectangle shape')
-    if ((sourceLayer.style?.cornerRadius ?? 0) !== 0) throw new Error('First-slice fracture requires sharp rectangle corners')
-    if (sourceLayer.style?.fill?.type !== 'solid') throw new Error('First-slice fracture requires a solid fill')
-    if (sourceLayer.opacity !== 1) throw new Error('First-slice fracture requires source opacity 1')
+    if (!sourceLayer?.size) throw new Error('Fracture source layer must be a rectangle shape or image layer')
+    const fractureAppearance = this.appearanceCompiler.snapshot(scene, sourceLayer)
     assertGenerationMatchesRectangle(input.generation, sourceLayer.size.width, sourceLayer.size.height)
 
     const base = this.rigidCompiler.compile(scene, {
@@ -62,20 +75,21 @@ export class FractureRigidRecipeCompiler {
       bodies: [input.sourceBody, ...input.staticBodies],
     })
     const clock = new SimulationClock(base)
-    const eventTick = input.fractureTimeMs * clock.stepHz / 1000
-    if (!Number.isSafeInteger(eventTick) || eventTick < 1 || eventTick >= clock.totalTicks) {
-      throw new RangeError('Fracture time must align to an interior fixed-step tick')
-    }
+    const trigger = resolveTrigger(input, base)
+    const eventTick = trigger.kind === 'time' ? resolveEventTick(input.fractureTimeMs, clock) : 0
+    const eventTimeMs = trigger.kind === 'time' ? input.fractureTimeMs! : 0
     const source = base.bodies[0]
     const eventId = `${input.generation.generationId}:event`
     const fragments = input.generation.fragments.map(fragment => compileFragment(source, fragment, eventId))
     const bodies = [source, ...base.bodies.slice(1), ...fragments]
     const fractureEvents = [{
       id: eventId,
-      timeMs: input.fractureTimeMs,
+      timeMs: eventTimeMs,
       tick: eventTick,
       sourceBodyId: source.bodyId,
       fragmentBodyIds: fragments.map(fragment => fragment.bodyId),
+      trigger,
+      ...(input.explosion ? { explosion: cloneExplosion(input.explosion) } : {}),
     }]
     const sourceRevision = hashRigidBodySource(base.timelineId, bodies)
     const withoutHash: Omit<RigidBodyBakeRecipe, 'recipeHash'> = {
@@ -83,6 +97,7 @@ export class FractureRigidRecipeCompiler {
       source: { ...base.source, revision: sourceRevision },
       bodies,
       fractureEvents,
+      fractureAppearance,
     }
     return Object.freeze({ ...withoutHash, recipeHash: hashRigidBodyBakeRecipe(withoutHash) })
   }
@@ -100,7 +115,9 @@ export class FractureRigidRecipeCompiler {
         timelineId: recipe.timelineId,
         startTimeMs: recipe.startTimeMs,
         durationMs: recipe.durationMs,
-        fractureTimeMs: event.timeMs,
+        fractureTimeMs: event.trigger?.kind === 'impact' ? undefined : event.timeMs,
+        fractureTrigger: triggerInput(recipe, event),
+        explosion: event.explosion,
         stepHz: recipe.stepHz,
         sampleFps: recipe.sampleFps,
         pixelsPerMeter: recipe.pixelsPerMeter,
@@ -108,11 +125,67 @@ export class FractureRigidRecipeCompiler {
         sourceBody: authored(source),
         staticBodies: staticBodies.map(authored),
       })
-      return current.recipeHash === recipe.recipeHash && current.source.revision === recipe.source.revision
+      const comparable = copyRealization(current, recipe)
+      return comparable.recipeHash === recipe.recipeHash && comparable.source.revision === recipe.source.revision
     } catch {
       return false
     }
   }
+}
+
+function resolveEventTick(timeMs: number | undefined, clock: SimulationClock): number {
+  if (!Number.isFinite(timeMs)) throw new RangeError('Fracture time is required for a timed trigger')
+  const tick = timeMs! * clock.stepHz / 1000
+  if (!Number.isSafeInteger(tick) || tick < 1 || tick >= clock.totalTicks) {
+    throw new RangeError('Fracture time must align to an interior fixed-step tick')
+  }
+  return tick
+}
+
+function resolveTrigger(input: FractureRigidRecipeInput, base: RigidBodyBakeRecipe) {
+  if (input.fractureTrigger?.kind !== 'impact') return Object.freeze({ kind: 'time' as const })
+  const minimum = input.fractureTrigger.minimumRelativeNormalSpeedPxPerSecond
+  if (!Number.isFinite(minimum) || minimum <= 0) throw new RangeError('Impact fracture speed must be positive and finite')
+  const requested = input.fractureTrigger.colliderLayerIds
+  const colliders = base.bodies.filter(body => body.motionType === 'static'
+    && (!requested || requested.includes(body.layerId)))
+  if (!colliders.length) throw new Error('Impact fracture requires at least one selected static collider')
+  if (requested?.some(layerId => !colliders.some(body => body.layerId === layerId))) {
+    throw new Error('Impact fracture collider selection is missing or is not static')
+  }
+  return Object.freeze({
+    kind: 'impact' as const,
+    minimumRelativeNormalSpeedPxPerSecond: minimum,
+    colliderBodyIds: Object.freeze(colliders.map(body => body.bodyId)),
+  })
+}
+
+function cloneExplosion(value: RigidFractureExplosion): RigidFractureExplosion {
+  return Object.freeze({ ...value, centerLocalOffsetPx: Object.freeze({ ...value.centerLocalOffsetPx }) })
+}
+
+function triggerInput(recipe: RigidBodyBakeRecipe, event: NonNullable<RigidBodyBakeRecipe['fractureEvents']>[number]) {
+  if (event.trigger?.kind !== 'impact') return { kind: 'time' as const }
+  return {
+    kind: 'impact' as const,
+    minimumRelativeNormalSpeedPxPerSecond: event.trigger.minimumRelativeNormalSpeedPxPerSecond,
+    colliderLayerIds: event.trigger.colliderBodyIds.map(bodyId => {
+      const body = recipe.bodies.find(candidate => candidate.bodyId === bodyId)
+      if (!body) throw new Error(`Impact fracture collider is missing: ${bodyId}`)
+      return body.layerId
+    }),
+  }
+}
+
+function copyRealization(current: RigidBodyBakeRecipe, stored: RigidBodyBakeRecipe): RigidBodyBakeRecipe {
+  const events = current.fractureEvents?.map((event, index) => {
+    const source = stored.fractureEvents?.[index]
+    return source?.trigger?.kind === 'impact'
+      ? { ...event, timeMs: source.timeMs, tick: source.tick, realization: source.realization }
+      : event
+  })
+  const withoutHash: Omit<RigidBodyBakeRecipe, 'recipeHash'> = { ...current, fractureEvents: events }
+  return { ...withoutHash, recipeHash: hashRigidBodyBakeRecipe(withoutHash) }
 }
 
 function compileFragment(

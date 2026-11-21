@@ -18,12 +18,15 @@ describe('VoronoiFractureGenerator', () => {
     expect(second).toEqual(first)
     expect(first).toMatchObject({
       schemaVersion: 1, generationIndex: 0, parentId: 'panel', requestedFragmentCount: 32,
-      algorithm: { id: 'd3-delaunay', version: '6.0.4', compilerVersion: 1 },
+      algorithm: { id: 'd3-delaunay', version: '6.0.4', compilerVersion: 2 },
     })
     expect(first.topologyHash).toMatch(/^[0-9a-f]{16}$/)
     expect(first.seeds).toHaveLength(32)
     expect(first.fragments).toHaveLength(32)
     expect(new Set(first.fragments.map(fragment => fragment.id))).toHaveProperty('size', 32)
+    expect(first.fragments.every(fragment => /^[\w-]{1,128}$/.test(fragment.id))).toBe(true)
+    expect(first.fragments[0].id).toBe('panel-v1-fragment-0')
+    expect(first.seeds[0].id).toBe('panel-v1-seed-0')
     expect(() => new FractureManifestValidator().validate(first)).not.toThrow()
   })
 
@@ -89,5 +92,7 @@ describe('VoronoiFractureGenerator', () => {
     expect(() => generator.generate({ ...base, fragmentCount: 1 })).toThrow(/2–100/)
     expect(() => generator.generate({ ...base, fragmentCount: 101 })).toThrow(/2–100/)
     expect(() => generator.generate({ ...base, fragmentCount: 16, seed: -1 })).toThrow(/unsigned/)
+    expect(() => generator.generate({ ...base, generationId: 'invalid:id', fragmentCount: 16 })).toThrow(/ASCII/)
+    expect(() => generator.generate({ ...base, generationId: 'x'.repeat(117), fragmentCount: 16 })).toThrow(/1–116/)
   })
 })

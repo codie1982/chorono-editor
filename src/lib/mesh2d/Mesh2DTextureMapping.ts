@@ -71,7 +71,7 @@ export function resolveMesh2DTexturePlacement(
   sourceHeight: number,
   value?: Mesh2DTextureTransform,
 ): Mesh2DTexturePlacement | null {
-  const bounds = computeMesh2DLocalBounds(geometry)
+  const bounds = resolveTextureReferenceBounds(geometry)
   if (!bounds || !Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight)
       || sourceWidth <= 0 || sourceHeight <= 0) return null
   const transform = resolveMesh2DTextureTransform(value)
@@ -99,6 +99,23 @@ export function resolveMesh2DTexturePlacement(
     sourceToLocal.applyToPoint({ x: 0, y: sourceHeight }),
   ] as const
   return { sourceToLocal, localToSource, bounds, corners, pivot: sourceToLocal.applyToPoint(sourcePivot) }
+}
+
+/**
+ * Resolves the local rectangle normalized UVs address.
+ *
+ * Ordinary Mesh2D layers retain their geometry-bounds behavior. Generated
+ * fracture fragments may instead reference the complete source rectangle so
+ * their UVs do not get renormalized independently per piece.
+ */
+function resolveTextureReferenceBounds(
+  geometry: Mesh2DGeometry,
+): { x: number; y: number; width: number; height: number } | null {
+  const explicit = geometry.textureReferenceBounds
+  if (!explicit) return computeMesh2DLocalBounds(geometry)
+  if (![explicit.x, explicit.y, explicit.width, explicit.height].every(Number.isFinite)
+    || explicit.width <= 0 || explicit.height <= 0) return null
+  return { ...explicit }
 }
 
 /** Returns decoded image/video dimensions without retaining the media object. */

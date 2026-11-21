@@ -89,6 +89,8 @@ import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
 import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
 import type { ShortcutContext } from '@/lib/shortcuts'
 import { Mesh2DTextureOverlay } from './canvas/mesh2d/Mesh2DTextureOverlay'
+import { PhysicsViewportOverlay } from './physics/PhysicsViewportOverlay'
+import type { PhysicsViewportOverlaySettings } from './physics/PhysicsViewportOverlayState'
 
 interface Props {
   scene: ChronoScene
@@ -256,6 +258,8 @@ interface Props {
   /** A committed ID selects the new shape and may rearm a fresh template;
    * no ID means cancelled placement. Never reuse an already committed ID. */
   onShapePlacementComplete?: (id?: string) => void
+  /** Local editor-only fracture diagnostics; never part of scene/export. */
+  physicsOverlay?: PhysicsViewportOverlaySettings
 }
 
 const PADDING   = 24
@@ -271,6 +275,7 @@ export default function SceneCanvas({
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming, motionControlsHost, onOpenMotionControls,
   arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
+  physicsOverlay,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
   splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected,
 }: Props) {
@@ -1345,6 +1350,13 @@ export default function SceneCanvas({
               touchAction: 'none',
             }}
           />
+
+          {!hideEditorUI && physicsOverlay?.enabled && <PhysicsViewportOverlay
+            scene={scene}
+            timeMs={timeMs}
+            overrides={overrides}
+            settings={physicsOverlay}
+          />}
 
           {shapePlacement.draft && <ShapePlacementOutline bounds={boundsForFrame(shapePlacement.draft)}
             width={width} height={height} zoom={zoom} />}

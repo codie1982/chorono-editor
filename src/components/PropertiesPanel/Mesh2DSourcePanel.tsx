@@ -26,7 +26,7 @@ interface Props {
 }
 
 /**
- * Shows the persisted source contract for spline/shape-derived Mesh2D layers.
+ * Shows persisted source contracts for authored and bake-generated Mesh2D layers.
  *
  * Source lookup and fingerprint comparison are read-only. Regeneration returns
  * one complete layer snapshot to the owning editor command path, so tolerance
@@ -37,13 +37,16 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
   const mesh = layer.mesh2d
   const source = layer.mesh2d?.source
   const boundarySource = source?.kind === 'splineBoundary' || source?.kind === 'shapeBoundary'
-  const sourceLayer = boundarySource
+  const fractureSource = source?.kind === 'fractureFragment'
+  const sourceLayer = boundarySource || fractureSource
     ? allLayers.find(candidate => candidate.id === source.sourceLayerId)
     : undefined
   const current = useMemo(
     () => source?.kind === 'shapeBoundary'
       ? isShapeBoundaryMesh2DCurrent(layer, sourceLayer)
-      : isSplineBoundaryMesh2DCurrent(layer, sourceLayer),
+      : source?.kind === 'splineBoundary'
+        ? isSplineBoundaryMesh2DCurrent(layer, sourceLayer)
+        : true,
     [layer, source, sourceLayer],
   )
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +105,30 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
 
   return (
     <div className="flex flex-col gap-3">
+      {fractureSource && <section aria-labelledby="mesh2d-fracture-source-heading" className="flex flex-col gap-2">
+        <h3 id="mesh2d-fracture-source-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+          Fracture Fragment
+        </h3>
+        <div className="rounded border border-blue-800/60 bg-blue-950/20 px-2.5 py-2 text-[11px] text-blue-100">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-blue-300/70">Source layer</span>
+            <span className="min-w-0 truncate text-right" title={sourceLayer?.name ?? source.sourceLayerId}>
+              {sourceLayer?.name ?? source.sourceLayerId}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="text-blue-300/70">Generation</span>
+            <span className="min-w-0 truncate font-mono text-[10px]" title={source.generationId}>{source.generationId}</span>
+          </div>
+          <p role="status" className="mt-2 rounded border border-blue-700/60 bg-blue-950/35 px-2 py-1.5 text-[10px] leading-4 text-blue-200">
+            Bake-owned image mesh · source-rectangle UVs preserved
+          </p>
+        </div>
+        <p className="text-[10px] leading-4 text-gray-500">
+          Texture edits are allowed, but Inspect Bake will mark this generated output as edited before Re-bake or Clear.
+        </p>
+      </section>}
+
       {boundarySource && (source.kind === 'splineBoundary' || source.kind === 'shapeBoundary') && <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
         <h3 id="mesh2d-source-heading" className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
           {source.kind === 'shapeBoundary' ? 'Shape Source' : 'Spline Source'}

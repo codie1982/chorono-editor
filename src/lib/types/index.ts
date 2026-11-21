@@ -81,6 +81,7 @@ export type {
   StructuredGridMesh2DSource,
   SplineBoundaryMesh2DSource,
   ShapeBoundaryMesh2DSource,
+  FractureFragmentMesh2DSource,
   Mesh2DSource,
   Mesh2DTopology,
   Mesh2DGeometry,
@@ -97,6 +98,8 @@ export type {
   RigidFractureEvent,
   RigidPoseCacheHeader,
   RigidBakeTrackOwnership,
+  RigidBakeLayerOwnership,
+  RigidBakeGenerationOwnership,
   RigidBakeRecord,
   PhysicsSceneData,
 } from './physics'
@@ -104,6 +107,7 @@ export type {
 export type {
   FracturePoint2D,
   FractureBounds2D,
+  FractureAppearanceSnapshot,
   FractureSeedPoint,
   FragmentGeometry,
   FractureSourceGeometry,

@@ -1,5 +1,5 @@
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
-import type { PhysicsSceneData, RigidBodyBakeRecipe } from '@/lib/types/physics'
+import type { PhysicsSceneData, RigidBakeRecord, RigidBodyBakeRecipe } from '@/lib/types/physics'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource } from './RigidBodySceneCompiler'
 import { rigidBakeTrackTargets } from './RigidPoseTrackCompiler'
 import { assertRigidFractureEvents } from './RigidFractureValidation'
@@ -52,7 +52,57 @@ export function assertPhysicsSceneData(value: PhysicsSceneData | undefined): voi
     if (targets.size !== expectedTargets.size || Array.from(targets).some(target => !expectedTargets.has(target))) {
       throw new Error('Rigid bake track ownership does not match its bodies')
     }
+    assertExtendedOwnership(record as unknown as RigidBakeRecord, recipe, value)
   })
+}
+
+function assertExtendedOwnership(
+  record: RigidBakeRecord,
+  recipe: RigidBodyBakeRecipe,
+  physics: PhysicsSceneData,
+): void {
+  const fracture = !!recipe.fractureEvents?.length
+  const generatedLayers = record.generatedLayers
+  const generation = record.fractureGeneration
+  if ((generatedLayers === undefined) !== (generation === undefined)) {
+    throw new Error('Rigid bake generated ownership is incomplete')
+  }
+  if (!fracture && (generatedLayers !== undefined || generation !== undefined)) {
+    throw new Error('Ordinary rigid bake cannot own fracture output')
+  }
+  if (generatedLayers !== undefined) {
+    if (!Array.isArray(generatedLayers) || generatedLayers.length > 512) {
+      throw new Error('Invalid rigid bake generated-layer ownership')
+    }
+    const expected = new Set(recipe.bodies.filter(body => body.activation).map(body => body.layerId))
+    const ids = new Set<string>()
+    generatedLayers.forEach(owned => {
+      if (!isRecord(owned) || !boundedText(owned.layerId) || !HASH.test(String(owned.contentHash)) || ids.has(String(owned.layerId))) {
+        throw new Error('Invalid rigid bake generated-layer ownership')
+      }
+      ids.add(String(owned.layerId))
+    })
+    if (ids.size !== expected.size || Array.from(ids).some(id => !expected.has(id))) {
+      throw new Error('Rigid bake generated-layer ownership does not match its fragments')
+    }
+    if (!isRecord(generation) || !boundedText(generation.generationId) || !HASH.test(String(generation.topologyHash))) {
+      throw new Error('Invalid rigid bake fracture-generation ownership')
+    }
+    const ownedGeneration = physics.fractureGenerations?.find(candidate => candidate.generationId === generation.generationId)
+    if (!ownedGeneration || ownedGeneration.topologyHash !== generation.topologyHash) {
+      throw new Error('Rigid bake fracture-generation ownership is stale')
+    }
+  }
+  const added = record.timelineLayerIdsAdded
+  if (added !== undefined) {
+    if (!Array.isArray(added) || added.length > 513) throw new Error('Invalid rigid bake timeline membership ownership')
+    const relevant = new Set(recipe.bodies.filter(body => body.motionType === 'dynamic').map(body => body.layerId))
+    const ids = new Set<string>()
+    added.forEach(id => {
+      if (!boundedText(id) || ids.has(id) || !relevant.has(id)) throw new Error('Invalid rigid bake timeline membership ownership')
+      ids.add(id)
+    })
+  }
 }
 
 function assertRecipe(value: unknown): void {
@@ -114,7 +164,30 @@ function assertRecipe(value: unknown): void {
   })
   if (!dynamic) throw new Error('Rigid bake recipe requires a dynamic body')
   new SimulationClock(value as unknown as RigidBodyBakeRecipe)
-  assertRigidFractureEvents(value as unknown as RigidBodyBakeRecipe)
+  assertRigidFractureEvents(value as unknown as RigidBodyBakeRecipe, { requireRealized: true })
+  assertFractureAppearance(value as unknown as RigidBodyBakeRecipe)
+}
+
+/** Validate additive fracture appearance provenance without loading media. */
+function assertFractureAppearance(recipe: RigidBodyBakeRecipe): void {
+  const appearance = recipe.fractureAppearance
+  if (!appearance) return
+  const event = recipe.fractureEvents?.[0]
+  if (!event || appearance.schemaVersion !== 1 || !['solid', 'image'].includes(appearance.kind)
+    || !boundedText(appearance.sourceLayerId) || !HASH.test(appearance.contentHash)) {
+    throw new Error('Invalid fracture appearance provenance')
+  }
+  const source = recipe.bodies.find(body => body.bodyId === event.sourceBodyId)
+  if (!source || source.layerId !== appearance.sourceLayerId) {
+    throw new Error('Fracture appearance source does not match its event body')
+  }
+  if (appearance.kind === 'image') {
+    if (!boundedText(appearance.assetId) || !Number.isFinite(appearance.assetWidth)
+      || !Number.isFinite(appearance.assetHeight) || appearance.assetWidth <= 0 || appearance.assetHeight <= 0
+      || !['fill', 'contain', 'cover', 'none'].includes(appearance.objectFit)) {
+      throw new Error('Invalid fracture image appearance provenance')
+    }
+  }
 }
 
 function assertFiniteNumber(value: unknown): asserts value is number {

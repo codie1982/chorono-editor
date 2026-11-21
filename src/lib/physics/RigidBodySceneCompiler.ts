@@ -26,10 +26,10 @@ export interface RigidBodyBakeInput {
 }
 
 /**
- * Compiles supported scene rectangles into an immutable rigid-body recipe.
+ * Compiles supported rectangular scene layers into an immutable rigid-body recipe.
  *
- * This first vertical slice accepts root, non-instanced rectangle layers with
- * positive uniform scale and no live transform writer. It snapshots visual
+ * This first vertical slice accepts root, non-instanced rectangle shapes and
+ * image layers with positive uniform scale and no live transform writer. It snapshots visual
  * geometry in composition pixels and physics settings in SI-facing units; it
  * never retains the scene or creates a solver. Instances are stateless.
  */
@@ -96,8 +96,8 @@ export class RigidBodySceneCompiler {
   }
 
   private compileBody(scene: ChronoScene, layer: Layer, authoring: RigidBodyAuthoring): RigidBodySnapshot {
-    if (authoring.collider !== 'rectangle' || layer.type !== 'shape' || (layer.shapeKind ?? layer.shape ?? 'rect') !== 'rect') {
-      throw new Error(`Rigid body ${layer.id} must be a rectangle shape`)
+    if (authoring.collider !== 'rectangle' || !isRectangleVisualLayer(layer)) {
+      throw new Error(`Rigid body ${layer.id} must be a rectangle shape or image layer`)
     }
     if (layer.parentId || layer.instanceOf) throw new Error(`Rigid body ${layer.id} cannot use hierarchy or live instances yet`)
     if (layer.motionPath || layer.followPath) throw new Error(`Rigid body ${layer.id} cannot use a motion/follow path`)
@@ -157,6 +157,28 @@ export class RigidBodySceneCompiler {
   }
 }
 
+/**
+ * Reports whether a layer can be offered by rectangular rigid-body pickers.
+ *
+ * This inexpensive capability check covers static layer geometry, hierarchy
+ * and uniform scale. The compiler still validates timeline/expression writers,
+ * numeric material values and bake range when Preview starts.
+ */
+export function isRigidRectangleLayerCandidate(layer: Layer): boolean {
+  return isRectangleVisualLayer(layer) && !!layer.size
+    && Number.isFinite(layer.size.width) && layer.size.width > 0
+    && Number.isFinite(layer.size.height) && layer.size.height > 0
+    && !layer.parentId && !layer.instanceOf
+    && Number.isFinite(layer.transform.scaleX) && layer.transform.scaleX > 0
+    && Number.isFinite(layer.transform.scaleY)
+    && Math.abs(layer.transform.scaleX - layer.transform.scaleY) <= 1e-9
+}
+
+function isRectangleVisualLayer(layer: Layer): boolean {
+  return (layer.type === 'shape' && (layer.shapeKind ?? layer.shape ?? 'rect') === 'rect')
+    || (layer.type === 'image' && !!layer.image)
+}
+
 /** Recomputes the deterministic recipe hash and rejects altered stored fields. */
 export function hashRigidBodyBakeRecipe(recipe: Omit<RigidBodyBakeRecipe, 'recipeHash'>): string {
   return hashCanonicalRecords('rigid-bake-recipe-v1', [
@@ -168,7 +190,31 @@ export function hashRigidBodyBakeRecipe(recipe: Omit<RigidBodyBakeRecipe, 'recip
     ...(recipe.fractureEvents ?? []).flatMap(event => [
       `fracture:${event.id}`, `fracture-time:${event.timeMs}`, `fracture-tick:${event.tick}`,
       `fracture-source:${event.sourceBodyId}`, `fracture-fragments:${event.fragmentBodyIds.join(',')}`,
+      ...(event.trigger ? event.trigger.kind === 'time'
+        ? ['fracture-trigger:time']
+        : [
+          `fracture-trigger:impact,${event.trigger.minimumRelativeNormalSpeedPxPerSecond}`,
+          `fracture-trigger-colliders:${event.trigger.colliderBodyIds.join(',')}`,
+        ] : []),
+      ...(event.explosion ? [
+        `fracture-explosion-center:${event.explosion.centerLocalOffsetPx.x},${event.explosion.centerLocalOffsetPx.y}`,
+        `fracture-explosion-velocity:${event.explosion.radialVelocityPxPerSecond},${event.explosion.directionDeg},${event.explosion.directionalVelocityPxPerSecond}`,
+        `fracture-explosion-spin:${event.explosion.spinVelocityDegPerSecond}`,
+        `fracture-explosion-random:${event.explosion.variation},${event.explosion.seed}`,
+      ] : []),
+      ...(event.realization ? [
+        `fracture-impact-body:${event.realization.contactBodyId}`,
+        `fracture-impact-speed:${event.realization.relativeNormalSpeedPxPerSecond}`,
+        `fracture-impact-point:${event.realization.contactPointPx.x},${event.realization.contactPointPx.y}`,
+        `fracture-impact-normal:${event.realization.contactNormal.x},${event.realization.contactNormal.y}`,
+      ] : []),
     ]),
+    ...(recipe.fractureAppearance ? [
+      `fracture-appearance:${recipe.fractureAppearance.schemaVersion},${recipe.fractureAppearance.kind},${recipe.fractureAppearance.sourceLayerId},${recipe.fractureAppearance.contentHash}`,
+      ...(recipe.fractureAppearance.kind === 'image' ? [
+        `fracture-image:${recipe.fractureAppearance.assetId},${recipe.fractureAppearance.assetWidth},${recipe.fractureAppearance.assetHeight},${recipe.fractureAppearance.objectFit}`,
+      ] : []),
+    ] : []),
   ])
 }
 

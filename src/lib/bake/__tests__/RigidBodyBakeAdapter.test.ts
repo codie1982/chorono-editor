@@ -18,12 +18,19 @@ describe('RigidBodyBakeAdapter', () => {
     const preview = job.getSnapshot().preview!
     expect(job.getSnapshot().status).toBe('preview-ready')
     expect(preview.report).toMatchObject({ tickCount: 360, sampleCount: 91, bodyCount: 2,
-      dynamicBodyCount: 1, keyframeCount: 273, solver: 'matter-js@0.20.0' })
+      dynamicBodyCount: 1, solver: 'matter-js@0.20.0', execution: 'inline' })
+    expect(preview.report.rawKeyframeCount).toBeGreaterThanOrEqual(273)
+    expect(preview.report.keyframeCount).toBeLessThan(preview.report.rawKeyframeCount)
+    expect(preview.report.maxVertexErrorPx).toBeLessThanOrEqual(.5 + 1e-9)
+    expect(preview.report.maxAngleErrorDeg).toBeLessThanOrEqual(.25 + 1e-9)
+    expect(preview.report.protectedEventCount).toBeGreaterThan(0)
     expect(preview.tracks.map(track => track.target)).toEqual([
       'layers.box.transform.x', 'layers.box.transform.y', 'layers.box.transform.rotationDeg',
     ])
     expect(preview.clip.poseAt('rigid:box', 90).centerY).toBeCloseTo(350, 0)
     expect(preview.tracks[1].keyframes.at(-1)?.value).toBeCloseTo(300, 0)
+    expect(preview.tracks.map(track => track.keyframes.map(key => key.timeMs)))
+      .toEqual(Array(3).fill(preview.tracks[0].keyframes.map(key => key.timeMs)))
     expect(budget.getSnapshot().chargedBytes).toBe(preview.report.retainedBytes)
     job.dispose()
     expect(budget.getSnapshot().chargedBytes).toBe(0)

@@ -12,8 +12,14 @@ import { SeededRandom } from './SeededRandom'
 const MIN_FRAGMENT_COUNT = 2
 const MAX_FRAGMENT_COUNT = 100
 const MAX_SEED_DRAWS_PER_POINT = 4096
+const MAX_GENERATION_ID_LENGTH = 116
 
 export interface VoronoiFractureInput {
+  /**
+   * Stable ASCII scene-id prefix. The 116-character limit leaves room for
+   * the longest generated `-fragment-99` layer id inside the scene's
+   * 128-character entity-id contract.
+   */
   readonly generationId: string
   readonly sourceOwnerId: string
   readonly sourcePolygon: readonly FracturePoint2D[]
@@ -38,8 +44,8 @@ export interface VoronoiFractureInput {
 export class VoronoiFractureGenerator {
   /** Creates generation zero in source-local pixels without mutating input. */
   generate(input: VoronoiFractureInput): FractureGeneration {
-    assertId(input.generationId, 'Fracture generation id')
-    assertId(input.sourceOwnerId, 'Fracture source owner id')
+    assertSceneId(input.generationId, 'Fracture generation id', MAX_GENERATION_ID_LENGTH)
+    assertSceneId(input.sourceOwnerId, 'Fracture source owner id', 128)
     if (!Number.isSafeInteger(input.fragmentCount) || input.fragmentCount < MIN_FRAGMENT_COUNT
       || input.fragmentCount > MAX_FRAGMENT_COUNT) {
       throw new RangeError(`Fracture fragment count must be ${MIN_FRAGMENT_COUNT}–${MAX_FRAGMENT_COUNT}`)
@@ -80,7 +86,7 @@ export class VoronoiFractureGenerator {
           areaPx2: source.area,
           boundsPx: source.bounds,
         },
-        algorithm: { id: 'd3-delaunay', version: '6.0.4', compilerVersion: 1 },
+        algorithm: { id: 'd3-delaunay', version: '6.0.4', compilerVersion: 2 },
         seeds,
         fragments,
       }
@@ -105,7 +111,7 @@ export class VoronoiFractureGenerator {
       const polygon = new ConvexPolygon2D(clipped, `Voronoi fragment ${index}`)
       if (!polygon.contains(seed, 1e-7)) throw new Error(`Voronoi fragment ${index} does not contain its seed`)
       return Object.freeze({
-        id: `${generationId}:fragment:${index}`,
+        id: `${generationId}-fragment-${index}`,
         seedId: seed.id,
         polygon: polygon.points,
         centroidPx: polygon.centroid,
@@ -140,7 +146,7 @@ function createSeeds(
       }
     }
     if (!realized) throw new Error(`Fracture seed ${index} could not be placed inside the source polygon`)
-    seeds.push(Object.freeze({ id: `${generationId}:seed:${index}`, ...realized }))
+    seeds.push(Object.freeze({ id: `${generationId}-seed-${index}`, ...realized }))
   }
   return seeds
 }
@@ -161,8 +167,9 @@ function mixSeed(seed: number, attempt: number): number {
   return value >>> 0
 }
 
-function assertId(value: string, label: string): void {
-  if (typeof value !== 'string' || value.length < 1 || value.length > 256 || /[\u0000-\u001f]/.test(value)) {
-    throw new Error(`${label} must be 1–256 printable characters`)
+/** Validates ids that may become scene layer ids or prefixes for them. */
+function assertSceneId(value: string, label: string, maxLength: number): void {
+  if (typeof value !== 'string' || value.length < 1 || value.length > maxLength || !/^[\w-]+$/.test(value)) {
+    throw new Error(`${label} must be 1–${maxLength} ASCII letters, digits, underscores or hyphens`)
   }
 }

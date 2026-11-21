@@ -1,7 +1,7 @@
-import { MatterPhysicsBackend } from '@/lib/physics/MatterPhysicsBackend'
 import type { PhysicsBackendFactory } from '@/lib/physics/PhysicsBackend'
 import { RigidPoseClip } from '@/lib/physics/RigidPoseClip'
 import { RigidPoseTrackCompiler } from '@/lib/physics/RigidPoseTrackCompiler'
+import type { RigidPoseSimplificationPolicy } from '@/lib/physics/RigidPoseKeyframeSimplifier'
 import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource } from '@/lib/physics/RigidBodySceneCompiler'
 import { editorResourceBudget, type ResourceAllocator, type ResourceReservation } from '@/lib/resources/budget'
@@ -10,6 +10,10 @@ import { SimulationClock } from '@/lib/simulation/SimulationClock'
 import type { Track } from '@/lib/types'
 import type { RigidBodyBakeRecipe, RigidPoseCacheHeader } from '@/lib/types/physics'
 import type { BakeAdapter, BakePreparationContext } from '../BakeContracts'
+import type { RigidBodySimulationExecutor } from '../rigid/RigidBodySimulationExecutor'
+import { RigidBodySimulationRunner } from '../rigid/RigidBodySimulationRunner'
+import { RigidBodyWorkerClient } from '../rigid/RigidBodyWorkerClient'
+import { realizeRigidFractureRecipe } from '@/lib/physics/RigidFractureRecipeRealizer'
 
 const DEFAULT_MAX_RETAINED_BYTES = 64 * 1024 ** 2
 const PREVIEW_OVERHEAD_BYTES = 64 * 1024
@@ -21,11 +25,16 @@ export interface RigidBodyBakeReport {
   readonly sampleCount: number
   readonly bodyCount: number
   readonly dynamicBodyCount: number
+  readonly rawKeyframeCount: number
   readonly keyframeCount: number
+  readonly protectedEventCount: number
+  readonly maxVertexErrorPx: number
+  readonly maxAngleErrorDeg: number
   readonly clipBytes: number
   readonly estimatedTrackBytes: number
   readonly retainedBytes: number
   readonly solver: 'matter-js@0.20.0'
+  readonly execution: 'inline' | 'worker'
   readonly recipeHash: string
 }
 
@@ -75,34 +84,46 @@ export class RigidBodyBakePreview {
 export interface RigidBodyBakeAdapterOptions {
   readonly allocator?: ResourceAllocator
   readonly backendFactory?: PhysicsBackendFactory
+  /** Explicit execution policy; omit to prefer Worker in supported browsers. */
+  readonly simulationExecutor?: RigidBodySimulationExecutor
   readonly maxRetainedBytes?: number
-  /** Cooperative main-thread slice size until the dedicated worker lands. */
+  /** Cooperative compatibility-fallback slice size. */
   readonly yieldEveryTicks?: number
+  /** Coupled world-space pose simplification; defaults to 0.5 px / 0.25°. */
+  readonly simplificationPolicy?: RigidPoseSimplificationPolicy
 }
 
 /**
  * Runs one deterministic fixed-step rigid simulation and prepares normal tracks.
  *
- * Solver state is private to the injected backend and always disposed. Work
- * observes AbortSignal on every tick and yields at a bounded interval so the UI
- * can cancel. No scene mutation occurs; publication remains BakeService's one
- * synchronous commit transaction.
+ * Browsers prefer a dedicated Worker; unsupported platforms retain the same
+ * deterministic bounded-yield runner. Solver state is always disposed and
+ * work observes AbortSignal. No scene mutation occurs; publication remains
+ * BakeService's one synchronous commit transaction.
  */
 export class RigidBodyBakeAdapter implements BakeAdapter<RigidBodyBakeRecipe, RigidBodyBakePreview> {
   readonly kind = 'rigidPose'
   private readonly allocator: ResourceAllocator
-  private readonly backendFactory: PhysicsBackendFactory
+  private readonly simulationExecutor: RigidBodySimulationExecutor
   private readonly maxRetainedBytes: number
   private readonly yieldEveryTicks: number
-  private readonly trackCompiler = new RigidPoseTrackCompiler()
+  private readonly trackCompiler: RigidPoseTrackCompiler
 
   constructor(options: RigidBodyBakeAdapterOptions = {}) {
     this.allocator = options.allocator ?? editorResourceBudget
-    this.backendFactory = options.backendFactory ?? (() => new MatterPhysicsBackend())
     this.maxRetainedBytes = options.maxRetainedBytes ?? DEFAULT_MAX_RETAINED_BYTES
     this.yieldEveryTicks = options.yieldEveryTicks ?? 64
     if (!Number.isSafeInteger(this.maxRetainedBytes) || this.maxRetainedBytes < 1) throw new RangeError('Rigid preview byte limit is invalid')
     if (!Number.isSafeInteger(this.yieldEveryTicks) || this.yieldEveryTicks < 1) throw new RangeError('Rigid bake yield interval is invalid')
+    if (options.simulationExecutor && options.backendFactory) {
+      throw new Error('Rigid simulation executor and backend factory are mutually exclusive')
+    }
+    this.simulationExecutor = options.simulationExecutor ?? (
+      !options.backendFactory && options.yieldEveryTicks === undefined && RigidBodyWorkerClient.isSupported()
+        ? new RigidBodyWorkerClient()
+        : new RigidBodySimulationRunner({ backendFactory: options.backendFactory, yieldEveryTicks: this.yieldEveryTicks })
+    )
+    this.trackCompiler = new RigidPoseTrackCompiler(options.simplificationPolicy)
   }
 
   /** Prepares an owned pose clip and editable tracks without touching the scene. */
@@ -113,68 +134,68 @@ export class RigidBodyBakeAdapter implements BakeAdapter<RigidBodyBakeRecipe, Ri
     const poseValues = safeProduct(clock.sampleCount, recipe.bodies.length, 3)
     const visibilityKeyframeCount = (recipe.fractureEvents ?? [])
       .reduce((count, event) => count + (event.fragmentBodyIds.length + 1) * 2, 0)
-    const keyframeCount = safeAdd(safeProduct(clock.sampleCount, dynamicCount, 3), visibilityKeyframeCount)
+    const rawKeyframeCount = safeAdd(safeProduct(clock.sampleCount, dynamicCount, 3), visibilityKeyframeCount)
     const posePayloadBytes = safeAdd(safeProduct(poseValues, Float64Array.BYTES_PER_ELEMENT), safeProduct(clock.sampleCount, Float64Array.BYTES_PER_ELEMENT))
     const trackCount = dynamicCount * 3 + (recipe.fractureEvents ?? [])
       .reduce((count, event) => count + event.fragmentBodyIds.length + 1, 0)
-    const estimatedTrackBytes = safeAdd(safeProduct(keyframeCount, ESTIMATED_KEY_BYTES), safeProduct(trackCount, ESTIMATED_TRACK_BYTES))
-    const retainedEstimate = safeAdd(posePayloadBytes, estimatedTrackBytes)
+    const worstCaseTrackBytes = safeAdd(safeProduct(rawKeyframeCount, ESTIMATED_KEY_BYTES), safeProduct(trackCount, ESTIMATED_TRACK_BYTES))
+    const retainedEstimate = safeAdd(posePayloadBytes, worstCaseTrackBytes)
     if (retainedEstimate > this.maxRetainedBytes) throw new RangeError(`Rigid bake preview exceeds ${this.maxRetainedBytes} retained bytes`)
     checkCancelled(context.signal)
-    const peakBytes = safeAdd(safeProduct(posePayloadBytes, 2), estimatedTrackBytes, PREVIEW_OVERHEAD_BYTES)
+    const peakBytes = safeAdd(safeProduct(posePayloadBytes, 2), worstCaseTrackBytes, PREVIEW_OVERHEAD_BYTES)
     const reservation = this.allocator.reserve('preview', peakBytes)
     if (!reservation) throw new RangeError('Rigid bake preview exceeds the managed resource budget')
-    const backend = this.backendFactory()
-    let poses = new Float64Array(poseValues)
-    let times = clock.sampleTimesMs()
     try {
-      if (backend.id !== recipe.solverId || backend.version !== recipe.solverVersion) {
-        throw new Error('Rigid physics backend does not match the recipe')
-      }
-      backend.initialize(recipe)
-      writeSample(poses, 0, recipe, backend)
       context.reportProgress({ value: .05, phase: 'simulate', message: 'Rigid solver initialized.' })
-      for (let tick = 1; tick <= clock.totalTicks; tick++) {
-        checkCancelled(context.signal)
-        backend.step(clock.stepDurationMs)
-        if (clock.isSampleTick(tick)) writeSample(poses, clock.sampleIndexForTick(tick), recipe, backend)
-        if (tick % this.yieldEveryTicks === 0 || tick === clock.totalTicks) {
-          context.reportProgress({
-            value: .05 + .7 * tick / clock.totalTicks,
-            phase: 'simulate', message: `Simulated ${tick} / ${clock.totalTicks} fixed ticks.`,
-          })
-          await yieldToHost()
-        }
-      }
+      const simulation = await this.simulationExecutor.simulate(recipe, {
+        signal: context.signal,
+        reportProgress: ({ tick, totalTicks }) => context.reportProgress({
+          value: .05 + .7 * tick / totalTicks,
+          phase: 'simulate',
+          message: `Simulated ${tick} / ${totalTicks} fixed ticks.`,
+        }),
+      })
       checkCancelled(context.signal)
+      const realizedRecipe = realizeRigidFractureRecipe(recipe, simulation.events)
       const header: RigidPoseCacheHeader = {
-        schemaVersion: 1, kind: 'rigidPose', solverId: recipe.solverId, solverVersion: recipe.solverVersion,
-        sourceHash: String(recipe.source.revision), recipeHash: recipe.recipeHash,
+        schemaVersion: 1, kind: 'rigidPose', solverId: realizedRecipe.solverId, solverVersion: realizedRecipe.solverVersion,
+        sourceHash: String(realizedRecipe.source.revision), recipeHash: realizedRecipe.recipeHash,
         coordinateSpace: 'composition-pixels-y-down', linearUnit: 'pixel', angularUnit: 'degree-unwrapped',
-        timeUnit: 'millisecond', pixelsPerMeter: recipe.pixelsPerMeter, stepHz: recipe.stepHz,
-        sampleFps: recipe.sampleFps, durationMs: recipe.durationMs,
-        bodyIds: recipe.bodies.map(body => body.bodyId), channels: ['centerX', 'centerY', 'angle'],
+        timeUnit: 'millisecond', pixelsPerMeter: realizedRecipe.pixelsPerMeter, stepHz: realizedRecipe.stepHz,
+        sampleFps: realizedRecipe.sampleFps, durationMs: realizedRecipe.durationMs,
+        bodyIds: realizedRecipe.bodies.map(body => body.bodyId), channels: ['centerX', 'centerY', 'angle'],
       }
       context.reportProgress({ value: .8, phase: 'compile', message: 'Compiling normal transform tracks.' })
-      const clip = new RigidPoseClip({ header, sampleTimesMs: times, poses })
-      poses = new Float64Array(0); times = new Float64Array(0)
-      const tracks = this.trackCompiler.compile(recipe, clip)
+      const clip = new RigidPoseClip({
+        header,
+        sampleTimesMs: simulation.sampleTimesMs,
+        poses: simulation.poses,
+      })
+      const compilation = this.trackCompiler.compile(realizedRecipe, clip, simulation.events)
+      const tracks = compilation.tracks
       checkCancelled(context.signal)
+      const estimatedTrackBytes = safeAdd(
+        safeProduct(compilation.report.keyframeCount, ESTIMATED_KEY_BYTES),
+        safeProduct(trackCount, ESTIMATED_TRACK_BYTES),
+      )
       const retainedBytes = safeAdd(clip.byteLength, estimatedTrackBytes)
       if (!reservation.resize(retainedBytes)) throw new RangeError('Rigid retained preview exceeds the managed resource budget')
       reservation.commit()
       const report: RigidBodyBakeReport = {
         tickCount: clock.totalTicks, sampleCount: clock.sampleCount, bodyCount: recipe.bodies.length,
-        dynamicBodyCount: dynamicCount, keyframeCount, clipBytes: clip.byteLength, estimatedTrackBytes,
-        retainedBytes, solver: 'matter-js@0.20.0', recipeHash: recipe.recipeHash,
+        dynamicBodyCount: dynamicCount, rawKeyframeCount: compilation.report.rawKeyframeCount,
+        keyframeCount: compilation.report.keyframeCount,
+        protectedEventCount: compilation.report.protectedEventCount,
+        maxVertexErrorPx: compilation.report.maxVertexErrorPx,
+        maxAngleErrorDeg: compilation.report.maxAngleErrorDeg,
+        clipBytes: clip.byteLength, estimatedTrackBytes,
+        retainedBytes, solver: 'matter-js@0.20.0', execution: simulation.execution, recipeHash: realizedRecipe.recipeHash,
       }
       context.reportProgress({ value: .95, phase: 'preview', message: 'Rigid pose preview and editable tracks are ready.' })
-      return new RigidBodyBakePreview({ recipe, report, clip, tracks, reservation })
+      return new RigidBodyBakePreview({ recipe: realizedRecipe, report, clip, tracks, reservation })
     } catch (error) {
       reservation.release()
       throw error
-    } finally {
-      backend.dispose()
     }
   }
 
@@ -190,25 +211,8 @@ export class RigidBodyBakeAdapter implements BakeAdapter<RigidBodyBakeRecipe, Ri
   }
 }
 
-function writeSample(
-  target: Float64Array,
-  sampleIndex: number,
-  recipe: RigidBodyBakeRecipe,
-  backend: ReturnType<PhysicsBackendFactory>,
-): void {
-  recipe.bodies.forEach((body, bodyIndex) => {
-    const pose = backend.readPose(body.bodyId), offset = (sampleIndex * recipe.bodies.length + bodyIndex) * 3
-    if (![pose.centerX, pose.centerY, pose.angleDeg].every(Number.isFinite)) throw new RangeError(`Rigid solver produced a non-finite pose for ${body.bodyId}`)
-    target[offset] = pose.centerX; target[offset + 1] = pose.centerY; target[offset + 2] = pose.angleDeg
-  })
-}
-
 function checkCancelled(signal: AbortSignal): void {
   if (signal.aborted) throw cancelledJobError()
-}
-
-function yieldToHost(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0))
 }
 
 function safeProduct(...values: number[]): number {

@@ -42,6 +42,20 @@ describe('Mesh2D texture mapping', () => {
     expect(placement.corners[0].y).toBeCloseTo(155)
   })
 
+  it('uses an explicit source rectangle instead of renormalizing fragment geometry bounds', () => {
+    const fragment = {
+      ...geometry,
+      positions: [120, 40, 220, 40, 220, 140, 120, 140],
+      uvs: [120 / 320, 40 / 180, 220 / 320, 40 / 180, 220 / 320, 140 / 180, 120 / 320, 140 / 180],
+      textureReferenceBounds: { x: 0, y: 0, width: 320, height: 180 },
+    }
+    const placement = resolveMesh2DTexturePlacement(fragment, 640, 360)!
+
+    expect(placement.bounds).toEqual({ x: 0, y: 0, width: 320, height: 180 })
+    expect(placement.localToSource.applyToPoint({ x: 120, y: 40 })).toEqual({ x: 240, y: 80 })
+    expect(placement.localToSource.applyToPoint({ x: 220, y: 140 })).toEqual({ x: 440, y: 280 })
+  })
+
   it('rejects non-finite, non-positive and out-of-range portable values', () => {
     expect(() => resolveMesh2DTextureTransform({ ...DEFAULT_MESH2D_TEXTURE_TRANSFORM, scaleX: 0 })).toThrow('positive')
     expect(() => resolveMesh2DTextureTransform({ ...DEFAULT_MESH2D_TEXTURE_TRANSFORM, pivotU: 2 })).toThrow('between 0 and 1')

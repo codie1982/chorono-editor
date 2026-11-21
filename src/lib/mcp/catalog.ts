@@ -116,7 +116,7 @@ export async function getCapabilities(profile: ToolCatalogProfile = 'standard', 
       functions: ['vec2', 'x', 'y', 'rgb', 'rgba', 'color', 'red', 'green', 'blue', 'alpha', 'concat', 'str', 'fixed'],
       configuration: 'Lifecycle/asset operations are not live jobs. Inspector configuration calculators apply only an explicitly reviewed result; they do not persist a formula.' },
     particlePresets: getAllParticlePresets().map(p => ({ id: p.id, name: p.name })), limits: LIMITS,
-    exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'stereo WAV audio preview and mixdown'] }
+    exports: ['portable project JSON', 'runtime JSON', 'PNG preview', 'SVG', 'image sequence ZIP', 'Chorono Render PNG/MP4 transfer with built-in fallback', 'stereo WAV audio preview and mixdown'] }
   if (options.summary) return { ...base, objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category })) }
   return { ...base, tools: catalog.list('legacy'),
     objectKinds: layerRegistry.getAll().map(d => ({ kind: d.kind, label: d.label, category: d.category, properties: d.getPropertyGroups(d.createDefault()) })), scripting: SCRIPT_HELP }

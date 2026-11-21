@@ -6,12 +6,15 @@ import { implementationToolName, parseToolCatalogProfile, TOOL_ALIASES } from '.
 describe('versioned MCP discovery and callable compatibility', () => {
   it('publishes focused workflows while retaining the historical discovery profile', async () => {
     const standard = await getToolCatalog(), legacy = await getToolCatalog('legacy')
-    expect(standard).toHaveLength(41)
-    expect(legacy).toHaveLength(78)
+    expect(standard).toHaveLength(58)
+    expect(legacy).toHaveLength(95)
     expect(new Set(standard.map(tool => tool.name)).size).toBe(standard.length)
     expect(standard.map(tool => tool.name)).toEqual(expect.arrayContaining([
       'get_handoff_context', 'get_scene', 'get_layer', 'create_layer', 'upsert_keyframes', 'render_preview',
-      'evaluate_frame', 'batch_actions', 'import_asset', 'export_audio', 'undo',
+      'evaluate_frame', 'batch_actions', 'import_asset', 'render_2d', 'bake_rigid_bodies',
+      'bake_voronoi_fracture', 'prepare_rigid_body_bake', 'prepare_voronoi_fracture_bake',
+      'get_bake_job', 'preview_bake_job', 'cancel_bake_job', 'discard_bake_job',
+      'commit_bake_job', 'inspect_physics_bake', 'clear_physics_bake', 'export_audio', 'undo',
     ]))
     expect(standard.some(tool => tool.name === 'get_scene_json')).toBe(false)
     expect(legacy.map(tool => tool.name)).toEqual(expect.arrayContaining([
@@ -36,10 +39,10 @@ describe('versioned MCP discovery and callable compatibility', () => {
 
   it('separates lightweight and exact-schema discovery from the old full response', async () => {
     const full = await getCapabilities() as any
-    expect(full.tools).toHaveLength(78)
+    expect(full.tools).toHaveLength(95)
     expect(full.scripting).toContain('scene.add')
     expect(full.catalog).toMatchObject({ version: 1, profile: 'standard' })
-    expect(full.catalog.advertisedToolNames).toHaveLength(41)
+    expect(full.catalog.advertisedToolNames).toHaveLength(58)
     const summary = await getCapabilities('standard', { summary: true }) as any
     expect(summary.tools).toBeUndefined()
     expect(summary.scripting).toBeUndefined()

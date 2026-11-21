@@ -16,12 +16,20 @@ import type { BridgeJob } from '../../protocol'
 export function fakeEditor(label = 'MCP tester') {
   let scene = emptyScene(), revision = 0, transactionActive = false
   const history: ChronoScene[] = [], future: ChronoScene[] = [], document = new EditorDocumentLifetime()
+  const committedListeners = new Set<(value: ChronoScene) => void>()
+  const publishCommitted = () => committedListeners.forEach(listener => listener(scene))
   const host = { editor: {
     getScene: () => scene, getRevision: () => revision, getDocumentSignal: () => document.signal,
     isTransactionActive: () => transactionActive,
-    dispatchCommand: (command: any) => { const next = executeAuthoredCommand(command, scene); history.push(scene); scene = next; revision++; future.length = 0 },
-    undo: () => { if (history.length) { future.push(scene); scene = history.pop()!; revision++ } },
-    redo: () => { if (future.length) { history.push(scene); scene = future.pop()!; revision++ } },
+    subscribeCommitted: (listener: (value: ChronoScene) => void) => {
+      committedListeners.add(listener)
+      return () => { committedListeners.delete(listener) }
+    },
+    dispatchCommand: (command: any) => {
+      const next = executeAuthoredCommand(command, scene); history.push(scene); scene = next; revision++; future.length = 0; publishCommitted()
+    },
+    undo: () => { if (history.length) { future.push(scene); scene = history.pop()!; revision++; publishCommitted() } },
+    redo: () => { if (future.length) { history.push(scene); scene = future.pop()!; revision++; publishCommitted() } },
   }, assets: new Map(), selectedTimelineId: '', currentTimeMs: 0, selectTimeline: () => {}, seek: () => {}, playToggle: () => {}, setSpeed: () => {} } as unknown as MCPHost
   const paired = pairEditor('Test editor'), controller = new AbortController(), tokens: string[] = []
   /** Independent authenticated identity, even when labels are identical. */
@@ -56,7 +64,9 @@ export function fakeEditor(label = 'MCP tester') {
     },
     setTransactionActive: (active: boolean) => { transactionActive = active },
     interceptJobs: (callback?: (job: BridgeJob) => void) => { beforeJob = callback },
-    replaceDocument: (next: ChronoScene, nextRevision = 0) => { scene = next; revision = nextRevision; document.replace(); history.length = 0; future.length = 0 },
+    replaceDocument: (next: ChronoScene, nextRevision = 0) => {
+      scene = next; revision = nextRevision; document.replace(); history.length = 0; future.length = 0; publishCommitted()
+    },
     historyLength: () => history.length,
     close: async () => { tokens.forEach(closeClientConnection); controller.abort(); await pump; disconnect(paired.id, paired.token) },
   }

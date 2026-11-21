@@ -1,21 +1,26 @@
-import { pathFromPoints, type Layer } from '@/lib/types'
+import type { ChronoScene, Layer } from '@/lib/types'
 import type { FractureGeneration } from '@/lib/types/fracture'
 import type { RigidBodyBakeRecipe } from '@/lib/types/physics'
 import { visualTransformFromRigidPose } from '@/lib/physics/RigidVisualTransform'
+import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
 
 /**
- * Builds editable path layers for one prepared fracture generation.
+ * Builds editable path or textured Mesh2D layers for one fracture generation.
  *
- * Fragment paths retain source-local polygon coordinates. Their anchors move
- * to the uniform-density centroid while the initial transform is compensated,
- * so the assembled fragments exactly overlay the source before activation and
- * later rotate around their physical centre. Returned layers own cloned style
- * data and have no runtime solver references.
+ * Fragment geometry retains source-local polygon coordinates. Solid sources
+ * produce paths; image sources produce Mesh2D triangles with source-rectangle
+ * UVs. Anchors move to the uniform-density centroid while the initial transform
+ * is compensated, so assembled fragments exactly overlay the source before
+ * activation and later rotate around their physical centre. Returned layers
+ * own detached portable appearance data and no runtime solver references.
  */
 export class FractureLayerFactory {
-  create(sceneLayers: readonly Layer[], generation: FractureGeneration, recipe: RigidBodyBakeRecipe): Layer[] {
-    const source = sceneLayers.find(layer => layer.id === generation.source.ownerId)
+  private readonly appearanceCompiler = new FractureAppearanceCompiler()
+
+  create(scene: Pick<ChronoScene, 'layers' | 'assets'>, generation: FractureGeneration, recipe: RigidBodyBakeRecipe): Layer[] {
+    const source = scene.layers.find(layer => layer.id === generation.source.ownerId)
     if (!source) throw new Error(`Fracture source layer is missing: ${generation.source.ownerId}`)
+    const appearanceSnapshot = recipe.fractureAppearance ?? this.appearanceCompiler.snapshot(scene, source)
     const event = recipe.fractureEvents?.[0]
     if (!event || event.fragmentBodyIds.length !== generation.fragments.length) {
       throw new Error('Fracture recipe does not match its generation')
@@ -31,12 +36,18 @@ export class FractureLayerFactory {
         centerY: body.centerPx.y,
         angleDeg: body.angleDeg,
       })
+      const appearance = this.appearanceCompiler.createFragmentAppearance(
+        scene,
+        source,
+        generation,
+        fragment,
+        appearanceSnapshot,
+      )
       return {
         id: fragment.id,
         name: `${source.name} · Fragment ${index + 1}`,
         mode: '2danimation',
-        type: 'path',
-        path: pathFromPoints(fragment.polygon.map(point => [point.x, point.y])),
+        ...appearance,
         transform: {
           x: transform.x,
           y: transform.y,
@@ -47,7 +58,6 @@ export class FractureLayerFactory {
           anchorY: body.visual.anchorY,
         },
         opacity: 1,
-        style: source.style ? structuredClone(source.style) : undefined,
         blendMode: source.blendMode,
         startMs: source.startMs,
         endMs: source.endMs,

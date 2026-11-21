@@ -11,18 +11,24 @@ import { SourceAccessError, sourceFailure } from './source/SourceAccessError'
 import { isSourceMutation } from './source/ToolSourcePolicy'
 import type { SourceAuthorization } from './source/EditorSourceIdentity'
 import { summarizeSourceChanges } from './source/SourceChangeSummary'
+import { MCPBakeJobOwnership, type MCPBakeJobOwner } from './bake/MCPBakeJobOwnership'
 
 interface Pending { job: BridgeJob; resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
 interface Session { id: string; token: string; label: string; seenAt: number; queue: Pending[]; pending: Map<string, Pending>; wake?: () => void; tail: Promise<unknown>; results: Map<string, { hash: string; result: Promise<any> }> }
 interface Plan { clientId: string; sessionId: string; documentEpoch: string; revision: number; scene: Snapshot['scene']; expiresAt: number; logs: string[]; commandCount: number; authoringHints?: AuthoringHints }
-interface BrokerState { sessions: Map<string, Session>; plans: Map<string, Plan>; reads?: ReadAccessRegistry; clients?: ClientConnections }
+interface BrokerState { sessions: Map<string, Session>; plans: Map<string, Plan>; reads?: ReadAccessRegistry; clients?: ClientConnections; bakeJobs?: MCPBakeJobOwnership }
 const globalBroker = globalThis as typeof globalThis & { __choronoBroker?: BrokerState }
 const state: BrokerState = globalBroker.__choronoBroker ??= { sessions: new Map(), plans: new Map() }
 const reads = state.reads ??= new ReadAccessRegistry(() => randomBytes(32).toString('hex'))
+const bakeJobs = state.bakeJobs ??= new MCPBakeJobOwnership()
 const clients = state.clients ??= new ClientConnections(() => randomBytes(32).toString('hex'), id => {
   reads.revoke({ clientId: id })
   for (const [planId, plan] of Array.from(state.plans)) if (plan.clientId === id) state.plans.delete(planId)
+  cancelOwnedBakeJobs(bakeJobs.releaseClient(id))
 })
+
+const BAKE_START_TOOLS = new Set(['prepare_rigid_body_bake', 'prepare_voronoi_fracture_bake'])
+const BAKE_JOB_TOOLS = new Set(['get_bake_job', 'preview_bake_job', 'cancel_bake_job', 'discard_bake_job', 'commit_bake_job'])
 
 /** Authenticated local-transport registration. The supplied name is audit text,
  * never authority. Only the resulting private connection credential resolves
@@ -39,6 +45,7 @@ export const closeClientConnection = (token: string): void => clients.close(toke
 function cleanup() {
   for (const [id, session] of Array.from(state.sessions)) if (Date.now() - session.seenAt > 120000) disconnect(id, session.token)
   for (const [id, plan] of Array.from(state.plans)) if (plan.expiresAt < Date.now()) { state.plans.delete(id); reads.revoke({ planId: id }) }
+  cancelOwnedBakeJobs(bakeJobs.prune())
 }
 
 export function pairEditor(label: string) {
@@ -61,6 +68,7 @@ export function disconnect(id: string, token: string) {
   for (const pending of Array.from(session.pending.values())) { clearTimeout(pending.timer); pending.reject(new Error('Editor disconnected')) }
   session.wake?.()
   state.sessions.delete(id)
+  bakeJobs.releaseSession(id)
   reads.revoke({ sessionId: id })
   for (const [planId, plan] of Array.from(state.plans)) if (plan.sessionId === id) state.plans.delete(planId)
 }
@@ -110,6 +118,15 @@ function ask(session: Session, method: string, args: JsonObject = {}, timeoutMs 
   })
 }
 
+/** Best-effort cooperative cancellation when the owning MCP connection closes. */
+function cancelOwnedBakeJobs(owners: readonly MCPBakeJobOwner[]): void {
+  for (const owner of owners) {
+    const session = state.sessions.get(owner.sessionId)
+    if (!session) continue
+    void ask(session, 'cancel_bake_job', { jobId: owner.jobId }, 30000).catch(() => {})
+  }
+}
+
 function chooseSession(id?: string) {
   cleanup()
   if (id) { const session = state.sessions.get(id); if (!session) throw new Error('Editor session not found'); return session }
@@ -130,6 +147,10 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
   const session = chooseSession(args.sessionId)
   const sourceWrite = isSourceMutation(name)
   if (sourceWrite || name === 'get_scene' || name === 'get_handoff_context') clients.verify(client)
+  if (BAKE_JOB_TOOLS.has(name)) {
+    const identity = clients.verify(client)
+    bakeJobs.require(String(args.jobId), identity.id, session.id)
+  }
   const hash = createHash('sha256').update(JSON.stringify({ name: requestedName, args })).digest('hex')
   const requestKey = args.requestId && name !== 'get_scene' && name !== 'get_handoff_context' ? `${client?.id ?? 'read-only'}:${args.requestId}` : undefined
   if (requestKey && session.results.has(requestKey)) {
@@ -180,6 +201,18 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
       reads.revoke({ planId: args.planId })
       return { ...result, logs: plan.logs, commandCount: plan.commandCount, ...summarize(plan.scene) }
     }
+    if (BAKE_START_TOOLS.has(name)) {
+      const started = await ask(session, name, args, 30000, authorization)
+      const jobId = started?.bakeJob?.jobId
+      if (typeof jobId !== 'string') throw new Error('Editor did not return a persistent bake job id')
+      bakeJobs.register(jobId, client!.id, session.id)
+      return started
+    }
+    if (BAKE_JOB_TOOLS.has(name)) {
+      const value = await ask(session, name, args, 30000, authorization)
+      if (name === 'discard_bake_job') bakeJobs.remove(String(args.jobId))
+      return value
+    }
     if (name === 'save_project') {
       const before: Snapshot = await ask(session, 'portable_snapshot')
       checkRevision(before.revision)
@@ -196,7 +229,17 @@ export async function callEditorTool(requestedName: string, args: JsonObject, cl
       const { data: _data, extension: _extension, ...metadata } = exported
       return { ...metadata, ...await writeArtifact(args.name ?? 'animation-' + Date.now(), exported.extension, data, false, 'exports'), revision: exported.revision, warnings: exported.warnings ?? [] }
     }
-    return ask(session, name, args, name === 'render_preview' ? 60000 : 30000, authorization)
+    if (name === 'render_2d') {
+      const rendered = await ask(session, name, args, 120000)
+      if (!rendered.data || !rendered.extension) return rendered
+      const data = Buffer.from(rendered.data, 'base64')
+      const { data: _data, extension: _extension, ...metadata } = rendered
+      return { ...metadata, ...await writeArtifact(args.name ?? 'render-' + Date.now(), rendered.extension, data, false, 'exports'),
+        revision: rendered.revision, warnings: rendered.warnings ?? [] }
+    }
+    return ask(session, name, args,
+      ['render_preview', 'bake_rigid_bodies', 'bake_voronoi_fracture'].includes(name) ? 120000 : 30000,
+      authorization)
   })
   session.tail = result
   if (requestKey) {

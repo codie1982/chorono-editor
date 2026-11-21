@@ -132,6 +132,10 @@ import AssetsPanel         from '@/components/panels/AssetsPanel'
 import StateMachinePanel       from '@/components/panels/StateMachinePanel'
 import ScriptConsolePanel      from '@/components/panels/ScriptConsolePanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
+import PhysicsSimulationsPanel from '@/components/physics/PhysicsSimulationsPanel'
+import { usePhysicsBakeController } from '@/components/physics/usePhysicsBakeController'
+import { DEFAULT_PHYSICS_VIEWPORT_OVERLAY_SETTINGS } from '@/components/physics/PhysicsViewportOverlayState'
+import JobsBakePanel from '@/components/bake/JobsBakePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
@@ -178,6 +182,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [initialScene] = useState(() => session.scene ?? createChoronoDemo())
   const sessionIdentity = useSessionIdentity()!
   const editor = useEditorState(initialScene, session.history)
+  const physicsBake = usePhysicsBakeController(editor)
+  const [physicsViewportOverlay, setPhysicsViewportOverlay] = useState(DEFAULT_PHYSICS_VIEWPORT_OVERLAY_SETTINGS)
   const recovery = useSceneSessionRecovery(editor, session)
   useEffect(() => acquireDiagnosticSharing(() => !editor.isTransactionActive()), [editor.isTransactionActive])
   const {
@@ -234,7 +240,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets',
-    'particles', 'player', 'scriptConsole', 'resourceMonitor', 'splineModeling', 'motionKeys',
+    'particles', 'physicsSimulations', 'jobsBake', 'player', 'scriptConsole', 'resourceMonitor', 'splineModeling', 'motionKeys',
   ])
 
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
@@ -1366,6 +1372,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       { id: 'assets',         title: 'Assets',         render: () => null },
 
       { id: 'particles',      title: 'Particle',       render: () => null },
+      { id: 'physicsSimulations', title: 'Physics',    render: () => null },
+      { id: 'jobsBake',       title: 'Jobs & Bake',    render: () => null },
       { id: 'scriptConsole',  title: 'Script',         render: () => null },
 
       { id: 'resourceMonitor', title: 'Resources & Performance', render: () => null },
@@ -1611,6 +1619,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     shapePlacementLayer={shapeCreation.template}
                     onShapePlacementComplete={shapeCreation.complete}
                     scene={scene} displayScene={layerIsolation.scene}
+                    physicsOverlay={physicsViewportOverlay}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
@@ -2031,6 +2040,24 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onLayerChange={updateLayer}
                   />
                 ),
+              },
+              {
+                id: 'physicsSimulations', title: 'Physics',
+                render: () => (
+                  <PhysicsSimulationsPanel
+                    scene={scene}
+                    selectedLayerId={selectedLayerId}
+                    selectedTimelineId={selectedTlId}
+                    controller={physicsBake}
+                    onOpenParticles={() => dock.dispatchRestorePanel('particles')}
+                    viewportOverlay={physicsViewportOverlay}
+                    onViewportOverlayChange={setPhysicsViewportOverlay}
+                  />
+                ),
+              },
+              {
+                id: 'jobsBake', title: 'Jobs & Bake',
+                render: () => <JobsBakePanel controller={physicsBake} editor={editor} />,
               },
               {
                 // BL-76 — Authoring Script REPL (JS host + scene API facade).

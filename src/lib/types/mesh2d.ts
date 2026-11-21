@@ -65,8 +65,26 @@ export interface ShapeBoundaryMesh2DSource {
   readonly generatorVersion: 1
 }
 
+/**
+ * Bake-owned Mesh2D source for one image-backed fracture fragment.
+ *
+ * Positions remain in the original source layer's local coordinates while
+ * UVs address the full source rectangle. The appearance hash identifies the
+ * exact image placement inherited at prepare time. Editing this generated
+ * layer is allowed, but bake ownership will then report it as modified.
+ */
+export interface FractureFragmentMesh2DSource {
+  readonly kind: 'fractureFragment'
+  readonly sourceLayerId: string
+  readonly generationId: string
+  readonly fragmentId: string
+  readonly sourceAppearanceHash: string
+  readonly generatorVersion: 1
+}
+
 /** Persisted source recipes supported by the 2D mesh subsystem. */
-export type Mesh2DSource = StructuredGridMesh2DSource | SplineBoundaryMesh2DSource | ShapeBoundaryMesh2DSource
+export type Mesh2DSource = StructuredGridMesh2DSource | SplineBoundaryMesh2DSource
+  | ShapeBoundaryMesh2DSource | FractureFragmentMesh2DSource
 
 /**
  * Fixed connectivity for a Mesh2D source.
@@ -96,6 +114,18 @@ export interface Mesh2DGeometry {
   readonly positions: readonly number[]
   readonly uvs: readonly number[]
   readonly topology: Mesh2DTopology
+  /**
+   * Local rectangle addressed by normalized UVs before texture placement.
+   * Absence preserves the historical contract where the geometry bounds are
+   * the UV reference. Fracture fragments use the complete source rectangle so
+   * independently moving pieces continue sampling their original pixels.
+   */
+  readonly textureReferenceBounds?: {
+    readonly x: number
+    readonly y: number
+    readonly width: number
+    readonly height: number
+  }
 }
 
 /** Ways a texture's source rectangle can be fitted into Mesh2D local bounds. */

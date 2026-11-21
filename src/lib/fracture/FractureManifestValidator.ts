@@ -14,12 +14,13 @@ export class FractureManifestValidator {
   validate(generation: FractureGeneration): void {
     if (!generation || generation.schemaVersion !== 1 || generation.generationIndex !== 0
       || generation.algorithm?.id !== 'd3-delaunay' || generation.algorithm.version !== '6.0.4'
-      || generation.algorithm.compilerVersion !== 1) throw new Error('Unsupported fracture generation schema')
+      || ![1, 2].includes(generation.algorithm.compilerVersion)) throw new Error('Unsupported fracture generation schema')
     if (!Number.isSafeInteger(generation.rootSeed) || generation.rootSeed < 0 || generation.rootSeed > 0xffffffff
       || !Number.isSafeInteger(generation.generationAttempt) || generation.generationAttempt < 0
       || !Number.isSafeInteger(generation.requestedFragmentCount) || generation.requestedFragmentCount < 2
       || generation.requestedFragmentCount > 100) throw new Error('Invalid fracture generation parameters')
     const source = new ConvexPolygon2D(generation.source.polygon, 'Stored fracture source')
+    if (generation.algorithm.compilerVersion === 2) assertPortableEntityIds(generation)
     if (generation.source.revision !== hashFractureSource(generation.source.ownerId, source.points)) {
       throw new Error('Fracture source revision is stale')
     }
@@ -54,6 +55,29 @@ export class FractureManifestValidator {
     const { topologyHash, ...withoutHash } = generation
     if (hashFractureGeneration(withoutHash) !== topologyHash) throw new Error('Fracture topology hash is stale')
   }
+}
+
+/**
+ * Compiler v2 guarantees every generated fragment can be used directly as a
+ * scene layer id. Compiler v1 remains readable as manifest data, but its
+ * colon-delimited fragment ids cannot cross the current scene boundary.
+ */
+function assertPortableEntityIds(generation: FractureGeneration): void {
+  if (!/^[\w-]{1,116}$/.test(generation.generationId)
+    || !/^[\w-]{1,128}$/.test(generation.source.ownerId)) {
+    throw new Error('Invalid fracture scene id prefix')
+  }
+  generation.seeds.forEach((seed, index) => {
+    if (seed.id !== `${generation.generationId}-seed-${index}`) {
+      throw new Error(`Invalid fracture seed id: ${seed.id}`)
+    }
+  })
+  generation.fragments.forEach((fragment, index) => {
+    if (fragment.id !== `${generation.generationId}-fragment-${index}`
+      || !/^[\w-]{1,128}$/.test(fragment.id)) {
+      throw new Error(`Invalid fracture fragment id: ${fragment.id}`)
+    }
+  })
 }
 
 function assertBounds(

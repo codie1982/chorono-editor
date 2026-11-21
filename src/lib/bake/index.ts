@@ -34,3 +34,12 @@ export type {
   RigidBodyBakeAdapterOptions,
   RigidBodyBakeReport,
 } from './adapters/RigidBodyBakeAdapter'
+export { RigidBodySimulationRunner } from './rigid/RigidBodySimulationRunner'
+export { RigidBodyWorkerClient, RigidBodyWorkerUnavailable } from './rigid/RigidBodyWorkerClient'
+export type {
+  RigidBodySimulationContext,
+  RigidBodySimulationExecution,
+  RigidBodySimulationExecutor,
+  RigidBodySimulationProgress,
+  RigidBodySimulationResult,
+} from './rigid/RigidBodySimulationExecutor'

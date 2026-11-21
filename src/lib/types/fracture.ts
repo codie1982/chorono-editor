@@ -12,6 +12,32 @@ export interface FractureBounds2D {
   readonly maxY: number
 }
 
+/**
+ * Appearance provenance captured with a prepared fracture recipe.
+ *
+ * The content hash covers the supported source appearance and the image
+ * asset's persisted dimensions where applicable. Runtime decoded media is not
+ * retained. Older fracture recipes may omit this additive record and continue
+ * to use the historical solid-path output behavior.
+ */
+export type FractureAppearanceSnapshot =
+  | {
+    readonly schemaVersion: 1
+    readonly kind: 'solid'
+    readonly sourceLayerId: string
+    readonly contentHash: string
+  }
+  | {
+    readonly schemaVersion: 1
+    readonly kind: 'image'
+    readonly sourceLayerId: string
+    readonly contentHash: string
+    readonly assetId: string
+    readonly assetWidth: number
+    readonly assetHeight: number
+    readonly objectFit: 'fill' | 'contain' | 'cover' | 'none'
+  }
+
 /** Realized deterministic Voronoi seed retained with portable geometry. */
 export interface FractureSeedPoint extends FracturePoint2D {
   readonly id: string
@@ -63,7 +89,8 @@ export interface FractureGeneration {
   readonly algorithm: {
     readonly id: 'd3-delaunay'
     readonly version: '6.0.4'
-    readonly compilerVersion: 1
+    /** V2 emits scene-portable fragment/seed ids; V1 remains readable. */
+    readonly compilerVersion: 1 | 2
   }
   readonly seeds: readonly FractureSeedPoint[]
   readonly fragments: readonly FragmentGeometry[]

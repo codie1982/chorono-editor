@@ -1,7 +1,11 @@
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
 import { FractureManifestValidator } from '@/lib/fracture/FractureManifestValidator'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
-import { hashRigidBakeTrack, rigidBakeTrackTargets } from '@/lib/physics/RigidPoseTrackCompiler'
+import { createRigidBakeRecord } from '@/lib/physics/RigidBakeOwnership'
+import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
+import { assertRigidBakeTracks } from '@/lib/physics/RigidBakeTrackValidation'
+import { rigidBakeTrackTargets } from '@/lib/physics/RigidPoseTrackCompiler'
+import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation'
 import type { ChronoScene, Layer, Timeline, Track } from '@/lib/types'
 import type { FractureGeneration } from '@/lib/types/fracture'
 import type { PhysicsSceneData, RigidBodyBakeRecipe } from '@/lib/types/physics'
@@ -31,6 +35,7 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
     label: `Bake Voronoi Fracture (${input.generation.fragments.length} fragments)`,
     execute(scene: ChronoScene): ChronoScene {
       new FractureManifestValidator().validate(input.generation)
+      assertRigidFractureEvents(input.recipe, { requireRealized: true })
       if (!new FractureRigidRecipeCompiler().isCurrent(input.recipe, input.generation, scene)) {
         throw new Error('Fracture source changed. Prepare a new bake preview.')
       }
@@ -41,7 +46,7 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
         || targets.some(target => !expectedTargets.delete(target)) || expectedTargets.size) {
         throw new Error('Fracture bake tracks do not match the recipe')
       }
-      input.tracks.forEach(track => validateTrack(track, input.sampleCount))
+      assertRigidBakeTracks(input.recipe, input.tracks)
       const timeline = scene.timelines.find(candidate => candidate.id === input.recipe.timelineId)
       if (!timeline) throw new Error(`Fracture bake timeline does not exist: ${input.recipe.timelineId}`)
       const collision = timeline.tracks.find(track => targets.includes(track.target))
@@ -53,31 +58,40 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
       if (scene.physics?.fractureGenerations?.some(generation => generation.generationId === input.generation.generationId)) {
         throw new Error(`Fracture generation already exists: ${input.generation.generationId}`)
       }
-      const fragmentLayers = new FractureLayerFactory().create(scene.layers, input.generation, input.recipe)
+      const fragmentLayers = new FractureLayerFactory().create(scene, input.generation, input.recipe)
       beforeLayers = scene.layers
       beforeTimeline = timeline
       beforePhysics = scene.physics
       hadPhysics = Object.hasOwn(scene, 'physics')
+      const hasExplicitMembership = timeline.layerIds !== undefined
       const layerIds = new Set(timeline.layerIds ?? [])
-      layerIds.add(input.generation.source.ownerId)
-      fragmentLayers.forEach(layer => layerIds.add(layer.id))
+      const addedLayerIds: string[] = []
+      if (hasExplicitMembership) {
+        for (const layerId of [input.generation.source.ownerId, ...fragmentLayers.map(layer => layer.id)]) {
+          if (!layerIds.has(layerId)) addedLayerIds.push(layerId)
+          layerIds.add(layerId)
+        }
+      }
       const nextTimeline: Timeline = {
         ...timeline,
         tracks: [...timeline.tracks, ...input.tracks],
-        layerIds: timeline.layerIds === undefined ? undefined : Array.from(layerIds),
+        ...(hasExplicitMembership ? { layerIds: Array.from(layerIds) } : {}),
       }
-      const record = {
-        schemaVersion: 1 as const,
+      const record = createRigidBakeRecord({
         id: recordId,
         recipe: input.recipe,
         sampleCount: input.sampleCount,
-        tracks: input.tracks.map(track => ({ target: track.target, contentHash: hashRigidBakeTrack(track) })),
-      }
+        tracks: input.tracks,
+        generatedLayers: fragmentLayers,
+        generation: input.generation,
+        timelineLayerIdsAdded: hasExplicitMembership ? addedLayerIds : undefined,
+      })
       return {
         ...scene,
         layers: [...scene.layers, ...fragmentLayers],
         timelines: scene.timelines.map(candidate => candidate.id === timeline.id ? nextTimeline : candidate),
         physics: {
+          ...scene.physics,
           schemaVersion: 1,
           rigidBakes: [...(scene.physics?.rigidBakes ?? []), record],
           fractureGenerations: [...(scene.physics?.fractureGenerations ?? []), input.generation],
@@ -98,18 +112,39 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
   }
 }
 
-function validateTrack(track: Track, sampleCount: number): void {
-  const visibility = track.target.endsWith('.opacity')
-  if (track.controller !== undefined || track.keyframes.length !== (visibility ? 2 : sampleCount)) {
-    throw new Error(`Fracture bake track has an invalid sample count: ${track.target}`)
-  }
-  track.keyframes.forEach((key, index) => {
-    if (typeof key.value !== 'number' || !Number.isFinite(key.value) || !Number.isFinite(key.timeMs)
-      || (index > 0 && key.timeMs <= track.keyframes[index - 1].timeMs)) {
-      throw new Error(`Fracture bake track contains invalid samples: ${track.target}`)
-    }
+/**
+ * Replaces one existing Voronoi bake and its owned topology atomically.
+ *
+ * Old tracks, generated fragment layers and the topology manifest are removed
+ * only through verified ownership. The replacement may use a different seed,
+ * generation id or fragment count; unrelated scene content is never selected
+ * by prefix. One undo restores the exact previous bake.
+ */
+export function makeReplaceVoronoiFractureBakeCmd(input: {
+  readonly existingRecordId: string
+  readonly generation: FractureGeneration
+  readonly recipe: RigidBodyBakeRecipe
+  readonly tracks: readonly Track[]
+  readonly sampleCount: number
+  readonly conflictPolicy?: RigidBakeConflictPolicy
+}): EditorCommand {
+  const apply = makeApplyVoronoiFractureBakeCmd({
+    generation: input.generation,
+    recipe: input.recipe,
+    tracks: input.tracks,
+    sampleCount: input.sampleCount,
+    recordId: input.existingRecordId,
   })
-  if (visibility && track.keyframes.some(key => key.easing?.type !== 'hold' || (key.value !== 0 && key.value !== 1))) {
-    throw new Error(`Fracture visibility track is not an atomic hold switch: ${track.target}`)
+  let before: ChronoScene | undefined
+  return {
+    label: `Re-bake Voronoi Fracture (${input.generation.fragments.length} fragments)`,
+    execute(scene: ChronoScene): ChronoScene {
+      before = scene
+      const cleared = clearRigidBakeOwnedContent(scene, input.existingRecordId, input.conflictPolicy)
+      return apply.execute(cleared)
+    },
+    undo(scene: ChronoScene): ChronoScene {
+      return before ?? scene
+    },
   }
 }

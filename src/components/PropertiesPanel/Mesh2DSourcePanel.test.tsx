@@ -71,4 +71,36 @@ describe('Mesh2DSourcePanel', () => {
     expect(html).toContain('Clip linked: Flag Motion')
     expect(html).toContain('Topology is validated during decode')
   })
+
+  it('identifies bake-owned fracture meshes and explains edited-output ownership', () => {
+    const source = { ...newRectLayer(), id: 'poster-source', name: 'Poster Source' }
+    const base = newStructuredGridMesh2DLayer()
+    const layer = {
+      ...base,
+      id: 'poster-fragment-0',
+      mesh2d: {
+        ...base.mesh2d!,
+        source: {
+          kind: 'fractureFragment' as const,
+          sourceLayerId: source.id,
+          generationId: 'poster-generation',
+          fragmentId: 'poster-fragment-0',
+          sourceAppearanceHash: '1234567890abcdef',
+          generatorVersion: 1 as const,
+        },
+        appearance: { schemaVersion: 1 as const, kind: 'texture' as const, textureAssetId: 'poster', sampling: 'linear' as const },
+      },
+    }
+    const html = renderToStaticMarkup(
+      <Mesh2DSourcePanel layer={layer} allLayers={[source, layer]}
+        allAssets={[{ id: 'poster', name: 'Poster.png', type: 'image', url: 'embedded:poster' }]}
+        onLayerChange={() => undefined} />,
+    )
+
+    expect(html).toContain('Fracture Fragment')
+    expect(html).toContain('Poster Source')
+    expect(html).toContain('poster-generation')
+    expect(html).toContain('source-rectangle UVs preserved')
+    expect(html).toContain('mark this generated output as edited')
+  })
 })

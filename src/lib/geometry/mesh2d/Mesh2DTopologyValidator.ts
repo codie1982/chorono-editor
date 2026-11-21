@@ -14,6 +14,7 @@ export interface Mesh2DValidationDiagnostic {
     | 'duplicate-vertex-id'
     | 'non-finite-position'
     | 'non-finite-uv'
+    | 'invalid-texture-reference-bounds'
     | 'triangle-index-count'
     | 'invalid-triangle-index'
     | 'duplicate-triangle-index'
@@ -69,6 +70,7 @@ export class Mesh2DTopologyValidator {
     if (geometry.topology.triangleIndices.length % 3 !== 0) this.error(diagnostics, 'triangle-index-count', 'Triangle indices must be grouped in triples')
 
     this.validateVertexPayload(geometry, diagnostics)
+    this.validateTextureReferenceBounds(geometry, diagnostics)
     const indicesValid = this.validateTriangles(geometry, diagnostics)
     if (indicesValid && Number.isInteger(vertexCount) && Number.isInteger(triangleCount)) {
       this.validateConnectivity(geometry, diagnostics)
@@ -83,6 +85,18 @@ export class Mesh2DTopologyValidator {
       diagnostics,
       vertexCount: Number.isInteger(vertexCount) ? vertexCount : Math.floor(vertexCount),
       triangleCount: Number.isInteger(triangleCount) ? triangleCount : Math.floor(triangleCount),
+    }
+  }
+
+  private validateTextureReferenceBounds(
+    geometry: Mesh2DGeometry,
+    diagnostics: Mesh2DValidationDiagnostic[],
+  ): void {
+    const bounds = geometry.textureReferenceBounds
+    if (!bounds) return
+    if (![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)
+      || bounds.width <= 0 || bounds.height <= 0) {
+      this.error(diagnostics, 'invalid-texture-reference-bounds', 'Texture reference bounds must be finite with positive width and height')
     }
   }
 

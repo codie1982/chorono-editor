@@ -89,6 +89,21 @@ describe('MCP tool definition presentation', () => {
     expect(decorateToolDefinition(definition('run_script'), 'run_script').annotations?.destructiveHint).toBe(true)
   })
 
+  it('distinguishes persistent bake reads, runtime controls and source commit', () => {
+    for (const name of ['get_bake_job', 'preview_bake_job', 'inspect_physics_bake']) {
+      expect(decorateToolDefinition(definition(name), name).annotations)
+        .toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true })
+    }
+    for (const name of ['prepare_rigid_body_bake', 'prepare_voronoi_fracture_bake', 'cancel_bake_job', 'discard_bake_job']) {
+      expect(decorateToolDefinition(definition(name), name).annotations)
+        .toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false })
+    }
+    expect(decorateToolDefinition(definition('commit_bake_job'), 'commit_bake_job').annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false })
+    expect(decorateToolDefinition(definition('clear_physics_bake'), 'clear_physics_bake').annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false })
+  })
+
   it('discloses possible existing remote asset reads only on handlers that actually load media', () => {
     for (const name of ['render_preview', 'render_audio_preview', 'export_audio', 'export_sequence', 'normalize_audio_clip']) {
       expect(decorateToolDefinition(definition(name), name).annotations?.openWorldHint).toBe(true)

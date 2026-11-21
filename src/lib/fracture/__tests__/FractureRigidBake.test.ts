@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { emptyScene, newRectLayer } from '@/lib/defaults'
+import { emptyScene, newImageLayer, newRectLayer } from '@/lib/defaults'
 import { RigidBodyBakeAdapter } from '@/lib/bake/adapters/RigidBodyBakeAdapter'
-import { makeApplyVoronoiFractureBakeCmd } from '@/lib/editor/commands-voronoi-fracture-bake'
+import { makeClearRigidBakeCmd } from '@/lib/editor/commands-rigid-bake-lifecycle'
+import {
+  makeApplyVoronoiFractureBakeCmd,
+  makeReplaceVoronoiFractureBakeCmd,
+} from '@/lib/editor/commands-voronoi-fracture-bake'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
 import { assertPhysicsSceneData } from '@/lib/physics/PhysicsSceneValidation'
+import { RigidBakeOwnershipInspector } from '@/lib/physics/RigidBakeOwnership'
+import { RigidBakeOwnershipConflictError } from '@/lib/physics/RigidBakeSceneMutation'
 import { ResourceBudget } from '@/lib/resources/budget'
+import { PhysicsBakeRecipeFactory } from '@/lib/physics/PhysicsBakeRecipeFactory'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer } from '@/lib/types'
 import type { RigidBodyAuthoring } from '@/lib/types/physics'
@@ -17,7 +24,7 @@ describe('Voronoi rigid bake integration', () => {
     const fixture = fractureFixture()
     const event = fixture.recipe.fractureEvents![0]
     const fragments = fixture.recipe.bodies.filter(body => body.activation)
-    const layers = new FractureLayerFactory().create(fixture.scene.layers, fixture.generation, fixture.recipe)
+    const layers = new FractureLayerFactory().create(fixture.scene, fixture.generation, fixture.recipe)
 
     expect(event).toMatchObject({ timeMs: 1000, tick: 120, sourceBodyId: 'rigid:panel' })
     expect(fragments).toHaveLength(16)
@@ -90,6 +97,67 @@ describe('Voronoi rigid bake integration', () => {
     preview.release()
   })
 
+  it('commits portable image fragments and tracks source appearance changes', async () => {
+    const fixture = imageFractureFixture()
+    const preview = await new RigidBodyBakeAdapter({ allocator: new ResourceBudget({ maxBytes: 32 * 1024 ** 2 }) })
+      .prepare(fixture.recipe, { signal: new AbortController().signal, reportProgress: () => {} })
+    const command = makeApplyVoronoiFractureBakeCmd({
+      generation: fixture.generation,
+      recipe: fixture.recipe,
+      tracks: preview.tracks,
+      sampleCount: preview.report.sampleCount,
+      recordId: 'image-fracture-bake',
+    })
+    const committed = command.execute(fixture.scene)
+    const fragments = committed.layers.filter(layer => layer.mesh2d?.source.kind === 'fractureFragment')
+
+    expect(fragments).toHaveLength(8)
+    expect(fragments.every(layer => layer.mesh2d?.appearance?.textureAssetId === 'poster')).toBe(true)
+    expect(committed.physics?.rigidBakes[0].recipe.fractureAppearance).toMatchObject({
+      kind: 'image', assetId: 'poster', objectFit: 'cover',
+    })
+    expect(() => assertPhysicsSceneData(committed.physics)).not.toThrow()
+    expect(parseSceneJson(JSON.stringify(committed), true)).toEqual(committed)
+    expect(new RigidBakeOwnershipInspector().inspect(committed, 'image-fracture-bake').sourceState).toBe('current')
+
+    const changed: ChronoScene = {
+      ...committed,
+      layers: committed.layers.map(layer => layer.id === fixture.image.id
+        ? { ...layer, image: { ...layer.image!, objectFit: 'contain' } }
+        : layer),
+    }
+    expect(new RigidBakeOwnershipInspector().inspect(changed, 'image-fracture-bake').sourceState).toBe('changed')
+    expect(command.undo(committed)).toEqual(fixture.scene)
+    preview.release()
+  })
+
+  it('keeps implicit all-layer timeline membership current for legacy portable scenes', async () => {
+    const fixture = imageFractureFixture()
+    const timeline = { ...fixture.scene.timelines[0] }
+    delete timeline.layerIds
+    const legacyScene: ChronoScene = { ...fixture.scene, timelines: [timeline] }
+    const preview = await new RigidBodyBakeAdapter({ allocator: new ResourceBudget({ maxBytes: 32 * 1024 ** 2 }) })
+      .prepare(fixture.recipe, { signal: new AbortController().signal, reportProgress: () => {} })
+    const command = makeApplyVoronoiFractureBakeCmd({
+      generation: fixture.generation,
+      recipe: fixture.recipe,
+      tracks: preview.tracks,
+      sampleCount: preview.report.sampleCount,
+      recordId: 'implicit-membership-image-fracture',
+    })
+
+    const committed = command.execute(legacyScene)
+
+    expect(committed.timelines[0].layerIds).toBeUndefined()
+    expect(committed.physics?.rigidBakes[0].timelineLayerIdsAdded).toBeUndefined()
+    expect(new RigidBakeOwnershipInspector().inspect(committed, 'implicit-membership-image-fracture')).toMatchObject({
+      ownershipState: 'current',
+      issues: [],
+    })
+    expect(command.undo(committed)).toEqual(legacyScene)
+    preview.release()
+  })
+
   it('rejects a stale source before publishing any fragment', async () => {
     const fixture = fractureFixture()
     const preview = await new RigidBodyBakeAdapter({ allocator: new ResourceBudget({ maxBytes: 32 * 1024 ** 2 }) })
@@ -106,6 +174,67 @@ describe('Voronoi rigid bake integration', () => {
     })
     expect(() => command.execute(stale)).toThrow(/source changed/)
     expect(stale.layers).toHaveLength(2)
+    preview.release()
+  })
+
+  it('protects edited fragment output during clear/re-bake and keeps legacy ownership explicit', async () => {
+    const fixture = fractureFixture()
+    const preview = await new RigidBodyBakeAdapter({ allocator: new ResourceBudget({ maxBytes: 32 * 1024 ** 2 }) })
+      .prepare(fixture.recipe, { signal: new AbortController().signal, reportProgress: () => {} })
+    const recordId = 'panel-fracture-lifecycle'
+    const baked = makeApplyVoronoiFractureBakeCmd({
+      generation: fixture.generation,
+      recipe: fixture.recipe,
+      tracks: preview.tracks,
+      sampleCount: preview.report.sampleCount,
+      recordId,
+    }).execute(fixture.scene)
+    const record = baked.physics!.rigidBakes[0]
+    expect(record.generatedLayers).toHaveLength(16)
+    expect(record.fractureGeneration).toEqual({
+      generationId: fixture.generation.generationId,
+      topologyHash: fixture.generation.topologyHash,
+    })
+    expect(new RigidBakeOwnershipInspector().inspect(baked, recordId).ownershipState).toBe('current')
+    expect(() => assertPhysicsSceneData(baked.physics)).not.toThrow()
+
+    const fragmentId = fixture.generation.fragments[0].id
+    const edited: ChronoScene = {
+      ...baked,
+      layers: baked.layers.map(layer => layer.id === fragmentId ? { ...layer, name: `${layer.name} edited` } : layer),
+    }
+    expect(new RigidBakeOwnershipInspector().inspect(edited, recordId)).toMatchObject({
+      ownershipState: 'edited',
+      issues: expect.arrayContaining([expect.objectContaining({ kind: 'modified-generated-layer', target: fragmentId })]),
+    })
+    expect(() => makeClearRigidBakeCmd({ recordId }).execute(edited)).toThrow(RigidBakeOwnershipConflictError)
+
+    const replace = makeReplaceVoronoiFractureBakeCmd({
+      existingRecordId: recordId,
+      generation: fixture.generation,
+      recipe: fixture.recipe,
+      tracks: preview.tracks,
+      sampleCount: preview.report.sampleCount,
+      conflictPolicy: 'discard-edits',
+    })
+    const replaced = replace.execute(edited)
+    expect(new RigidBakeOwnershipInspector().inspect(replaced, recordId).ownershipState).toBe('current')
+    expect(replaced.layers.find(layer => layer.id === fragmentId)?.name).not.toContain('edited')
+    expect(replace.undo(replaced)).toBe(edited)
+
+    const legacyRecord = { ...record }
+    delete legacyRecord.generatedLayers
+    delete legacyRecord.fractureGeneration
+    delete legacyRecord.timelineLayerIdsAdded
+    const legacy: ChronoScene = { ...baked, physics: { ...baked.physics!, rigidBakes: [legacyRecord] } }
+    expect(new RigidBakeOwnershipInspector().inspect(legacy, recordId).ownershipState).toBe('legacy')
+    expect(() => makeClearRigidBakeCmd({ recordId }).execute(legacy)).toThrow(RigidBakeOwnershipConflictError)
+    const forceClear = makeClearRigidBakeCmd({ recordId, conflictPolicy: 'discard-edits' })
+    const cleared = forceClear.execute(legacy)
+    expect(cleared.layers).toEqual(fixture.scene.layers)
+    expect(cleared.timelines[0].tracks).toHaveLength(0)
+    expect(cleared.physics).toBeUndefined()
+    expect(forceClear.undo(cleared)).toBe(legacy)
     preview.release()
   })
 })
@@ -148,6 +277,42 @@ function fractureFixture() {
     gravityMetersPerSecondSquared: { x: 0, y: 0 }, sourceBody, staticBodies: [floorBody],
   })
   return { scene, panel, floor, generation, recipe }
+}
+
+function imageFractureFixture() {
+  const image: Layer = {
+    ...newImageLayer('poster', 320, 180),
+    id: 'poster-layer',
+    name: 'Breakable Poster',
+    image: { assetId: 'poster', objectFit: 'cover' },
+    transform: { x: 180, y: 80, scaleX: 1, scaleY: 1, rotationDeg: 15, anchorX: 160, anchorY: 90 },
+  }
+  const floor: Layer = {
+    ...newRectLayer(), id: 'image-floor', name: 'Floor', size: { width: 900, height: 40 },
+    transform: { x: 0, y: 700, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 450, anchorY: 20 },
+    style: { fill: { type: 'solid', color: '#475569' }, cornerRadius: 0 },
+  }
+  const base = emptyScene()
+  const scene: ChronoScene = {
+    ...base,
+    composition: { ...base.composition, width: 900, height: 760, durationMs: 2000, frameRate: 30 },
+    layers: [image, floor],
+    assets: [{ id: 'poster', name: 'Poster.png', type: 'image', url: 'embedded:poster', width: 640, height: 360 }],
+    timelines: [{ id: 'main', durationMs: 2000, autoplay: false, loop: false, tracks: [], layerIds: [] }],
+  }
+  const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+    sourceLayerId: image.id,
+    staticLayerIds: [floor.id],
+    timelineId: 'main',
+    durationMs: 2000,
+    fractureTimeMs: 1000,
+    fragmentCount: 8,
+    seed: 20261121,
+    generationId: 'image-generation-v1',
+    gravity: { x: 0, y: 0 },
+    material: { densityKgPerSquareMeter: 8, friction: .2, restitution: .1, airFriction: 0 },
+  })
+  return { scene, image, floor, ...prepared }
 }
 
 function weightedCentroid(

@@ -15,7 +15,10 @@ export const SOURCE_EDITING_CAPABILITIES = Object.freeze({ version: 1, required:
     addressEncoding: 'JSON string tuples', recordLimit: 8000, fieldLimit: 16000, charLimit: 2097152 } })
 
 const SOURCE_EXTRAS = new Set(['run_script', 'apply_script_plan', 'batch_actions', 'load_project',
-  'import_asset', 'normalize_audio_clip', 'undo', 'redo', 'apply_scene'])
+  'import_asset', 'normalize_audio_clip', 'bake_rigid_bodies', 'bake_voronoi_fracture',
+  'prepare_rigid_body_bake', 'prepare_voronoi_fracture_bake', 'commit_bake_job',
+  'clear_physics_bake',
+  'undo', 'redo', 'apply_scene'])
 
 /** Authored-source policy, separate from readOnlyHint (which also accounts for
  * local file writes). Native commands derive from their owning registry. File

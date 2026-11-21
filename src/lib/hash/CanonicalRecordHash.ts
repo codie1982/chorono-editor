@@ -15,6 +15,30 @@ export function hashCanonicalRecords(scope: string, records: readonly string[]):
   return `${fnv1a32(canonical, 0x811c9dc5)}${fnv1a32(canonical, 0x9e3779b9)}`
 }
 
+/**
+ * Serializes portable JSON-like data with deterministic object-key ordering.
+ *
+ * Arrays preserve authored order, undefined object fields are omitted and
+ * non-finite numbers or non-JSON values fail explicitly. The helper does not
+ * clone or mutate its input. It is intended for content-change hashes, not as
+ * a persistence serializer or a cryptographic signature.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value)
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Canonical JSON contains a non-finite number')
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().filter(key => record[key] !== undefined)
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`
+  }
+  throw new Error('Canonical JSON contains a non-portable value')
+}
+
 /** FNV-1a over UTF-16 code units; output is a fixed-width lowercase word. */
 function fnv1a32(value: string, initial: number): string {
   let hash = initial >>> 0
