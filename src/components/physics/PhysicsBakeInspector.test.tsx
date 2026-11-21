@@ -83,6 +83,34 @@ describe('PhysicsBakeInspector', () => {
     expect(html).toContain('Collider aligned')
     expect(html).toContain('Atomic event')
   })
+
+  it('shows bonded graph material and realized component breaks', async () => {
+    const fixture = rigidBakeFixture()
+    const source = {
+      ...fixture.scene,
+      layers: fixture.scene.layers.map(layer => layer.id === 'box'
+        ? { ...layer, style: { ...layer.style!, cornerRadius: 0 } }
+        : layer),
+    }
+    const baked = await prepareMCPVoronoiBake(source, {
+      sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main',
+      durationMs: 1800, fractureTimeMs: 100, stepHz: 120, sampleFps: 30,
+      fragmentCount: 6, seed: 42, generationId: 'inspector-cluster',
+      cluster: { defaults: { impulseStrength: .001, damageThreshold: .001,
+        relativeNormalSpeedScale: 1, variation: 0 } },
+    })
+    const html = renderToStaticMarkup(createElement(PhysicsBakeInspector, {
+      scene: baked.scene,
+      controller: controllerFor(baked.scene),
+      onRebakeStarted() {},
+    }))
+
+    expect(html).toContain('Bonded cluster')
+    expect(html).toContain('Compound body')
+    expect(html).toContain('Fragments / bonds')
+    expect(html).toContain('Breaks / component splits')
+    expect(html).toMatch(/\d+ broken/)
+  })
 })
 
 function controllerFor(scene: ChronoScene): PhysicsBakeController {

@@ -20,6 +20,14 @@ export function BakeReportMetrics({ report }: { readonly report: RigidBodyBakeRe
     </dd>
     <dt className="text-gray-500">Protected events</dt>
     <dd className="text-right font-mono tabular-nums text-gray-200">{report.protectedEventCount.toLocaleString()}</dd>
+    {report.clusterCount > 0 && <>
+      <dt className="text-gray-500">Bonded cluster</dt>
+      <dd className="text-right font-mono tabular-nums text-cyan-200">
+        {report.bondCount.toLocaleString()} bonds · {report.bondBreakCount.toLocaleString()} breaks
+      </dd>
+      <dt className="text-gray-500">Component splits</dt>
+      <dd className="text-right font-mono tabular-nums text-cyan-200">{report.clusterSplitCount.toLocaleString()}</dd>
+    </>}
     <dt className="text-gray-500">Maximum error</dt>
     <dd className="text-right font-mono tabular-nums text-gray-200"
       aria-label={`Maximum error ${formatError(report.maxVertexErrorPx)} pixels and ${formatError(report.maxAngleErrorDeg)} degrees`}>

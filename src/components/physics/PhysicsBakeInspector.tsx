@@ -7,6 +7,7 @@ import type { ChronoScene } from '@/lib/types'
 import type { RigidBakeOwnershipInspection } from '@/lib/physics/RigidBakeOwnership'
 import FractureAppearanceQualityCard from './FractureAppearanceQualityCard'
 import FractureEventSummary from './FractureEventSummary'
+import FractureBondedClusterCard from './FractureBondedClusterCard'
 import FractureTopologyColliderCard from './FractureTopologyColliderCard'
 import type { PhysicsBakeController } from './usePhysicsBakeController'
 
@@ -118,6 +119,7 @@ export default function PhysicsBakeInspector({ scene, controller, onRebakeStarte
             <dt className="text-gray-500">Bodies</dt><dd className="text-right text-gray-300">{record.recipe.bodies.length}</dd>
           </dl>
           {record.recipe.fractureEvents?.[0] && <FractureEventSummary event={record.recipe.fractureEvents[0]} />}
+          <FractureBondedClusterCard recipe={record.recipe} />
           {inspection.mode === 'fracture' && <FractureAppearanceQualityCard
             analysis={fractureAppearanceQuality.get(record.id)!} />}
           {inspection.mode === 'fracture' && <FractureTopologyColliderCard

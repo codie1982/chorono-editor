@@ -298,6 +298,11 @@ export function requestFromRecord(
         ...event.explosion,
         centerLocalOffsetPx: { ...event.explosion.centerLocalOffsetPx },
       } : undefined,
+      cluster: recipe.fractureClusters?.[0] ? {
+        graphId: recipe.fractureClusters[0].graph.graphId,
+        defaults: { ...recipe.fractureClusters[0].graph.defaults },
+        overrides: recipe.fractureClusters[0].graph.overrides.map(override => ({ ...override })),
+      } : undefined,
       fragmentCount: generation.requestedFragmentCount,
       seed: generation.rootSeed,
       generationId: generation.generationId,

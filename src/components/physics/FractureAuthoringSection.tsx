@@ -1,5 +1,6 @@
 import { FractureAppearanceCompiler } from '@/lib/fracture/FractureAppearanceCompiler'
 import type { ChronoScene, Layer } from '@/lib/types'
+import type { FractureBondOverride } from '@/lib/types/fractureCluster'
 import {
   inputClass,
   labelClass,
@@ -28,6 +29,15 @@ export interface FractureAuthoringDraft {
   readonly explosionSeed: number
   readonly seed: number
   readonly generationId: string
+  readonly clusterEnabled: boolean
+  readonly bondGraphId: string
+  readonly bondImpulseStrength: number
+  readonly bondDamageThreshold: number
+  readonly bondDamageDecayPerSecond: number
+  readonly bondRelativeNormalSpeedScale: number
+  readonly bondVariation: number
+  readonly bondSeed: number
+  readonly bondOverrides: readonly FractureBondOverride[]
 }
 
 interface Props {
@@ -89,8 +99,43 @@ export default function FractureAuthoringSection({ scene, source, draft, onChang
     </label>
     <p className="text-xs leading-5 text-gray-500">The realized event tick, seed and polygons are persisted together. Impact preview fails clearly when no contact reaches the threshold.</p>
     <label className={toggleRowClass}>
+      <input type="checkbox" checked={draft.clusterEnabled}
+        onChange={event => {
+          onChange('clusterEnabled', event.target.checked)
+          if (event.target.checked && draft.explosionEnabled) onChange('explosionEnabled', false)
+        }} className="size-4 accent-cyan-500" />
+      <span><span className="block text-xs text-gray-200">Keep fragments bonded</span>
+        <span className="block text-xs leading-5 text-gray-500">Starts as one compound body; shared-boundary bonds split connected components under load.</span></span>
+    </label>
+    {draft.clusterEnabled && <div className="space-y-2 rounded border border-cyan-800/70 bg-cyan-950/20 p-2">
+      <p role="status" className="text-xs leading-5 text-cyan-100">Automatic shared-boundary cluster · mass, centre and momentum are checked on every split. Artistic explosion is unavailable in this mode.</p>
+      <label className={labelClass}>Bond graph ID
+        <input aria-label="Bond graph ID" value={draft.bondGraphId} maxLength={96}
+          placeholder="Auto from generation" onChange={event => onChange('bondGraphId', event.target.value)}
+          className={`${inputClass} font-mono`} />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <PhysicsNumberField label="Impulse strength" unit="solver load" value={draft.bondImpulseStrength} min={0.000001}
+          onChange={value => onChange('bondImpulseStrength', value)} />
+        <PhysicsNumberField label="Damage threshold" unit="accumulated" value={draft.bondDamageThreshold} min={0.000001}
+          onChange={value => onChange('bondDamageThreshold', value)} />
+        <PhysicsNumberField label="Damage decay" unit="per second" value={draft.bondDamageDecayPerSecond} min={0}
+          onChange={value => onChange('bondDamageDecayPerSecond', value)} />
+        <PhysicsNumberField label="Speed influence" unit="load / px/s" value={draft.bondRelativeNormalSpeedScale} min={0}
+          onChange={value => onChange('bondRelativeNormalSpeedScale', value)} />
+        <PhysicsNumberField label="Bond variation" unit="0–1" value={draft.bondVariation} min={0} max={1}
+          onChange={value => onChange('bondVariation', value)} />
+        <PhysicsNumberField label="Bond seed" unit="uint32" value={draft.bondSeed} min={0} max={0xffffffff} step={1}
+          onChange={value => onChange('bondSeed', value)} />
+      </div>
+      {draft.bondOverrides.length > 0 && <p className="text-xs leading-5 text-cyan-200">{draft.bondOverrides.length} manual/custom bond override{draft.bondOverrides.length === 1 ? '' : 's'} will be preserved on Re-bake. Per-bond Canvas editing lands in the next cluster UI slice.</p>}
+    </div>}
+    <label className={toggleRowClass}>
       <input type="checkbox" checked={draft.explosionEnabled}
-        onChange={event => onChange('explosionEnabled', event.target.checked)} className="size-4 accent-amber-500" />
+        onChange={event => {
+          onChange('explosionEnabled', event.target.checked)
+          if (event.target.checked && draft.clusterEnabled) onChange('clusterEnabled', false)
+        }} className="size-4 accent-amber-500" />
       <span><span className="block text-xs text-gray-200">Add artistic explosion</span>
         <span className="block text-xs leading-5 text-gray-500">Adds external velocity and spin once at the fracture tick.</span></span>
     </label>

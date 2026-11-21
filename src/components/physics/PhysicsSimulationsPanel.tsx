@@ -413,6 +413,9 @@ function initialDraft(sourceLayerId: string, timelineId: string, durationMs: num
     impactSpeedPxPerSecond: 120, explosionEnabled: false, explosionCenterX: 0, explosionCenterY: 0,
     explosionRadialVelocity: 180, explosionDirectionDeg: 270, explosionDirectionalVelocity: 0,
     explosionSpinVelocity: 180, explosionVariation: .15, explosionSeed: 42,
+    clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
+    bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
+    bondVariation: .1, bondSeed: 42, bondOverrides: [],
     seed: 42, generationId: generationIdFor(sourceLayerId) }
 }
 
@@ -487,7 +490,20 @@ function buildRequest(
       spinVelocityDegPerSecond: draft.explosionSpinVelocity,
       variation: draft.explosionVariation,
       seed: draft.explosionSeed,
-    } } : {}), fragmentCount: draft.fragmentCount,
+    } } : {}),
+    ...(draft.clusterEnabled ? { cluster: {
+      ...(draft.bondGraphId ? { graphId: draft.bondGraphId } : {}),
+      defaults: {
+        impulseStrength: draft.bondImpulseStrength,
+        damageThreshold: draft.bondDamageThreshold,
+        damageDecayPerSecond: draft.bondDamageDecayPerSecond,
+        relativeNormalSpeedScale: draft.bondRelativeNormalSpeedScale,
+        variation: draft.bondVariation,
+        seed: draft.bondSeed,
+      },
+      overrides: draft.bondOverrides,
+    } } : {}),
+    fragmentCount: draft.fragmentCount,
     seed: draft.seed, generationId: draft.generationId, material,
     initialVelocityPxPerSecond: { x: draft.velocityX, y: draft.velocityY },
     initialAngularVelocityDegPerSecond: draft.angularVelocity } }
@@ -534,6 +550,15 @@ function draftFromRequest(request: PhysicsBakeRequest): PhysicsDraft {
       explosionSpinVelocity: common.explosion?.spinVelocityDegPerSecond ?? 180,
       explosionVariation: common.explosion?.variation ?? .15,
       explosionSeed: common.explosion?.seed ?? 42,
+      clusterEnabled: !!common.cluster,
+      bondGraphId: common.cluster?.graphId ?? '',
+      bondImpulseStrength: common.cluster?.defaults?.impulseStrength ?? 40,
+      bondDamageThreshold: common.cluster?.defaults?.damageThreshold ?? 80,
+      bondDamageDecayPerSecond: common.cluster?.defaults?.damageDecayPerSecond ?? 0,
+      bondRelativeNormalSpeedScale: common.cluster?.defaults?.relativeNormalSpeedScale ?? .1,
+      bondVariation: common.cluster?.defaults?.variation ?? .1,
+      bondSeed: common.cluster?.defaults?.seed ?? common.seed,
+      bondOverrides: [...(common.cluster?.overrides ?? [])],
       seed: common.seed,
       generationId: common.generationId,
     }
@@ -572,6 +597,15 @@ function draftFromRequest(request: PhysicsBakeRequest): PhysicsDraft {
     explosionSpinVelocity: 180,
     explosionVariation: .15,
     explosionSeed: 42,
+    clusterEnabled: false,
+    bondGraphId: '',
+    bondImpulseStrength: 40,
+    bondDamageThreshold: 80,
+    bondDamageDecayPerSecond: 0,
+    bondRelativeNormalSpeedScale: .1,
+    bondVariation: .1,
+    bondSeed: 42,
+    bondOverrides: [],
     seed: 42,
     generationId: generationIdFor(dynamic.layerId),
   }

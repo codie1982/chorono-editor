@@ -111,6 +111,9 @@ describe('PhysicsSimulationsPanel', () => {
       explosionSpinVelocity: 180,
       explosionVariation: .15,
       explosionSeed: 42,
+      clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
+      bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
+      bondVariation: .1, bondSeed: 42, bondOverrides: [],
       seed: 99,
       generationId: 'old-generation',
     }
@@ -204,6 +207,22 @@ describe('PhysicsSimulationsPanel', () => {
     expect(html).toContain('Concave outlines and holes use compound colliders')
     expect(html).toContain('live deformation must be baked first')
   })
+
+  it('progressively discloses bonded cluster controls and conservation status', () => {
+    const { scene, box } = rigidBakeFixture()
+    const html = renderToStaticMarkup(createElement(FractureAuthoringSection, {
+      scene,
+      source: box,
+      draft: draftFixture({ clusterEnabled: true }),
+      onChange() {},
+    }))
+
+    expect(html).toContain('Keep fragments bonded')
+    expect(html).toContain('Automatic shared-boundary cluster')
+    expect(html).toContain('Impulse strength')
+    expect(html).toContain('Damage threshold')
+    expect(html).toContain('mass, centre and momentum are checked')
+  })
 })
 
 function draftFixture(overrides: Partial<PhysicsDraft> = {}): PhysicsDraft {
@@ -216,6 +235,9 @@ function draftFixture(overrides: Partial<PhysicsDraft> = {}): PhysicsDraft {
     impactSpeedPxPerSecond: 120, explosionEnabled: false, explosionCenterX: 0,
     explosionCenterY: 0, explosionRadialVelocity: 180, explosionDirectionDeg: 270,
     explosionDirectionalVelocity: 0, explosionSpinVelocity: 180, explosionVariation: .15,
-    explosionSeed: 42, seed: 42, generationId: 'fracture-box', ...overrides,
+    explosionSeed: 42, seed: 42, generationId: 'fracture-box',
+    clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
+    bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
+    bondVariation: .1, bondSeed: 42, bondOverrides: [], ...overrides,
   }
 }
