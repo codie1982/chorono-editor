@@ -52,6 +52,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Geliştirme branch'inde |
 | Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Geliştirme branch'inde |
 | Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Geliştirme branch'inde |
+| Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -3143,5 +3144,39 @@ kanıtları `projects/exports/physics-parity-1795285088211.runtime.json` ve
 kaydedildi. Validator geçerli ve uyarısızdı. Doğrulama **433 test dosyası /
 3.237 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run build` ile
 geçti; production build yalnız bilinen `applicationBuildInfo.ts` named-export
-uyarısını verdi. Böylece aşama 4 kapandı; aktif fizik işi aşama 5 kompleks
-kaynak ve fragment mesh derleyicisidir.
+uyarısını verdi. Böylece aşama 4 kapandı; aşama 5'in ilk convex kaynak dilimi
+§12.77'de tamamlandı.
+
+### 12.77. Convex shape/spline fracture kaynağı — 21 Kasım 2026
+
+`FractureSourceBoundaryCompiler`, root shape ve kapalı spline kaynaklarını
+mevcut `ShapeBoundaryMesh2DGenerator` / `SplineBoundaryMesh2DGenerator`
+üzerinden tek yetkili boundary akışına bağladı. Sıralı tek dış halka,
+centroid, bounds ve alan derlenir; açık/branching, kopuk, çok halkalı, delikli
+ve concave kaynaklar Preview öncesinde açık tanıyla reddedilir. Image
+rectangle'ın mevcut collider ve full-source UV davranışı değişmedi.
+
+`RigidBodyLayerCompiler`, katman adaptasyonu ile recipe orchestration'ı ayırdı.
+Fracture kaynağı artık rectangle veya convex-polygon collider taşır; solid
+shape/spline fragment'ları editable Path olarak kalır. Physics UI fracture
+kaynağında Shape/Image/Spline gösterir, statik çevreyi desteklenen rectangle
+listesinde tutar ve concave/delikli kaynak için sonraki clipping dilimini açıkça
+belirtir. MCP prepare/bake açıklamaları, schema, canonical Chorono skill'i ve
+gerçek stdio kabulü aynı capability sınırına güncellendi.
+
+İzole `http://127.0.0.1:2010` production editöründe chamfered kapalı spline
+MCP script dry-run/apply ile üretildi. Persistent Worker işi 12 Path fragment,
+tick `48` / `400 ms` olay ve convex-polygon source collider verdi. Exact event
+incelemesinde 12/12 render–collider polygon, 128 örnek,
+`2,842170943040401e-14 px` maksimum ve epsilon düzeyinde ortalama fark ölçüldü.
+399/400/1600 ms gerçek 640×420 kareleri incelendi; validator geçerli/uyarısız,
+UI'da spline durum kartı ve etkin Preview görüldü, browser console hatası yoktu.
+
+Tekrarlanabilir harness `scripts/qa/convex-spline-fracture-live.mjs` içindedir.
+Portable kanıt
+`projects/convex-spline-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 653e2a2bd06e19fd8eaed05836d36824b5d5086039088e72abad89b8873ce60b`).
+Doğrulama **434 test dosyası / 3.245 test**, TypeScript, MCP build ve production
+build ile geçti. Bilinen `applicationBuildInfo.ts` ve caniuse-lite uyarıları
+sürer. Aktif fizik işi concave/delikli shape/spline ile doğrulanmış Mesh2D
+clipping; ardından fragment triangle/UV, adjacency ve compound collider'dır.

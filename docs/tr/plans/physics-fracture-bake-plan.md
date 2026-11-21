@@ -8,9 +8,12 @@ hash'li güvenli Re-bake / Clear Bake, image→Mesh2D fragment görünümü, kay
 korunumu, event hizası/raster seam/mask bellek ölçümü, darbe tetikli fracture,
 deterministik artistic explosion, topology/render–collider tanısı ve 32 parça /
 eğimli zemin / yüksek hızlı küçük cisim görsel matrisi de tamamlandı. Aşama 3
-ve temel scrub/player/MCP/render/export parity kabulüyle aşama 4 kapandı;
-aşama 5–9 bütünüyle açıktır. Aktif sıra kompleks kaynak ve fragment mesh
-derleyicisidir.
+ve temel scrub/player/MCP/render/export parity kabulüyle aşama 4 kapandı.
+Aşama 5'in ilk dikey diliminde canonical Mesh2D sınırından tek halkalı,
+deliksiz convex shape/spline kaynak derleme, convex collider, Path fragment,
+ürün UI'ı ve MCP akışı tamamlandı. Aktif sıra concave/delikli shape/spline ile
+Mesh2D clipping ve fragment mesh/adjacency/compound-collider derleyicisidir;
+aşama 6–9 açıktır.
 Character Motion planı ayrı tutulur ve bu özellik için önkoşul değildir. Ortak
 ürün alanı **Physics Simulations**; bu belge Rigid Body, Voronoi Fracture,
 bonded destruction cluster, secondary/recursive fracture ve olay tabanlı
@@ -120,6 +123,15 @@ Canlı render veya `evaluate_at_time` her çağrıldığında fizik ilerlemez. �
 Voronoi geometrisi parçaların şeklini belirler; fizik motoru bu parçaların sonradan nasıl hareket edeceğini hesaplar. İlk kaynak **düz renkli dikdörtgen veya convex kapalı polygon**dur. D3 Voronoi hücrelerinden kapalı convex polygon verisi alınabilir; hücreler kaynak alanla ayrıca kesiştirilir. Dikdörtgen viewport sınırı keyfi kaynak silüetinin yerine geçmez. [D3 Voronoi API](https://d3js.org/d3-delaunay/voronoi)
 
 Voronoi için kapalı shape/spline sınırı yeterlidir; iç triangle mesh matematiksel zorunluluk değildir. Mesh vertex'leri, Voronoi seed noktaları ve üretilen parça kimlikleri ayrı tutulur. Delaunay triangulation üçgen ağ; Voronoi ise değişken kenar sayılı kırılma hücreleri üretir. Bir render üçgeni otomatik olarak bir fizik parçası sayılmaz.
+
+**21 Kasım 2026 gerçekleşen convex kaynak dilimi:**
+`FractureSourceBoundaryCompiler`, shape ve kapalı spline'ı mevcut canonical
+Mesh2D boundary generator'larından geçirir; tek sıralı dış halkayı çıkarır ve
+centroid/bounds/alan ile birlikte doğrular. Açık, branching, çok halkalı,
+delikli veya concave topoloji Preview öncesinde açık tanıyla reddedilir. Image
+kaynağın tarihsel dikdörtgen collider/UV sözleşmesi korunur. Source collider
+rectangle veya convex polygon olabilir; solid shape/spline fragment'ları
+editable Path olarak kalır. Ürün UI ve MCP araçları aynı compiler'ı kullanır.
 
 Geometri adımları:
 
