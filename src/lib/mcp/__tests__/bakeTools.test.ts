@@ -55,6 +55,15 @@ describe('MCP rigid/fracture bake workflows', () => {
       sourceLayerId: 'box', timelineId: 'main', durationMs: 400,
       fractureTimeMs: 200, fragmentCount: 4, seed: 7, generationId: 'box-v1',
     })).resolves.toHaveProperty('name', 'bake_voronoi_fracture')
+    await expect(validateToolCall('bake_voronoi_fracture', {
+      ...access,
+      sourceLayerId: 'box', timelineId: 'main', durationMs: 400,
+      fractureTimeMs: 200, fragmentCount: 4, seed: 7, generationId: 'cluster-v1',
+      cluster: {
+        defaults: { impulseStrength: 10, damageThreshold: 20, relativeNormalSpeedScale: .1 },
+        overrides: [{ fragmentAId: 'cluster-v1-fragment-0', fragmentBId: 'cluster-v1-fragment-1', unbreakable: true }],
+      },
+    })).resolves.toHaveProperty('name', 'bake_voronoi_fracture')
     await expect(validateToolCall('prepare_voronoi_fracture_bake', {
       ...access,
       sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main', durationMs: 1000,
@@ -115,6 +124,43 @@ describe('MCP rigid/fracture bake workflows', () => {
     expect(baked.scene.layers.every(layer => /^[\w-]{1,128}$/.test(layer.id))).toBe(true)
     expect(baked.scene.physics?.fractureGenerations?.[0].generationId).toBe('box-v1')
     expect(baked.scene.physics?.rigidBakes).toHaveLength(1)
+  })
+
+  it('publishes and inspects bonded cluster breaks through the MCP service', async () => {
+    const editor = fakeEditor('Bonded cluster owner')
+    editor.replaceDocument(fixture())
+    try {
+      const baked = await editor.call('bake_voronoi_fracture', {
+        sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main',
+        durationMs: 1000, fractureTimeMs: 100, fragmentCount: 6, seed: 42,
+        generationId: 'mcp-cluster-v1', stepHz: 120, sampleFps: 30,
+        cluster: { defaults: {
+          impulseStrength: .001, damageThreshold: .001,
+          relativeNormalSpeedScale: 1, variation: 0,
+        } },
+      })
+      expect(baked.bake.report).toMatchObject({
+        clusterCount: 1,
+        bondCount: expect.any(Number),
+        bondBreakCount: expect.any(Number),
+        clusterSplitCount: expect.any(Number),
+      })
+      expect(baked.bake.report.bondCount).toBeGreaterThan(0)
+      expect(baked.bake.report.bondBreakCount).toBeGreaterThan(0)
+      const record = editor.host.editor.getScene().physics!.rigidBakes[0]
+      const inspection = (await editor.call('inspect_physics_bake', { recordId: record.id })).bake
+      expect(inspection.bondedCluster).toMatchObject({
+        graphId: 'mcp-cluster-v1-cluster',
+        strategy: 'compoundBody',
+        fragmentCount: 6,
+        bondCount: expect.any(Number),
+        breakCount: expect.any(Number),
+        breakEvents: expect.any(Array),
+      })
+      expect(inspection.bondedCluster.breakCount).toBeGreaterThan(0)
+    } finally {
+      await editor.close()
+    }
   })
 
   it('publishes a convex spline source through the public MCP bake service', async () => {

@@ -291,6 +291,8 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     if (method === 'inspect_physics_bake') {
       const inspection = new RigidBakeOwnershipInspector().inspect(before, args.recordId)
       const fractureEvent = inspection.record.recipe.fractureEvents?.[0]
+      const cluster = inspection.record.recipe.fractureClusters?.[0]
+      const bondBreakEvents = inspection.record.recipe.fractureBondBreakEvents ?? []
       const renderColliderQuality = fractureEvent
         ? new FractureRenderColliderAnalyzer().analyzeCommittedEvent(before, inspection.record.id)
         : undefined
@@ -310,6 +312,18 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
           absoluteTimeMs: inspection.record.recipe.startTimeMs + fractureEvent.timeMs,
           tick: fractureEvent.tick,
         }, renderColliderQuality } : {}),
+        ...(cluster ? { bondedCluster: {
+          graphId: cluster.graph.graphId,
+          strategy: cluster.strategy,
+          fragmentCount: cluster.graph.fragmentIds.length,
+          bondCount: cluster.graph.bonds.length,
+          manualBondCount: cluster.graph.bonds.filter(bond => bond.origin === 'manual').length,
+          unbreakableBondCount: cluster.graph.bonds.filter(bond => bond.unbreakable).length,
+          breakCount: bondBreakEvents.length,
+          splitCount: bondBreakEvents.filter(event => event.componentIds.length > 1).length,
+          defaults: cluster.graph.defaults,
+          breakEvents: bondBreakEvents,
+        } } : {}),
         issues: inspection.issues,
       } }
     }

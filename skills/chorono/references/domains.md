@@ -50,6 +50,19 @@ identities, not display names. `generationId` is 1–110 ASCII word characters o
 hyphens so generated seed and fragment ids remain valid portable scene ids;
 do not use colons, spaces, paths, or display labels.
 
+Add `cluster` to the Voronoi request to keep generated fragments in bonded
+compound connected components. It is mutually exclusive with `explosion`.
+Defaults control positive impulse strength/damage threshold, non-negative
+damage decay and relative-normal-speed load, seeded 0..1 variation and seed.
+Pair overrides use generated fragment ids to customize, disable or explicitly
+add a manual bond; `unbreakable:true` prevents contact damage from breaking it.
+The Worker applies one contact load per fixed tick, splits the intact bond graph
+into canonical components and verifies mass, centre and both momenta before
+publishing poses. Review `clusterCount`, `bondCount`, `bondBreakCount` and
+`clusterSplitCount` in job status. After commit, `inspect_physics_bake` exposes
+`bondedCluster` and its portable realized break sequence. These are an artistic
+scalar bond model, not FEM stress or crack-tip propagation.
+
 Both prepare tools are standalone and cannot run inside `batch_actions`. Read
 `get_scene` immediately before prepare and pass its revision/readToken. Keep the
 returned job id in the same MCP connection/editor session: poll `get_bake_job`,
@@ -61,6 +74,7 @@ overwritten. To re-simulate a committed record, first call
 `inspect_physics_bake`. Fracture inspection also returns the atomic
 `topologyEvent` and exact-event `renderColliderQuality`; review its textual
 status, body counts and maximum/mean pixel delta together with rendered frames.
+For bonded output also review `bondedCluster` material/break/split evidence.
 Then prepare with `replaceRecordId`. A current ownership set replaces safely;
 edited/incomplete/legacy output remains untouched unless
 the user explicitly chooses `replaceEdited:true` on `commit_bake_job`.

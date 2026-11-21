@@ -184,6 +184,20 @@ bir kez eklenen deterministik **artistic external energy**'dir; doğal temas
 kuvveti veya her kare uygulanan field değildir. Commit ve Re-bake, gerçekleşmiş
 impact kanıtını ve explosion ayarlarını recipe hash/provenance içinde korur.
 
+İsteğe bağlı `cluster` alanı FRACTURE2 bonded cluster'ı etkinleştirir ve
+`explosion` ile birlikte kullanılamaz. `defaults`; pozitif impulse strength,
+damage threshold, non-negative decay/relative-normal-speed scale, 0–1 seeded
+variation ve unsigned seed taşır. `overrides`, üretilen iki fragment kimliğini
+vererek otomatik bond'u özelleştirir/devre dışı bırakır veya açık manual bond
+ekler; `unbreakable` kalıcı authoring politikasıdır. Worker başlangıçta graph'ın
+intact connected component'ini tek compound body yapar. Her fixed tick'te aynı
+teması bir kez toplar, en yakın kırılabilir bond'a scalar load/damage uygular ve
+kopuşta sağlam graph component'lerini aynı tick'te yeniden kurar. Mass, centre
+of mass, linear momentum ve angular momentum tolerans dışında kalırsa job
+başarısız olur; gizli enerji eklenmez. `get_bake_job` raporu cluster/bond/break/
+split sayılarını, `inspect_physics_bake` ise `bondedCluster` altında graph
+materiali, manual/unbreakable sayıları ve portable break event sırasını döner.
+
 `render_2d` source mutation değildir. `backend:auto`, çalışan Chorono Render'ı
 önceler; still için PNG, video için MP4 bitirme akışına frame ZIP'i aktarır.
 Servis yoksa built-in renderer still PNG veya video PNG-sequence ZIP'i üretir.

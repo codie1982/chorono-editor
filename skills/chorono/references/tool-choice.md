@@ -43,6 +43,10 @@ recorded exact contact evidence; they cannot commit an unresolved placeholder.
 Optional explosion settings add deterministic one-shot radial/directional
 velocity and spin, and must be presented as artistic external energy rather
 than natural collision force.
+Alternatively, `cluster` starts fragments as shared-boundary/manual bonded
+compound components. It cannot be combined with explosion. Review job bond and
+split counts, then inspect the committed `bondedCluster` break sequence; this
+is the same Worker recipe used by the product UI.
 
 Committed bake lifecycle is ownership-guarded. Read `inspect_physics_bake`
 before Re-bake or Clear. Untouched output can be replaced or cleared directly;
