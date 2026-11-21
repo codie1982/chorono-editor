@@ -2,7 +2,10 @@
 
 Tarih: 4 Kasım 2026. Durum: mimari ve geliştirme planı; uygulama yapılmadı. Güncel kapsam: **yalnızca `2danimation` modu**. 3D mod, hacimsel solver, scene adapter, renderer ve export işleri aktif geliştirme planında yer almaz.
 
-Genel uygulama kuyruğu [2D üretim yol haritasını](../production-2d-roadmap.md) izler: export → bileşen → çoklu format önceliklidir. Bu sıvı/akış planı korunur; bu teslimlerin önkoşulu değildir.
+Genel uygulama kuyruğu [2D üretim yol haritasını](../production-2d-roadmap.md)
+izler. Sıvı/akış; ortak simülasyon çekirdeği, BakeService ve Blob Surface
+altyapısıyla bütünleşir. Bu belge alt sistemin iç teslim sırasını tanımlar; ana
+planın önceliklerini değiştirmez.
 
 ## 1. Ürün kararı
 
@@ -17,7 +20,7 @@ Physics Simulations alanına **Liquids & Flow** eklenir. Gravity, kuvvet alanlar
 
 Liquid ilk uygulama sırasıdır; grid flow ikinci solver dilimidir. Tek bir particle emitter'ı su/duman fiziği diye sunulmaz. İlk sürüm kimyasal yanma, çok fazlı hava-su etkileşimi veya yüksek doğrulukta mühendislik akış analizi hedeflemez.
 
-Ortak mimari: [Simulation Core 2D](simulation-core-2d-architecture.md). Diğer alanlar: [Rigid Body & Fracture](physics-fracture-bake-plan.md), [Cloth / Fabric](cloth-fabric-simulation-bake-plan.md). Paylaşılan sınıflar mevcut 2D sistemlerinin ihtiyaçlarına göre kurulur; olası 3D için ek soyutlama veya dependency geliştirilmez.
+Ortak mimari: [Simulation Core 2D](simulation-core-2d-architecture.md). Sahne nesnelerini kaynak, collider veya takip edilen yüzey olarak kullanma: [Emitter / Collider / Surface Target](emitter-collider-surface-interaction-plan.md). Diğer alanlar: [Rigid Body & Fracture](physics-fracture-bake-plan.md), [Cloth / Fabric](cloth-fabric-simulation-bake-plan.md). Paylaşılan sınıflar mevcut 2D sistemlerinin ihtiyaçlarına göre kurulur; olası 3D için ek soyutlama veya dependency geliştirilmez.
 
 ## 2. Mevcut durum
 
@@ -27,13 +30,13 @@ Planlanan physics job, clock, field selection, collider source, cache ve bake ow
 
 ## 3. Liquid solver kararı
 
-İlk aday **Position Based Fluids (PBF)** tabanlı 2D çözümdür. PBF, particle yoğunluk kısıtlarını iteratif olarak çözen bir yöntemdir; cloth tarafındaki particle buffer, komşuluk ve constraint yaklaşımıyla bazı yardımcıları paylaşmaya uygundur. Liquid yoğunluk kısıtı, kumaşın kenar/bükülme kısıtıyla aynı hesap değildir. [PBF makalesi](https://mmacklin.com/pbf_sig_preprint.pdf)
+İlk teknik kapı iki adayı karşılaştırır: hazır 2D particle/fluid backend'i olarak **LiquidFun** ve Chorono gereksinimlerine göre sınırlı **Position Based Fluids (PBF)** çözümü. LiquidFun seçilirse motor tipi scene modeline sızmaz; adapter recipe/snapshot, fixed-step, collider/field, particle örnekleri ve diagnostics taşır. PBF seçilirse komşuluk, density/boundary çözümü ve kararlılık yükü anlamlı fixture'larla kanıtlanır. Bakım/paketleme, worker kullanımı, cancellation, boundary sızıntısı, kütle/density hatası, tekrar üretim ve bake maliyeti ölçülmeden backend kesinleşmez; iki backend aynı ilk teslimde ürünleştirilmez. PBF, cloth tarafındaki particle buffer ve komşuluk yardımcılarını paylaşabilir; liquid yoğunluk kısıtı kumaşın kenar/bükülme kısıtı değildir. [LiquidFun particle sistemi](https://google.github.io/liquidfun/Programmers-Guide/html/md__chapter11__particles.html), [PBF makalesi](https://mmacklin.com/pbf_sig_preprint.pdf)
 
 İlk dilimde sabit particle kütleleri, support radius, hedef yoğunluk, spatial hash komşuluğu, density correction, hız güncelleme ve sınır çözümü bulunur. Düşük düzey viskozite/sönüm görsel kontrol olarak eklenebilir; gerçek birimle kalibre edilmeden ölçülmüş fiziksel viskozite diye etiketlenmez. Surface tension ve vorticity kontrolü ayrı doğrulama aşamalarıdır.
 
 Başlangıç particle dizilimi ve kernel/gradient normalizasyonu **2D** için tanımlanır. Kütle/alan veya eşdeğer slab thickness sözleşmesi kullanılır. 3D yoğunluk değerini aynı sabitle kopyalamak doğru bir boyut dönüşümü değildir.
 
-PBF'nin ilk teknik doğrulaması yetersiz sonuç verirse grid/particle hibrit PIC-FLIP ayrı bir karar adayıdır. İki liquid backend aynı ilk teslimde geliştirilmez. PIC/FLIP yaklaşımı grid basınç çözümü ve particle-grid transferi gerektirir; basit bir ayar seçeneği değildir. [PIC/FLIP referansı](https://matthias-research.github.io/pages/tenMinutePhysics/18-flip.pdf)
+LiquidFun/PBF prototiplerinin ikisi de ürün hedefini karşılamazsa grid/particle hibrit PIC-FLIP ayrı bir karar adayıdır. Aynı ilk teslimde ikinci bir liquid backend geliştirilmez. PIC/FLIP yaklaşımı grid basınç çözümü ve particle-grid transferi gerektirir; basit bir ayar seçeneği değildir. [PIC/FLIP referansı](https://matthias-research.github.io/pages/tenMinutePhysics/18-flip.pdf)
 
 ## 4. Grid flow ve duman
 
@@ -47,7 +50,7 @@ Gaz ve liquid birbiriyle etkileşen birleşik iki fazlı solver olarak ilk sür�
 
 ## 5. Domain, kaynak ve sınırlar
 
-Kullanıcı 2D domain alanını, başlangıç dolu bölgeyi veya emitter kaynağını, başlangıç hızını ve süreyi seçer. İlk liquid dilimi önceden doldurulmuş sabit particle kümesiyle başlar; emitter/drain ikinci adımdır.
+Kullanıcı 2D domain alanını, başlangıç dolu bölgeyi veya emitter kaynağını, başlangıç hızını ve süreyi seçer. İlk liquid dilimi önceden doldurulmuş sabit particle kümesiyle başlar; emitter/drain ikinci adımdır. İkinci adımda emitter yalnız point/rectangle değildir: capability varsa shape fill/perimeter, spline path, text glyph fill/outline/yönlü kenar ve `Mesh2D` vertex/edge/triangle alanından örnekleme yapabilir. Kaynak seçimi collider veya surface-follow ilişkisini otomatik açmaz.
 
 Domain kenarları explicit `closed` veya `open/outflow` davranışı taşır. Kaynak alan, kuvvet alanı ve collider birbirinden ayrıdır. Açık sınırdan çıkan sıvı silinebilir; bunun kütle kaydı tutulur. Kapalı, dolu domain'e sürekli sıvı eklemek sınırsız sıkıştırma/particle üretimine dönüşmez; kapasite ve taşma politikası önceden belirlenir.
 
@@ -68,13 +71,16 @@ Alanlar simülasyon alt adımlarında örneklenir. Liquid density çözümü ve 
 | Field → fluid targets | Bir veya birden fazla liquid/domain; include/exclude ve koleksiyonlar |
 | Fluid → collision objects | Kap/zemin/engel katmanları; collision groups ve ignore çiftleri |
 | Emitter → kaynak nesne | Sıvı/yoğunluk eklenen bölge ve başlangıç hızının kaynağı |
+| Fluid → takip edilen yüzey | İsteğe bağlı projection/tangent flow, offset, adhesion ve detach eşiği; collision'dan ayrıdır |
 | Fluid → diğer dinamik nesneler | Ayrı coupling modu; ilk dilimde görünür ama desteklenmeyen seçim açık tanı verir |
 
-Görsel katman otomatik collider sayılmaz. İlk 2D engeller plane/segment, circle, rectangle ve doğrulanmış convex polygon'dur. Collider'ın kalınlık/malzeme ve transform'u physics snapshot'ta tutulur; image alpha'sını kendiliğinden kapalı kap geometrisi saymaz.
+Görsel katman otomatik collider sayılmaz. İlk 2D engeller plane/segment, circle, rectangle ve doğrulanmış convex polygon'dur. Sonraki geometri adapter aşaması shape/spline, gerçek text glyph outline/compound veya SDF ve `Mesh2D` sınırını ekler. Glyph delikleri korunur; text ölçüm kutusu veya tek convex hull collider değildir. Collider'ın kalınlık/malzeme ve transform'u physics snapshot'ta tutulur; image alpha'sını kendiliğinden kapalı kap geometrisi saymaz. Raster alpha/SDF yalnız açık fallback ve kayıtlı çözünürlükle kullanılabilir.
 
 Liquid'de particle penetration düzeltmesi yanında duvar yakınındaki yoğunluk eksikliğini ele alan boundary örnekleri/yoğunluk düzeltmesi gerekir. Sadece particle'ı duvar dışına itmek sızıntı, yapışma ve yoğunluk bozulmasını bütünüyle çözmez. İnce duvar, köşe, dar geçit ve hızlı akış ayrı kabul sahneleridir.
 
 Grid akışta obstacle hücre/face işaretleri ve normal boundary velocity basınç/advection işlemine girer; çizimde maskeyle kesmek fiziksel collision değildir. Hareketli collider girişi bake edilmiş trajectory'den her alt adımda örneklenir.
+
+Text/shape üzerinde sıvı için üç ayrı kalite seviyesi vardır: collider üstünden yerçekimiyle akış; adhesion/slip ile tutunma; kontrollü surface-follow ile kontur boyunca tangent akış. Gerçek thin-film, wetting, kalıntı ve kuruma ilk kapsam dışındadır. Yaklaşan damlaların birleşip uzaklaşınca ayrılan görünümü particle solver yerine geçmez; bu görünüm aşağıdaki Blob Surface reconstruction ile üretilir.
 
 İlk etkileşim **one-way**: engeller sıvıyı yönlendirir, sıvı engelleri hareket ettirmez. Yüzen cisim, sıvının nesneyi sürüklemesi veya kumaşı ıslatıp ağırlaştırması sonraki coupling kapsamıdır. Bu aşama basınç/itki, buoyancy, kütle/atalet ve ortak alt-adım değişimini gerektirir; yalnız collision listesine eklemek yeterli değildir.
 
@@ -98,7 +104,7 @@ Liquid adapter, aynı contour builder'a solver particle'larından scalar alan ve
 
 Sıvı ayrılabilir, birleşebilir ve delik oluşturabilir. Bu nedenle contour/topoloji kareler arasında değişebilir. Normal spline'ın sabit point id'lerini her karede zorla eşleyerek morph etmek varsayılan bake değildir. Marching-squares benzeri yüzey çıkarımının threshold/resolution ayarı bake appearance sürümüne girer.
 
-Native contour algoritması **Marching Squares** olarak adlandırılır; `d3-contour` MultiPolygon çıktısı başlangıç adayıdır. Bu işlem quad mesh üretmez. Compound path yüzeyi doğrudan çizebilir; mesh gerektiğinde sınır/delikler ayrıca triangulate edilir. Grid origin/spacing, influence bounds ve kalite profili sabittir; kareden kareye bbox merkezine taşınarak jitter üretilmez. Seçili kareyi Editable Poly'ye dönüştürmek yeni sabit vertex/triangle kimlikleri oluşturur ve kaynak klibi korur; değişken topolojiyi cloth cache'ine zorla eşlemez.
+Native contour algoritması **Marching Squares** olarak adlandırılır; `d3-contour` MultiPolygon çıktısı başlangıç adayıdır. Bu işlem quad mesh üretmez. Compound path yüzeyi doğrudan çizebilir; mesh gerektiğinde sınır/delikler ayrıca triangulate edilir. Grid origin/spacing, influence bounds ve kalite profili sabittir; kareden kareye bbox merkezine taşınarak jitter üretilmez. Seçili kareyi Mesh2D snapshot'a dönüştürmek yeni sabit vertex/triangle kimlikleri oluşturur ve kaynak klibi korur; değişken topolojiyi cloth cache'ine zorla eşlemez.
 
 Grid smoke/dye, scalar kanalları texture/renk haritasıyla çizer. Bütün sonuç tek fluid/domain katmanında çizilir; her damla/particle ayrı sahne katmanı yapılmaz. WebGL offscreen pass mevcut Canvas kompozisyonuna adapter ile bağlanabilir. Parent, opacity, mask/effect, zoom ve export resolution test edilir.
 
@@ -128,7 +134,7 @@ Ara karede doğum/ölüm, hızlı hareket ve duvar geçişi interpolasyonla bozu
 
 ## 11. Editör, kayıt ve MCP
 
-Physics Simulations panelinde Liquids/Flow; domain/emitter, material, fields, affected objects, collision objects, diagnostics ve bake seçenekleri bulunur. Particle/grid çözünürlüğü, süre, beklenen clip boyutu ve simülasyon adımları görünür olur.
+Physics Simulations panelinde Liquids/Flow; domain/emitter, material, fields, affected objects, collision objects, surface targets, diagnostics ve bake seçenekleri bulunur. **Emit From**, **Collide With** ve **Follow Surface** ayrı layer picker ve geometri modu alanlarıdır. Seçili hedef satırında ad/tür/mod, capability, reveal/select/remove ve inline hata görünür; eksik font veya silinmiş hedef Apply/Simulate işlemini açık tanıyla durdurur. Particle/grid çözünürlüğü, süre, beklenen clip boyutu ve simülasyon adımları görünür olur. Ayrıntılı görünüm [2D UI sözleşmesinde](../production-2d-ui-contracts.md#55-blob-surface-sıvı-ve-akış) tanımlıdır.
 
 Preview kalıcı katmanları değiştirmez. Bake sonucu katman, cache asset'i, playback track'i ve BakeRecord ile tek undo transaction'ında eklenir. Kullanıcı ayarları değişince ilgili sonuç stale olur. Re-bake yalnız sahip olduğu üretilmiş verilere dokunur; manuel düzenlenen sonuç için yeni sürüm/explicit replace politikası kullanılır.
 
@@ -147,19 +153,19 @@ Planlanan ortak sınıflar [Simulation Core 2D belgesinde](simulation-core-2d-ar
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |
 | 0 — Ortak core | Recipe, units, domain, particle cache fixture ve decoder | Solver olmadan bilinen particle klibi scene/player/export'ta aynı oynar. |
-| 0 — Yüzey altyapısı | Ana plandaki BLOB0/BLOB1: native etki noktaları, alan, Marching Squares ve merge owner | İki küme birleşir/ayrılır; delik ve boş yüzey geçerlidir; elle edit, undo ve seçili kareyi Poly'ye dönüştürme çalışır. PBF doğruluk prototipi bunu beklemek zorunda değildir. |
-| 1 — Liquid 2D | PBF, gravity, sabit kap/collider ve dolu başlangıç bölgesi | Kapta sıvı durulur, engel etrafında akar; density/kütle/duvar sızıntısı bütçesi ölçülür. |
-| 2 — Kontrol ve bake | Fields, affected objects, emitter/drain, BLOB2 fluid yüzey adapter'ı, atomik bake | Vortex yalnız seçili sıvıyı etkiler; kaynak kütle bütçesi kaydedilir; birleşme/ayrılma contour'u, görünüm için cache reuse, solver kapalı playback ve undo geçer. |
-| 3 — Grid Flow 2D | Advection/projection, smoke/dye, boundary ve grid bake | Engel etrafında renkli akış; divergence ve boundary residual tanıları; texture bake parity. |
+| 0 — Yüzey altyapısı | Ana plandaki BLOB0/BLOB1: native etki noktaları, alan, Marching Squares ve merge owner | İki küme birleşir/ayrılır; delik ve boş yüzey geçerlidir; elle edit, undo ve seçili kareyi Mesh2D snapshot'a dönüştürme çalışır. Parçacık çözücü doğruluk prototipi bunu beklemek zorunda değildir. |
+| 1 — Backend prototipi ve Liquid 2D | LiquidFun ile dar PBF karşılaştırması; seçilen tek backend'de gravity, sabit kap/collider ve dolu başlangıç bölgesi | Backend ölçümle seçilir; kapta sıvı durulur, engel etrafında akar; density/kütle/duvar sızıntısı bütçesi ölçülür. |
+| 2 — Kontrol ve bake | Fields, affected objects, emitter/drain, shape/spline/text/`Mesh2D` emission adapter'ları, BLOB2 fluid yüzey adapter'ı, atomik bake | Vortex yalnız seçili sıvıyı etkiler; kaynak kütle bütçesi kaydedilir; birleşme/ayrılma contour'u, görünüm için cache reuse, solver kapalı playback ve undo geçer. |
+| 3 — Sahne geometrisi ve Grid Flow 2D | Glyph/shape/mesh boundary-SDF, optional surface-follow; advection/projection, smoke/dye, obstacle ve grid bake | `WATER` yazısı üstünde sıvı ayrılır/birleşir; text delikleri korunur. Yazıdan duman çıkar ve seçili engel etrafında akar; divergence ve boundary residual tanıları ile texture bake parity geçer. |
 | 4 — Ürün teslimi | Moving baked collider, cache bütçesi/format, MCP, re-bake ve portable | Cancel/stale, kayıt/yükleme, korunmuş kullanıcı düzenlemesi ve supported runtime export çalışır. |
 
 **İlk dikey dilim:** 2D kap, yaklaşık 1.000 particle, gravity ve tek engel → 3 saniye hesap → particle/contour önizleme → native clip bake → solver kapalı playback → undo/kayıt-yükleme. Sonraki adım vortex alanı ve etkilenen nesne listesidir.
 
 ## 14. Doğrulama ve uygulama sınırları
 
-Testler: kapalı domain kütle/alan ve density hatası; emitter/drain muhasebesi; boundary kaçak/köşe/dar geçit; alan maskeleri; fixed-step tekrar ve bütçe; grid divergence/pressure residual; collision velocity; stable particle id ve doğum/ölüm; değişen surface topology; clip decode/interpolasyon; birim/eksen; stale/cancel; tek undo; güvenli re-bake; portable ve renderer parity.
+Testler: kapalı domain kütle/alan ve density hatası; emitter/drain muhasebesi; shape/spline/text/`Mesh2D` emission örneklemesi; glyph delikleri; surface-follow offset/adhesion/detach; boundary kaçak/köşe/dar geçit; alan maskeleri; fixed-step tekrar ve bütçe; grid divergence/pressure residual; collision velocity; stable particle id ve doğum/ölüm; değişen surface topology; clip decode/interpolasyon; birim/eksen; stale/cancel; tek undo; güvenli re-bake; portable ve renderer parity.
 
-Görsel sahneler: dam-break/kapta dalga, dökülme ve dolan kap, circle engel etrafında akış, vortex ile seçili domain, smoke/dye engel sahnesi. Başlangıç, ilk temas, en büyük sıçrama/akış, orta ve durulma anları gerçek render ile incelenir; yalnız particle debug görüntüsü son görünüm kabulü değildir.
+Görsel sahneler: dam-break/kapta dalga, dökülme ve dolan kap, circle engel etrafında akış, vortex ile seçili domain, `WATER` text üstünde ayrılan/birleşen sıvı, text glyph kaynağından duman/alev ve smoke/dye engel sahnesi. Başlangıç, ilk temas, en büyük sıçrama/akış, orta ve durulma anları gerçek render ile incelenir; yalnız particle debug görüntüsü son görünüm kabulü değildir.
 
 Önerilen modüller ortak `src/lib/physics/` altında liquid, grid flow, fields, spatial query ve cache bileşenleridir. Önce mevcut numeric/geometry/job yardımcıları değerlendirilir. Exact API ve dosya sınırları ilk teknik dilimde kesinleşir.
 

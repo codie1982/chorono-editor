@@ -4,7 +4,10 @@ Tarih: 4 Kasım 2026. Durum: mimari ve geliştirme planı; uygulama yapılmadı.
 
 Ortak servis, sınıf ve birim sözleşmesi: [Simulation Core 2D](simulation-core-2d-architecture.md). Diğer alan: [Liquid & Fluids](fluid-liquid-simulation-bake-plan.md). **Geliştirme yalnızca 2D modundadır.** Seçilen bayrak/perde görünümü için yerel x/y/z yüzey deformasyonu korunur; 3D mod, scene adapter, kamera veya hacimsel runtime işi yapılmaz. Olası 3D uyarlama aktif aşama veya kabul ölçütü değildir.
 
-Genel uygulama kuyruğu [2D üretim yol haritasını](../production-2d-roadmap.md) izler: export → bileşen → çoklu format önceliklidir. Kumaş planı korunur; bu teslimlerin önkoşulu değildir.
+Genel uygulama kuyruğu [2D üretim yol haritasını](../production-2d-roadmap.md)
+izler. Kumaş; Mesh2D/spline-to-mesh ve ortak BakeService sözleşmelerinden sonra
+gelir. Bu belge kumaş alt sisteminin iç teslim sırasını tanımlar; ana planın
+önceliklerini değiştirmez.
 
 ## 1. Ürün ve kapsam kararı
 
@@ -34,13 +37,13 @@ Repoda kumaş/soft-body çözümü, üçgen mesh katmanı veya mesh deformasyon 
 
 Kullanılabilecek parçalar: LayerRegistry/LayerRendererRegistry, mevcut canvas kompozisyonu, Matrix2D, property schema, timeline/curve editor, native undo komutları ve planlanan fizik job/cache sistemi.
 
-6 Kasım 2026 eklemesi: [Editable Poly 2D ve native ağ araçları](../production-2d-roadmap.md#9-editable-poly-2d-native-ağ-üretimi-ve-blob-surface) ortak geometri altyapısıdır. Vertex/edge/triangle/quad seçimi, structured grid, UV/komşuluk, doğrulama ve buffer yardımcıları paylaşılır. Kumaşın yerel z'si, rest metric, pin/constraint ve solver state'i ayrı adapter'da kalır. Birleştirilip ayrılan Blob yüzeyi sabit topolojili cloth mesh'i değildir.
+17 Kasım 2026 kapsam düzeltmesi: [Mesh2D ve spline-to-mesh](../production-2d-roadmap.md#9-mesh2d-spline-to-mesh-ve-blob-surface) ortak geometri altyapısıdır. Structured grid, kapalı spline/shape flattening ve triangulation, UV/komşuluk, doğrulama ve buffer yardımcıları paylaşılır. Kullanıcıya açık Editable Poly 2D geliştirilmez. Kumaşın yerel z'si, rest metric, pin/constraint ve solver state'i ayrı adapter'da kalır. Birleştirilip ayrılan Blob yüzeyi sabit topolojili cloth mesh'i değildir.
 
 Önemli fark: rigid-body bake'i x/y/dönme track'leri üretirken kumaş bake'i **yüzeydeki vertex konumlarını** saklamalıdır. Mevcut `bakeTrack` bu deformasyonu üretmez. Bu özellik için hem geometry cache formatı hem mesh renderer ve cache playback desteği gerekir.
 
 ## 3. Ortak fizik çatısı ve solver seçimi
 
-[Physics & Fracture planı](physics-fracture-bake-plan.md) rigid-body uygulaması için Matter.js kararını korur. Kumaş için ayrı bir **XPBD tabanlı yüzey solver'ı** önerilir. XPBD, kısıtların esnekliğini compliance ile ifade eder; klasik PBD'de malzeme sertliğinin zaman adımı ve iterasyon sayısına bağımlılığına çözüm getirir. Uygulamada çözüm doğruluğu ve yakınsama yine test edilmelidir. [XPBD makalesi](https://mmacklin.com/xpbd.pdf)
+[Physics & Fracture planı](physics-fracture-bake-plan.md) rigid-body uygulaması için Matter.js kararını korur. Kumaş backend'i prototip kapısında iki adayla değerlendirilir: JavaScript/WASM bağları bulunan Rapier soft-body cloth ve Chorono'nun dar gereksinimlerine göre küçük bir **XPBD tabanlı yüzey solver'ı**. Rapier seçilirse engine tipi domain modeline sızmaz; adapter yalnız rest mesh, pin/constraint, collider/field snapshot ve örneklenmiş vertex sonucunu taşır. XPBD seçilirse collision/self-collision ve kararlılık yükünün gerçekten karşılandığı fixture'larla kanıtlanır. İki backend aynı ilk teslimde ürünleştirilmez. Karar; yerel z, pin, self-contact, fixed-step tekrar, worker/bundle maliyeti, cancellation ve cache çıktısıyla ölçülür. [Rapier soft bodies](https://www.rapier.rs/docs/user_guides/javascript/soft_bodies/), [XPBD makalesi](https://mmacklin.com/xpbd.pdf)
 
 Ortak sistemler: recipe/snapshot, sabit saat, worker job, kuvvet alanı tanımları, collider kaynakları, progress/cancel/stale, bake ownership, kayıt ve export capability denetimi.
 
@@ -63,7 +66,7 @@ Kumaş solver'ı React/DOM/canvas bağımsızdır; typed-array durumuyla worker 
 
 Başlangıçta dikdörtgen düzenli üçgen grid kullanılır. Vertex kütlesi ait olduğu üçgen alanı ve yüzey yoğunluğundan türetilir; çözünürlüğü artırmak toplam kumaş kütlesini rastgele değiştirmez. Gerilme ve bükülme ayrı ayarlardır. İplik yönlerine göre farklı sertlik ileri malzeme aşamasında eklenebilir.
 
-Rest grid native **Structured Quad Grid** aracından üretilebilir; kaynak quad yüzler kararlı diyagonalle solver triangle'larına derlenir. Authoring yüz/vertex kimlikleri ve fizik bağlantısı korunur. Genel kapalı sınırdan kalite ağı için CDT daha sonraki seçenektir; ilk kumaşın başlaması tüm quad remeshing'in tamamlanmasını gerektirmez. Her kare yeniden triangulate yapılmaz. Diyagonal/topology değişimi pin/constraint ve deformasyon bake hash'ini geçersiz kılar; eski düzenleme otomatik yeni indislerle eşlenmez.
+Rest grid native **Structured Grid** üreticisinden oluşturulur; kaynak hücreler kararlı diyagonalle solver triangle'larına derlenir. Keyfi kapalı spline/shape daha sonra spline-to-mesh ve gerektiğinde CDT adapter'ıyla dönüştürülür. Vertex kimlikleri ve fizik bağlantısı topology hash ile korunur. İlk kumaşın başlaması keyfi spline triangulation'ını beklemez. Her kare yeniden triangulate yapılmaz. Topology değişimi pin/constraint ve deformasyon bake hash'ini geçersiz kılar; eski düzenleme otomatik yeni indislerle eşlenmez.
 
 Bükülme komşu üçgenler üzerinden modellenir. Basit karşı-vertex mesafe kısıtı prototipte kullanılabilir; açı tabanlı bükülme daha tutarlı bir sonraki seçenek olarak ölçülür. Referans yaklaşım, güçlü kenar kısıtlarıyla esnemeyi sınırlayıp bükülmeyi ayrı ele alır. [Kumaş modeli referansı](https://matthias-research.github.io/pages/tenMinutePhysics/14-cloth.pdf)
 
@@ -180,7 +183,7 @@ Started/progress/completed/cancelled/failed, pin released ve bake completed olay
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |
 | 0 — Mesh/cache temeli | Sabit topoloji, textured mesh, z katlanma ve cache playback fixture | Solver olmadan örnek mesh klibi scene/player/preview/export'ta eşleşir; UV kaymaz; ön/arka yüz ve hit-test çalışır. |
-| 1 — Kumaş solver | XPBD, rest grid, gravity, sert pin, esneme/bükülme, damping | İki köşeden bağlı kumaş sarkar; rest kütlesi korunur; çözünürlük ve timestep profilleri kontrol edilir. |
+| 1 — Backend prototipi ve kumaş solver | Rapier soft-body ile dar XPBD karşılaştırması; seçilen tek backend'de rest grid, gravity, sert pin, esneme/bükülme ve damping | Backend ölçümle seçilir; iki köşeden bağlı kumaş sarkar; rest kütlesi korunur; çözünürlük ve timestep profilleri kontrol edilir. |
 | 2 — Alanlar ve collision | Wind/gust, affected objects, static primitive collision, one-way girişler | Bayrak rüzgârla dalgalanır; yalnız seçili kumaş etkilenir; örtü primitive üzerinde geçerli biçimde durur. |
 | 3 — Kontrol ve katlanma | Animasyonlu pin/collider, bırakma, soft pin ve sınırlı self-collision | Perde hareketli hedefi izler; bırakma sıçramaz; katlanmalı/drape sahnesinde penetrasyon bütçesi sağlanır. |
 | 4 — Teslim | Atomik bake/re-bake, cache bütçesi/sıkıştırma, portable, MCP ve runtime capability | Scrub fiziği yeniden hesaplamaz; kayıt açılır; solver olmayan playback aynı cache'i gösterir; kullanıcı düzenlemeleri korunur. |

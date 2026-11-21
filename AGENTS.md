@@ -57,7 +57,7 @@ For sorting, reuse the language/library operation or existing sorting utility wh
 
 ### Shared 2D / 2.5D and future mode foundations
 
-- Reuse common calculations, topology, validation, resource management and meaningful rendering preparation across animation, boxed 3D content and future modes. Build shared code from concrete consumers; the active roadmap remains 2D/2.5D and does not activate a full game engine or 3D workspace.
+- Reuse common calculations, topology, validation, resource management and meaningful rendering preparation across animation, boxed 3D content and future modes. Build shared code from concrete consumers. Track 2D features in `docs/tr/production-2d-roadmap.md` and 3D features in `docs/tr/production-3d-roadmap.md`; the planned boxed 3D layer does not activate a full game engine or independent 3D workspace.
 - Keep topology connectivity separate from vertex positions, dimensional attributes, transforms and renderer state. A shared triangle/quad topology may serve 2D and 3D positions through explicit adapters. Keep UV, normals and solver rest data in appropriate typed payloads.
 - Preserve explicit 2D affine and 3D matrix/projection contracts. Do not add z to every legacy 2D transform or use unrestricted casts to make incompatible vectors/renderers appear interchangeable.
 - Share dimension-independent algorithms and buffer/command preparation where their semantics match. Canvas2D composition, GPU depth/camera/material evaluation and platform drawing remain backend adapters. One renderer is not assumed to satisfy every backend's capabilities.

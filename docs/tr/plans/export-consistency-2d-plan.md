@@ -92,7 +92,7 @@ Bu belge yalnız plan yazar. Uygulamada repo kontrolleri `npm test`, `npm run mc
 
 ### 9.1. Hedef ve kaynak kod incelemesi
 
-**Hızlı viewport, seçili kareyi final kalitesiyle gösteren Render Preview ve yüksek kaliteli final export aynı sahne değerlendirmesini kullanır; çalışma çözünürlüğü/örnekleme/renk profili ayrı seçilir.** Render süresi çıktı zamanını belirlemez. Bu plan genel 2D/2.5D kompozisyonlar içindir; belirli sahne veya katman id'sine özel değildir.
+**Hızlı viewport, seçili kareyi final kalitesiyle gösteren Render Preview ve yüksek kaliteli final export mevcut Chorono 2D evaluator, renderer registry ve compositor hattını kullanır; çalışma çözünürlüğü/örnekleme/renk profili ayrı seçilir.** İkinci bir genel 2D render motoru veya timeline kurulmaz. Render süresi çıktı zamanını belirlemez. Character FK/IK, Mesh2D, bake clip'leri, mask/effect ve normal katmanlar aynı canonical frame request'ten çözülür. Bu plan genel 2D kompozisyonlar içindir; belirli sahne veya katman id'sine özel değildir.
 
 Yerel checkout'ta doğrulanan başlangıç:
 
@@ -120,9 +120,15 @@ Renderer clear işlemini backing koordinatlarında bütün hedefe uygular; backg
 
 Output aspect ratio değişimi ilk sürümde [çoklu format compiler'ının](multiformat-production-2d-plan.md) işidir. Final renderer kendi başına nesneleri yeniden yerleştirmez; verilen resolved variant'ı çizer. Raster image/video/sprite kaynakları kendi orijinal çözünürlüğüyle sınırlıdır; vektörlerin yüksek çözünürlükte yeniden çizilmesi bitmap kaynağa yeni detay kazandırdığı anlamına gelmez.
 
-### 9.3. İlk teslim: native hedef çözünürlük, supersampling ve Render Preview
+### 9.3. İlk teslim: Chorono 2D renderer ile native hedef çözünürlük, supersampling ve Render Preview
 
-İlk backend mevcut Canvas2D/registry/GPU köprüsüdür. Yeni bir sahne veya timeline motoru kurulmaz. Path/shape/spline ve yazı hedef backing'e yeniden çizilir. Fontlar hazır ve sürümü pin'li olmalı; layout ve kadraj logical uzayda korunur. Yüksek çözünürlükte ölçüm ve glyph çizimi tutarsız hale gelmemeli.
+İlk backend mevcut Canvas2D/registry/GPU köprüsüdür. Yeni bir sahne, timeline
+veya genel renderer kurulmaz. Character değerlendirmesi renderer öncesinde
+nihai layer override'larını üretir; Mesh2D ve simulation cache renderer'ları
+registry adapter'ı olarak aynı compositor'a yüzey verir. Path/shape/spline ve
+yazı hedef backing'e yeniden çizilir. Fontlar hazır ve sürümü pin'li olmalı;
+layout ve kadraj logical uzayda korunur. Yüksek çözünürlükte ölçüm ve glyph
+çizimi tutarsız hale gelmemeli.
 
 Mask, feather, stroke, shadow offset, blur radius ve glow gibi authored değerler logical piksel anlamını korur; pass onları ilgili backing ölçeğine bir kez çevirir. Particle SDF, efekt shader ve motion-blur sample canvas'ı aynı target sözleşmesini izler. Önceden düşük çözünürlükte cache'lenmiş bir maskeyi/efekti büyütmek Final High sayılmaz. Cache anahtarı source/version/time yanında output/internal ölçü, ROI, backend ve kalite profilini içerir.
 
