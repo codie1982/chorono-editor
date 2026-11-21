@@ -9,10 +9,11 @@ korunumu, event hizası/raster seam/mask bellek ölçümü, darbe tetikli fractu
 deterministik artistic explosion, topology/render–collider tanısı ve 32 parça /
 eğimli zemin / yüksek hızlı küçük cisim görsel matrisi de tamamlandı. Aşama 3
 ve temel scrub/player/MCP/render/export parity kabulüyle aşama 4 kapandı.
-Aşama 5'in ilk dikey diliminde canonical Mesh2D sınırından tek halkalı,
-deliksiz convex shape/spline kaynak derleme, convex collider, Path fragment,
-ürün UI'ı ve MCP akışı tamamlandı. Aktif sıra concave/delikli shape/spline ile
-Mesh2D clipping ve fragment mesh/adjacency/compound-collider derleyicisidir;
+Aşama 5'in ilk dikey dilimlerinde canonical Mesh2D sınırından tek halkalı,
+deliksiz convex shape/spline/Mesh2D kaynak derleme, convex collider, Path veya
+UV-korumalı Mesh2D fragment, ürün UI'ı ve MCP akışı tamamlandı. Aktif sıra
+concave/delikli shape/spline ile Mesh2D connected-region clipping ve fragment
+adjacency/compound-collider derleyicisidir;
 aşama 6–9 açıktır.
 Character Motion planı ayrı tutulur ve bu özellik için önkoşul değildir. Ortak
 ürün alanı **Physics Simulations**; bu belge Rigid Body, Voronoi Fracture,
@@ -132,6 +133,16 @@ delikli veya concave topoloji Preview öncesinde açık tanıyla reddedilir. Ima
 kaynağın tarihsel dikdörtgen collider/UV sözleşmesi korunur. Source collider
 rectangle veya convex polygon olabilir; solid shape/spline fragment'ları
 editable Path olarak kalır. Ürün UI ve MCP araçları aynı compiler'ı kullanır.
+
+**21 Kasım 2026 gerçekleşen convex Mesh2D dilimi:** Doğrulanmış sabit-topology
+Mesh2D tek dış halkası source collider'a derlenir. `FractureMesh2DClipper`, her
+kaynak triangle'ını convex fragment sınırıyla keser ve yeni kenar vertex'lerinde
+authored UV'leri enterpole eder; texture transform/appearance metadata'sı
+korunur. Geometrik edge sahipliği UV seam'lerinde position anahtarıyla
+çözüldüğü için Inspector gerçek render sınırını collider ile karşılaştırabilir.
+Deformation bağlı kaynaklar ve bake-owned fragment'ların kök kaynak olarak
+yeniden seçilmesi açıkça reddedilir; bunlar sırasıyla deformation bake ve
+secondary-destruction dilimlerinin konusudur.
 
 Geometri adımları:
 

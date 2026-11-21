@@ -53,6 +53,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Geliştirme branch'inde |
 | Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Geliştirme branch'inde |
 | Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Geliştirme branch'inde |
+| Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -3178,5 +3179,40 @@ Portable kanıt
 (`sha256 653e2a2bd06e19fd8eaed05836d36824b5d5086039088e72abad89b8873ce60b`).
 Doğrulama **434 test dosyası / 3.245 test**, TypeScript, MCP build ve production
 build ile geçti. Bilinen `applicationBuildInfo.ts` ve caniuse-lite uyarıları
-sürer. Aktif fizik işi concave/delikli shape/spline ile doğrulanmış Mesh2D
-clipping; ardından fragment triangle/UV, adjacency ve compound collider'dır.
+sürer. Convex Mesh2D ve fragment triangle/UV dilimi §12.78'de tamamlandı.
+
+### 12.78. Convex Mesh2D fracture ve UV clipping — 21 Kasım 2026
+
+`FractureSourceBoundaryCompiler`, doğrulanmış sabit-topology Mesh2D'yi aynı tek
+halkalı convex kaynak sözleşmesine bağladı. Mesh2D rectangle görünümde olsa bile
+source collider gerçek boundary'den `convexPolygon` olarak derlenir; deformation
+binding bulunan kaynaklar statik geometriye bake edilmeden kabul edilmez.
+Bake-owned fracture fragment'ları kök source picker'dan çıkarıldı; recursive
+yeniden kırılma secondary-destruction aşamasına bırakıldı.
+
+Yeni `FractureMesh2DClipper`, her source triangle'ını convex fragment ile
+Sutherland–Hodgman half-plane clipping üzerinden keser. Yeni boundary
+vertex'lerinde UV doğrusal enterpole edilir; source appearance ve texture
+reference bounds korunur. Alan eşliği ve üretilen topology ortak validator ile
+denetlenir. Overlay resolver, UV seam'i için çoğaltılmış vertex indekslerine
+değil kuantize geometrik edge sahipliğine bakarak gerçek dış sınırı çıkarır;
+bu nedenle Inspector render–collider ölçümü fragment triangle soup'u polygon
+sanmaz.
+
+İzole 2010 production editöründe MCP ile shape→Mesh2D oluşturuldu ve persistent
+Worker fracture uygulandı. 10 fragment toplam 38 render triangle, tick `48` /
+`400 ms` olay ve convex source collider üretti. Exact event'te 10/10
+render–collider polygon, 108 örnek, `7,948456744365475e-10 px` maksimum ve
+`3,45635770255906e-11 px` ortalama fark ölçüldü. 399/400/1600 ms gerçek
+640×420 kareleri incelendi; validator geçerli/uyarısız, Mesh2D capability kartı
+ve etkin Preview görüldü, generated fragment'lar source listesinden çıkarıldı
+ve browser console hatası yoktu.
+
+Tekrarlanabilir harness `scripts/qa/convex-mesh2d-fracture-live.mjs` içindedir.
+Portable kanıt
+`projects/convex-mesh2d-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 9dd9e0a541d3ad8d1bbda479bb67055b2b753f4e4e13312a81ae305794397095`).
+Doğrulama **434 test dosyası / 3.250 test**, TypeScript, MCP build ve production
+build ile geçti. Bilinen `applicationBuildInfo.ts` uyarısı sürer. Aktif fizik
+işi concave/delikli ve çok halkalı source clipping, connected component,
+fragment adjacency ve compound collider'dır.
