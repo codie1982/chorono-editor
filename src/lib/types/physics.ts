@@ -3,7 +3,7 @@ import type { FractureAppearanceSnapshot, FractureGeneration } from './fracture'
 
 export type RigidBodyMotionType = 'dynamic' | 'static'
 
-export type RigidBodyCollider = 'rectangle' | 'convexPolygon'
+export type RigidBodyCollider = 'rectangle' | 'convexPolygon' | 'compoundPolygon'
 
 export interface RigidBodyMaterial {
   /** Mass per square metre before conversion to Matter's pixel-area density. */
@@ -32,6 +32,8 @@ export interface RigidBodySnapshot extends RigidBodyAuthoring {
   readonly heightPx: number
   /** Convex vertices relative to the body's centre, in composition pixels. */
   readonly colliderVerticesPx?: readonly { readonly x: number; readonly y: number }[]
+  /** Non-overlapping convex parts relative to the compound body's centre. */
+  readonly colliderPartsPx?: readonly (readonly { readonly x: number; readonly y: number }[])[]
   /** Delayed body activation owned by one topology event. */
   readonly activation?: {
     readonly kind: 'fractureFragment'

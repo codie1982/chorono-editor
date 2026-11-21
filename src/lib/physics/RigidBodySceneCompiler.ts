@@ -177,6 +177,9 @@ export function hashRigidBodySource(timelineId: string, bodies: readonly RigidBo
       `center:${body.centerPx.x},${body.centerPx.y}`, `angle:${body.angleDeg}`,
       `size:${body.widthPx},${body.heightPx}`,
       ...(body.colliderVerticesPx ? [`vertices:${body.colliderVerticesPx.map(point => `${point.x},${point.y}`).join(';')}`] : []),
+      ...(body.colliderPartsPx ? body.colliderPartsPx.map((part, index) => (
+        `part-${index}:${part.map(point => `${point.x},${point.y}`).join(';')}`
+      )) : []),
       ...(body.activation ? [`activation:${body.activation.kind},${body.activation.eventId},${body.activation.sourceBodyId},${body.activation.sourceLocalOffsetPx.x},${body.activation.sourceLocalOffsetPx.y}`] : []),
       `visual:${body.visual.widthPx},${body.visual.heightPx},${body.visual.anchorX},${body.visual.anchorY},${body.visual.uniformScale}`,
       ...(body.visual.centerOfMassLocalPx ? [`visual-com:${body.visual.centerOfMassLocalPx.x},${body.visual.centerOfMassLocalPx.y}`] : []),

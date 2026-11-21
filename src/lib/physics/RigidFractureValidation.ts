@@ -45,7 +45,7 @@ export function assertRigidFractureEvents(
     }
     event.fragmentBodyIds.forEach(bodyId => {
       const body = bodyById.get(bodyId)
-      if (!body || body.motionType !== 'dynamic' || body.collider !== 'convexPolygon'
+      if (!body || body.motionType !== 'dynamic' || !['convexPolygon', 'compoundPolygon'].includes(body.collider)
         || body.activation?.kind !== 'fractureFragment' || body.activation.eventId !== event.id
         || body.activation.sourceBodyId !== source.bodyId || ownedBodies.has(bodyId)) {
         throw new Error(`Rigid fracture fragment is invalid: ${bodyId}`)

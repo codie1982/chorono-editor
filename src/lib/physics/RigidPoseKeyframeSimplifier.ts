@@ -111,6 +111,12 @@ export class RigidPoseKeyframeSimplifier {
 interface Point2D { readonly x: number; readonly y: number }
 
 function supportVertices(body: RigidBodySnapshot): readonly Point2D[] {
+  if (body.collider === 'compoundPolygon') {
+    if (!body.colliderPartsPx?.length || body.colliderPartsPx.some(part => part.length < 3)) {
+      throw new Error(`Compound rigid body ${body.bodyId} has no simplification support vertices`)
+    }
+    return body.colliderPartsPx.flat()
+  }
   if (body.collider === 'convexPolygon') {
     if (!body.colliderVerticesPx || body.colliderVerticesPx.length < 3) {
       throw new Error(`Rigid body ${body.bodyId} has no simplification support vertices`)

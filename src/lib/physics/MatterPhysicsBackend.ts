@@ -167,7 +167,7 @@ export class MatterPhysicsBackend implements PhysicsBackend {
     let body: Matter.Body
     if (input.collider === 'rectangle') {
       body = Matter.Bodies.rectangle(center.x, center.y, input.widthPx, input.heightPx, options)
-    } else {
+    } else if (input.collider === 'convexPolygon') {
       if (!input.colliderVerticesPx || input.colliderVerticesPx.length < 3) {
         throw new Error(`Convex rigid body ${input.bodyId} has no collider vertices`)
       }
@@ -175,6 +175,20 @@ export class MatterPhysicsBackend implements PhysicsBackend {
         center.x,
         center.y,
         [input.colliderVerticesPx.map(point => ({ x: point.x, y: point.y }))],
+        options,
+        false,
+        1e-9,
+        1e-9,
+        1e-9,
+      )
+    } else {
+      if (!input.colliderPartsPx?.length || input.colliderPartsPx.some(part => part.length < 3)) {
+        throw new Error(`Compound rigid body ${input.bodyId} has no convex collider parts`)
+      }
+      body = Matter.Bodies.fromVertices(
+        center.x,
+        center.y,
+        input.colliderPartsPx.map(part => part.map(point => ({ x: point.x, y: point.y }))),
         options,
         false,
         1e-9,

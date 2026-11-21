@@ -123,7 +123,8 @@ function assertRecipe(value: unknown): void {
   let dynamic = 0
   value.bodies.forEach(body => {
     if (!isRecord(body) || !boundedText(body.bodyId) || !boundedText(body.layerId) || bodyIds.has(body.bodyId) || layerIds.has(body.layerId)
-      || !['dynamic', 'static'].includes(String(body.motionType)) || !['rectangle', 'convexPolygon'].includes(String(body.collider))
+      || !['dynamic', 'static'].includes(String(body.motionType))
+      || !['rectangle', 'convexPolygon', 'compoundPolygon'].includes(String(body.collider))
       || !isRecord(body.centerPx) || !isRecord(body.visual) || !isRecord(body.material) || !isRecord(body.initialVelocityPxPerSecond)) {
       throw new Error('Invalid rigid body snapshot')
     }
@@ -144,11 +145,23 @@ function assertRecipe(value: unknown): void {
         if (!isRecord(vertex)) throw new Error('Invalid convex rigid vertex')
         assertFiniteNumber(vertex.x); assertFiniteNumber(vertex.y)
       })
-      if (!isRecord(body.activation) || body.activation.kind !== 'fractureFragment'
-        || !boundedText(body.activation.eventId) || !boundedText(body.activation.sourceBodyId)
-        || !isRecord(body.activation.sourceLocalOffsetPx)) throw new Error('Invalid rigid fragment activation')
-      assertFiniteNumber(body.activation.sourceLocalOffsetPx.x); assertFiniteNumber(body.activation.sourceLocalOffsetPx.y)
-    } else if (body.colliderVerticesPx !== undefined || body.activation !== undefined) {
+      if (body.colliderPartsPx !== undefined) throw new Error('Convex rigid body cannot carry compound collider parts')
+      assertFragmentActivation(body)
+    } else if (body.collider === 'compoundPolygon') {
+      if (!Array.isArray(body.colliderPartsPx) || !body.colliderPartsPx.length || body.colliderPartsPx.length > 256
+        || body.colliderVerticesPx !== undefined) throw new Error('Invalid compound rigid collider')
+      let vertexCount = 0
+      body.colliderPartsPx.forEach(part => {
+        if (!Array.isArray(part) || part.length < 3 || part.length > 128) throw new Error('Invalid compound rigid collider part')
+        vertexCount += part.length
+        part.forEach(vertex => {
+          if (!isRecord(vertex)) throw new Error('Invalid compound rigid vertex')
+          assertFiniteNumber(vertex.x); assertFiniteNumber(vertex.y)
+        })
+      })
+      if (vertexCount > 4096) throw new Error('Compound rigid collider vertex budget exceeded')
+      assertFragmentActivation(body)
+    } else if (body.colliderVerticesPx !== undefined || body.colliderPartsPx !== undefined || body.activation !== undefined) {
       throw new Error('Rectangle rigid body cannot carry fragment collider data')
     }
     if ((body.widthPx as number) <= 0 || (body.heightPx as number) <= 0
@@ -166,6 +179,14 @@ function assertRecipe(value: unknown): void {
   new SimulationClock(value as unknown as RigidBodyBakeRecipe)
   assertRigidFractureEvents(value as unknown as RigidBodyBakeRecipe, { requireRealized: true })
   assertFractureAppearance(value as unknown as RigidBodyBakeRecipe)
+}
+
+function assertFragmentActivation(body: Record<string, unknown>): void {
+  if (!isRecord(body.activation) || body.activation.kind !== 'fractureFragment'
+    || !boundedText(body.activation.eventId) || !boundedText(body.activation.sourceBodyId)
+    || !isRecord(body.activation.sourceLocalOffsetPx)) throw new Error('Invalid rigid fragment activation')
+  assertFiniteNumber(body.activation.sourceLocalOffsetPx.x)
+  assertFiniteNumber(body.activation.sourceLocalOffsetPx.y)
 }
 
 /** Validate additive fracture appearance provenance without loading media. */

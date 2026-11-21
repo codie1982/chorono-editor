@@ -66,6 +66,7 @@ export interface MCPPhysicsBakePreviewFrame {
     readonly widthPx: number
     readonly heightPx: number
     readonly colliderVerticesPx?: RigidBodySnapshot['colliderVerticesPx']
+    readonly colliderPartsPx?: RigidBodySnapshot['colliderPartsPx']
   }[]
 }
 
@@ -179,6 +180,7 @@ export class MCPPhysicsBakeJobManager {
           widthPx: body.widthPx,
           heightPx: body.heightPx,
           ...(body.colliderVerticesPx ? { colliderVerticesPx: body.colliderVerticesPx } : {}),
+          ...(body.colliderPartsPx ? { colliderPartsPx: body.colliderPartsPx } : {}),
         }
       }),
     }

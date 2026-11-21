@@ -56,7 +56,7 @@ function isVisible(body: RigidBodySnapshot, event: NonNullable<RigidBodyBakePrev
   return true
 }
 
-/** Draw a collider-space rectangle or convex fragment around its sampled COM. */
+/** Draw a collider-space rectangle, convex fragment or compound fragment. */
 function BodyShape({ body, index, transform }: {
   readonly body: RigidBodySnapshot
   readonly index: number
@@ -65,6 +65,11 @@ function BodyShape({ body, index, transform }: {
   const staticBody = body.motionType === 'static'
   const fill = staticBody ? '#64748b' : fragmentColor(index)
   const common = { fill, fillOpacity: staticBody ? 0.72 : 0.82, stroke: staticBody ? '#cbd5e1' : '#f8fafc', strokeWidth: 1.5 }
+  if (body.colliderPartsPx?.length) {
+    return <g transform={transform}>{body.colliderPartsPx.map((part, partIndex) => (
+      <polygon key={partIndex} points={part.map(point => `${point.x},${point.y}`).join(' ')} {...common} />
+    ))}</g>
+  }
   if (body.colliderVerticesPx?.length) {
     return <polygon transform={transform} points={body.colliderVerticesPx.map(point => `${point.x},${point.y}`).join(' ')} {...common} />
   }
