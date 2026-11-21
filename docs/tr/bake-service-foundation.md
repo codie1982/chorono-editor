@@ -114,9 +114,9 @@ geri getirir.
 BAKE0–BAKE2 henüz şunları sağlamaz:
 
 - generated-asset garbage collection,
-- physics simulation worker'ı, checkpoint veya tam re-bake ownership eşlemesi
-  (rigid track ownership manifesti persist edilir, replacement akışı henüz yoktur),
-- ortak Jobs & Bake paneli veya MCP async job araçları,
+- checkpoint veya tam re-bake ownership eşlemesi (rigid track ownership
+  manifesti persist edilir, replacement akışı henüz yoktur),
+- çoklu adapter/job geçmişi ve genel kuyruk görünümü,
 - Character/IK ve 3D payload adapter'ları.
 
 Sabit topolojili Mesh2D preview/cache adapter'ının kaynak, bütçe, sahiplik ve
@@ -137,3 +137,30 @@ penceresinde normal, running/cancelled, ready, stale ve failed durumlarıyla
 incelenmelidir. Rigid adapter/commit testleri gerçek Matter collision sonucu,
 budget release, portable save/load, runtime-export track'leri ve exact undo'yu
 kapsar.
+
+21 Kasım 2026 ürün diliminde workspace ömründeki rigid/fracture job'u
+`Physics` ve `Jobs & Bake` dock'larına bağlandı. İki panel aynı snapshot'ı
+gösterir; scrub önizlemesi scene/history yazmaz, Cancel/Discard runtime
+kaynaklarını bırakır ve Apply mevcut atomik komutları çağırır. Bu ilk görünüm
+tek aktif fizik job'uyla sınırlıdır; kalıcı MCP job kimliği, çoklu kuyruk/geçmiş
+ve diğer adapter'lar ayrı teslimdir.
+
+Aynı akış 21 Kasım'da 2010 portundaki izole canlı editörde doğrulandı. Rigid
+preview panel değişiminde korundu ve Discard kaynak sahneyi değiştirmedi;
+Fracture preview Apply edildi, tek Undo ile tüm fragment/track'ler kaldırıldı ve
+Redo ile geri geldi. Gerçek 1200/2500 ms PNG'leri, uyarısız scene validator ve
+boş browser console error listesi incelendi. Portable kabul sahnesi
+`projects/physics-ui-acceptance-2026-11-21.chorono.json` dosyasındadır; bu UI
+durumu aynı çalışma alanındaki önceki provenance kayıtlarını korur. Temiz,
+tek-manifestli canonical fixture
+`projects/voronoi-fracture-worker-v2-acceptance-2026-11-21.chorono.json`'dır.
+
+Aynı günün sonraki diliminde MCP fizik hazırlığı da bağlantı-sahipli kalıcı job
+kimliğine taşındı. Prepare scene/history yazmaz; get/preview/cancel/discard
+runtime sahipliğini yönetir, commit güncel source kontrolünden sonra tek undo
+transaction'ı yayınlar. MCP bağlantısı kapanınca aktif işler iptal edilir ve
+başka bağlantı job kimliğini kullanamaz. **Jobs & Bake** paneli MCP işini insan
+incelemesine açar; panel Apply'i normal editor command/history yolundan geçirir.
+Bu akış çoklu geçmiş/kuyruk veya güvenli re-bake replacement iddiası taşımaz.
+Canlı production kabulü ve portable kanıt
+`projects/mcp-bake-job-ui-acceptance-2026-11-21.chorono.json` içindedir.
