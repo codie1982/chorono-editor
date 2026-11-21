@@ -56,6 +56,9 @@ export default function FractureAuthoringSection({ scene, source, draft, onChang
     {(source?.type === 'shape' || source?.type === 'spline') && <p role="status" className="rounded border border-emerald-800/60 bg-emerald-950/25 p-2 text-xs leading-5 text-emerald-100">
       Convex {source.type} boundary enabled · solid editable Path fragments · source-local centre of mass preserved. Concave outlines and holes require the next clipping slice.
     </p>}
+    {source?.type === 'mesh2d' && <p role="status" className="rounded border border-violet-800/60 bg-violet-950/25 p-2 text-xs leading-5 text-violet-100">
+      Convex Mesh2D boundary enabled · source triangles and authored UVs are clipped into fixed-topology Mesh2D fragments. Concave outlines, holes and deformation-bound sources require the next clipping slice.
+    </p>}
     <div className="grid grid-cols-2 gap-2">
       <PhysicsNumberField label="Fragments" unit="2–100" value={draft.fragmentCount} min={2} max={100} step={1}
         onChange={value => onChange('fragmentCount', value)} />

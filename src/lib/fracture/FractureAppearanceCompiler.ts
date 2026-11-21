@@ -8,6 +8,7 @@ import type {
   FragmentGeometry,
 } from '@/lib/types/fracture'
 import type { Mesh2DData, Mesh2DTextureFit, Mesh2DTopology } from '@/lib/types/mesh2d'
+import { FractureMesh2DClipper } from './FractureMesh2DClipper'
 import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
 
 export type FractureFragmentAppearance = Pick<Layer, 'type' | 'path' | 'mesh2d' | 'style'>
@@ -17,7 +18,8 @@ export type FractureFragmentAppearance = Pick<Layer, 'type' | 'path' | 'mesh2d' 
  *
  * Solid shapes remain editable path layers. Image layers become fixed-topology
  * Mesh2D fragments that reuse the existing texture renderer and keep normalized
- * UVs in the complete source-rectangle space. The compiler stores no decoded
+ * UVs in the complete source-rectangle space. Convex Mesh2D sources clip their
+ * existing render triangles and interpolate authored UVs. The compiler stores no decoded
  * media or mutable state; asset dimensions come from portable scene metadata.
  * Unsupported effects and missing metadata fail before simulation starts so a
  * bake cannot silently lose appearance.
@@ -27,6 +29,7 @@ export class FractureAppearanceCompiler {
     private readonly topologyHasher = new Mesh2DTopologyHasher(),
     private readonly topologyValidator = new Mesh2DTopologyValidator(),
     private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler(),
+    private readonly meshClipper = new FractureMesh2DClipper(),
   ) {}
 
   /** Validate and capture the supported source appearance without mutation. */
@@ -43,6 +46,20 @@ export class FractureAppearanceCompiler {
         sourceLayerId: source.id,
         contentHash: hashCanonicalRecords('fracture-solid-appearance-v1', [canonicalJson({
           sourceType: source.type,
+          style: source.style,
+          blendMode: source.blendMode ?? 'source-over',
+          opacity: source.opacity,
+        })]),
+      })
+    }
+    if (source.type === 'mesh2d' && source.mesh2d) {
+      this.sourceBoundaryCompiler.compile(source)
+      return Object.freeze({
+        schemaVersion: 1,
+        kind: 'mesh2d',
+        sourceLayerId: source.id,
+        contentHash: hashCanonicalRecords('fracture-mesh2d-appearance-v1', [canonicalJson({
+          mesh2d: source.mesh2d,
           style: source.style,
           blendMode: source.blendMode ?? 'source-over',
           opacity: source.opacity,
@@ -78,7 +95,7 @@ export class FractureAppearanceCompiler {
         objectFit,
       })
     }
-    throw new Error('Fracture source must be a supported convex shape, spline or image rectangle.')
+    throw new Error('Fracture source must be a supported convex shape, spline, Mesh2D or image rectangle.')
   }
 
   /**
@@ -103,6 +120,22 @@ export class FractureAppearanceCompiler {
       return {
         type: 'path',
         path: pathFromPoints(fragment.polygon.map(point => [point.x, point.y])),
+        style: source.style ? structuredClone(source.style) : undefined,
+      }
+    }
+    if (snapshot.kind === 'mesh2d') {
+      if (source.type !== 'mesh2d' || !source.mesh2d) {
+        throw new Error('Fracture Mesh2D source geometry is missing.')
+      }
+      return {
+        type: 'mesh2d',
+        mesh2d: this.meshClipper.clip(
+          source.mesh2d,
+          source.id,
+          generation.generationId,
+          fragment,
+          snapshot.contentHash,
+        ),
         style: source.style ? structuredClone(source.style) : undefined,
       }
     }

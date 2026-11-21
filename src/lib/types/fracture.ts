@@ -37,6 +37,13 @@ export type FractureAppearanceSnapshot =
     readonly assetHeight: number
     readonly objectFit: 'fill' | 'contain' | 'cover' | 'none'
   }
+  | {
+    readonly schemaVersion: 1
+    readonly kind: 'mesh2d'
+    readonly sourceLayerId: string
+    /** Covers portable geometry, UVs, appearance, style and blend inputs. */
+    readonly contentHash: string
+  }
 
 /** Realized deterministic Voronoi seed retained with portable geometry. */
 export interface FractureSeedPoint extends FracturePoint2D {

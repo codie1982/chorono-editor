@@ -7,8 +7,8 @@ cluster damage.
 ## Entry points and data flow
 
 1. `FractureSourceBoundaryCompiler.compile` converts a root closed shape,
-   closed spline or image rectangle through the canonical Mesh2D boundary
-   generators. It extracts one ordered boundary ring and rejects open,
+   closed spline, convex Mesh2D or image rectangle through the canonical
+   Mesh2D boundary generators/validator. It extracts one ordered boundary ring and rejects open,
    branching, disconnected, holed or concave topology with an authoring
    diagnostic. Image rectangles preserve their historical four-corner source.
 2. `VoronoiFractureGenerator.generate` validates the compiled convex polygon,
@@ -30,7 +30,8 @@ cluster damage.
    evidence; unresolved impact placeholders cannot compile tracks or commit.
 6. `FractureAppearanceCompiler` keeps solid convex shape/spline sources as
    editable paths and converts image rectangles into fixed-topology Mesh2D
-   fragments. Image UVs
+   fragments. `FractureMesh2DClipper` clips each validated source triangle and
+   interpolates authored UVs into the fragment topology. Image UVs
    stay normalized in the complete source-rectangle space; every fragment
    carries the same texture asset, fit mode and `textureReferenceBounds`.
 7. `FractureAppearanceQualityAnalyzer` measures exact-event source/fragment
@@ -65,12 +66,15 @@ cluster damage.
   This keeps every generated layer inside the portable scene id contract.
   Compiler v1 manifests remain readable as topology data, but their legacy
   colon-delimited fragment ids cannot be inserted into a current scene.
-- V1 supports one closed, hole-free, strictly convex root shape or spline, or a
-  root image rectangle with positive persisted asset dimensions. It supports
+- V1 supports one closed, hole-free, strictly convex root shape, spline or
+  fixed-topology Mesh2D, or a root image rectangle with positive persisted
+  asset dimensions. Deformation-bound Mesh2D must first be baked into static
+  geometry. It supports
   one generation, 2–100 convex fragments and static rectangle environment
   bodies. Solid fragments are paths; image fragments are bake-owned Mesh2D
   layers with full-source normalized UVs and the source
-  `fill`/`contain`/`cover`/`none` fit semantics.
+  `fill`/`contain`/`cover`/`none` fit semantics. Mesh2D fragments preserve
+  source triangle UV interpolation and appearance metadata.
 - Fracture sources must be fully opaque. Enabled effects, masks and motion blur
   are rejected before Preview instead of being silently discarded.
 - Artistic explosion stores a source-local centre, a composition-space

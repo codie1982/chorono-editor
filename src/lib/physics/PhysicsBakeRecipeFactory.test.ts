@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { rigidBakeFixture } from '@/lib/bake/__tests__/RigidBodyBakeFixture'
 import { newCircleLayer, newImageLayer, newSplineLayerFromData } from '@/lib/defaults'
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
+import { Mesh2DTopologyValidator, StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import { PhysicsBakeRecipeFactory } from './PhysicsBakeRecipeFactory'
 
@@ -92,5 +93,46 @@ describe('PhysicsBakeRecipeFactory', () => {
     expect(prepared.recipe.fractureAppearance).toMatchObject({ kind: 'solid', sourceLayerId: source.id })
     expect(fragments).toHaveLength(8)
     expect(fragments.every(layer => layer.type === 'path')).toBe(true)
+  })
+
+  it('compiles a convex Mesh2D source into UV-preserving Mesh2D fragments', () => {
+    const fixture = rigidBakeFixture()
+    const mesh2d = new StructuredGridMesh2DGenerator().generate({
+      width: 120,
+      height: 80,
+      columns: 3,
+      rows: 2,
+      diagonal: 'topLeftToBottomRight',
+    })
+    const source = {
+      ...fixture.box,
+      id: 'convex-mesh',
+      name: 'Convex Mesh',
+      type: 'mesh2d' as const,
+      size: { width: 120, height: 80 },
+      mesh2d,
+      transform: { ...fixture.box.transform, x: 240, y: 120, scaleX: 1, scaleY: 1 },
+    }
+    const scene = { ...fixture.scene, layers: [source, fixture.floor] }
+    const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      sourceLayerId: source.id,
+      staticLayerIds: [fixture.floor.id],
+      timelineId: 'main',
+      durationMs: 3000,
+      fractureTimeMs: 800,
+      fragmentCount: 8,
+      seed: 42,
+      generationId: 'convex-mesh',
+    })
+    const fragments = new FractureLayerFactory().create(scene, prepared.generation, prepared.recipe)
+
+    expect(prepared.recipe.bodies[0].collider).toBe('convexPolygon')
+    expect(prepared.recipe.fractureAppearance).toMatchObject({ kind: 'mesh2d', sourceLayerId: source.id })
+    expect(fragments).toHaveLength(8)
+    expect(fragments.every(layer => layer.type === 'mesh2d'
+      && layer.mesh2d?.source.kind === 'fractureFragment')).toBe(true)
+    fragments.forEach(layer => {
+      expect(new Mesh2DTopologyValidator().validate(layer.mesh2d!.geometry).valid).toBe(true)
+    })
   })
 })

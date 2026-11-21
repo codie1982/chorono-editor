@@ -173,7 +173,7 @@ function assertFractureAppearance(recipe: RigidBodyBakeRecipe): void {
   const appearance = recipe.fractureAppearance
   if (!appearance) return
   const event = recipe.fractureEvents?.[0]
-  if (!event || appearance.schemaVersion !== 1 || !['solid', 'image'].includes(appearance.kind)
+  if (!event || appearance.schemaVersion !== 1 || !['solid', 'image', 'mesh2d'].includes(appearance.kind)
     || !boundedText(appearance.sourceLayerId) || !HASH.test(appearance.contentHash)) {
     throw new Error('Invalid fracture appearance provenance')
   }

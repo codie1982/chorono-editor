@@ -2,6 +2,7 @@ import type { OverrideMap } from '@/lib/evaluator'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import type { ChronoScene, Layer } from '@/lib/types'
 import type { FracturePoint2D } from '@/lib/types/fracture'
+import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
 import type { RigidBakeRecord, RigidBodySnapshot } from '@/lib/types/physics'
 
 export interface FractureOverlayPolygon {
@@ -192,13 +193,7 @@ function renderPolygonFromLayer(
     && layer.path.anchors.every(anchor => hasStraightHandles(anchor))) {
     localPoints = layer.path.anchors.map(anchor => ({ x: anchor.x, y: anchor.y }))
   } else if (layer.type === 'mesh2d' && layer.mesh2d?.source.kind === 'fractureFragment') {
-    const positions = layer.mesh2d.geometry.positions
-    if (positions.length >= 6 && positions.length % 2 === 0) {
-      localPoints = []
-      for (let index = 0; index < positions.length; index += 2) {
-        localPoints.push({ x: positions[index], y: positions[index + 1] })
-      }
-    }
+    localPoints = meshBoundaryPoints(layer.mesh2d.geometry)
   }
   if (!localPoints) return null
   const matrix = resolveMatrix(layer)
@@ -208,6 +203,62 @@ function renderPolygonFromLayer(
     centroid: matrix.applyToPoint(fragment.centroidPx),
     triangleIndices: convexFan(localPoints.length),
   }
+}
+
+/**
+ * Reconstructs one geometric boundary from fixed-topology Mesh2D triangles.
+ *
+ * Edge ownership is keyed by quantized positions rather than vertex indices so
+ * deliberate UV seams with duplicated vertices still cancel as internal
+ * edges. Multiple rings, branches and T-junctions return unavailable instead
+ * of presenting a misleading collider comparison.
+ */
+function meshBoundaryPoints(geometry: Mesh2DGeometry): FracturePoint2D[] | undefined {
+  const points = new Map<string, FracturePoint2D>()
+  const edges = new Map<string, { readonly a: string; readonly b: string; count: number }>()
+  const indices = geometry.topology.triangleIndices
+  for (let offset = 0; offset + 2 < indices.length; offset += 3) {
+    const triangle = indices.slice(offset, offset + 3)
+    for (let edgeIndex = 0; edgeIndex < 3; edgeIndex++) {
+      const aIndex = triangle[edgeIndex], bIndex = triangle[(edgeIndex + 1) % 3]
+      const a = { x: geometry.positions[aIndex * 2], y: geometry.positions[aIndex * 2 + 1] }
+      const b = { x: geometry.positions[bIndex * 2], y: geometry.positions[bIndex * 2 + 1] }
+      if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) return undefined
+      const aKey = meshPointKey(a), bKey = meshPointKey(b)
+      if (aKey === bKey) continue
+      points.set(aKey, a); points.set(bKey, b)
+      const edgeKey = aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`
+      const current = edges.get(edgeKey)
+      if (current) current.count++
+      else edges.set(edgeKey, { a: aKey, b: bKey, count: 1 })
+    }
+  }
+  const boundary = Array.from(edges.values()).filter(edge => edge.count === 1)
+  if (boundary.length < 3) return undefined
+  const neighbors = new Map<string, string[]>()
+  boundary.forEach(edge => {
+    neighbors.set(edge.a, [...(neighbors.get(edge.a) ?? []), edge.b])
+    neighbors.set(edge.b, [...(neighbors.get(edge.b) ?? []), edge.a])
+  })
+  if (Array.from(neighbors.values()).some(items => items.length !== 2)) return undefined
+  const start = Array.from(neighbors.keys()).sort()[0]
+  const loop = [start]
+  let previous = ''
+  let current = start
+  while (loop.length <= boundary.length) {
+    const next = neighbors.get(current)!.filter(key => key !== previous).sort()[0]
+    if (next === start) break
+    if (!next || loop.includes(next)) return undefined
+    loop.push(next)
+    previous = current
+    current = next
+  }
+  if (loop.length !== boundary.length) return undefined
+  return loop.map(key => points.get(key)!)
+}
+
+function meshPointKey(point: FracturePoint2D): string {
+  return `${Math.round(point.x * 1e7)},${Math.round(point.y * 1e7)}`
 }
 
 function hasStraightHandles(anchor: NonNullable<Layer['path']>['anchors'][number]): boolean {

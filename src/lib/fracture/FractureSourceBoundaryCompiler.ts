@@ -1,5 +1,6 @@
 import {
   Mesh2DAdjacencyBuilder,
+  Mesh2DTopologyValidator,
   ShapeBoundaryMesh2DGenerator,
   SplineBoundaryMesh2DGenerator,
   type ShapeBoundaryInput,
@@ -11,11 +12,13 @@ import { ConvexPolygon2D } from './ConvexPolygon2D'
 
 /** Validated single-ring source geometry in layer-local composition pixels. */
 export interface FractureSourceBoundary {
-  readonly sourceKind: 'rectangle' | 'shape' | 'spline'
+  readonly sourceKind: 'rectangle' | 'shape' | 'spline' | 'mesh2d'
   readonly polygon: readonly FracturePoint2D[]
   readonly centroidPx: FracturePoint2D
   readonly boundsPx: FractureBounds2D
   readonly areaPx2: number
+  /** Rectangle keeps the historical adapter; Mesh2D always uses its boundary. */
+  readonly colliderKind: 'rectangle' | 'convexPolygon'
   /** True only for the historical 0,0 → width,height rectangle contract. */
   readonly isOriginRectangle: boolean
 }
@@ -26,8 +29,9 @@ export interface FractureSourceBoundary {
  * Shape and spline geometry is compiled through the existing Mesh2D boundary
  * generators, so curve flattening, contour validation and source-local units
  * remain authoritative in one place. This first slice then extracts one
- * boundary loop and requires strict convexity. Multiple rings, holes, concave
- * outlines and Mesh2D sources fail explicitly for the later clipping slice.
+ * boundary loop and requires strict convexity. Convex Mesh2D sources reuse
+ * their validated portable topology. Multiple rings, holes and concave
+ * outlines fail explicitly for the later variable-topology clipping slice.
  * Instances are stateless and retain no source arrays.
  */
 export class FractureSourceBoundaryCompiler {
@@ -35,6 +39,7 @@ export class FractureSourceBoundaryCompiler {
     private readonly shapeGenerator = new ShapeBoundaryMesh2DGenerator(),
     private readonly splineGenerator = new SplineBoundaryMesh2DGenerator(),
     private readonly adjacencyBuilder = new Mesh2DAdjacencyBuilder(),
+    private readonly topologyValidator = new Mesh2DTopologyValidator(),
   ) {}
 
   /** Compile one borrowed layer without mutating or retaining it. */
@@ -56,7 +61,21 @@ export class FractureSourceBoundaryCompiler {
     if (layer.type === 'spline' && layer.spline) {
       return this.fromGeometry('spline', this.splineGenerator.generate(layer.id, layer.spline).geometry)
     }
-    throw new Error('Fracture source must be an image rectangle, closed shape or closed spline.')
+    if (layer.type === 'mesh2d' && layer.mesh2d) {
+      if (layer.mesh2d.source.kind === 'fractureFragment') {
+        throw new Error('Generated fracture fragments require the later secondary-destruction workflow.')
+      }
+      if (layer.mesh2d.deformation) {
+        throw new Error('Fracture Mesh2D source deformation must be baked into static geometry before Preview.')
+      }
+      const validation = this.topologyValidator.validate(layer.mesh2d.geometry)
+      if (!validation.valid) {
+        const codes = validation.diagnostics.filter(item => item.severity === 'error').map(item => item.code)
+        throw new Error(`Fracture Mesh2D source topology is invalid: ${codes.join(', ')}`)
+      }
+      return this.fromGeometry('mesh2d', layer.mesh2d.geometry)
+    }
+    throw new Error('Fracture source must be an image rectangle, closed shape, closed spline or convex Mesh2D.')
   }
 
   private rectangle(layer: Layer): FractureSourceBoundary {
@@ -70,7 +89,7 @@ export class FractureSourceBoundaryCompiler {
     ])
   }
 
-  private fromGeometry(sourceKind: 'shape' | 'spline', geometry: Mesh2DGeometry): FractureSourceBoundary {
+  private fromGeometry(sourceKind: 'shape' | 'spline' | 'mesh2d', geometry: Mesh2DGeometry): FractureSourceBoundary {
     const polygon = extractSingleBoundaryLoop(geometry, this.adjacencyBuilder)
     try {
       return this.validated(sourceKind, polygon)
@@ -85,20 +104,23 @@ export class FractureSourceBoundaryCompiler {
     points: readonly FracturePoint2D[],
   ): FractureSourceBoundary {
     const polygon = new ConvexPolygon2D(points, `Fracture ${sourceKind} boundary`)
+    const isRectangle = isOriginRectangle(polygon.points, polygon.bounds)
     return Object.freeze({
       sourceKind,
       polygon: polygon.points,
       centroidPx: polygon.centroid,
       boundsPx: polygon.bounds,
       areaPx2: polygon.area,
-      isOriginRectangle: isOriginRectangle(polygon.points, polygon.bounds),
+      colliderKind: sourceKind !== 'mesh2d' && isRectangle ? 'rectangle' : 'convexPolygon',
+      isOriginRectangle: isRectangle,
     })
   }
 }
 
 /** Cheap picker admission; the compiler remains the source of detailed errors. */
 export function isFractureSourceLayerCandidate(layer: Layer): boolean {
-  return ['shape', 'image', 'spline'].includes(layer.type)
+  return ['shape', 'image', 'spline', 'mesh2d'].includes(layer.type)
+    && layer.mesh2d?.source.kind !== 'fractureFragment'
     && !layer.parentId && !layer.instanceOf
     && Number.isFinite(layer.transform.scaleX) && layer.transform.scaleX > 0
     && Number.isFinite(layer.transform.scaleY)

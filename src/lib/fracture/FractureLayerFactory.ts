@@ -8,8 +8,8 @@ import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
  * Builds editable path or textured Mesh2D layers for one fracture generation.
  *
  * Fragment geometry retains source-local polygon coordinates. Solid sources
- * produce paths; image sources produce Mesh2D triangles with source-rectangle
- * UVs. Anchors move to the uniform-density centroid while the initial transform
+ * produce paths; image and Mesh2D sources produce clipped Mesh2D triangles
+ * with preserved source UVs. Anchors move to the uniform-density centroid while the initial transform
  * is compensated, so assembled fragments exactly overlay the source before
  * activation and later rotate around their physical centre. Returned layers
  * own detached portable appearance data and no runtime solver references.

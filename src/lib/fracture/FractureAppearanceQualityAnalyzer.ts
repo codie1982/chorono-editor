@@ -11,7 +11,7 @@ export interface FractureAppearanceQualityReport {
   readonly status: 'pass' | 'warning'
   readonly recordId: string
   readonly generationId: string
-  readonly appearanceKind: 'solid' | 'image'
+  readonly appearanceKind: 'solid' | 'image' | 'mesh2d'
   readonly eventTimeMs: number
   readonly fragmentCount: number
   readonly triangleCount: number

@@ -89,14 +89,16 @@ private to the creating MCP connection and paired editor session. The older
 prepare-and-publish behavior for compatibility.
 
 The current Voronoi source adapter accepts a fully opaque root solid convex
-shape, a single closed convex spline, or an image rectangle with positive
-persisted asset dimensions. Shape/spline boundaries reuse the canonical
-Mesh2D flattening and contour validator, then require one hole-free convex
-ring. Solid sources publish path fragments. Image sources publish bake-owned
-`Mesh2D` fragments whose normalized UVs address the complete source rectangle
-and keep the source texture/fit semantics. Concave, holed and multi-ring
-sources, enabled effects, masks and motion blur are rejected before Preview
-rather than being silently approximated or dropped.
+shape, a single closed convex spline, a convex fixed-topology `Mesh2D`, or an
+image rectangle with positive persisted asset dimensions. Shape/spline
+boundaries reuse the canonical Mesh2D flattening and contour validator, then
+require one hole-free convex ring. Solid sources publish path fragments. Image
+sources publish bake-owned `Mesh2D` fragments whose normalized UVs address the
+complete source rectangle and keep the source texture/fit semantics. Mesh2D
+sources clip their validated source triangles and interpolate authored UVs
+into fixed-topology fragment meshes. Concave, holed, multi-ring and
+deformation-bound Mesh2D sources, enabled effects, masks and motion blur are
+rejected before Preview rather than being silently approximated or dropped.
 
 Choose `fractureTrigger.kind` as `time` or `impact`. A timed trigger requires
 `fractureTimeMs` on an interior fixed-step tick. Impact requires a positive

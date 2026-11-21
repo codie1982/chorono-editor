@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { rigidBakeFixture } from '@/lib/bake/__tests__/RigidBodyBakeFixture'
 import { newImageLayer, newSplineLayerFromData } from '@/lib/defaults'
+import { StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import type { PhysicsBakeController } from './usePhysicsBakeController'
 import PhysicsSimulationsPanel, {
@@ -181,6 +182,26 @@ describe('PhysicsSimulationsPanel', () => {
     expect(html).toContain('Convex spline boundary enabled')
     expect(html).toContain('solid editable Path fragments')
     expect(html).toContain('Concave outlines and holes require the next clipping slice')
+  })
+
+  it('explains convex Mesh2D triangle and UV clipping without hiding remaining limits', () => {
+    const { scene, box } = rigidBakeFixture()
+    const source = {
+      ...box,
+      id: 'convex-mesh',
+      type: 'mesh2d' as const,
+      mesh2d: new StructuredGridMesh2DGenerator().generate({ width: 120, height: 80, columns: 2, rows: 2 }),
+    }
+    const html = renderToStaticMarkup(createElement(FractureAuthoringSection, {
+      scene: { ...scene, layers: [...scene.layers, source] },
+      source,
+      draft: draftFixture({ sourceLayerId: source.id }),
+      onChange() {},
+    }))
+
+    expect(html).toContain('Convex Mesh2D boundary enabled')
+    expect(html).toContain('source triangles and authored UVs are clipped')
+    expect(html).toContain('deformation-bound sources require the next clipping slice')
   })
 })
 

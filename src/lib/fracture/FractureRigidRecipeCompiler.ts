@@ -65,8 +65,7 @@ export class FractureRigidRecipeCompiler {
     const sourceLayer = scene.layers.find(layer => layer.id === input.sourceBody.layerId)
     if (!sourceLayer) throw new Error('Fracture source layer is missing')
     const sourceBoundary = this.sourceBoundaryCompiler.compile(sourceLayer)
-    if ((sourceBoundary.isOriginRectangle && input.sourceBody.collider !== 'rectangle')
-      || (!sourceBoundary.isOriginRectangle && input.sourceBody.collider !== 'convexPolygon')) {
+    if (sourceBoundary.colliderKind !== input.sourceBody.collider) {
       throw new Error('Fracture source collider no longer matches its compiled boundary')
     }
     const fractureAppearance = this.appearanceCompiler.snapshot(scene, sourceLayer)

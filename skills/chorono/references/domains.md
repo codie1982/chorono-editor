@@ -26,12 +26,15 @@ Use `prepare_rigid_body_bake` for supported root, non-instanced rectangle layers
 At least one body is `dynamic`; `static` bodies act as colliders. A reviewed
 commit publishes ordinary x/y/rotation tracks and a versioned ownership record
 in one undo step. Use `prepare_voronoi_fracture_bake` for a fully opaque root
-solid convex shape, single closed convex spline, or image rectangle with positive
-persisted asset dimensions. Solid sources create deterministic fragment path
-layers; image sources create textured Mesh2D fragments with normalized UVs in
-the complete source-rectangle space. Shape/spline sources reuse the canonical
-Mesh2D flatten/contour validator; concave, holed and multi-ring sources are
-rejected until the clipping slice. Enabled effects, masks and motion blur are
+solid convex shape, single closed convex spline, convex fixed-topology Mesh2D,
+or image rectangle with positive persisted asset dimensions. Solid sources
+create deterministic fragment path layers; image sources create textured
+Mesh2D fragments with normalized UVs in the complete source-rectangle space.
+Mesh2D sources clip validated source triangles and interpolate authored UVs
+into fixed-topology fragment meshes. Shape/spline sources reuse the canonical
+Mesh2D flatten/contour validator; concave, holed, multi-ring and
+deformation-bound Mesh2D sources are rejected until the clipping slice.
+Enabled effects, masks and motion blur are
 rejected before Preview. The commit also publishes visibility/pose tracks and
 topology provenance atomically. The fracture time must align to an interior
 fixed solver tick. Alternatively choose an impact trigger with a positive

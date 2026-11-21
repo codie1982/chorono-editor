@@ -211,7 +211,7 @@ export default function PhysicsSimulationsPanel({
       {mode === 'particle' ? <ParticleNotice onOpen={onOpenParticles} />
         : view === 'source' ? <div className="space-y-4">
           {!sources.length ? <InlineNotice tone="warning">{mode === 'fracture'
-            ? 'Add a root closed shape, closed spline or image rectangle with positive uniform scale. Concave outlines and holes remain disabled until the clipping slice.'
+            ? 'Add a root closed shape, closed spline, convex Mesh2D or image rectangle with positive uniform scale. Concave outlines and holes remain disabled until the clipping slice.'
             : 'Add a root rectangle shape or image with positive uniform scale. Rigid bodies do not approximate text, hierarchy or non-uniform scale.'}</InlineNotice>
             : <>
               <SourceSection sources={sources} staticRectangles={rigidRectangles} sourceLayerId={draft.sourceLayerId} selectedLayerId={selectedLayerId}
@@ -606,6 +606,7 @@ function isSupportedRectangle(layer: Layer): boolean {
 function sourceTypeLabel(layer: Layer): string {
   if (layer.type === 'image') return 'Image'
   if (layer.type === 'spline') return 'Spline'
+  if (layer.type === 'mesh2d') return 'Mesh2D'
   return 'Shape'
 }
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyScene, newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
+import { StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
+import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import type { ChronoScene, Layer } from '@/lib/types'
 import { prepareMCPRigidBake, prepareMCPVoronoiBake } from '../bake/MCPRigidBake'
@@ -137,6 +139,40 @@ describe('MCP rigid/fracture bake workflows', () => {
     })
     expect(baked.scene.layers.filter(layer => layer.id.startsWith('spline-v1-fragment-'))).toHaveLength(4)
     expect(record?.recipe.fractureAppearance).toMatchObject({ kind: 'solid', sourceLayerId: spline.id })
+  })
+
+  it('publishes a convex Mesh2D source with clipped fragment UV topology', async () => {
+    const scene = fixture()
+    const source = {
+      ...scene.layers[0],
+      id: 'convex-mesh-source',
+      type: 'mesh2d' as const,
+      mesh2d: new StructuredGridMesh2DGenerator().generate({
+        width: 80,
+        height: 80,
+        columns: 2,
+        rows: 2,
+        diagonal: 'topLeftToBottomRight',
+      }),
+    }
+    const baked = await prepareMCPVoronoiBake({ ...scene, layers: [source, scene.layers[1]] }, {
+      sourceLayerId: source.id, staticLayerIds: ['floor'], timelineId: 'main',
+      durationMs: 400, fractureTimeMs: 200, fragmentCount: 4, seed: 19,
+      generationId: 'mesh-v1', stepHz: 60, sampleFps: 30, gravity: { x: 0, y: 0 },
+    })
+
+    const record = baked.scene.physics?.rigidBakes[0]
+    const fragments = baked.scene.layers.filter(layer => layer.id.startsWith('mesh-v1-fragment-'))
+    expect(record?.recipe.fractureAppearance).toMatchObject({ kind: 'mesh2d', sourceLayerId: source.id })
+    expect(fragments).toHaveLength(4)
+    expect(fragments.every(layer => layer.type === 'mesh2d'
+      && !!layer.mesh2d
+      && layer.mesh2d.geometry.uvs.length === layer.mesh2d.geometry.positions.length)).toBe(true)
+    const quality = new FractureRenderColliderAnalyzer().analyzeCommittedEvent(
+      baked.scene,
+      baked.scene.physics!.rigidBakes[0].id,
+    )
+    expect(quality).toMatchObject({ status: 'pass', renderPolygonCount: 4, colliderPolygonCount: 4 })
   })
 
   it('persists the realized impact tick and explicit artistic explosion through direct MCP bake', async () => {

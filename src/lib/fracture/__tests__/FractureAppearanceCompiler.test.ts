@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { emptyScene, newImageLayer, newRectLayer } from '@/lib/defaults'
-import { Mesh2DTopologyValidator } from '@/lib/geometry/mesh2d'
+import { Mesh2DTopologyValidator, StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
 import { resolveMesh2DTexturePlacement } from '@/lib/mesh2d/Mesh2DTextureMapping'
 import { resolveFitRect } from '@/lib/render/media/resolveFitRect'
 import type { ChronoScene, Layer } from '@/lib/types'
@@ -70,6 +70,54 @@ describe('FractureAppearanceCompiler', () => {
     expect(appearance.path?.anchors.length).toBe(generation.fragments[0].polygon.length)
     expect(appearance.style).toEqual(source.style)
     expect(appearance.style).not.toBe(source.style)
+  })
+
+  it('clips convex Mesh2D triangles while preserving authored UV coordinates', () => {
+    const base = emptyScene()
+    const generated = new StructuredGridMesh2DGenerator().generate({
+      width: 120,
+      height: 80,
+      columns: 3,
+      rows: 2,
+      diagonal: 'topLeftToBottomRight',
+    })
+    const source: Layer = {
+      ...newRectLayer(),
+      id: 'mesh-source',
+      name: 'UV Mesh',
+      type: 'mesh2d',
+      size: { width: 120, height: 80 },
+      mesh2d: {
+        ...generated,
+        appearance: {
+          schemaVersion: 1,
+          kind: 'texture',
+          textureAssetId: 'poster',
+          sampling: 'nearest',
+        },
+      },
+      style: { fill: { type: 'solid', color: '#7C3AED' } },
+    }
+    const scene: ChronoScene = {
+      ...base,
+      layers: [source],
+      assets: [{ id: 'poster', name: 'Poster.png', type: 'image', url: 'embedded:poster', width: 120, height: 80 }],
+    }
+    const generation = generate(source, 'mesh-fracture')
+    const compiler = new FractureAppearanceCompiler()
+    const snapshot = compiler.snapshot(scene, source)
+    const fragment = generation.fragments[0]
+    const appearance = compiler.createFragmentAppearance(scene, source, generation, fragment, snapshot)
+
+    expect(snapshot).toMatchObject({ kind: 'mesh2d', sourceLayerId: source.id })
+    expect(appearance.type).toBe('mesh2d')
+    expect(appearance.mesh2d?.appearance).toEqual(source.mesh2d?.appearance)
+    expect(appearance.mesh2d?.geometry.positions.length).toBeGreaterThanOrEqual(fragment.polygon.length * 2)
+    appearance.mesh2d!.geometry.positions.forEach((coordinate, componentIndex) => {
+      const expected = componentIndex % 2 === 0 ? coordinate / 120 : coordinate / 80
+      expect(appearance.mesh2d!.geometry.uvs[componentIndex]).toBeCloseTo(expected, 8)
+    })
+    expect(new Mesh2DTopologyValidator().validate(appearance.mesh2d!.geometry).valid).toBe(true)
   })
 
   it('invalidates prepared image appearance after fit or asset metadata changes', () => {

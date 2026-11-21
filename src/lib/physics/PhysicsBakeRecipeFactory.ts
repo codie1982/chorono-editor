@@ -123,7 +123,7 @@ export class PhysicsBakeRecipeFactory {
       material,
       initialVelocityPxPerSecond: input.initialVelocityPxPerSecond,
       initialAngularVelocityDegPerSecond: input.initialAngularVelocityDegPerSecond,
-    }, boundary.isOriginRectangle ? 'rectangle' : 'convexPolygon')
+    }, boundary.colliderKind)
     const staticBodies = (input.staticLayerIds ?? []).map(layerId => createRigidBodyAuthoring({
       layerId,
       motionType: 'static',
