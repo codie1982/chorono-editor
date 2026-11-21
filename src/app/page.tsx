@@ -1620,6 +1620,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onShapePlacementComplete={shapeCreation.complete}
                     scene={scene} displayScene={layerIsolation.scene}
                     physicsOverlay={physicsViewportOverlay}
+                    onPhysicsBondSelect={bondId => setPhysicsViewportOverlay(previous => ({
+                      ...previous,
+                      selectedBondId: bondId,
+                    }))}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
@@ -2048,6 +2052,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     scene={scene}
                     selectedLayerId={selectedLayerId}
                     selectedTimelineId={selectedTlId}
+                    currentTimeMs={currentTimeMs}
                     controller={physicsBake}
                     onOpenParticles={() => dock.dispatchRestorePanel('particles')}
                     viewportOverlay={physicsViewportOverlay}

@@ -3,31 +3,40 @@
 import { useMemo } from 'react'
 import type { OverrideMap } from '@/lib/evaluator'
 import { FractureOverlayGeometryResolver } from '@/lib/fracture/FractureOverlayGeometryResolver'
+import { FractureBondOverlayResolver } from '@/lib/fracture/FractureBondOverlayResolver'
 import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
 import type { ChronoScene } from '@/lib/types'
 import type { PhysicsViewportOverlaySettings } from './PhysicsViewportOverlayState'
 
 const geometryResolver = new FractureOverlayGeometryResolver()
+const bondResolver = new FractureBondOverlayResolver()
 const renderColliderAnalyzer = new FractureRenderColliderAnalyzer()
 
 /**
- * Draws non-interactive fracture diagnostics above the editor Canvas.
+ * Draws fracture diagnostics and optional bond hit targets above Canvas.
  *
  * The SVG uses composition coordinates and the same evaluated frame overrides
  * as Canvas. It is hidden with the rest of editor chrome during playback and
  * never enters scene JSON, undo, preview capture or final export.
  */
-export function PhysicsViewportOverlay({ scene, timeMs, overrides, settings }: {
+export function PhysicsViewportOverlay({ scene, timeMs, overrides, settings, onBondSelect }: {
   readonly scene: ChronoScene
   readonly timeMs: number
   readonly overrides?: OverrideMap
   readonly settings: PhysicsViewportOverlaySettings
+  readonly onBondSelect?: (bondId: string) => void
 }) {
   const result = useMemo(() => {
     if (!settings.enabled) return null
     const frame = geometryResolver.resolve(scene, settings.recordId, timeMs, overrides)
-    return frame ? { frame, colliderAnalysis: renderColliderAnalyzer.analyzeFrame(frame) } : null
-  }, [overrides, scene, settings.enabled, settings.recordId, timeMs])
+    return frame ? {
+      frame,
+      colliderAnalysis: renderColliderAnalyzer.analyzeFrame(frame),
+      bondFrame: settings.bonds || settings.clusterColors
+        ? bondResolver.resolve(scene, settings.recordId, timeMs, overrides)
+        : null,
+    } : null
+  }, [overrides, scene, settings.bonds, settings.clusterColors, settings.enabled, settings.recordId, timeMs])
   const frame = result?.frame
   if (!frame) return null
   const colliderAnalysis = result.colliderAnalysis
@@ -40,6 +49,15 @@ export function PhysicsViewportOverlay({ scene, timeMs, overrides, settings }: {
     viewBox={`0 0 ${scene.composition.width} ${scene.composition.height}`}
     className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible"
   >
+    {settings.clusterColors && result.bondFrame && <g data-overlay="cluster-colors" stroke="none" fillOpacity={0.16}>
+      {frame.fragments.map(fragment => {
+        const componentIndex = result.bondFrame!.components.findIndex(component => component.fragmentIds.some(id => (
+          fragment.id === id || fragment.id.startsWith(`${id}:ring-`)
+        )))
+        return componentIndex < 0 ? null : <polygon key={`${fragment.id}:cluster-color`}
+          points={points(fragment.points)} fill={CLUSTER_COLORS[componentIndex % CLUSTER_COLORS.length]} />
+      })}
+    </g>}
     {settings.fragments && <g data-overlay="fragments" fill="none" stroke="#22d3ee" strokeWidth={1.25} vectorEffect="non-scaling-stroke">
       {frame.fragments.map(fragment => <polygon key={fragment.id} points={points(fragment.points)} />)}
     </g>}
@@ -54,6 +72,27 @@ export function PhysicsViewportOverlay({ scene, timeMs, overrides, settings }: {
       {frame.fragments.map(fragment => <g key={`${fragment.id}:centroid`} transform={`translate(${fragment.centroid.x} ${fragment.centroid.y})`}>
         <circle r={3.5} /><path d="M-6 0H6M0-6V6" fill="none" />
       </g>)}
+    </g>}
+    {settings.bonds && result.bondFrame && <g data-overlay="bonds" fill="none" vectorEffect="non-scaling-stroke">
+      {result.bondFrame.bonds.map(bond => {
+        const selected = settings.selectedBondId === bond.bondId
+        const stroke = bond.state === 'broken' ? '#ef4444' : bond.state === 'unbreakable' ? '#a78bfa' : '#22d3ee'
+        return <g key={bond.bondId} data-bond-id={bond.bondId}>
+          <line x1={bond.start.x} y1={bond.start.y} x2={bond.end.x} y2={bond.end.y}
+            stroke={stroke} strokeWidth={selected ? 3 : 1.75} strokeDasharray={bond.state === 'broken' ? '3 4' : undefined} />
+          <circle cx={bond.midpoint.x} cy={bond.midpoint.y} r={selected ? 4.5 : 3}
+            fill={bond.state === 'broken' ? '#7f1d1d' : '#0f172a'} stroke={stroke} strokeWidth={1.5} />
+          <line x1={bond.start.x} y1={bond.start.y} x2={bond.end.x} y2={bond.end.y}
+            stroke="transparent" strokeWidth={14} style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+            onPointerDown={event => {
+              event.preventDefault()
+              event.stopPropagation()
+              onBondSelect?.(bond.bondId)
+            }}>
+            <title>{`${bond.state} · impulse ${formatNumber(bond.impulseStrength)} · damage ${formatNumber(bond.damageThreshold)}`}</title>
+          </line>
+        </g>
+      })}
     </g>}
     {settings.colliderDelta && colliderAnalysis.status !== 'unavailable' && <g data-overlay="collider-delta"
       fill="none" stroke="#f97316" strokeWidth={1.5} vectorEffect="non-scaling-stroke">
@@ -74,6 +113,8 @@ export function PhysicsViewportOverlay({ scene, timeMs, overrides, settings }: {
         : `maximum ${formatNumber(colliderAnalysis.maxBoundaryDeltaPx)} px · ${colliderAnalysis.sampleCount} samples`} />}
   </svg>
 }
+
+const CLUSTER_COLORS = ['#22d3ee', '#a78bfa', '#34d399', '#f59e0b', '#f472b6', '#60a5fa']
 
 function DiagnosticBadge({ y, primary, secondary }: { readonly y: number; readonly primary: string; readonly secondary: string }) {
   return <g data-overlay="topology-status" transform={`translate(12 ${y})`}>

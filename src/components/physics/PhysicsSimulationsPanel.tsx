@@ -52,6 +52,7 @@ interface Props {
   readonly scene: ChronoScene
   readonly selectedLayerId: string | null
   readonly selectedTimelineId: string
+  readonly currentTimeMs?: number
   readonly controller: PhysicsBakeController
   readonly onOpenParticles: () => void
   readonly viewportOverlay: PhysicsViewportOverlaySettings
@@ -70,6 +71,7 @@ export default function PhysicsSimulationsPanel({
   scene,
   selectedLayerId,
   selectedTimelineId,
+  currentTimeMs = 0,
   controller,
   onOpenParticles,
   viewportOverlay,
@@ -90,6 +92,9 @@ export default function PhysicsSimulationsPanel({
   const fractureRecords = useMemo(() => (scene.physics?.rigidBakes ?? []).filter(record => (
     record.recipe.fractureEvents?.length && record.fractureGeneration
   )), [scene.physics?.rigidBakes])
+  const replacementClusterGraph = replaceRecordId
+    ? scene.physics?.rigidBakes.find(record => record.id === replaceRecordId)?.recipe.fractureClusters?.[0]?.graph
+    : undefined
 
   useEffect(() => { controller.checkSource() }, [controller.checkSource, scene])
   useEffect(() => {
@@ -220,6 +225,10 @@ export default function PhysicsSimulationsPanel({
               <TimingSection scene={scene} draft={draft} update={update} />
               <DynamicsSection draft={draft} update={update} />
               {mode === 'fracture' && <FractureAuthoringSection scene={scene} source={source} draft={draft}
+                clusterGraph={replacementClusterGraph} selectedBondId={viewportOverlay.selectedBondId}
+                currentTimeMs={currentTimeMs}
+                onSelectBond={bondId => onViewportOverlayChange({ ...viewportOverlay, enabled: true, bonds: true,
+                  recordId: replaceRecordId ?? viewportOverlay.recordId, selectedBondId: bondId })}
                 onChange={updateFracture} />}
             </>}
           {actionError && <p role="alert" className="rounded border border-red-800 bg-red-950/30 p-2 text-red-200">{actionError}</p>}
@@ -331,7 +340,8 @@ function FractureOverlayControls({ records, settings, onChange }: {
   const effectiveRecordId = settings.recordId && recordIds.has(settings.recordId)
     ? settings.recordId
     : records.at(-1)?.id ?? null
-  const activeCount = [settings.fragments, settings.colliders, settings.centroids, settings.triangles,
+  const activeCount = [settings.fragments, settings.colliders, settings.centroids, settings.triangles, settings.bonds,
+    settings.clusterColors,
     settings.topologyEvent, settings.colliderDelta]
     .filter(Boolean).length
   const patch = (next: Partial<PhysicsViewportOverlaySettings>) => onChange({
@@ -365,12 +375,19 @@ function FractureOverlayControls({ records, settings, onChange }: {
               onChange={checked => patch({ centroids: checked })} />
             <OverlayToggle label="Triangles" checked={settings.triangles} disabled={!settings.enabled}
               onChange={checked => patch({ triangles: checked })} />
+            <OverlayToggle label="Bonds" checked={settings.bonds} disabled={!settings.enabled}
+              onChange={checked => patch({ bonds: checked })} />
+            <OverlayToggle label="Cluster colors" checked={settings.clusterColors} disabled={!settings.enabled}
+              onChange={checked => patch({ clusterColors: checked })} />
             <OverlayToggle label="Event state" checked={settings.topologyEvent} disabled={!settings.enabled}
               onChange={checked => patch({ topologyEvent: checked })} />
             <OverlayToggle label="Collider delta" checked={settings.colliderDelta} disabled={!settings.enabled}
               onChange={checked => patch({ colliderDelta: checked })} />
           </div>
-          <p className="text-[10px] leading-4 text-gray-500">Event state names the active topology. Collider delta compares current visible boundaries with actual rigid colliders. Diagnostics never appear in preview, playback or export; triangle lines remain a diagnostic fan.</p>
+          {settings.selectedBondId && <p role="status" className="break-all rounded border border-cyan-900/70 bg-cyan-950/20 p-2 font-mono text-[9px] text-cyan-200">
+            Selected bond · {settings.selectedBondId}
+          </p>}
+          <p className="text-[10px] leading-4 text-gray-500">Event state names the active topology. Bond lines show intact, unbreakable or realized-broken state and can be selected on Canvas. Diagnostics never appear in preview, playback or export; triangle lines remain a diagnostic fan.</p>
         </>}
     </Fieldset>
   </div>
@@ -416,6 +433,7 @@ function initialDraft(sourceLayerId: string, timelineId: string, durationMs: num
     clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
     bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
     bondVariation: .1, bondSeed: 42, bondOverrides: [],
+    bondForcedBreaks: [], bondDamageResets: [],
     seed: 42, generationId: generationIdFor(sourceLayerId) }
 }
 
@@ -502,6 +520,8 @@ function buildRequest(
         seed: draft.bondSeed,
       },
       overrides: draft.bondOverrides,
+      forcedBreaks: draft.bondForcedBreaks,
+      damageResets: draft.bondDamageResets,
     } } : {}),
     fragmentCount: draft.fragmentCount,
     seed: draft.seed, generationId: draft.generationId, material,
@@ -559,6 +579,8 @@ function draftFromRequest(request: PhysicsBakeRequest): PhysicsDraft {
       bondVariation: common.cluster?.defaults?.variation ?? .1,
       bondSeed: common.cluster?.defaults?.seed ?? common.seed,
       bondOverrides: [...(common.cluster?.overrides ?? [])],
+      bondForcedBreaks: [...(common.cluster?.forcedBreaks ?? [])],
+      bondDamageResets: [...(common.cluster?.damageResets ?? [])],
       seed: common.seed,
       generationId: common.generationId,
     }
@@ -606,6 +628,8 @@ function draftFromRequest(request: PhysicsBakeRequest): PhysicsDraft {
     bondVariation: .1,
     bondSeed: 42,
     bondOverrides: [],
+    bondForcedBreaks: [],
+    bondDamageResets: [],
     seed: 42,
     generationId: generationIdFor(dynamic.layerId),
   }

@@ -114,6 +114,7 @@ describe('PhysicsSimulationsPanel', () => {
       clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
       bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
       bondVariation: .1, bondSeed: 42, bondOverrides: [],
+      bondForcedBreaks: [], bondDamageResets: [],
       seed: 99,
       generationId: 'old-generation',
     }
@@ -238,6 +239,7 @@ function draftFixture(overrides: Partial<PhysicsDraft> = {}): PhysicsDraft {
     explosionSeed: 42, seed: 42, generationId: 'fracture-box',
     clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
     bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
-    bondVariation: .1, bondSeed: 42, bondOverrides: [], ...overrides,
+    bondVariation: .1, bondSeed: 42, bondOverrides: [], bondForcedBreaks: [], bondDamageResets: [],
+    ...overrides,
   }
 }

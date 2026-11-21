@@ -24,6 +24,7 @@ export default function FractureBondedClusterCard({ recipe }: { readonly recipe:
       <dt className="text-gray-500">Manual / unbreakable</dt><dd className="text-right text-gray-300">{manualCount} / {unbreakableCount}</dd>
       <dt className="text-gray-500">Impulse / damage</dt><dd className="text-right text-gray-300">{format(graph.defaults.impulseStrength)} / {format(graph.defaults.damageThreshold)}</dd>
       <dt className="text-gray-500">Breaks / component splits</dt><dd className="text-right text-gray-300">{breaks.length} / {splitCount}</dd>
+      <dt className="text-gray-500">Forced / resets</dt><dd className="text-right text-gray-300">{cluster.forcedBreaks?.length ?? 0} / {cluster.damageResets?.length ?? 0}</dd>
     </dl>
     {breaks.length > 0 && <ol className="mt-2 space-y-1 border-t border-cyan-900/70 pt-2 text-[9px] leading-4 text-cyan-100">
       {breaks.slice(0, 4).map(event => <li key={event.bondId} className="flex items-start justify-between gap-2">
@@ -32,7 +33,7 @@ export default function FractureBondedClusterCard({ recipe }: { readonly recipe:
       </li>)}
       {breaks.length > 4 && <li className="text-cyan-400">+{breaks.length - 4} more break events</li>}
     </ol>}
-    <p className="mt-2 text-[9px] leading-4 text-gray-500">Break events are solver-realized and portable. Bond diagnostics are editor-only and never appear in final render or export.</p>
+    <p className="mt-2 text-[9px] leading-4 text-gray-500">Break events and action schedules are portable. Select a bond on Canvas, then use Re-bake → Edit Source for Group, Split, Unbreakable, Break at playhead or Reset Damage. Diagnostics never appear in final render or export.</p>
   </section>
 }
 

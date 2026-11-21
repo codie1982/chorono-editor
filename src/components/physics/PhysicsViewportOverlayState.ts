@@ -13,6 +13,9 @@ export interface PhysicsViewportOverlaySettings {
   readonly colliders: boolean
   readonly centroids: boolean
   readonly triangles: boolean
+  readonly bonds: boolean
+  readonly clusterColors: boolean
+  readonly selectedBondId: string | null
   readonly topologyEvent: boolean
   readonly colliderDelta: boolean
 }
@@ -25,6 +28,9 @@ export const DEFAULT_PHYSICS_VIEWPORT_OVERLAY_SETTINGS: PhysicsViewportOverlaySe
   colliders: true,
   centroids: true,
   triangles: false,
+  bonds: true,
+  clusterColors: false,
+  selectedBondId: null,
   topologyEvent: true,
   colliderDelta: false,
 })

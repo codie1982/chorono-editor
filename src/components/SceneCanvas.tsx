@@ -260,6 +260,8 @@ interface Props {
   onShapePlacementComplete?: (id?: string) => void
   /** Local editor-only fracture diagnostics; never part of scene/export. */
   physicsOverlay?: PhysicsViewportOverlaySettings
+  /** Select an editor-only fracture bond without changing scene history. */
+  onPhysicsBondSelect?: (bondId: string) => void
 }
 
 const PADDING   = 24
@@ -275,7 +277,7 @@ export default function SceneCanvas({
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming, motionControlsHost, onOpenMotionControls,
   arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
-  physicsOverlay,
+  physicsOverlay, onPhysicsBondSelect,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
   splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected,
 }: Props) {
@@ -1356,6 +1358,7 @@ export default function SceneCanvas({
             timeMs={timeMs}
             overrides={overrides}
             settings={physicsOverlay}
+            onBondSelect={onPhysicsBondSelect}
           />}
 
           {shapePlacement.draft && <ShapePlacementOutline bounds={boundsForFrame(shapePlacement.draft)}

@@ -1,6 +1,12 @@
 import { FractureAppearanceCompiler } from '@/lib/fracture/FractureAppearanceCompiler'
 import type { ChronoScene, Layer } from '@/lib/types'
-import type { FractureBondOverride } from '@/lib/types/fractureCluster'
+import type {
+  FractureBondDamageReset,
+  FractureBondForcedBreak,
+  FractureBondGraph,
+  FractureBondOverride,
+} from '@/lib/types/fractureCluster'
+import FractureBondAuthoringControls from './FractureBondAuthoringControls'
 import {
   inputClass,
   labelClass,
@@ -14,6 +20,9 @@ const appearanceCompiler = new FractureAppearanceCompiler()
 
 export interface FractureAuthoringDraft {
   readonly staticLayerIds: readonly string[]
+  readonly startTimeMs: number
+  readonly durationMs: number
+  readonly stepHz: number
   readonly fragmentCount: number
   readonly fractureTimeMs: number
   readonly fractureTriggerKind: 'time' | 'impact'
@@ -38,12 +47,18 @@ export interface FractureAuthoringDraft {
   readonly bondVariation: number
   readonly bondSeed: number
   readonly bondOverrides: readonly FractureBondOverride[]
+  readonly bondForcedBreaks: readonly FractureBondForcedBreak[]
+  readonly bondDamageResets: readonly FractureBondDamageReset[]
 }
 
 interface Props {
   readonly scene: ChronoScene
   readonly source?: Layer
   readonly draft: FractureAuthoringDraft
+  readonly clusterGraph?: FractureBondGraph
+  readonly selectedBondId?: string | null
+  readonly currentTimeMs?: number
+  onSelectBond?(bondId: string): void
   readonly onChange: <K extends keyof FractureAuthoringDraft>(key: K, value: FractureAuthoringDraft[K]) => void
 }
 
@@ -55,7 +70,10 @@ interface Props {
  * until enabled and always disclose that they add non-physical external
  * energy. All controls preserve labelled 44 px interaction targets.
  */
-export default function FractureAuthoringSection({ scene, source, draft, onChange }: Props) {
+export default function FractureAuthoringSection({
+  scene, source, draft, clusterGraph, selectedBondId = null, currentTimeMs = 0,
+  onSelectBond = () => {}, onChange,
+}: Props) {
   const imageAsset = source?.type === 'image' && source.image
     ? scene.assets.find(asset => asset.id === source.image!.assetId)
     : undefined
@@ -128,7 +146,14 @@ export default function FractureAuthoringSection({ scene, source, draft, onChang
         <PhysicsNumberField label="Bond seed" unit="uint32" value={draft.bondSeed} min={0} max={0xffffffff} step={1}
           onChange={value => onChange('bondSeed', value)} />
       </div>
-      {draft.bondOverrides.length > 0 && <p className="text-xs leading-5 text-cyan-200">{draft.bondOverrides.length} manual/custom bond override{draft.bondOverrides.length === 1 ? '' : 's'} will be preserved on Re-bake. Per-bond Canvas editing lands in the next cluster UI slice.</p>}
+      {draft.bondOverrides.length > 0 && <p className="text-xs leading-5 text-cyan-200">{draft.bondOverrides.length} manual/custom bond override{draft.bondOverrides.length === 1 ? '' : 's'} will be preserved on Re-bake.</p>}
+      <FractureBondAuthoringControls graph={clusterGraph} selectedBondId={selectedBondId}
+        currentTimeMs={currentTimeMs} startTimeMs={draft.startTimeMs} durationMs={draft.durationMs} stepHz={draft.stepHz}
+        overrides={draft.bondOverrides} forcedBreaks={draft.bondForcedBreaks} damageResets={draft.bondDamageResets}
+        onSelectBond={onSelectBond}
+        onOverrides={value => onChange('bondOverrides', value)}
+        onForcedBreaks={value => onChange('bondForcedBreaks', value)}
+        onDamageResets={value => onChange('bondDamageResets', value)} />
     </div>}
     <label className={toggleRowClass}>
       <input type="checkbox" checked={draft.explosionEnabled}

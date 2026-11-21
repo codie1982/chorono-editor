@@ -302,6 +302,8 @@ export function requestFromRecord(
         graphId: recipe.fractureClusters[0].graph.graphId,
         defaults: { ...recipe.fractureClusters[0].graph.defaults },
         overrides: recipe.fractureClusters[0].graph.overrides.map(override => ({ ...override })),
+        forcedBreaks: recipe.fractureClusters[0].forcedBreaks?.map(action => ({ ...action })),
+        damageResets: recipe.fractureClusters[0].damageResets?.map(action => ({ ...action })),
       } : undefined,
       fragmentCount: generation.requestedFragmentCount,
       seed: generation.rootSeed,

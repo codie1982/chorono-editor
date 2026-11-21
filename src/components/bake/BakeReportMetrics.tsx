@@ -27,6 +27,10 @@ export function BakeReportMetrics({ report }: { readonly report: RigidBodyBakeRe
       </dd>
       <dt className="text-gray-500">Component splits</dt>
       <dd className="text-right font-mono tabular-nums text-cyan-200">{report.clusterSplitCount.toLocaleString()}</dd>
+      <dt className="text-gray-500">Authored actions</dt>
+      <dd className="text-right font-mono tabular-nums text-cyan-200">
+        {report.forcedBreakActionCount.toLocaleString()} forced · {report.damageResetActionCount.toLocaleString()} resets
+      </dd>
     </>}
     <dt className="text-gray-500">Maximum error</dt>
     <dd className="text-right font-mono tabular-nums text-gray-200"

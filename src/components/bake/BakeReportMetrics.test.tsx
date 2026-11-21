@@ -18,6 +18,8 @@ describe('BakeReportMetrics', () => {
       bondCount: 7,
       bondBreakCount: 2,
       clusterSplitCount: 1,
+      forcedBreakActionCount: 1,
+      damageResetActionCount: 1,
       maxVertexErrorPx: .42,
       maxAngleErrorDeg: .2,
       clipBytes: 1024,
@@ -35,6 +37,7 @@ describe('BakeReportMetrics', () => {
     expect(html).toContain('Protected events')
     expect(html).toContain('7 bonds · 2 breaks')
     expect(html).toContain('Component splits')
+    expect(html).toContain('1 forced · 1 resets')
     expect(html).toContain('0.42 px · 0.2°')
     expect(html).toContain('3.0 KiB')
   })
