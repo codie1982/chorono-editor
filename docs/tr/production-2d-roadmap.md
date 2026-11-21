@@ -51,6 +51,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
 | Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Geliştirme branch'inde |
 | Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Geliştirme branch'inde |
+| Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -127,7 +128,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
-| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture, deterministik artistic explosion, gerçek render–collider tanısı ve 32 parça/eğimli zemin/yüksek hızlı cisim görsel matrisi tamamlandı. Sırada temel scrub/player/MCP/render/export parity vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
+| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture, deterministik artistic explosion, gerçek render–collider tanısı, geniş görsel matris ve temel scrub/player/MCP/render/export parity tamamlandı. Sırada kompleks shape/spline/`Mesh2D` kaynak ve fragment mesh derleyicisi vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
 | Sonra 4 | Fabric/kumaş | Structured grid veya spline'dan türetilmiş Mesh2D; gravity/wind/pin/collision, deformasyon klibi ve bake. |
 | Sonra 5 | Blob Surface, sıvı, akış/duman/ateş | Particle liquid + değişken topolojili Blob Surface; damla birleşme/ayrılması, text/shape/spline/`Mesh2D` kaynak-collider-yüzey hedefleri. Duman/ateş ayrı grid/partikül tarifidir; alanlar, obstacle ve typed simulation bake kullanır. |
 | Sonra 6 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
@@ -796,7 +797,7 @@ bunun gerekçesidir.
 
 | Öncelik / alan | Kod kanıtı ve pratik etkisi | Planın zorunlu uygulama koşulu |
 | --- | --- | --- |
-| P0 — export sözleşmesi | [RuntimeOptimizer](../../src/lib/export/RuntimeOptimizer.ts) çıktı listesinde assets/stateMachines/parameterWires/initialState yok. [exportToRuntime](../../src/lib/export/runtimeExport.ts) farklı alan/politika kullanıyor; parameterWires taşımıyor. | Öncelik 1'de canonical compiler ve eski çıktı loader'ları tamamlanır. Component/rig/clip metadata'sı kayıplı yola eklenip desteklenmiş sayılmaz. |
+| P0 — export sözleşmesi | [RuntimeSceneCompiler](../../src/lib/export/runtime/RuntimeSceneCompiler.ts), RuntimeOptimizer ve `exportToRuntime` için assets/stateMachines/parameterWires/initialState ile `hidden` dahil ortak alan sınırını sağlıyor; 32-fragment ve full-turn physics fixture parity'si geçti. | File/JSON/MCP exact options/profile, versioned eski çıktı loader'ı ve package/capability manifest'i tamamlanır. Component/rig/clip metadata'sı kayıplı yola eklenip desteklenmiş sayılmaz. |
 | P0 — çalışma kümesi ve tamponlar | [useAssetCache](../../src/app/hooks/useAssetCache.ts) sahne asset'lerini dolaşıp medya yükler. [CanvasRenderer](../../src/lib/render/CanvasRenderer.ts) visibility filtresi zaman/hidden/solo içindir; viewport paint culling yoktur. Mask/efekt yolu kompozisyon boyutunda yüzeyler üretir. | Öncelik 0'daki demand loading, bağımlılık güvenli paint culling, pool/ROI ve ortak resource ledger korunur. Kaynak belge/undo verisini görünmedi diye silme yapılmaz. |
 | P0 — cache varlığı yeterli değil | [OffscreenCanvasCache](../../src/lib/render/OffscreenCanvasCache.ts) 64 MiB LRU sunar; [MaskRenderer](../../src/lib/mask/MaskRenderer.ts) constructor'da bunu almasına rağmen render'da doğrudan `createOffscreen` kullanır. | Bütçe nesnesinin bulunması bütün yüzeylerin bütçeye girdiği kanıtı değildir. Acquire/release/admission gerçek tahsis yollarına bağlanır; maliyet çift sayılmaz. |
 | P1 — kapalı tipler ve şema | [LayerType/Layer](../../src/lib/types/core.ts) içinde mesh2d/blobSurface/deformableMesh yok; [AssetType](../../src/lib/types/media.ts) binary simulation clip içermiyor. | Her 2D feature type/schema/default/registry/validator/import/save/runtime sürümünü birlikte genişletir. API adları gerçekleşmeden capabilities içinde ilan edilmez. |
@@ -3106,3 +3107,41 @@ Tekrarlanabilir MCP harness'i
 Doğrulama **432 test dosyası / 3.234 test**, TypeScript, MCP build ve production
 build ile geçti. Aşama 3 tamamlandı; sıradaki iş aşama 4
 scrub/player/MCP/render/export parity kapısıdır.
+
+### 12.76. Temel playback ve runtime export parity — 21 Kasım 2026
+
+`RuntimeSceneCompiler`, runtime'a taşınan sahne alanlarının tek yetkili
+sınırı olarak eklendi. Composition, embedded visual asset'ler, `hidden` dahil
+görsel layer'lar, timeline'lar, parameter/trigger/binding/wire,
+state-machine ve initial state korunur. Audio varsayılan görsel runtime
+profilinden ayrı tutulur. Authoring kaydı, physics ownership/recipe ve yoğun
+editör cache'leri runtime JSON'a girmez; committed physics hareketi mevcut
+normal transform/opacity track'leri üzerinden solver olmadan oynar.
+`RuntimeOptimizer` ve eski `exportToRuntime` aynı derleyiciye bağlandı; her yol
+kendi açık track optimizasyonu/sinyal bake politikasını sınırın üstünde uygular.
+
+Tekrarlanabilir canlı kabul
+`scripts/qa/physics-playback-parity-live.mjs` ile izole 2010 production
+editöründe yürütüldü. 32 fragment panelinde 0/399/400/1200/2800/400 ms
+seek sırası için viewport scrub, açık `ChronoPlayer` raster'ı ve MCP
+`render_2d` PNG'si arasında her karede **0 farklı piksel** bulundu. Runtime
+export 1 asset, 34 layer ve 132 track taşıdı; 4.569 kaynak key güvenli biçimde
+4.407 key'e indi ve birleşik key zamanları ile ara noktalardaki bağımsız
+semantik evaluator karşılaştırması geçti.
+
+Panelin dönmesi tam tur kanıtlamadığı için ikinci bir gerçek Worker fixture'ı
+720°/s başlangıç açısal hızı, sıfır yerçekimi, 120 Hz solver ve 60 FPS örnekleme
+ile üretildi. Bake edilmiş unwrapped dönüş `713,9999999999966°` değerini
+korudu. 0/250/500/750/1000/250 ms seek sırasının her karesinde scrub/player ve
+final render yine **0 farklı piksel** verdi; runtime export 3 track ve 9/9 key
+taşıdı, physics tarifi taşımadı.
+
+Portable kanıt
+`projects/physics-playback-parity-full-turn-2026-11-21.chorono.json`, runtime
+kanıtları `projects/exports/physics-parity-1795285088211.runtime.json` ve
+`projects/exports/physics-full-turn-parity-1795285088211.runtime.json` olarak
+kaydedildi. Validator geçerli ve uyarısızdı. Doğrulama **433 test dosyası /
+3.237 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run build` ile
+geçti; production build yalnız bilinen `applicationBuildInfo.ts` named-export
+uyarısını verdi. Böylece aşama 4 kapandı; aktif fizik işi aşama 5 kompleks
+kaynak ve fragment mesh derleyicisidir.

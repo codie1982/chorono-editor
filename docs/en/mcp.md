@@ -70,6 +70,16 @@ original full discovery call.
 | Check/save/reopen | `validate_scene`, `save_project`, `load_project`, `list_projects`, `undo`, `redo` |
 | Media and output | `import_asset`, `export_runtime`, `export_svg`, `export_sequence`, `export_audio`, `render_audio_preview`, `get_audio_state` |
 
+`export_runtime` uses the same canonical runtime scene-field compiler as the
+editor's legacy runtime path. It preserves composition, embedded visual assets,
+visual layers including `hidden`, timelines, parameters, triggers, bindings,
+parameter wires, state machines and initial state. It omits editor/source-only
+authoring data and physics ownership/recipes; a committed physics bake plays
+without a solver through its ordinary timeline tracks. Audio remains a separate
+profile/output unless explicitly included by a supporting caller. Track
+optimization may remove redundant keys, so acceptance compares evaluated
+values and rendered frames rather than requiring identical key arrays.
+
 For a reviewable physics bake, prepare with a fresh `get_scene` revision/token,
 poll `get_bake_job`, sample the ready cache with `preview_bake_job`, then either
 cancel/discard it or read the scene again and call `commit_bake_job`. Prepare and

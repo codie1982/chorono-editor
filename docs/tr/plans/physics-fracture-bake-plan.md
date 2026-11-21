@@ -8,8 +8,9 @@ hash'li güvenli Re-bake / Clear Bake, image→Mesh2D fragment görünümü, kay
 korunumu, event hizası/raster seam/mask bellek ölçümü, darbe tetikli fracture,
 deterministik artistic explosion, topology/render–collider tanısı ve 32 parça /
 eğimli zemin / yüksek hızlı küçük cisim görsel matrisi de tamamlandı. Aşama 3
-kapandı; aşama 5–9 bütünüyle açıktır. Aşama 4'ün kalan kapısı
-scrub/player/MCP/render/export parity kabulüdür.
+ve temel scrub/player/MCP/render/export parity kabulüyle aşama 4 kapandı;
+aşama 5–9 bütünüyle açıktır. Aktif sıra kompleks kaynak ve fragment mesh
+derleyicisidir.
 Character Motion planı ayrı tutulur ve bu özellik için önkoşul değildir. Ortak
 ürün alanı **Physics Simulations**; bu belge Rigid Body, Voronoi Fracture,
 bonded destruction cluster, secondary/recursive fracture ve olay tabanlı
@@ -413,8 +414,10 @@ artistic explosion impulse/spin de uygulanıp canlı MCP kabulünden geçti.
 Topology olay rozeti, exact-event Inspector kartı ve gerçek render–collider
 fark tanısı UI/MCP eşliğiyle tamamlandı. 32 fragment panel, eğimli zemin ve
 yüksek hızlı küçük cisim geniş görsel matrisi de gerçek Worker/render/portable
-kabulünden geçti. Aktif sıra doğrudan aşama 4 scrub/player/MCP/render/export
-parity kapısıdır.
+kabulünden geçti. Temel scrub/player/MCP/render/export parity kapısı, 32
+fragment sahnesi ve 720°/s tam-tur fixture'ında scrub/player/final-render exact
+pixel karşılaştırması, canonical runtime export ve portable kayıtla kapandı.
+Aktif sıra aşama 5 kompleks kaynak ve fragment mesh derleyicisidir.
 
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |

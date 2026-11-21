@@ -80,6 +80,16 @@ kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları k
 | Dosyalar | `save_project`, `list_projects`, `load_project`, `export_runtime`, `export_svg`, `export_sequence`, `render_2d` |
 | Ses | `get_audio_state`, `render_audio_preview`, `export_audio` |
 
+`export_runtime`, editörün eski runtime yoluyla aynı canonical sahne-alanı
+derleyicisini kullanır. Composition, embedded görsel asset'ler, `hidden` dahil
+görsel layer'lar, timeline, parameter, trigger, binding, parameter wire,
+state-machine ve initial state korunur. Editör/source-only authoring verisi ile
+physics ownership/recipe atılır; committed physics bake solver olmadan normal
+timeline track'leri üzerinden oynar. Audio, destekleyen bir çağıran açıkça
+dahil etmedikçe ayrı profil/çıktıdır. Track optimizasyonu redundant key'leri
+kaldırabileceğinden kabul, key dizilerinin birebir eşitliğini değil
+değerlendirilmiş değer ve render karelerinin eşliğini karşılaştırır.
+
 ### Keşif ve uzman araçlar
 
 İlk keşifte `get_capabilities({summary:true})` kullanın. Bu hafif yanıt sürüm,
