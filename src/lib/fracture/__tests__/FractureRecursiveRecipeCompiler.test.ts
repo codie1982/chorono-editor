@@ -11,6 +11,7 @@ import { ResourceBudget } from '@/lib/resources/budget'
 import type { RigidBodySnapshot } from '@/lib/types/physics'
 import { FractureRecursiveRecipeCompiler } from '../FractureRecursiveRecipeCompiler'
 import { FractureOverlayGeometryResolver } from '../FractureOverlayGeometryResolver'
+import { FractureRenderColliderAnalyzer } from '../FractureRenderColliderAnalyzer'
 import { VoronoiFractureGenerator } from '../VoronoiFractureGenerator'
 
 function fixture() {
@@ -127,6 +128,14 @@ describe('FractureRecursiveRecipeCompiler', () => {
       renderPolygons: { length: 6 },
       dynamicColliderPolygons: { length: 6 },
     })
+    expect(new FractureRenderColliderAnalyzer().analyzeCommittedEvent(committed, 'recursive-bake'))
+      .toMatchObject({
+        status: 'pass',
+        generationId: value.root.generationId,
+        phase: 'fragments',
+        renderPolygonCount: 4,
+        colliderPolygonCount: 4,
+      })
     const cleared = clearRigidBakeOwnedContent(committed, 'recursive-bake')
     expect(cleared.layers).toEqual(value.scene.layers)
     expect(cleared.timelines).toEqual(value.scene.timelines)

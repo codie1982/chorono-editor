@@ -176,12 +176,12 @@ function resolveRecursiveFrame(
     })
   const dynamicColliderPolygons = activeBodies.flatMap(body => {
     const layer = layerById.get(body.layerId)
-    return layer ? bodyColliderPolygons(body, layer, resolveMatrix) : []
+    return layer ? recursiveBodyColliderPolygons(body, layer, resolveMatrix) : []
   })
   const colliderPolygons = [...dynamicColliderPolygons]
   record.recipe.bodies.filter(body => body.motionType === 'static').forEach(body => {
     const layer = layerById.get(body.layerId)
-    if (layer) colliderPolygons.push(...bodyColliderPolygons(body, layer, resolveMatrix))
+    if (layer) colliderPolygons.push(...recursiveBodyColliderPolygons(body, layer, resolveMatrix))
   })
   const latestEvent = [...events].reverse().find(event => localTimeMs + 1e-7 >= event.timeMs) ?? rootEvent
   const latestGenerationId = latestEvent.id.replace(/:event$/, '')
@@ -198,6 +198,26 @@ function resolveRecursiveFrame(
     dynamicColliderPolygons,
     colliderPolygons,
   }
+}
+
+/**
+ * Preserve layer ownership ids for the convex bodies used by FRACTURE3.
+ *
+ * Region/compound diagnostics deliberately suffix every boundary with a ring
+ * id because one layer can own several disjoint collider rings. Recursive
+ * convex generations render one polygon per layer, so adding `:ring-0` only to
+ * the collider breaks the render/collider ownership match in the inspector.
+ * Compound bodies retain the multi-ring representation for forward-compatible
+ * diagnostics, although the current recursive compiler rejects bonded roots.
+ */
+function recursiveBodyColliderPolygons(
+  body: RigidBodySnapshot,
+  layer: Layer,
+  resolveMatrix: ReturnType<typeof createLayerWorldMatrixResolver>,
+): FractureOverlayPolygon[] {
+  if (body.collider === 'compoundPolygon') return bodyColliderPolygons(body, layer, resolveMatrix)
+  const polygon = bodyColliderPolygon(body, layer, resolveMatrix)
+  return polygon ? [polygon] : []
 }
 
 /** Resolve FRACTURE1 render rings and actual compound collider union rings. */
