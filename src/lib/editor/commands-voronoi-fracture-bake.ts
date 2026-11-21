@@ -3,13 +3,15 @@ import { FractureManifestValidator } from '@/lib/fracture/FractureManifestValida
 import { FractureRegionLayerFactory } from '@/lib/fracture/FractureRegionLayerFactory'
 import { FractureRegionManifestValidator } from '@/lib/fracture/FractureRegionManifestValidator'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureGenerationHierarchyCompiler } from '@/lib/fracture/FractureGenerationHierarchyCompiler'
+import { FractureRecursiveRecipeCompiler } from '@/lib/fracture/FractureRecursiveRecipeCompiler'
 import { createRigidBakeRecord } from '@/lib/physics/RigidBakeOwnership'
 import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
 import { assertRigidBakeTracks } from '@/lib/physics/RigidBakeTrackValidation'
 import { rigidBakeTrackTargets } from '@/lib/physics/RigidPoseTrackCompiler'
 import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation'
 import type { ChronoScene, Layer, Timeline, Track } from '@/lib/types'
-import type { AnyFractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration, FractureGeneration } from '@/lib/types/fracture'
 import type { PhysicsSceneData, RigidBodyBakeRecipe } from '@/lib/types/physics'
 import type { EditorCommand } from './commands-keyframe'
 
@@ -23,24 +25,40 @@ import type { EditorCommand } from './commands-keyframe'
  */
 export function makeApplyVoronoiFractureBakeCmd(input: {
   readonly generation: AnyFractureGeneration
+  readonly childGenerations?: readonly FractureGeneration[]
   readonly recipe: RigidBodyBakeRecipe
   readonly tracks: readonly Track[]
   readonly sampleCount: number
   readonly recordId?: string
 }): EditorCommand {
   const recordId = input.recordId ?? `fracture-bake:${input.recipe.recipeHash}`
+  const generations: readonly AnyFractureGeneration[] = [input.generation, ...(input.childGenerations ?? [])]
   let beforeLayers: readonly Layer[] | undefined
   let beforeTimeline: Timeline | undefined
   let beforePhysics: PhysicsSceneData | undefined
   let hadPhysics = false
   return {
-    label: `Bake Voronoi Fracture (${input.generation.fragments.length} fragments)`,
+    label: `Bake Voronoi Fracture (${generations.reduce((sum, item) => sum + item.fragments.length, 0)} fragments)`,
     execute(scene: ChronoScene): ChronoScene {
-      if (input.generation.schemaVersion === 1) new FractureManifestValidator().validate(input.generation)
-      else new FractureRegionManifestValidator().validate(input.generation)
+      generations.forEach(generation => {
+        if (generation.schemaVersion === 1) new FractureManifestValidator().validate(generation)
+        else new FractureRegionManifestValidator().validate(generation)
+      })
+      if (generations.length > 1) {
+        const hierarchy = new FractureGenerationHierarchyCompiler().compile(
+          generations,
+          input.recipe.fractureHierarchy?.limits,
+        )
+        if (hierarchy.hierarchyHash !== input.recipe.fractureHierarchy?.hierarchyHash) {
+          throw new Error('Recursive fracture hierarchy does not match the recipe')
+        }
+      }
       assertRigidFractureEvents(input.recipe, { requireRealized: true })
-      if (!new FractureRigidRecipeCompiler().isCurrent(input.recipe, input.generation, scene)) {
+      if (generations.length === 1 && !new FractureRigidRecipeCompiler().isCurrent(input.recipe, input.generation, scene)) {
         throw new Error('Fracture source changed. Prepare a new bake preview.')
+      }
+      if (generations.length > 1 && !new FractureRecursiveRecipeCompiler().isCurrent(input.recipe, generations, scene)) {
+        throw new Error('Recursive fracture source or lineage changed. Prepare a new bake preview.')
       }
       if (!Number.isSafeInteger(input.sampleCount) || input.sampleCount < 2) throw new RangeError('Fracture bake sample count is invalid')
       const expectedTargets = new Set(rigidBakeTrackTargets(input.recipe))
@@ -54,16 +72,25 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
       if (!timeline) throw new Error(`Fracture bake timeline does not exist: ${input.recipe.timelineId}`)
       const collision = timeline.tracks.find(track => targets.includes(track.target))
       if (collision) throw new Error(`Fracture bake target already exists: ${collision.target}`)
-      const fragmentIds = new Set(input.generation.fragments.map(fragment => fragment.id))
+      const fragmentIds = new Set(generations.flatMap(generation => generation.fragments.map(fragment => fragment.id)))
       const layerCollision = scene.layers.find(layer => fragmentIds.has(layer.id))
       if (layerCollision) throw new Error(`Fracture fragment layer already exists: ${layerCollision.id}`)
       if (scene.physics?.rigidBakes.some(record => record.id === recordId)) throw new Error(`Fracture bake record already exists: ${recordId}`)
-      if (scene.physics?.fractureGenerations?.some(generation => generation.generationId === input.generation.generationId)) {
-        throw new Error(`Fracture generation already exists: ${input.generation.generationId}`)
+      const generationCollision = scene.physics?.fractureGenerations?.find(existing => (
+        generations.some(generation => generation.generationId === existing.generationId)
+      ))
+      if (generationCollision) {
+        throw new Error(`Fracture generation already exists: ${generationCollision.generationId}`)
       }
-      const fragmentLayers = input.generation.schemaVersion === 1
-        ? new FractureLayerFactory().create(scene, input.generation, input.recipe)
-        : new FractureRegionLayerFactory().create(scene, input.generation, input.recipe)
+      let layerScene: Pick<ChronoScene, 'layers' | 'assets'> = scene
+      const fragmentLayers: Layer[] = []
+      generations.forEach(generation => {
+        const created = generation.schemaVersion === 1
+          ? new FractureLayerFactory().create(layerScene, generation, input.recipe)
+          : new FractureRegionLayerFactory().create(layerScene, generation, input.recipe)
+        fragmentLayers.push(...created)
+        layerScene = { ...layerScene, layers: [...layerScene.layers, ...created] }
+      })
       beforeLayers = scene.layers
       beforeTimeline = timeline
       beforePhysics = scene.physics
@@ -88,7 +115,7 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
         sampleCount: input.sampleCount,
         tracks: input.tracks,
         generatedLayers: fragmentLayers,
-        generation: input.generation,
+        generations,
         timelineLayerIdsAdded: hasExplicitMembership ? addedLayerIds : undefined,
       })
       return {
@@ -99,7 +126,7 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
           ...scene.physics,
           schemaVersion: 1,
           rigidBakes: [...(scene.physics?.rigidBakes ?? []), record],
-          fractureGenerations: [...(scene.physics?.fractureGenerations ?? []), input.generation],
+          fractureGenerations: [...(scene.physics?.fractureGenerations ?? []), ...generations],
         },
       }
     },
@@ -128,6 +155,7 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
 export function makeReplaceVoronoiFractureBakeCmd(input: {
   readonly existingRecordId: string
   readonly generation: AnyFractureGeneration
+  readonly childGenerations?: readonly FractureGeneration[]
   readonly recipe: RigidBodyBakeRecipe
   readonly tracks: readonly Track[]
   readonly sampleCount: number
@@ -135,6 +163,7 @@ export function makeReplaceVoronoiFractureBakeCmd(input: {
 }): EditorCommand {
   const apply = makeApplyVoronoiFractureBakeCmd({
     generation: input.generation,
+    childGenerations: input.childGenerations,
     recipe: input.recipe,
     tracks: input.tracks,
     sampleCount: input.sampleCount,
@@ -142,7 +171,8 @@ export function makeReplaceVoronoiFractureBakeCmd(input: {
   })
   let before: ChronoScene | undefined
   return {
-    label: `Re-bake Voronoi Fracture (${input.generation.fragments.length} fragments)`,
+    label: `Re-bake Voronoi Fracture (${input.generation.fragments.length
+      + (input.childGenerations ?? []).reduce((sum, generation) => sum + generation.fragments.length, 0)} fragments)`,
     execute(scene: ChronoScene): ChronoScene {
       before = scene
       const cleared = clearRigidBakeOwnedContent(scene, input.existingRecordId, input.conflictPolicy)

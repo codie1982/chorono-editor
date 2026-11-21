@@ -22,8 +22,10 @@ export class FractureRegionLayerFactory {
   ): Layer[] {
     const source = scene.layers.find(layer => layer.id === generation.source.ownerId)
     if (!source) throw new Error(`Fracture region source layer is missing: ${generation.source.ownerId}`)
-    const snapshot = recipe.fractureAppearance ?? this.appearanceCompiler.snapshot(scene, source)
-    const event = recipe.fractureEvents?.[0]
+    const snapshot = recipe.fractureAppearance?.sourceLayerId === source.id
+      ? recipe.fractureAppearance
+      : this.appearanceCompiler.snapshot(scene, source)
+    const event = recipe.fractureEvents?.find(candidate => candidate.id === `${generation.generationId}:event`)
     if (!event || event.fragmentBodyIds.length !== generation.fragments.length) {
       throw new Error('Fracture region recipe does not match its generation')
     }

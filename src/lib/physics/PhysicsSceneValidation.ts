@@ -5,6 +5,7 @@ import { rigidBakeTrackTargets } from './RigidPoseTrackCompiler'
 import { assertRigidFractureEvents } from './RigidFractureValidation'
 import { FractureManifestValidator } from '@/lib/fracture/FractureManifestValidator'
 import { FractureRegionManifestValidator } from '@/lib/fracture/FractureRegionManifestValidator'
+import { FractureGenerationHierarchyCompiler } from '@/lib/fracture/FractureGenerationHierarchyCompiler'
 
 const HASH = /^[0-9a-f]{16}$/
 
@@ -66,6 +67,7 @@ function assertExtendedOwnership(
   const fracture = !!recipe.fractureEvents?.length
   const generatedLayers = record.generatedLayers
   const generation = record.fractureGeneration
+  const generationOwnerships = record.fractureGenerations ?? (generation ? [generation] : [])
   if ((generatedLayers === undefined) !== (generation === undefined)) {
     throw new Error('Rigid bake generated ownership is incomplete')
   }
@@ -90,9 +92,32 @@ function assertExtendedOwnership(
     if (!isRecord(generation) || !boundedText(generation.generationId) || !HASH.test(String(generation.topologyHash))) {
       throw new Error('Invalid rigid bake fracture-generation ownership')
     }
-    const ownedGeneration = physics.fractureGenerations?.find(candidate => candidate.generationId === generation.generationId)
-    if (!ownedGeneration || ownedGeneration.topologyHash !== generation.topologyHash) {
-      throw new Error('Rigid bake fracture-generation ownership is stale')
+    if (!Array.isArray(generationOwnerships) || !generationOwnerships.length || generationOwnerships.length > 32) {
+      throw new Error('Invalid recursive fracture-generation ownership')
+    }
+    const ownershipIds = new Set<string>()
+    const realized = generationOwnerships.map(owned => {
+      if (!isRecord(owned) || !boundedText(owned.generationId) || !HASH.test(String(owned.topologyHash))
+        || ownershipIds.has(owned.generationId)) {
+        throw new Error('Invalid recursive fracture-generation ownership')
+      }
+      ownershipIds.add(owned.generationId)
+      const current = physics.fractureGenerations?.find(candidate => candidate.generationId === owned.generationId)
+      if (!current || current.topologyHash !== owned.topologyHash) {
+        throw new Error('Rigid bake fracture-generation ownership is stale')
+      }
+      return current
+    })
+    if (recipe.fractureHierarchy) {
+      if (!record.fractureGenerations || record.fractureGenerations.length < 2) {
+        throw new Error('Recursive fracture bake is missing complete topology ownership')
+      }
+      const hierarchy = new FractureGenerationHierarchyCompiler().compile(realized, recipe.fractureHierarchy.limits)
+      if (hierarchy.hierarchyHash !== recipe.fractureHierarchy.hierarchyHash) {
+        throw new Error('Recursive fracture hierarchy hash is stale')
+      }
+    } else if (record.fractureGenerations?.length) {
+      throw new Error('Root-only fracture cannot own a recursive generation list')
     }
   }
   const added = record.timelineLayerIdsAdded

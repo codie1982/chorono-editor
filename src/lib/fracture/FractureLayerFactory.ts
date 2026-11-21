@@ -20,8 +20,10 @@ export class FractureLayerFactory {
   create(scene: Pick<ChronoScene, 'layers' | 'assets'>, generation: FractureGeneration, recipe: RigidBodyBakeRecipe): Layer[] {
     const source = scene.layers.find(layer => layer.id === generation.source.ownerId)
     if (!source) throw new Error(`Fracture source layer is missing: ${generation.source.ownerId}`)
-    const appearanceSnapshot = recipe.fractureAppearance ?? this.appearanceCompiler.snapshot(scene, source)
-    const event = recipe.fractureEvents?.[0]
+    const appearanceSnapshot = recipe.fractureAppearance?.sourceLayerId === source.id
+      ? recipe.fractureAppearance
+      : this.appearanceCompiler.snapshot(scene, source)
+    const event = recipe.fractureEvents?.find(candidate => candidate.id === `${generation.generationId}:event`)
     if (!event || event.fragmentBodyIds.length !== generation.fragments.length) {
       throw new Error('Fracture recipe does not match its generation')
     }

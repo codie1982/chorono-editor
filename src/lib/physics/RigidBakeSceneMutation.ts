@@ -53,7 +53,8 @@ export function clearRigidBakeOwnedContent(
   const nextLayers = generatedLayerIds.size
     ? scene.layers.filter(layer => !generatedLayerIds.has(layer.id))
     : scene.layers
-  const nextPhysics = clearPhysics(scene.physics!, record, inspection.generation)
+  const nextPhysics = clearPhysics(scene.physics!, record, inspection.generations
+    ?? (inspection.generation ? [inspection.generation] : []))
   const next: ChronoScene = { ...scene, layers: nextLayers, timelines: nextTimelines, physics: nextPhysics }
   if (!nextPhysics) delete next.physics
   return next
@@ -76,12 +77,15 @@ function clearTimeline(
 function clearPhysics(
   physics: PhysicsSceneData,
   record: RigidBakeRecord,
-  generation: AnyFractureGeneration | undefined,
+  ownedGenerations: readonly AnyFractureGeneration[],
 ): PhysicsSceneData | undefined {
   const rigidBakes = physics.rigidBakes.filter(candidate => candidate.id !== record.id)
   const generations = physics.fractureGenerations ?? []
-  const fractureGenerations = generation && !rigidBakes.some(candidate => ownsGeneration(candidate, generation))
-    ? generations.filter(candidate => candidate.generationId !== generation.generationId)
+  const removable = new Set(ownedGenerations.filter(generation => (
+    !rigidBakes.some(candidate => ownsGeneration(candidate, generation))
+  )).map(generation => generation.generationId))
+  const fractureGenerations = removable.size
+    ? generations.filter(candidate => !removable.has(candidate.generationId))
     : generations
   if (!rigidBakes.length && !fractureGenerations.length) return undefined
   return {
@@ -92,6 +96,7 @@ function clearPhysics(
 }
 
 function ownsGeneration(record: RigidBakeRecord, generation: AnyFractureGeneration): boolean {
+  if (record.fractureGenerations?.some(owned => owned.generationId === generation.generationId)) return true
   if (record.fractureGeneration) return record.fractureGeneration.generationId === generation.generationId
   const fragmentIds = new Set(record.recipe.bodies.filter(body => body.activation).map(body => body.layerId))
   const event = record.recipe.fractureEvents?.[0]

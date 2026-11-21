@@ -1,4 +1,5 @@
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureRecursiveRecipeCompiler } from '@/lib/fracture/FractureRecursiveRecipeCompiler'
 import { canonicalJson, hashCanonicalRecords } from '@/lib/hash/CanonicalRecordHash'
 import type { ChronoScene, Layer, Track } from '@/lib/types'
 import type { AnyFractureGeneration } from '@/lib/types/fracture'
@@ -39,6 +40,7 @@ export interface RigidBakeOwnershipInspection {
   readonly sourceState: RigidBakeSourceState
   readonly issues: readonly RigidBakeOwnershipIssue[]
   readonly generation?: AnyFractureGeneration
+  readonly generations?: readonly AnyFractureGeneration[]
   readonly canSafelyMutate: boolean
 }
 
@@ -78,6 +80,7 @@ export class RigidBakeOwnershipInspector {
     }
 
     let generation: AnyFractureGeneration | undefined
+    let generations: readonly AnyFractureGeneration[] | undefined
     if (fracture) {
       if (!record.generatedLayers) {
         issues.push(issue('unverified-generated-layers', record.id, 'This legacy bake has no generated-layer hashes.'))
@@ -91,13 +94,20 @@ export class RigidBakeOwnershipInspector {
           }
         }
       }
+      generations = resolveFractureGenerations(scene, record)
       generation = resolveFractureGeneration(scene, record)
-      if (!record.fractureGeneration) {
+      const ownedGenerations = record.fractureGenerations ?? (record.fractureGeneration ? [record.fractureGeneration] : [])
+      if (!ownedGenerations.length) {
         issues.push(issue('unverified-generation', record.id, 'This legacy bake has no explicit topology ownership.'))
-      } else if (!generation) {
-        issues.push(issue('missing-generation', record.fractureGeneration.generationId, 'The fracture topology manifest is missing.'))
-      } else if (generation.topologyHash !== record.fractureGeneration.topologyHash) {
-        issues.push(issue('modified-generation', generation.generationId, 'The fracture topology manifest no longer matches the bake.'))
+      } else {
+        ownedGenerations.forEach(owned => {
+          const current = generations?.find(candidate => candidate.generationId === owned.generationId)
+          if (!current) {
+            issues.push(issue('missing-generation', owned.generationId, 'The fracture topology manifest is missing.'))
+          } else if (current.topologyHash !== owned.topologyHash) {
+            issues.push(issue('modified-generation', current.generationId, 'The fracture topology manifest no longer matches the bake.'))
+          }
+        })
       }
     }
 
@@ -109,6 +119,7 @@ export class RigidBakeOwnershipInspector {
       sourceState: inspectSourceState(scene, record, generation),
       issues: Object.freeze(issues),
       ...(generation ? { generation } : {}),
+      ...(generations?.length ? { generations: Object.freeze([...generations]) } : {}),
       canSafelyMutate: issues.length === 0,
     })
   }
@@ -122,6 +133,7 @@ export function createRigidBakeRecord(input: {
   readonly tracks: readonly Track[]
   readonly generatedLayers?: readonly Layer[]
   readonly generation?: AnyFractureGeneration
+  readonly generations?: readonly AnyFractureGeneration[]
   readonly timelineLayerIdsAdded?: readonly string[]
 }): RigidBakeRecord {
   return Object.freeze({
@@ -139,11 +151,17 @@ export function createRigidBakeRecord(input: {
         contentHash: hashRigidBakeGeneratedLayer(layer),
       }))),
     } : {}),
-    ...(input.generation ? {
+    ...((input.generations?.[0] ?? input.generation) ? {
       fractureGeneration: Object.freeze({
-        generationId: input.generation.generationId,
-        topologyHash: input.generation.topologyHash,
+        generationId: (input.generations?.[0] ?? input.generation)!.generationId,
+        topologyHash: (input.generations?.[0] ?? input.generation)!.topologyHash,
       }),
+    } : {}),
+    ...(input.generations && input.generations.length > 1 ? {
+      fractureGenerations: Object.freeze(input.generations.map(generation => Object.freeze({
+        generationId: generation.generationId,
+        topologyHash: generation.topologyHash,
+      }))),
     } : {}),
     ...(input.timelineLayerIdsAdded ? {
       timelineLayerIdsAdded: Object.freeze([...input.timelineLayerIdsAdded]),
@@ -173,6 +191,23 @@ export function resolveFractureGeneration(
     && generation.fragments.every(fragment => fragmentIds.has(fragment.id)))
 }
 
+/** Resolve every explicitly owned recursive topology in stored order. */
+export function resolveFractureGenerations(
+  scene: ChronoScene,
+  record: RigidBakeRecord,
+): readonly AnyFractureGeneration[] {
+  if (record.fractureGenerations?.length) {
+    return record.fractureGenerations.flatMap(owned => {
+      const generation = scene.physics?.fractureGenerations?.find(candidate => (
+        candidate.generationId === owned.generationId
+      ))
+      return generation ? [generation] : []
+    })
+  }
+  const root = resolveFractureGeneration(scene, record)
+  return root ? [root] : []
+}
+
 function inspectSourceState(
   scene: ChronoScene,
   record: RigidBakeRecord,
@@ -189,6 +224,10 @@ function inspectSourceState(
   try {
     if (recipe.fractureEvents?.length) {
       if (!generation) return 'unavailable'
+      const generations = resolveFractureGenerations(scene, record)
+      if (recipe.fractureHierarchy) {
+        return new FractureRecursiveRecipeCompiler().isCurrent(recipe, generations, sourceScene) ? 'current' : 'changed'
+      }
       return new FractureRigidRecipeCompiler().isCurrent(recipe, generation, sourceScene) ? 'current' : 'changed'
     }
     return new RigidBodySceneCompiler().isCurrent(recipe, sourceScene) ? 'current' : 'changed'

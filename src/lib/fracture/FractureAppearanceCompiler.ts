@@ -36,10 +36,10 @@ export class FractureAppearanceCompiler {
   /** Validate and capture the supported source appearance without mutation. */
   snapshot(scene: Pick<ChronoScene, 'assets'>, source: Layer): FractureAppearanceSnapshot {
     this.assertCommonSource(source)
-    if (source.type === 'shape' || source.type === 'spline') {
-      this.sourceRegionCompiler.compile(source)
+    if (source.type === 'shape' || source.type === 'spline' || (source.type === 'path' && source.path)) {
+      if (source.type !== 'path') this.sourceRegionCompiler.compile(source)
       if (source.style?.fill?.type !== 'solid') {
-        throw new Error('Fracture shape or spline source must use a solid fill.')
+        throw new Error('Fracture shape, spline or generated path source must use a solid fill.')
       }
       return Object.freeze({
         schemaVersion: 1,
@@ -47,6 +47,7 @@ export class FractureAppearanceCompiler {
         sourceLayerId: source.id,
         contentHash: hashCanonicalRecords('fracture-solid-appearance-v1', [canonicalJson({
           sourceType: source.type,
+          ...(source.type === 'path' ? { path: source.path } : {}),
           style: source.style,
           blendMode: source.blendMode ?? 'source-over',
           opacity: source.opacity,

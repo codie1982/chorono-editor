@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { RigidBodyBakeAdapter } from '@/lib/bake/adapters/RigidBodyBakeAdapter'
 import { rigidBakeFixture } from '@/lib/bake/__tests__/RigidBodyBakeFixture'
+import { makeApplyVoronoiFractureBakeCmd } from '@/lib/editor/commands-voronoi-fracture-bake'
 import { PhysicsBakeRecipeFactory } from '@/lib/physics/PhysicsBakeRecipeFactory'
+import { assertPhysicsSceneData } from '@/lib/physics/PhysicsSceneValidation'
+import { RigidBakeOwnershipInspector } from '@/lib/physics/RigidBakeOwnership'
+import { clearRigidBakeOwnedContent } from '@/lib/physics/RigidBakeSceneMutation'
 import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation'
 import { ResourceBudget } from '@/lib/resources/budget'
 import type { RigidBodySnapshot } from '@/lib/types/physics'
@@ -86,6 +90,35 @@ describe('FractureRecursiveRecipeCompiler', () => {
     ])
     expect(preview.recipe.fractureEvents).toHaveLength(2)
     expect(preview.report.protectedEventCount).toBeGreaterThanOrEqual(2)
+    preview.release()
+  })
+
+  it('publishes, validates, inspects and clears the complete recursive forest', async () => {
+    const value = fixture()
+    const preview = await new RigidBodyBakeAdapter({
+      allocator: new ResourceBudget({ maxBytes: 16 * 1024 ** 2 }),
+      yieldEveryTicks: 1000,
+    }).prepare(value.recipe, { signal: new AbortController().signal, reportProgress: () => {} })
+    const command = makeApplyVoronoiFractureBakeCmd({
+      generation: value.root,
+      childGenerations: [value.child],
+      recipe: preview.recipe,
+      tracks: preview.tracks,
+      sampleCount: preview.report.sampleCount,
+      recordId: 'recursive-bake',
+    })
+    const committed = command.execute(value.scene)
+    const inspection = new RigidBakeOwnershipInspector().inspect(committed, 'recursive-bake')
+
+    expect(committed.physics?.fractureGenerations).toHaveLength(2)
+    expect(committed.physics?.rigidBakes[0].fractureGenerations).toHaveLength(2)
+    expect(inspection.generations).toHaveLength(2)
+    expect(inspection).toMatchObject({ ownershipState: 'current', sourceState: 'current' })
+    expect(() => assertPhysicsSceneData(committed.physics)).not.toThrow()
+    const cleared = clearRigidBakeOwnedContent(committed, 'recursive-bake')
+    expect(cleared.layers).toEqual(value.scene.layers)
+    expect(cleared.timelines).toEqual(value.scene.timelines)
+    expect(cleared.physics).toBeUndefined()
     preview.release()
   })
 
