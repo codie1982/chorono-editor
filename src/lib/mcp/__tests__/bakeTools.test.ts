@@ -176,6 +176,19 @@ describe('MCP rigid/fracture bake workflows', () => {
       expect(record.recipe.fractureEvents![0].realization).toMatchObject({
         kind: 'impact', contactBodyId: 'rigid:floor',
       })
+      const inspected = (await editor.call('inspect_physics_bake', { recordId: record.id })).bake
+      expect(inspected.topologyEvent).toMatchObject({
+        sourceBodyId: 'rigid:box',
+        fragmentBodyIds: expect.any(Array),
+        tick: record.recipe.fractureEvents![0].tick,
+      })
+      expect(inspected.renderColliderQuality).toMatchObject({
+        status: 'pass',
+        atEvent: true,
+        renderPolygonCount: 4,
+        colliderPolygonCount: 4,
+      })
+      expect(inspected.renderColliderQuality.maxBoundaryDeltaPx).toBeCloseTo(0, 9)
     } finally {
       await editor.close()
     }

@@ -14,6 +14,13 @@ export type {
   FractureExplosionDelta,
   FractureExplosionFragment,
 } from './FractureExplosionImpulseResolver'
+export { FractureRenderColliderAnalyzer } from './FractureRenderColliderAnalyzer'
+export type {
+  FractureRenderColliderAnalysis,
+  FractureRenderColliderDeltaLine,
+  FractureRenderColliderReport,
+  FractureRenderColliderUnavailable,
+} from './FractureRenderColliderAnalyzer'
 export { FractureRigidRecipeCompiler } from './FractureRigidRecipeCompiler'
 export type { FractureRigidRecipeInput } from './FractureRigidRecipeCompiler'
 export { hashFractureGeneration, hashFractureSource } from './FractureManifestHash'

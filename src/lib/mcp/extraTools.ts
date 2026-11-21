@@ -245,7 +245,7 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
     'Release a persistent bake job and any unpublished dense preview buffers. This does not undo a completed scene commit and the job id becomes invalid.',
     { jobId: bakeJobId }, ['jobId']),
   extra('inspect_physics_bake',
-    'Inspect one committed rigid/fracture bake ownership state without mutation. Reports current/edited/incomplete/legacy output, current/changed/unavailable source and exact hash/identity issues. Read this before Clear or Re-bake.',
+    'Inspect one committed rigid/fracture bake without mutation. Reports current/edited/incomplete/legacy ownership, source state and exact hash/identity issues. Fracture records also report the atomic topology event and exact-event visible-boundary versus compiled-collider quality. Read this before Clear or Re-bake.',
     { recordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Persisted rigid bake record id from get_scene.' } }, ['recordId'], true),
   extra('clear_physics_bake',
     'Remove only the tracks, fragment layers, topology and timeline memberships owned by one committed bake as one undoable edit. Default refuses edited, incomplete or legacy output. Set discardEdited:true only after explicitly deciding to delete those edits; ambiguous duplicate targets still refuse.', {

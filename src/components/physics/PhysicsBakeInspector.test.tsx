@@ -79,6 +79,9 @@ describe('PhysicsBakeInspector', () => {
     expect(html).toContain('rigid:floor')
     expect(html).toContain('Artistic explosion · external energy')
     expect(html).toContain('20261121')
+    expect(html).toContain('Topology &amp; collider')
+    expect(html).toContain('Collider aligned')
+    expect(html).toContain('Atomic event')
   })
 })
 

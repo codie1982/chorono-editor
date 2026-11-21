@@ -17,7 +17,14 @@ export interface FractureOverlayFrame {
   readonly generationId: string
   readonly phase: 'source' | 'fragments'
   readonly eventTimeMs: number
+  readonly eventTick: number
+  readonly atEvent: boolean
   readonly fragments: readonly FractureOverlayPolygon[]
+  /** Current visible source/fragment boundaries, excluding static colliders. */
+  readonly renderPolygons: readonly FractureOverlayPolygon[]
+  /** Actual active rigid-body colliders, excluding static environment bodies. */
+  readonly dynamicColliderPolygons: readonly FractureOverlayPolygon[]
+  /** Actual active dynamic and static rigid-body colliders. */
   readonly colliderPolygons: readonly FractureOverlayPolygon[]
 }
 
@@ -52,6 +59,7 @@ export class FractureOverlayGeometryResolver {
     const layerById = new Map(scene.layers.map(layer => [layer.id, layer]))
     const resolveMatrix = createLayerWorldMatrixResolver(scene, timeMs, overrides)
     const bodyByLayer = new Map(record.recipe.bodies.map(body => [body.layerId, body]))
+    const bodyById = new Map(record.recipe.bodies.map(body => [body.bodyId, body]))
     const fragments: FractureOverlayPolygon[] = []
 
     for (const fragment of generation.fragments) {
@@ -66,13 +74,26 @@ export class FractureOverlayGeometryResolver {
       })
     }
 
-    const colliderPolygons = phase === 'source'
-      ? [polygonFromPoints('source-collider', generation.source.polygon, sourceLayer, resolveMatrix)]
-      : fragments.map(fragment => ({ ...fragment, id: `${fragment.id}:collider` }))
+    const renderPolygons = phase === 'source'
+      ? [polygonFromPoints(sourceLayer.id, generation.source.polygon, sourceLayer, resolveMatrix)]
+      : generation.fragments.flatMap(fragment => {
+        const layer = layerById.get(fragment.id)
+        const polygon = layer && renderPolygonFromLayer(layer, fragment, resolveMatrix)
+        return polygon ? [polygon] : []
+      })
+    const activeDynamicBodies = phase === 'source'
+      ? [bodyById.get(event.sourceBodyId)].filter((body): body is RigidBodySnapshot => !!body)
+      : event.fragmentBodyIds.map(bodyId => bodyById.get(bodyId)).filter((body): body is RigidBodySnapshot => !!body)
+    const dynamicColliderPolygons = activeDynamicBodies.flatMap(body => {
+      const layer = layerById.get(body.layerId)
+      const polygon = layer && bodyColliderPolygon(body, layer, resolveMatrix)
+      return polygon ? [polygon] : []
+    })
+    const colliderPolygons = [...dynamicColliderPolygons]
     for (const body of record.recipe.bodies) {
       if (body.motionType !== 'static') continue
       const layer = layerById.get(body.layerId)
-      const polygon = layer && rectangleCollider(body, layer, resolveMatrix)
+      const polygon = layer && bodyColliderPolygon(body, layer, resolveMatrix)
       if (polygon) colliderPolygons.push(polygon)
     }
 
@@ -81,7 +102,11 @@ export class FractureOverlayGeometryResolver {
       generationId,
       phase,
       eventTimeMs,
+      eventTick: event.tick,
+      atEvent: Math.abs(timeMs - eventTimeMs) <= 1e-6,
       fragments,
+      renderPolygons,
+      dynamicColliderPolygons,
       colliderPolygons,
     }
   }
@@ -120,17 +145,82 @@ function polygonFromPoints(
   }
 }
 
-/** Resolve the current first-slice rectangle collider without approximation. */
-function rectangleCollider(
+/**
+ * Resolve an actual compiled collider through the current visual transform.
+ *
+ * Collider vertices are stored in composition pixels around the body centre,
+ * while layer geometry remains in unscaled local pixels. Dividing by the
+ * compiled uniform scale before applying the layer matrix avoids scaling the
+ * rigid vertices twice. The current first slice has root uniform-scale bodies;
+ * unsupported zero-scale legacy snapshots return `null`.
+ */
+function bodyColliderPolygon(
   body: RigidBodySnapshot,
   layer: Layer,
   resolveMatrix: ReturnType<typeof createLayerWorldMatrixResolver>,
 ): FractureOverlayPolygon | null {
-  if (body.collider !== 'rectangle' || !layer.size) return null
-  return polygonFromPoints(`${body.layerId}:collider`, [
-    { x: 0, y: 0 },
-    { x: layer.size.width, y: 0 },
-    { x: layer.size.width, y: layer.size.height },
-    { x: 0, y: layer.size.height },
-  ], layer, resolveMatrix)
+  const scale = body.visual.uniformScale
+  if (!Number.isFinite(scale) || scale <= 0) return null
+  const center = body.visual.centerOfMassLocalPx ?? {
+    x: body.visual.widthPx / 2,
+    y: body.visual.heightPx / 2,
+  }
+  const localPoints = body.collider === 'convexPolygon'
+    ? body.colliderVerticesPx?.map(point => ({
+      x: center.x + point.x / scale,
+      y: center.y + point.y / scale,
+    }))
+    : rectangleAround(center, body.widthPx / scale, body.heightPx / scale)
+  if (!localPoints || localPoints.length < 3) return null
+  const matrix = resolveMatrix(layer)
+  return {
+    id: `${body.layerId}:collider`,
+    points: localPoints.map(point => matrix.applyToPoint(point)),
+    centroid: matrix.applyToPoint(center),
+    triangleIndices: convexFan(localPoints.length),
+  }
+}
+
+/** Read the generated fragment's current render boundary when it is explicit. */
+function renderPolygonFromLayer(
+  layer: Layer,
+  fragment: { readonly id: string; readonly polygon: readonly FracturePoint2D[]; readonly centroidPx: FracturePoint2D },
+  resolveMatrix: ReturnType<typeof createLayerWorldMatrixResolver>,
+): FractureOverlayPolygon | null {
+  let localPoints: FracturePoint2D[] | undefined
+  if (layer.type === 'path' && layer.path?.closed && layer.path.anchors.length >= 3
+    && layer.path.anchors.every(anchor => hasStraightHandles(anchor))) {
+    localPoints = layer.path.anchors.map(anchor => ({ x: anchor.x, y: anchor.y }))
+  } else if (layer.type === 'mesh2d' && layer.mesh2d?.source.kind === 'fractureFragment') {
+    const positions = layer.mesh2d.geometry.positions
+    if (positions.length >= 6 && positions.length % 2 === 0) {
+      localPoints = []
+      for (let index = 0; index < positions.length; index += 2) {
+        localPoints.push({ x: positions[index], y: positions[index + 1] })
+      }
+    }
+  }
+  if (!localPoints) return null
+  const matrix = resolveMatrix(layer)
+  return {
+    id: fragment.id,
+    points: localPoints.map(point => matrix.applyToPoint(point)),
+    centroid: matrix.applyToPoint(fragment.centroidPx),
+    triangleIndices: convexFan(localPoints.length),
+  }
+}
+
+function hasStraightHandles(anchor: NonNullable<Layer['path']>['anchors'][number]): boolean {
+  return (anchor.inX === undefined || (anchor.inX === anchor.x && anchor.inY === anchor.y))
+    && (anchor.outX === undefined || (anchor.outX === anchor.x && anchor.outY === anchor.y))
+}
+
+function rectangleAround(center: FracturePoint2D, width: number, height: number): FracturePoint2D[] {
+  const halfWidth = width / 2, halfHeight = height / 2
+  return [
+    { x: center.x - halfWidth, y: center.y - halfHeight },
+    { x: center.x + halfWidth, y: center.y - halfHeight },
+    { x: center.x + halfWidth, y: center.y + halfHeight },
+    { x: center.x - halfWidth, y: center.y + halfHeight },
+  ]
 }

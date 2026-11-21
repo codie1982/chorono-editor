@@ -3,6 +3,7 @@ import { emptyScene, newRectLayer } from '@/lib/defaults'
 import type { OverrideMap } from '@/lib/evaluator'
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
 import { FractureOverlayGeometryResolver } from '@/lib/fracture/FractureOverlayGeometryResolver'
+import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
 import { VoronoiFractureGenerator } from '@/lib/fracture/VoronoiFractureGenerator'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
@@ -24,6 +25,8 @@ describe('FractureOverlayGeometryResolver', () => {
     })
     expect(frame!.fragments).toHaveLength(4)
     expect(frame!.colliderPolygons).toHaveLength(2)
+    expect(frame!.renderPolygons).toHaveLength(1)
+    expect(frame!.dynamicColliderPolygons).toHaveLength(1)
     expect(frame!.fragments[0].points[0]).toEqual(sourceMatrix.applyToPoint(first.polygon[0]))
     expect(frame!.fragments[0].centroid).toEqual(sourceMatrix.applyToPoint(first.centroidPx))
     expect(frame!.fragments[0].triangleIndices).toHaveLength((first.polygon.length - 2) * 3)
@@ -42,6 +45,46 @@ describe('FractureOverlayGeometryResolver', () => {
     expect(moved.fragments[0].points[0].x - baseline.fragments[0].points[0].x).toBeCloseTo(37, 9)
     expect(moved.fragments[0].centroid.x - baseline.fragments[0].centroid.x).toBeCloseTo(37, 9)
     expect(moved.colliderPolygons).toHaveLength(5)
+    expect(moved.dynamicColliderPolygons[0].points[0].x - baseline.dynamicColliderPolygons[0].points[0].x)
+      .toBeCloseTo(37, 9)
+  })
+
+  it('measures actual render boundaries against compiled colliders at the topology event', () => {
+    const fixture = overlayFixture()
+    const analyzer = new FractureRenderColliderAnalyzer()
+    const aligned = analyzer.analyzeCommittedEvent(fixture.scene, fixture.record.id)
+
+    expect(aligned).toMatchObject({
+      status: 'pass',
+      phase: 'fragments',
+      atEvent: true,
+      eventTimeMs: 1000,
+      eventTick: 120,
+      renderPolygonCount: 4,
+      colliderPolygonCount: 4,
+    })
+    if (aligned.status === 'unavailable') throw new Error(aligned.reason)
+    expect(aligned.maxBoundaryDeltaPx).toBeCloseTo(0, 9)
+    expect(aligned.deltaLines).toHaveLength(0)
+
+    const fragmentId = fixture.generation.fragments[0].id
+    const changed: ChronoScene = {
+      ...fixture.scene,
+      layers: fixture.scene.layers.map(layer => layer.id === fragmentId && layer.path ? {
+        ...layer,
+        path: {
+          ...layer.path,
+          anchors: layer.path.anchors.map((anchor, index) => index === 0
+            ? { ...anchor, x: anchor.x + 8 }
+            : anchor),
+        },
+      } : layer),
+    }
+    const warning = analyzer.analyzeCommittedEvent(changed, fixture.record.id)
+    expect(warning.status).toBe('warning')
+    if (warning.status === 'unavailable') throw new Error(warning.reason)
+    expect(warning.maxBoundaryDeltaPx).toBeGreaterThan(1)
+    expect(warning.deltaLines.length).toBeGreaterThan(0)
   })
 
   it('falls back to the newest compatible record and refuses missing topology', () => {

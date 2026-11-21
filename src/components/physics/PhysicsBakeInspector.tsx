@@ -2,13 +2,16 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { FractureAppearanceQualityAnalyzer } from '@/lib/fracture/FractureAppearanceQualityAnalyzer'
+import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
 import type { ChronoScene } from '@/lib/types'
 import type { RigidBakeOwnershipInspection } from '@/lib/physics/RigidBakeOwnership'
 import FractureAppearanceQualityCard from './FractureAppearanceQualityCard'
 import FractureEventSummary from './FractureEventSummary'
+import FractureTopologyColliderCard from './FractureTopologyColliderCard'
 import type { PhysicsBakeController } from './usePhysicsBakeController'
 
 const fractureAppearanceQualityAnalyzer = new FractureAppearanceQualityAnalyzer()
+const fractureRenderColliderAnalyzer = new FractureRenderColliderAnalyzer()
 
 interface Props {
   readonly scene: ChronoScene
@@ -33,6 +36,15 @@ export default function PhysicsBakeInspector({ scene, controller, onRebakeStarte
     for (const record of records) {
       if (record.recipe.fractureEvents?.length) {
         analyses.set(record.id, fractureAppearanceQualityAnalyzer.analyze(scene, record.id))
+      }
+    }
+    return analyses
+  }, [records, scene])
+  const fractureRenderColliderQuality = useMemo(() => {
+    const analyses = new Map<string, ReturnType<FractureRenderColliderAnalyzer['analyzeCommittedEvent']>>()
+    for (const record of records) {
+      if (record.recipe.fractureEvents?.length) {
+        analyses.set(record.id, fractureRenderColliderAnalyzer.analyzeCommittedEvent(scene, record.id))
       }
     }
     return analyses
@@ -108,6 +120,8 @@ export default function PhysicsBakeInspector({ scene, controller, onRebakeStarte
           {record.recipe.fractureEvents?.[0] && <FractureEventSummary event={record.recipe.fractureEvents[0]} />}
           {inspection.mode === 'fracture' && <FractureAppearanceQualityCard
             analysis={fractureAppearanceQuality.get(record.id)!} />}
+          {inspection.mode === 'fracture' && <FractureTopologyColliderCard
+            analysis={fractureRenderColliderQuality.get(record.id)!} />}
           {inspection.issues.length > 0 && <div className="mt-3 rounded border border-amber-800/70 bg-amber-950/20 p-2">
             <p className="text-[10px] font-medium text-amber-200">
               {inspection.issues.length} ownership {inspection.issues.length === 1 ? 'issue' : 'issues'}

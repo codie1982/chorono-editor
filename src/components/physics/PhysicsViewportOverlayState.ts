@@ -13,6 +13,8 @@ export interface PhysicsViewportOverlaySettings {
   readonly colliders: boolean
   readonly centroids: boolean
   readonly triangles: boolean
+  readonly topologyEvent: boolean
+  readonly colliderDelta: boolean
 }
 
 /** Safe, low-noise defaults; diagnostics appear only after explicit opt-in. */
@@ -23,4 +25,6 @@ export const DEFAULT_PHYSICS_VIEWPORT_OVERLAY_SETTINGS: PhysicsViewportOverlaySe
   colliders: true,
   centroids: true,
   triangles: false,
+  topologyEvent: true,
+  colliderDelta: false,
 })

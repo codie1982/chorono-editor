@@ -42,6 +42,7 @@ import {
 import { mcpPhysicsBakeJobs } from './bake/MCPPhysicsBakeJobManager'
 import { makeClearRigidBakeCmd } from '../editor/commands-rigid-bake-lifecycle'
 import { RigidBakeOwnershipInspector } from '../physics/RigidBakeOwnership'
+import { FractureRenderColliderAnalyzer } from '../fracture/FractureRenderColliderAnalyzer'
 
 export interface MCPHost {
   editor: EditorStateReturn
@@ -289,6 +290,10 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     }
     if (method === 'inspect_physics_bake') {
       const inspection = new RigidBakeOwnershipInspector().inspect(before, args.recordId)
+      const fractureEvent = inspection.record.recipe.fractureEvents?.[0]
+      const renderColliderQuality = fractureEvent
+        ? new FractureRenderColliderAnalyzer().analyzeCommittedEvent(before, inspection.record.id)
+        : undefined
       return { revision, bake: {
         recordId: inspection.record.id,
         mode: inspection.mode,
@@ -298,6 +303,13 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
         trackCount: inspection.record.tracks.length,
         generatedLayerCount: inspection.record.generatedLayers?.length ?? 0,
         generationId: inspection.generation?.generationId,
+        ...(fractureEvent ? { topologyEvent: {
+          sourceBodyId: fractureEvent.sourceBodyId,
+          fragmentBodyIds: fractureEvent.fragmentBodyIds,
+          localTimeMs: fractureEvent.timeMs,
+          absoluteTimeMs: inspection.record.recipe.startTimeMs + fractureEvent.timeMs,
+          tick: fractureEvent.tick,
+        }, renderColliderQuality } : {}),
         issues: inspection.issues,
       } }
     }

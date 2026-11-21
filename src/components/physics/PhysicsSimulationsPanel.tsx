@@ -310,7 +310,8 @@ function FractureOverlayControls({ records, settings, onChange }: {
   const effectiveRecordId = settings.recordId && recordIds.has(settings.recordId)
     ? settings.recordId
     : records.at(-1)?.id ?? null
-  const activeCount = [settings.fragments, settings.colliders, settings.centroids, settings.triangles]
+  const activeCount = [settings.fragments, settings.colliders, settings.centroids, settings.triangles,
+    settings.topologyEvent, settings.colliderDelta]
     .filter(Boolean).length
   const patch = (next: Partial<PhysicsViewportOverlaySettings>) => onChange({
     ...settings,
@@ -343,8 +344,12 @@ function FractureOverlayControls({ records, settings, onChange }: {
               onChange={checked => patch({ centroids: checked })} />
             <OverlayToggle label="Triangles" checked={settings.triangles} disabled={!settings.enabled}
               onChange={checked => patch({ triangles: checked })} />
+            <OverlayToggle label="Event state" checked={settings.topologyEvent} disabled={!settings.enabled}
+              onChange={checked => patch({ topologyEvent: checked })} />
+            <OverlayToggle label="Collider delta" checked={settings.colliderDelta} disabled={!settings.enabled}
+              onChange={checked => patch({ colliderDelta: checked })} />
           </div>
-          <p className="text-[10px] leading-4 text-gray-500">Viewport diagnostics never appear in preview, playback or export. Triangle lines remain a diagnostic fan; image sources use separate bake-owned Mesh2D appearance triangles.</p>
+          <p className="text-[10px] leading-4 text-gray-500">Event state names the active topology. Collider delta compares current visible boundaries with actual rigid colliders. Diagnostics never appear in preview, playback or export; triangle lines remain a diagnostic fan.</p>
         </>}
     </Fieldset>
   </div>

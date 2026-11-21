@@ -82,11 +82,23 @@ after the event it resolves the generated fragment transforms. All returned
 polygons and points are in composition/world pixels.
 
 The resolver reuses `createLayerWorldMatrixResolver` instead of duplicating
-parent-transform evaluation. It returns fragment polygons, exact rectangle
-colliders for the supported first slice, fragment centroids and a diagnostic
-convex triangle fan. That fan is only a topology inspection aid: image
+parent-transform evaluation. It returns fragment cells, current straight-path
+or fracture-Mesh2D render boundaries, actual compiled dynamic/static colliders,
+fragment centroids and a diagnostic convex triangle fan. Convex collider
+vertices are converted from centre-relative composition pixels back through
+the current layer matrix without applying the authored uniform scale twice.
+That fan is only a topology inspection aid: image
 fragments have their own validated Mesh2D topology and UV layout, and neither
 renderer nor exporter consumes the diagnostic fan.
+
+`FractureRenderColliderAnalyzer` compares the current visible boundaries with
+the active compiled colliders in the same evaluated frame. Its symmetric
+vertex-to-edge distance supports different boundary tessellations, reports
+maximum/mean composition-pixel delta and emits at most 64 editor-only connector
+lines. `analyzeCommittedEvent` uses the canonical frame evaluator at the exact
+atomic source→fragment tick. Unsupported curved/legacy appearance returns an
+explicit unavailable result rather than a guessed alignment. The Inspector and
+MCP `inspect_physics_bake` response consume this one domain report.
 
 Diagnostics are derived view state. They are not written to scene JSON,
 history, portable files or exporter payloads. Missing or legacy ownership data
