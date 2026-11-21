@@ -132,6 +132,12 @@ siler; değiştirilmiş/legacy çıktı için `discardEdited:true` gerekir. Dupl
 track target veya layer kimliğinde sahiplik belirsiz olduğundan zorla silme de
 reddedilir. Re-bake, Clear ve Undo her biri tek source transaction'ıdır.
 
+`clear_scene` normal oluşturma ön adımı değil, açık bir fresh-start
+mutasyonudur. Layer ve timeline'larla birlikte onlara bağlı physics, runtime ve
+authoring metadata'sını tek undo adımında temizler; composition ayarlarını,
+yeniden kullanılabilir asset/collection verisini ve editor guide'larını korur.
+Böylece yeni sahne, kaldırılmış nesnelere ait eski bir bake'i göstermez.
+
 `bake_rigid_bodies` ve `bake_voronoi_fracture` geriye uyumlu tek çağrılı
 hazırla+yayınla yollarıdır; ayrı insan incelemesi gereken işlerde persistent
 akış tercih edilir. Bütün fizik bake araçları batch içine alınmaz. Browser'da

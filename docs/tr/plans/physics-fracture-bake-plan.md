@@ -5,11 +5,11 @@ dikey rigid + tek nesil Voronoi dilimi, dedicated Worker, Physics ürün UI'ı v
 bağlantı-sahipli kalıcı MCP job status/Preview/Apply/Cancel/Discard akışı
 ve dünya-uzayı/olay-korumalı rigid keyframe sadeleştirme uygulandı. Sahiplik
 hash'li güvenli Re-bake / Clear Bake, image→Mesh2D fragment görünümü, kaynak UV
-korunumu, event hizası/raster seam/mask bellek ölçümü, darbe tetikli fracture
-ve deterministik artistic explosion da tamamlandı. Aşama 3'te kalan
-panel/overlay bitişi ve 32 parçalı görsel matris; aşama 5–9 bütünüyle açıktır.
-Aşama
-4'ün kalan kapısı scrub/player/MCP/render/export parity kabulüdür.
+korunumu, event hizası/raster seam/mask bellek ölçümü, darbe tetikli fracture,
+deterministik artistic explosion, topology/render–collider tanısı ve 32 parça /
+eğimli zemin / yüksek hızlı küçük cisim görsel matrisi de tamamlandı. Aşama 3
+kapandı; aşama 5–9 bütünüyle açıktır. Aşama 4'ün kalan kapısı
+scrub/player/MCP/render/export parity kabulüdür.
 Character Motion planı ayrı tutulur ve bu özellik için önkoşul değildir. Ortak
 ürün alanı **Physics Simulations**; bu belge Rigid Body, Voronoi Fracture,
 bonded destruction cluster, secondary/recursive fracture ve olay tabanlı
@@ -411,9 +411,10 @@ henüz bu aşamaların tamamı geçti anlamına gelmez. Seam/boşluk ile mask be
 ölçümü de tamamlandı. Darbe/temas fracture ve açık dış enerji olarak raporlanan
 artistic explosion impulse/spin de uygulanıp canlı MCP kabulünden geçti.
 Topology olay rozeti, exact-event Inspector kartı ve gerçek render–collider
-fark tanısı UI/MCP eşliğiyle tamamlandı. Aktif sıra aşama 3'ün 32 fragment,
-eğimli zemin ve yüksek hızlı küçük parça geniş görsel matrisiyle aşama 4 parity
-kapısıdır.
+fark tanısı UI/MCP eşliğiyle tamamlandı. 32 fragment panel, eğimli zemin ve
+yüksek hızlı küçük cisim geniş görsel matrisi de gerçek Worker/render/portable
+kabulünden geçti. Aktif sıra doğrudan aşama 4 scrub/player/MCP/render/export
+parity kapısıdır.
 
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |

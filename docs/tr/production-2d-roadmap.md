@@ -50,6 +50,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Image fracture Mesh2D görünümü, kaynak UV koruması ve canlı kabul | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
 | Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
 | Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Geliştirme branch'inde |
+| Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -126,7 +127,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
-| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture, deterministik artistic explosion ve gerçek render–collider tanısı tamamlandı. Sırada 32 parçalı görsel matris ve temel scrub/player/MCP/render/export parity vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
+| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture, deterministik artistic explosion, gerçek render–collider tanısı ve 32 parça/eğimli zemin/yüksek hızlı cisim görsel matrisi tamamlandı. Sırada temel scrub/player/MCP/render/export parity vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
 | Sonra 4 | Fabric/kumaş | Structured grid veya spline'dan türetilmiş Mesh2D; gravity/wind/pin/collision, deformasyon klibi ve bake. |
 | Sonra 5 | Blob Surface, sıvı, akış/duman/ateş | Particle liquid + değişken topolojili Blob Surface; damla birleşme/ayrılması, text/shape/spline/`Mesh2D` kaynak-collider-yüzey hedefleri. Duman/ateş ayrı grid/partikül tarifidir; alanlar, obstacle ve typed simulation bake kullanır. |
 | Sonra 6 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
@@ -3068,3 +3069,40 @@ Doğrulama **431 test dosyası / 3.232 test**, TypeScript, MCP/CLI build,
 **16/16 CLI testi** ve production build ile geçti. Aşama 3 panel/overlay dilimi
 tamamlandı; sıradaki fizik işi 32 fragment, eğimli zemin ve yüksek hızlı küçük
 parça geniş görsel matrisi, ardından aşama 4 parity kapısıdır.
+
+### 12.75. Geniş fizik görsel matrisi ve temiz MCP reseti — 21 Kasım 2026
+
+Aşama 3'ün son kabul matrisi üç ayrı editable proje olarak gerçek Worker,
+canonical raster renderer ve portable save üzerinden tamamlandı:
+
+- **32 parçalı dokulu panel:** zamanlı olay tick `48` / `400 ms`; 32 fragment,
+  32/32 render–collider polygon, 346 sınır örneği ve exact event'te `0 px`
+  maksimum/ortalama fark. 10.515 ham key 4.569 key'e sadeleşti; maksimum
+  vertex/açı hatası `0,497 px / 0,243°`, retained toplamı 766.712 byte oldu.
+- **Eğimli zemin:** 76 px kutu `-12°` statik yüzeyde `x=378 → 221,8 px`
+  ilerledi ve `-180,707°` döndü. 276 ham key 144 key'e sadeleşti; gerçek
+  0/1400/2800 ms karelerinde temas ve kayma görsel olarak incelendi.
+- **Yüksek hızlı küçük cisim:** 24 px gövde `1200 px/s` hız ve 120 Hz sabit
+  adımla 28 px duvara `350 ms`te `x=508,025` merkezinde temas etti, duvarın
+  içinden geçmeden `800 ms`te `x=380,389` konumuna geri sekti. 222 ham key 18
+  key'e, ölçülen vertex hatası sayısal epsilon düzeyine indi.
+
+Canlı matris ilk turda gerçek bir MCP yaşam döngüsü kusurunu yakaladı:
+`clear_scene`, layer/timeline'ı kaldırırken önceki fracture bake kaydını
+bırakıyordu. `clearAuthoredSceneContent` artık katman, timeline, parameter,
+trigger, binding, wire, state machine, initial state, physics ownership ve
+authoring kaydını birlikte temizler; composition, asset/collection ve editor
+guide verisini korur. Tek Undo eski sahneyi aynen geri getirir. Son turda her
+fixture commit öncesi 0 bake kaydıyla başladı ve yalnız kendi bake kaydıyla
+kaydedildi; canlı Rigid UI'da eski **Canvas diagnostics / Applied fracture
+bake** görünmedi.
+
+Tekrarlanabilir MCP harness'i
+`scripts/qa/physics-visual-matrix-live.mjs` içindedir. Portable kanıtlar:
+`projects/physics-visual-matrix-panel-32-2026-11-21.chorono.json`,
+`projects/physics-visual-matrix-inclined-floor-2026-11-21.chorono.json` ve
+`projects/physics-visual-matrix-high-speed-small-body-2026-11-21.chorono.json`.
+Üç validator geçerli/uyarısız, kareler 800×450 ve production UI canlıydı.
+Doğrulama **432 test dosyası / 3.234 test**, TypeScript, MCP build ve production
+build ile geçti. Aşama 3 tamamlandı; sıradaki iş aşama 4
+scrub/player/MCP/render/export parity kapısıdır.

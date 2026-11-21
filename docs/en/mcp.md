@@ -112,6 +112,12 @@ conflicts by default; pass `replaceEdited:true` on the first
 output. Duplicate targets or layer ids remain blocked because ownership is
 ambiguous. Re-bake and Clear each publish one undoable source edit.
 
+`clear_scene` is an explicit fresh-start mutation, not a routine creation
+prelude. It removes layers, timelines and their dependent physics, runtime and
+authoring metadata in one undoable edit while preserving composition settings,
+reusable assets/collections and editor guides. This prevents a newly authored
+scene from exposing a stale bake that belongs to removed objects.
+
 Native spline, particle, state-machine, advanced track and audio clip edits are
 available through single-tool discovery and mutation batches, or directly in
 the legacy catalog. Scripts also expose the existing domain handles. Specialized
