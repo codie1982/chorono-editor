@@ -1,5 +1,11 @@
-import { hashCanonicalRecords } from '@/lib/hash/CanonicalRecordHash'
-import type { FractureGeneration, FracturePoint2D, FragmentGeometry } from '@/lib/types/fracture'
+import { canonicalJson, hashCanonicalRecords } from '@/lib/hash/CanonicalRecordHash'
+import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
+import type {
+  FractureGeneration,
+  FracturePoint2D,
+  FractureRegionGeneration,
+  FragmentGeometry,
+} from '@/lib/types/fracture'
 
 /** Hashes every portable source/seed/fragment field that defines topology. */
 export function hashFractureGeneration(
@@ -26,6 +32,18 @@ export function hashFractureGeneration(
 /** Hashes a validated source polygon independently from a generated topology. */
 export function hashFractureSource(ownerId: string, polygonValue: readonly FracturePoint2D[]): string {
   return hashCanonicalRecords('fracture-source-v1', [`owner:${ownerId}`, `polygon:${polygon(polygonValue)}`])
+}
+
+/** Hashes the complete portable FRACTURE1 source geometry used by clipping. */
+export function hashFractureRegionSource(ownerId: string, geometry: Mesh2DGeometry): string {
+  return hashCanonicalRecords('fracture-region-source-v2', [canonicalJson({ ownerId, geometry })])
+}
+
+/** Hashes every realized FRACTURE1 source, fragment and adjacency field. */
+export function hashFractureRegionGeneration(
+  generation: Omit<FractureRegionGeneration, 'topologyHash'>,
+): string {
+  return hashCanonicalRecords('fracture-region-generation-v2', [canonicalJson(generation)])
 }
 
 function fragmentRecords(fragment: FragmentGeometry): string[] {
