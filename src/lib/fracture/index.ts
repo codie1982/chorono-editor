@@ -31,6 +31,12 @@ export type {
 } from './FractureRenderColliderAnalyzer'
 export { FractureRigidRecipeCompiler } from './FractureRigidRecipeCompiler'
 export type { FractureRigidRecipeInput } from './FractureRigidRecipeCompiler'
+export { FractureBodySnapshotCompiler } from './FractureBodySnapshotCompiler'
+export { FractureRecursiveRecipeCompiler } from './FractureRecursiveRecipeCompiler'
+export type {
+  FractureRecursiveChildInput,
+  FractureRecursiveRecipeInput,
+} from './FractureRecursiveRecipeCompiler'
 export {
   hashFractureGeneration,
   hashFractureRegionGeneration,
@@ -54,6 +60,10 @@ export type {
   FractureBondOverlayItem,
 } from './FractureBondOverlayResolver'
 export { FractureClusterComponents } from './FractureClusterComponents'
+export {
+  DEFAULT_FRACTURE_GENERATION_BUDGETS,
+  FractureGenerationHierarchyCompiler,
+} from './FractureGenerationHierarchyCompiler'
 export { hashFractureBondGraph } from './FractureBondGraphHash'
 export { SeededRandom } from './SeededRandom'
 export { VoronoiFractureGenerator } from './VoronoiFractureGenerator'

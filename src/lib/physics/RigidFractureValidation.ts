@@ -7,9 +7,10 @@ import type { RigidBodyBakeRecipe } from '@/lib/types/physics'
  * Validates atomic body-replacement events independently from geometry authoring.
  *
  * Events must land on a fixed solver tick, be strictly ordered, own distinct
- * source/fragment bodies, and match every fragment activation descriptor. The
- * first implementation supports one generation per source; later recursive
- * destruction can extend this policy without changing Matter body creation.
+ * fragment bodies, and match every activation descriptor. A source may be a
+ * root body or a fragment produced by an earlier event, but it can be consumed
+ * only once. This explicit active-body walk is the FRACTURE3 parent→child
+ * contract and prevents a child from activating before its parent exists.
  */
 export function assertRigidFractureEvents(
   recipe: RigidBodyBakeRecipe,
@@ -19,7 +20,9 @@ export function assertRigidFractureEvents(
   if (events.length > 32) throw new RangeError('Rigid fracture event budget exceeded')
   const clock = new SimulationClock(recipe)
   const bodyById = new Map(recipe.bodies.map(body => [body.bodyId, body]))
-  const eventIds = new Set<string>(), ownedBodies = new Set<string>()
+  const eventIds = new Set<string>(), ownedFragments = new Set<string>()
+  const activeBodies = new Set(recipe.bodies.filter(body => !body.activation).map(body => body.bodyId))
+  const consumedSources = new Set<string>()
   let previousTick = 0
   events.forEach(event => {
     if (!event.id || eventIds.has(event.id)) throw new Error(`Rigid fracture event id is missing or duplicated: ${event.id}`)
@@ -35,10 +38,11 @@ export function assertRigidFractureEvents(
     }
     if (!unresolvedImpact) previousTick = event.tick
     const source = bodyById.get(event.sourceBodyId)
-    if (!source || source.motionType !== 'dynamic' || source.activation || ownedBodies.has(source.bodyId)) {
+    if (!source || source.motionType !== 'dynamic' || !activeBodies.has(source.bodyId)
+      || consumedSources.has(source.bodyId)) {
       throw new Error(`Rigid fracture source is invalid: ${event.sourceBodyId}`)
     }
-    ownedBodies.add(source.bodyId)
+    consumedSources.add(source.bodyId)
     assertTrigger(event, bodyById, source.bodyId, unresolvedImpact)
     assertExplosion(event)
     if (event.fragmentBodyIds.length < 2 || event.fragmentBodyIds.length > 256
@@ -49,14 +53,17 @@ export function assertRigidFractureEvents(
       const body = bodyById.get(bodyId)
       if (!body || body.motionType !== 'dynamic' || !['convexPolygon', 'compoundPolygon'].includes(body.collider)
         || body.activation?.kind !== 'fractureFragment' || body.activation.eventId !== event.id
-        || body.activation.sourceBodyId !== source.bodyId || ownedBodies.has(bodyId)) {
+        || body.activation.sourceBodyId !== source.bodyId || ownedFragments.has(bodyId)
+        || activeBodies.has(bodyId)) {
         throw new Error(`Rigid fracture fragment is invalid: ${bodyId}`)
       }
-      ownedBodies.add(bodyId)
+      ownedFragments.add(bodyId)
     })
+    activeBodies.delete(source.bodyId)
+    event.fragmentBodyIds.forEach(bodyId => activeBodies.add(bodyId))
   })
   recipe.bodies.filter(body => body.activation).forEach(body => {
-    if (!ownedBodies.has(body.bodyId)) throw new Error(`Rigid fragment has no owning event: ${body.bodyId}`)
+    if (!ownedFragments.has(body.bodyId)) throw new Error(`Rigid fragment has no owning event: ${body.bodyId}`)
   })
   assertClusters(recipe, events)
   assertBondBreakEvents(recipe)

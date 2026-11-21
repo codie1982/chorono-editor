@@ -179,6 +179,9 @@ export function hashRigidBodyBakeRecipe(recipe: Omit<RigidBodyBakeRecipe, 'recip
         `fracture-image:${recipe.fractureAppearance.assetId},${recipe.fractureAppearance.assetWidth},${recipe.fractureAppearance.assetHeight},${recipe.fractureAppearance.objectFit}`,
       ] : []),
     ] : []),
+    ...(recipe.fractureHierarchy ? [
+      `fracture-hierarchy:${recipe.fractureHierarchy.hierarchyHash}`,
+    ] : []),
   ])
 }
 

@@ -25,6 +25,10 @@ export interface VoronoiFractureInput {
   readonly sourcePolygon: readonly FracturePoint2D[]
   readonly fragmentCount: number
   readonly seed: number
+  /** Zero for a root source; positive for a precomputed recursive child. */
+  readonly generationIndex?: number
+  /** Root source or direct parent fragment id. Defaults to sourceOwnerId. */
+  readonly parentId?: string
   /** Minimum fragment area as a fraction of mean area. Default 0.01. */
   readonly minimumAreaRatio?: number
   /** Whole-generation retries when a cell is too small. Default 24. */
@@ -42,10 +46,18 @@ export interface VoronoiFractureInput {
  * stateless and safe to share.
  */
 export class VoronoiFractureGenerator {
-  /** Creates generation zero in source-local pixels without mutating input. */
+  /** Creates one root or child generation in source-local pixels without mutation. */
   generate(input: VoronoiFractureInput): FractureGeneration {
     assertSceneId(input.generationId, 'Fracture generation id', MAX_GENERATION_ID_LENGTH)
     assertSceneId(input.sourceOwnerId, 'Fracture source owner id', 128)
+    const generationIndex = input.generationIndex ?? 0
+    const parentId = input.parentId ?? input.sourceOwnerId
+    if (!Number.isSafeInteger(generationIndex) || generationIndex < 0 || generationIndex > 8) {
+      throw new RangeError('Fracture generation index must be an integer from 0 to 8')
+    }
+    if (parentId !== input.sourceOwnerId) {
+      throw new Error('Fracture generation parent must own the source geometry')
+    }
     if (!Number.isSafeInteger(input.fragmentCount) || input.fragmentCount < MIN_FRAGMENT_COUNT
       || input.fragmentCount > MAX_FRAGMENT_COUNT) {
       throw new RangeError(`Fracture fragment count must be ${MIN_FRAGMENT_COUNT}–${MAX_FRAGMENT_COUNT}`)
@@ -74,8 +86,8 @@ export class VoronoiFractureGenerator {
       const withoutHash: Omit<FractureGeneration, 'topologyHash'> = {
         schemaVersion: 1,
         generationId: input.generationId,
-        generationIndex: 0,
-        parentId: input.sourceOwnerId,
+        generationIndex,
+        parentId,
         rootSeed: input.seed,
         generationAttempt: attempt,
         requestedFragmentCount: input.fragmentCount,

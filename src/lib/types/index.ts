@@ -120,6 +120,10 @@ export type {
   FractureFragmentAdjacency,
   FractureRegionGeneration,
   AnyFractureGeneration,
+  FractureGenerationBudgetLimits,
+  FractureGenerationBudgetUsage,
+  FractureGenerationLineageEntry,
+  FractureGenerationHierarchy,
 } from './fracture'
 
 export type {

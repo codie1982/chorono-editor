@@ -1,11 +1,6 @@
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
 import type { ChronoScene } from '@/lib/types'
-import type {
-  FractureGeneration,
-  FractureRegionFragmentGeometry,
-  FractureRegionGeneration,
-  FragmentGeometry,
-} from '@/lib/types/fracture'
+import type { FractureGeneration, FractureRegionGeneration } from '@/lib/types/fracture'
 import type {
   FractureBondDamageReset,
   FractureBondForcedBreak,
@@ -26,6 +21,7 @@ import { FractureRegionManifestValidator } from './FractureRegionManifestValidat
 import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
 import { FractureSourceRegionCompiler, type FractureSourceRegion } from './FractureSourceRegionCompiler'
 import { hashFractureRegionSource } from './FractureManifestHash'
+import { FractureBodySnapshotCompiler } from './FractureBodySnapshotCompiler'
 
 export interface FractureRigidRecipeInput {
   readonly generation: FractureGeneration | FractureRegionGeneration
@@ -73,6 +69,7 @@ export class FractureRigidRecipeCompiler {
   private readonly sourceRegionCompiler = new FractureSourceRegionCompiler()
   private readonly bondGraphValidator = new FractureBondGraphValidator()
   private readonly bondActionSchedule = new FractureBondActionSchedule()
+  private readonly bodySnapshotCompiler = new FractureBodySnapshotCompiler()
 
   /** Compiles an immutable one-generation recipe without mutating the scene. */
   compile(scene: ChronoScene, input: FractureRigidRecipeInput): RigidBodyBakeRecipe {
@@ -139,9 +136,7 @@ export class FractureRigidRecipeCompiler {
         damageResets: input.bondDamageResets,
       })
       : undefined
-    const fragments = input.generation.schemaVersion === 1
-      ? input.generation.fragments.map(fragment => compileFragment(source, fragment, eventId))
-      : input.generation.fragments.map(fragment => compileRegionFragment(source, fragment, eventId))
+    const fragments = this.bodySnapshotCompiler.compile(source, input.generation, eventId)
     const bodies = [source, ...base.bodies.slice(1), ...fragments]
     const fractureEvents = [{
       id: eventId,
@@ -267,100 +262,6 @@ function copyRealization(current: RigidBodyBakeRecipe, stored: RigidBodyBakeReci
   return { ...withoutHash, recipeHash: hashRigidBodyBakeRecipe(withoutHash) }
 }
 
-function compileFragment(
-  source: RigidBodySnapshot,
-  fragment: FragmentGeometry,
-  eventId: string,
-): RigidBodySnapshot {
-  const scale = source.visual.uniformScale
-  const sourceCenterLocal = source.visual.centerOfMassLocalPx ?? {
-    x: source.visual.widthPx / 2,
-    y: source.visual.heightPx / 2,
-  }
-  const sourceLocalOffsetPx = {
-    x: (fragment.centroidPx.x - sourceCenterLocal.x) * scale,
-    y: (fragment.centroidPx.y - sourceCenterLocal.y) * scale,
-  }
-  const worldOffset = rotate(sourceLocalOffsetPx, source.angleDeg)
-  return Object.freeze({
-    layerId: fragment.id,
-    bodyId: `rigid:${fragment.id}`,
-    motionType: 'dynamic',
-    collider: 'convexPolygon',
-    colliderVerticesPx: fragment.polygon.map(point => Object.freeze({
-      x: (point.x - fragment.centroidPx.x) * scale,
-      y: (point.y - fragment.centroidPx.y) * scale,
-    })),
-    activation: {
-      kind: 'fractureFragment' as const, eventId, sourceBodyId: source.bodyId, sourceLocalOffsetPx,
-    },
-    material: { ...source.material },
-    initialVelocityPxPerSecond: { ...source.initialVelocityPxPerSecond },
-    initialAngularVelocityDegPerSecond: source.initialAngularVelocityDegPerSecond,
-    centerPx: { x: source.centerPx.x + worldOffset.x, y: source.centerPx.y + worldOffset.y },
-    angleDeg: source.angleDeg,
-    widthPx: (fragment.boundsPx.maxX - fragment.boundsPx.minX) * scale,
-    heightPx: (fragment.boundsPx.maxY - fragment.boundsPx.minY) * scale,
-    visual: {
-      widthPx: source.visual.widthPx,
-      heightPx: source.visual.heightPx,
-      anchorX: fragment.centroidPx.x,
-      anchorY: fragment.centroidPx.y,
-      uniformScale: scale,
-      centerOfMassLocalPx: { ...fragment.centroidPx },
-    },
-  })
-}
-
-function compileRegionFragment(
-  source: RigidBodySnapshot,
-  fragment: FractureRegionFragmentGeometry,
-  eventId: string,
-): RigidBodySnapshot {
-  if (!fragment.colliderParts.length || fragment.colliderParts.length > 256
-    || fragment.colliderParts.reduce((sum, part) => sum + part.length, 0) > 4096) {
-    throw new Error(`Fracture region collider budget exceeded: ${fragment.id}`)
-  }
-  const scale = source.visual.uniformScale
-  const sourceCenterLocal = source.visual.centerOfMassLocalPx ?? {
-    x: source.visual.widthPx / 2,
-    y: source.visual.heightPx / 2,
-  }
-  const sourceLocalOffsetPx = {
-    x: (fragment.centroidPx.x - sourceCenterLocal.x) * scale,
-    y: (fragment.centroidPx.y - sourceCenterLocal.y) * scale,
-  }
-  const worldOffset = rotate(sourceLocalOffsetPx, source.angleDeg)
-  return Object.freeze({
-    layerId: fragment.id,
-    bodyId: `rigid:${fragment.id}`,
-    motionType: 'dynamic',
-    collider: 'compoundPolygon',
-    colliderPartsPx: fragment.colliderParts.map(part => part.map(point => Object.freeze({
-      x: (point.x - fragment.centroidPx.x) * scale,
-      y: (point.y - fragment.centroidPx.y) * scale,
-    }))),
-    activation: {
-      kind: 'fractureFragment' as const, eventId, sourceBodyId: source.bodyId, sourceLocalOffsetPx,
-    },
-    material: { ...source.material },
-    initialVelocityPxPerSecond: { ...source.initialVelocityPxPerSecond },
-    initialAngularVelocityDegPerSecond: source.initialAngularVelocityDegPerSecond,
-    centerPx: { x: source.centerPx.x + worldOffset.x, y: source.centerPx.y + worldOffset.y },
-    angleDeg: source.angleDeg,
-    widthPx: (fragment.boundsPx.maxX - fragment.boundsPx.minX) * scale,
-    heightPx: (fragment.boundsPx.maxY - fragment.boundsPx.minY) * scale,
-    visual: {
-      widthPx: source.visual.widthPx,
-      heightPx: source.visual.heightPx,
-      anchorX: fragment.centroidPx.x,
-      anchorY: fragment.centroidPx.y,
-      uniformScale: scale,
-      centerOfMassLocalPx: { ...fragment.centroidPx },
-    },
-  })
-}
-
 function compoundSourceGeometry(region: FractureSourceRegion) {
   const indices = region.geometry.topology.triangleIndices
   const colliderParts = Array.from({ length: indices.length / 3 }, (_, triangleIndex) => (
@@ -404,10 +305,4 @@ function assertGenerationMatchesSource(
       Math.abs(point.x - expected.polygon[index].x) > 1e-7
       || Math.abs(point.y - expected.polygon[index].y) > 1e-7
     ))) throw new Error('Fracture generation no longer matches the source boundary')
-}
-
-function rotate(point: { x: number; y: number }, angleDeg: number): { x: number; y: number } {
-  const radians = angleDeg * Math.PI / 180
-  const cosine = Math.cos(radians), sine = Math.sin(radians)
-  return { x: cosine * point.x - sine * point.y, y: sine * point.x + cosine * point.y }
 }

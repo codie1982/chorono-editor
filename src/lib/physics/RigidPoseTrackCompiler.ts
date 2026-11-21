@@ -113,36 +113,17 @@ export class RigidPoseTrackCompiler {
   }
 
   private compileFractureVisibility(recipe: RigidBodyBakeRecipe): Track[] {
-    return (recipe.fractureEvents ?? []).flatMap(event => {
-      const eventTimeMs = recipe.startTimeMs + event.timeMs
-      const participants = [
-        { bodyId: event.sourceBodyId, from: 1, to: 0 },
-        ...event.fragmentBodyIds.map(bodyId => ({ bodyId, from: 0, to: 1 })),
-      ]
-      return participants.map(participant => {
-        const body = recipe.bodies.find(candidate => candidate.bodyId === participant.bodyId)
-        if (!body) throw new Error(`Rigid fracture visibility body is missing: ${participant.bodyId}`)
-        return {
-          target: `layers.${body.layerId}.opacity`,
-          label: `Rigid Bake · Fracture Visibility`,
-          kind: 'property' as const,
-          keyframes: [
-            {
-              id: `rigid:${recipe.recipeHash}:${body.layerId}:opacity:before`,
-              timeMs: recipe.startTimeMs,
-              value: participant.from,
-              easing: { type: 'hold' as const },
-            },
-            {
-              id: `rigid:${recipe.recipeHash}:${body.layerId}:opacity:event`,
-              timeMs: eventTimeMs,
-              value: participant.to,
-              easing: { type: 'hold' as const },
-            },
-          ],
-        }
-      })
-    })
+    return fractureVisibilityPlan(recipe).map(plan => ({
+      target: `layers.${plan.body.layerId}.opacity`,
+      label: `Rigid Bake · Fracture Visibility`,
+      kind: 'property' as const,
+      keyframes: plan.values.map((value, index) => ({
+        id: `rigid:${recipe.recipeHash}:${plan.body.layerId}:opacity:${index}`,
+        timeMs: value.timeMs,
+        value: value.value,
+        easing: { type: 'hold' as const },
+      })),
+    }))
   }
 }
 
@@ -177,19 +158,48 @@ function mergeTimes(base: ArrayLike<number>, extra: readonly number[]): number[]
 
 /** Returns the complete track target set owned by an ordinary/fracture bake. */
 export function rigidBakeTrackTargets(recipe: RigidBodyBakeRecipe): string[] {
-  const targets = recipe.bodies.filter(body => body.motionType === 'dynamic').flatMap(body => [
+  const targets = new Set(recipe.bodies.filter(body => body.motionType === 'dynamic').flatMap(body => [
     `layers.${body.layerId}.transform.x`,
     `layers.${body.layerId}.transform.y`,
     `layers.${body.layerId}.transform.rotationDeg`,
-  ])
+  ]))
   for (const event of recipe.fractureEvents ?? []) {
     for (const bodyId of [event.sourceBodyId, ...event.fragmentBodyIds]) {
       const body = recipe.bodies.find(candidate => candidate.bodyId === bodyId)
       if (!body) throw new Error(`Rigid fracture track body is missing: ${bodyId}`)
-      targets.push(`layers.${body.layerId}.opacity`)
+      targets.add(`layers.${body.layerId}.opacity`)
     }
   }
-  return targets
+  return Array.from(targets)
+}
+
+/** Canonical merged opacity transitions for root and recursive fracture bodies. */
+export function fractureVisibilityPlan(recipe: RigidBodyBakeRecipe): readonly {
+  readonly body: RigidBodySnapshot
+  readonly values: readonly { readonly timeMs: number; readonly value: 0 | 1 }[]
+}[] {
+  const transitions = new Map<string, Array<{ timeMs: number; value: 0 | 1 }>>()
+  const participants = new Set<string>()
+  for (const event of recipe.fractureEvents ?? []) {
+    const eventTimeMs = recipe.startTimeMs + event.timeMs
+    participants.add(event.sourceBodyId)
+    transitions.set(event.sourceBodyId, [...(transitions.get(event.sourceBodyId) ?? []), { timeMs: eventTimeMs, value: 0 }])
+    event.fragmentBodyIds.forEach(bodyId => {
+      participants.add(bodyId)
+      transitions.set(bodyId, [...(transitions.get(bodyId) ?? []), { timeMs: eventTimeMs, value: 1 }])
+    })
+  }
+  return Array.from(participants).map(bodyId => {
+    const body = recipe.bodies.find(candidate => candidate.bodyId === bodyId)
+    if (!body) throw new Error(`Rigid fracture visibility body is missing: ${bodyId}`)
+    return {
+      body,
+      values: Object.freeze([
+        { timeMs: recipe.startTimeMs, value: body.activation ? 0 as const : 1 as const },
+        ...(transitions.get(bodyId) ?? []),
+      ]),
+    }
+  })
 }
 
 /** Hashes the generated fields owned by a rigid bake record. */

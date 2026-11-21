@@ -12,10 +12,12 @@ import { hashFractureGeneration, hashFractureSource } from './FractureManifestHa
  */
 export class FractureManifestValidator {
   validate(generation: FractureGeneration): void {
-    if (!generation || generation.schemaVersion !== 1 || generation.generationIndex !== 0
+    if (!generation || generation.schemaVersion !== 1
       || generation.algorithm?.id !== 'd3-delaunay' || generation.algorithm.version !== '6.0.4'
       || ![1, 2].includes(generation.algorithm.compilerVersion)) throw new Error('Unsupported fracture generation schema')
-    if (!Number.isSafeInteger(generation.rootSeed) || generation.rootSeed < 0 || generation.rootSeed > 0xffffffff
+    if (!Number.isSafeInteger(generation.generationIndex) || generation.generationIndex < 0 || generation.generationIndex > 8
+      || generation.parentId !== generation.source.ownerId
+      || !Number.isSafeInteger(generation.rootSeed) || generation.rootSeed < 0 || generation.rootSeed > 0xffffffff
       || !Number.isSafeInteger(generation.generationAttempt) || generation.generationAttempt < 0
       || !Number.isSafeInteger(generation.requestedFragmentCount) || generation.requestedFragmentCount < 2
       || generation.requestedFragmentCount > 100) throw new Error('Invalid fracture generation parameters')

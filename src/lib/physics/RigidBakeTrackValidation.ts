@@ -1,6 +1,6 @@
 import type { Track } from '@/lib/types'
 import type { RigidBodyBakeRecipe } from '@/lib/types/physics'
-import { rigidBakeTrackTargets } from './RigidPoseTrackCompiler'
+import { fractureVisibilityPlan, rigidBakeTrackTargets } from './RigidPoseTrackCompiler'
 
 const TIME_EPSILON_MS = 1e-7
 const TRANSFORM_CHANNELS = ['x', 'y', 'rotationDeg'] as const
@@ -50,13 +50,7 @@ export function assertRigidBakeTracks(
     }
   }
 
-  for (const event of recipe.fractureEvents ?? []) {
-    const eventTimeMs = recipe.startTimeMs + event.timeMs
-    validateVisibility(byTarget, recipe, event.sourceBodyId, 1, 0, clipStartMs, eventTimeMs)
-    event.fragmentBodyIds.forEach(bodyId => {
-      validateVisibility(byTarget, recipe, bodyId, 0, 1, clipStartMs, eventTimeMs)
-    })
-  }
+  for (const plan of fractureVisibilityPlan(recipe)) validateVisibility(byTarget, plan.body.layerId, plan.values)
 }
 
 function validateTransformTrack(track: Track, startTimeMs: number, endTimeMs: number): void {
@@ -73,21 +67,14 @@ function validateTransformTrack(track: Track, startTimeMs: number, endTimeMs: nu
 
 function validateVisibility(
   tracks: ReadonlyMap<string, Track>,
-  recipe: RigidBodyBakeRecipe,
-  bodyId: string,
-  from: number,
-  to: number,
-  startTimeMs: number,
-  eventTimeMs: number,
+  layerId: string,
+  expected: readonly { readonly timeMs: number; readonly value: 0 | 1 }[],
 ): void {
-  const body = recipe.bodies.find(candidate => candidate.bodyId === bodyId)
-  if (!body) throw new Error(`Rigid bake visibility body is missing: ${bodyId}`)
-  const track = requiredTrack(tracks, `layers.${body.layerId}.opacity`)
+  const track = requiredTrack(tracks, `layers.${layerId}.opacity`)
   validateNumericKeys(track)
-  if (track.controller !== undefined || track.keyframes.length !== 2
-    || !sameTime(track.keyframes[0].timeMs, startTimeMs)
-    || !sameTime(track.keyframes[1].timeMs, eventTimeMs)
-    || track.keyframes[0].value !== from || track.keyframes[1].value !== to
+  if (track.controller !== undefined || track.keyframes.length !== expected.length
+    || track.keyframes.some((key, index) => !sameTime(key.timeMs, expected[index].timeMs)
+      || key.value !== expected[index].value)
     || track.keyframes.some(key => key.easing?.type !== 'hold')) {
     throw new Error(`Rigid fracture visibility is not an atomic hold switch: ${trackLabel(track)}`)
   }

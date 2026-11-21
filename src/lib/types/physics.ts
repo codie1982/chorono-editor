@@ -1,5 +1,9 @@
 import type { SimulationCacheHeader } from '@/lib/simulation/SimulationCacheHeader'
-import type { AnyFractureGeneration, FractureAppearanceSnapshot } from './fracture'
+import type {
+  AnyFractureGeneration,
+  FractureAppearanceSnapshot,
+  FractureGenerationHierarchy,
+} from './fracture'
 import type {
   FractureBondDamageReset,
   FractureBondForcedBreak,
@@ -151,6 +155,8 @@ export interface RigidBodyBakeRecipe {
   readonly fractureClusters?: readonly RigidFractureCluster[]
   /** Compact realized break sequence; absent on unpublished recipes. */
   readonly fractureBondBreakEvents?: readonly RigidFractureBondBreakEvent[]
+  /** Optional FRACTURE3 parent-child lineage and admitted generation budgets. */
+  readonly fractureHierarchy?: FractureGenerationHierarchy
   /** Supported source appearance captured for current fracture recipes. */
   readonly fractureAppearance?: FractureAppearanceSnapshot
 }
@@ -192,6 +198,8 @@ export interface RigidBakeRecord {
   readonly tracks: readonly RigidBakeTrackOwnership[]
   readonly generatedLayers?: readonly RigidBakeLayerOwnership[]
   readonly fractureGeneration?: RigidBakeGenerationOwnership
+  /** Complete topology ownership for recursive bakes; root-only records omit it. */
+  readonly fractureGenerations?: readonly RigidBakeGenerationOwnership[]
   /** Timeline memberships introduced by this bake, not pre-existing entries. */
   readonly timelineLayerIdsAdded?: readonly string[]
 }

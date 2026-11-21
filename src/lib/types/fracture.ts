@@ -83,13 +83,15 @@ export interface FractureSourceGeometry {
  *
  * Realized seeds and polygons are persisted because seed plus library version
  * alone is not a cross-version geometry guarantee. This foundation represents
- * generation zero only; parent/child lineage and recursive destruction extend
- * the contract in a later version.
+ * Generation zero is a root source. FRACTURE3 also reuses this realized convex
+ * geometry contract for precomputed child generations: `generationIndex` is
+ * then positive and `parentId`/`source.ownerId` identify the parent fragment.
+ * The hierarchy manifest validates the cross-generation lineage and budgets.
  */
 export interface FractureGeneration {
   readonly schemaVersion: 1
   readonly generationId: string
-  readonly generationIndex: 0
+  readonly generationIndex: number
   readonly parentId: string
   readonly rootSeed: number
   readonly generationAttempt: number
@@ -186,3 +188,45 @@ export interface FractureRegionGeneration {
 
 /** Every portable first-generation fracture manifest accepted by the scene. */
 export type AnyFractureGeneration = FractureGeneration | FractureRegionGeneration
+
+/** Admission limits for one precomputed FRACTURE3 generation hierarchy. */
+export interface FractureGenerationBudgetLimits {
+  readonly maxDepth: number
+  readonly maxGenerations: number
+  readonly maxFragments: number
+  readonly maxTriangles: number
+  readonly maxPortableBytes: number
+}
+
+/** Deterministic resource usage measured from realized portable manifests. */
+export interface FractureGenerationBudgetUsage {
+  readonly depth: number
+  readonly generations: number
+  readonly fragments: number
+  readonly triangles: number
+  readonly portableBytes: number
+}
+
+/** One stable parent-child edge in a recursive fracture hierarchy. */
+export interface FractureGenerationLineageEntry {
+  readonly generationId: string
+  readonly generationIndex: number
+  readonly parentGenerationId?: string
+  readonly parentFragmentId?: string
+}
+
+/**
+ * Portable FRACTURE3 hierarchy and its admitted resource envelope.
+ *
+ * Geometry remains in the individual generation manifests. This record owns
+ * only ordering, lineage, deterministic usage and limits; it contains no
+ * runtime solver object or per-frame state.
+ */
+export interface FractureGenerationHierarchy {
+  readonly schemaVersion: 1
+  readonly rootGenerationId: string
+  readonly entries: readonly FractureGenerationLineageEntry[]
+  readonly limits: FractureGenerationBudgetLimits
+  readonly usage: FractureGenerationBudgetUsage
+  readonly hierarchyHash: string
+}
