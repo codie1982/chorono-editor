@@ -63,6 +63,14 @@ publishing poses. Review `clusterCount`, `bondCount`, `bondBreakCount` and
 `bondedCluster` and its portable realized break sequence. These are an artistic
 scalar bond model, not FEM stress or crack-tip propagation.
 
+Use `cluster.forcedBreaks` for an explicit fixed-tick break and
+`cluster.damageResets` to clear accumulated damage for one bond or the complete
+graph. Each action uses simulation-local `timeMs`, must align to `stepHz`, and
+records `source:"timeline"` or `source:"user"`. A forced break intentionally
+overrides `unbreakable`; a reset runs before contact load on that tick. The
+Inspector returns both canonical schedules and the realized `reason:"forced"`
+event. Product Canvas bond selection and Re-bake use these same portable fields.
+
 Both prepare tools are standalone and cannot run inside `batch_actions`. Read
 `get_scene` immediately before prepare and pass its revision/readToken. Keep the
 returned job id in the same MCP connection/editor session: poll `get_bake_job`,

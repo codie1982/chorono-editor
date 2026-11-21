@@ -47,6 +47,10 @@ Alternatively, `cluster` starts fragments as shared-boundary/manual bonded
 compound components. It cannot be combined with explosion. Review job bond and
 split counts, then inspect the committed `bondedCluster` break sequence; this
 is the same Worker recipe used by the product UI.
+For authored interaction, pass fixed-step-aligned `cluster.forcedBreaks` and
+`cluster.damageResets`; inspect their counts/schedules and confirm a forced
+break's realized tick before commit. Use `replaceRecordId` for the same
+single-undo Re-bake workflow as Canvas Group/Split/Unbreakable editing.
 
 Committed bake lifecycle is ownership-guarded. Read `inspect_physics_bake`
 before Re-bake or Clear. Untouched output can be replaced or cleared directly;

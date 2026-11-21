@@ -56,6 +56,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Geliştirme branch'inde |
 | Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
 | Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
+| FRACTURE2 Canvas bond authoring, fixed-tick break/reset ve MCP tamamlama | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5` | Aşama 6 kod kapsamı tamamlandı; canlı kabul bekliyor |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -3299,9 +3300,40 @@ Kod, UI ve MCP servis sözleşmesi `codex/mesh2d-mesh0` branch'inde
 `applicationBuildInfo.ts` named-export ve güncel olmayan Browserslist veri
 uyarıları kaldı.
 
-Bu dikey dilimde otomatik cluster ve MCP üzerinden manual pair override
-çalışır. Canvas bond overlay/seçim ile Group Selected, Split Cluster,
-Unbreakable/Reset Damage ve forced time/user break ürün authoring'i FRACTURE2'nin
-kalan dilimidir. Artistic explosion bonded modla henüz birleşmez; ayrı external
-energy modeli olduğundan UI ve compiler bunu açık hata yerine karşılıklı dışlar.
-Secondary/recursive destruction FRACTURE3 sırasını korur.
+Bu ilk dikey dilimde otomatik cluster ve MCP üzerinden manual pair override
+çalışır. Artistic explosion bonded modla birleşmez; ayrı external energy modeli
+olduğundan UI ve compiler bunu karşılıklı dışlar. Canvas ve action authoring
+tamamlaması §12.81'de kayıtlıdır.
+
+### 12.81. FRACTURE2 Canvas ve action authoring tamamlaması — 22 Kasım 2026
+
+Canvas diagnostics'e varsayılan açık bond çizgileri ve isteğe bağlı connected
+component renkleri eklendi. Bond hit target'ı sahne seçimini veya undo geçmişini
+değiştirmeden editor-local seçim yapar; intact, unbreakable ve gerçekleşmiş
+broken durumları renk/metinle ayrılır. Bu çizimler playback, preview capture,
+runtime export ve final render'a girmez.
+
+Bonded Re-bake draft'ı seçili bond için Strength, Damage Threshold ve
+Unbreakable; fragment çifti için **Group selected fragments**; mevcut kenar için
+**Split cluster** işlemlerini canonical pair override'a çevirir. **Break at
+playhead**, local zamanı `stepHz` tick'ine hizalayıp portable `forcedBreaks`
+schedule'ı üretir. **Reset bond/all damage** aynı zaman sözleşmesiyle yükten
+önce çalışan `damageResets` kaydıdır. Forced action Unbreakable'ı bilinçli olarak
+aşar; impact topology action zamanından sonra etkinleşirse action ilk etkin
+cluster tick'inde uygulanır. Replacement Apply bütün değişikliği tek undoable
+edit olarak yayımlar.
+
+Doğrudan ve persistent MCP Voronoi araçları `cluster.forcedBreaks` ve
+`cluster.damageResets` için aynı bounded schema'yı kullanır. Job raporu authored
+action sayılarını, `inspect_physics_bake.bondedCluster` canonical schedule'ları
+ve `reason: forced` gerçekleşme kanıtını döndürür. Canonical skill, MCP rehberi
+ve domain README aynı sözleşmeyle eşlendi.
+
+Domain/solver `e2f07284`, Canvas/UI `a089b7aa`, MCP servis/test `4e82f4a5`
+commitleriyle `codex/mesh2d-mesh0` branch'inde gruplandı. Tam doğrulama **446
+test dosyası / 3.282 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run
+build` ile geçti. Production build'de yalnız bilinen `applicationBuildInfo.ts`
+named-export ve güncel olmayan Browserslist verisi uyarıları sürer. FRACTURE2
+aşama 6'nın kod kapsamı kapanmıştır; sıradaki geliştirme FRACTURE3
+secondary/recursive fracture'dır. Canlı temiz proje UI/MCP kabulü ayrı kanıt
+olarak bu bölümün devamına eklenecektir.

@@ -86,9 +86,9 @@ rendering, file I/O or recursive child generation.
   direction, radial/directional velocity, spin, bounded variation and an
   unsigned seed. It is applied once as fragments activate and the editor
   discloses it as added external energy.
-- Concave/donut sources and the first bonded compound-body runtime are
-  supported. Canvas per-bond editing, forced timeline/user breaks and recursive
-  secondary destruction remain later slices.
+- Concave/donut sources, bonded compound-body runtime, Canvas bond selection,
+  per-bond Group/Split/Unbreakable policy, fixed-tick forced breaks and damage
+  resets are supported. Recursive secondary destruction remains a later slice.
 
 ## Lifecycle and ownership
 

@@ -1,6 +1,6 @@
 # Physics & Fracture — 2D motion, destruction ve bake
 
-Tarih: 4 Kasım 2026. Güncelleme: 21 Kasım 2026. Durum: aşama 0–2'nin ilk
+Tarih: 4 Kasım 2026. Güncelleme: 22 Kasım 2026. Durum: aşama 0–2'nin ilk
 dikey rigid + tek nesil Voronoi dilimi, dedicated Worker, Physics ürün UI'ı ve
 bağlantı-sahipli kalıcı MCP job status/Preview/Apply/Cancel/Discard akışı
 ve dünya-uzayı/olay-korumalı rigid keyframe sadeleştirme uygulandı. Sahiplik
@@ -11,12 +11,13 @@ eğimli zemin / yüksek hızlı küçük cisim görsel matrisi de tamamlandı. A
 ve temel scrub/player/MCP/render/export parity kabulüyle aşama 4 kapandı.
 Aşama 5; convex ve concave/delikli/çok halkalı shape/spline/Mesh2D kaynak,
 connected-region clipping, UV-korumalı fragment mesh, adjacency ve compound
-collider ile ürün UI/MCP kabulü dahil kapandı. Aşama 6'nın ilk dikey dilimi;
+collider ile ürün UI/MCP kabulü dahil kapandı. Aşama 6;
 ortak sınır midpoint/normal ölçümü, portable auto/manual bond graph, scalar
 damage, Matter compound cluster, connected-component split, mass/COM/momentum
-doğrulaması, ürün UI ve MCP rapor/inceleme sözleşmesiyle uygulandı. Aktif sıra
-Canvas bond overlay/seçim, per-bond Group/Split/Unbreakable/Reset Damage ve
-forced time/user break authoring'idir; aşama 7–9 açıktır.
+doğrulaması, Canvas bond/cluster görünümü ve seçimi, per-bond
+Group/Split/Strength/Damage/Unbreakable, fixed-tick forced break/Reset Damage
+authoring'i ve aynı MCP rapor/inceleme sözleşmesiyle kapandı. Aktif sıra aşama
+7 secondary/recursive fracture'dır; aşama 7–9 açıktır.
 Character Motion planı ayrı tutulur ve bu özellik için önkoşul değildir. Ortak
 ürün alanı **Physics Simulations**; bu belge Rigid Body, Voronoi Fracture,
 bonded destruction cluster, secondary/recursive fracture ve olay tabanlı
@@ -442,7 +443,7 @@ yüksek hızlı küçük cisim geniş görsel matrisi de gerçek Worker/render/p
 kabulünden geçti. Temel scrub/player/MCP/render/export parity kapısı, 32
 fragment sahnesi ve 720°/s tam-tur fixture'ında scrub/player/final-render exact
 pixel karşılaştırması, canonical runtime export ve portable kayıtla kapandı.
-Aktif sıra aşama 5 kompleks kaynak ve fragment mesh derleyicisidir.
+Aktif sıra aşama 7 secondary destruction ve child generation derleyicisidir.
 
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |

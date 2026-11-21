@@ -197,6 +197,15 @@ of mass, linear momentum ve angular momentum tolerans dışında kalırsa job
 başarısız olur; gizli enerji eklenmez. `get_bake_job` raporu cluster/bond/break/
 split sayılarını, `inspect_physics_bake` ise `bondedCluster` altında graph
 materiali, manual/unbreakable sayıları ve portable break event sırasını döner.
+`cluster.forcedBreaks`, graph'taki bir `bondId` ile fixed-step'e hizalı local
+`timeMs` ve `timeline|user` kaynağı taşıyarak Unbreakable dahil açık kopuş
+authoring'i yapar. `cluster.damageResets` aynı zaman sözleşmesiyle tek bond'un
+veya `bondId` verilmeden bütün graph'ın birikmiş hasarını o tick'in temas
+yükünden önce sıfırlar. Impact topology daha geç etkinleşirse süresi geçmiş
+action ilk etkin cluster tick'inde uygulanır. Job raporu authored forced/reset
+sayılarını; `bondedCluster` ise canonical schedule'ları ve gerçekleşen forced
+break kanıtını da döndürür. Product UI'daki Break at playhead ve Reset Damage
+bu MCP alanlarıyla aynı recipe/hash yolunu kullanır.
 
 `render_2d` source mutation değildir. `backend:auto`, çalışan Chorono Render'ı
 önceler; still için PNG, video için MP4 bitirme akışına frame ZIP'i aktarır.
