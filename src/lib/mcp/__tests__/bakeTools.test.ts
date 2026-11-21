@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { emptyScene, newRectLayer } from '@/lib/defaults'
+import { emptyScene, newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
+import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import type { ChronoScene, Layer } from '@/lib/types'
 import { prepareMCPRigidBake, prepareMCPVoronoiBake } from '../bake/MCPRigidBake'
 import { validateToolCall } from '../catalog'
@@ -112,6 +113,30 @@ describe('MCP rigid/fracture bake workflows', () => {
     expect(baked.scene.layers.every(layer => /^[\w-]{1,128}$/.test(layer.id))).toBe(true)
     expect(baked.scene.physics?.fractureGenerations?.[0].generationId).toBe('box-v1')
     expect(baked.scene.physics?.rigidBakes).toHaveLength(1)
+  })
+
+  it('publishes a convex spline source through the public MCP bake service', async () => {
+    const scene = fixture()
+    const spline = {
+      ...newSplineLayerFromData(createRectangleSpline({ width: 100, height: 70 }), {
+        name: 'Convex spline source', x: 200, y: 80,
+      }),
+      id: 'convex-spline-source',
+    }
+    const baked = await prepareMCPVoronoiBake({ ...scene, layers: [spline, scene.layers[1]] }, {
+      sourceLayerId: spline.id, staticLayerIds: ['floor'], timelineId: 'main',
+      durationMs: 400, fractureTimeMs: 200, fragmentCount: 4, seed: 17,
+      generationId: 'spline-v1', stepHz: 60, sampleFps: 30, gravity: { x: 0, y: 0 },
+    })
+
+    const record = baked.scene.physics?.rigidBakes[0]
+    expect(record?.recipe.bodies[0]).toMatchObject({
+      layerId: spline.id,
+      collider: 'convexPolygon',
+      visual: { centerOfMassLocalPx: { x: 0, y: 0 } },
+    })
+    expect(baked.scene.layers.filter(layer => layer.id.startsWith('spline-v1-fragment-'))).toHaveLength(4)
+    expect(record?.recipe.fractureAppearance).toMatchObject({ kind: 'solid', sourceLayerId: spline.id })
   })
 
   it('persists the realized impact tick and explicit artistic explosion through direct MCP bake', async () => {

@@ -8,11 +8,12 @@ import type {
   FragmentGeometry,
 } from '@/lib/types/fracture'
 import type { Mesh2DData, Mesh2DTextureFit, Mesh2DTopology } from '@/lib/types/mesh2d'
+import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
 
 export type FractureFragmentAppearance = Pick<Layer, 'type' | 'path' | 'mesh2d' | 'style'>
 
 /**
- * Converts one supported rectangle source appearance into bake-owned fragments.
+ * Converts one supported convex source appearance into bake-owned fragments.
  *
  * Solid shapes remain editable path layers. Image layers become fixed-topology
  * Mesh2D fragments that reuse the existing texture renderer and keep normalized
@@ -25,21 +26,23 @@ export class FractureAppearanceCompiler {
   constructor(
     private readonly topologyHasher = new Mesh2DTopologyHasher(),
     private readonly topologyValidator = new Mesh2DTopologyValidator(),
+    private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler(),
   ) {}
 
   /** Validate and capture the supported source appearance without mutation. */
   snapshot(scene: Pick<ChronoScene, 'assets'>, source: Layer): FractureAppearanceSnapshot {
     this.assertCommonSource(source)
-    if (source.type === 'shape') {
-      if ((source.shapeKind ?? source.shape ?? 'rect') !== 'rect' || !source.size
-        || (source.style?.cornerRadius ?? 0) !== 0 || source.style?.fill?.type !== 'solid') {
-        throw new Error('Fracture shape source must be a sharp rectangle with a solid fill.')
+    if (source.type === 'shape' || source.type === 'spline') {
+      this.sourceBoundaryCompiler.compile(source)
+      if (source.style?.fill?.type !== 'solid') {
+        throw new Error('Fracture shape or spline source must use a solid fill.')
       }
       return Object.freeze({
         schemaVersion: 1,
         kind: 'solid',
         sourceLayerId: source.id,
         contentHash: hashCanonicalRecords('fracture-solid-appearance-v1', [canonicalJson({
+          sourceType: source.type,
           style: source.style,
           blendMode: source.blendMode ?? 'source-over',
           opacity: source.opacity,
@@ -75,7 +78,7 @@ export class FractureAppearanceCompiler {
         objectFit,
       })
     }
-    throw new Error('Fracture source must be a supported rectangle shape or image layer.')
+    throw new Error('Fracture source must be a supported convex shape, spline or image rectangle.')
   }
 
   /**

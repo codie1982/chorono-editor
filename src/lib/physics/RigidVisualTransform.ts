@@ -25,9 +25,33 @@ export function rigidCenterFromVisual(input: {
   readonly anchorY: number
   readonly uniformScale: number
 }): { x: number; y: number } {
+  return rigidCenterFromLocalPoint({
+    ...input,
+    localX: input.widthPx / 2,
+    localY: input.heightPx / 2,
+  })
+}
+
+/**
+ * Maps an arbitrary layer-local centre of mass to composition coordinates.
+ *
+ * This is the shape/spline counterpart of `rigidCenterFromVisual`. Local
+ * coordinates, anchor and scale use composition pixels; angle is clockwise
+ * y-down degrees. The function is pure and preserves non-centred pivots.
+ */
+export function rigidCenterFromLocalPoint(input: {
+  readonly x: number
+  readonly y: number
+  readonly angleDeg: number
+  readonly localX: number
+  readonly localY: number
+  readonly anchorX: number
+  readonly anchorY: number
+  readonly uniformScale: number
+}): { x: number; y: number } {
   const offset = rotate(
-    (input.widthPx / 2 - input.anchorX) * input.uniformScale,
-    (input.heightPx / 2 - input.anchorY) * input.uniformScale,
+    (input.localX - input.anchorX) * input.uniformScale,
+    (input.localY - input.anchorY) * input.uniformScale,
     input.angleDeg,
   )
   return { x: input.x + input.anchorX + offset.x, y: input.y + input.anchorY + offset.y }

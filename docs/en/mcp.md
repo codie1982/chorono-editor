@@ -88,12 +88,15 @@ private to the creating MCP connection and paired editor session. The older
 `bake_rigid_bodies` and `bake_voronoi_fracture` calls retain their one-request
 prepare-and-publish behavior for compatibility.
 
-The first Voronoi slice accepts a fully opaque root rectangle that is either a
-sharp solid shape or an image with positive persisted asset dimensions. Solid
-sources publish path fragments. Image sources publish bake-owned `Mesh2D`
-fragments whose normalized UVs address the complete source rectangle and keep
-the source texture/fit semantics. Enabled effects, masks and motion blur are
-rejected before Preview rather than being silently dropped.
+The current Voronoi source adapter accepts a fully opaque root solid convex
+shape, a single closed convex spline, or an image rectangle with positive
+persisted asset dimensions. Shape/spline boundaries reuse the canonical
+Mesh2D flattening and contour validator, then require one hole-free convex
+ring. Solid sources publish path fragments. Image sources publish bake-owned
+`Mesh2D` fragments whose normalized UVs address the complete source rectangle
+and keep the source texture/fit semantics. Concave, holed and multi-ring
+sources, enabled effects, masks and motion blur are rejected before Preview
+rather than being silently approximated or dropped.
 
 Choose `fractureTrigger.kind` as `time` or `impact`. A timed trigger requires
 `fractureTimeMs` on an interior fixed-step tick. Impact requires a positive

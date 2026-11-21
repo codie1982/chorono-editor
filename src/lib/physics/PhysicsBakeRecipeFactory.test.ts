@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { rigidBakeFixture } from '@/lib/bake/__tests__/RigidBodyBakeFixture'
-import { newImageLayer } from '@/lib/defaults'
+import { newCircleLayer, newImageLayer, newSplineLayerFromData } from '@/lib/defaults'
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
+import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import { PhysicsBakeRecipeFactory } from './PhysicsBakeRecipeFactory'
 
 describe('PhysicsBakeRecipeFactory', () => {
@@ -62,5 +63,34 @@ describe('PhysicsBakeRecipeFactory', () => {
     expect(fragments.every(layer => layer.type === 'mesh2d'
       && layer.mesh2d?.source.kind === 'fractureFragment'
       && layer.mesh2d.appearance?.textureAssetId === 'poster')).toBe(true)
+  })
+
+  it.each([
+    ['circle shape', () => ({ ...newCircleLayer(), id: 'convex-circle', name: 'Convex Circle' })],
+    ['closed spline', () => ({
+      ...newSplineLayerFromData(createRectangleSpline({ width: 120, height: 80 }), { name: 'Convex Spline' }),
+      id: 'convex-spline',
+    })],
+  ])('compiles a %s through convex source, solver and editable path fragments', (_label, createSource) => {
+    const fixture = rigidBakeFixture()
+    const source = createSource()
+    source.transform = { ...source.transform, x: 240, y: 120, scaleX: 1, scaleY: 1 }
+    const scene = { ...fixture.scene, layers: [source, fixture.floor] }
+
+    const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      sourceLayerId: source.id, staticLayerIds: [fixture.floor.id], timelineId: 'main', durationMs: 3000,
+      fractureTimeMs: 800, fragmentCount: 8, seed: 42, generationId: `convex-${source.type}`,
+    })
+    const sourceBody = prepared.recipe.bodies[0]
+    const fragments = new FractureLayerFactory().create(scene, prepared.generation, prepared.recipe)
+
+    expect(sourceBody.collider).toBe('convexPolygon')
+    expect(sourceBody.colliderVerticesPx?.length).toBe(prepared.generation.source.polygon.length)
+    expect(sourceBody.visual.centerOfMassLocalPx).toEqual(prepared.generation.source.polygon.length === 4
+      ? { x: 0, y: 0 }
+      : expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }))
+    expect(prepared.recipe.fractureAppearance).toMatchObject({ kind: 'solid', sourceLayerId: source.id })
+    expect(fragments).toHaveLength(8)
+    expect(fragments.every(layer => layer.type === 'path')).toBe(true)
   })
 })

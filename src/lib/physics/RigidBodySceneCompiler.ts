@@ -1,18 +1,17 @@
 import { hashCanonicalRecords } from '@/lib/hash/CanonicalRecordHash'
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
-import type { ChronoScene, Layer } from '@/lib/types'
+import type { ChronoScene } from '@/lib/types'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
-  RigidBodyMaterial,
   RigidBodySnapshot,
 } from '@/lib/types/physics'
-import { rigidCenterFromVisual } from './RigidVisualTransform'
+import {
+  RigidBodyLayerCompiler,
+  type PreparedConvexColliderGeometry,
+} from './RigidBodyLayerCompiler'
 
-const TRANSFORM_PATHS = new Set([
-  'transform.x', 'transform.y', 'transform.scaleX', 'transform.scaleY',
-  'transform.rotationDeg', 'transform.anchorX', 'transform.anchorY',
-])
+export { isRigidRectangleLayerCandidate } from './RigidBodyLayerCompiler'
 
 export interface RigidBodyBakeInput {
   readonly timelineId: string
@@ -25,6 +24,10 @@ export interface RigidBodyBakeInput {
   readonly bodies: readonly RigidBodyAuthoring[]
 }
 
+export type RigidBodySnapshotBakeInput = Omit<RigidBodyBakeInput, 'bodies'> & {
+  readonly bodies: readonly RigidBodySnapshot[]
+}
+
 /**
  * Compiles supported rectangular scene layers into an immutable rigid-body recipe.
  *
@@ -34,12 +37,44 @@ export interface RigidBodyBakeInput {
  * never retains the scene or creates a solver. Instances are stateless.
  */
 export class RigidBodySceneCompiler {
+  private readonly layerCompiler = new RigidBodyLayerCompiler()
+
   /**
    * Validates the source scene and returns a deterministic Matter.js recipe.
    * The requested body order is preserved and therefore defines dense clip
    * order. Unsupported hierarchy/drivers fail instead of being approximated.
    */
   compile(scene: ChronoScene, input: RigidBodyBakeInput): RigidBodyBakeRecipe {
+    const ids = new Set<string>()
+    const bodies = input.bodies.map(authoring => {
+      if (!authoring.layerId || ids.has(authoring.layerId)) throw new Error(`Rigid body layer id is missing or duplicated: ${authoring.layerId}`)
+      ids.add(authoring.layerId)
+      return this.compileBodySnapshot(scene, authoring)
+    })
+    return this.compileSnapshots(scene, { ...input, bodies })
+  }
+
+  /**
+   * Compile an individual visual layer through the shared rectangle/convex
+   * adapter. Prepared convex geometry remains owned by its domain compiler.
+   */
+  compileBodySnapshot(
+    scene: ChronoScene,
+    authoring: RigidBodyAuthoring,
+    convex?: PreparedConvexColliderGeometry,
+  ): RigidBodySnapshot {
+    return this.layerCompiler.compile(scene, authoring, convex)
+  }
+
+  /**
+   * Assemble validated body snapshots into the canonical rigid recipe.
+   *
+   * This boundary is used by fracture after its source geometry adapter has
+   * produced a convex snapshot. Callers must not pass unvalidated imported
+   * polygons directly; layer adaptation remains the responsibility of
+   * `compileBodySnapshot`.
+   */
+  compileSnapshots(scene: ChronoScene, input: RigidBodySnapshotBakeInput): RigidBodyBakeRecipe {
     if ((scene.mode ?? '2danimation') !== '2danimation') throw new Error('Rigid bake requires a 2D animation scene')
     const timeline = scene.timelines.find(candidate => candidate.id === input.timelineId)
     if (!timeline) throw new Error(`Rigid bake timeline does not exist: ${input.timelineId}`)
@@ -54,13 +89,11 @@ export class RigidBodySceneCompiler {
     if (!input.bodies.length) throw new Error('Rigid bake requires at least one body')
     if (!input.bodies.some(body => body.motionType === 'dynamic')) throw new Error('Rigid bake requires at least one dynamic body')
     const ids = new Set<string>()
-    const bodies = input.bodies.map(authoring => {
-      if (!authoring.layerId || ids.has(authoring.layerId)) throw new Error(`Rigid body layer id is missing or duplicated: ${authoring.layerId}`)
-      ids.add(authoring.layerId)
-      const layer = scene.layers.find(candidate => candidate.id === authoring.layerId)
-      if (!layer) throw new Error(`Rigid body layer does not exist: ${authoring.layerId}`)
-      return this.compileBody(scene, layer, authoring)
+    input.bodies.forEach(body => {
+      if (!body.layerId || ids.has(body.layerId)) throw new Error(`Rigid body layer id is missing or duplicated: ${body.layerId}`)
+      ids.add(body.layerId)
     })
+    const bodies = input.bodies
     const sourceRevision = hashRigidBodySource(input.timelineId, bodies)
     const recipeHash = hashCanonicalRecords('rigid-bake-recipe-v1', [
       `source:${sourceRevision}`, `timeline:${input.timelineId}`, `start:${startTimeMs}`,
@@ -95,88 +128,6 @@ export class RigidBodySceneCompiler {
     }
   }
 
-  private compileBody(scene: ChronoScene, layer: Layer, authoring: RigidBodyAuthoring): RigidBodySnapshot {
-    if (authoring.collider !== 'rectangle' || !isRectangleVisualLayer(layer)) {
-      throw new Error(`Rigid body ${layer.id} must be a rectangle shape or image layer`)
-    }
-    if (layer.parentId || layer.instanceOf) throw new Error(`Rigid body ${layer.id} cannot use hierarchy or live instances yet`)
-    if (layer.motionPath || layer.followPath) throw new Error(`Rigid body ${layer.id} cannot use a motion/follow path`)
-    const size = layer.size
-    if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) {
-      throw new RangeError(`Rigid body ${layer.id} requires positive finite rectangle dimensions`)
-    }
-    const transform = layer.transform
-    Object.entries(transform).forEach(([field, value]) => assertFinite(value, `Rigid body ${layer.id} transform.${field}`))
-    if (transform.scaleX <= 0 || transform.scaleY <= 0 || Math.abs(transform.scaleX - transform.scaleY) > 1e-9) {
-      throw new Error(`Rigid body ${layer.id} requires positive uniform scale`)
-    }
-    this.assertNoTransformWriter(scene, layer)
-    assertMaterial(authoring.material, layer.id)
-    assertFinite(authoring.initialVelocityPxPerSecond.x, `Rigid body ${layer.id} velocity x`)
-    assertFinite(authoring.initialVelocityPxPerSecond.y, `Rigid body ${layer.id} velocity y`)
-    assertFinite(authoring.initialAngularVelocityDegPerSecond, `Rigid body ${layer.id} angular velocity`)
-    const center = rigidCenterFromVisual({
-      x: transform.x, y: transform.y, angleDeg: transform.rotationDeg,
-      widthPx: size.width, heightPx: size.height, anchorX: transform.anchorX, anchorY: transform.anchorY,
-      uniformScale: transform.scaleX,
-    })
-    return {
-      ...authoring, material: { ...authoring.material },
-      initialVelocityPxPerSecond: { ...authoring.initialVelocityPxPerSecond },
-      bodyId: `rigid:${layer.id}`, centerPx: center, angleDeg: transform.rotationDeg,
-      widthPx: size.width * transform.scaleX, heightPx: size.height * transform.scaleX,
-      visual: {
-        widthPx: size.width, heightPx: size.height, anchorX: transform.anchorX,
-        anchorY: transform.anchorY, uniformScale: transform.scaleX,
-      },
-    }
-  }
-
-  private assertNoTransformWriter(scene: ChronoScene, layer: Layer): void {
-    const prefix = `layers.${layer.id}.`
-    const track = scene.timelines.flatMap(timeline => timeline.tracks).find(candidate => (
-      candidate.target.startsWith(prefix)
-      && TRANSFORM_PATHS.has(candidate.target.slice(prefix.length))
-      && (candidate.keyframes.length > 0 || candidate.controller !== undefined)
-    ))
-    if (track) throw new Error(`Rigid body ${layer.id} transform is already animated: ${track.target}`)
-    if (Object.keys(layer.propertyExpressions?.fields ?? {}).some(path => TRANSFORM_PATHS.has(path))) {
-      throw new Error(`Rigid body ${layer.id} transform has a live expression`)
-    }
-    if (Object.keys(layer.paramBindings ?? {}).some(path => TRANSFORM_PATHS.has(path))) {
-      throw new Error(`Rigid body ${layer.id} transform has a parameter binding`)
-    }
-    if (scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === layer.id
-      && !!binding.target.property && TRANSFORM_PATHS.has(binding.target.property))) {
-      throw new Error(`Rigid body ${layer.id} transform has a scene binding`)
-    }
-    if (scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === layer.id
-      && TRANSFORM_PATHS.has(wire.target.propertyPath))) {
-      throw new Error(`Rigid body ${layer.id} transform has an enabled parameter wire`)
-    }
-  }
-}
-
-/**
- * Reports whether a layer can be offered by rectangular rigid-body pickers.
- *
- * This inexpensive capability check covers static layer geometry, hierarchy
- * and uniform scale. The compiler still validates timeline/expression writers,
- * numeric material values and bake range when Preview starts.
- */
-export function isRigidRectangleLayerCandidate(layer: Layer): boolean {
-  return isRectangleVisualLayer(layer) && !!layer.size
-    && Number.isFinite(layer.size.width) && layer.size.width > 0
-    && Number.isFinite(layer.size.height) && layer.size.height > 0
-    && !layer.parentId && !layer.instanceOf
-    && Number.isFinite(layer.transform.scaleX) && layer.transform.scaleX > 0
-    && Number.isFinite(layer.transform.scaleY)
-    && Math.abs(layer.transform.scaleX - layer.transform.scaleY) <= 1e-9
-}
-
-function isRectangleVisualLayer(layer: Layer): boolean {
-  return (layer.type === 'shape' && (layer.shapeKind ?? layer.shape ?? 'rect') === 'rect')
-    || (layer.type === 'image' && !!layer.image)
 }
 
 /** Recomputes the deterministic recipe hash and rejects altered stored fields. */
@@ -233,18 +184,6 @@ export function hashRigidBodySource(timelineId: string, bodies: readonly RigidBo
       `velocity:${body.initialVelocityPxPerSecond.x},${body.initialVelocityPxPerSecond.y},${body.initialAngularVelocityDegPerSecond}`,
     ]),
   ])
-}
-
-function assertMaterial(material: RigidBodyMaterial, layerId: string): void {
-  if (!material || !Number.isFinite(material.densityKgPerSquareMeter) || material.densityKgPerSquareMeter <= 0) {
-    throw new RangeError(`Rigid body ${layerId} density must be positive and finite`)
-  }
-  for (const [field, value] of [['friction', material.friction], ['restitution', material.restitution]] as const) {
-    if (!Number.isFinite(value) || value < 0 || value > 1) throw new RangeError(`Rigid body ${layerId} ${field} must be between 0 and 1`)
-  }
-  if (!Number.isFinite(material.airFriction) || material.airFriction < 0 || material.airFriction >= 1) {
-    throw new RangeError(`Rigid body ${layerId} air friction must be in [0, 1)`)
-  }
 }
 
 function assertFinite(value: number, label: string): void {

@@ -10,6 +10,7 @@ import type {
 import { hashRigidBodyBakeRecipe, hashRigidBodySource, RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
 import { FractureManifestValidator } from './FractureManifestValidator'
+import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
 
 export interface FractureRigidRecipeInput {
   readonly generation: FractureGeneration
@@ -38,7 +39,8 @@ export interface FractureRigidRecipeInput {
 /**
  * Compiles one prepared Voronoi generation into the existing rigid recipe.
  *
- * The source rectangle and static environment reuse RigidBodySceneCompiler.
+ * The source boundary and static rectangle environment reuse
+ * RigidBodySceneCompiler's shared layer adapter.
  * Fragment colliders are convex polygons centred on their uniform-density
  * centroid and stay inactive until the one topology event. Source-local
  * geometry is converted to composition pixels explicitly; Matter handles and
@@ -48,23 +50,35 @@ export class FractureRigidRecipeCompiler {
   private readonly rigidCompiler = new RigidBodySceneCompiler()
   private readonly manifestValidator = new FractureManifestValidator()
   private readonly appearanceCompiler = new FractureAppearanceCompiler()
+  private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
 
   /** Compiles an immutable one-generation recipe without mutating the scene. */
   compile(scene: ChronoScene, input: FractureRigidRecipeInput): RigidBodyBakeRecipe {
     this.manifestValidator.validate(input.generation)
     if (input.sourceBody.layerId !== input.generation.source.ownerId || input.sourceBody.motionType !== 'dynamic'
-      || input.sourceBody.collider !== 'rectangle') {
-      throw new Error('Fracture source must be the generation owner and a dynamic rectangle')
+      || !['rectangle', 'convexPolygon'].includes(input.sourceBody.collider)) {
+      throw new Error('Fracture source must be the generation owner and a dynamic supported boundary')
     }
     if (input.staticBodies.some(body => body.motionType !== 'static' || body.collider !== 'rectangle')) {
       throw new Error('First-slice fracture environment supports static rectangles only')
     }
     const sourceLayer = scene.layers.find(layer => layer.id === input.sourceBody.layerId)
-    if (!sourceLayer?.size) throw new Error('Fracture source layer must be a rectangle shape or image layer')
+    if (!sourceLayer) throw new Error('Fracture source layer is missing')
+    const sourceBoundary = this.sourceBoundaryCompiler.compile(sourceLayer)
+    if ((sourceBoundary.isOriginRectangle && input.sourceBody.collider !== 'rectangle')
+      || (!sourceBoundary.isOriginRectangle && input.sourceBody.collider !== 'convexPolygon')) {
+      throw new Error('Fracture source collider no longer matches its compiled boundary')
+    }
     const fractureAppearance = this.appearanceCompiler.snapshot(scene, sourceLayer)
-    assertGenerationMatchesRectangle(input.generation, sourceLayer.size.width, sourceLayer.size.height)
+    assertGenerationMatchesBoundary(input.generation, sourceBoundary.polygon)
 
-    const base = this.rigidCompiler.compile(scene, {
+    const sourceSnapshot = this.rigidCompiler.compileBodySnapshot(
+      scene,
+      input.sourceBody,
+      input.sourceBody.collider === 'convexPolygon' ? sourceBoundary : undefined,
+    )
+    const staticSnapshots = input.staticBodies.map(body => this.rigidCompiler.compileBodySnapshot(scene, body))
+    const base = this.rigidCompiler.compileSnapshots(scene, {
       timelineId: input.timelineId,
       startTimeMs: input.startTimeMs,
       durationMs: input.durationMs,
@@ -72,7 +86,7 @@ export class FractureRigidRecipeCompiler {
       sampleFps: input.sampleFps,
       pixelsPerMeter: input.pixelsPerMeter,
       gravityMetersPerSecondSquared: input.gravityMetersPerSecondSquared,
-      bodies: [input.sourceBody, ...input.staticBodies],
+      bodies: [sourceSnapshot, ...staticSnapshots],
     })
     const clock = new SimulationClock(base)
     const trigger = resolveTrigger(input, base)
@@ -237,18 +251,20 @@ function authored(body: RigidBodySnapshot): RigidBodyAuthoring {
   return {
     layerId: body.layerId,
     motionType: body.motionType,
-    collider: 'rectangle',
+    collider: body.collider,
     material: { ...body.material },
     initialVelocityPxPerSecond: { ...body.initialVelocityPxPerSecond },
     initialAngularVelocityDegPerSecond: body.initialAngularVelocityDegPerSecond,
   }
 }
 
-function assertGenerationMatchesRectangle(generation: FractureGeneration, width: number, height: number): void {
-  const expected = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }]
+function assertGenerationMatchesBoundary(
+  generation: FractureGeneration,
+  expected: readonly { readonly x: number; readonly y: number }[],
+): void {
   if (generation.source.polygon.length !== expected.length || generation.source.polygon.some((point, index) => (
     Math.abs(point.x - expected[index].x) > 1e-7 || Math.abs(point.y - expected[index].y) > 1e-7
-  ))) throw new Error('Fracture generation no longer matches the source rectangle')
+  ))) throw new Error('Fracture generation no longer matches the source boundary')
 }
 
 function rotate(point: { x: number; y: number }, angleDeg: number): { x: number; y: number } {

@@ -155,8 +155,11 @@ rigid/Voronoi solver dedicated Worker
 kullanır; Worker yoksa aynı deterministic fixed-step runner bounded inline
 fallback'tir. Worker progress/cancel/deadline ve transferable dense buffer
 sözleşmesine sahiptir. İlk rigid dilimi root, instance olmayan rectangle
-collider'larını destekler. Voronoi kaynağı tam opak, keskin köşeli solid shape
-veya kalıcı pozitif asset boyutları bulunan root image rectangle olabilir.
+collider'larını destekler. Voronoi kaynağı tam opak solid convex shape, tek
+kapalı convex spline veya kalıcı pozitif asset boyutları bulunan root image
+rectangle olabilir. Shape/spline sınırı canonical Mesh2D flatten ve contour
+doğrulamasını kullanır; concave, delikli veya çok halkalı kaynaklar clipping
+dilimine kadar açık hatayla reddedilir.
 Solid kaynak path; image kaynak, tam source rectangle uzayında normalize UV ve
 aynı texture/fit bilgisi taşıyan bake-owned `Mesh2D` fragmentler üretir. Efekt,
 mask ve motion blur Preview öncesinde açık tanıyla reddedilir. Dense solver

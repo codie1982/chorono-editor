@@ -1,4 +1,5 @@
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureSourceBoundaryCompiler } from '@/lib/fracture/FractureSourceBoundaryCompiler'
 import { VoronoiFractureGenerator } from '@/lib/fracture/VoronoiFractureGenerator'
 import type { ChronoScene } from '@/lib/types'
 import type { FractureGeneration } from '@/lib/types/fracture'
@@ -83,6 +84,7 @@ export class PhysicsBakeRecipeFactory {
   private readonly rigidCompiler = new RigidBodySceneCompiler()
   private readonly fractureCompiler = new FractureRigidRecipeCompiler()
   private readonly fractureGenerator = new VoronoiFractureGenerator()
+  private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
 
   /** Compile a deterministic rigid recipe without starting the simulation. */
   compileRigid(scene: ChronoScene, input: RigidBakeRecipeInput): RigidBodyBakeRecipe {
@@ -94,27 +96,23 @@ export class PhysicsBakeRecipeFactory {
       sampleFps: input.sampleFps,
       pixelsPerMeter: input.pixelsPerMeter,
       gravityMetersPerSecondSquared: resolveGravity(input.gravity),
-      bodies: input.bodies.map(createRigidBodyAuthoring),
+      bodies: input.bodies.map(body => createRigidBodyAuthoring(body)),
     })
   }
 
   /**
-   * Generate one rectangle Voronoi manifest and compile its timed replacement
+   * Generate one convex-source Voronoi manifest and compile its replacement
    * into a rigid recipe. The realized polygons are returned for the eventual
    * atomic editor command; callers must keep them paired with this recipe.
    */
   compileVoronoi(scene: ChronoScene, input: VoronoiBakeRecipeInput): PreparedVoronoiBakeRecipe {
     const source = scene.layers.find(layer => layer.id === input.sourceLayerId)
-    if (!source?.size) throw new Error(`Fracture source layer does not exist or has no size: ${input.sourceLayerId}`)
+    if (!source) throw new Error(`Fracture source layer does not exist: ${input.sourceLayerId}`)
+    const boundary = this.sourceBoundaryCompiler.compile(source)
     const generation = this.fractureGenerator.generate({
       generationId: input.generationId,
       sourceOwnerId: source.id,
-      sourcePolygon: [
-        { x: 0, y: 0 },
-        { x: source.size.width, y: 0 },
-        { x: source.size.width, y: source.size.height },
-        { x: 0, y: source.size.height },
-      ],
+      sourcePolygon: boundary.polygon,
       fragmentCount: input.fragmentCount,
       seed: input.seed,
     })
@@ -125,7 +123,7 @@ export class PhysicsBakeRecipeFactory {
       material,
       initialVelocityPxPerSecond: input.initialVelocityPxPerSecond,
       initialAngularVelocityDegPerSecond: input.initialAngularVelocityDegPerSecond,
-    })
+    }, boundary.isOriginRectangle ? 'rectangle' : 'convexPolygon')
     const staticBodies = (input.staticLayerIds ?? []).map(layerId => createRigidBodyAuthoring({
       layerId,
       motionType: 'static',
@@ -151,11 +149,14 @@ export class PhysicsBakeRecipeFactory {
 }
 
 /** Convert concise product/MCP settings into complete persisted authoring. */
-export function createRigidBodyAuthoring(input: PhysicsBodyInput): RigidBodyAuthoring {
+export function createRigidBodyAuthoring(
+  input: PhysicsBodyInput,
+  collider: RigidBodyAuthoring['collider'] = 'rectangle',
+): RigidBodyAuthoring {
   return {
     layerId: input.layerId,
     motionType: input.motionType,
-    collider: 'rectangle',
+    collider,
     material: resolveMaterial(input.material),
     initialVelocityPxPerSecond: {
       x: input.initialVelocityPxPerSecond?.x ?? 0,

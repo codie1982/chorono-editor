@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BakeJobStatusCard } from '@/components/bake/BakeJobStatusCard'
+import { isFractureSourceLayerCandidate } from '@/lib/fracture/FractureSourceBoundaryCompiler'
 import type { RigidBakeOwnershipInspection } from '@/lib/physics/RigidBakeOwnership'
 import type { RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
 import { isRigidRectangleLayerCandidate } from '@/lib/physics/RigidBodySceneCompiler'
@@ -58,8 +59,8 @@ interface Props {
 }
 
 /**
- * Product UI for the implemented rectangle rigid-body and first-generation
- * Voronoi bake slice. Form values remain a local draft; Preview starts the
+ * Product UI for rectangle rigid bodies and convex-source Voronoi fracture.
+ * Form values remain a local draft; Preview starts the
  * shared workspace job, Cancel/Discard release it and Apply is the only source
  * mutation. Unsupported geometry is excluded from pickers and described
  * explicitly. The Particle tab routes to the existing particle authoring
@@ -74,14 +75,16 @@ export default function PhysicsSimulationsPanel({
   viewportOverlay,
   onViewportOverlayChange,
 }: Props) {
-  const rectangles = useMemo(() => scene.layers.filter(isSupportedRectangle), [scene.layers])
-  const initialSource = rectangles.find(layer => layer.id === selectedLayerId)?.id ?? rectangles[0]?.id ?? ''
+  const rigidRectangles = useMemo(() => scene.layers.filter(isSupportedRectangle), [scene.layers])
+  const fractureSources = useMemo(() => scene.layers.filter(isFractureSourceLayerCandidate), [scene.layers])
+  const initialSource = rigidRectangles.find(layer => layer.id === selectedLayerId)?.id ?? rigidRectangles[0]?.id ?? ''
   const initialTimeline = scene.timelines.find(timeline => timeline.id === selectedTimelineId) ?? scene.timelines[0]
   const [mode, setMode] = useState<PhysicsMode>('rigid')
   const [view, setView] = useState<PhysicsView>('source')
   const [draft, setDraft] = useState<PhysicsDraft>(() => initialDraft(initialSource, initialTimeline?.id ?? '', initialTimeline?.durationMs ?? 3000))
   const [replaceRecordId, setReplaceRecordId] = useState<string | undefined>()
   const [actionError, setActionError] = useState('')
+  const sources = mode === 'fracture' ? fractureSources : rigidRectangles
   const snapshot = controller.snapshot
   const preview = snapshot?.preview
   const fractureRecords = useMemo(() => (scene.physics?.rigidBakes ?? []).filter(record => (
@@ -90,14 +93,19 @@ export default function PhysicsSimulationsPanel({
 
   useEffect(() => { controller.checkSource() }, [controller.checkSource, scene])
   useEffect(() => {
-    const reconciled = reconcilePhysicsDraftWithScene(scene, selectedTimelineId, draft)
+    const reconciled = reconcilePhysicsDraftWithScene(
+      scene,
+      selectedTimelineId,
+      draft,
+      mode === 'fracture' ? 'fracture' : 'rigid',
+    )
     if (reconciled === draft) return
     controller.discard()
     setActionError('')
     setReplaceRecordId(undefined)
     setView('source')
     setDraft(reconciled)
-  }, [controller, draft, scene, selectedTimelineId])
+  }, [controller, draft, mode, scene, selectedTimelineId])
 
   const update = <K extends keyof PhysicsDraft>(key: K, value: PhysicsDraft[K]) => {
     controller.discard()
@@ -123,7 +131,7 @@ export default function PhysicsSimulationsPanel({
     }))
   }
   const useSelection = () => {
-    if (selectedLayerId && rectangles.some(layer => layer.id === selectedLayerId)) selectSource(selectedLayerId)
+    if (selectedLayerId && sources.some(layer => layer.id === selectedLayerId)) selectSource(selectedLayerId)
   }
   const toggleStatic = (layerId: string) => update('staticLayerIds', draft.staticLayerIds.includes(layerId)
     ? draft.staticLayerIds.filter(id => id !== layerId)
@@ -148,7 +156,7 @@ export default function PhysicsSimulationsPanel({
       setActionError(error instanceof Error ? error.message : String(error))
     }
   }
-  const source = rectangles.find(layer => layer.id === draft.sourceLayerId)
+  const source = sources.find(layer => layer.id === draft.sourceLayerId)
   const sourceError = mode === 'fracture' && source ? fractureSourceError(scene, source) : null
   const triggerError = mode === 'fracture' && draft.fractureTriggerKind === 'impact' && !draft.staticLayerIds.length
     ? 'Impact trigger needs at least one selected static collider.'
@@ -177,6 +185,17 @@ export default function PhysicsSimulationsPanel({
         {(['rigid', 'fracture', 'particle'] as const).map(item => <TabButton key={item} selected={mode === item}
           onClick={() => {
             if (item !== mode) { controller.discard(); setReplaceRecordId(undefined) }
+            if (item !== 'particle') {
+              const nextSources = item === 'fracture' ? fractureSources : rigidRectangles
+              const preferred = nextSources.find(layer => layer.id === selectedLayerId)
+                ?? nextSources.find(layer => layer.id === draft.sourceLayerId)
+                ?? nextSources[0]
+              if (preferred && preferred.id !== draft.sourceLayerId) {
+                setDraft(previous => ({ ...previous, sourceLayerId: preferred.id,
+                  generationId: generationIdFor(preferred.id),
+                  staticLayerIds: previous.staticLayerIds.filter(id => id !== preferred.id) }))
+              }
+            }
             setMode(item); setView('source'); setActionError('')
           }}>
           {item === 'rigid' ? 'Rigid' : item === 'fracture' ? 'Fracture' : 'Particle'}
@@ -191,9 +210,11 @@ export default function PhysicsSimulationsPanel({
     <div className="flex-1 overflow-auto p-3">
       {mode === 'particle' ? <ParticleNotice onOpen={onOpenParticles} />
         : view === 'source' ? <div className="space-y-4">
-          {!rectangles.length ? <InlineNotice tone="warning">Add a root rectangle shape or image with positive uniform scale. This first slice does not approximate circles, text, hierarchy or non-uniform scale.</InlineNotice>
+          {!sources.length ? <InlineNotice tone="warning">{mode === 'fracture'
+            ? 'Add a root closed shape, closed spline or image rectangle with positive uniform scale. Concave outlines and holes remain disabled until the clipping slice.'
+            : 'Add a root rectangle shape or image with positive uniform scale. Rigid bodies do not approximate text, hierarchy or non-uniform scale.'}</InlineNotice>
             : <>
-              <SourceSection rectangles={rectangles} sourceLayerId={draft.sourceLayerId} selectedLayerId={selectedLayerId}
+              <SourceSection sources={sources} staticRectangles={rigidRectangles} sourceLayerId={draft.sourceLayerId} selectedLayerId={selectedLayerId}
                 staticLayerIds={draft.staticLayerIds} onSource={selectSource} onUseSelection={useSelection} onToggleStatic={toggleStatic} />
               {sourceError && <InlineNotice tone="warning">{sourceError} Choose a supported source or fix it before Preview.</InlineNotice>}
               <TimingSection scene={scene} draft={draft} update={update} />
@@ -225,7 +246,7 @@ export default function PhysicsSimulationsPanel({
 
     {mode !== 'particle' && <div className="grid grid-cols-3 gap-2 border-t border-gray-700 bg-gray-900 p-3">
       {active ? <button type="button" onClick={controller.cancel} className={secondaryButton}>Cancel</button>
-        : <button type="button" disabled={!rectangles.length || !!sourceError || !!triggerError} onClick={start}
+        : <button type="button" disabled={!sources.length || !!sourceError || !!triggerError} onClick={start}
           className={secondaryButton}>{preview ? 'Refresh preview' : 'Preview'}</button>}
       <button type="button" disabled={!snapshot || active || snapshot.status === 'committing'} onClick={controller.discard} className={secondaryButton}>Discard</button>
       <button type="button" disabled={!canApply} onClick={() => void apply(replacementInspection?.canSafelyMutate === false ? 'discard-edits' : 'reject')}
@@ -236,26 +257,26 @@ export default function PhysicsSimulationsPanel({
   </div>
 }
 
-function SourceSection({ rectangles, sourceLayerId, selectedLayerId, staticLayerIds, onSource, onUseSelection, onToggleStatic }: {
-  rectangles: readonly Layer[]; sourceLayerId: string; selectedLayerId: string | null; staticLayerIds: readonly string[]
+function SourceSection({ sources, staticRectangles, sourceLayerId, selectedLayerId, staticLayerIds, onSource, onUseSelection, onToggleStatic }: {
+  sources: readonly Layer[]; staticRectangles: readonly Layer[]; sourceLayerId: string; selectedLayerId: string | null; staticLayerIds: readonly string[]
   onSource(id: string): void; onUseSelection(): void; onToggleStatic(id: string): void
 }) {
-  const selectionCompatible = !!selectedLayerId && rectangles.some(layer => layer.id === selectedLayerId)
+  const selectionCompatible = !!selectedLayerId && sources.some(layer => layer.id === selectedLayerId)
   return <Fieldset title="Bodies">
     <label className={labelClass}>Dynamic source
       <select aria-label="Dynamic body source" value={sourceLayerId} onChange={event => onSource(event.target.value)} className={inputClass}>
-        {rectangles.map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type === 'image' ? 'Image' : 'Shape'} · {layer.id}</option>)}
+        {sources.map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {sourceTypeLabel(layer)} · {layer.id}</option>)}
       </select>
     </label>
     <button type="button" disabled={!selectionCompatible || selectedLayerId === sourceLayerId} onClick={onUseSelection} className={smallButton}>Use canvas selection</button>
     <div>
       <p className="mb-1 text-[10px] text-gray-400">Collide with · static rectangles</p>
       <div className="max-h-28 space-y-1 overflow-auto rounded border border-gray-700 bg-gray-950/40 p-2">
-        {rectangles.filter(layer => layer.id !== sourceLayerId).map(layer => <label key={layer.id} className="flex min-h-11 items-center gap-2 rounded px-1 text-[11px] hover:bg-gray-800/60 focus-within:ring-2 focus-within:ring-blue-400">
+        {staticRectangles.filter(layer => layer.id !== sourceLayerId).map(layer => <label key={layer.id} className="flex min-h-11 items-center gap-2 rounded px-1 text-[11px] hover:bg-gray-800/60 focus-within:ring-2 focus-within:ring-blue-400">
           <input type="checkbox" checked={staticLayerIds.includes(layer.id)} onChange={() => onToggleStatic(layer.id)} className="accent-blue-500" />
           <span className="truncate">{layer.name}</span><span className="ml-auto font-mono text-[9px] text-gray-500">{layer.type === 'image' ? 'image rect' : 'shape rect'}</span>
         </label>)}
-        {rectangles.length < 2 && <p className="text-[10px] text-gray-500">No separate static collider. The body can still fall freely.</p>}
+        {staticRectangles.filter(layer => layer.id !== sourceLayerId).length === 0 && <p className="text-[10px] text-gray-500">No separate static rectangle collider. The body can still fall freely.</p>}
       </div>
     </div>
   </Fieldset>
@@ -408,13 +429,15 @@ export function reconcilePhysicsDraftWithScene(
   scene: ChronoScene,
   selectedTimelineId: string,
   draft: PhysicsDraft,
+  mode: Exclude<PhysicsMode, 'particle'> = 'rigid',
 ): PhysicsDraft {
-  const candidates = scene.layers.filter(isSupportedRectangle)
+  const candidates = scene.layers.filter(mode === 'fracture' ? isFractureSourceLayerCandidate : isSupportedRectangle)
+  const staticIds = new Set(scene.layers.filter(isSupportedRectangle).map(layer => layer.id))
   const candidateIds = new Set(candidates.map(layer => layer.id))
   const sourceLayerId = candidateIds.has(draft.sourceLayerId)
     ? draft.sourceLayerId
     : candidates[0]?.id ?? ''
-  const staticLayerIds = draft.staticLayerIds.filter(id => candidateIds.has(id) && id !== sourceLayerId)
+  const staticLayerIds = draft.staticLayerIds.filter(id => staticIds.has(id) && id !== sourceLayerId)
   const timeline = scene.timelines.find(item => item.id === draft.timelineId)
     ?? scene.timelines.find(item => item.id === selectedTimelineId)
     ?? scene.timelines[0]
@@ -578,6 +601,12 @@ function ReplacementNotice({ inspection }: { inspection: RigidBakeOwnershipInspe
 
 function isSupportedRectangle(layer: Layer): boolean {
   return isRigidRectangleLayerCandidate(layer)
+}
+
+function sourceTypeLabel(layer: Layer): string {
+  if (layer.type === 'image') return 'Image'
+  if (layer.type === 'spline') return 'Spline'
+  return 'Shape'
 }
 
 function generationIdFor(sourceLayerId: string): string {

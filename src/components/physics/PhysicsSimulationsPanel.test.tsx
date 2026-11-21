@@ -2,7 +2,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { rigidBakeFixture } from '@/lib/bake/__tests__/RigidBodyBakeFixture'
-import { newImageLayer } from '@/lib/defaults'
+import { newImageLayer, newSplineLayerFromData } from '@/lib/defaults'
+import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import type { PhysicsBakeController } from './usePhysicsBakeController'
 import PhysicsSimulationsPanel, {
   reconcilePhysicsDraftWithScene,
@@ -129,6 +130,21 @@ describe('PhysicsSimulationsPanel', () => {
     expect(reconcilePhysicsDraftWithScene(replacement, 'fresh-timeline', reconciled)).toBe(reconciled)
   })
 
+  it('keeps convex spline sources in fracture mode while static colliders stay rectangles', () => {
+    const { scene } = rigidBakeFixture()
+    const spline = { ...newSplineLayerFromData(createRectangleSpline({ width: 120, height: 80 })), id: 'convex-spline' }
+    const stale = draftFixture({ sourceLayerId: spline.id, staticLayerIds: ['floor', spline.id] })
+    const next = reconcilePhysicsDraftWithScene(
+      { ...scene, layers: [...scene.layers, spline] },
+      'main',
+      stale,
+      'fracture',
+    )
+
+    expect(next.sourceLayerId).toBe(spline.id)
+    expect(next.staticLayerIds).toEqual(['floor'])
+  })
+
   it('progressively discloses impact recovery and explicit explosion energy controls', () => {
     const { scene, box } = rigidBakeFixture()
     const impact = draftFixture({
@@ -150,6 +166,21 @@ describe('PhysicsSimulationsPanel', () => {
     expect(html).toContain('External energy enabled')
     expect(html).toContain('Radial velocity')
     expect(html).toContain('Explosion seed')
+  })
+
+  it('explains convex spline fragment support and the concave clipping boundary', () => {
+    const { scene } = rigidBakeFixture()
+    const spline = { ...newSplineLayerFromData(createRectangleSpline({ width: 120, height: 80 })), id: 'convex-spline' }
+    const html = renderToStaticMarkup(createElement(FractureAuthoringSection, {
+      scene: { ...scene, layers: [...scene.layers, spline] },
+      source: spline,
+      draft: draftFixture({ sourceLayerId: spline.id }),
+      onChange() {},
+    }))
+
+    expect(html).toContain('Convex spline boundary enabled')
+    expect(html).toContain('solid editable Path fragments')
+    expect(html).toContain('Concave outlines and holes require the next clipping slice')
   })
 })
 

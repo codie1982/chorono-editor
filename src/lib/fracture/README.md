@@ -6,34 +6,41 @@ cluster damage.
 
 ## Entry points and data flow
 
-1. `VoronoiFractureGenerator.generate` validates a convex source polygon,
+1. `FractureSourceBoundaryCompiler.compile` converts a root closed shape,
+   closed spline or image rectangle through the canonical Mesh2D boundary
+   generators. It extracts one ordered boundary ring and rejects open,
+   branching, disconnected, holed or concave topology with an authoring
+   diagnostic. Image rectangles preserve their historical four-corner source.
+2. `VoronoiFractureGenerator.generate` validates the compiled convex polygon,
    realizes deterministic seeds with the compiler-owned PRNG, obtains cells
    from pinned `d3-delaunay@6.0.4`, clips them to the actual source, rejects
    slivers by retrying the whole generation and returns `FractureGeneration`.
-2. `FractureManifestValidator.validate` verifies stored geometry, derived
+3. `FractureManifestValidator.validate` verifies stored geometry, derived
    area/centroid/bounds and provenance without regenerating D3 cells. Saved
    polygons are authoritative across future library versions.
-3. `FractureRigidRecipeCompiler.compile` reuses `RigidBodySceneCompiler` for
-   the dynamic rectangle and static environment, then adds centroid-relative
-   convex fragment colliders and either a fixed-tick or explicit-collider
-   impact event.
-4. `RigidBodyBakeAdapter` runs the extended `MatterPhysicsBackend`. At the
+4. `RigidBodyLayerCompiler` adapts the source layer and rectangle environment
+   bodies independently of recipe orchestration. `FractureRigidRecipeCompiler`
+   supplies the compiled rectangle or convex-polygon source collider, then
+   adds centroid-relative convex fragment colliders and either a fixed-tick or
+   explicit-collider impact event.
+5. `RigidBodyBakeAdapter` runs the extended `MatterPhysicsBackend`. At the
    event tick the source body is removed, fragment bodies are added, and each
    receives source linear velocity plus the angular tangential component.
    Impact jobs first realize the exact qualifying contact into immutable recipe
    evidence; unresolved impact placeholders cannot compile tracks or commit.
-5. `FractureAppearanceCompiler` keeps sharp solid sources as editable paths and
-   converts image rectangles into fixed-topology Mesh2D fragments. Image UVs
+6. `FractureAppearanceCompiler` keeps solid convex shape/spline sources as
+   editable paths and converts image rectangles into fixed-topology Mesh2D
+   fragments. Image UVs
    stay normalized in the complete source-rectangle space; every fragment
    carries the same texture asset, fit mode and `textureReferenceBounds`.
-6. `FractureAppearanceQualityAnalyzer` measures exact-event source/fragment
+7. `FractureAppearanceQualityAnalyzer` measures exact-event source/fragment
    alignment, preserved area, shared boundaries and triangle count. It reports
    current mask scratch and the existing four-surface full-frame alternative
    without confusing later physical separation with an event seam.
-7. `FractureExplosionImpulseResolver` computes deterministic one-shot radial,
+8. `FractureExplosionImpulseResolver` computes deterministic one-shot radial,
    directional and spin velocity deltas in stable fragment order. This is
    optional artistic external energy, not contact force or a per-frame field.
-8. `makeApplyVoronoiFractureBakeCmd` creates the appropriate fragment layers,
+9. `makeApplyVoronoiFractureBakeCmd` creates the appropriate fragment layers,
    normal transform/visibility tracks, topology persistence and ownership
    atomically. Undo restores the exact prior layer, timeline and physics
    envelopes.
@@ -58,11 +65,12 @@ cluster damage.
   This keeps every generated layer inside the portable scene id contract.
   Compiler v1 manifests remain readable as topology data, but their legacy
   colon-delimited fragment ids cannot be inserted into a current scene.
-- V1 supports either a sharp, solid-fill root rectangle or a root image
-  rectangle with positive persisted asset dimensions, one generation, 2–100
-  convex fragments and static rectangle environment bodies. Solid fragments
-  are paths; image fragments are bake-owned Mesh2D layers with full-source
-  normalized UVs and the source `fill`/`contain`/`cover`/`none` fit semantics.
+- V1 supports one closed, hole-free, strictly convex root shape or spline, or a
+  root image rectangle with positive persisted asset dimensions. It supports
+  one generation, 2–100 convex fragments and static rectangle environment
+  bodies. Solid fragments are paths; image fragments are bake-owned Mesh2D
+  layers with full-source normalized UVs and the source
+  `fill`/`contain`/`cover`/`none` fit semantics.
 - Fracture sources must be fully opaque. Enabled effects, masks and motion blur
   are rejected before Preview instead of being silently discarded.
 - Artistic explosion stores a source-local centre, a composition-space
@@ -71,6 +79,15 @@ cluster damage.
   discloses it as added external energy.
 - Concave or donut sources, bonded clusters and recursive destruction remain
   later stages.
+
+## Lifecycle and ownership
+
+Boundary compilation is stateless and allocates temporary topology only for
+the call. The returned polygon, bounds and centroid are plain immutable source
+data; no DOM, GPU or Matter handle is retained. Bake preparation owns its
+runtime resources until commit, cancel or discard. Only the realized source
+polygon, fragment manifest, recipe provenance and generated tracks enter the
+portable scene. Dense poses and solver objects remain job-owned runtime data.
 
 ## Editor-only Canvas diagnostics
 
@@ -110,13 +127,11 @@ into preview or final output.
 ## Minimal use
 
 ```ts
+const boundary = new FractureSourceBoundaryCompiler().compile(scene, sourceLayer)
 const generation = new VoronoiFractureGenerator().generate({
   generationId: 'panel-generation-v1',
   sourceOwnerId: 'panel',
-  sourcePolygon: [
-    { x: 0, y: 0 }, { x: 320, y: 0 },
-    { x: 320, y: 180 }, { x: 0, y: 180 },
-  ],
+  sourcePolygon: boundary.polygon,
   fragmentCount: 16,
   seed: 42,
 })
