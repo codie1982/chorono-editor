@@ -169,7 +169,7 @@ describe('PhysicsSimulationsPanel', () => {
     expect(html).toContain('Explosion seed')
   })
 
-  it('explains convex spline fragment support and the concave clipping boundary', () => {
+  it('explains closed spline region and compound collider support', () => {
     const { scene } = rigidBakeFixture()
     const spline = { ...newSplineLayerFromData(createRectangleSpline({ width: 120, height: 80 })), id: 'convex-spline' }
     const html = renderToStaticMarkup(createElement(FractureAuthoringSection, {
@@ -179,12 +179,12 @@ describe('PhysicsSimulationsPanel', () => {
       onChange() {},
     }))
 
-    expect(html).toContain('Convex spline boundary enabled')
-    expect(html).toContain('solid editable Path fragments')
-    expect(html).toContain('Concave outlines and holes require the next clipping slice')
+    expect(html).toContain('Closed spline enabled')
+    expect(html).toContain('convex sources create editable Path fragments')
+    expect(html).toContain('concave or holed sources create fixed-topology Mesh2D fragments with compound colliders')
   })
 
-  it('explains convex Mesh2D triangle and UV clipping without hiding remaining limits', () => {
+  it('explains Mesh2D region clipping and the live-deformation limit', () => {
     const { scene, box } = rigidBakeFixture()
     const source = {
       ...box,
@@ -199,9 +199,10 @@ describe('PhysicsSimulationsPanel', () => {
       onChange() {},
     }))
 
-    expect(html).toContain('Convex Mesh2D boundary enabled')
+    expect(html).toContain('Mesh2D region enabled')
     expect(html).toContain('source triangles and authored UVs are clipped')
-    expect(html).toContain('deformation-bound sources require the next clipping slice')
+    expect(html).toContain('Concave outlines and holes use compound colliders')
+    expect(html).toContain('live deformation must be baked first')
   })
 })
 

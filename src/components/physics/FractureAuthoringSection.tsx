@@ -54,10 +54,10 @@ export default function FractureAuthoringSection({ scene, source, draft, onChang
       Image fragments enabled · {imageAsset?.name ?? source.image?.assetId ?? 'missing asset'} · fit {source.image?.objectFit ?? 'contain'} · source-rectangle UVs preserved.
     </p>}
     {(source?.type === 'shape' || source?.type === 'spline') && <p role="status" className="rounded border border-emerald-800/60 bg-emerald-950/25 p-2 text-xs leading-5 text-emerald-100">
-      Convex {source.type} boundary enabled · solid editable Path fragments · source-local centre of mass preserved. Concave outlines and holes require the next clipping slice.
+      Closed {source.type} enabled · convex sources create editable Path fragments; concave or holed sources create fixed-topology Mesh2D fragments with compound colliders.
     </p>}
     {source?.type === 'mesh2d' && <p role="status" className="rounded border border-violet-800/60 bg-violet-950/25 p-2 text-xs leading-5 text-violet-100">
-      Convex Mesh2D boundary enabled · source triangles and authored UVs are clipped into fixed-topology Mesh2D fragments. Concave outlines, holes and deformation-bound sources require the next clipping slice.
+      Mesh2D region enabled · source triangles and authored UVs are clipped into connected fragment meshes. Concave outlines and holes use compound colliders; live deformation must be baked first.
     </p>}
     <div className="grid grid-cols-2 gap-2">
       <PhysicsNumberField label="Fragments" unit="2–100" value={draft.fragmentCount} min={2} max={100} step={1}
@@ -84,7 +84,7 @@ export default function FractureAuthoringSection({ scene, source, draft, onChang
           : <PhysicsInlineNotice tone="warning">Choose at least one Collide with body. Impact preview stays disabled until a trigger collider is selected.</PhysicsInlineNotice>}
       </div>}
     <label className={labelClass}>Generation ID
-      <input aria-label="Fracture generation ID" value={draft.generationId} maxLength={116}
+      <input aria-label="Fracture generation ID" value={draft.generationId} maxLength={110}
         onChange={event => onChange('generationId', event.target.value)} className={`${inputClass} font-mono`} />
     </label>
     <p className="text-xs leading-5 text-gray-500">The realized event tick, seed and polygons are persisted together. Impact preview fails clearly when no contact reaches the threshold.</p>
