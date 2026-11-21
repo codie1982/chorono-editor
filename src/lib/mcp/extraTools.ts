@@ -139,6 +139,30 @@ const voronoiBakeProperties = {
           },
         },
       },
+      forcedBreaks: {
+        type: 'array', maxItems: 1024,
+        description: 'Optional fixed-tick bond breaks. timeMs is simulation-local and must align to stepHz; source=user records an explicit Break at playhead action.',
+        items: {
+          type: 'object', additionalProperties: false, required: ['bondId', 'timeMs', 'source'],
+          properties: {
+            bondId: { type: 'string', minLength: 1, maxLength: 160 },
+            timeMs: { type: 'number', exclusiveMinimum: 0 },
+            source: { type: 'string', enum: ['timeline', 'user'] },
+          },
+        },
+      },
+      damageResets: {
+        type: 'array', maxItems: 1024,
+        description: 'Optional fixed-tick accumulated-damage resets. Omit bondId to reset the complete graph; timeMs is simulation-local and aligned to stepHz.',
+        items: {
+          type: 'object', additionalProperties: false, required: ['timeMs', 'source'],
+          properties: {
+            bondId: { type: 'string', minLength: 1, maxLength: 160 },
+            timeMs: { type: 'number', exclusiveMinimum: 0 },
+            source: { type: 'string', enum: ['timeline', 'user'] },
+          },
+        },
+      },
     },
   },
   recordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Optional unique persisted bake ownership id.' },

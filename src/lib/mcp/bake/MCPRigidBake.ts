@@ -12,7 +12,12 @@ import { RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
 import type { ChronoScene } from '@/lib/types'
 import type { AnyFractureGeneration } from '@/lib/types/fracture'
-import type { FractureBondDefaults, FractureBondOverride } from '@/lib/types/fractureCluster'
+import type {
+  FractureBondDamageReset,
+  FractureBondDefaults,
+  FractureBondForcedBreak,
+  FractureBondOverride,
+} from '@/lib/types/fractureCluster'
 import type { RigidBodyBakeRecipe, RigidBodyMaterial, RigidFractureExplosion } from '@/lib/types/physics'
 import type { BakePreparationContext } from '@/lib/bake/BakeContracts'
 
@@ -60,6 +65,8 @@ export interface MCPVoronoiBakeInput {
     readonly graphId?: string
     readonly defaults?: Partial<FractureBondDefaults>
     readonly overrides?: readonly FractureBondOverride[]
+    readonly forcedBreaks?: readonly FractureBondForcedBreak[]
+    readonly damageResets?: readonly FractureBondDamageReset[]
   }
   readonly recordId?: string
   readonly replaceRecordId?: string

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyScene, newRectLayer, newSplineLayerFromData, newStarLayer } from '@/lib/defaults'
 import { StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
 import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
+import { PhysicsBakeRecipeFactory } from '@/lib/physics/PhysicsBakeRecipeFactory'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
 import type { ChronoScene, Layer } from '@/lib/types'
 import { prepareMCPRigidBake, prepareMCPVoronoiBake } from '../bake/MCPRigidBake'
@@ -62,6 +63,8 @@ describe('MCP rigid/fracture bake workflows', () => {
       cluster: {
         defaults: { impulseStrength: 10, damageThreshold: 20, relativeNormalSpeedScale: .1 },
         overrides: [{ fragmentAId: 'cluster-v1-fragment-0', fragmentBId: 'cluster-v1-fragment-1', unbreakable: true }],
+        forcedBreaks: [{ bondId: 'cluster-v1-cluster-bond-0000000000000000', timeMs: 200, source: 'user' }],
+        damageResets: [{ timeMs: 100, source: 'timeline' }],
       },
     })).resolves.toHaveProperty('name', 'bake_voronoi_fracture')
     await expect(validateToolCall('prepare_voronoi_fracture_bake', {
@@ -128,16 +131,29 @@ describe('MCP rigid/fracture bake workflows', () => {
 
   it('publishes and inspects bonded cluster breaks through the MCP service', async () => {
     const editor = fakeEditor('Bonded cluster owner')
-    editor.replaceDocument(fixture())
+    const scene = fixture()
+    editor.replaceDocument(scene)
     try {
-      const baked = await editor.call('bake_voronoi_fracture', {
+      const common = {
         sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main',
         durationMs: 1000, fractureTimeMs: 100, fragmentCount: 6, seed: 42,
         generationId: 'mcp-cluster-v1', stepHz: 120, sampleFps: 30,
+      } as const
+      const graph = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+        ...common,
+        cluster: { defaults: { impulseStrength: 1e6, damageThreshold: 1e6,
+          relativeNormalSpeedScale: 0, variation: 0 } },
+      }).recipe.fractureClusters![0].graph
+      const forcedBondId = graph.bonds[0].bondId
+      const baked = await editor.call('bake_voronoi_fracture', {
+        ...common,
         cluster: { defaults: {
-          impulseStrength: .001, damageThreshold: .001,
-          relativeNormalSpeedScale: 1, variation: 0,
-        } },
+          impulseStrength: 1e6, damageThreshold: 1e6,
+          relativeNormalSpeedScale: 0, variation: 0,
+        },
+        forcedBreaks: [{ bondId: forcedBondId, timeMs: 200, source: 'user' }],
+        damageResets: [{ bondId: forcedBondId, timeMs: 150, source: 'user' }],
+        },
       })
       expect(baked.bake.report).toMatchObject({
         clusterCount: 1,
@@ -155,9 +171,13 @@ describe('MCP rigid/fracture bake workflows', () => {
         fragmentCount: 6,
         bondCount: expect.any(Number),
         breakCount: expect.any(Number),
+        forcedBreakCount: 1,
+        damageResetCount: 1,
         breakEvents: expect.any(Array),
       })
-      expect(inspection.bondedCluster.breakCount).toBeGreaterThan(0)
+      const forced = inspection.bondedCluster.breakEvents.find((event: { bondId: string }) => event.bondId === forcedBondId)
+      expect(forced).toMatchObject({ bondId: forcedBondId, reason: 'forced' })
+      expect(forced.timeMs).toBeCloseTo(200, 7)
     } finally {
       await editor.close()
     }
