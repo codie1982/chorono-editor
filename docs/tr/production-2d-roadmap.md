@@ -54,6 +54,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Geliştirme branch'inde |
 | Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Geliştirme branch'inde |
 | Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Geliştirme branch'inde |
+| Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -3214,5 +3215,48 @@ Portable kanıt
 (`sha256 9dd9e0a541d3ad8d1bbda479bb67055b2b753f4e4e13312a81ae305794397095`).
 Doğrulama **434 test dosyası / 3.250 test**, TypeScript, MCP build ve production
 build ile geçti. Bilinen `applicationBuildInfo.ts` uyarısı sürer. Aktif fizik
-işi concave/delikli ve çok halkalı source clipping, connected component,
-fragment adjacency ve compound collider'dır.
+işi olarak tanımlanan concave/delikli ve çok halkalı source clipping,
+connected component, fragment adjacency ve compound collider sonraki §12.79
+diliminde tamamlandı.
+
+### 12.79. Kompleks fracture region, adjacency ve compound collider — 21 Kasım 2026
+
+`FractureSourceRegionCompiler`, image, kapalı shape/spline ve sabit-topology
+Mesh2D kaynaklarını concavity, delik ve kopuk dış halkaları koruyan doğrulanmış
+region sözleşmesine derler. Topology bağlantısı vertex konumundan ayrı tutulur;
+deformation-bound ve daha önce üretilmiş fracture fragment Mesh2D kaynakları
+secondary destruction gelene kadar açık tanıyla reddedilir.
+
+`FractureRegionClipper`, kaynak triangle'larını her convex Voronoi hücresiyle
+keser, UV'leri yeni kenarlarda enterpole eder ve yalnız pozitif uzunlukta ortak
+edge taşıyan parçaları aynı connected component'e alır. Nokta teması gövdeleri
+yanlışlıkla birleştirmez. Portable generation schema v2; source/fragment
+ring'leri, render triangle soup'u, convex collider parçaları, cell/component
+sahipliği, adjacency uzunluğu ve deterministik topology hash'ini saklar.
+`PhysicsBakeRecipeFactory` convex tek halkalı kaynakta önceki kompakt Path
+akışını, kompleks kaynakta Mesh2D + `compoundPolygon` akışını otomatik seçer.
+
+Physics Fracture UI artık closed shape/spline ve Mesh2D capability kartlarında
+concave/delikli kaynakların fixed-topology Mesh2D fragment ve compound collider
+üreteceğini açıkça gösterir. Inspector çok halkalı render sınırını gerçek
+compound collider union'ıyla karşılaştırır. Doğrudan ve kalıcı MCP bake
+araçları aynı kaynak/limit/açıklama sözleşmesini yayımlar; preview gövdeleri
+`colliderPartsPx` taşır. Canonical Chorono skill'i bu davranışla eşlendi.
+
+İzole `http://127.0.0.1:2010` production editöründe temiz 1080×1080 proje UI'dan
+oluşturuldu ve gerçek stdio MCP bağlantısı kuruldu. Yedi uçlu concave yıldız,
+zemin ve 8 hücreli persistent Worker bake; tick `72` / `600 ms` olay, 8
+editable Mesh2D fragment, 36 track, 1.266 keyframe ve 10 body üretti.
+Inspector `Output current` / `Source current`, 8/8 render–collider polygon, 178
+sınır örneği ve tam `0 px` maksimum/ortalama delta verdi. 599/600/1400 ms gerçek
+PNG'lerinde bütün yıldızdan atomik parçalanmaya ve zemin temasına geçiş
+incelendi. `validate_scene` geçerli ve uyarısızdı.
+
+Portable kanıt
+`projects/complex-region-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 ab9af337e67d4163a63bb2a542ec77b8342aaf69f1d7f961c9826c6aefcac285`,
+2.122.864 byte) olarak kaydedildi. Uygulama doğrulaması **440 test dosyası /
+3.264 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run build` ile
+geçti. Bilinen `applicationBuildInfo.ts` named-export uyarısı sürer. Sıradaki
+destruction işi bonded cluster/hasar/connected-component ayrılmasıdır;
+secondary/recursive fracture bundan sonra gelir.
