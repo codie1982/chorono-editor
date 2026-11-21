@@ -6,7 +6,12 @@ import { VoronoiFractureGenerator } from '@/lib/fracture/VoronoiFractureGenerato
 import { VoronoiRegionFractureGenerator } from '@/lib/fracture/VoronoiRegionFractureGenerator'
 import type { ChronoScene } from '@/lib/types'
 import type { FractureGeneration, FractureRegionGeneration } from '@/lib/types/fracture'
-import type { FractureBondDefaults, FractureBondOverride } from '@/lib/types/fractureCluster'
+import type {
+  FractureBondDamageReset,
+  FractureBondDefaults,
+  FractureBondForcedBreak,
+  FractureBondOverride,
+} from '@/lib/types/fractureCluster'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
@@ -64,6 +69,8 @@ export interface VoronoiBakeRecipeInput {
     readonly graphId?: string
     readonly defaults?: Partial<FractureBondDefaults>
     readonly overrides?: readonly FractureBondOverride[]
+    readonly forcedBreaks?: readonly FractureBondForcedBreak[]
+    readonly damageResets?: readonly FractureBondDamageReset[]
   }
   readonly stepHz?: number
   readonly sampleFps?: number
@@ -150,13 +157,18 @@ export class PhysicsBakeRecipeFactory {
       motionType: 'static',
       material,
     }))
+    const bondGraph = input.cluster ? this.bondGraphCompiler.compile(generation, {
+      graphId: input.cluster.graphId ?? defaultClusterGraphId(input.generationId, generation.topologyHash),
+      defaults: resolveBondDefaults(input.cluster.defaults, input.seed),
+      overrides: input.cluster.overrides,
+    }) : undefined
     const recipe = this.fractureCompiler.compile(scene, {
       generation,
-      ...(input.cluster ? { bondGraph: this.bondGraphCompiler.compile(generation, {
-        graphId: input.cluster.graphId ?? defaultClusterGraphId(input.generationId, generation.topologyHash),
-        defaults: resolveBondDefaults(input.cluster.defaults, input.seed),
-        overrides: input.cluster.overrides,
-      }) } : {}),
+      ...(bondGraph ? {
+        bondGraph,
+        forcedBondBreaks: input.cluster?.forcedBreaks,
+        bondDamageResets: input.cluster?.damageResets,
+      } : {}),
       timelineId: input.timelineId,
       startTimeMs: input.startTimeMs ?? 0,
       durationMs: input.durationMs,

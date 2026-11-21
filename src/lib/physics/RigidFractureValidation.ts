@@ -1,5 +1,6 @@
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
 import { FractureBondGraphValidator } from '@/lib/fracture/FractureBondGraphValidator'
+import { FractureBondActionSchedule } from '@/lib/fracture/FractureBondActionSchedule'
 import type { RigidBodyBakeRecipe } from '@/lib/types/physics'
 
 /**
@@ -76,6 +77,14 @@ function assertClusters(
     const event = events.find(candidate => candidate.id === cluster.eventId)
     if (!event || event.explosion) throw new Error(`Rigid fracture cluster event is invalid: ${cluster.eventId}`)
     new FractureBondGraphValidator().validatePortable(cluster.graph)
+    const actions = new FractureBondActionSchedule().compile(cluster.graph, new SimulationClock(recipe), {
+      forcedBreaks: cluster.forcedBreaks,
+      damageResets: cluster.damageResets,
+    })
+    if (JSON.stringify(actions.forcedBreaks) !== JSON.stringify(cluster.forcedBreaks ?? [])
+      || JSON.stringify(actions.damageResets) !== JSON.stringify(cluster.damageResets ?? [])) {
+      throw new Error(`Rigid fracture cluster actions are not canonical: ${cluster.eventId}`)
+    }
     const fragmentLayerIds = event.fragmentBodyIds.map(bodyId => (
       recipe.bodies.find(body => body.bodyId === bodyId)?.layerId
     )).sort()

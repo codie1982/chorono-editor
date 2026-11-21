@@ -1,6 +1,10 @@
 import type { SimulationCacheHeader } from '@/lib/simulation/SimulationCacheHeader'
 import type { AnyFractureGeneration, FractureAppearanceSnapshot } from './fracture'
-import type { FractureBondGraph } from './fractureCluster'
+import type {
+  FractureBondDamageReset,
+  FractureBondForcedBreak,
+  FractureBondGraph,
+} from './fractureCluster'
 
 export type RigidBodyMotionType = 'dynamic' | 'static'
 
@@ -108,6 +112,9 @@ export interface RigidFractureCluster {
   readonly eventId: string
   readonly strategy: 'compoundBody'
   readonly graph: FractureBondGraph
+  /** Canonical authoring schedules consumed by the deterministic solver. */
+  readonly forcedBreaks?: readonly FractureBondForcedBreak[]
+  readonly damageResets?: readonly FractureBondDamageReset[]
 }
 
 /** Compact solver realization of one FRACTURE2 bond break. */

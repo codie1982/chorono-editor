@@ -9,6 +9,7 @@ import type {
 import type { RigidBondBreakSolverEvidence } from './PhysicsBackend'
 import type { RigidPose2D } from './RigidVisualTransform'
 import { MatterBodyFactory } from './MatterBodyFactory'
+import { MatterFractureClusterActions } from './MatterFractureClusterActions'
 import {
   applyConservedMatterClusterField,
   matterClusterContactLoad,
@@ -57,6 +58,7 @@ export class MatterFractureClusterRuntime {
   private readonly virtualFragments = new Map<string, VirtualFragment>()
   private readonly brokenBondIds = new Set<string>()
   private readonly damageByBondId = new Map<string, number>()
+  private readonly actions: MatterFractureClusterActions
   private readonly components = new FractureClusterComponents()
   private sequence = 0
 
@@ -66,7 +68,9 @@ export class MatterFractureClusterRuntime {
     recipe: RigidBodyBakeRecipe,
     private readonly emitBreak: (event: MatterClusterRuntimeEvent) => void,
   ) {
-    ;(recipe.fractureClusters ?? []).forEach(cluster => this.clusterRecipes.set(cluster.eventId, cluster))
+    const clusterRecipes = recipe.fractureClusters ?? []
+    clusterRecipes.forEach(cluster => this.clusterRecipes.set(cluster.eventId, cluster))
+    this.actions = new MatterFractureClusterActions(clusterRecipes)
     recipe.bodies.forEach(snapshot => {
       this.snapshotsByBodyId.set(snapshot.bodyId, snapshot)
       this.snapshotsByLayerId.set(snapshot.layerId, snapshot)
@@ -122,8 +126,18 @@ export class MatterFractureClusterRuntime {
     return layerId ? this.snapshotsByLayerId.get(layerId)?.bodyId ?? null : null
   }
 
-  /** Apply decay/contact load and split changed components after one solver tick. */
-  afterStep(deltaMs: number): void {
+  /** Apply authored actions, decay and contact load after one solver tick. */
+  afterStep(deltaMs: number, elapsedMs: number): void {
+    this.actions.applyDamageResets(elapsedMs, graphId => this.hasActiveGraph(graphId), (graph, bondId) => {
+      if (bondId) this.damageByBondId.set(bondId, 0)
+      else graph.bonds.forEach(bond => this.damageByBondId.set(bond.bondId, 0))
+    })
+    this.actions.applyForcedBreaks(elapsedMs, (graphId, bond) => {
+      const cluster = this.clusterForBond(graphId, bond)
+      if (!cluster) return false
+      this.breakBond(cluster, bond, 0, this.damageByBondId.get(bond.bondId) ?? 0, 'forced')
+      return true
+    })
     this.decayDamage(deltaMs)
     const loads = this.collectContactLoads()
     loads.forEach(load => this.applyContactLoad(load))
@@ -136,6 +150,7 @@ export class MatterFractureClusterRuntime {
     this.virtualFragments.clear()
     this.brokenBondIds.clear()
     this.damageByBondId.clear()
+    this.actions.dispose()
   }
 
   private collectContactLoads(): Map<string, ContactLoad> {
@@ -177,22 +192,48 @@ export class MatterFractureClusterRuntime {
       ? 'impulse' as const
       : damage + 1e-7 >= bond.damageThreshold ? 'damage' as const : null
     if (!reason) return
+    this.breakBond(contact.cluster, bond, contact.load, damage, reason)
+  }
+
+  private breakBond(
+    cluster: RuntimeCluster,
+    bond: FractureBond,
+    load: number,
+    damage: number,
+    reason: RigidBondBreakSolverEvidence['reason'],
+  ): void {
+    if (this.brokenBondIds.has(bond.bondId)) return
     this.brokenBondIds.add(bond.bondId)
-    const splitComponents = this.components.resolve(contact.cluster.graph, Array.from(this.brokenBondIds))
-      .filter(component => component.fragmentIds.some(id => contact.cluster.fragmentLayerIds.includes(id)))
+    const splitComponents = this.components.resolve(cluster.graph, this.brokenForGraph(cluster.graph))
+      .filter(component => component.fragmentIds.some(id => cluster.fragmentLayerIds.includes(id)))
     this.emitBreak({
       bodyIds: [this.snapshotsByLayerId.get(bond.fragmentAId)!.bodyId,
         this.snapshotsByLayerId.get(bond.fragmentBId)!.bodyId].sort(),
       evidence: {
-        graphId: contact.cluster.graph.graphId,
+        graphId: cluster.graph.graphId,
         bondId: bond.bondId,
-        load: contact.load,
+        load,
         accumulatedDamage: damage,
         reason,
         componentIds: splitComponents.map(component => component.componentId),
       },
     })
-    if (splitComponents.length > 1) this.splitCluster(contact.cluster, splitComponents.map(component => component.fragmentIds))
+    if (splitComponents.length > 1) this.splitCluster(cluster, splitComponents.map(component => component.fragmentIds))
+  }
+
+  private hasActiveGraph(graphId: string): boolean {
+    return Array.from(this.clusters.values()).some(cluster => cluster.graph.graphId === graphId)
+  }
+
+  private clusterForBond(graphId: string, bond: FractureBond): RuntimeCluster | null {
+    return Array.from(this.clusters.values()).find(cluster => cluster.graph.graphId === graphId
+      && cluster.fragmentLayerIds.includes(bond.fragmentAId)
+      && cluster.fragmentLayerIds.includes(bond.fragmentBId)) ?? null
+  }
+
+  private brokenForGraph(graph: FractureBondGraph): string[] {
+    const known = new Set(graph.bonds.map(bond => bond.bondId))
+    return Array.from(this.brokenBondIds).filter(id => known.has(id))
   }
 
   private splitCluster(cluster: RuntimeCluster, componentIds: readonly (readonly string[])[]): void {

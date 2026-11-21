@@ -108,7 +108,7 @@ export class MatterPhysicsBackend implements PhysicsBackend {
         this.activateFracture(event)
       }
     }
-    this.clusterRuntime?.afterStep(deltaMs)
+    this.clusterRuntime?.afterStep(deltaMs, this.elapsedMs)
     this.impactCandidates.clear()
   }
 

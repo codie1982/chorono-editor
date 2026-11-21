@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { emptyScene, newRectLayer } from '@/lib/defaults'
 import type { OverrideMap } from '@/lib/evaluator'
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
+import { FractureBondGraphCompiler } from '@/lib/fracture/FractureBondGraphCompiler'
+import { FractureBondOverlayResolver } from '@/lib/fracture/FractureBondOverlayResolver'
 import { FractureOverlayGeometryResolver } from '@/lib/fracture/FractureOverlayGeometryResolver'
 import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
@@ -93,6 +95,22 @@ describe('FractureOverlayGeometryResolver', () => {
       .toBe(fixture.record.id)
     expect(new FractureOverlayGeometryResolver().resolve({ ...fixture.scene, physics: undefined }, null, 0)).toBeNull()
   })
+
+  it('resolves selectable bond lines through source and fragment world matrices', () => {
+    const fixture = overlayFixture()
+    const resolver = new FractureBondOverlayResolver()
+    const before = resolver.resolve(fixture.scene, fixture.record.id, 500)!
+    const bond = fixture.record.recipe.fractureClusters![0].graph.bonds[0]
+    const movedX = fixture.scene.layers.find(layer => layer.id === bond.fragmentAId)!.transform.x + 25
+    const moved = resolver.resolve(fixture.scene, fixture.record.id, 1000,
+      new Map([[`layers.${bond.fragmentAId}.transform.x`, movedX]]))!
+    const baseline = resolver.resolve(fixture.scene, fixture.record.id, 1000)!
+
+    expect(before.bonds).toHaveLength(fixture.record.recipe.fractureClusters![0].graph.bonds.length)
+    expect(before.bonds[0]).toMatchObject({ bondId: bond.bondId, state: 'intact' })
+    expect(moved.bonds[0].start.x - baseline.bonds[0].start.x).toBeCloseTo(25, 9)
+    expect(moved.bonds[0].end).toEqual(baseline.bonds[0].end)
+  })
 })
 
 function overlayFixture() {
@@ -128,6 +146,11 @@ function overlayFixture() {
     seed: 20261121,
   })
   const material = { densityKgPerSquareMeter: 1, friction: .2, restitution: .1, airFriction: .01 }
+  const bondGraph = new FractureBondGraphCompiler().compile(generation, {
+    graphId: 'overlay-bonds',
+    defaults: { impulseStrength: 40, damageThreshold: 80, damageDecayPerSecond: 0,
+      relativeNormalSpeedScale: .1, variation: 0, seed: 1 },
+  })
   const dynamic: RigidBodyAuthoring = {
     layerId: panel.id,
     motionType: 'dynamic',
@@ -146,6 +169,7 @@ function overlayFixture() {
   }
   const recipe = new FractureRigidRecipeCompiler().compile(sourceScene, {
     generation,
+    bondGraph,
     timelineId: 'overlay',
     startTimeMs: 0,
     durationMs: 1600,

@@ -6,7 +6,11 @@ import type {
   FractureRegionGeneration,
   FragmentGeometry,
 } from '@/lib/types/fracture'
-import type { FractureBondGraph } from '@/lib/types/fractureCluster'
+import type {
+  FractureBondDamageReset,
+  FractureBondForcedBreak,
+  FractureBondGraph,
+} from '@/lib/types/fractureCluster'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
@@ -15,6 +19,7 @@ import type {
 } from '@/lib/types/physics'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource, RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
+import { FractureBondActionSchedule } from './FractureBondActionSchedule'
 import { FractureBondGraphValidator } from './FractureBondGraphValidator'
 import { FractureManifestValidator } from './FractureManifestValidator'
 import { FractureRegionManifestValidator } from './FractureRegionManifestValidator'
@@ -25,6 +30,8 @@ import { hashFractureRegionSource } from './FractureManifestHash'
 export interface FractureRigidRecipeInput {
   readonly generation: FractureGeneration | FractureRegionGeneration
   readonly bondGraph?: FractureBondGraph
+  readonly forcedBondBreaks?: readonly FractureBondForcedBreak[]
+  readonly bondDamageResets?: readonly FractureBondDamageReset[]
   readonly timelineId: string
   readonly startTimeMs: number
   readonly durationMs: number
@@ -65,6 +72,7 @@ export class FractureRigidRecipeCompiler {
   private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
   private readonly sourceRegionCompiler = new FractureSourceRegionCompiler()
   private readonly bondGraphValidator = new FractureBondGraphValidator()
+  private readonly bondActionSchedule = new FractureBondActionSchedule()
 
   /** Compiles an immutable one-generation recipe without mutating the scene. */
   compile(scene: ChronoScene, input: FractureRigidRecipeInput): RigidBodyBakeRecipe {
@@ -125,6 +133,12 @@ export class FractureRigidRecipeCompiler {
     const eventTimeMs = trigger.kind === 'time' ? input.fractureTimeMs! : 0
     const source = base.bodies[0]
     const eventId = `${input.generation.generationId}:event`
+    const bondActions = input.bondGraph
+      ? this.bondActionSchedule.compile(input.bondGraph, clock, {
+        forcedBreaks: input.forcedBondBreaks,
+        damageResets: input.bondDamageResets,
+      })
+      : undefined
     const fragments = input.generation.schemaVersion === 1
       ? input.generation.fragments.map(fragment => compileFragment(source, fragment, eventId))
       : input.generation.fragments.map(fragment => compileRegionFragment(source, fragment, eventId))
@@ -148,6 +162,8 @@ export class FractureRigidRecipeCompiler {
         eventId,
         strategy: 'compoundBody' as const,
         graph: input.bondGraph,
+        ...(bondActions?.forcedBreaks.length ? { forcedBreaks: bondActions.forcedBreaks } : {}),
+        ...(bondActions?.damageResets.length ? { damageResets: bondActions.damageResets } : {}),
       })] } : {}),
       fractureAppearance,
     }
@@ -169,6 +185,8 @@ export class FractureRigidRecipeCompiler {
       const current = this.compile(scene, {
         generation,
         bondGraph: recipe.fractureClusters?.[0]?.graph,
+        forcedBondBreaks: recipe.fractureClusters?.[0]?.forcedBreaks,
+        bondDamageResets: recipe.fractureClusters?.[0]?.damageResets,
         timelineId: recipe.timelineId,
         startTimeMs: recipe.startTimeMs,
         durationMs: recipe.durationMs,

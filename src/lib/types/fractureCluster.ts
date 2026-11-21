@@ -72,6 +72,22 @@ export interface FractureBondGraph {
   readonly graphHash: string
 }
 
+/** One authored, fixed-tick bond break materialized by timeline or user intent. */
+export interface FractureBondForcedBreak {
+  readonly bondId: string
+  /** Simulation-local milliseconds, aligned to the recipe fixed step. */
+  readonly timeMs: number
+  readonly source: 'timeline' | 'user'
+}
+
+/** One authored damage reset; an omitted bond id resets the complete graph. */
+export interface FractureBondDamageReset {
+  readonly bondId?: string
+  /** Simulation-local milliseconds, aligned to the recipe fixed step. */
+  readonly timeMs: number
+  readonly source: 'timeline' | 'user'
+}
+
 /** One intact connected component resolved from a bond graph. */
 export interface FractureClusterComponent {
   readonly componentId: string

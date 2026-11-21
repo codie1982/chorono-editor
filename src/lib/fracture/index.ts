@@ -43,6 +43,16 @@ export type { FractureSharedBoundaryMetrics } from './FractureSharedBoundaryAnal
 export { FractureBondGraphCompiler } from './FractureBondGraphCompiler'
 export type { FractureBondGraphCompileInput } from './FractureBondGraphCompiler'
 export { FractureBondGraphValidator } from './FractureBondGraphValidator'
+export { FractureBondActionSchedule } from './FractureBondActionSchedule'
+export type {
+  FractureBondActionScheduleInput,
+  FractureBondActionScheduleResult,
+} from './FractureBondActionSchedule'
+export { FractureBondOverlayResolver } from './FractureBondOverlayResolver'
+export type {
+  FractureBondOverlayFrame,
+  FractureBondOverlayItem,
+} from './FractureBondOverlayResolver'
 export { FractureClusterComponents } from './FractureClusterComponents'
 export { hashFractureBondGraph } from './FractureBondGraphHash'
 export { SeededRandom } from './SeededRandom'

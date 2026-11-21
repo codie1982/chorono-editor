@@ -59,4 +59,35 @@ describe('MatterFractureClusterRuntime', () => {
         variation: 0, seed: 1 },
     })).toThrow(/cannot be combined/)
   })
+
+  it('materializes a user-forced bond break on its exact fixed tick', async () => {
+    const fixture = rigidBakeFixture()
+    const scene = { ...fixture.scene, layers: fixture.scene.layers.map(layer => layer.id === 'box'
+      ? { ...layer, style: { ...layer.style!, cornerRadius: 0 } } : layer) }
+    const common = {
+      sourceLayerId: 'box', timelineId: 'main', durationMs: 1000, fractureTimeMs: 100,
+      fragmentCount: 5, seed: 7, generationId: 'forced-cluster', stepHz: 100, sampleFps: 20,
+    } as const
+    const initial = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      ...common,
+      cluster: { defaults: { impulseStrength: 1e9, damageThreshold: 1e9, variation: 0 } },
+    })
+    const bondId = initial.recipe.fractureClusters![0].graph.bonds[0].bondId
+    const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      ...common,
+      cluster: {
+        defaults: { impulseStrength: 1e9, damageThreshold: 1e9, variation: 0 },
+        forcedBreaks: [{ bondId, timeMs: 200, source: 'user' }],
+        damageResets: [{ bondId, timeMs: 150, source: 'user' }],
+      },
+    })
+
+    const result = await new RigidBodySimulationRunner().simulate(prepared.recipe, {
+      signal: new AbortController().signal,
+      reportProgress: () => {},
+    })
+    const forced = result.events.find(event => event.kind === 'bond-break')
+
+    expect(forced).toMatchObject({ tick: 20, timeMs: 200, bondBreak: { bondId, reason: 'forced', load: 0 } })
+  })
 })
