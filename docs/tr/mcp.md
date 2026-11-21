@@ -118,7 +118,12 @@ komutu olarak normal editor history yolundan geçer.
 
 Re-bake öncesinde `inspect_physics_bake`, kaydın output durumunu `current`,
 `edited`, `incomplete` veya `legacy`; kaynak durumunu `current`, `changed` veya
-`unavailable` olarak raporlar. Prepare çağrısına `replaceRecordId` verildiğinde
+`unavailable` olarak raporlar. Fracture kayıtlarında ayrıca atomik
+source→fragment tick/zaman/body kimliklerini taşıyan `topologyEvent` ve kesin
+olay karesindeki görünür sınır–derlenmiş collider sayıları, maksimum/ortalama
+pixel farkı ile açık pass/warning/unavailable durumunu taşıyan
+`renderColliderQuality` döner. Statik çevre collider'ları bu farka katılmaz.
+Prepare çağrısına `replaceRecordId` verildiğinde
 eski bake sahneden silinmez; yalnız replacement preview hazırlanır. Commit
 varsayılan olarak hash uyuşmazlığını reddeder. Kullanıcı düzenlemelerini silme
 kararı açıkça verilmişse ilk `commit_bake_job` çağrısına `replaceEdited:true`

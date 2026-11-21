@@ -43,12 +43,13 @@ commitleri içeren başka bir branch bulunmadı.
 | Typed BakeService ve Mesh2D deformation bake | `codex/mesh2d-mesh0` | `aaf3066a`–`251f2d3d` | Geliştirme branch'inde |
 | 2D rigid body bake | `codex/mesh2d-mesh0` | `13aca9c3` | Geliştirme branch'inde |
 | İlk deterministik Voronoi fracture dilimi | `codex/mesh2d-mesh0` | `fcd22d8b` | Geliştirme branch'inde |
-| Voronoi v2 portable kimlikleri, canlı kabul ve rigid Worker sınırı | `codex/mesh2d-mesh0` | 21 Kasım çalışma ağacı; henüz commitlenmedi | Geliştirme branch'inde |
-| Kalıcı MCP bake job, Jobs & Bake insan inceleme UI'ı ve opacity birim düzeltmesi | `codex/mesh2d-mesh0` | 21 Kasım çalışma ağacı; henüz commitlenmedi | Geliştirme branch'inde |
-| Olay-korumalı rigid keyframe sadeleştirme ve kalite raporu UI'ı | `codex/mesh2d-mesh0` | 21 Kasım çalışma ağacı; henüz commitlenmedi | Geliştirme branch'inde |
-| Sahiplik hash'li güvenli Re-bake / Clear Bake, Inspector ve MCP yaşam döngüsü | `codex/mesh2d-mesh0` | 21 Kasım çalışma ağacı; henüz commitlenmedi | Geliştirme branch'inde |
-| Image fracture Mesh2D görünümü, kaynak UV koruması ve canlı kabul | `codex/mesh2d-mesh0` | 21 Kasım çalışma ağacı; henüz commitlenmedi | Geliştirme branch'inde |
-| Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | 21 Kasım çalışma ağacı; henüz commitlenmedi | Geliştirme branch'inde |
+| Voronoi v2 portable kimlikleri, canlı kabul ve rigid Worker sınırı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
+| Kalıcı MCP bake job, Jobs & Bake insan inceleme UI'ı ve opacity birim düzeltmesi | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
+| Olay-korumalı rigid keyframe sadeleştirme ve kalite raporu UI'ı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
+| Sahiplik hash'li güvenli Re-bake / Clear Bake, Inspector ve MCP yaşam döngüsü | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
+| Image fracture Mesh2D görünümü, kaynak UV koruması ve canlı kabul | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
+| Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
+| Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -125,7 +126,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
-| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture ve deterministik artistic explosion tamamlandı. Sırada kalan panel/overlay bitişi, 32 parçalı görsel matris ve temel scrub/player/MCP/render/export parity vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
+| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture, deterministik artistic explosion ve gerçek render–collider tanısı tamamlandı. Sırada 32 parçalı görsel matris ve temel scrub/player/MCP/render/export parity vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
 | Sonra 4 | Fabric/kumaş | Structured grid veya spline'dan türetilmiş Mesh2D; gravity/wind/pin/collision, deformasyon klibi ve bake. |
 | Sonra 5 | Blob Surface, sıvı, akış/duman/ateş | Particle liquid + değişken topolojili Blob Surface; damla birleşme/ayrılması, text/shape/spline/`Mesh2D` kaynak-collider-yüzey hedefleri. Duman/ateş ayrı grid/partikül tarifidir; alanlar, obstacle ve typed simulation bake kullanır. |
 | Sonra 6 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
@@ -3031,5 +3032,39 @@ Doğrulama **430 test dosyası / 3.229 test**, `npx tsc --noEmit`,
 `npm run mcp:build`, `npm run cli:build`, **16/16 CLI testi** ve
 `npm run build` ile geçti. Production build yalnız bilinen
 `applicationBuildInfo.ts` named-export uyarısını verdi.
-Güncel sıradaki fizik işi aşama 3'ün kalan panel/overlay ve 32 fragment görsel
-matrisiyle aşama 4 scrub/player/MCP/render/export parity kapısını kapatmaktır.
+Bu dilimden sonraki fizik işi topology/collider tanısını §12.74'te tamamlamak,
+ardından 32 fragment görsel matrisiyle aşama 4
+scrub/player/MCP/render/export parity kapısını kapatmaktır.
+
+### 12.74. Topology olayı ve gerçek render–collider tanısı — 21 Kasım 2026
+
+Committed fracture bake artık aynı değerlendirilmiş karede iki ayrı geometri
+taşır: Path/Mesh2D'den gelen gerçek render sınırı ve bake body snapshot'ından
+gelen gerçek derlenmiş collider sınırı. `FractureOverlayGeometryResolver`
+source/fragment fazını, exact event tick'ini ve bu iki polygon kümesini üretir;
+`FractureRenderColliderAnalyzer` iki yönlü vertex→edge mesafesiyle maksimum ve
+ortalama px farkını ölçer. Sabit-topology görünüm ile değişken-topology olay
+durumu tek cache biçimine zorlanmaz.
+
+**Inspect Bake → Topology & collider** kartı olay zamanı/tick, source→fragment,
+polygon ve örnek sayılarını; aligned/review/unavailable durumunu ve kurtarma
+yolunu semantik başlık/`dl` ile verir. Canvas'taki **Event state** ve
+**Collider delta** seçenekleri önce/source, exact event ve sonra/fragments
+durumlarını metinle gösterir. Rozetler ve delta çizgileri editor-only'dir;
+canonical render/export çıktısına girmez.
+
+MCP `inspect_physics_bake` aynı kalıcı kayıttan `topologyEvent` ile
+`renderColliderQuality` alanlarını döndürür. İzole 2010 production kabulünde
+tick `68` / `566.667 ms`, 16 fragment body, 16/16 polygon, 164 örnek ve `0 px`
+maksimum/ortalama fark görüldü. 421 px panel yatay taşmadı; kontroller 44 px,
+kanıt metni 12/16 px idi. Before/exact/after gerçek PNG'leri 800×450 üretildi;
+validator geçerli ve uyarısızdı.
+
+Tekrarlanabilir MCP kabulü
+`scripts/qa/fracture-topology-collider-live.mjs` içindedir. Portable kanıt
+`projects/fracture-topology-collider-acceptance-2026-11-21.chorono.json`
+(`sha256 3d51d8e52026bdde58d32c6ce6a4ee5f39324b9bce67a994b03aabd01b26dbcd`).
+Doğrulama **431 test dosyası / 3.232 test**, TypeScript, MCP/CLI build,
+**16/16 CLI testi** ve production build ile geçti. Aşama 3 panel/overlay dilimi
+tamamlandı; sıradaki fizik işi 32 fragment, eğimli zemin ve yüksek hızlı küçük
+parça geniş görsel matrisi, ardından aşama 4 parity kapısıdır.

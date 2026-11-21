@@ -53,8 +53,11 @@ read `get_scene` again and call `commit_bake_job`. Prepare, status, preview,
 cancel and discard do not write scene source; commit publishes exactly one undo
 step. Existing transform writers or target collisions are rejected rather than
 overwritten. To re-simulate a committed record, first call
-`inspect_physics_bake`, then prepare with `replaceRecordId`. A current ownership
-set replaces safely; edited/incomplete/legacy output remains untouched unless
+`inspect_physics_bake`. Fracture inspection also returns the atomic
+`topologyEvent` and exact-event `renderColliderQuality`; review its textual
+status, body counts and maximum/mean pixel delta together with rendered frames.
+Then prepare with `replaceRecordId`. A current ownership set replaces safely;
+edited/incomplete/legacy output remains untouched unless
 the user explicitly chooses `replaceEdited:true` on `commit_bake_job`.
 `clear_physics_bake` has the same safe default and requires
 `discardEdited:true` to delete changed output. Duplicate targets remain blocked;

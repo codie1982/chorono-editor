@@ -409,9 +409,11 @@ solid source Path davranışı korunur. Diagnostic triangle fan gerçek appearan
 mesh'i değildir. 32 parçalı/geniş görsel matris ve bütün ürün UI kriterleri
 henüz bu aşamaların tamamı geçti anlamına gelmez. Seam/boşluk ile mask bellek
 ölçümü de tamamlandı. Darbe/temas fracture ve açık dış enerji olarak raporlanan
-artistic explosion impulse/spin de uygulanıp canlı MCP kabulünden geçti. Aktif
-sıra aşama 3'ün kalan panel/overlay bitişi ve geniş görsel matrisiyle aşama 4
-parity kapısıdır.
+artistic explosion impulse/spin de uygulanıp canlı MCP kabulünden geçti.
+Topology olay rozeti, exact-event Inspector kartı ve gerçek render–collider
+fark tanısı UI/MCP eşliğiyle tamamlandı. Aktif sıra aşama 3'ün 32 fragment,
+eğimli zemin ve yüksek hızlı küçük parça geniş görsel matrisiyle aşama 4 parity
+kapısıdır.
 
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |
@@ -473,7 +475,8 @@ kinematic çevre ve GPU compute hâlâ kapsam dışıdır. Worker'da CPU çözü
 doğruluk temelidir; GPU çizim desteği fizik hesabını otomatik hızlandırmış
 sayılmaz.
 
-Uygulanan ilk dilim için `npm test` (415 dosya / 3.172 test), TypeScript,
-`npm run mcp:build` ve `npm run build` 21 Kasım'da geçti; build öncesinde Next
-sunucusu durduruldu. Yeni sistem class'ları mevcut event/script sözleşmesine
-uyar. Yayınlama veya paket kurulumu bu planın parçası değildir.
+Güncel uygulanan dilim için `npm test` (431 dosya / 3.232 test), TypeScript,
+`npm run mcp:build`, `npm run cli:build`, 16/16 CLI testi ve `npm run build`
+21 Kasım'da geçti; build öncesinde Next sunucusu durduruldu. Yeni sistem
+class'ları mevcut event/script sözleşmesine uyar. Yayınlama veya paket kurulumu
+bu planın parçası değildir.

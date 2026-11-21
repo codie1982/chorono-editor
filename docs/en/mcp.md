@@ -99,7 +99,12 @@ retain realized impact evidence and explosion settings in recipe provenance.
 
 Before Re-bake or Clear, call `inspect_physics_bake`. It reports output as
 `current`, `edited`, `incomplete` or `legacy`, and source as `current`,
-`changed` or `unavailable`. Pass `replaceRecordId` to a prepare call to build a
+`changed` or `unavailable`. Fracture records additionally return
+`topologyEvent` with the atomic source-to-fragment tick/time/body identities and
+`renderColliderQuality` with exact-event visible-boundary versus compiled
+collider counts, maximum/mean pixel delta and explicit pass/warning/unavailable
+status. Static environment colliders are excluded from the delta. Pass
+`replaceRecordId` to a prepare call to build a
 replacement preview without removing the committed bake. Commit refuses hash
 conflicts by default; pass `replaceEdited:true` on the first
 `commit_bake_job` call only after an explicit destructive Replace choice.

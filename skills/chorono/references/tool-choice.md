@@ -40,6 +40,8 @@ than natural collision force.
 
 Committed bake lifecycle is ownership-guarded. Read `inspect_physics_bake`
 before Re-bake or Clear. Untouched output can be replaced or cleared directly;
+fracture inspection also exposes its atomic topology event and exact-event
+render/collider quality, so validate those metrics together with rendered PNGs.
 edited, incomplete or legacy output refuses by default. `replaceEdited:true` on
 the first `commit_bake_job` call or `discardEdited:true` on
 `clear_physics_bake` is an explicit destructive decision. Duplicate targets or
