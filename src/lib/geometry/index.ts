@@ -19,11 +19,13 @@ export {
   SplineBoundaryRingBuilder,
   Mesh2DTopologyHasher,
   Mesh2DAdjacencyBuilder,
+  Mesh2DBoundaryRingExtractor,
   Mesh2DTopologyValidator,
   computeMesh2DLocalBounds,
   computeMesh2DPositionBounds,
   containsMesh2DPoint,
 } from './mesh2d'
+export type { Mesh2DBoundaryRing } from './mesh2d'
 export type {
   StructuredGridMesh2DOptions,
   SplineBoundaryMesh2DOptions,

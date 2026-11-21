@@ -3,6 +3,8 @@ export type { StructuredGridMesh2DOptions } from './StructuredGridMesh2DGenerato
 export { Mesh2DTopologyHasher } from './Mesh2DTopologyHasher'
 export { hashMesh2DCanonical } from './Mesh2DTopologyHasher'
 export { Mesh2DAdjacencyBuilder } from './Mesh2DAdjacencyBuilder'
+export { Mesh2DBoundaryRingExtractor } from './Mesh2DBoundaryRingExtractor'
+export type { Mesh2DBoundaryRing } from './Mesh2DBoundaryRingExtractor'
 export type { Mesh2DAdjacency, Mesh2DEdgeAdjacency } from './Mesh2DAdjacencyBuilder'
 export { Mesh2DTopologyValidator } from './Mesh2DTopologyValidator'
 export type {
