@@ -38,6 +38,15 @@ export interface FractureAuthoringDraft {
   readonly explosionSeed: number
   readonly seed: number
   readonly generationId: string
+  readonly secondaryEnabled: boolean
+  readonly secondaryParentFragmentIndex: number
+  readonly secondaryFragmentCount: number
+  readonly secondaryFractureTimeMs: number
+  readonly secondarySeed: number
+  readonly secondaryGenerationId: string
+  readonly secondaryMaxFragments: number
+  readonly secondaryMaxTriangles: number
+  readonly secondaryMaxPortableBytes: number
   readonly clusterEnabled: boolean
   readonly bondGraphId: string
   readonly bondImpulseStrength: number
@@ -117,10 +126,52 @@ export default function FractureAuthoringSection({
     </label>
     <p className="text-xs leading-5 text-gray-500">The realized event tick, seed and polygons are persisted together. Impact preview fails clearly when no contact reaches the threshold.</p>
     <label className={toggleRowClass}>
+      <input type="checkbox" checked={draft.secondaryEnabled}
+        onChange={event => {
+          onChange('secondaryEnabled', event.target.checked)
+          if (event.target.checked) {
+            onChange('clusterEnabled', false)
+            onChange('fractureTriggerKind', 'time')
+          }
+        }} className="size-4 accent-fuchsia-500" />
+      <span><span className="block text-xs text-gray-200">Precompute secondary fracture</span>
+        <span className="block text-xs leading-5 text-gray-500">Replaces one selected root fragment with a deterministic child generation at a later fixed tick.</span></span>
+    </label>
+    {draft.secondaryEnabled && <div className="space-y-2 rounded border border-fuchsia-800/70 bg-fuchsia-950/20 p-2">
+      <p role="status" className="text-xs leading-5 text-fuchsia-100">FRACTURE3 generation 1 · convex root only · time trigger only · bonded root clusters are unavailable in this first recursive slice.</p>
+      <div className="grid grid-cols-2 gap-2">
+        <PhysicsNumberField label="Parent fragment" unit={`index 0–${Math.max(0, draft.fragmentCount - 1)}`}
+          value={draft.secondaryParentFragmentIndex} min={0} max={Math.max(0, draft.fragmentCount - 1)} step={1}
+          onChange={value => onChange('secondaryParentFragmentIndex', value)} />
+        <PhysicsNumberField label="Child fragments" unit="2–100" value={draft.secondaryFragmentCount} min={2} max={100} step={1}
+          onChange={value => onChange('secondaryFragmentCount', value)} />
+        <PhysicsNumberField label="Secondary time" unit="local ms" value={draft.secondaryFractureTimeMs} min={1}
+          onChange={value => onChange('secondaryFractureTimeMs', value)} />
+        <PhysicsNumberField label="Child seed" unit="uint32" value={draft.secondarySeed} min={0} max={0xffffffff} step={1}
+          onChange={value => onChange('secondarySeed', value)} />
+      </div>
+      <label className={labelClass}>Child generation ID
+        <input aria-label="Secondary fracture generation ID" value={draft.secondaryGenerationId} maxLength={110}
+          onChange={event => onChange('secondaryGenerationId', event.target.value)} className={`${inputClass} font-mono`} />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <PhysicsNumberField label="Fragment budget" unit="total" value={draft.secondaryMaxFragments} min={2} max={4096} step={1}
+          onChange={value => onChange('secondaryMaxFragments', value)} />
+        <PhysicsNumberField label="Triangle budget" unit="total" value={draft.secondaryMaxTriangles} min={1} max={65536} step={1}
+          onChange={value => onChange('secondaryMaxTriangles', value)} />
+        <PhysicsNumberField label="Portable budget" unit="bytes" value={draft.secondaryMaxPortableBytes} min={1} max={67108864} step={1}
+          onChange={value => onChange('secondaryMaxPortableBytes', value)} />
+      </div>
+      <p className="text-xs leading-5 text-fuchsia-200">Depth is fixed to 1 and the generation count to 2. Admission uses realized fragment, triangle and UTF-8 portable byte totals before simulation starts.</p>
+    </div>}
+    <label className={toggleRowClass}>
       <input type="checkbox" checked={draft.clusterEnabled}
         onChange={event => {
           onChange('clusterEnabled', event.target.checked)
-          if (event.target.checked && draft.explosionEnabled) onChange('explosionEnabled', false)
+          if (event.target.checked) {
+            if (draft.explosionEnabled) onChange('explosionEnabled', false)
+            if (draft.secondaryEnabled) onChange('secondaryEnabled', false)
+          }
         }} className="size-4 accent-cyan-500" />
       <span><span className="block text-xs text-gray-200">Keep fragments bonded</span>
         <span className="block text-xs leading-5 text-gray-500">Starts as one compound body; shared-boundary bonds split connected components under load.</span></span>

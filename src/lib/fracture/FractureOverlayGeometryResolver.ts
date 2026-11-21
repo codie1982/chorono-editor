@@ -1,11 +1,12 @@
 import type { OverrideMap } from '@/lib/evaluator'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import type { ChronoScene, Layer } from '@/lib/types'
-import type { FracturePoint2D } from '@/lib/types/fracture'
+import type { FractureGeneration, FracturePoint2D } from '@/lib/types/fracture'
 import type { FractureRegionGeneration } from '@/lib/types/fracture'
 import type { Mesh2DGeometry, Mesh2DTopology } from '@/lib/types/mesh2d'
 import type { RigidBakeRecord, RigidBodySnapshot } from '@/lib/types/physics'
 import { Mesh2DBoundaryRingExtractor, Mesh2DTopologyHasher } from '@/lib/geometry/mesh2d'
+import { isRigidBodyVisibleAtTime } from '@/lib/physics/RigidPoseTrackCompiler'
 
 export interface FractureOverlayPolygon {
   readonly id: string
@@ -59,6 +60,9 @@ export class FractureOverlayGeometryResolver {
     const generation = scene.physics?.fractureGenerations?.find(item => item.generationId === generationId)
     const sourceLayer = scene.layers.find(layer => layer.id === generation?.source.ownerId)
     if (!generation || !sourceLayer) return null
+    if (record.recipe.fractureHierarchy) {
+      return resolveRecursiveFrame(scene, record, sourceLayer, timeMs, overrides)
+    }
     if (generation.schemaVersion === 2) {
       return resolveRegionFrame(scene, record, event, generation, sourceLayer, timeMs, overrides)
     }
@@ -118,6 +122,81 @@ export class FractureOverlayGeometryResolver {
       dynamicColliderPolygons,
       colliderPolygons,
     }
+  }
+}
+
+/** Resolve the mixed active root/child topology after a recursive event. */
+function resolveRecursiveFrame(
+  scene: ChronoScene,
+  record: RigidBakeRecord,
+  sourceLayer: Layer,
+  timeMs: number,
+  overrides?: OverrideMap,
+): FractureOverlayFrame | null {
+  const hierarchy = record.recipe.fractureHierarchy
+  const events = record.recipe.fractureEvents ?? []
+  const rootEvent = events[0]
+  if (!hierarchy || !rootEvent) return null
+  const generationById = new Map((scene.physics?.fractureGenerations ?? [])
+    .filter((item): item is FractureGeneration => item.schemaVersion === 1)
+    .map(item => [item.generationId, item]))
+  const generations = hierarchy.entries.map(entry => generationById.get(entry.generationId))
+  if (generations.some(generation => !generation)) return null
+  const fragments = generations.flatMap(generation => generation!.fragments)
+  const fragmentById = new Map(fragments.map(fragment => [fragment.id, fragment]))
+  const layerById = new Map(scene.layers.map(layer => [layer.id, layer]))
+  const resolveMatrix = createLayerWorldMatrixResolver(scene, timeMs, overrides)
+  const rootTimeMs = record.recipe.startTimeMs + rootEvent.timeMs
+  const phase = timeMs < rootTimeMs ? 'source' as const : 'fragments' as const
+  const localTimeMs = timeMs - record.recipe.startTimeMs
+  const activeBodies = record.recipe.bodies.filter(body => body.motionType === 'dynamic'
+    && isRigidBodyVisibleAtTime(record.recipe, body.bodyId, localTimeMs))
+
+  const activeFragments = phase === 'source'
+    ? generations[0]!.fragments.map(fragment => ({ fragment, layer: sourceLayer }))
+    : activeBodies.flatMap(body => {
+      const fragment = fragmentById.get(body.layerId)
+      const layer = layerById.get(body.layerId)
+      return fragment && layer ? [{ fragment, layer }] : []
+    })
+  const diagnosticFragments = activeFragments.map(({ fragment, layer }) => {
+    const matrix = resolveMatrix(layer)
+    return {
+      id: fragment.id,
+      points: fragment.polygon.map(point => matrix.applyToPoint(point)),
+      centroid: matrix.applyToPoint(fragment.centroidPx),
+      triangleIndices: convexFan(fragment.polygon.length),
+    }
+  })
+  const renderPolygons = phase === 'source'
+    ? [polygonFromPoints(sourceLayer.id, generations[0]!.source.polygon, sourceLayer, resolveMatrix)]
+    : activeFragments.flatMap(({ fragment, layer }) => {
+      const polygon = renderPolygonFromLayer(layer, fragment, resolveMatrix)
+      return polygon ? [polygon] : []
+    })
+  const dynamicColliderPolygons = activeBodies.flatMap(body => {
+    const layer = layerById.get(body.layerId)
+    return layer ? bodyColliderPolygons(body, layer, resolveMatrix) : []
+  })
+  const colliderPolygons = [...dynamicColliderPolygons]
+  record.recipe.bodies.filter(body => body.motionType === 'static').forEach(body => {
+    const layer = layerById.get(body.layerId)
+    if (layer) colliderPolygons.push(...bodyColliderPolygons(body, layer, resolveMatrix))
+  })
+  const latestEvent = [...events].reverse().find(event => localTimeMs + 1e-7 >= event.timeMs) ?? rootEvent
+  const latestGenerationId = latestEvent.id.replace(/:event$/, '')
+  const eventTimeMs = record.recipe.startTimeMs + latestEvent.timeMs
+  return {
+    recordId: record.id,
+    generationId: latestGenerationId,
+    phase,
+    eventTimeMs,
+    eventTick: latestEvent.tick,
+    atEvent: Math.abs(timeMs - eventTimeMs) <= 1e-6,
+    fragments: diagnosticFragments,
+    renderPolygons,
+    dynamicColliderPolygons,
+    colliderPolygons,
   }
 }
 

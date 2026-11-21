@@ -71,6 +71,17 @@ overrides `unbreakable`; a reset runs before contact load on that tick. The
 Inspector returns both canonical schedules and the realized `reason:"forced"`
 event. Product Canvas bond selection and Re-bake use these same portable fields.
 
+Add `secondary` to precompute one FRACTURE3 child generation. Supply a
+zero-based `parentFragmentIndex`, a later fixed-step `fractureTimeMs`, child
+`fragmentCount`/`seed`, and optionally a stable child `generationId`. The first
+slice requires a convex root and timed root event and cannot combine with a
+bonded root cluster. Optional `budgets` bound realized `maxDepth`,
+`maxGenerations`, `maxFragments`, `maxTriangles` and `maxPortableBytes` before
+the Worker starts. Preview returns both topology events and uses the merged
+root-fragment visibility interval. After commit, `inspect_physics_bake` returns
+`topologyEvents` and `recursiveHierarchy` with entries, limits, usage and hash;
+Clear/Re-bake owns every generation atomically.
+
 Both prepare tools are standalone and cannot run inside `batch_actions`. Read
 `get_scene` immediately before prepare and pass its revision/readToken. Keep the
 returned job id in the same MCP connection/editor session: poll `get_bake_job`,

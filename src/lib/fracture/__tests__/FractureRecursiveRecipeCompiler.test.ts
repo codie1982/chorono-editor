@@ -10,6 +10,7 @@ import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation
 import { ResourceBudget } from '@/lib/resources/budget'
 import type { RigidBodySnapshot } from '@/lib/types/physics'
 import { FractureRecursiveRecipeCompiler } from '../FractureRecursiveRecipeCompiler'
+import { FractureOverlayGeometryResolver } from '../FractureOverlayGeometryResolver'
 import { VoronoiFractureGenerator } from '../VoronoiFractureGenerator'
 
 function fixture() {
@@ -115,6 +116,17 @@ describe('FractureRecursiveRecipeCompiler', () => {
     expect(inspection.generations).toHaveLength(2)
     expect(inspection).toMatchObject({ ownershipState: 'current', sourceState: 'current' })
     expect(() => assertPhysicsSceneData(committed.physics)).not.toThrow()
+    const overlay = new FractureOverlayGeometryResolver()
+    expect(overlay.resolve(committed, 'recursive-bake', 750)).toMatchObject({
+      generationId: value.root.generationId,
+      renderPolygons: { length: 4 },
+      dynamicColliderPolygons: { length: 4 },
+    })
+    expect(overlay.resolve(committed, 'recursive-bake', 1250)).toMatchObject({
+      generationId: value.child.generationId,
+      renderPolygons: { length: 6 },
+      dynamicColliderPolygons: { length: 6 },
+    })
     const cleared = clearRigidBakeOwnedContent(committed, 'recursive-bake')
     expect(cleared.layers).toEqual(value.scene.layers)
     expect(cleared.timelines).toEqual(value.scene.timelines)

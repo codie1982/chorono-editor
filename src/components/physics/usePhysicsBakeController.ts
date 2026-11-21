@@ -13,6 +13,7 @@ import { makeClearRigidBakeCmd } from '@/lib/editor/commands-rigid-bake-lifecycl
 import { makeApplyRigidBodyBakeCmd, makeReplaceRigidBodyBakeCmd } from '@/lib/editor/commands-rigid-body-bake'
 import { makeApplyVoronoiFractureBakeCmd, makeReplaceVoronoiFractureBakeCmd } from '@/lib/editor/commands-voronoi-fracture-bake'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureRecursiveRecipeCompiler } from '@/lib/fracture/FractureRecursiveRecipeCompiler'
 import {
   PhysicsBakeRecipeFactory,
   type RigidBakeRecipeInput,
@@ -53,6 +54,7 @@ export interface PhysicsBakeController {
 interface PreparedJob {
   readonly mode: PhysicsBakeRequest['mode']
   readonly generation?: AnyFractureGeneration
+  readonly generations?: readonly AnyFractureGeneration[]
   readonly recordId?: string
   readonly replaceRecordId?: string
 }
@@ -106,10 +108,11 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
       : liveScene
     const factory = new PhysicsBakeRecipeFactory()
     const compiled = request.mode === 'rigid'
-      ? { recipe: factory.compileRigid(scene, request.input), generation: undefined }
+      ? { recipe: factory.compileRigid(scene, request.input), generation: undefined, generations: undefined }
       : factory.compileVoronoi(scene, request.input)
     const recipe = compiled.recipe
     const generation = compiled.generation
+    const generations = compiled.generations
     const documentSignal = getDocumentSignal()
 
     discard()
@@ -132,7 +135,9 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
           return false
         }
         return request.mode === 'fracture' && generation
-          ? new FractureRigidRecipeCompiler().isCurrent(recipe, generation, current)
+          ? generations && generations.length > 1
+            ? new FractureRecursiveRecipeCompiler().isCurrent(recipe, generations, current)
+            : new FractureRigidRecipeCompiler().isCurrent(recipe, generation, current)
           : new RigidBodySceneCompiler().isCurrent(recipe, current)
       },
       prepare: context => adapter.prepare(recipe, context),
@@ -141,6 +146,7 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
     prepared.current = {
       mode: request.mode,
       generation,
+      generations,
       recordId: request.recordId,
       replaceRecordId: request.replaceRecordId,
     }
@@ -170,7 +176,7 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
 
   const startRebake = useCallback((recordId: string) => {
     const inspection = new RigidBakeOwnershipInspector().inspect(getScene(), recordId)
-    start(requestFromRecord(inspection.record, inspection.generation))
+    start(requestFromRecord(inspection.record, inspection.generation, inspection.generations))
   }, [getScene, start])
 
   const clearBake = useCallback((recordId: string, conflictPolicy?: RigidBakeConflictPolicy) => {
@@ -190,12 +196,14 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
         dispatchCommand(pending.replaceRecordId ? makeReplaceVoronoiFractureBakeCmd({
           existingRecordId: pending.replaceRecordId,
           generation: pending.generation,
+          childGenerations: pending.generations?.slice(1).filter((item): item is Extract<AnyFractureGeneration, { schemaVersion: 1 }> => item.schemaVersion === 1),
           recipe: preview.recipe,
           tracks: preview.tracks,
           sampleCount: preview.report.sampleCount,
           conflictPolicy,
         }) : makeApplyVoronoiFractureBakeCmd({
           generation: pending.generation,
+          childGenerations: pending.generations?.slice(1).filter((item): item is Extract<AnyFractureGeneration, { schemaVersion: 1 }> => item.schemaVersion === 1),
           recipe: preview.recipe,
           tracks: preview.tracks,
           sampleCount: preview.report.sampleCount,
@@ -243,6 +251,7 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
 export function requestFromRecord(
   record: RigidBakeRecord,
   generation?: AnyFractureGeneration,
+  generations?: readonly AnyFractureGeneration[],
 ): PhysicsBakeRequest {
   const recipe = record.recipe
   const common = {
@@ -285,6 +294,23 @@ export function requestFromRecord(
       }),
     }
     : { kind: 'time' as const }
+  const childGeneration = generations?.[1]
+  const childEvent = childGeneration
+    ? recipe.fractureEvents?.find(candidate => candidate.id === `${childGeneration.generationId}:event`)
+    : undefined
+  const secondary = childGeneration && childGeneration.schemaVersion === 1 && childEvent
+    ? {
+      parentFragmentIndex: generation.fragments.findIndex(fragment => fragment.id === childGeneration.parentId),
+      fractureTimeMs: childEvent.timeMs,
+      fragmentCount: childGeneration.requestedFragmentCount,
+      seed: childGeneration.rootSeed,
+      generationId: childGeneration.generationId,
+      budgets: recipe.fractureHierarchy?.limits,
+    }
+    : undefined
+  if (secondary && secondary.parentFragmentIndex < 0) {
+    throw new Error('The recursive fracture parent is missing from its root generation.')
+  }
   return {
     mode: 'fracture',
     replaceRecordId: record.id,
@@ -305,6 +331,7 @@ export function requestFromRecord(
         forcedBreaks: recipe.fractureClusters[0].forcedBreaks?.map(action => ({ ...action })),
         damageResets: recipe.fractureClusters[0].damageResets?.map(action => ({ ...action })),
       } : undefined,
+      secondary,
       fragmentCount: generation.requestedFragmentCount,
       seed: generation.rootSeed,
       generationId: generation.generationId,

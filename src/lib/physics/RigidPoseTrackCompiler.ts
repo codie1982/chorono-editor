@@ -202,6 +202,23 @@ export function fractureVisibilityPlan(recipe: RigidBodyBakeRecipe): readonly {
   })
 }
 
+/** Evaluate topology visibility for one body at simulation-local time. */
+export function isRigidBodyVisibleAtTime(
+  recipe: RigidBodyBakeRecipe,
+  bodyId: string,
+  timeMs: number,
+): boolean {
+  const body = recipe.bodies.find(candidate => candidate.bodyId === bodyId)
+  if (!body) throw new Error(`Rigid visibility body is missing: ${bodyId}`)
+  let visible = !body.activation
+  for (const event of recipe.fractureEvents ?? []) {
+    if (timeMs + 1e-7 < event.timeMs) break
+    if (event.sourceBodyId === bodyId) visible = false
+    if (event.fragmentBodyIds.includes(bodyId)) visible = true
+  }
+  return visible
+}
+
 /** Hashes the generated fields owned by a rigid bake record. */
 export function hashRigidBakeTrack(track: Track): string {
   return hashCanonicalRecords('rigid-bake-track-v1', [

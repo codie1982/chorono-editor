@@ -10,9 +10,10 @@ import {
 } from '@/lib/bake'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import type { ChronoScene } from '@/lib/types'
-import type { RigidBodySnapshot, RigidFractureEvent } from '@/lib/types/physics'
+import type { RigidBodySnapshot } from '@/lib/types/physics'
 import type { RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
 import { RigidBakeOwnershipInspector, type RigidBakeOwnershipInspection } from '@/lib/physics/RigidBakeOwnership'
+import { isRigidBodyVisibleAtTime } from '@/lib/physics/RigidPoseTrackCompiler'
 import {
   compileMCPRigidBake,
   compileMCPVoronoiBake,
@@ -44,6 +45,8 @@ export interface MCPPhysicsBakeJobSnapshot {
   readonly recipeHash: string
   readonly generationId?: string
   readonly fragmentCount?: number
+  readonly generationCount?: number
+  readonly totalFragmentCount?: number
   readonly replaceRecordId?: string
   readonly error?: string
 }
@@ -55,6 +58,7 @@ export interface MCPPhysicsBakePreviewFrame {
   readonly absoluteTimeMs: number
   readonly durationMs: number
   readonly event?: { readonly timeMs: number; readonly tick: number }
+  readonly events?: readonly { readonly eventId: string; readonly timeMs: number; readonly tick: number }[]
   readonly bodies: readonly {
     readonly bodyId: string
     readonly layerId: string
@@ -159,6 +163,7 @@ export class MCPPhysicsBakeJobManager {
     }
     const preview = snapshot.preview
     const event = preview.recipe.fractureEvents?.[0]
+    const events = preview.recipe.fractureEvents ?? []
     const defaultTime = event?.timeMs ?? Math.min(1000, preview.recipe.durationMs)
     const timeMs = clampTime(requestedTimeMs ?? defaultTime, preview.recipe.durationMs)
     return {
@@ -167,13 +172,16 @@ export class MCPPhysicsBakeJobManager {
       absoluteTimeMs: preview.recipe.startTimeMs + timeMs,
       durationMs: preview.recipe.durationMs,
       ...(event ? { event: { timeMs: event.timeMs, tick: event.tick } } : {}),
+      ...(events.length ? { events: events.map(item => ({
+        eventId: item.id, timeMs: item.timeMs, tick: item.tick,
+      })) } : {}),
       bodies: preview.recipe.bodies.map(body => {
         const pose = preview.clip.sample(body.bodyId, timeMs)
         return {
           bodyId: body.bodyId,
           layerId: body.layerId,
           motionType: body.motionType,
-          visible: isBodyVisible(body, event, timeMs),
+          visible: isRigidBodyVisibleAtTime(preview.recipe, body.bodyId, timeMs),
           centerX: pose.centerX,
           centerY: pose.centerY,
           angleDeg: pose.angleDeg,
@@ -320,6 +328,7 @@ export class MCPPhysicsBakeJobManager {
   private snapshot(entry: JobEntry): MCPPhysicsBakeJobSnapshot {
     const current = entry.handle.getSnapshot()
     const generation = entry.definition.generation
+    const generations = entry.definition.generations
     return {
       jobId: entry.jobId,
       mode: entry.definition.mode,
@@ -335,7 +344,13 @@ export class MCPPhysicsBakeJobManager {
       recipeHash: entry.report?.recipeHash ?? entry.definition.recipe.recipeHash,
       ...(entry.definition.replaceRecordId ? { replaceRecordId: entry.definition.replaceRecordId } : {}),
       ...(entry.report ? { report: entry.report } : {}),
-      ...(generation ? { generationId: generation.generationId, fragmentCount: generation.fragments.length } : {}),
+      ...(generation ? {
+        generationId: generation.generationId,
+        fragmentCount: generation.fragments.length,
+        generationCount: generations?.length ?? 1,
+        totalFragmentCount: generations?.reduce((sum, item) => sum + item.fragments.length, 0)
+          ?? generation.fragments.length,
+      } : {}),
       ...(current.error ? { error: current.error } : {}),
     }
   }
@@ -381,17 +396,6 @@ function randomJobId(): string {
 function clampTime(timeMs: number, durationMs: number): number {
   if (!Number.isFinite(timeMs)) throw new RangeError('Bake preview time must be finite')
   return Math.max(0, Math.min(durationMs, timeMs))
-}
-
-function isBodyVisible(
-  body: RigidBodySnapshot,
-  event: RigidFractureEvent | undefined,
-  timeMs: number,
-): boolean {
-  if (!event) return true
-  if (body.bodyId === event.sourceBodyId) return timeMs < event.timeMs
-  if (event.fragmentBodyIds.includes(body.bodyId)) return timeMs >= event.timeMs
-  return true
 }
 
 function isTerminal(status: BakeJobStatus): boolean {

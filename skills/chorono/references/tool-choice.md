@@ -52,6 +52,13 @@ For authored interaction, pass fixed-step-aligned `cluster.forcedBreaks` and
 break's realized tick before commit. Use `replaceRecordId` for the same
 single-undo Re-bake workflow as Canvas Group/Split/Unbreakable editing.
 
+Alternatively, `secondary` precomputes one convex child generation from a
+root `parentFragmentIndex`. Its fixed-time event must follow the root event.
+Use `budgets` to cap realized hierarchy depth, generation/fragment/triangle
+counts and portable bytes. This first recursive slice is incompatible with an
+impact root or bonded root cluster. Review both preview `events`; after commit
+read `recursiveHierarchy` from `inspect_physics_bake` before Re-bake or Clear.
+
 Committed bake lifecycle is ownership-guarded. Read `inspect_physics_bake`
 before Re-bake or Clear. Untouched output can be replaced or cleared directly;
 fracture inspection also exposes its atomic topology event and exact-event

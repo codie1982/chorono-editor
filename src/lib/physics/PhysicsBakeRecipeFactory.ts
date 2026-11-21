@@ -1,4 +1,6 @@
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureRecursiveRecipeCompiler } from '@/lib/fracture/FractureRecursiveRecipeCompiler'
+import type { FractureGenerationBudgetLimits } from '@/lib/types/fracture'
 import { FractureBondGraphCompiler } from '@/lib/fracture/FractureBondGraphCompiler'
 import { FractureSourceBoundaryCompiler } from '@/lib/fracture/FractureSourceBoundaryCompiler'
 import { FractureSourceRegionCompiler } from '@/lib/fracture/FractureSourceRegionCompiler'
@@ -72,6 +74,15 @@ export interface VoronoiBakeRecipeInput {
     readonly forcedBreaks?: readonly FractureBondForcedBreak[]
     readonly damageResets?: readonly FractureBondDamageReset[]
   }
+  /** Optional first FRACTURE3 precomputed child generation. */
+  readonly secondary?: {
+    readonly parentFragmentIndex: number
+    readonly fractureTimeMs: number
+    readonly fragmentCount: number
+    readonly seed: number
+    readonly generationId?: string
+    readonly budgets?: Partial<FractureGenerationBudgetLimits>
+  }
   readonly stepHz?: number
   readonly sampleFps?: number
   readonly pixelsPerMeter?: number
@@ -84,6 +95,7 @@ export interface VoronoiBakeRecipeInput {
 export interface PreparedVoronoiBakeRecipe {
   readonly recipe: RigidBodyBakeRecipe
   readonly generation: FractureGeneration | FractureRegionGeneration
+  readonly generations: readonly (FractureGeneration | FractureRegionGeneration)[]
 }
 
 /**
@@ -99,6 +111,7 @@ export interface PreparedVoronoiBakeRecipe {
 export class PhysicsBakeRecipeFactory {
   private readonly rigidCompiler = new RigidBodySceneCompiler()
   private readonly fractureCompiler = new FractureRigidRecipeCompiler()
+  private readonly recursiveCompiler = new FractureRecursiveRecipeCompiler()
   private readonly fractureGenerator = new VoronoiFractureGenerator()
   private readonly regionFractureGenerator = new VoronoiRegionFractureGenerator()
   private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
@@ -162,7 +175,7 @@ export class PhysicsBakeRecipeFactory {
       defaults: resolveBondDefaults(input.cluster.defaults, input.seed),
       overrides: input.cluster.overrides,
     }) : undefined
-    const recipe = this.fractureCompiler.compile(scene, {
+    const rootInput = {
       generation,
       ...(bondGraph ? {
         bondGraph,
@@ -181,9 +194,44 @@ export class PhysicsBakeRecipeFactory {
       sampleFps: input.sampleFps,
       pixelsPerMeter: input.pixelsPerMeter,
       gravityMetersPerSecondSquared: resolveGravity(input.gravity),
+    }
+    if (!input.secondary) {
+      const recipe = this.fractureCompiler.compile(scene, rootInput)
+      return { recipe, generation, generations: [generation] }
+    }
+    if (generation.schemaVersion !== 1) {
+      throw new Error('First secondary-fracture slice requires a convex root generation')
+    }
+    if (input.cluster) throw new Error('Secondary fracture cannot be combined with a bonded root cluster yet')
+    if (input.fractureTrigger?.kind === 'impact') {
+      throw new Error('Secondary fracture currently requires a fixed-time root event')
+    }
+    const parentIndex = input.secondary.parentFragmentIndex
+    if (!Number.isSafeInteger(parentIndex) || parentIndex < 0 || parentIndex >= generation.fragments.length) {
+      throw new RangeError('Secondary fracture parent index is outside the root fragment set')
+    }
+    const parent = generation.fragments[parentIndex]
+    const childGeneration = this.fractureGenerator.generate({
+      generationId: input.secondary.generationId ?? childGenerationId(input.generationId, parentIndex),
+      sourceOwnerId: parent.id,
+      parentId: parent.id,
+      generationIndex: 1,
+      sourcePolygon: parent.polygon,
+      fragmentCount: input.secondary.fragmentCount,
+      seed: input.secondary.seed,
     })
-    return { recipe, generation }
+    const recipe = this.recursiveCompiler.compile(scene, {
+      root: rootInput,
+      children: [{ generation: childGeneration, fractureTimeMs: input.secondary.fractureTimeMs }],
+      budgets: input.secondary.budgets,
+    })
+    return { recipe, generation, generations: [generation, childGeneration] }
   }
+}
+
+function childGenerationId(rootGenerationId: string, parentIndex: number): string {
+  const suffix = `-g1-p${parentIndex}`
+  return `${rootGenerationId.slice(0, 116 - suffix.length)}${suffix}`
 }
 
 /** Stable first FRACTURE2 material defaults shared by UI and MCP callers. */

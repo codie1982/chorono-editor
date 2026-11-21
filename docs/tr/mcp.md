@@ -207,6 +207,18 @@ sayılarını; `bondedCluster` ise canonical schedule'ları ve gerçekleşen for
 break kanıtını da döndürür. Product UI'daki Break at playhead ve Reset Damage
 bu MCP alanlarıyla aynı recipe/hash yolunu kullanır.
 
+İsteğe bağlı `secondary` alanı FRACTURE3'ün ilk recursive dilimini açar.
+`parentFragmentIndex` kök neslin sıfır tabanlı parçasını, `fractureTimeMs` kök
+olaydan sonraki fixed-step child olayını, `fragmentCount`/`seed` ise çocuk
+Voronoi topolojisini tanımlar. `generationId` verilmezse kararlı bir `g1-pN`
+kimliği üretilir. İlk dilim yalnız convex kök + time trigger destekler; impact
+ve bonded root cluster ile birleşmez. `budgets.maxDepth`, `maxGenerations`,
+`maxFragments`, `maxTriangles`, `maxPortableBytes` realized iki manifest
+üzerinden Worker başlamadan uygulanır. Preview `events` ile iki topology
+olayını verir; commit sonrasında `inspect_physics_bake.topologyEvents` ve
+`recursiveHierarchy` lineage, used/limit ve hash kanıtını döndürür. Clear ve
+Re-bake iki generation'ı ve bütün child katmanlarını atomik sahiplenir.
+
 `render_2d` source mutation değildir. `backend:auto`, çalışan Chorono Render'ı
 önceler; still için PNG, video için MP4 bitirme akışına frame ZIP'i aktarır.
 Servis yoksa built-in renderer still PNG veya video PNG-sequence ZIP'i üretir.

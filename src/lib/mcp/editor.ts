@@ -291,6 +291,8 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     if (method === 'inspect_physics_bake') {
       const inspection = new RigidBakeOwnershipInspector().inspect(before, args.recordId)
       const fractureEvent = inspection.record.recipe.fractureEvents?.[0]
+      const fractureEvents = inspection.record.recipe.fractureEvents ?? []
+      const fractureHierarchy = inspection.record.recipe.fractureHierarchy
       const cluster = inspection.record.recipe.fractureClusters?.[0]
       const bondBreakEvents = inspection.record.recipe.fractureBondBreakEvents ?? []
       const renderColliderQuality = fractureEvent
@@ -305,13 +307,28 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
         trackCount: inspection.record.tracks.length,
         generatedLayerCount: inspection.record.generatedLayers?.length ?? 0,
         generationId: inspection.generation?.generationId,
+        generationCount: inspection.generations?.length ?? (inspection.generation ? 1 : 0),
         ...(fractureEvent ? { topologyEvent: {
           sourceBodyId: fractureEvent.sourceBodyId,
           fragmentBodyIds: fractureEvent.fragmentBodyIds,
           localTimeMs: fractureEvent.timeMs,
           absoluteTimeMs: inspection.record.recipe.startTimeMs + fractureEvent.timeMs,
           tick: fractureEvent.tick,
-        }, renderColliderQuality } : {}),
+        }, topologyEvents: fractureEvents.map(event => ({
+          eventId: event.id,
+          sourceBodyId: event.sourceBodyId,
+          fragmentBodyIds: event.fragmentBodyIds,
+          localTimeMs: event.timeMs,
+          absoluteTimeMs: inspection.record.recipe.startTimeMs + event.timeMs,
+          tick: event.tick,
+        })), renderColliderQuality } : {}),
+        ...(fractureHierarchy ? { recursiveHierarchy: {
+          rootGenerationId: fractureHierarchy.rootGenerationId,
+          entries: fractureHierarchy.entries,
+          limits: fractureHierarchy.limits,
+          usage: fractureHierarchy.usage,
+          hierarchyHash: fractureHierarchy.hierarchyHash,
+        } } : {}),
         ...(cluster ? { bondedCluster: {
           graphId: cluster.graph.graphId,
           strategy: cluster.strategy,
@@ -357,7 +374,12 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
       return { ...applied, bake: {
         recipeHash: baked.recipeHash,
         report: baked.report,
-        ...(baked.generationId ? { generationId: baked.generationId, fragmentCount: baked.fragmentCount } : {}),
+        ...(baked.generationId ? {
+          generationId: baked.generationId,
+          fragmentCount: baked.fragmentCount,
+          generationCount: baked.generationCount,
+          totalFragmentCount: baked.totalFragmentCount,
+        } : {}),
       } }
     }
     if (method === 'import_asset') {

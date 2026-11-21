@@ -39,6 +39,32 @@ describe('PhysicsBakeRecipeFactory', () => {
     expect(prepared.generation.source.ownerId).toBe('box')
   })
 
+  it('precomputes one admitted child generation with stable lineage', () => {
+    const fixture = rigidBakeFixture()
+    const scene = { ...fixture.scene, layers: fixture.scene.layers.map(layer => layer.id === 'box'
+      ? { ...layer, style: { ...layer.style!, cornerRadius: 0 } } : layer) }
+    const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main', durationMs: 3000,
+      fractureTimeMs: 800, fragmentCount: 6, seed: 42, generationId: 'factory-recursive',
+      secondary: {
+        parentFragmentIndex: 2, fractureTimeMs: 1200, fragmentCount: 3, seed: 84,
+        generationId: 'factory-recursive-g1',
+        budgets: { maxDepth: 1, maxGenerations: 2, maxFragments: 16 },
+      },
+    })
+
+    expect(prepared.generations).toHaveLength(2)
+    expect(prepared.recipe.fractureEvents).toMatchObject([
+      { id: 'factory-recursive:event', timeMs: 800, tick: 96 },
+      { id: 'factory-recursive-g1:event', timeMs: 1200, tick: 144 },
+    ])
+    expect(prepared.recipe.fractureHierarchy).toMatchObject({
+      rootGenerationId: 'factory-recursive',
+      usage: { depth: 1, generations: 2, fragments: 9 },
+      limits: { maxDepth: 1, maxGenerations: 2, maxFragments: 16 },
+    })
+  })
+
   it('pairs an optional deterministic bond graph with the fracture event', () => {
     const fixture = rigidBakeFixture()
     const scene = { ...fixture.scene, layers: fixture.scene.layers.map(layer => layer.id === 'box'

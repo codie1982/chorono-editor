@@ -9,6 +9,7 @@ import FractureAppearanceQualityCard from './FractureAppearanceQualityCard'
 import FractureEventSummary from './FractureEventSummary'
 import FractureBondedClusterCard from './FractureBondedClusterCard'
 import FractureTopologyColliderCard from './FractureTopologyColliderCard'
+import FractureHierarchyCard from './FractureHierarchyCard'
 import type { PhysicsBakeController } from './usePhysicsBakeController'
 
 const fractureAppearanceQualityAnalyzer = new FractureAppearanceQualityAnalyzer()
@@ -118,7 +119,8 @@ export default function PhysicsBakeInspector({ scene, controller, onRebakeStarte
             <dt className="text-gray-500">Tracks</dt><dd className="text-right text-gray-300">{record.tracks.length}</dd>
             <dt className="text-gray-500">Bodies</dt><dd className="text-right text-gray-300">{record.recipe.bodies.length}</dd>
           </dl>
-          {record.recipe.fractureEvents?.[0] && <FractureEventSummary event={record.recipe.fractureEvents[0]} />}
+          {record.recipe.fractureEvents?.map(event => <FractureEventSummary key={event.id} event={event} />)}
+          <FractureHierarchyCard recipe={record.recipe} />
           <FractureBondedClusterCard recipe={record.recipe} />
           {inspection.mode === 'fracture' && <FractureAppearanceQualityCard
             analysis={fractureAppearanceQuality.get(record.id)!} />}

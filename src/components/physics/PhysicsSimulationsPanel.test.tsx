@@ -115,6 +115,9 @@ describe('PhysicsSimulationsPanel', () => {
       bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
       bondVariation: .1, bondSeed: 42, bondOverrides: [],
       bondForcedBreaks: [], bondDamageResets: [],
+      secondaryEnabled: false, secondaryParentFragmentIndex: 0, secondaryFragmentCount: 4,
+      secondaryFractureTimeMs: 1200, secondarySeed: 84, secondaryGenerationId: 'old-generation-g1',
+      secondaryMaxFragments: 256, secondaryMaxTriangles: 4096, secondaryMaxPortableBytes: 8388608,
       seed: 99,
       generationId: 'old-generation',
     }
@@ -224,6 +227,23 @@ describe('PhysicsSimulationsPanel', () => {
     expect(html).toContain('Damage threshold')
     expect(html).toContain('mass, centre and momentum are checked')
   })
+
+  it('discloses recursive parent selection, child timing and admission budgets', () => {
+    const { scene, box } = rigidBakeFixture()
+    const html = renderToStaticMarkup(createElement(FractureAuthoringSection, {
+      scene,
+      source: box,
+      draft: draftFixture({ secondaryEnabled: true }),
+      onChange() {},
+    }))
+
+    expect(html).toContain('Precompute secondary fracture')
+    expect(html).toContain('Parent fragment')
+    expect(html).toContain('Secondary time')
+    expect(html).toContain('Fragment budget')
+    expect(html).toContain('Portable budget')
+    expect(html).toContain('Depth is fixed to 1')
+  })
 })
 
 function draftFixture(overrides: Partial<PhysicsDraft> = {}): PhysicsDraft {
@@ -240,6 +260,9 @@ function draftFixture(overrides: Partial<PhysicsDraft> = {}): PhysicsDraft {
     clusterEnabled: false, bondGraphId: '', bondImpulseStrength: 40, bondDamageThreshold: 80,
     bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
     bondVariation: .1, bondSeed: 42, bondOverrides: [], bondForcedBreaks: [], bondDamageResets: [],
+    secondaryEnabled: false, secondaryParentFragmentIndex: 0, secondaryFragmentCount: 4,
+    secondaryFractureTimeMs: 1200, secondarySeed: 84, secondaryGenerationId: 'fracture-box-g1',
+    secondaryMaxFragments: 256, secondaryMaxTriangles: 4096, secondaryMaxPortableBytes: 8388608,
     ...overrides,
   }
 }

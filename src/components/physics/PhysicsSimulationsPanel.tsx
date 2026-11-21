@@ -132,6 +132,7 @@ export default function PhysicsSimulationsPanel({
       ...previous,
       sourceLayerId,
       generationId: generationIdFor(sourceLayerId),
+      secondaryGenerationId: secondaryGenerationIdFor(sourceLayerId),
       staticLayerIds: previous.staticLayerIds.filter(id => id !== sourceLayerId),
     }))
   }
@@ -175,7 +176,7 @@ export default function PhysicsSimulationsPanel({
   const canApply = snapshot?.status === 'preview-ready' && !!preview
     && !replacementUnavailable && !ambiguousReplacement
   const beginRebake = (inspection: RigidBakeOwnershipInspection) => {
-    const request = requestFromRecord(inspection.record, inspection.generation)
+    const request = requestFromRecord(inspection.record, inspection.generation, inspection.generations)
     setMode(request.mode)
     setDraft(draftFromRequest(request))
     setReplaceRecordId(inspection.record.id)
@@ -434,6 +435,10 @@ function initialDraft(sourceLayerId: string, timelineId: string, durationMs: num
     bondDamageDecayPerSecond: 0, bondRelativeNormalSpeedScale: .1,
     bondVariation: .1, bondSeed: 42, bondOverrides: [],
     bondForcedBreaks: [], bondDamageResets: [],
+    secondaryEnabled: false, secondaryParentFragmentIndex: 0, secondaryFragmentCount: 4,
+    secondaryFractureTimeMs: Math.min(1200, Math.max(2, durationMs - 1)), secondarySeed: 84,
+    secondaryGenerationId: secondaryGenerationIdFor(sourceLayerId),
+    secondaryMaxFragments: 256, secondaryMaxTriangles: 4096, secondaryMaxPortableBytes: 8 * 1024 * 1024,
     seed: 42, generationId: generationIdFor(sourceLayerId) }
 }
 
@@ -479,7 +484,11 @@ export function reconcilePhysicsDraftWithScene(
     fractureTimeMs: timelineChanged
       ? Math.min(800, Math.max(1, durationMs - 1))
       : draft.fractureTimeMs,
+    secondaryFractureTimeMs: timelineChanged
+      ? Math.min(1200, Math.max(2, durationMs - 1))
+      : draft.secondaryFractureTimeMs,
     generationId: sourceChanged ? generationIdFor(sourceLayerId) : draft.generationId,
+    secondaryGenerationId: sourceChanged ? secondaryGenerationIdFor(sourceLayerId) : draft.secondaryGenerationId,
   }
 }
 
@@ -522,6 +531,20 @@ function buildRequest(
       overrides: draft.bondOverrides,
       forcedBreaks: draft.bondForcedBreaks,
       damageResets: draft.bondDamageResets,
+    } } : {}),
+    ...(draft.secondaryEnabled ? { secondary: {
+      parentFragmentIndex: draft.secondaryParentFragmentIndex,
+      fractureTimeMs: draft.secondaryFractureTimeMs,
+      fragmentCount: draft.secondaryFragmentCount,
+      seed: draft.secondarySeed,
+      generationId: draft.secondaryGenerationId,
+      budgets: {
+        maxDepth: 1,
+        maxGenerations: 2,
+        maxFragments: draft.secondaryMaxFragments,
+        maxTriangles: draft.secondaryMaxTriangles,
+        maxPortableBytes: draft.secondaryMaxPortableBytes,
+      },
     } } : {}),
     fragmentCount: draft.fragmentCount,
     seed: draft.seed, generationId: draft.generationId, material,
@@ -581,6 +604,15 @@ function draftFromRequest(request: PhysicsBakeRequest): PhysicsDraft {
       bondOverrides: [...(common.cluster?.overrides ?? [])],
       bondForcedBreaks: [...(common.cluster?.forcedBreaks ?? [])],
       bondDamageResets: [...(common.cluster?.damageResets ?? [])],
+      secondaryEnabled: !!common.secondary,
+      secondaryParentFragmentIndex: common.secondary?.parentFragmentIndex ?? 0,
+      secondaryFragmentCount: common.secondary?.fragmentCount ?? 4,
+      secondaryFractureTimeMs: common.secondary?.fractureTimeMs ?? Math.min(1200, Math.max(2, common.durationMs - 1)),
+      secondarySeed: common.secondary?.seed ?? 84,
+      secondaryGenerationId: common.secondary?.generationId ?? secondaryGenerationIdFor(common.sourceLayerId),
+      secondaryMaxFragments: common.secondary?.budgets?.maxFragments ?? 256,
+      secondaryMaxTriangles: common.secondary?.budgets?.maxTriangles ?? 4096,
+      secondaryMaxPortableBytes: common.secondary?.budgets?.maxPortableBytes ?? 8 * 1024 * 1024,
       seed: common.seed,
       generationId: common.generationId,
     }
@@ -630,6 +662,15 @@ function draftFromRequest(request: PhysicsBakeRequest): PhysicsDraft {
     bondOverrides: [],
     bondForcedBreaks: [],
     bondDamageResets: [],
+    secondaryEnabled: false,
+    secondaryParentFragmentIndex: 0,
+    secondaryFragmentCount: 4,
+    secondaryFractureTimeMs: Math.min(1200, Math.max(2, common.durationMs - 1)),
+    secondarySeed: 84,
+    secondaryGenerationId: secondaryGenerationIdFor(dynamic.layerId),
+    secondaryMaxFragments: 256,
+    secondaryMaxTriangles: 4096,
+    secondaryMaxPortableBytes: 8 * 1024 * 1024,
     seed: 42,
     generationId: generationIdFor(dynamic.layerId),
   }
@@ -671,6 +712,11 @@ function sourceTypeLabel(layer: Layer): string {
 function generationIdFor(sourceLayerId: string): string {
   const safe = `fracture-${sourceLayerId || 'source'}`.replace(/[^A-Za-z0-9_-]/g, '-')
   return safe.slice(0, 116)
+}
+
+function secondaryGenerationIdFor(sourceLayerId: string): string {
+  const root = generationIdFor(sourceLayerId)
+  return `${root.slice(0, 108)}-g1`
 }
 
 const smallButton = 'min-h-11 rounded border border-gray-600 px-3 py-2 text-[10px] text-gray-200 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400'

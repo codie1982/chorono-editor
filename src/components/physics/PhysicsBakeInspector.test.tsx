@@ -111,6 +111,37 @@ describe('PhysicsBakeInspector', () => {
     expect(html).toContain('Breaks / component splits')
     expect(html).toMatch(/\d+ broken/)
   })
+
+  it('shows recursive lineage, both events and admitted resource usage', async () => {
+    const fixture = rigidBakeFixture()
+    const source = {
+      ...fixture.scene,
+      layers: fixture.scene.layers.map(layer => layer.id === 'box'
+        ? { ...layer, style: { ...layer.style!, cornerRadius: 0 } }
+        : layer),
+    }
+    const baked = await prepareMCPVoronoiBake(source, {
+      sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main',
+      durationMs: 1800, fractureTimeMs: 400, stepHz: 120, sampleFps: 30,
+      fragmentCount: 6, seed: 42, generationId: 'inspector-recursive',
+      secondary: {
+        parentFragmentIndex: 1, fractureTimeMs: 800, fragmentCount: 3, seed: 84,
+        generationId: 'inspector-recursive-g1',
+      },
+    })
+    const html = renderToStaticMarkup(createElement(PhysicsBakeInspector, {
+      scene: baked.scene,
+      controller: controllerFor(baked.scene),
+      onRebakeStarted() {},
+    }))
+
+    expect(html).toContain('Recursive hierarchy')
+    expect(html).toContain('2 generations')
+    expect(html).toContain('Portable bytes')
+    expect(html).toContain('inspector-recursive-g1')
+    expect(html).toContain('400 ms')
+    expect(html).toContain('800 ms')
+  })
 })
 
 function controllerFor(scene: ChronoScene): PhysicsBakeController {

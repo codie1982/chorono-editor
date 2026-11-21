@@ -7,11 +7,12 @@ import { makeApplyRigidBodyBakeCmd, makeReplaceRigidBodyBakeCmd } from '@/lib/ed
 import { makeApplyVoronoiFractureBakeCmd, makeReplaceVoronoiFractureBakeCmd } from '@/lib/editor/commands-voronoi-fracture-bake'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureRecursiveRecipeCompiler } from '@/lib/fracture/FractureRecursiveRecipeCompiler'
 import { PhysicsBakeRecipeFactory } from '@/lib/physics/PhysicsBakeRecipeFactory'
 import { RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
 import type { ChronoScene } from '@/lib/types'
-import type { AnyFractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration, FractureGenerationBudgetLimits } from '@/lib/types/fracture'
 import type {
   FractureBondDamageReset,
   FractureBondDefaults,
@@ -68,6 +69,14 @@ export interface MCPVoronoiBakeInput {
     readonly forcedBreaks?: readonly FractureBondForcedBreak[]
     readonly damageResets?: readonly FractureBondDamageReset[]
   }
+  readonly secondary?: {
+    readonly parentFragmentIndex: number
+    readonly fractureTimeMs: number
+    readonly fragmentCount: number
+    readonly seed: number
+    readonly generationId?: string
+    readonly budgets?: Partial<FractureGenerationBudgetLimits>
+  }
   readonly recordId?: string
   readonly replaceRecordId?: string
   readonly replaceEdited?: boolean
@@ -86,6 +95,8 @@ export interface MCPBakeResult {
   readonly recipeHash: string
   readonly generationId?: string
   readonly fragmentCount?: number
+  readonly generationCount?: number
+  readonly totalFragmentCount?: number
 }
 
 /**
@@ -104,6 +115,7 @@ export interface MCPPhysicsBakeDefinition {
   readonly sourceLayerId: string
   readonly recipe: RigidBodyBakeRecipe
   readonly generation?: AnyFractureGeneration
+  readonly generations?: readonly AnyFractureGeneration[]
   readonly recordId?: string
   readonly replaceRecordId?: string
   readonly defaultConflictPolicy: RigidBakeConflictPolicy
@@ -152,25 +164,30 @@ export function compileMCPRigidBake(scene: ChronoScene, input: MCPRigidBakeInput
 export function compileMCPVoronoiBake(scene: ChronoScene, input: MCPVoronoiBakeInput): MCPPhysicsBakeDefinition {
   assertReplacementInput(input)
   const sourceScene = replacementSource(scene, input.replaceRecordId)
-  const { recipe, generation } = new PhysicsBakeRecipeFactory().compileVoronoi(sourceScene, input)
+  const { recipe, generation, generations } = new PhysicsBakeRecipeFactory().compileVoronoi(sourceScene, input)
   return {
     mode: 'fracture',
     label: `Voronoi fracture · ${input.sourceLayerId}`,
     sourceLayerId: input.sourceLayerId,
     recipe,
     generation,
+    generations,
     recordId: input.recordId,
     replaceRecordId: input.replaceRecordId,
     defaultConflictPolicy: input.replaceEdited ? 'discard-edits' : 'reject',
     isSourceCurrent: current => {
       try {
-        return new FractureRigidRecipeCompiler().isCurrent(recipe, generation, replacementSource(current, input.replaceRecordId))
+        const source = replacementSource(current, input.replaceRecordId)
+        return generations.length > 1
+          ? new FractureRecursiveRecipeCompiler().isCurrent(recipe, generations, source)
+          : new FractureRigidRecipeCompiler().isCurrent(recipe, generation, source)
       } catch { return false }
     },
     createCommand: (preview, conflictPolicy = input.replaceEdited ? 'discard-edits' : 'reject') => input.replaceRecordId
       ? makeReplaceVoronoiFractureBakeCmd({
         existingRecordId: input.replaceRecordId,
         generation,
+        childGenerations: generations.slice(1).filter((item): item is Extract<AnyFractureGeneration, { schemaVersion: 1 }> => item.schemaVersion === 1),
         recipe: preview.recipe,
         tracks: preview.tracks,
         sampleCount: preview.report.sampleCount,
@@ -178,6 +195,7 @@ export function compileMCPVoronoiBake(scene: ChronoScene, input: MCPVoronoiBakeI
       })
       : makeApplyVoronoiFractureBakeCmd({
       generation,
+      childGenerations: generations.slice(1).filter((item): item is Extract<AnyFractureGeneration, { schemaVersion: 1 }> => item.schemaVersion === 1),
       recipe: preview.recipe,
       tracks: preview.tracks,
       sampleCount: preview.report.sampleCount,
@@ -224,6 +242,7 @@ async function prepareAndApply(
   const preview = await adapter.prepare(definition.recipe, preparationContext(signal))
   try {
     const generation = definition.generation
+    const generations = definition.generations
     return {
       scene: definition.createCommand(preview, definition.defaultConflictPolicy).execute(scene),
       report: preview.report,
@@ -231,6 +250,10 @@ async function prepareAndApply(
       ...(generation ? {
         generationId: generation.generationId,
         fragmentCount: generation.fragments.length,
+        ...(generations?.length ? {
+          generationCount: generations.length,
+          totalFragmentCount: generations.reduce((sum, item) => sum + item.fragments.length, 0),
+        } : {}),
       } : {}),
     }
   } finally {

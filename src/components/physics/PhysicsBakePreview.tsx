@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { RigidBodyBakePreview } from '@/lib/bake'
 import type { ChronoScene } from '@/lib/types'
 import type { RigidBodySnapshot } from '@/lib/types/physics'
+import { isRigidBodyVisibleAtTime } from '@/lib/physics/RigidPoseTrackCompiler'
 import FractureEventSummary from './FractureEventSummary'
 
 /**
@@ -35,7 +36,7 @@ export default function PhysicsBakePreview({ scene, preview }: {
       viewBox={`0 0 ${scene.composition.width} ${scene.composition.height}`}
       className="aspect-video w-full rounded border border-gray-800 bg-gray-950">
       <rect width={scene.composition.width} height={scene.composition.height} fill={scene.composition.backgroundColor || '#111827'} />
-      {bodies.map(({ body, index, pose }) => isVisible(body, event, timeMs) && <BodyShape key={body.bodyId} body={body} index={index}
+      {bodies.map(({ body, index, pose }) => isRigidBodyVisibleAtTime(preview.recipe, body.bodyId, timeMs) && <BodyShape key={body.bodyId} body={body} index={index}
         transform={`translate(${pose.centerX} ${pose.centerY}) rotate(${pose.angleDeg})`} />)}
     </svg>
     <label className="mt-2 flex flex-col gap-1 text-[10px] text-gray-400">
@@ -44,16 +45,8 @@ export default function PhysicsBakePreview({ scene, preview }: {
         value={timeMs} onChange={eventValue => setTimeMs(Number(eventValue.target.value))}
         className="w-full accent-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" />
     </label>
-    {event && <FractureEventSummary event={event} />}
+    {preview.recipe.fractureEvents?.map(item => <FractureEventSummary key={item.id} event={item} />)}
   </section>
-}
-
-/** Decide parent/fragment visibility at the single supported topology event. */
-function isVisible(body: RigidBodySnapshot, event: NonNullable<RigidBodyBakePreview['recipe']['fractureEvents']>[number] | undefined, timeMs: number): boolean {
-  if (!event) return true
-  if (body.bodyId === event.sourceBodyId) return timeMs < event.timeMs
-  if (event.fragmentBodyIds.includes(body.bodyId)) return timeMs >= event.timeMs
-  return true
 }
 
 /** Draw a collider-space rectangle, convex fragment or compound fragment. */

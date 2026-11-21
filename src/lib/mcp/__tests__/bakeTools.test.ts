@@ -58,6 +58,15 @@ describe('MCP rigid/fracture bake workflows', () => {
     })).resolves.toHaveProperty('name', 'bake_voronoi_fracture')
     await expect(validateToolCall('bake_voronoi_fracture', {
       ...access,
+      sourceLayerId: 'box', timelineId: 'main', durationMs: 600,
+      fractureTimeMs: 200, fragmentCount: 4, seed: 7, generationId: 'recursive-v1',
+      secondary: {
+        parentFragmentIndex: 1, fractureTimeMs: 400, fragmentCount: 3, seed: 9,
+        budgets: { maxDepth: 1, maxGenerations: 2, maxFragments: 16, maxTriangles: 64, maxPortableBytes: 1048576 },
+      },
+    })).resolves.toHaveProperty('name', 'bake_voronoi_fracture')
+    await expect(validateToolCall('bake_voronoi_fracture', {
+      ...access,
       sourceLayerId: 'box', timelineId: 'main', durationMs: 400,
       fractureTimeMs: 200, fragmentCount: 4, seed: 7, generationId: 'cluster-v1',
       cluster: {
@@ -127,6 +136,40 @@ describe('MCP rigid/fracture bake workflows', () => {
     expect(baked.scene.layers.every(layer => /^[\w-]{1,128}$/.test(layer.id))).toBe(true)
     expect(baked.scene.physics?.fractureGenerations?.[0].generationId).toBe('box-v1')
     expect(baked.scene.physics?.rigidBakes).toHaveLength(1)
+  })
+
+  it('publishes and inspects recursive lineage through the MCP service', async () => {
+    const editor = fakeEditor('Recursive fracture owner')
+    editor.replaceDocument(fixture())
+    try {
+      const baked = await editor.call('bake_voronoi_fracture', {
+        sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main',
+        durationMs: 800, fractureTimeMs: 200, fragmentCount: 4, seed: 7,
+        generationId: 'mcp-recursive-v1', stepHz: 60, sampleFps: 30, gravity: { x: 0, y: 0 },
+        secondary: {
+          parentFragmentIndex: 1, fractureTimeMs: 400, fragmentCount: 3, seed: 9,
+          generationId: 'mcp-recursive-v1-g1',
+          budgets: { maxDepth: 1, maxGenerations: 2, maxFragments: 16, maxTriangles: 64, maxPortableBytes: 1048576 },
+        },
+      })
+      expect(baked.bake).toMatchObject({ generationCount: 2, totalFragmentCount: 7 })
+      const record = editor.host.editor.getScene().physics!.rigidBakes[0]
+      const inspection = (await editor.call('inspect_physics_bake', { recordId: record.id })).bake
+      expect(inspection).toMatchObject({
+        ownershipState: 'current',
+        sourceState: 'current',
+        generationCount: 2,
+        recursiveHierarchy: {
+          rootGenerationId: 'mcp-recursive-v1',
+          usage: { depth: 1, generations: 2, fragments: 7 },
+          limits: { maxDepth: 1, maxGenerations: 2, maxFragments: 16 },
+        },
+      })
+      expect(inspection.topologyEvents).toHaveLength(2)
+      expect(inspection.topologyEvents.map((event: { tick: number }) => event.tick)).toEqual([12, 24])
+    } finally {
+      await editor.close()
+    }
   })
 
   it('publishes and inspects bonded cluster breaks through the MCP service', async () => {

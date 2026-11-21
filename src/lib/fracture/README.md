@@ -1,8 +1,8 @@
 # Voronoi fracture foundation
 
-This directory owns deterministic single-generation geometry plus the portable
-FRACTURE2 bond-graph domain. It does not own React controls, the Matter world,
-rendering, file I/O or recursive child generation.
+This directory owns deterministic generation geometry, the portable FRACTURE2
+bond-graph domain and the first FRACTURE3 precomputed parent→child hierarchy.
+It does not own React controls, the Matter world, rendering or file I/O.
 
 ## Entry points and data flow
 
@@ -50,6 +50,10 @@ rendering, file I/O or recursive child generation.
     `FractureBondGraphCompiler` adds automatic/manual overrides, seeded policy
     materialization and a portable hash. `FractureClusterComponents` resolves
     canonical intact components after any deterministic bond set is removed.
+11. `FractureGenerationHierarchyCompiler` validates stable parent-fragment
+    lineage and admits realized depth/generation/fragment/triangle/portable-byte
+    usage. `FractureRecursiveRecipeCompiler` adds ordered fixed-tick child body
+    replacement events to the same canonical Matter recipe.
 
 ## Contracts
 
@@ -86,9 +90,14 @@ rendering, file I/O or recursive child generation.
   direction, radial/directional velocity, spin, bounded variation and an
   unsigned seed. It is applied once as fragments activate and the editor
   discloses it as added external energy.
-- Concave/donut sources, bonded compound-body runtime, Canvas bond selection,
+- Concave/donut roots, bonded compound-body runtime, Canvas bond selection,
   per-bond Group/Split/Unbreakable policy, fixed-tick forced breaks and damage
-  resets are supported. Recursive secondary destruction remains a later slice.
+  resets are supported. FRACTURE3 supports one precomputed convex child
+  generation selected by root fragment index. The child event must be later
+  than the timed root event; impact roots and bonded root clusters are rejected
+  in this first recursive slice. Default admission is depth 3, 16 generations,
+  256 fragments, 4096 triangles and 8 MiB portable topology, with lower
+  per-request limits allowed.
 
 ## Lifecycle and ownership
 
