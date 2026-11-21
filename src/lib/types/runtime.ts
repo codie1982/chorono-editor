@@ -4,17 +4,14 @@
 // players). Stripped of editor-only fields (locked, hidden, colorLabel, etc.)
 // and with paths compressed to short strings.
 
-import type { Layer, Timeline, Composition, SceneParameter, Trigger, Binding } from './core'
+import type { ChronoScene } from './core'
 
-export interface RuntimeAnimation {
-  formatVersion: '1.0.0'
-  composition:   Composition
-  layers:        Layer[]      // editor-meta-stripped
-  timelines:     Timeline[]
-  parameters:    SceneParameter[]
-  triggers:      Trigger[]
-  bindings:      Binding[]
-}
+/** Complete interactive scene graph after editor-only/source-only fields are
+ * removed. The remaining shape is directly consumable by ChronoPlayer. */
+export type RuntimeAnimation = Omit<
+  ChronoScene,
+  'assetCollections' | 'editorGuides' | 'authoring' | 'physics'
+>
 
 export interface RuntimePackage {
   version:   '1.0'

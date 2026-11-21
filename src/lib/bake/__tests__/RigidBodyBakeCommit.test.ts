@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { makeApplyRigidBodyBakeCmd } from '@/lib/editor/commands-rigid-body-bake'
 import { evaluateNumericTrack } from '@/lib/evaluator'
 import { exportToRuntime } from '@/lib/export/runtimeExport'
+import { defaultRuntimeExporter } from '@/lib/export/RuntimeExporter'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
+import { ChronoPlayer } from '@/lib/player/ChronoPlayer'
 import { ResourceBudget } from '@/lib/resources/budget'
 import { RigidBodyBakeAdapter } from '../adapters/RigidBodyBakeAdapter'
 import { rigidBakeFixture } from './RigidBodyBakeFixture'
@@ -25,6 +27,16 @@ describe('Rigid body bake commit', () => {
     const runtime = exportToRuntime(next)
     expect(runtime).not.toHaveProperty('physics')
     expect(runtime.timelines[0].tracks).toHaveLength(3)
+    const packaged = defaultRuntimeExporter.export(next).runtime
+    expect(packaged).not.toHaveProperty('physics')
+    expect(packaged.assets).toEqual(next.assets)
+    for (const timeMs of [0, 500, 1500, 3000]) {
+      const authoredFrame = new ChronoPlayer(next, null, { loop: false }).tick(timeMs)
+      const runtimeFrame = new ChronoPlayer(runtime, null, { loop: false }).tick(timeMs)
+      const packagedFrame = new ChronoPlayer(packaged, null, { loop: false }).tick(timeMs)
+      expect(runtimeFrame.overrides).toEqual(authoredFrame.overrides)
+      expect(packagedFrame.overrides).toEqual(authoredFrame.overrides)
+    }
     expect(parseSceneJson(JSON.stringify(next), true)).toEqual(next)
     expect(command.undo(next)).toStrictEqual(scene)
     preview.release()

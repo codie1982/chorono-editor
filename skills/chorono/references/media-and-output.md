@@ -15,7 +15,7 @@ For fonts, import the actual supported font file, read the registered family fro
 | Editable portable project | `save_project`; local blob media is embedded and the scene remains editable |
 | Reopen existing work | `list_projects`, then `load_project` by project name |
 | Clean frame for inspection | `render_preview`; returns actual PNG image content |
-| Runtime playback data | `export_runtime`; inspect optimization and validation diagnostics |
+| Runtime playback data | `export_runtime`; preserves visual layers/visibility, embedded assets, timelines, parameters, wires, state machines and initial state. Physics ownership/recipes stay source-only because committed bake playback is carried by ordinary tracks. Inspect optimization and validation diagnostics. |
 | Vector still | `export_svg`; report unsupported-feature/export warnings |
 | Frame sequence | `export_sequence`; ZIP of images, bounded workload, no audio |
 | Preferred final 2D output | `render_2d` with `backend:'auto'`; transfers to Chorono Render when available, otherwise writes built-in PNG/PNG-sequence output |

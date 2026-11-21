@@ -4,52 +4,33 @@
 // shipped to the runtime player.
 //
 // Passes (in order):
-//   1. removeEditorMetadata     — drop locked / hidden / solo / colorLabel /
-//                                 internalGrid / paramBindings (UI editor state)
+//   1. compileRuntimeScene      — one canonical source/runtime field contract
 //   2. normalizeKeyframes       — sort by timeMs, dedupe IDs
 //   3. removeRedundantKeyframes — if 3 keyframes have identical value, drop
 //                                 the middle one (cubic still passes through)
-//   4. packAssets               — already lean; placeholder for future binary pack
 
-import { withoutAuthoring } from '../editor/authoring/AuthoringConverter'
-import type { ChronoScene, Layer, Track } from '../types'
+import type { ChronoScene, Track } from '../types'
 import type { RuntimeAnimation } from '../types/runtime'
+import { defaultRuntimeSceneCompiler, type RuntimeSceneCompiler } from './runtime/RuntimeSceneCompiler'
 
+/**
+ * Applies safe runtime track normalization after canonical scene compilation.
+ * The compiler owns field selection and editor metadata; this class owns only
+ * ordering/deduplication and redundant-key removal. Instances are stateless.
+ */
 export class RuntimeOptimizer {
+  constructor(private readonly compiler: RuntimeSceneCompiler = defaultRuntimeSceneCompiler) {}
+
   optimize(scene: ChronoScene): RuntimeAnimation {
-    let s = withoutAuthoring(scene)
-    s = this.removeEditorMetadata(s)
+    let s = this.compiler.compile(scene)
     s = this.normalizeKeyframes(s)
     s = this.removeRedundantKeyframes(s)
-    return {
-      formatVersion: '1.0.0',
-      composition:   s.composition,
-      layers:        s.layers,
-      timelines:     s.timelines,
-      parameters:    s.parameters ?? [],
-      triggers:      s.triggers,
-      bindings:      s.bindings,
-    }
-  }
-
-  // ── Pass 1: strip editor-only fields ─────────────────────────────────────
-
-  private removeEditorMetadata(scene: ChronoScene): ChronoScene {
-    return {
-      ...scene,
-      layers: scene.layers.map(l => {
-        const {
-          locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c, internalGrid: _g, inputExpressions: _inputs,
-          ...keep
-        } = l
-        return keep as Layer
-      }),
-    }
+    return s
   }
 
   // ── Pass 2: keyframe normalisation ───────────────────────────────────────
 
-  private normalizeKeyframes(scene: ChronoScene): ChronoScene {
+  private normalizeKeyframes(scene: RuntimeAnimation): RuntimeAnimation {
     return {
       ...scene,
       timelines: scene.timelines.map(tl => ({
@@ -74,7 +55,7 @@ export class RuntimeOptimizer {
 
   // ── Pass 3: drop redundant flat-value keyframes ──────────────────────────
 
-  private removeRedundantKeyframes(scene: ChronoScene): ChronoScene {
+  private removeRedundantKeyframes(scene: RuntimeAnimation): RuntimeAnimation {
     return {
       ...scene,
       timelines: scene.timelines.map(tl => ({
