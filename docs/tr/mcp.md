@@ -155,18 +155,20 @@ rigid/Voronoi solver dedicated Worker
 kullanır; Worker yoksa aynı deterministic fixed-step runner bounded inline
 fallback'tir. Worker progress/cancel/deadline ve transferable dense buffer
 sözleşmesine sahiptir. İlk rigid dilimi root, instance olmayan rectangle
-collider'larını destekler. Voronoi kaynağı tam opak solid convex shape, tek
-kapalı convex spline, convex sabit-topology `Mesh2D` veya kalıcı pozitif asset
-boyutları bulunan root image rectangle olabilir. Shape/spline sınırı canonical
-Mesh2D flatten ve contour doğrulamasını kullanır. Mesh2D kaynak üçgenleri
-fragment sınırıyla kesilir; yeni kenar vertex'lerinde authored UV enterpole
-edilir. Concave, delikli, çok halkalı veya deformation bağlı Mesh2D kaynaklar
-sonraki clipping dilimine kadar açık hatayla reddedilir.
-Solid kaynak path; image ve Mesh2D kaynaklar kaynak UV/texture yerleşimini
-koruyan bake-owned `Mesh2D` fragmentler üretir. Efekt, mask ve motion blur
+collider'larını destekler. Voronoi kaynağı tam opak solid kapalı shape/spline,
+sabit-topology `Mesh2D` veya kalıcı pozitif asset boyutları bulunan root image
+rectangle olabilir. Shape/spline sınırı canonical Mesh2D flatten ve contour
+doğrulamasını kullanır. Kaynak üçgenleri Voronoi hücreleriyle kesilir; yeni
+kenar vertex'lerinde authored UV enterpole edilir. Concave, delikli ve çok
+halkalı bölgeler bağlı component'lere ayrılır; her component ayrı Mesh2D
+fragment ve non-overlap convex parçalardan oluşan compound collider üretir.
+Deformation bağlı Mesh2D statik geometriye bake edilene kadar açık hatayla
+reddedilir. Convex solid kaynaklar kompakt path akışını korur; kompleks solid,
+image ve Mesh2D kaynaklar kaynak UV/texture yerleşimini koruyan bake-owned
+`Mesh2D` fragmentler üretir. Efekt, mask ve motion blur
 Preview öncesinde açık tanıyla reddedilir. Dense solver
 örnekleri scene JSON/history'ye yazılmaz.
-Voronoi `generationId` değeri 1–116 karakter uzunluğunda ASCII harf/rakam,
+Voronoi `generationId` değeri 1–110 karakter uzunluğunda ASCII harf/rakam,
 alt çizgi veya tire olmalıdır; fragment ve seed sahne kimlikleri bu kökten
 üretilir. Kolon gibi başka ayraçlar portable layer kimliği değildir.
 

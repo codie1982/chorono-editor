@@ -26,14 +26,14 @@ Use `prepare_rigid_body_bake` for supported root, non-instanced rectangle layers
 At least one body is `dynamic`; `static` bodies act as colliders. A reviewed
 commit publishes ordinary x/y/rotation tracks and a versioned ownership record
 in one undo step. Use `prepare_voronoi_fracture_bake` for a fully opaque root
-solid convex shape, single closed convex spline, convex fixed-topology Mesh2D,
-or image rectangle with positive persisted asset dimensions. Solid sources
-create deterministic fragment path layers; image sources create textured
-Mesh2D fragments with normalized UVs in the complete source-rectangle space.
-Mesh2D sources clip validated source triangles and interpolate authored UVs
-into fixed-topology fragment meshes. Shape/spline sources reuse the canonical
-Mesh2D flatten/contour validator; concave, holed, multi-ring and
-deformation-bound Mesh2D sources are rejected until the clipping slice.
+solid closed shape/spline, fixed-topology Mesh2D, or image rectangle with
+positive persisted asset dimensions. Convex solid sources retain deterministic
+fragment path layers. Concave, holed and multi-ring sources clip canonical
+Mesh2D triangles into edge-connected fragment meshes; every connected component
+gets a non-overlapping compound collider. Image and Mesh2D UVs are interpolated
+at new clip edges and retain their texture-reference space. Shape/spline sources
+reuse the canonical Mesh2D flatten/contour validator. Deformation-bound Mesh2D
+must be baked to static geometry before preview.
 Enabled effects, masks and motion blur are
 rejected before Preview. The commit also publishes visibility/pose tracks and
 topology provenance atomically. The fracture time must align to an interior
@@ -46,7 +46,7 @@ deterministic one-shot radial/directional velocity and spin from a source-local
 centre, composition-space direction, bounded variation and unsigned seed. It
 is disclosed external energy, not contact force or an ongoing field. Generation
 ids, record ids and layer ids are stable model
-identities, not display names. `generationId` is 1–116 ASCII word characters or
+identities, not display names. `generationId` is 1–110 ASCII word characters or
 hyphens so generated seed and fragment ids remain valid portable scene ids;
 do not use colons, spaces, paths, or display labels.
 

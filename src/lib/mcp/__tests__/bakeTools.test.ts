@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyScene, newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
+import { emptyScene, newRectLayer, newSplineLayerFromData, newStarLayer } from '@/lib/defaults'
 import { StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
 import { FractureRenderColliderAnalyzer } from '@/lib/fracture/FractureRenderColliderAnalyzer'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
@@ -139,6 +139,38 @@ describe('MCP rigid/fracture bake workflows', () => {
     })
     expect(baked.scene.layers.filter(layer => layer.id.startsWith('spline-v1-fragment-'))).toHaveLength(4)
     expect(record?.recipe.fractureAppearance).toMatchObject({ kind: 'solid', sourceLayerId: spline.id })
+  })
+
+  it('publishes a concave source through region Mesh2D and compound MCP bake contracts', async () => {
+    const scene = fixture()
+    const source = {
+      ...newStarLayer(),
+      id: 'concave-star-source',
+      name: 'Concave star source',
+      transform: { ...scene.layers[0].transform },
+    }
+    const baked = await prepareMCPVoronoiBake({ ...scene, layers: [source, scene.layers[1]] }, {
+      sourceLayerId: source.id, staticLayerIds: ['floor'], timelineId: 'main',
+      durationMs: 400, fractureTimeMs: 200, fragmentCount: 6, seed: 23,
+      generationId: 'concave-star-v2', stepHz: 60, sampleFps: 30, gravity: { x: 0, y: 0 },
+    })
+
+    const generation = baked.scene.physics?.fractureGenerations?.[0]
+    const record = baked.scene.physics?.rigidBakes[0]
+    const fragments = baked.scene.layers.filter(layer => layer.id.startsWith('concave-star-v2-fragment-'))
+    expect(generation?.schemaVersion).toBe(2)
+    if (!generation || generation.schemaVersion !== 2) throw new Error('Expected FRACTURE1 region generation')
+    expect(record?.recipe.bodies[0].collider).toBe('compoundPolygon')
+    expect(record?.recipe.bodies.filter(body => body.activation)
+      .every(body => body.collider === 'compoundPolygon' && body.colliderPartsPx?.length)).toBe(true)
+    expect(fragments).toHaveLength(generation.fragments.length)
+    expect(fragments.every(layer => layer.type === 'mesh2d'
+      && layer.mesh2d?.source.kind === 'fractureFragment')).toBe(true)
+    const quality = new FractureRenderColliderAnalyzer().analyzeCommittedEvent(
+      baked.scene,
+      record!.id,
+    )
+    expect(quality).toMatchObject({ status: 'pass' })
   })
 
   it('publishes a convex Mesh2D source with clipped fragment UV topology', async () => {
