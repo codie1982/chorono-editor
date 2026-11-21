@@ -9,12 +9,14 @@ korunumu, event hizası/raster seam/mask bellek ölçümü, darbe tetikli fractu
 deterministik artistic explosion, topology/render–collider tanısı ve 32 parça /
 eğimli zemin / yüksek hızlı küçük cisim görsel matrisi de tamamlandı. Aşama 3
 ve temel scrub/player/MCP/render/export parity kabulüyle aşama 4 kapandı.
-Aşama 5'in ilk dikey dilimlerinde canonical Mesh2D sınırından tek halkalı,
-deliksiz convex shape/spline/Mesh2D kaynak derleme, convex collider, Path veya
-UV-korumalı Mesh2D fragment, ürün UI'ı ve MCP akışı tamamlandı. Aktif sıra
-concave/delikli shape/spline ile Mesh2D connected-region clipping ve fragment
-adjacency/compound-collider derleyicisidir;
-aşama 6–9 açıktır.
+Aşama 5; convex ve concave/delikli/çok halkalı shape/spline/Mesh2D kaynak,
+connected-region clipping, UV-korumalı fragment mesh, adjacency ve compound
+collider ile ürün UI/MCP kabulü dahil kapandı. Aşama 6'nın ilk dikey dilimi;
+ortak sınır midpoint/normal ölçümü, portable auto/manual bond graph, scalar
+damage, Matter compound cluster, connected-component split, mass/COM/momentum
+doğrulaması, ürün UI ve MCP rapor/inceleme sözleşmesiyle uygulandı. Aktif sıra
+Canvas bond overlay/seçim, per-bond Group/Split/Unbreakable/Reset Damage ve
+forced time/user break authoring'idir; aşama 7–9 açıktır.
 Character Motion planı ayrı tutulur ve bu özellik için önkoşul değildir. Ortak
 ürün alanı **Physics Simulations**; bu belge Rigid Body, Voronoi Fracture,
 bonded destruction cluster, secondary/recursive fracture ve olay tabanlı
@@ -153,7 +155,7 @@ Geometri adımları:
 5. Her parça için alan, centroid, collider ve kaynak görsele göre ofset üret. Yoğunluktan kütle türetilir; geometri ve seçilen kütle sözleşmesi birlikte doğrulanır.
 6. Gerçekleşen tohumları, polygon'ları ve geometri sürümünü projede tut. Yalnızca seed saklamak gelecekte farklı kütüphane sürümünde aynı parçaları garanti etmez.
 
-**Sonraki kompleks kaynak dilimi:** concave/delikli shape/spline sınırı veya doğrulanmış Mesh2D üçgenleri hücrelerle kesiştirilir; aynı hücredeki bağlı bölgeler birleştirilir. Kopuk bileşenler ayrı parçadır. Concave parça, uygun convex alt parçalardan compound collider'a derlenebilir; convex hull ile delikler/boşluklar doldurulmaz. Triangle spatial index gereksiz tüm hücre × tüm yüz taramasını azaltır. Kaynak UV/koordinat, alan, centroid ve kütle denetlenir. Bu dilim ilk convex kırılma teslimini bekletmez.
+**Gerçekleşen kompleks kaynak dilimi:** concave/delikli shape/spline sınırı ve doğrulanmış Mesh2D üçgenleri hücrelerle kesiştirilir; aynı hücredeki edge-connected bölgeler birleştirilir. Kopuk bileşenler ayrı parçadır. Concave parça, uygun non-overlap convex alt parçalardan compound collider'a derlenir; convex hull ile delikler/boşluklar doldurulmaz. Kaynak UV/koordinat, alan, centroid ve kütle denetlenir. Bu sözleşme aşama 6 bond graph'ının doğrulanmış fragment girdisidir.
 
 Temel teslim bir cismin tek seferde önceden hazırlanmış parçalara ayrılmasıdır. Zamanlı kırılma temel tetiktir. Darbeye göre kırılma, tanımlı göreli normal hız/eşik ve temas noktasıyla sonraki aşamada eklenir. Aşağıdaki ileri destruction dilimleri cluster, biriken hasar ve recursive fracture ekler; bunlar sanatsal/parametrik bir bond modeli kullanır, malzeme gerilimi, çatlak yayılması veya gerçek mukavemet analizi iddia etmez.
 

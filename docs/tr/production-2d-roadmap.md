@@ -55,6 +55,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Geliştirme branch'inde |
 | Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Geliştirme branch'inde |
 | Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
+| Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -3260,3 +3261,47 @@ Portable kanıt
 geçti. Bilinen `applicationBuildInfo.ts` named-export uyarısı sürer. Sıradaki
 destruction işi bonded cluster/hasar/connected-component ayrılmasıdır;
 secondary/recursive fracture bundan sonra gelir.
+
+### 12.80. Bonded cluster ilk dikey dilimi — 21 Kasım 2026
+
+FRACTURE2 için geometri, politika ve solver sorumlulukları ayrıldı.
+`FractureSharedBoundaryAnalyzer`, eski adjacency manifestini değiştirmeden ortak
+sınır uzunluğu, ağırlıklı midpoint ve A→B unit normal üretir.
+`FractureBondGraphCompiler`; kararlı bond kimliği, auto/shared-boundary veya
+explicit manual origin, disabled/custom/unbreakable override, impulse strength,
+damage threshold/decay, relative normal speed scale ve seed'li variation'ı
+portable/hash'li graph'a derler. Canonical override kaydı Re-bake sırasında
+manual kararların kaybolmasını önler. `FractureClusterComponents`, kopmuş bond
+setinden kararlı intact connected component kimlikleri çıkarır.
+
+Matter Worker başlangıçta intact graph component'ini tek compound body olarak
+etkinleştirir ve fragment'lara virtual pose sağlar. Aynı temas bir fixed tick'te
+bir kez toplanır; en yakın kırılabilir bond scalar load/damage alır. Kopuşta
+component'ler aynı tick'te yeni body'lere çevrilir. Yeni body velocity alanı
+eski cluster COM'u etrafında kurulur; toplam mass, COM, linear momentum ve
+angular momentum tolerans dışında kalırsa job publish edilmeden başarısız olur.
+Gerçekleşen bond break sequence recipe hash/provenance içinde portable kalır ve
+track simplifier kopuş tick'ini korur.
+
+Physics UI'da **Keep fragments bonded** progressive disclosure kartı graph id,
+impulse/damage/decay/speed/variation/seed alanlarını ve explosion ile karşılıklı
+dışlamayı gösterir. Preview raporu bond/break/split sayılarını, commit sonrası
+Inspector graph materialini ve gerçekleşen break'leri gösterir. Doğrudan ve
+kalıcı MCP Voronoi araçları aynı `cluster.defaults/overrides` şemasını kullanır;
+`get_bake_job` aynı metrikleri, `inspect_physics_bake.bondedCluster` graph,
+manual/unbreakable ve break sequence'i döndürür. Canonical Chorono skill ve MCP
+rehberi eşlendi.
+
+Kod, UI ve MCP servis sözleşmesi `codex/mesh2d-mesh0` branch'inde
+`1a0c0017`, `0d347583` ve `aba2eafa` commitleriyle gruplandı. Tam doğrulama
+**444 test dosyası / 3.277 test**, `npx tsc --noEmit`, `npm run mcp:build` ve
+`npm run build` ile geçti. Production build'de yalnız önceden bilinen
+`applicationBuildInfo.ts` named-export ve güncel olmayan Browserslist veri
+uyarıları kaldı.
+
+Bu dikey dilimde otomatik cluster ve MCP üzerinden manual pair override
+çalışır. Canvas bond overlay/seçim ile Group Selected, Split Cluster,
+Unbreakable/Reset Damage ve forced time/user break ürün authoring'i FRACTURE2'nin
+kalan dilimidir. Artistic explosion bonded modla henüz birleşmez; ayrı external
+energy modeli olduğundan UI ve compiler bunu açık hata yerine karşılıklı dışlar.
+Secondary/recursive destruction FRACTURE3 sırasını korur.
