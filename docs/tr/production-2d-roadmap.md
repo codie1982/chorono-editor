@@ -56,7 +56,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Geliştirme branch'inde |
 | Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
 | Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
-| FRACTURE2 Canvas bond authoring, fixed-tick break/reset ve MCP tamamlama | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5` | Aşama 6 kod kapsamı tamamlandı; canlı kabul bekliyor |
+| FRACTURE2 Canvas bond authoring, fixed-tick break/reset, MCP tamamlama ve temiz canlı kabul | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5`, `3336a1db` | Aşama 6 ve temiz UI/MCP kabulü tamamlandı |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -133,7 +133,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
-| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, tek nesil Voronoi, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, MCP job inceleme, olay-korumalı sadeleştirme, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, image→Mesh2D fragment/source-UV korunumu, seam/mask kalite ölçümü, darbe tetikli fracture, deterministik artistic explosion, gerçek render–collider tanısı, geniş görsel matris ve temel scrub/player/MCP/render/export parity tamamlandı. Sırada kompleks shape/spline/`Mesh2D` kaynak ve fragment mesh derleyicisi vardır. Cluster, secondary fracture, particle body ve ortak `Emit From / Collide With / Follow Surface` sonraki alt dilimlerdir. |
+| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, kompleks shape/spline/`Mesh2D` fracture kaynakları, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, render/export parity ve FRACTURE2 bonded cluster + per-bond action authoring temiz canlı kabulle tamamlandı. Sıradaki destruction dilimi FRACTURE3 secondary/recursive fracture, lineage ve generation bütçeleridir; particle body ile ortak `Emit From / Collide With / Follow Surface` onu izler. |
 | Sonra 4 | Fabric/kumaş | Structured grid veya spline'dan türetilmiş Mesh2D; gravity/wind/pin/collision, deformasyon klibi ve bake. |
 | Sonra 5 | Blob Surface, sıvı, akış/duman/ateş | Particle liquid + değişken topolojili Blob Surface; damla birleşme/ayrılması, text/shape/spline/`Mesh2D` kaynak-collider-yüzey hedefleri. Duman/ateş ayrı grid/partikül tarifidir; alanlar, obstacle ve typed simulation bake kullanır. |
 | Sonra 6 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
@@ -3333,7 +3333,29 @@ Domain/solver `e2f07284`, Canvas/UI `a089b7aa`, MCP servis/test `4e82f4a5`
 commitleriyle `codex/mesh2d-mesh0` branch'inde gruplandı. Tam doğrulama **446
 test dosyası / 3.282 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run
 build` ile geçti. Production build'de yalnız bilinen `applicationBuildInfo.ts`
-named-export ve güncel olmayan Browserslist verisi uyarıları sürer. FRACTURE2
-aşama 6'nın kod kapsamı kapanmıştır; sıradaki geliştirme FRACTURE3
-secondary/recursive fracture'dır. Canlı temiz proje UI/MCP kabulü ayrı kanıt
-olarak bu bölümün devamına eklenecektir.
+named-export ve güncel olmayan Browserslist verisi uyarıları sürer.
+
+Temiz canlı kabul 22 Kasım'da 2000 portundaki kullanıcı projesine dokunmadan,
+MCP etkin production editörünün izole `2010` oturumunda tamamlandı. Tekrarlanabilir
+`scripts/qa/fracture-bond-actions-live.mjs` harness'i temiz 900×500 sahneyi MCP
+`clear_scene` ve QuickJS dry-run/apply akışıyla kurdu; ilk bonded bake'i commit
+edip aynı record'u persistent Re-bake ile atomik değiştirdi. Sonuç 8 fragment,
+14 bond, 49 sample, 36 track ve tek kayıtlı bake'tir. Unbreakable olarak
+işaretlenen bond için 450 ms damage reset ve tick 72 / 600 ms forced break
+uygulandı; Inspector olayı `reason: forced`, action sayılarını `1 / 1` verdi.
+599/600/1000 ms gerçek 900×500 PNG'leri incelendi; 599→1000 karşılaştırmasında
+19.760 piksel değişti. `validate_scene` geçerli ve uyarısız, browser console
+error listesi boştu.
+
+Canlı UI'da **Inspect Bake** kartı 8/14 fragment/bond, 0/1
+manual/unbreakable, 1/0 break/split ve 1/1 forced/reset gösterdi. Canvas bond ve
+cluster renk overlay'leri açıldı; geniş hit target ile bond seçimi doğrulandı.
+**Re-bake → Edit Source** görünümünde Strength, Damage Threshold, Unbreakable,
+Split, Break at playhead, Reset bond/all damage ve Group kontrolleri gerçek
+sahne üzerinde görüldü. Portable proje
+`projects/fracture-bond-actions-acceptance-2026-11-22.chorono.json`
+(`1.082.787` byte,
+`sha256 8f63c2f71b6dbc8cbf5745cd9e81ed82ef48fddf461fd7605e3feb4f413de819`)
+olarak kaydedildi. Harness `3336a1db` commit'indedir. FRACTURE2 aşama 6 kod ve
+canlı kabul kapsamı kapanmıştır; sıradaki geliştirme FRACTURE3
+secondary/recursive fracture'dır.
