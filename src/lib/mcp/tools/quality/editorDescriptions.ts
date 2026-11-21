@@ -2,7 +2,7 @@
  * public aliases. Each entry documents actual command semantics rather than
  * promising a new generic patch, deletion or key-preservation contract. */
 export const editorDescriptions: Readonly<Record<string, string>> = {
-  clear_scene: 'Remove all authored layers and timelines for an explicitly requested reset. Read get_scene first and preserve existing work for ordinary revisions. This is a destructive source edit with one undo step; it is not a required creation prelude.',
+  clear_scene: 'Remove authored layers, timelines and dependent physics/runtime/attribution metadata for an explicitly requested reset while preserving composition settings, assets, collections and editor guides. Read get_scene first and preserve existing work for ordinary revisions. This is a destructive source edit with one undo step; it is not a required creation prelude.',
   update_composition: 'Change only supplied composition size, duration, frame rate or background fields. Use for the canvas settings, not layer transforms or timeline playback. Source edit; returns the committed revision and scene summary.',
   add_layer: 'Create a layer using the legacy flat shape/text/media fields and an explicit unique id. Use a registered-kind creation tool for model-shaped payloads, or spline/path creation for editable geometry. Returns addedLayerIds and one undoable source change.',
   update_layer: 'Update only supplied legacy flat fields of an existing layer. Use for supported transform, shape, typography and appearance fields; this is not a recursive arbitrary Layer patch. Returns a committed revision and scene summary; unrelated supplied fields are not inferred.',
