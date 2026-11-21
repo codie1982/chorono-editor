@@ -96,6 +96,8 @@ export type {
   RigidBodySnapshot,
   RigidBodyBakeRecipe,
   RigidFractureEvent,
+  RigidFractureCluster,
+  RigidFractureBondBreakEvent,
   RigidPoseCacheHeader,
   RigidBakeTrackOwnership,
   RigidBakeLayerOwnership,
@@ -119,6 +121,14 @@ export type {
   FractureRegionGeneration,
   AnyFractureGeneration,
 } from './fracture'
+
+export type {
+  FractureBondDefaults,
+  FractureBondOverride,
+  FractureBond,
+  FractureBondGraph,
+  FractureClusterComponent,
+} from './fractureCluster'
 
 export type {
   LayerEffects,

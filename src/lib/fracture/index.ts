@@ -38,6 +38,13 @@ export {
   hashFractureSource,
 } from './FractureManifestHash'
 export { FractureFragmentAdjacencyBuilder } from './FractureFragmentAdjacencyBuilder'
+export { FractureSharedBoundaryAnalyzer } from './FractureSharedBoundaryAnalyzer'
+export type { FractureSharedBoundaryMetrics } from './FractureSharedBoundaryAnalyzer'
+export { FractureBondGraphCompiler } from './FractureBondGraphCompiler'
+export type { FractureBondGraphCompileInput } from './FractureBondGraphCompiler'
+export { FractureBondGraphValidator } from './FractureBondGraphValidator'
+export { FractureClusterComponents } from './FractureClusterComponents'
+export { hashFractureBondGraph } from './FractureBondGraphHash'
 export { SeededRandom } from './SeededRandom'
 export { VoronoiFractureGenerator } from './VoronoiFractureGenerator'
 export { VoronoiRegionFractureGenerator } from './VoronoiRegionFractureGenerator'

@@ -39,6 +39,25 @@ describe('PhysicsBakeRecipeFactory', () => {
     expect(prepared.generation.source.ownerId).toBe('box')
   })
 
+  it('pairs an optional deterministic bond graph with the fracture event', () => {
+    const fixture = rigidBakeFixture()
+    const scene = { ...fixture.scene, layers: fixture.scene.layers.map(layer => layer.id === 'box'
+      ? { ...layer, style: { ...layer.style!, cornerRadius: 0 } } : layer) }
+    const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      sourceLayerId: 'box', staticLayerIds: ['floor'], timelineId: 'main', durationMs: 3000,
+      fractureTimeMs: 800, fragmentCount: 8, seed: 42, generationId: 'clustered-fracture',
+      cluster: { defaults: { impulseStrength: 20, damageThreshold: 50 } },
+    })
+
+    expect(prepared.recipe.fractureClusters).toHaveLength(1)
+    expect(prepared.recipe.fractureClusters?.[0]).toMatchObject({
+      eventId: 'clustered-fracture:event',
+      strategy: 'compoundBody',
+      graph: { generationId: 'clustered-fracture', fragmentIds: expect.any(Array) },
+    })
+    expect(prepared.recipe.fractureClusters?.[0].graph.bonds.length).toBeGreaterThan(0)
+  })
+
   it('captures image provenance and produces texture-backed fragment Mesh2D layers', () => {
     const fixture = rigidBakeFixture()
     const image = {

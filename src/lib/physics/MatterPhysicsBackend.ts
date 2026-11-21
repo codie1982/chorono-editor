@@ -2,6 +2,7 @@ import Matter from 'matter-js'
 import type { RigidBodyBakeRecipe, RigidBodySnapshot, RigidFractureEvent } from '@/lib/types/physics'
 import type {
   PhysicsBackend,
+  RigidBondBreakSolverEvidence,
   RigidBodyFractureSolverEvidence,
   RigidBodySolverEvent,
   RigidBodySolverEventKind,
@@ -9,6 +10,8 @@ import type {
 import { compareRigidBodyIds } from './RigidBodyEventOrdering'
 import type { RigidPose2D } from './RigidVisualTransform'
 import { FractureExplosionImpulseResolver } from '@/lib/fracture/FractureExplosionImpulseResolver'
+import { MatterBodyFactory } from './MatterBodyFactory'
+import { MatterFractureClusterRuntime } from './MatterFractureClusterRuntime'
 
 const MATTER_BASE_DELTA_MS = 1000 / 60
 
@@ -44,6 +47,8 @@ export class MatterPhysicsBackend implements PhysicsBackend {
   private readonly activatedFractureEvents = new Set<string>()
   private readonly impactCandidates = new Map<string, ImpactCandidate>()
   private readonly explosionResolver = new FractureExplosionImpulseResolver()
+  private bodyFactory: MatterBodyFactory | undefined
+  private clusterRuntime: MatterFractureClusterRuntime | undefined
   private readonly sleepListeners = new Map<string, {
     body: Matter.Body
     onStart: (event: Matter.IEvent<Matter.Body>) => void
@@ -62,6 +67,10 @@ export class MatterPhysicsBackend implements PhysicsBackend {
     engine.gravity.scale = 1e-6
     this.engine = engine
     this.recipe = recipe
+    this.bodyFactory = new MatterBodyFactory(recipe)
+    this.clusterRuntime = new MatterFractureClusterRuntime(engine, this.bodyFactory, recipe, event => {
+      this.recordEvent('bond-break', event.bodyIds, undefined, event.evidence)
+    })
     Matter.Events.on(engine, 'collisionStart', event => this.recordCollisions('contact-start', event.pairs))
     Matter.Events.on(engine, 'collisionEnd', event => this.recordCollisions('contact-end', event.pairs))
     const created: Matter.Body[] = []
@@ -99,11 +108,14 @@ export class MatterPhysicsBackend implements PhysicsBackend {
         this.activateFracture(event)
       }
     }
+    this.clusterRuntime?.afterStep(deltaMs)
     this.impactCandidates.clear()
   }
 
   /** Reads one detached composition-space pose without exposing Matter state. */
   readPose(bodyId: string): RigidPose2D {
+    const virtual = this.clusterRuntime?.readPose(bodyId)
+    if (virtual) return virtual
     const body = this.bodies.get(bodyId)
     if (!body) {
       const snapshot = this.snapshots.get(bodyId)
@@ -123,6 +135,10 @@ export class MatterPhysicsBackend implements PhysicsBackend {
       ...event,
       bodyIds: [...event.bodyIds],
       ...(event.fracture ? { fracture: cloneFractureEvidence(event.fracture) } : {}),
+      ...(event.bondBreak ? { bondBreak: {
+        ...event.bondBreak,
+        componentIds: [...event.bondBreak.componentIds],
+      } } : {}),
     }))
     this.pendingEvents.length = 0
     return drained
@@ -144,6 +160,9 @@ export class MatterPhysicsBackend implements PhysicsBackend {
     this.sleepListeners.clear()
     this.engine = undefined
     this.recipe = undefined
+    this.bodyFactory = undefined
+    this.clusterRuntime?.dispose()
+    this.clusterRuntime = undefined
     this.elapsedMs = 0
     this.currentTick = 0
     this.currentStepTimeMs = 0
@@ -154,48 +173,8 @@ export class MatterPhysicsBackend implements PhysicsBackend {
   }
 
   private createBody(input: RigidBodySnapshot, center: { x: number; y: number }, angleDeg: number): Matter.Body {
-    if (!this.recipe) throw new Error('Matter physics recipe is unavailable')
-    const options = {
-      label: input.bodyId,
-      isStatic: input.motionType === 'static',
-      angle: angleDeg * Math.PI / 180,
-      density: input.material.densityKgPerSquareMeter / this.recipe.pixelsPerMeter ** 2,
-      friction: input.material.friction,
-      restitution: input.material.restitution,
-      frictionAir: input.material.airFriction,
-    }
-    let body: Matter.Body
-    if (input.collider === 'rectangle') {
-      body = Matter.Bodies.rectangle(center.x, center.y, input.widthPx, input.heightPx, options)
-    } else if (input.collider === 'convexPolygon') {
-      if (!input.colliderVerticesPx || input.colliderVerticesPx.length < 3) {
-        throw new Error(`Convex rigid body ${input.bodyId} has no collider vertices`)
-      }
-      body = Matter.Bodies.fromVertices(
-        center.x,
-        center.y,
-        [input.colliderVerticesPx.map(point => ({ x: point.x, y: point.y }))],
-        options,
-        false,
-        1e-9,
-        1e-9,
-        1e-9,
-      )
-    } else {
-      if (!input.colliderPartsPx?.length || input.colliderPartsPx.some(part => part.length < 3)) {
-        throw new Error(`Compound rigid body ${input.bodyId} has no convex collider parts`)
-      }
-      body = Matter.Bodies.fromVertices(
-        center.x,
-        center.y,
-        input.colliderPartsPx.map(part => part.map(point => ({ x: point.x, y: point.y }))),
-        options,
-        false,
-        1e-9,
-        1e-9,
-        1e-9,
-      )
-    }
+    if (!this.bodyFactory) throw new Error('Matter physics recipe is unavailable')
+    const body = this.bodyFactory.create(input, center, angleDeg)
     this.bodies.set(input.bodyId, body)
     if (input.motionType === 'dynamic') {
       const onStart = () => this.recordEvent('sleep-start', [input.bodyId])
@@ -209,7 +188,10 @@ export class MatterPhysicsBackend implements PhysicsBackend {
 
   private recordCollisions(kind: 'contact-start' | 'contact-end', pairs: readonly Matter.Pair[]): void {
     pairs.forEach(pair => {
-      const bodyIds = [bodyId(pair.bodyA), bodyId(pair.bodyB)].sort(compareRigidBodyIds)
+      const bodyIds = [
+        this.clusterRuntime?.collisionBodyId(pair.bodyA) ?? bodyId(pair.bodyA),
+        this.clusterRuntime?.collisionBodyId(pair.bodyB) ?? bodyId(pair.bodyB),
+      ].sort(compareRigidBodyIds)
       if (bodyIds[0] && bodyIds[1] && bodyIds[0] !== bodyIds[1]) this.recordEvent(kind, bodyIds)
       if (kind === 'contact-start') this.captureImpactCandidates(pair)
     })
@@ -219,6 +201,7 @@ export class MatterPhysicsBackend implements PhysicsBackend {
     kind: RigidBodySolverEventKind,
     bodyIds: readonly string[],
     fracture?: RigidBodyFractureSolverEvidence,
+    bondBreak?: RigidBondBreakSolverEvidence,
   ): void {
     if (this.currentTick < 1 || !Number.isFinite(this.currentStepTimeMs)) return
     const key = `${this.currentTick}:${kind}:${bodyIds.join(',')}`
@@ -230,6 +213,10 @@ export class MatterPhysicsBackend implements PhysicsBackend {
       timeMs: this.currentStepTimeMs,
       bodyIds: Object.freeze([...bodyIds]),
       ...(fracture ? { fracture: Object.freeze(cloneFractureEvidence(fracture)) } : {}),
+      ...(bondBreak ? { bondBreak: Object.freeze({
+        ...bondBreak,
+        componentIds: Object.freeze([...bondBreak.componentIds]),
+      }) } : {}),
     }))
   }
 
@@ -286,12 +273,15 @@ export class MatterPhysicsBackend implements PhysicsBackend {
       }
       return snapshot
     })
-    const explosionDeltas = event.explosion
+    const cluster = this.clusterRuntime?.supports(event.id)
+      ? this.clusterRuntime.activate(event, source, fragmentSnapshots)
+      : undefined
+    const explosionDeltas = !cluster && event.explosion
       ? this.explosionResolver.resolve(event.explosion, source.angle, fragmentSnapshots.map(snapshot => ({
         sourceLocalOffsetPx: snapshot.activation!.sourceLocalOffsetPx,
       })))
       : undefined
-    const fragments = fragmentSnapshots.map((snapshot, index) => {
+    const fragments = cluster ? [cluster] : fragmentSnapshots.map((snapshot, index) => {
       const offset = rotate(snapshot.activation!.sourceLocalOffsetPx, source.angle)
       const body = this.createBody(snapshot, {
         x: source.position.x + offset.x,

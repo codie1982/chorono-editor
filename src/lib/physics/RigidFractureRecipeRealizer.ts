@@ -20,7 +20,23 @@ export function realizeRigidFractureRecipe(
     .filter(event => event.kind === 'fracture' && event.fracture)
     .map(event => [event.fracture!.eventId, event]))
   const fractureEvents = recipe.fractureEvents.map(event => realizeEvent(event, markers.get(event.id)))
-  const withoutHash: Omit<RigidBodyBakeRecipe, 'recipeHash'> = { ...recipe, fractureEvents }
+  const fractureBondBreakEvents = solverEvents.filter(event => event.kind === 'bond-break' && event.bondBreak)
+    .map(event => Object.freeze({
+      tick: event.tick,
+      timeMs: event.timeMs,
+      graphId: event.bondBreak!.graphId,
+      bondId: event.bondBreak!.bondId,
+      fragmentBodyIds: Object.freeze([...event.bodyIds] as [string, string]),
+      load: event.bondBreak!.load,
+      accumulatedDamage: event.bondBreak!.accumulatedDamage,
+      reason: event.bondBreak!.reason,
+      componentIds: Object.freeze([...event.bondBreak!.componentIds]),
+    }))
+  const withoutHash: Omit<RigidBodyBakeRecipe, 'recipeHash'> = {
+    ...recipe,
+    fractureEvents,
+    ...(fractureBondBreakEvents.length ? { fractureBondBreakEvents } : {}),
+  }
   const realized = Object.freeze({ ...withoutHash, recipeHash: hashRigidBodyBakeRecipe(withoutHash) })
   assertRigidFractureEvents(realized, { requireRealized: true })
   return realized

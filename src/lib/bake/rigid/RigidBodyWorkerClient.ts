@@ -158,6 +158,7 @@ export class RigidBodyWorkerClient implements RigidBodySimulationExecutor {
 
 const EVENT_KINDS = new Set<RigidBodySolverEventKind>([
   'contact-start', 'contact-end', 'sleep-start', 'sleep-end', 'fracture',
+  'bond-break',
 ])
 
 /** Treat Worker event metadata as untrusted structured-clone input. */
@@ -184,7 +185,11 @@ function validateEvents(
     if (event.kind.startsWith('sleep-') && event.bodyIds.length !== 1) {
       throw new Error('Rigid worker event payload is invalid.')
     }
+    if (event.kind === 'bond-break' && (event.bodyIds.length !== 2 || !validBondBreakEvidence(event, recipe))) {
+      throw new Error('Rigid worker event payload is invalid.')
+    }
     if (event.kind !== 'fracture' && event.fracture) throw new Error('Rigid worker event payload is invalid.')
+    if (event.kind !== 'bond-break' && event.bondBreak) throw new Error('Rigid worker event payload is invalid.')
     if (event.kind === 'fracture' && !validFractureEvidence(event, recipe)) {
       throw new Error('Rigid worker event payload is invalid.')
     }
@@ -200,8 +205,27 @@ function validateEvents(
         ...(event.fracture.contactPointPx ? { contactPointPx: Object.freeze({ ...event.fracture.contactPointPx }) } : {}),
         ...(event.fracture.contactNormal ? { contactNormal: Object.freeze({ ...event.fracture.contactNormal }) } : {}),
       }) } : {}),
+      ...(event.bondBreak ? { bondBreak: Object.freeze({
+        ...event.bondBreak,
+        componentIds: Object.freeze([...event.bondBreak.componentIds]),
+      }) } : {}),
     })
   }))
+}
+
+function validBondBreakEvidence(event: RigidBodySolverEvent, recipe: RigidBodyBakeRecipe): boolean {
+  const evidence = event.bondBreak
+  const cluster = recipe.fractureClusters?.find(candidate => candidate.graph.graphId === evidence?.graphId)
+  const bond = cluster?.graph.bonds.find(candidate => candidate.bondId === evidence?.bondId)
+  if (!evidence || !bond || !['impulse', 'damage', 'forced'].includes(evidence.reason)
+    || !Number.isFinite(evidence.load) || evidence.load < 0
+    || !Number.isFinite(evidence.accumulatedDamage) || evidence.accumulatedDamage < 0
+    || !Array.isArray(evidence.componentIds) || !evidence.componentIds.length
+    || evidence.componentIds.some(id => typeof id !== 'string' || !id)) return false
+  const expectedBodyIds = [bond.fragmentAId, bond.fragmentBId].map(layerId => (
+    recipe.bodies.find(body => body.layerId === layerId)?.bodyId
+  )).sort()
+  return JSON.stringify(event.bodyIds) === JSON.stringify(expectedBodyIds)
 }
 
 function validFractureEvidence(event: RigidBodySolverEvent, recipe: RigidBodyBakeRecipe): boolean {

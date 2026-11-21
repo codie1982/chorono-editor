@@ -1,5 +1,6 @@
 import type { SimulationCacheHeader } from '@/lib/simulation/SimulationCacheHeader'
 import type { AnyFractureGeneration, FractureAppearanceSnapshot } from './fracture'
+import type { FractureBondGraph } from './fractureCluster'
 
 export type RigidBodyMotionType = 'dynamic' | 'static'
 
@@ -102,6 +103,26 @@ export interface RigidFractureEvent {
   readonly realization?: RigidFractureImpactRealization
 }
 
+/** One bonded compound-body policy activated by a fracture topology event. */
+export interface RigidFractureCluster {
+  readonly eventId: string
+  readonly strategy: 'compoundBody'
+  readonly graph: FractureBondGraph
+}
+
+/** Compact solver realization of one FRACTURE2 bond break. */
+export interface RigidFractureBondBreakEvent {
+  readonly tick: number
+  readonly timeMs: number
+  readonly graphId: string
+  readonly bondId: string
+  readonly fragmentBodyIds: readonly [string, string]
+  readonly load: number
+  readonly accumulatedDamage: number
+  readonly reason: 'impulse' | 'damage' | 'forced'
+  readonly componentIds: readonly string[]
+}
+
 export interface RigidBodyBakeRecipe {
   readonly version: 1
   readonly kind: 'rigidPose'
@@ -119,6 +140,10 @@ export interface RigidBodyBakeRecipe {
   readonly bodies: readonly RigidBodySnapshot[]
   /** Optional first-generation topology events; absent for ordinary rigid bake. */
   readonly fractureEvents?: readonly RigidFractureEvent[]
+  /** Optional FRACTURE2 graphs; one graph may own each fracture event. */
+  readonly fractureClusters?: readonly RigidFractureCluster[]
+  /** Compact realized break sequence; absent on unpublished recipes. */
+  readonly fractureBondBreakEvents?: readonly RigidFractureBondBreakEvent[]
   /** Supported source appearance captured for current fracture recipes. */
   readonly fractureAppearance?: FractureAppearanceSnapshot
 }

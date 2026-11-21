@@ -28,6 +28,10 @@ export interface RigidBodyBakeReport {
   readonly rawKeyframeCount: number
   readonly keyframeCount: number
   readonly protectedEventCount: number
+  readonly clusterCount: number
+  readonly bondCount: number
+  readonly bondBreakCount: number
+  readonly clusterSplitCount: number
   readonly maxVertexErrorPx: number
   readonly maxAngleErrorDeg: number
   readonly clipBytes: number
@@ -186,6 +190,11 @@ export class RigidBodyBakeAdapter implements BakeAdapter<RigidBodyBakeRecipe, Ri
         dynamicBodyCount: dynamicCount, rawKeyframeCount: compilation.report.rawKeyframeCount,
         keyframeCount: compilation.report.keyframeCount,
         protectedEventCount: compilation.report.protectedEventCount,
+        clusterCount: realizedRecipe.fractureClusters?.length ?? 0,
+        bondCount: realizedRecipe.fractureClusters?.reduce((sum, cluster) => sum + cluster.graph.bonds.length, 0) ?? 0,
+        bondBreakCount: simulation.events.filter(event => event.kind === 'bond-break').length,
+        clusterSplitCount: simulation.events.filter(event => event.kind === 'bond-break'
+          && (event.bondBreak?.componentIds.length ?? 0) > 1).length,
         maxVertexErrorPx: compilation.report.maxVertexErrorPx,
         maxAngleErrorDeg: compilation.report.maxAngleErrorDeg,
         clipBytes: clip.byteLength, estimatedTrackBytes,

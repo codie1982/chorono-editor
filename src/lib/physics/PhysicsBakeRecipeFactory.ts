@@ -1,10 +1,12 @@
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
+import { FractureBondGraphCompiler } from '@/lib/fracture/FractureBondGraphCompiler'
 import { FractureSourceBoundaryCompiler } from '@/lib/fracture/FractureSourceBoundaryCompiler'
 import { FractureSourceRegionCompiler } from '@/lib/fracture/FractureSourceRegionCompiler'
 import { VoronoiFractureGenerator } from '@/lib/fracture/VoronoiFractureGenerator'
 import { VoronoiRegionFractureGenerator } from '@/lib/fracture/VoronoiRegionFractureGenerator'
 import type { ChronoScene } from '@/lib/types'
 import type { FractureGeneration, FractureRegionGeneration } from '@/lib/types/fracture'
+import type { FractureBondDefaults, FractureBondOverride } from '@/lib/types/fractureCluster'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
@@ -58,6 +60,11 @@ export interface VoronoiBakeRecipeInput {
   readonly fragmentCount: number
   readonly seed: number
   readonly generationId: string
+  readonly cluster?: {
+    readonly graphId?: string
+    readonly defaults?: Partial<FractureBondDefaults>
+    readonly overrides?: readonly FractureBondOverride[]
+  }
   readonly stepHz?: number
   readonly sampleFps?: number
   readonly pixelsPerMeter?: number
@@ -89,6 +96,7 @@ export class PhysicsBakeRecipeFactory {
   private readonly regionFractureGenerator = new VoronoiRegionFractureGenerator()
   private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
   private readonly sourceRegionCompiler = new FractureSourceRegionCompiler()
+  private readonly bondGraphCompiler = new FractureBondGraphCompiler()
 
   /** Compile a deterministic rigid recipe without starting the simulation. */
   compileRigid(scene: ChronoScene, input: RigidBakeRecipeInput): RigidBodyBakeRecipe {
@@ -144,6 +152,11 @@ export class PhysicsBakeRecipeFactory {
     }))
     const recipe = this.fractureCompiler.compile(scene, {
       generation,
+      ...(input.cluster ? { bondGraph: this.bondGraphCompiler.compile(generation, {
+        graphId: input.cluster.graphId ?? defaultClusterGraphId(input.generationId, generation.topologyHash),
+        defaults: resolveBondDefaults(input.cluster.defaults, input.seed),
+        overrides: input.cluster.overrides,
+      }) } : {}),
       timelineId: input.timelineId,
       startTimeMs: input.startTimeMs ?? 0,
       durationMs: input.durationMs,
@@ -159,6 +172,26 @@ export class PhysicsBakeRecipeFactory {
     })
     return { recipe, generation }
   }
+}
+
+/** Stable first FRACTURE2 material defaults shared by UI and MCP callers. */
+export function resolveBondDefaults(
+  value: Partial<FractureBondDefaults> | undefined,
+  fallbackSeed: number,
+): FractureBondDefaults {
+  return {
+    impulseStrength: value?.impulseStrength ?? 40,
+    damageThreshold: value?.damageThreshold ?? 80,
+    damageDecayPerSecond: value?.damageDecayPerSecond ?? 0,
+    relativeNormalSpeedScale: value?.relativeNormalSpeedScale ?? 0.1,
+    variation: value?.variation ?? 0.1,
+    seed: value?.seed ?? fallbackSeed,
+  }
+}
+
+function defaultClusterGraphId(generationId: string, topologyHash: string): string {
+  const readable = `${generationId}-cluster`
+  return readable.length <= 96 ? readable : `${generationId.slice(0, 79)}-cluster-${topologyHash.slice(0, 8)}`
 }
 
 /** Convert concise product/MCP settings into complete persisted authoring. */

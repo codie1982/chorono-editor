@@ -7,6 +7,16 @@ export type RigidBodySolverEventKind =
   | 'sleep-start'
   | 'sleep-end'
   | 'fracture'
+  | 'bond-break'
+
+export interface RigidBondBreakSolverEvidence {
+  readonly graphId: string
+  readonly bondId: string
+  readonly load: number
+  readonly accumulatedDamage: number
+  readonly reason: 'impulse' | 'damage' | 'forced'
+  readonly componentIds: readonly string[]
+}
 
 export interface RigidBodyFractureSolverEvidence {
   readonly eventId: string
@@ -32,6 +42,8 @@ export interface RigidBodySolverEvent {
   readonly bodyIds: readonly string[]
   /** Present only for the exact topology replacement marker. */
   readonly fracture?: RigidBodyFractureSolverEvidence
+  /** Present only for a FRACTURE2 bond break and same-tick component rebuild. */
+  readonly bondBreak?: RigidBondBreakSolverEvidence
 }
 
 /** Narrow solver contract used by the rigid bake adapter. */

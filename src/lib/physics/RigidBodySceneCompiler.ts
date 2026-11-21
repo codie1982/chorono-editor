@@ -161,6 +161,12 @@ export function hashRigidBodyBakeRecipe(recipe: Omit<RigidBodyBakeRecipe, 'recip
         `fracture-impact-normal:${event.realization.contactNormal.x},${event.realization.contactNormal.y}`,
       ] : []),
     ]),
+    ...(recipe.fractureClusters ?? []).map(cluster => (
+      `fracture-cluster:${cluster.eventId},${cluster.strategy},${cluster.graph.graphHash}`
+    )),
+    ...(recipe.fractureBondBreakEvents ?? []).map(event => (
+      `fracture-bond-break:${event.tick},${event.timeMs},${event.graphId},${event.bondId},${event.fragmentBodyIds.join(',')},${event.load},${event.accumulatedDamage},${event.reason},${event.componentIds.join(',')}`
+    )),
     ...(recipe.fractureAppearance ? [
       `fracture-appearance:${recipe.fractureAppearance.schemaVersion},${recipe.fractureAppearance.kind},${recipe.fractureAppearance.sourceLayerId},${recipe.fractureAppearance.contentHash}`,
       ...(recipe.fractureAppearance.kind === 'image' ? [

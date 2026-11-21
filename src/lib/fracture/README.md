@@ -1,8 +1,8 @@
 # Voronoi fracture foundation
 
-This directory owns the first single-generation 2D destruction slice. It does
-not own React controls, the Matter world, rendering, file I/O or recursive
-cluster damage.
+This directory owns deterministic single-generation geometry plus the portable
+FRACTURE2 bond-graph domain. It does not own React controls, the Matter world,
+rendering, file I/O or recursive child generation.
 
 ## Entry points and data flow
 
@@ -45,6 +45,11 @@ cluster damage.
    normal transform/visibility tracks, topology persistence and ownership
    atomically. Undo restores the exact prior layer, timeline and physics
    envelopes.
+10. `FractureSharedBoundaryAnalyzer` measures length, midpoint and an oriented
+    normal without changing the FRACTURE1 adjacency manifest. The
+    `FractureBondGraphCompiler` adds automatic/manual overrides, seeded policy
+    materialization and a portable hash. `FractureClusterComponents` resolves
+    canonical intact components after any deterministic bond set is removed.
 
 ## Contracts
 
@@ -81,8 +86,9 @@ cluster damage.
   direction, radial/directional velocity, spin, bounded variation and an
   unsigned seed. It is applied once as fragments activate and the editor
   discloses it as added external energy.
-- Concave or donut sources, bonded clusters and recursive destruction remain
-  later stages.
+- Concave/donut sources and the first bonded compound-body runtime are
+  supported. Canvas per-bond editing, forced timeline/user breaks and recursive
+  secondary destruction remain later slices.
 
 ## Lifecycle and ownership
 

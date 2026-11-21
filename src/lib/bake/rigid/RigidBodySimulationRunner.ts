@@ -84,6 +84,10 @@ function freezeEvents(events: readonly RigidBodySolverEvent[]): readonly RigidBo
       ...(event.fracture.contactPointPx ? { contactPointPx: Object.freeze({ ...event.fracture.contactPointPx }) } : {}),
       ...(event.fracture.contactNormal ? { contactNormal: Object.freeze({ ...event.fracture.contactNormal }) } : {}),
     }) } : {}),
+    ...(event.bondBreak ? { bondBreak: Object.freeze({
+      ...event.bondBreak,
+      componentIds: Object.freeze([...event.bondBreak.componentIds]),
+    }) } : {}),
   })))
 }
 

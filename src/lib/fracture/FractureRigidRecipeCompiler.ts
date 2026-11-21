@@ -6,6 +6,7 @@ import type {
   FractureRegionGeneration,
   FragmentGeometry,
 } from '@/lib/types/fracture'
+import type { FractureBondGraph } from '@/lib/types/fractureCluster'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
@@ -14,6 +15,7 @@ import type {
 } from '@/lib/types/physics'
 import { hashRigidBodyBakeRecipe, hashRigidBodySource, RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
+import { FractureBondGraphValidator } from './FractureBondGraphValidator'
 import { FractureManifestValidator } from './FractureManifestValidator'
 import { FractureRegionManifestValidator } from './FractureRegionManifestValidator'
 import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
@@ -22,6 +24,7 @@ import { hashFractureRegionSource } from './FractureManifestHash'
 
 export interface FractureRigidRecipeInput {
   readonly generation: FractureGeneration | FractureRegionGeneration
+  readonly bondGraph?: FractureBondGraph
   readonly timelineId: string
   readonly startTimeMs: number
   readonly durationMs: number
@@ -61,11 +64,16 @@ export class FractureRigidRecipeCompiler {
   private readonly appearanceCompiler = new FractureAppearanceCompiler()
   private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
   private readonly sourceRegionCompiler = new FractureSourceRegionCompiler()
+  private readonly bondGraphValidator = new FractureBondGraphValidator()
 
   /** Compiles an immutable one-generation recipe without mutating the scene. */
   compile(scene: ChronoScene, input: FractureRigidRecipeInput): RigidBodyBakeRecipe {
     if (input.generation.schemaVersion === 1) this.manifestValidator.validate(input.generation)
     else this.regionManifestValidator.validate(input.generation)
+    if (input.bondGraph) {
+      this.bondGraphValidator.validate(input.bondGraph, input.generation)
+      if (input.explosion) throw new Error('Bonded cluster and artistic explosion cannot be combined yet')
+    }
     if (input.sourceBody.layerId !== input.generation.source.ownerId || input.sourceBody.motionType !== 'dynamic'
       || !['rectangle', 'convexPolygon', 'compoundPolygon'].includes(input.sourceBody.collider)) {
       throw new Error('Fracture source must be the generation owner and a dynamic supported boundary')
@@ -136,6 +144,11 @@ export class FractureRigidRecipeCompiler {
       source: { ...base.source, revision: sourceRevision },
       bodies,
       fractureEvents,
+      ...(input.bondGraph ? { fractureClusters: [Object.freeze({
+        eventId,
+        strategy: 'compoundBody' as const,
+        graph: input.bondGraph,
+      })] } : {}),
       fractureAppearance,
     }
     return Object.freeze({ ...withoutHash, recipeHash: hashRigidBodyBakeRecipe(withoutHash) })
@@ -155,6 +168,7 @@ export class FractureRigidRecipeCompiler {
     try {
       const current = this.compile(scene, {
         generation,
+        bondGraph: recipe.fractureClusters?.[0]?.graph,
         timelineId: recipe.timelineId,
         startTimeMs: recipe.startTimeMs,
         durationMs: recipe.durationMs,
@@ -227,7 +241,11 @@ function copyRealization(current: RigidBodyBakeRecipe, stored: RigidBodyBakeReci
       ? { ...event, timeMs: source.timeMs, tick: source.tick, realization: source.realization }
       : event
   })
-  const withoutHash: Omit<RigidBodyBakeRecipe, 'recipeHash'> = { ...current, fractureEvents: events }
+  const withoutHash: Omit<RigidBodyBakeRecipe, 'recipeHash'> = {
+    ...current,
+    fractureEvents: events,
+    ...(stored.fractureBondBreakEvents ? { fractureBondBreakEvents: stored.fractureBondBreakEvents } : {}),
+  }
   return { ...withoutHash, recipeHash: hashRigidBodyBakeRecipe(withoutHash) }
 }
 
