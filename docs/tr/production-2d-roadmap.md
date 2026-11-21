@@ -57,6 +57,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
 | Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
 | FRACTURE2 Canvas bond authoring, fixed-tick break/reset, MCP tamamlama ve temiz canlı kabul | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5`, `3336a1db` | Aşama 6 ve temiz UI/MCP kabulü tamamlandı |
+| FRACTURE3 recursive generation, lineage/bütçe, portable forest, ürün UI/MCP ve temiz canlı kabul | `codex/mesh2d-mesh0` | `fe0c4f45`–`72711c78`, `206853a3`, `5eaf8ca9` | İlk secondary destruction dilimi ve canlı UI/MCP kabulü tamamlandı |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -133,7 +134,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
-| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, kompleks shape/spline/`Mesh2D` fracture kaynakları, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, render/export parity ve FRACTURE2 bonded cluster + per-bond action authoring temiz canlı kabulle tamamlandı. Sıradaki destruction dilimi FRACTURE3 secondary/recursive fracture, lineage ve generation bütçeleridir; particle body ile ortak `Emit From / Collide With / Follow Surface` onu izler. |
+| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, kompleks shape/spline/`Mesh2D` fracture kaynakları, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, render/export parity, FRACTURE2 bonded cluster/action authoring ve FRACTURE3 precomputed recursive generation temiz canlı kabulle tamamlandı. Sıradaki destruction dilimi FRACTURE4 damage deformation/ileri bake'tir; particle body ile ortak `Emit From / Collide With / Follow Surface` onu izler. |
 | Sonra 4 | Fabric/kumaş | Structured grid veya spline'dan türetilmiş Mesh2D; gravity/wind/pin/collision, deformasyon klibi ve bake. |
 | Sonra 5 | Blob Surface, sıvı, akış/duman/ateş | Particle liquid + değişken topolojili Blob Surface; damla birleşme/ayrılması, text/shape/spline/`Mesh2D` kaynak-collider-yüzey hedefleri. Duman/ateş ayrı grid/partikül tarifidir; alanlar, obstacle ve typed simulation bake kullanır. |
 | Sonra 6 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
@@ -759,7 +760,7 @@ büyütmek final native geometri çizimi sayılmaz.
 | FRACTURE0 — rigid ve tek nesil Voronoi | Sabit adım Matter adapter, doğrulanmış convex sınır, seed'li parçalar, momentum devri, olay/transform bake ve tek undo. |
 | FRACTURE1 — fragment mesh ve kompleks kaynak | Concave/delikli clipping; fragment triangle/UV/topology hash, adjacency, compound collider ve portable generation manifest. |
 | FRACTURE2 — bonded cluster | Auto/manual cluster, ortak sınır bond'ları, dayanım/damage, connected-component split ve kütle/momentum koruyan body rebuild. |
-| FRACTURE3 — secondary destruction | Precomputed/on-demand recursive child generation, kararlı lineage/kimlik, generation ve toplam fragment/triangle/byte bütçesi. |
+| FRACTURE3 — secondary destruction — ilk dilim tamamlandı | Precomputed recursive child generation, kararlı lineage/kimlik, generation ve toplam fragment/triangle/byte bütçesi; portable forest, ürün UI/MCP ve canlı kabul. On-demand runtime üretim FRACTURE4+ kararıdır. |
 | FRACTURE4 — damage deformation ve ileri bake | Mesh2D dent/bend/shear, rest/deformed fracture snapshot, `fractureEventSequence`, checkpoint/seek, MCP ve canonical render/export parity. |
 | BLOB0 — nokta alanı ve çizim | “+” noktalar, radius/weight/threshold, alan→contour→fill; iki küme yaklaşınca birleşir ve uzaklaşınca ayrılır, boş yüzey/delik desteklenir. |
 | BLOB1 — native grup ve düzeltme | Açık merge owner, nokta/grup animasyonu, sayısal kontrol, tek undo, seçili kareyi Mesh2D snapshot'a dönüştürme; kaynak ve layer sırası korunur. |
@@ -3357,5 +3358,58 @@ sahne üzerinde görüldü. Portable proje
 (`1.082.787` byte,
 `sha256 8f63c2f71b6dbc8cbf5745cd9e81ed82ef48fddf461fd7605e3feb4f413de819`)
 olarak kaydedildi. Harness `3336a1db` commit'indedir. FRACTURE2 aşama 6 kod ve
-canlı kabul kapsamı kapanmıştır; sıradaki geliştirme FRACTURE3
-secondary/recursive fracture'dır.
+canlı kabul kapsamı kapanmıştır; onu izleyen FRACTURE3 teslimi §12.82'de
+tamamlanmıştır.
+
+### 12.82. FRACTURE3 precomputed recursive generation — 22 Kasım 2026
+
+İlk secondary destruction dilimi, daha önce oluşmuş bir root fragment'ını
+sonraki fixed tick'te deterministik child generation ile değiştiren iki olaylı
+recipe olarak tamamlandı. `FractureGenerationHierarchyCompiler` kararlı
+parent–child lineage ve generation kimliklerini doğrular; depth, generation,
+toplam fragment, triangle ve UTF-8 portable byte bütçelerini solver allocation
+öncesinde uygular. Root ve child body snapshot'ları aynı canonical recipe hash'i
+altındadır; parent opacity geçişi tek track'te root görünümü → parent fragment →
+child fragments sırasını korur.
+
+Portable commit bütün generation forest'ını, topology manifestlerini, generated
+layer sahipliğini ve iki fracture event'ini birlikte kaydeder. Clear ve Re-bake
+tam ağacı tek undoable işlemle yönetir; source hash, ownership ve hierarchy hash
+denetimi eksik/edited output'u sessizce ezmez. Canvas/MCP görünürlüğü canonical
+event schedule'ını kullanır; child event sonrasında stale parent fragment
+çizilmez.
+
+Physics → Fracture UI'ına **Precompute secondary fracture**, parent fragment,
+child fragment/time/seed/generation ve toplam fragment/triangle/portable byte
+bütçeleri eklendi. Inspect Bake iki event'i, lineage listesini ve used/limit
+tablosunu gösterir. Persistent/doğrudan MCP schema aynı `secondary` ve `budgets`
+sözleşmesini kullanır; job sonucu generation/fragment sayısını, preview iki
+event'i, `inspect_physics_bake` ise `topologyEvents` ve `recursiveHierarchy`
+kanıtını döndürür. Canonical skill ile MCP rehberi aynı anda güncellendi.
+
+Domain/lineage `fe0c4f45`, portable forest `5de59dd2`, UI/MCP `72711c78`, canlı
+testte bulunan convex collider owner-id tanısı düzeltmesi `206853a3` ve kabul
+harness'i `5eaf8ca9` commitleriyle `codex/mesh2d-mesh0` branch'inde gruplandı.
+Tam doğrulama **448 test dosyası / 3.292 test**, `npm run mcp:build` ve
+`npm run build` ile geçti. Production build'de yalnız önceden bilinen
+`applicationBuildInfo.ts` named-export uyarısı kaldı.
+
+Temiz canlı kabul, 2000 portundaki kullanıcı projesine dokunmadan MCP etkin
+production editörünün izole `2010` oturumunda tamamlandı.
+`scripts/qa/recursive-fracture-live.mjs` temiz 900×500/1800 ms sahne kurdu;
+400 ms/tick 48'de 6 root fragment ve 800 ms/tick 96'da seçili parent'tan 4
+child fragment üretti. Sonuç 2 generation, 10 fragment, 26 triangle,
+6.040/2.097.152 portable byte, Worker execution, 55 sample ve 887 keyframe'dir.
+Görünür dynamic body sayıları 399/600/800/1000 ms için 1/6/9/9'dur; root ve
+child karşılaştırmalarında sırasıyla 38.280 ve 4.934 piksel değişti.
+
+Canlı Inspect Bake görünümünde iki event, current/current sahiplik, lineage ve
+bütçe tablosu doğrulandı. Topology & collider kartı exact 400 ms event'inde
+6/6 polygon, 56 boundary sample ve 0 px maksimum/ortalama fark verdi. Re-bake
+authoring'de bütün secondary alanları geri yüklendi; `validate_scene` uyarısız
+geçti ve browser console warning/error listesi boştu. Portable kanıt
+`projects/recursive-fracture-acceptance-2026-11-22.chorono.json`
+(`1.348.566` byte,
+`sha256 9e9225bffae2a402a4694d22e08e84f6eebb266f8af1f0888c2cb42bff7be77d`)
+olarak kaydedildi. FRACTURE3 ilk dilimi kapanmıştır; sıradaki destruction işi
+FRACTURE4 damage deformation ve ileri event/checkpoint bake'tir.
