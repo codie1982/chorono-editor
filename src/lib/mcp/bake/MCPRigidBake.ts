@@ -11,7 +11,7 @@ import { PhysicsBakeRecipeFactory } from '@/lib/physics/PhysicsBakeRecipeFactory
 import { RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
 import type { ChronoScene } from '@/lib/types'
-import type { FractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration } from '@/lib/types/fracture'
 import type { RigidBodyBakeRecipe, RigidBodyMaterial, RigidFractureExplosion } from '@/lib/types/physics'
 import type { BakePreparationContext } from '@/lib/bake/BakeContracts'
 
@@ -90,7 +90,7 @@ export interface MCPPhysicsBakeDefinition {
   readonly label: string
   readonly sourceLayerId: string
   readonly recipe: RigidBodyBakeRecipe
-  readonly generation?: FractureGeneration
+  readonly generation?: AnyFractureGeneration
   readonly recordId?: string
   readonly replaceRecordId?: string
   readonly defaultConflictPolicy: RigidBakeConflictPolicy

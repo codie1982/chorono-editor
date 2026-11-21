@@ -2,8 +2,10 @@ import type { OverrideMap } from '@/lib/evaluator'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import type { ChronoScene, Layer } from '@/lib/types'
 import type { FracturePoint2D } from '@/lib/types/fracture'
-import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
+import type { FractureRegionGeneration } from '@/lib/types/fracture'
+import type { Mesh2DGeometry, Mesh2DTopology } from '@/lib/types/mesh2d'
 import type { RigidBakeRecord, RigidBodySnapshot } from '@/lib/types/physics'
+import { Mesh2DBoundaryRingExtractor, Mesh2DTopologyHasher } from '@/lib/geometry/mesh2d'
 
 export interface FractureOverlayPolygon {
   readonly id: string
@@ -28,6 +30,9 @@ export interface FractureOverlayFrame {
   /** Actual active dynamic and static rigid-body colliders. */
   readonly colliderPolygons: readonly FractureOverlayPolygon[]
 }
+
+const overlayRingExtractor = new Mesh2DBoundaryRingExtractor()
+const overlayTopologyHasher = new Mesh2DTopologyHasher()
 
 /**
  * Prepares renderer-independent world-space geometry for fracture diagnostics.
@@ -54,6 +59,9 @@ export class FractureOverlayGeometryResolver {
     const generation = scene.physics?.fractureGenerations?.find(item => item.generationId === generationId)
     const sourceLayer = scene.layers.find(layer => layer.id === generation?.source.ownerId)
     if (!generation || !sourceLayer) return null
+    if (generation.schemaVersion === 2) {
+      return resolveRegionFrame(scene, record, event, generation, sourceLayer, timeMs, overrides)
+    }
 
     const eventTimeMs = record.recipe.startTimeMs + event.timeMs
     const phase = timeMs < eventTimeMs ? 'source' : 'fragments'
@@ -111,6 +119,82 @@ export class FractureOverlayGeometryResolver {
       colliderPolygons,
     }
   }
+}
+
+/** Resolve FRACTURE1 render rings and actual compound collider union rings. */
+function resolveRegionFrame(
+  scene: ChronoScene,
+  record: RigidBakeRecord,
+  event: NonNullable<RigidBakeRecord['recipe']['fractureEvents']>[number],
+  generation: FractureRegionGeneration,
+  sourceLayer: Layer,
+  timeMs: number,
+  overrides?: OverrideMap,
+): FractureOverlayFrame | null {
+  const eventTimeMs = record.recipe.startTimeMs + event.timeMs
+  const phase = timeMs < eventTimeMs ? 'source' : 'fragments'
+  const layerById = new Map(scene.layers.map(layer => [layer.id, layer]))
+  const bodyById = new Map(record.recipe.bodies.map(body => [body.bodyId, body]))
+  const resolveMatrix = createLayerWorldMatrixResolver(scene, timeMs, overrides)
+  const fragments = generation.fragments.flatMap(fragment => {
+    const layer = phase === 'source' ? sourceLayer : layerById.get(fragment.id)
+    if (!layer) return []
+    return polygonsFromRings(fragment.id, fragment.boundaryRings, layer, resolveMatrix)
+  })
+  if (!fragments.length) return null
+
+  const renderPolygons = phase === 'source'
+    ? polygonsFromRings(sourceLayer.id, generation.source.rings, sourceLayer, resolveMatrix)
+    : generation.fragments.flatMap(fragment => {
+      const layer = layerById.get(fragment.id)
+      if (!layer || layer.type !== 'mesh2d' || !layer.mesh2d) return []
+      const rings = meshBoundaryRings(layer.mesh2d.geometry)
+      return rings ? polygonsFromRings(fragment.id, rings, layer, resolveMatrix) : []
+    })
+  const activeBodies = phase === 'source'
+    ? [bodyById.get(event.sourceBodyId)].filter((body): body is RigidBodySnapshot => !!body)
+    : event.fragmentBodyIds.map(id => bodyById.get(id)).filter((body): body is RigidBodySnapshot => !!body)
+  const dynamicColliderPolygons = activeBodies.flatMap(body => {
+    const layer = layerById.get(body.layerId)
+    return layer ? bodyColliderPolygons(body, layer, resolveMatrix) : []
+  })
+  const colliderPolygons = [...dynamicColliderPolygons]
+  record.recipe.bodies.filter(body => body.motionType === 'static').forEach(body => {
+    const layer = layerById.get(body.layerId)
+    if (layer) colliderPolygons.push(...bodyColliderPolygons(body, layer, resolveMatrix))
+  })
+  if (renderPolygons.length !== dynamicColliderPolygons.length) return null
+  return {
+    recordId: record.id,
+    generationId: generation.generationId,
+    phase,
+    eventTimeMs,
+    eventTick: event.tick,
+    atEvent: Math.abs(timeMs - eventTimeMs) <= 1e-6,
+    fragments,
+    renderPolygons,
+    dynamicColliderPolygons,
+    colliderPolygons,
+  }
+}
+
+function polygonsFromRings(
+  ownerId: string,
+  rings: readonly { readonly points: readonly FracturePoint2D[] }[],
+  layer: Layer,
+  resolveMatrix: ReturnType<typeof createLayerWorldMatrixResolver>,
+): FractureOverlayPolygon[] {
+  const matrix = resolveMatrix(layer)
+  return rings.map((ring, ringIndex) => {
+    const points = ring.points.map(point => matrix.applyToPoint(point))
+    const centroid = points.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
+    return {
+      id: `${ownerId}:ring-${ringIndex}`,
+      points,
+      centroid: { x: centroid.x / points.length, y: centroid.y / points.length },
+      triangleIndices: convexFan(points.length),
+    }
+  })
 }
 
 /** Select the requested fracture record or the newest renderable one. */
@@ -180,6 +264,34 @@ function bodyColliderPolygon(
     centroid: matrix.applyToPoint(center),
     triangleIndices: convexFan(localPoints.length),
   }
+}
+
+/** Resolve one or more union boundary rings from a compiled rigid collider. */
+function bodyColliderPolygons(
+  body: RigidBodySnapshot,
+  layer: Layer,
+  resolveMatrix: ReturnType<typeof createLayerWorldMatrixResolver>,
+): FractureOverlayPolygon[] {
+  if (body.collider !== 'compoundPolygon') {
+    const polygon = bodyColliderPolygon(body, layer, resolveMatrix)
+    return polygon ? [{ ...polygon, id: `${body.layerId}:ring-0:collider` }] : []
+  }
+  const scale = body.visual.uniformScale
+  if (!Number.isFinite(scale) || scale <= 0 || !body.colliderPartsPx?.length) return []
+  const center = body.visual.centerOfMassLocalPx ?? {
+    x: body.visual.widthPx / 2,
+    y: body.visual.heightPx / 2,
+  }
+  const parts = body.colliderPartsPx.map(part => part.map(point => ({
+    x: center.x + point.x / scale,
+    y: center.y + point.y / scale,
+  })))
+  const rings = boundaryRingsFromParts(parts)
+  if (!rings) return []
+  return polygonsFromRings(body.layerId, rings, layer, resolveMatrix).map(polygon => ({
+    ...polygon,
+    id: `${polygon.id}:collider`,
+  }))
 }
 
 /** Read the generated fragment's current render boundary when it is explicit. */
@@ -255,6 +367,71 @@ function meshBoundaryPoints(geometry: Mesh2DGeometry): FracturePoint2D[] | undef
   }
   if (loop.length !== boundary.length) return undefined
   return loop.map(key => points.get(key)!)
+}
+
+/** Weld UV-seam vertices by position and extract every actual render ring. */
+function meshBoundaryRings(
+  geometry: Mesh2DGeometry,
+): readonly { readonly points: readonly FracturePoint2D[] }[] | undefined {
+  const welded = weldedGeometry(geometry.positions, geometry.topology.triangleIndices)
+  if (!welded) return undefined
+  try {
+    return overlayRingExtractor.extract(welded).map(ring => ({ points: ring.points }))
+  } catch {
+    return undefined
+  }
+}
+
+function boundaryRingsFromParts(
+  parts: readonly (readonly FracturePoint2D[])[],
+): readonly { readonly points: readonly FracturePoint2D[] }[] | undefined {
+  const positions: number[] = []
+  const triangleIndices: number[] = []
+  parts.forEach(part => {
+    const base = positions.length / 2
+    part.forEach(point => positions.push(point.x, point.y))
+    for (let index = 1; index < part.length - 1; index++) {
+      triangleIndices.push(base, base + index, base + index + 1)
+    }
+  })
+  const geometry = weldedGeometry(positions, triangleIndices)
+  if (!geometry) return undefined
+  try {
+    return overlayRingExtractor.extract(geometry).map(ring => ({ points: ring.points }))
+  } catch {
+    return undefined
+  }
+}
+
+function weldedGeometry(
+  sourcePositions: readonly number[],
+  sourceIndices: readonly number[],
+): Mesh2DGeometry | undefined {
+  const positions: number[] = []
+  const uvs: number[] = []
+  const vertexIds: string[] = []
+  const triangleIndices: number[] = []
+  const weldedByPoint = new Map<string, number>()
+  for (const sourceIndex of sourceIndices) {
+    const point = { x: sourcePositions[sourceIndex * 2], y: sourcePositions[sourceIndex * 2 + 1] }
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined
+    const key = meshPointKey(point)
+    let index = weldedByPoint.get(key)
+    if (index === undefined) {
+      index = positions.length / 2
+      weldedByPoint.set(key, index)
+      positions.push(point.x, point.y)
+      uvs.push(0, 0)
+      vertexIds.push(`overlay:${index}`)
+    }
+    triangleIndices.push(index)
+  }
+  const withoutHash: Omit<Mesh2DTopology, 'topologyHash'> = { schemaVersion: 1, vertexIds, triangleIndices }
+  return {
+    positions,
+    uvs,
+    topology: { ...withoutHash, topologyHash: overlayTopologyHasher.hash(withoutHash) },
+  }
 }
 
 function meshPointKey(point: FracturePoint2D): string {

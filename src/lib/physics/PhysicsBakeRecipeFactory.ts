@@ -1,8 +1,10 @@
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
 import { FractureSourceBoundaryCompiler } from '@/lib/fracture/FractureSourceBoundaryCompiler'
+import { FractureSourceRegionCompiler } from '@/lib/fracture/FractureSourceRegionCompiler'
 import { VoronoiFractureGenerator } from '@/lib/fracture/VoronoiFractureGenerator'
+import { VoronoiRegionFractureGenerator } from '@/lib/fracture/VoronoiRegionFractureGenerator'
 import type { ChronoScene } from '@/lib/types'
-import type { FractureGeneration } from '@/lib/types/fracture'
+import type { FractureGeneration, FractureRegionGeneration } from '@/lib/types/fracture'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
@@ -67,7 +69,7 @@ export interface VoronoiBakeRecipeInput {
 
 export interface PreparedVoronoiBakeRecipe {
   readonly recipe: RigidBodyBakeRecipe
-  readonly generation: FractureGeneration
+  readonly generation: FractureGeneration | FractureRegionGeneration
 }
 
 /**
@@ -84,7 +86,9 @@ export class PhysicsBakeRecipeFactory {
   private readonly rigidCompiler = new RigidBodySceneCompiler()
   private readonly fractureCompiler = new FractureRigidRecipeCompiler()
   private readonly fractureGenerator = new VoronoiFractureGenerator()
+  private readonly regionFractureGenerator = new VoronoiRegionFractureGenerator()
   private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
+  private readonly sourceRegionCompiler = new FractureSourceRegionCompiler()
 
   /** Compile a deterministic rigid recipe without starting the simulation. */
   compileRigid(scene: ChronoScene, input: RigidBakeRecipeInput): RigidBodyBakeRecipe {
@@ -108,14 +112,23 @@ export class PhysicsBakeRecipeFactory {
   compileVoronoi(scene: ChronoScene, input: VoronoiBakeRecipeInput): PreparedVoronoiBakeRecipe {
     const source = scene.layers.find(layer => layer.id === input.sourceLayerId)
     if (!source) throw new Error(`Fracture source layer does not exist: ${input.sourceLayerId}`)
-    const boundary = this.sourceBoundaryCompiler.compile(source)
-    const generation = this.fractureGenerator.generate({
-      generationId: input.generationId,
-      sourceOwnerId: source.id,
-      sourcePolygon: boundary.polygon,
-      fragmentCount: input.fragmentCount,
-      seed: input.seed,
-    })
+    const sourceRegion = this.sourceRegionCompiler.compile(source)
+    const boundary = sourceRegion.isSingleConvexRing ? this.sourceBoundaryCompiler.compile(source) : undefined
+    const generation = boundary
+      ? this.fractureGenerator.generate({
+        generationId: input.generationId,
+        sourceOwnerId: source.id,
+        sourcePolygon: boundary.polygon,
+        fragmentCount: input.fragmentCount,
+        seed: input.seed,
+      })
+      : this.regionFractureGenerator.generate({
+        generationId: input.generationId,
+        sourceOwnerId: source.id,
+        sourceRegion,
+        fragmentCount: input.fragmentCount,
+        seed: input.seed,
+      })
     const material = resolveMaterial(input.material)
     const sourceBody = createRigidBodyAuthoring({
       layerId: source.id,
@@ -123,7 +136,7 @@ export class PhysicsBakeRecipeFactory {
       material,
       initialVelocityPxPerSecond: input.initialVelocityPxPerSecond,
       initialAngularVelocityDegPerSecond: input.initialAngularVelocityDegPerSecond,
-    }, boundary.colliderKind)
+    }, boundary?.colliderKind ?? 'compoundPolygon')
     const staticBodies = (input.staticLayerIds ?? []).map(layerId => createRigidBodyAuthoring({
       layerId,
       motionType: 'static',

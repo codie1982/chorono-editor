@@ -8,6 +8,7 @@ import type {
 } from '@/lib/types/physics'
 import {
   RigidBodyLayerCompiler,
+  type PreparedCompoundColliderGeometry,
   type PreparedConvexColliderGeometry,
 } from './RigidBodyLayerCompiler'
 
@@ -61,9 +62,9 @@ export class RigidBodySceneCompiler {
   compileBodySnapshot(
     scene: ChronoScene,
     authoring: RigidBodyAuthoring,
-    convex?: PreparedConvexColliderGeometry,
+    prepared?: PreparedConvexColliderGeometry | PreparedCompoundColliderGeometry,
   ): RigidBodySnapshot {
-    return this.layerCompiler.compile(scene, authoring, convex)
+    return this.layerCompiler.compile(scene, authoring, prepared)
   }
 
   /**

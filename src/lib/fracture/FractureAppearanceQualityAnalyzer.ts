@@ -65,10 +65,21 @@ export class FractureAppearanceQualityAnalyzer {
     if (!generation) return unavailable('The fracture generation manifest is missing.')
     const source = scene.layers.find(layer => layer.id === generation.source.ownerId)
     if (!source) return unavailable('The fracture source layer is missing.')
-    const fragments = generation.fragments.map(fragment => ({
-      geometry: fragment,
-      layer: scene.layers.find(layer => layer.id === fragment.id),
-    }))
+    const fragments = generation.schemaVersion === 1
+      ? generation.fragments.map(fragment => ({
+        id: fragment.id,
+        points: fragment.polygon,
+        colliderParts: [fragment.polygon] as readonly (readonly FracturePoint2D[])[],
+        fallbackTriangleCount: Math.max(0, fragment.polygon.length - 2),
+        layer: scene.layers.find(layer => layer.id === fragment.id),
+      }))
+      : generation.fragments.map(fragment => ({
+        id: fragment.id,
+        points: meshPoints(fragment.geometry.positions),
+        colliderParts: fragment.colliderParts,
+        fallbackTriangleCount: 0,
+        layer: scene.layers.find(layer => layer.id === fragment.id),
+      }))
     if (fragments.some(fragment => !fragment.layer)) return unavailable('One or more generated fragment layers are missing.')
 
     const eventTimeMs = record.recipe.startTimeMs + event.timeMs
@@ -82,10 +93,11 @@ export class FractureAppearanceQualityAnalyzer {
     let triangleCount = 0
     let maskedFragmentCount = 0
 
-    for (const { geometry, layer: maybeLayer } of fragments) {
+    for (const fragment of fragments) {
+      const { layer: maybeLayer } = fragment
       const layer = maybeLayer!
       const matrix = resolveMatrix(layer)
-      for (const point of geometry.polygon) {
+      for (const point of fragment.points) {
         const expected = sourceMatrix.applyToPoint(point)
         const actual = matrix.applyToPoint(point)
         const gap = Math.hypot(actual.x - expected.x, actual.y - expected.y)
@@ -93,23 +105,33 @@ export class FractureAppearanceQualityAnalyzer {
         gapCount++
         maxEventAlignmentGapPx = Math.max(maxEventAlignmentGapPx, gap)
       }
-      fragmentAreaPx2 += polygonArea(geometry.polygon.map(point => matrix.applyToPoint(point)))
+      fragmentAreaPx2 += fragment.colliderParts.reduce((sum, part) => (
+        sum + polygonArea(part.map(point => matrix.applyToPoint(point)))
+      ), 0)
       triangleCount += layer.type === 'mesh2d'
         ? (layer.mesh2d?.geometry.topology.triangleIndices.length ?? 0) / 3
-        : Math.max(0, geometry.polygon.length - 2)
+        : fragment.fallbackTriangleCount
       if (layer.masks?.length) maskedFragmentCount++
     }
 
-    const sourceAreaPx2 = polygonArea(generation.source.polygon.map(point => sourceMatrix.applyToPoint(point)))
+    const sourceAreaPx2 = generation.schemaVersion === 1
+      ? polygonArea(generation.source.polygon.map(point => sourceMatrix.applyToPoint(point)))
+      : Math.abs(generation.source.rings.reduce((sum, ring) => (
+        sum + signedPolygonArea(ring.points.map(point => sourceMatrix.applyToPoint(point)))
+      ), 0))
     const eventAreaDeltaPercent = sourceAreaPx2 > 0
       ? Math.abs(fragmentAreaPx2 - sourceAreaPx2) / sourceAreaPx2 * 100
       : Number.POSITIVE_INFINITY
-    const shared = sharedEdges(generation.fragments.map(fragment => fragment.polygon))
-    const sharedBoundaryLengthPx = shared.reduce((sum, edge) => {
-      const start = sourceMatrix.applyToPoint(edge.start)
-      const end = sourceMatrix.applyToPoint(edge.end)
-      return sum + Math.hypot(end.x - start.x, end.y - start.y)
-    }, 0)
+    const sharedEdgeCount = generation.schemaVersion === 1
+      ? sharedEdges(generation.fragments.map(fragment => fragment.polygon)).length
+      : generation.adjacency.length
+    const sharedBoundaryLengthPx = generation.schemaVersion === 1
+      ? sharedEdges(generation.fragments.map(fragment => fragment.polygon)).reduce((sum, edge) => {
+        const start = sourceMatrix.applyToPoint(edge.start)
+        const end = sourceMatrix.applyToPoint(edge.end)
+        return sum + Math.hypot(end.x - start.x, end.y - start.y)
+      }, 0)
+      : generation.adjacency.reduce((sum, edge) => sum + edge.sharedLengthPx * matrixUnitScale(sourceMatrix), 0)
     const fullFrameMaskAlternativePeakBytes = scene.composition.width * scene.composition.height * 4 * 4
     const meanEventAlignmentGapPx = gapCount ? gapTotal / gapCount : Number.POSITIVE_INFINITY
     const status = maxEventAlignmentGapPx <= EVENT_ALIGNMENT_TOLERANCE_PX
@@ -123,7 +145,7 @@ export class FractureAppearanceQualityAnalyzer {
       eventTimeMs,
       fragmentCount: fragments.length,
       triangleCount,
-      sharedEdgeCount: shared.length,
+      sharedEdgeCount,
       sharedBoundaryLengthPx,
       maxEventAlignmentGapPx,
       meanEventAlignmentGapPx,
@@ -141,13 +163,29 @@ function unavailable(reason: string): FractureAppearanceQualityUnavailable {
 
 /** Absolute shoelace area; degenerate polygons report zero. */
 function polygonArea(points: readonly FracturePoint2D[]): number {
+  return Math.abs(signedPolygonArea(points))
+}
+
+function signedPolygonArea(points: readonly FracturePoint2D[]): number {
   let twiceArea = 0
   for (let index = 0; index < points.length; index++) {
     const current = points[index]
     const next = points[(index + 1) % points.length]
     twiceArea += current.x * next.y - next.x * current.y
   }
-  return Math.abs(twiceArea) / 2
+  return twiceArea / 2
+}
+
+function meshPoints(positions: readonly number[]): FracturePoint2D[] {
+  return Array.from({ length: positions.length / 2 }, (_, index) => ({
+    x: positions[index * 2], y: positions[index * 2 + 1],
+  }))
+}
+
+function matrixUnitScale(matrix: { applyToPoint(point: FracturePoint2D): FracturePoint2D }): number {
+  const origin = matrix.applyToPoint({ x: 0, y: 0 })
+  const unit = matrix.applyToPoint({ x: 1, y: 0 })
+  return Math.hypot(unit.x - origin.x, unit.y - origin.y)
 }
 
 interface SharedEdge {

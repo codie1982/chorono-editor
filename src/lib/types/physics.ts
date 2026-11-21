@@ -1,5 +1,5 @@
 import type { SimulationCacheHeader } from '@/lib/simulation/SimulationCacheHeader'
-import type { FractureAppearanceSnapshot, FractureGeneration } from './fracture'
+import type { AnyFractureGeneration, FractureAppearanceSnapshot } from './fracture'
 
 export type RigidBodyMotionType = 'dynamic' | 'static'
 
@@ -169,5 +169,5 @@ export interface PhysicsSceneData {
   readonly schemaVersion: 1
   readonly rigidBakes: readonly RigidBakeRecord[]
   /** Realized immutable topology; dense per-frame pose samples remain external. */
-  readonly fractureGenerations?: readonly FractureGeneration[]
+  readonly fractureGenerations?: readonly AnyFractureGeneration[]
 }

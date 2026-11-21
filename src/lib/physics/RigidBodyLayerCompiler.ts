@@ -15,29 +15,67 @@ export interface PreparedConvexColliderGeometry {
   readonly boundsPx: FractureBounds2D
 }
 
+/** Prepared non-overlapping convex parts in layer-local composition pixels. */
+export interface PreparedCompoundColliderGeometry {
+  readonly colliderParts: readonly (readonly FracturePoint2D[])[]
+  readonly centroidPx: FracturePoint2D
+  readonly boundsPx: FractureBounds2D
+}
+
 /**
  * Compiles one visual layer and authored material into a solver snapshot.
  *
  * Rectangle adaptation preserves the historical rigid contract. Prepared
- * convex geometry is accepted only from an owning geometry compiler and is
- * centred on its uniform-density centroid. Common hierarchy, transform-writer,
- * material and unit validation is shared by both paths. Instances are
- * stateless and never retain scene or geometry buffers.
+ * convex or compound geometry is accepted only from an owning geometry
+ * compiler and is centred on its uniform-density centroid. Common hierarchy,
+ * transform-writer, material and unit validation is shared by every path.
+ * Instances are stateless and never retain scene or geometry buffers.
  */
 export class RigidBodyLayerCompiler {
   compile(
     scene: ChronoScene,
     authoring: RigidBodyAuthoring,
-    convex?: PreparedConvexColliderGeometry,
+    prepared?: PreparedConvexColliderGeometry | PreparedCompoundColliderGeometry,
   ): RigidBodySnapshot {
     const layer = scene.layers.find(candidate => candidate.id === authoring.layerId)
     if (!layer) throw new Error(`Rigid body layer does not exist: ${authoring.layerId}`)
     this.assertCommon(scene, layer, authoring)
     if (authoring.collider === 'rectangle') return this.rectangle(layer, authoring)
-    if (!convex || convex.polygon.length < 3) {
-      throw new Error(`Convex rigid body ${layer.id} requires prepared collider geometry`)
+    if (authoring.collider === 'convexPolygon') {
+      if (!prepared || !('polygon' in prepared) || prepared.polygon.length < 3) {
+        throw new Error(`Convex rigid body ${layer.id} requires prepared collider geometry`)
+      }
+      return this.convex(layer, authoring, prepared)
     }
-    return this.convex(layer, authoring, convex)
+    if (!prepared || !('colliderParts' in prepared) || !prepared.colliderParts.length
+      || prepared.colliderParts.some(part => part.length < 3)) {
+      throw new Error(`Compound rigid body ${layer.id} requires prepared convex parts`)
+    }
+    return this.compound(layer, authoring, prepared)
+  }
+
+  private compound(
+    layer: Layer,
+    authoring: RigidBodyAuthoring,
+    geometry: PreparedCompoundColliderGeometry,
+  ): RigidBodySnapshot {
+    const scale = layer.transform.scaleX
+    const center = rigidCenterFromLocalPoint({
+      x: layer.transform.x, y: layer.transform.y, angleDeg: layer.transform.rotationDeg,
+      localX: geometry.centroidPx.x, localY: geometry.centroidPx.y,
+      anchorX: layer.transform.anchorX, anchorY: layer.transform.anchorY, uniformScale: scale,
+    })
+    const width = geometry.boundsPx.maxX - geometry.boundsPx.minX
+    const height = geometry.boundsPx.maxY - geometry.boundsPx.minY
+    return this.snapshot(authoring, layer, center, width * scale, height * scale, {
+      widthPx: layer.size?.width ?? width,
+      heightPx: layer.size?.height ?? height,
+      centerOfMassLocalPx: { ...geometry.centroidPx },
+      colliderPartsPx: geometry.colliderParts.map(part => part.map(point => ({
+        x: (point.x - geometry.centroidPx.x) * scale,
+        y: (point.y - geometry.centroidPx.y) * scale,
+      }))),
+    })
   }
 
   private rectangle(layer: Layer, authoring: RigidBodyAuthoring): RigidBodySnapshot {
@@ -85,7 +123,13 @@ export class RigidBodyLayerCompiler {
     centerPx: { readonly x: number; readonly y: number },
     widthPx: number,
     heightPx: number,
-    visual: { readonly widthPx: number; readonly heightPx: number; readonly centerOfMassLocalPx?: FracturePoint2D; readonly colliderVerticesPx?: readonly FracturePoint2D[] },
+    visual: {
+      readonly widthPx: number
+      readonly heightPx: number
+      readonly centerOfMassLocalPx?: FracturePoint2D
+      readonly colliderVerticesPx?: readonly FracturePoint2D[]
+      readonly colliderPartsPx?: readonly (readonly FracturePoint2D[])[]
+    },
   ): RigidBodySnapshot {
     return {
       ...authoring,
@@ -97,6 +141,7 @@ export class RigidBodyLayerCompiler {
       widthPx,
       heightPx,
       ...(visual.colliderVerticesPx ? { colliderVerticesPx: visual.colliderVerticesPx } : {}),
+      ...(visual.colliderPartsPx ? { colliderPartsPx: visual.colliderPartsPx } : {}),
       visual: {
         widthPx: visual.widthPx,
         heightPx: visual.heightPx,

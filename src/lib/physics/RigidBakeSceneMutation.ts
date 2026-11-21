@@ -1,5 +1,5 @@
 import type { ChronoScene, Timeline, Track } from '@/lib/types'
-import type { FractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration } from '@/lib/types/fracture'
 import type { PhysicsSceneData, RigidBakeRecord } from '@/lib/types/physics'
 import {
   RigidBakeOwnershipInspector,
@@ -76,7 +76,7 @@ function clearTimeline(
 function clearPhysics(
   physics: PhysicsSceneData,
   record: RigidBakeRecord,
-  generation: FractureGeneration | undefined,
+  generation: AnyFractureGeneration | undefined,
 ): PhysicsSceneData | undefined {
   const rigidBakes = physics.rigidBakes.filter(candidate => candidate.id !== record.id)
   const generations = physics.fractureGenerations ?? []
@@ -91,7 +91,7 @@ function clearPhysics(
   }
 }
 
-function ownsGeneration(record: RigidBakeRecord, generation: FractureGeneration): boolean {
+function ownsGeneration(record: RigidBakeRecord, generation: AnyFractureGeneration): boolean {
   if (record.fractureGeneration) return record.fractureGeneration.generationId === generation.generationId
   const fragmentIds = new Set(record.recipe.bodies.filter(body => body.activation).map(body => body.layerId))
   const event = record.recipe.fractureEvents?.[0]

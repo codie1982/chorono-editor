@@ -1,5 +1,7 @@
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
 import { FractureManifestValidator } from '@/lib/fracture/FractureManifestValidator'
+import { FractureRegionLayerFactory } from '@/lib/fracture/FractureRegionLayerFactory'
+import { FractureRegionManifestValidator } from '@/lib/fracture/FractureRegionManifestValidator'
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
 import { createRigidBakeRecord } from '@/lib/physics/RigidBakeOwnership'
 import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
@@ -7,7 +9,7 @@ import { assertRigidBakeTracks } from '@/lib/physics/RigidBakeTrackValidation'
 import { rigidBakeTrackTargets } from '@/lib/physics/RigidPoseTrackCompiler'
 import { assertRigidFractureEvents } from '@/lib/physics/RigidFractureValidation'
 import type { ChronoScene, Layer, Timeline, Track } from '@/lib/types'
-import type { FractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration } from '@/lib/types/fracture'
 import type { PhysicsSceneData, RigidBodyBakeRecipe } from '@/lib/types/physics'
 import type { EditorCommand } from './commands-keyframe'
 
@@ -20,7 +22,7 @@ import type { EditorCommand } from './commands-keyframe'
  * Undo restores the exact prior layers, timeline and optional physics envelope.
  */
 export function makeApplyVoronoiFractureBakeCmd(input: {
-  readonly generation: FractureGeneration
+  readonly generation: AnyFractureGeneration
   readonly recipe: RigidBodyBakeRecipe
   readonly tracks: readonly Track[]
   readonly sampleCount: number
@@ -34,7 +36,8 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
   return {
     label: `Bake Voronoi Fracture (${input.generation.fragments.length} fragments)`,
     execute(scene: ChronoScene): ChronoScene {
-      new FractureManifestValidator().validate(input.generation)
+      if (input.generation.schemaVersion === 1) new FractureManifestValidator().validate(input.generation)
+      else new FractureRegionManifestValidator().validate(input.generation)
       assertRigidFractureEvents(input.recipe, { requireRealized: true })
       if (!new FractureRigidRecipeCompiler().isCurrent(input.recipe, input.generation, scene)) {
         throw new Error('Fracture source changed. Prepare a new bake preview.')
@@ -58,7 +61,9 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
       if (scene.physics?.fractureGenerations?.some(generation => generation.generationId === input.generation.generationId)) {
         throw new Error(`Fracture generation already exists: ${input.generation.generationId}`)
       }
-      const fragmentLayers = new FractureLayerFactory().create(scene, input.generation, input.recipe)
+      const fragmentLayers = input.generation.schemaVersion === 1
+        ? new FractureLayerFactory().create(scene, input.generation, input.recipe)
+        : new FractureRegionLayerFactory().create(scene, input.generation, input.recipe)
       beforeLayers = scene.layers
       beforeTimeline = timeline
       beforePhysics = scene.physics
@@ -122,7 +127,7 @@ export function makeApplyVoronoiFractureBakeCmd(input: {
  */
 export function makeReplaceVoronoiFractureBakeCmd(input: {
   readonly existingRecordId: string
-  readonly generation: FractureGeneration
+  readonly generation: AnyFractureGeneration
   readonly recipe: RigidBodyBakeRecipe
   readonly tracks: readonly Track[]
   readonly sampleCount: number

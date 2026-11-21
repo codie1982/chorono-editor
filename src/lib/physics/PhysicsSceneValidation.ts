@@ -4,6 +4,7 @@ import { hashRigidBodyBakeRecipe, hashRigidBodySource } from './RigidBodySceneCo
 import { rigidBakeTrackTargets } from './RigidPoseTrackCompiler'
 import { assertRigidFractureEvents } from './RigidFractureValidation'
 import { FractureManifestValidator } from '@/lib/fracture/FractureManifestValidator'
+import { FractureRegionManifestValidator } from '@/lib/fracture/FractureRegionManifestValidator'
 
 const HASH = /^[0-9a-f]{16}$/
 
@@ -23,7 +24,8 @@ export function assertPhysicsSceneData(value: PhysicsSceneData | undefined): voi
   const fractureIds = new Set<string>()
   value.fractureGenerations?.forEach(generation => {
     if (fractureIds.has(generation.generationId)) throw new Error('Duplicate fracture generation id')
-    new FractureManifestValidator().validate(generation)
+    if (generation.schemaVersion === 1) new FractureManifestValidator().validate(generation)
+    else new FractureRegionManifestValidator().validate(generation)
     fractureIds.add(generation.generationId)
   })
   const recordIds = new Set<string>()

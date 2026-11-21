@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { rigidBakeFixture } from '@/lib/bake/__tests__/RigidBodyBakeFixture'
-import { newCircleLayer, newImageLayer, newSplineLayerFromData } from '@/lib/defaults'
+import { newCircleLayer, newImageLayer, newSplineLayerFromData, newStarLayer } from '@/lib/defaults'
 import { FractureLayerFactory } from '@/lib/fracture/FractureLayerFactory'
+import { FractureRegionLayerFactory } from '@/lib/fracture/FractureRegionLayerFactory'
 import { Mesh2DTopologyValidator, StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d'
 import { createRectangleSpline } from '@/lib/spline/primitives/createRectangleSpline'
+import type { AnyFractureGeneration, FractureGeneration } from '@/lib/types/fracture'
 import { PhysicsBakeRecipeFactory } from './PhysicsBakeRecipeFactory'
 
 describe('PhysicsBakeRecipeFactory', () => {
@@ -55,7 +57,8 @@ describe('PhysicsBakeRecipeFactory', () => {
       sourceLayerId: image.id, staticLayerIds: [fixture.floor.id], timelineId: 'main', durationMs: 3000,
       fractureTimeMs: 800, fragmentCount: 8, seed: 42, generationId: 'image-fracture',
     })
-    const fragments = new FractureLayerFactory().create(scene, prepared.generation, prepared.recipe)
+    const generation = legacyGeneration(prepared.generation)
+    const fragments = new FractureLayerFactory().create(scene, generation, prepared.recipe)
 
     expect(prepared.recipe.fractureAppearance).toMatchObject({
       kind: 'image', sourceLayerId: image.id, assetId: 'poster', objectFit: 'cover',
@@ -83,11 +86,12 @@ describe('PhysicsBakeRecipeFactory', () => {
       fractureTimeMs: 800, fragmentCount: 8, seed: 42, generationId: `convex-${source.type}`,
     })
     const sourceBody = prepared.recipe.bodies[0]
-    const fragments = new FractureLayerFactory().create(scene, prepared.generation, prepared.recipe)
+    const generation = legacyGeneration(prepared.generation)
+    const fragments = new FractureLayerFactory().create(scene, generation, prepared.recipe)
 
     expect(sourceBody.collider).toBe('convexPolygon')
-    expect(sourceBody.colliderVerticesPx?.length).toBe(prepared.generation.source.polygon.length)
-    expect(sourceBody.visual.centerOfMassLocalPx).toEqual(prepared.generation.source.polygon.length === 4
+    expect(sourceBody.colliderVerticesPx?.length).toBe(generation.source.polygon.length)
+    expect(sourceBody.visual.centerOfMassLocalPx).toEqual(generation.source.polygon.length === 4
       ? { x: 0, y: 0 }
       : expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }))
     expect(prepared.recipe.fractureAppearance).toMatchObject({ kind: 'solid', sourceLayerId: source.id })
@@ -124,7 +128,7 @@ describe('PhysicsBakeRecipeFactory', () => {
       seed: 42,
       generationId: 'convex-mesh',
     })
-    const fragments = new FractureLayerFactory().create(scene, prepared.generation, prepared.recipe)
+    const fragments = new FractureLayerFactory().create(scene, legacyGeneration(prepared.generation), prepared.recipe)
 
     expect(prepared.recipe.bodies[0].collider).toBe('convexPolygon')
     expect(prepared.recipe.fractureAppearance).toMatchObject({ kind: 'mesh2d', sourceLayerId: source.id })
@@ -135,4 +139,41 @@ describe('PhysicsBakeRecipeFactory', () => {
       expect(new Mesh2DTopologyValidator().validate(layer.mesh2d!.geometry).valid).toBe(true)
     })
   })
+
+  it('compiles a concave source into region Mesh2D layers and compound colliders', () => {
+    const fixture = rigidBakeFixture()
+    const source = {
+      ...newStarLayer(),
+      id: 'concave-star',
+      name: 'Concave Star',
+      transform: { ...fixture.box.transform, x: 240, y: 120, scaleX: 1, scaleY: 1 },
+    }
+    const scene = { ...fixture.scene, layers: [source, fixture.floor] }
+    const prepared = new PhysicsBakeRecipeFactory().compileVoronoi(scene, {
+      sourceLayerId: source.id,
+      staticLayerIds: [fixture.floor.id],
+      timelineId: 'main',
+      durationMs: 3000,
+      fractureTimeMs: 800,
+      fragmentCount: 8,
+      seed: 42,
+      generationId: 'concave-star-generation',
+    })
+
+    expect(prepared.generation.schemaVersion).toBe(2)
+    if (prepared.generation.schemaVersion !== 2) throw new Error('Expected FRACTURE1 region topology')
+    const fragments = new FractureRegionLayerFactory().create(scene, prepared.generation, prepared.recipe)
+    expect(prepared.recipe.bodies[0].collider).toBe('compoundPolygon')
+    expect(prepared.recipe.bodies.slice(2).every(body => body.collider === 'compoundPolygon'
+      && body.colliderPartsPx?.length)).toBe(true)
+    expect(fragments).toHaveLength(prepared.generation.fragments.length)
+    expect(fragments.every(layer => layer.type === 'mesh2d'
+      && layer.mesh2d?.source.kind === 'fractureFragment')).toBe(true)
+  })
 })
+
+function legacyGeneration(generation: AnyFractureGeneration): FractureGeneration {
+  expect(generation.schemaVersion).toBe(1)
+  if (generation.schemaVersion !== 1) throw new Error('Expected a convex FRACTURE0 generation')
+  return generation
+}

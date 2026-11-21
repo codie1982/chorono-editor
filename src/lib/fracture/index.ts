@@ -2,6 +2,7 @@ export { ConvexPolygon2D, clipConvexPolygon, signedDoubleArea } from './ConvexPo
 export { FractureManifestValidator } from './FractureManifestValidator'
 export { FractureRegionManifestValidator } from './FractureRegionManifestValidator'
 export { FractureLayerFactory } from './FractureLayerFactory'
+export { FractureRegionLayerFactory } from './FractureRegionLayerFactory'
 export { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
 export { FractureMesh2DClipper } from './FractureMesh2DClipper'
 export { FractureRegionClipper } from './FractureRegionClipper'

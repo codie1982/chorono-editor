@@ -1,7 +1,7 @@
 import { FractureRigidRecipeCompiler } from '@/lib/fracture/FractureRigidRecipeCompiler'
 import { canonicalJson, hashCanonicalRecords } from '@/lib/hash/CanonicalRecordHash'
 import type { ChronoScene, Layer, Track } from '@/lib/types'
-import type { FractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration } from '@/lib/types/fracture'
 import type {
   RigidBakeRecord,
   RigidBodyBakeRecipe,
@@ -38,7 +38,7 @@ export interface RigidBakeOwnershipInspection {
   readonly ownershipState: RigidBakeOwnershipState
   readonly sourceState: RigidBakeSourceState
   readonly issues: readonly RigidBakeOwnershipIssue[]
-  readonly generation?: FractureGeneration
+  readonly generation?: AnyFractureGeneration
   readonly canSafelyMutate: boolean
 }
 
@@ -77,7 +77,7 @@ export class RigidBakeOwnershipInspector {
       }
     }
 
-    let generation: FractureGeneration | undefined
+    let generation: AnyFractureGeneration | undefined
     if (fracture) {
       if (!record.generatedLayers) {
         issues.push(issue('unverified-generated-layers', record.id, 'This legacy bake has no generated-layer hashes.'))
@@ -121,7 +121,7 @@ export function createRigidBakeRecord(input: {
   readonly sampleCount: number
   readonly tracks: readonly Track[]
   readonly generatedLayers?: readonly Layer[]
-  readonly generation?: FractureGeneration
+  readonly generation?: AnyFractureGeneration
   readonly timelineLayerIdsAdded?: readonly string[]
 }): RigidBakeRecord {
   return Object.freeze({
@@ -160,7 +160,7 @@ export function hashRigidBakeGeneratedLayer(layer: Layer): string {
 export function resolveFractureGeneration(
   scene: ChronoScene,
   record: RigidBakeRecord,
-): FractureGeneration | undefined {
+): AnyFractureGeneration | undefined {
   const generations = scene.physics?.fractureGenerations ?? []
   if (record.fractureGeneration) {
     return generations.find(generation => generation.generationId === record.fractureGeneration!.generationId)
@@ -176,7 +176,7 @@ export function resolveFractureGeneration(
 function inspectSourceState(
   scene: ChronoScene,
   record: RigidBakeRecord,
-  generation: FractureGeneration | undefined,
+  generation: AnyFractureGeneration | undefined,
 ): RigidBakeSourceState {
   const recipe = record.recipe
   const ownedTargets = new Set(record.tracks.map(track => track.target))

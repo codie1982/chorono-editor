@@ -1,6 +1,11 @@
 import { SimulationClock } from '@/lib/simulation/SimulationClock'
 import type { ChronoScene } from '@/lib/types'
-import type { FractureGeneration, FragmentGeometry } from '@/lib/types/fracture'
+import type {
+  FractureGeneration,
+  FractureRegionFragmentGeometry,
+  FractureRegionGeneration,
+  FragmentGeometry,
+} from '@/lib/types/fracture'
 import type {
   RigidBodyAuthoring,
   RigidBodyBakeRecipe,
@@ -10,10 +15,13 @@ import type {
 import { hashRigidBodyBakeRecipe, hashRigidBodySource, RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { FractureAppearanceCompiler } from './FractureAppearanceCompiler'
 import { FractureManifestValidator } from './FractureManifestValidator'
+import { FractureRegionManifestValidator } from './FractureRegionManifestValidator'
 import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
+import { FractureSourceRegionCompiler, type FractureSourceRegion } from './FractureSourceRegionCompiler'
+import { hashFractureRegionSource } from './FractureManifestHash'
 
 export interface FractureRigidRecipeInput {
-  readonly generation: FractureGeneration
+  readonly generation: FractureGeneration | FractureRegionGeneration
   readonly timelineId: string
   readonly startTimeMs: number
   readonly durationMs: number
@@ -49,14 +57,17 @@ export interface FractureRigidRecipeInput {
 export class FractureRigidRecipeCompiler {
   private readonly rigidCompiler = new RigidBodySceneCompiler()
   private readonly manifestValidator = new FractureManifestValidator()
+  private readonly regionManifestValidator = new FractureRegionManifestValidator()
   private readonly appearanceCompiler = new FractureAppearanceCompiler()
   private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler()
+  private readonly sourceRegionCompiler = new FractureSourceRegionCompiler()
 
   /** Compiles an immutable one-generation recipe without mutating the scene. */
   compile(scene: ChronoScene, input: FractureRigidRecipeInput): RigidBodyBakeRecipe {
-    this.manifestValidator.validate(input.generation)
+    if (input.generation.schemaVersion === 1) this.manifestValidator.validate(input.generation)
+    else this.regionManifestValidator.validate(input.generation)
     if (input.sourceBody.layerId !== input.generation.source.ownerId || input.sourceBody.motionType !== 'dynamic'
-      || !['rectangle', 'convexPolygon'].includes(input.sourceBody.collider)) {
+      || !['rectangle', 'convexPolygon', 'compoundPolygon'].includes(input.sourceBody.collider)) {
       throw new Error('Fracture source must be the generation owner and a dynamic supported boundary')
     }
     if (input.staticBodies.some(body => body.motionType !== 'static' || body.collider !== 'rectangle')) {
@@ -64,18 +75,31 @@ export class FractureRigidRecipeCompiler {
     }
     const sourceLayer = scene.layers.find(layer => layer.id === input.sourceBody.layerId)
     if (!sourceLayer) throw new Error('Fracture source layer is missing')
-    const sourceBoundary = this.sourceBoundaryCompiler.compile(sourceLayer)
-    if (sourceBoundary.colliderKind !== input.sourceBody.collider) {
-      throw new Error('Fracture source collider no longer matches its compiled boundary')
-    }
     const fractureAppearance = this.appearanceCompiler.snapshot(scene, sourceLayer)
-    assertGenerationMatchesBoundary(input.generation, sourceBoundary.polygon)
-
-    const sourceSnapshot = this.rigidCompiler.compileBodySnapshot(
-      scene,
-      input.sourceBody,
-      input.sourceBody.collider === 'convexPolygon' ? sourceBoundary : undefined,
-    )
+    let sourceSnapshot: RigidBodySnapshot
+    if (input.generation.schemaVersion === 1) {
+      const boundary = this.sourceBoundaryCompiler.compile(sourceLayer)
+      if (boundary.colliderKind !== input.sourceBody.collider) {
+        throw new Error('Fracture source collider no longer matches its compiled boundary')
+      }
+      assertGenerationMatchesSource(input.generation, boundary)
+      sourceSnapshot = this.rigidCompiler.compileBodySnapshot(
+        scene,
+        input.sourceBody,
+        input.sourceBody.collider === 'rectangle' ? undefined : boundary,
+      )
+    } else {
+      const region = this.sourceRegionCompiler.compile(sourceLayer)
+      if (input.sourceBody.collider !== 'compoundPolygon') {
+        throw new Error('Fracture region source requires a compound collider')
+      }
+      assertGenerationMatchesSource(input.generation, region)
+      sourceSnapshot = this.rigidCompiler.compileBodySnapshot(
+        scene,
+        input.sourceBody,
+        compoundSourceGeometry(region),
+      )
+    }
     const staticSnapshots = input.staticBodies.map(body => this.rigidCompiler.compileBodySnapshot(scene, body))
     const base = this.rigidCompiler.compileSnapshots(scene, {
       timelineId: input.timelineId,
@@ -93,7 +117,9 @@ export class FractureRigidRecipeCompiler {
     const eventTimeMs = trigger.kind === 'time' ? input.fractureTimeMs! : 0
     const source = base.bodies[0]
     const eventId = `${input.generation.generationId}:event`
-    const fragments = input.generation.fragments.map(fragment => compileFragment(source, fragment, eventId))
+    const fragments = input.generation.schemaVersion === 1
+      ? input.generation.fragments.map(fragment => compileFragment(source, fragment, eventId))
+      : input.generation.fragments.map(fragment => compileRegionFragment(source, fragment, eventId))
     const bodies = [source, ...base.bodies.slice(1), ...fragments]
     const fractureEvents = [{
       id: eventId,
@@ -116,7 +142,11 @@ export class FractureRigidRecipeCompiler {
   }
 
   /** Recompiles authored inputs and compares full recipe provenance. */
-  isCurrent(recipe: RigidBodyBakeRecipe, generation: FractureGeneration, scene: ChronoScene): boolean {
+  isCurrent(
+    recipe: RigidBodyBakeRecipe,
+    generation: FractureGeneration | FractureRegionGeneration,
+    scene: ChronoScene,
+  ): boolean {
     const event = recipe.fractureEvents?.[0]
     if (!event) return false
     const source = recipe.bodies.find(body => body.bodyId === event.sourceBodyId)
@@ -246,6 +276,71 @@ function compileFragment(
   })
 }
 
+function compileRegionFragment(
+  source: RigidBodySnapshot,
+  fragment: FractureRegionFragmentGeometry,
+  eventId: string,
+): RigidBodySnapshot {
+  if (!fragment.colliderParts.length || fragment.colliderParts.length > 256
+    || fragment.colliderParts.reduce((sum, part) => sum + part.length, 0) > 4096) {
+    throw new Error(`Fracture region collider budget exceeded: ${fragment.id}`)
+  }
+  const scale = source.visual.uniformScale
+  const sourceCenterLocal = source.visual.centerOfMassLocalPx ?? {
+    x: source.visual.widthPx / 2,
+    y: source.visual.heightPx / 2,
+  }
+  const sourceLocalOffsetPx = {
+    x: (fragment.centroidPx.x - sourceCenterLocal.x) * scale,
+    y: (fragment.centroidPx.y - sourceCenterLocal.y) * scale,
+  }
+  const worldOffset = rotate(sourceLocalOffsetPx, source.angleDeg)
+  return Object.freeze({
+    layerId: fragment.id,
+    bodyId: `rigid:${fragment.id}`,
+    motionType: 'dynamic',
+    collider: 'compoundPolygon',
+    colliderPartsPx: fragment.colliderParts.map(part => part.map(point => Object.freeze({
+      x: (point.x - fragment.centroidPx.x) * scale,
+      y: (point.y - fragment.centroidPx.y) * scale,
+    }))),
+    activation: {
+      kind: 'fractureFragment' as const, eventId, sourceBodyId: source.bodyId, sourceLocalOffsetPx,
+    },
+    material: { ...source.material },
+    initialVelocityPxPerSecond: { ...source.initialVelocityPxPerSecond },
+    initialAngularVelocityDegPerSecond: source.initialAngularVelocityDegPerSecond,
+    centerPx: { x: source.centerPx.x + worldOffset.x, y: source.centerPx.y + worldOffset.y },
+    angleDeg: source.angleDeg,
+    widthPx: (fragment.boundsPx.maxX - fragment.boundsPx.minX) * scale,
+    heightPx: (fragment.boundsPx.maxY - fragment.boundsPx.minY) * scale,
+    visual: {
+      widthPx: source.visual.widthPx,
+      heightPx: source.visual.heightPx,
+      anchorX: fragment.centroidPx.x,
+      anchorY: fragment.centroidPx.y,
+      uniformScale: scale,
+      centerOfMassLocalPx: { ...fragment.centroidPx },
+    },
+  })
+}
+
+function compoundSourceGeometry(region: FractureSourceRegion) {
+  const indices = region.geometry.topology.triangleIndices
+  const colliderParts = Array.from({ length: indices.length / 3 }, (_, triangleIndex) => (
+    indices.slice(triangleIndex * 3, triangleIndex * 3 + 3).map(vertexIndex => ({
+      x: region.geometry.positions[vertexIndex * 2],
+      y: region.geometry.positions[vertexIndex * 2 + 1],
+    }))
+  ))
+  if (colliderParts.length > 256) throw new Error('Fracture source compound collider exceeds the 256-part budget')
+  return {
+    colliderParts,
+    centroidPx: region.centroidPx,
+    boundsPx: region.boundsPx,
+  }
+}
+
 function authored(body: RigidBodySnapshot): RigidBodyAuthoring {
   return {
     layerId: body.layerId,
@@ -257,13 +352,22 @@ function authored(body: RigidBodySnapshot): RigidBodyAuthoring {
   }
 }
 
-function assertGenerationMatchesBoundary(
-  generation: FractureGeneration,
-  expected: readonly { readonly x: number; readonly y: number }[],
+function assertGenerationMatchesSource(
+  generation: FractureGeneration | FractureRegionGeneration,
+  expected: ReturnType<FractureSourceBoundaryCompiler['compile']> | FractureSourceRegion,
 ): void {
-  if (generation.source.polygon.length !== expected.length || generation.source.polygon.some((point, index) => (
-    Math.abs(point.x - expected[index].x) > 1e-7 || Math.abs(point.y - expected[index].y) > 1e-7
-  ))) throw new Error('Fracture generation no longer matches the source boundary')
+  if (generation.schemaVersion === 2) {
+    if (!('geometry' in expected)
+      || generation.source.revision !== hashFractureRegionSource(generation.source.ownerId, expected.geometry)) {
+      throw new Error('Fracture region generation no longer matches the source geometry')
+    }
+    return
+  }
+  if (!('polygon' in expected) || generation.source.polygon.length !== expected.polygon.length
+    || generation.source.polygon.some((point, index) => (
+      Math.abs(point.x - expected.polygon[index].x) > 1e-7
+      || Math.abs(point.y - expected.polygon[index].y) > 1e-7
+    ))) throw new Error('Fracture generation no longer matches the source boundary')
 }
 
 function rotate(point: { x: number; y: number }, angleDeg: number): { x: number; y: number } {

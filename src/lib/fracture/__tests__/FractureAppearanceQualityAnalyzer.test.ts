@@ -114,6 +114,7 @@ function qualityFixture(): {
     generationId: 'quality-generation',
     gravity: { x: 0, y: 0 },
   })
+  if (prepared.generation.schemaVersion !== 1) throw new Error('Quality fixture requires convex FRACTURE0 topology')
   const fragments = new FractureLayerFactory().create(authored, prepared.generation, prepared.recipe)
   const recordId = 'quality-fracture-bake'
   const record = createRigidBakeRecord({

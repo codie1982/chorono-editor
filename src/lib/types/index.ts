@@ -117,6 +117,7 @@ export type {
   FractureRegionFragmentGeometry,
   FractureFragmentAdjacency,
   FractureRegionGeneration,
+  AnyFractureGeneration,
 } from './fracture'
 
 export type {

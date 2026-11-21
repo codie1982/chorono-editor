@@ -183,3 +183,6 @@ export interface FractureRegionGeneration {
   readonly adjacency: readonly FractureFragmentAdjacency[]
   readonly topologyHash: string
 }
+
+/** Every portable first-generation fracture manifest accepted by the scene. */
+export type AnyFractureGeneration = FractureGeneration | FractureRegionGeneration

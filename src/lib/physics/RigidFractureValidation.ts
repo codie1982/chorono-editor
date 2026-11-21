@@ -39,7 +39,7 @@ export function assertRigidFractureEvents(
     ownedBodies.add(source.bodyId)
     assertTrigger(event, bodyById, source.bodyId, unresolvedImpact)
     assertExplosion(event)
-    if (event.fragmentBodyIds.length < 2 || event.fragmentBodyIds.length > 100
+    if (event.fragmentBodyIds.length < 2 || event.fragmentBodyIds.length > 256
       || new Set(event.fragmentBodyIds).size !== event.fragmentBodyIds.length) {
       throw new Error(`Rigid fracture event ${event.id} has an invalid fragment set`)
     }

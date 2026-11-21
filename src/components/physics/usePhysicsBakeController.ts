@@ -21,7 +21,7 @@ import {
 import { RigidBodySceneCompiler } from '@/lib/physics/RigidBodySceneCompiler'
 import { RigidBakeOwnershipInspector, type RigidBakeOwnershipInspection } from '@/lib/physics/RigidBakeOwnership'
 import { clearRigidBakeOwnedContent, type RigidBakeConflictPolicy } from '@/lib/physics/RigidBakeSceneMutation'
-import type { FractureGeneration } from '@/lib/types/fracture'
+import type { AnyFractureGeneration } from '@/lib/types/fracture'
 import type { RigidBakeRecord } from '@/lib/types/physics'
 
 export type PhysicsBakeRequest =
@@ -52,7 +52,7 @@ export interface PhysicsBakeController {
 
 interface PreparedJob {
   readonly mode: PhysicsBakeRequest['mode']
-  readonly generation?: FractureGeneration
+  readonly generation?: AnyFractureGeneration
   readonly recordId?: string
   readonly replaceRecordId?: string
 }
@@ -242,7 +242,7 @@ export function usePhysicsBakeController(editor: EditorStateReturn): PhysicsBake
  */
 export function requestFromRecord(
   record: RigidBakeRecord,
-  generation?: FractureGeneration,
+  generation?: AnyFractureGeneration,
 ): PhysicsBakeRequest {
   const recipe = record.recipe
   const common = {

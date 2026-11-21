@@ -5,11 +5,12 @@ import { pathFromPoints, type ChronoScene, type Layer } from '@/lib/types'
 import type {
   FractureAppearanceSnapshot,
   FractureGeneration,
+  FractureRegionFragmentGeometry,
   FragmentGeometry,
 } from '@/lib/types/fracture'
 import type { Mesh2DData, Mesh2DTextureFit, Mesh2DTopology } from '@/lib/types/mesh2d'
 import { FractureMesh2DClipper } from './FractureMesh2DClipper'
-import { FractureSourceBoundaryCompiler } from './FractureSourceBoundaryCompiler'
+import { FractureSourceRegionCompiler } from './FractureSourceRegionCompiler'
 
 export type FractureFragmentAppearance = Pick<Layer, 'type' | 'path' | 'mesh2d' | 'style'>
 
@@ -28,7 +29,7 @@ export class FractureAppearanceCompiler {
   constructor(
     private readonly topologyHasher = new Mesh2DTopologyHasher(),
     private readonly topologyValidator = new Mesh2DTopologyValidator(),
-    private readonly sourceBoundaryCompiler = new FractureSourceBoundaryCompiler(),
+    private readonly sourceRegionCompiler = new FractureSourceRegionCompiler(),
     private readonly meshClipper = new FractureMesh2DClipper(),
   ) {}
 
@@ -36,7 +37,7 @@ export class FractureAppearanceCompiler {
   snapshot(scene: Pick<ChronoScene, 'assets'>, source: Layer): FractureAppearanceSnapshot {
     this.assertCommonSource(source)
     if (source.type === 'shape' || source.type === 'spline') {
-      this.sourceBoundaryCompiler.compile(source)
+      this.sourceRegionCompiler.compile(source)
       if (source.style?.fill?.type !== 'solid') {
         throw new Error('Fracture shape or spline source must use a solid fill.')
       }
@@ -53,7 +54,7 @@ export class FractureAppearanceCompiler {
       })
     }
     if (source.type === 'mesh2d' && source.mesh2d) {
-      this.sourceBoundaryCompiler.compile(source)
+      this.sourceRegionCompiler.compile(source)
       return Object.freeze({
         schemaVersion: 1,
         kind: 'mesh2d',
@@ -96,6 +97,66 @@ export class FractureAppearanceCompiler {
       })
     }
     throw new Error('Fracture source must be a supported convex shape, spline, Mesh2D or image rectangle.')
+  }
+
+  /**
+   * Build one FRACTURE1 Mesh2D appearance from already clipped render geometry.
+   * Solid, image and authored Mesh2D sources all use the same fixed-topology
+   * fragment layer so holes and disconnected-cell components stay explicit.
+   */
+  createRegionFragmentAppearance(
+    scene: Pick<ChronoScene, 'assets'>,
+    source: Layer,
+    generationId: string,
+    fragment: FractureRegionFragmentGeometry,
+    snapshot: FractureAppearanceSnapshot,
+  ): FractureFragmentAppearance {
+    const current = this.snapshot(scene, source)
+    if (current.kind !== snapshot.kind || current.sourceLayerId !== snapshot.sourceLayerId
+      || current.contentHash !== snapshot.contentHash) {
+      throw new Error('Fracture source appearance changed. Prepare a new bake preview.')
+    }
+    const referenceBounds = snapshot.kind === 'image' && source.size
+      ? { x: 0, y: 0, width: source.size.width, height: source.size.height }
+      : fragment.geometry.textureReferenceBounds
+    const mesh: Mesh2DData = {
+      schemaVersion: 1,
+      source: {
+        kind: 'fractureFragment',
+        sourceLayerId: source.id,
+        generationId,
+        fragmentId: fragment.id,
+        sourceAppearanceHash: snapshot.contentHash,
+        generatorVersion: 1,
+      },
+      geometry: {
+        ...fragment.geometry,
+        ...(referenceBounds ? { textureReferenceBounds: { ...referenceBounds } } : {}),
+      },
+      appearance: snapshot.kind === 'image'
+        ? {
+          schemaVersion: 1,
+          kind: 'texture',
+          textureAssetId: snapshot.assetId,
+          sampling: 'linear',
+          textureTransform: {
+            ...DEFAULT_MESH2D_TEXTURE_TRANSFORM,
+            fit: imageFitToMeshFit(snapshot.objectFit),
+          },
+        }
+        : snapshot.kind === 'mesh2d' && source.type === 'mesh2d' && source.mesh2d?.appearance
+          ? structuredClone(source.mesh2d.appearance)
+          : { schemaVersion: 1, kind: 'solid', sampling: 'linear' },
+    }
+    const validation = this.topologyValidator.validate(mesh.geometry)
+    if (!validation.valid) {
+      throw new Error(`Fracture region fragment generated invalid Mesh2D topology: ${validation.diagnostics.map(item => item.code).join(', ')}`)
+    }
+    return {
+      type: 'mesh2d',
+      mesh2d: mesh,
+      style: source.style ? structuredClone(source.style) : undefined,
+    }
   }
 
   /**
