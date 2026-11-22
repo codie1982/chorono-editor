@@ -22,7 +22,7 @@ describe('converted Mesh boundary paint', () => {
     const recorded = context(), positions = result.mesh2d!.geometry.positions.map((n, i) => n + (i % 2 === 0 ? 10 : 20))
     drawMesh2DLayer(recorded.ctx, result, new Map())
     drawMesh2DBoundaryStroke(recorded.ctx, result, new Map(), positions)
-    expect(recorded.fills).toHaveLength(0)
+    expect(recorded.fills).toHaveLength(1)
     expect(recorded.strokes).toHaveLength(1)
     expect(recorded.commands.filter(command => command[0] === 'M')).toHaveLength(1)
     expect(recorded.commands.filter(command => command[0] === 'L')).toHaveLength(4)

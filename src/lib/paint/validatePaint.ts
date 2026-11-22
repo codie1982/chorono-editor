@@ -8,6 +8,7 @@ export function assertScenePaint(scene: ChronoScene): void {
   const assets = new Map(scene.assets.map(asset => [asset.id, asset]))
   const check = (fill: ShapeFill | undefined) => {
     if (!fill) return
+    if (fill.disabledType !== undefined && !['solid', 'gradient', 'image'].includes(fill.disabledType)) throw new Error('Invalid inactive fill type.')
     if (fill.type === 'image' && !fill.image) throw new Error('Image paint requires its versioned placement payload.')
     const image = fill.image
     if (!image) return

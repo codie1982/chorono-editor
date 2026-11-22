@@ -10,6 +10,7 @@ import { PolygonClippingBackend } from '../boolean/PolygonClippingBackend'
 import { flattenPathContours } from '../flattenPathContours'
 import { classifyPlanarBoundaries } from '../planar/boundaries'
 import { SplineToMeshConverter } from './SplineToMeshConverter'
+import { geometryConversionPaint } from '../../paint/geometryConversionPaint'
 
 /** Stateless representation conversion. Reuses primitive curves, the Boolean
  * union backend, robust planar classification and validated Earcut topology.
@@ -39,8 +40,9 @@ export class GeometryConversionService {
     return separateSplineElements(spline, recipe.unionTolerancePx)
   }
 
-  /** Materialize the selected stack prefix. Stable layer ID, transform, paint,
-   * lifetime and parent are preserved. Mesh has a local self-source ID, no
+  /** Materialize the selected stack prefix. Stable layer ID, transform,
+   * lifetime and parent are preserved; representation entry applies contour/
+   * surface paint defaults. Mesh has a local self-source ID, no
    * hidden intermediate layer. Changing topology clears old pins/deformation;
    * callers must reject rebuilds with such attachments before reaching here. */
   apply(layer: Layer, recipe: GeometryConversionData): Layer {
@@ -52,7 +54,10 @@ export class GeometryConversionService {
     }
     const mesh = recipe.stages.find(stage => stage.kind === 'convertMesh2d')
     const { shape: _shape, shapeKind: _kind, shapeParams: _params, path: _path, mesh2d: _mesh, modifierStack: _stack, ...rest } = layer
-    const style = layer.style ? { ...layer.style, cornerRadius: undefined } : undefined
+    const kind = !recipe.stages.length && recipe.sources.length === 1 && recipe.sources[0].type === 'shape'
+      ? 'shape' : mesh ? 'mesh2d' : 'spline'
+    const paint = geometryConversionPaint(layer.style, layer.type, kind)
+    const style = paint ? { ...paint, cornerRadius: undefined } : undefined
     if (!recipe.stages.length && recipe.sources.length === 1 && recipe.sources[0].type === 'shape') {
       const source = recipe.sources[0]
       return { ...rest, type: 'shape', spline: undefined, geometryConversion: undefined,

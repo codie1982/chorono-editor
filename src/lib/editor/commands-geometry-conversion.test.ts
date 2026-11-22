@@ -37,6 +37,8 @@ describe('geometry conversion command', () => {
     expect(Object.values(layer.spline!.segments).filter(segment => segment.type === 'cubic')).toHaveLength(4)
     expect(layer.transform).toEqual(source.transform)
     expect(layer.style?.cornerRadius).toBeUndefined()
+    expect(layer.style?.fill?.type).toBe('none')
+    expect(layer.style?.stroke?.width).toBeGreaterThan(0)
     expect(layer.modifierStack?.source).toMatchObject({ kind: 'shape', sources: [{ cornerRadius: 12 }] })
     expect(Object.values(layer.spline!.subShapes).every(sub => sub.editable)).toBe(true)
     expect(plan.command.undo(result)).toBe(scene)
@@ -58,9 +60,11 @@ describe('geometry conversion command', () => {
     const { layer, result } = convert(layers, target)
     expect(result.layers).toHaveLength(1)
     if (target === 'spline') {
+      expect(layer.style?.fill?.type).toBe('none')
       expect(Object.values(layer.spline!.contours)).toHaveLength(3)
       expect(Object.values(layer.spline!.subShapes).map(sub => sub.contourIds.length).sort()).toEqual([1, 2])
     } else {
+      expect(layer.style?.fill?.type).toBe('solid')
       const mesh = layer.mesh2d!.geometry
       expect(containsMesh2DPoint(mesh, 60, 60)).toBe(false)
       expect(containsMesh2DPoint(mesh, 10, 60)).toBe(true)
@@ -83,6 +87,23 @@ describe('geometry conversion command', () => {
       const { layer } = convert([source], 'mesh2d')
       expect(containsMesh2DPoint(layer.mesh2d!.geometry, 50, 50)).toBe(radius === 0)
     }
+  })
+
+  it('turns stroke-only compound spline boundaries into filled triangles without closing their holes', () => {
+    const layers = [rect('top', 0, 0, 120, 20), rect('bottom', 0, 100, 120, 20),
+      rect('left', 0, 20, 20, 80), rect('right', 100, 20, 20, 80), rect('island', 180, 0, 20, 20)]
+    const spline = convert(layers, 'spline')
+    expect(spline.layer.style?.fill?.type).toBe('none')
+    expect(spline.layer.style?.stroke?.width).toBeGreaterThan(0)
+    const plan = prepareGeometryConversion(spline.result, [spline.layer.id], 'mesh2d'), result = plan.command.execute(spline.result)
+    const mesh = result.layers[0]
+    expect(mesh.style?.fill?.type).toBe('solid')
+    expect(mesh.mesh2d!.geometry.topology.triangleIndices.length).toBeGreaterThan(0)
+    expect(containsMesh2DPoint(mesh.mesh2d!.geometry, 60, 60)).toBe(false)
+    expect(containsMesh2DPoint(mesh.mesh2d!.geometry, 10, 60)).toBe(true)
+    expect(containsMesh2DPoint(mesh.mesh2d!.geometry, 190, 10)).toBe(true)
+    expect(parseSceneJson(JSON.stringify(spline.result), true).layers[0].style).toEqual(spline.layer.style)
+    expect(plan.command.undo(result)).toBe(spline.result)
   })
 
   it('keeps open primitives open for Spline and rejects filled-surface conversion', () => {

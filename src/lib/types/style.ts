@@ -22,6 +22,10 @@ export interface GradientFill {
 
 export interface ShapeFill {
   type: 'solid' | 'gradient' | 'image' | 'none'
+  /** Last active mode while type is None. Inactive payloads remain on this
+   * fill; representation conversion can restore the exact paint without
+   * guessing from stale gradient/image data. Optional for legacy scenes. */
+  disabledType?: 'solid' | 'gradient' | 'image'
   /** Solid fill colour (hex) */
   color?: string
   /** Fill opacity 0–100, independent of layer opacity. Default 100. */

@@ -1,8 +1,12 @@
 import type { Composition, ImagePaint, ShapeFill, ShapeStroke } from '../types'
 
-/** Retain inactive paint payloads when switching type; never touch keyframes. */
+/** Retain inactive paint payloads and remember the last active mode on None.
+ * Re-enabling removes the remembered mode; no input or keyframes are changed. */
 export function withFillType(fill: ShapeFill | undefined, type: ShapeFill['type']): ShapeFill {
-  return { ...fill, type, ...(type === 'solid' && !fill?.color ? { color: '#3B82F6' } : {}),
+  const { disabledType, ...payload } = fill ?? {}
+  const remembered = fill?.type === 'none' ? disabledType : fill?.type
+  return { ...payload, type, ...(type === 'none' && remembered ? { disabledType: remembered } : {}),
+    ...(type === 'solid' && !fill?.color ? { color: '#3B82F6' } : {}),
     ...(type === 'gradient' && !fill?.gradient ? { gradient: { type: 'linear' as const, angle: 90, stops: [{ offset: 0, color: fill?.color ?? '#3B82F6' }, { offset: 1, color: '#EC4899' }] } } : {}),
     ...(type === 'image' && !fill?.image ? { image: { version: 1 as const, assetId: '', fit: 'cover' as const, scale: 1 } } : {}) }
 }

@@ -3,6 +3,7 @@ import type { Layer } from '../types'
 import type { ModifierGeometry, GeometryModifierStackData } from './geometryTypes'
 import { geometryModifierRegistry, type GeometryModifierRegistry } from './builtins'
 import { GeometryStackEvaluator } from './GeometryStackEvaluator'
+import { geometryConversionPaint } from '../paint/geometryConversionPaint'
 
 /** Integration adapter between ordinary Layer fields and canonical stack data.
  * Source remains detached/immutable; transforms, appearance and animation live
@@ -36,8 +37,8 @@ export class ModifierStackService {
     return structuredClone({ version: 1, source, modifiers })
   }
 
-  /** Recompute the complete result from base, retaining identity/placement and
-   * independent paint. Pins cannot silently migrate to changed topology. */
+  /** Recompute the complete result, retaining identity/placement and independent
+   * paint except representation-entry defaults. Pins cannot silently migrate. */
   execute(layer: Layer, stack: GeometryModifierStackData): Layer {
     return this.withGeometry(layer, stack, this.evaluator.execute(stack, { layerId: layer.id }))
   }
@@ -50,9 +51,10 @@ export class ModifierStackService {
       if (geometry.sources.length !== 1 || geometry.sources[0].type !== 'shape') throw new Error('A compound source requires an enabled Convert Spline step.')
       const source = geometry.sources[0]
       return { ...rest, type: 'shape', modifierStack: stack, shape: source.shape, shapeKind: source.shapeKind,
-        shapeParams: source.shapeParams, size: source.size, style: { ...layer.style, cornerRadius: source.cornerRadius } }
+        shapeParams: source.shapeParams, size: source.size, style: { ...geometryConversionPaint(layer.style, layer.type, 'shape'), cornerRadius: source.cornerRadius } }
     }
-    const style = layer.style ? { ...layer.style, cornerRadius: undefined } : undefined
+    const paint = geometryConversionPaint(layer.style, layer.type, geometry.kind)
+    const style = paint ? { ...paint, cornerRadius: undefined } : undefined
     if (geometry.kind === 'spline') return { ...rest, type: 'spline', spline: geometry.spline, style, modifierStack: stack }
     const previous = layer.mesh2d, current = geometry.mesh
     if (previous?.pins?.vertexIds.length && meshModifierRestIdentity(previous.geometry) !== meshModifierRestIdentity(current.geometry)) throw new Error('Remove Mesh pins before changing modifier topology.')
