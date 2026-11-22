@@ -27,13 +27,13 @@ export function operationFixture(): ChronoScene {
   scene.layers = [a, b]; scene.timelines = [{ ...newTimeline(), id: 'main', layerIds: ['a', 'b'], tracks: [] }]; return scene
 }
 /** Real solver output is intentionally not stored in the resulting source. */
-function apply(scene: ChronoScene, operation: 'union' | 'subtract' | 'intersect' = 'union') {
+function apply(scene: ChronoScene, operation: 'union' | 'subtract' | 'intersect' | 'xor' = 'union') {
   const plan = prepareBooleanOperation(scene, [{ layerId: 'a', label: 'A' }, { layerId: 'b', label: 'B' }], { operation, reverse: false, tolerancePx: .25 }, 0, new Map())
   const result = new PolygonClippingBackend().compute(plan.request), command = plan.command(result)
   return { plan, result, command, next: command.execute(scene) }
 }
 describe('persisted Boolean operation', () => {
-  it.each(['union', 'subtract', 'intersect'] as const)('keeps exact sources, save/open, one inverse and shared bounds for %s', operation => {
+  it.each(['union', 'subtract', 'intersect', 'xor'] as const)('keeps exact sources, save/open, one inverse and shared bounds for %s', operation => {
     const scene = operationFixture(), before = structuredClone(scene), { next, command, plan, result } = apply(scene, operation)
     expect(scene).toEqual(before); expect(command.undo(next)).toBe(scene); expect(command.execute(command.undo(next))).toEqual(next)
     for (const original of scene.layers) expect(next.layers.find(layer => layer.id === original.id)).toEqual({ ...original, parentId: plan.ownerId })

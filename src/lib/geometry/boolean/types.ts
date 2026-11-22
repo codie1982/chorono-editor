@@ -1,6 +1,6 @@
 import type { PathDefinition } from '../PathCommand'
 
-export type BooleanOperation = 'union' | 'subtract' | 'intersect'
+export type BooleanOperation = 'union' | 'subtract' | 'intersect' | 'xor'
 /** Immutable job data. Paths and result use the caller-selected planar pixel calculation space,
  * never CSS/screen pixels. Preview uses composition coordinates; persisted
  * recipes use their captured linear sampling space without world translation. No scene IDs or old vertex identities are assigned

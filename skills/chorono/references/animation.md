@@ -89,7 +89,7 @@ For grouping, create a group and parent child handles with `child.parent(group)`
 
 Native S2D-3 Boolean preview is transient: select 2–8 closed Shape/Spline
 layers or spline Objects, then Spline & Boolean panel / viewport context menu → Boolean
-preview. Union/Subtract/Intersect, explicit A−B/B−A and composition-pixel curve
+preview. Union/Subtract/Intersect/XOR, explicit A−B/B−A and composition-pixel curve
 tolerance do not alter source, keys or history. It is excluded from exports and
 session JSON. S2D-4 UI Apply persists a normal group recipe with original inputs
 and a generated spline child. MCP uses `prepare_spline_edit` with

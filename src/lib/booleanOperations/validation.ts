@@ -9,7 +9,7 @@ import { BOOLEAN_LIMITS } from '../geometry/boolean/types'
 /** Validate finite, bounded v1 source without conversion/clipping. Actual
  * geometry admission stays in the shared operand adapter and solver. */
 export function assertBooleanRecipe(value: BooleanOperationData): void {
-  if (!value || value.version !== 1 || !['union', 'subtract', 'intersect'].includes(value.operation) || typeof value.reverse !== 'boolean'
+  if (!value || value.version !== 1 || !['union', 'subtract', 'intersect', 'xor'].includes(value.operation) || typeof value.reverse !== 'boolean'
     || !Number.isFinite(value.tolerancePx) || value.tolerancePx < .01 || value.tolerancePx > 10
     || !Array.isArray(value.sampling) || value.sampling.length !== 4 || value.sampling.some(n => !Number.isFinite(n) || Math.abs(n) > 1e5)
     || Math.abs(new Matrix2D(...value.sampling, 0, 0).determinant()) < 1e-9) throw new Error('Invalid or unsupported Boolean recipe v1.')

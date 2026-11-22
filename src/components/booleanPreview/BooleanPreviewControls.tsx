@@ -15,6 +15,7 @@ export function BooleanPreviewControls({ controller: c }: { controller: BooleanP
     {!c.active ? <p className="text-gray-400">Select 2–8 closed shapes, splines or spline Objects. Source geometry stays editable.</p> : <>
       <label className="flex items-center gap-2">Operation<select aria-label="Boolean operation" className={input + ' flex-1'} value={c.operation} onChange={event => c.setOperation(event.target.value as BooleanOperation)}>
         <option value="union">Union · A ∪ B</option><option value="subtract">Subtract</option><option value="intersect">Intersect · A ∩ B</option>
+        <option value="xor">Exclude · XOR</option>
       </select></label>
       <p className="break-words">A: {c.targets[0]?.label}<br />B: {c.targets.slice(1).map(target => target.label).join(' + ')}</p>
       {c.operation === 'subtract' && <label className="flex items-center gap-2">Order<select aria-label="Boolean subtraction order" className={input + ' flex-1'} value={c.reverse ? 'ba' : 'ab'} onChange={event => c.setReverse(event.target.value === 'ba')}><option value="ab">A − B</option><option value="ba">B − A</option></select></label>}

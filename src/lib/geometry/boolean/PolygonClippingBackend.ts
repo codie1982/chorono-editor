@@ -21,7 +21,7 @@ export class PolygonClippingBackend {
    * disjoint: crossing/touching mixed contours refuse rather than invent holes.
    * Empty intersection/subtraction is a valid zero-command result. */
   compute(request: BooleanRequest): BooleanResult {
-    if (!['union', 'subtract', 'intersect'].includes(request.operation) || typeof request.reverse !== 'boolean') throw new Error('Invalid Boolean operation.')
+    if (!['union', 'subtract', 'intersect', 'xor'].includes(request.operation) || typeof request.reverse !== 'boolean') throw new Error('Invalid Boolean operation.')
     if (request.operands.length < 2 || request.operands.length > limits.operands) throw new Error(`Select 2–${limits.operands} Boolean inputs.`)
     let inputVertices = 0, ringCount = 0, commands = 0, contacts = 0
     const all: Vec2[][] = []
@@ -45,6 +45,7 @@ export class PolygonClippingBackend {
     let result: MultiPolygon
     if (request.operation === 'union') result = union(a, ...rest)
     else if (request.operation === 'intersect') result = intersection(a, ...rest)
+    else if (request.operation === 'xor') result = xor(a, ...rest)
     else result = request.reverse ? difference(union(rest[0], ...rest.slice(1)), a) : difference(a, ...rest)
     const counts = outputCounts(result)
     return { path: { closed: result.length > 0, commands: result.flatMap(polygon => polygon.flatMap(ring => [M(...ring[0]), ...ring.slice(1, -1).map(p => L(...p)), Z()])) },
