@@ -32,6 +32,34 @@ seviyesi veya geometri hareketi bu snapshot'ı değiştirmez. Exit/entry güncel
 geometriyi yeni başlangıç yapar. Grid mesh'te saklı boundary ring yoksa mevcut
 `Mesh2DBoundaryRingExtractor` kullanılır. Ghost source/history/export'a yazılmaz.
 
+## Native spline araçları ve eski stack
+
+Spline Edit panelinde seçim özellikleri, moda özel araçlar ve ortak transform
+öndedir. Chamfer/Fillet Point, Offset Path Edge/Object aracıdır; panel ile sağ tık
+menüsü `components/splineEdit/tools/splineEditTools.ts` admission tanımlarını
+kullanır. Kaynak/Geçmiş kapalı gelir; eski dönüşüm/stack kayıtları orada korunur.
+`legacySplineTool` descriptor işareti dört eski sınıfı yeni UI instance chooser'ından
+çıkarır; evaluator, kayıt ID'leri ve programmatik uyumluluk davranışı değişmez.
+
+Native Offset varsayılanı Replace'tir. Tam seçili contour'ları değiştirir;
+Object kimliği/adı, seçilmemiş contour'lar/delikler, layer TRS ve paint korunur.
+Keep source Append yapar. Kısmi Edge zinciri sessizce bütün contour'a genişletilmez;
+bu teslimde tam contour seçimi gerekir. Inside/Outside aynı aracın Inset/Outset
+seçenekleridir. Paralel kontur gerçek bant değildir; arayüzde Outline diye sunulmaz.
+
+Headless `offset` operasyonu isteğe bağlı `resultMode: 'append'|'replace'` alır.
+Omitted/append eski çağrıların fresh Object ekleme ve edge promotion davranışını
+korur. Replace tam contour seçimi gerektirir ve native Edit'le aynı planner/solver'ı
+kullanır. İkinci işlem pipeline'ı yoktur. Preview/Keep source/Cancel kaynak veya
+Undo yazmaz; Apply bir komuttur. Kaldırılacak geometriye canlı referans varsa
+sessiz ID eşleme yerine işlem reddedilir.
+
+Eski stack sonucu doğrudan edit edilemiyorsa Apply to editable spline, mevcut
+Bake komutunu açıkça çalıştırır ve aynı layer'da Object Edit'i odaklar. Bir Undo
+eski stack ve sonucu geri getirir. Dosya açılışında veya drawer açarken otomatik
+Bake yoktur. Sonraki araç teslimleri [native Edit planında](plans/spline-edit-native-tools-plan.md)
+açıkça ayrı tutulur; tamamlanmamış komutlar UI'da çalışıyormuş gibi gösterilmez.
+
 ## Spline Boolean & Paths
 
 Edit içindeki Union/Subtract/Intersect/XOR düğmeleri mevcut ortak Boolean
@@ -103,6 +131,7 @@ kabul sayfaları normal editor/hooks/renderer/exporter'ı kullanır, bağlı kul
 sahnesini değiştirmez:
 
 ```
+node scripts/perf/spline-tools.mjs /tmp/chorono-tools-qa
 node scripts/perf/spline-edit.mjs /tmp/chorono-edit-qa
 node scripts/perf/spline-attach.mjs /tmp/chorono-boolean-qa
 node scripts/perf/image-paint.mjs /tmp/chorono-paint-qa

@@ -69,3 +69,14 @@ holes; `Separate Inputs` restores original Boolean sources. These UI choices do
 not change the documented scripting `boolean` operation's retained-recipe contract.
 Canvas shortcuts 1/2/3 enter Point/Edge/Object for selected Spline/Mesh; they do
 not run in text/numeric inputs, modal widgets, timeline or 3D detail contexts.
+
+Interactive spline Chamfer/Fillet/Offset Path are native Edit tools, not new
+modifier instances. Point mode owns Chamfer/Fillet; Edge/Object owns Offset.
+The native UI defaults to replacing the selected complete contours. Keep source
+adds new Objects. In `prepare_spline_edit`, `kind:'offset'` accepts optional
+`resultMode:'append'|'replace'`: omitted preserves the existing append/promotion
+contract; replace requires complete contour edges and keeps original Object IDs,
+unselected geometry, layer TRS and paint. Removed live geometry readers refuse.
+Partial-chain Edit Offset and geometric Outline v2 are not available yet.
+Existing serialized modifier records remain supported; no automatic load-time
+bake occurs. Fill/Stroke stay in Properties.

@@ -98,6 +98,13 @@ it does not use midpoint 1→4 triangle splitting.
 registers a test-only grid detail strategy using the existing grid generator,
 verifying that new connectivity works without changing runner or panel.
 
+The four Spline modeling classes (Offset, Outline, Chamfer, Fillet) are now
+compatibility-only UI entries (`descriptor.legacySplineTool`). Old records and
+programmatic callers retain their contracts and evaluator; new interactive work
+uses native spline Edit tools and commits geometry with Apply. The Spline panel
+keeps existing stacks in a closed Source / History drawer, with explicit undoable
+Bake-to-editable admission. Mesh modifier creation/execution is unchanged.
+
 ## Data, units and compatibility
 
 `Layer.modifierStack` v1 stores `{ source, modifiers }`; ordinary `spline` or

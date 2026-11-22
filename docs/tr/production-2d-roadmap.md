@@ -3831,3 +3831,12 @@ Fill/Stroke seçenekleri ve native doğrulama girişleri
 Outline geometrik bant v2 için [uygulama planı](plans/spline-outline-band-v2-plan.md)
 hazırdır; sabit kalınlık ve köşelerde artan vertex yoğunluğu kararı kesindir,
 v2 henüz uygulanmış değildir.
+
+### Native Spline Edit araçları — ilk teslim
+
+Chamfer/Fillet Point araçları, Offset Path Edge/Object aracıdır; Apply doğrudan
+geometriyi değiştirir. Offset varsayılan Replace, isteğe bağlı Keep source Append;
+Object/delik sahipliği ve seçilmemiş geometri korunur. Eski stack kapalı
+Source / History bölümündedir ve açık Bake/Undo ile edit edilebilir.
+[Native Edit teslim planı](plans/spline-edit-native-tools-plan.md) ilk teslim ile
+sonraki nokta/topoloji, kesişim ve Outline v2 aşamalarını ayrı tutar.

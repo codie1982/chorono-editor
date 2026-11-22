@@ -6,8 +6,9 @@ Durum: **tasarım önerisi; v2 uygulaması başlamadı**. 22 Kasım 2026.
 
 Outline, kaynak çizgiyi sınırları, iç/dış konturları ve vertex'leri olan gerçek
 bir alana dönüştürür. Canvas stroke kalınlığına dayanmaz. Genişlik bant geometrisini
-değiştirir; dolgu ve desen bu alanı boyar. Kaynak spline modifier içinde korunur;
-Execute sonucu üretir, Bake sonucu doğrudan edit edilebilir hale getirir.
+değiştirir; dolgu ve desen bu alanı boyar. Önizleme kaynağı değiştirmez. Apply seçili çizgiyi gerçek, düzenlenebilir bantla
+değiştirir; Keep source seçilirse bant aynı spline içine yeni Object olarak eklenir.
+Her Apply ayrı Undo olur; yeni modifier satırı oluşturulmaz.
 
 Kesinleşen kullanıcı kararı: “Köşelerde ağırlığı artar” ifadesi **vertex yoğunluğu** anlamındadır.
 Gövdenin geometrik kalınlığı sabit kalır; köşelerde fazladan kalınlaşma/width
@@ -26,8 +27,8 @@ köşelerde sıklaştırma aynı anda vaat edilmez.
   Topoloji belirsizliği/çökme durumunda tüm işi tanıyla reddediyor.
 - `flattenPathContours`, `PathSampler`, planar sınır sınıflandırıcısı ve
   `PolygonClippingBackend`: ikinci bir Boolean/offset motoru yazılmayacak.
-- Genel Modifier/registry, stack evaluator, native komut/Undo ve worker yaşam
-  döngüsü korunacak. Paint, gradient, pattern, dash ve preset davranışı ortak
+- Native spline operasyonları, komut/Undo ve worker yaşam döngüsü kullanılacak.
+  Mevcut modifier sınıfları yalnız eski kayıtların uyumluluk yolunda korunacak. Paint, gradient, pattern, dash ve preset davranışı ortak
   Stroke ayarlarıyla paylaşılacak.
 
 Eksikler: tam hizalama/cap/dash bandı, ayarlanabilir dağılım, eğri-fit çıktısı,
@@ -80,7 +81,7 @@ olmadan eski sahnenin geometri sonucu değiştirilmeyecek.
 
 ## UI, preset ve clipboard
 
-Edit → Add modifiers → Outline; seçili modifier'ın kendi paneli:
+Edit → Edge/Object → Outline; native aracın önizleme/Apply paneli:
 
 - Geometry: width, align, caps, corners, miter limit ve dash/gap/sequence.
 - Sampling: spacing, corner/curvature yoğunluğu ve tolerans; vertex sayısı/hata tanısı.
@@ -97,7 +98,7 @@ preset sürümlü JSON'dur; pattern asset bağımlılıkları portable manifest'
 1. v1/v2 adapter'ı, ayar şeması, kalite/iptal/bütçe tanıları.
 2. Saf sampling stratejileri ve kaynak vertex/t eşlemesi.
 3. Align/cap/join/dash bant üretimi ve Boolean temizleme.
-4. Geometri-boya çıktı entegrasyonu, modifier paneli ve ortak preset/clipboard.
+4. Geometri-boya çıktı entegrasyonu, native Edit paneli ve ortak preset/clipboard.
 5. Renderer, SVG, runtime/export, clone/instance ve portable save/load.
 6. Gerçek Edit viewport, worker stale-result, Undo/Redo ve görsel karşılaştırma.
 
@@ -108,5 +109,5 @@ Q/C eğriler, C1 süreklilik/cusp, delikler/iç içe adalar, çoklu/kopuk contou
 köşe/eğrilikte artan örnek sayısı ve sabit köşe konumu. Aynı ayarda zoomlar
 arasında aynı topoloji; native Edit ve çıktı görüntüleri karşılaştırılır.
 
-Her faz mevcut kaynakları değiştirmeden test edilir. Execute tek native komut,
+Her faz mevcut kaynakları değiştirmeden test edilir. Apply tek native komut,
 her uygulama ayrı Undo; transient preview/ghost/preset clipboard sahneye yazılmaz.
