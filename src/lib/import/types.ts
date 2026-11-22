@@ -15,6 +15,8 @@ import type { EditorCommand }  from '../editor/commands-keyframe'
 // ── Format Detection ──────────────────────────────────────────────────────────
 
 export type ImportFormat =
+  | 'model/gltf-binary'
+  | 'model/gltf+json'
   // Asset formats (single output)
   | 'image/png'
   | 'image/jpeg'
@@ -52,6 +54,7 @@ export type ImportKind = 'asset' | 'document'
 
 export function getImportKind(format: ImportFormat): ImportKind {
   const assetFormats: ImportFormat[] = [
+    'model/gltf-binary', 'model/gltf+json',
     'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif',
     'image/spritesheet',  // single output (1 sprite asset + 1 frameSequence layer)
     'video/mp4', 'video/mov', 'video/webm',

@@ -1,7 +1,7 @@
 # Chorono MCP catalog and compatibility
 
 Chorono MCP 2.1.0 controls the connected editor through STDIO. The default
-`standard` catalog exposes 58 focused tools. All 95 tool names remain
+`standard` catalog exposes 62 focused tools. All 99 tool names remain
 callable with their existing domain payload and default semantics. Source mutations now require the authorization envelope described below. Tool
 discovery and call resolution are separate; this update does not replace the
 editor's native commands or undo system.
@@ -49,7 +49,7 @@ the agent following the copied request.
    cannot be nested in a mutation batch.
 
 The original `get_capabilities({})` response still returns the full property
-schemas, scripting reference and `tools` compatibility inventory of 95
+schemas, scripting reference and `tools` compatibility inventory of 99
 names. Its `tools` array is not the current client's direct discovery surface.
 Read `catalog: {version:1,profile,advertisedToolNames,aliases}` for that surface;
 each alias is `{name,implementationName}`. `chorono://capabilities` remains the
@@ -62,9 +62,12 @@ original full discovery call.
 | --- | --- |
 | Read source and inspect records | `get_handoff_context`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets` |
 | Create or edit ordinary layers | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition` |
+| Import and edit boxed 3D | `import_asset` for GLB/glTF bytes, then `update_model3d` for static pose, camera, lighting and 2D box size |
 | Create/edit animation | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Build/edit Mesh2D | `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` |
 | Review and publish physics bakes | `prepare_rigid_body_bake`, `prepare_voronoi_fracture_bake`, `get_bake_job`, `preview_bake_job`, `cancel_bake_job`, `discard_bake_job`, `commit_bake_job`, `inspect_physics_bake`, `clear_physics_bake` |
+
+| Spline topology, paint and CPU solvers | `prepare_spline_edit`, `apply_spline_edit`, `discard_spline_edit` |
 | Procedural work or native batches | `run_script`, `apply_script_plan`, `batch_actions` |
 | Verify pixels/values/runtime | `render_preview`, `evaluate_frame`, `get_runtime`, `control_playback`, `control_runtime` |
 | Check/save/reopen | `validate_scene`, `save_project`, `load_project`, `list_projects`, `undo`, `redo` |
@@ -133,6 +136,20 @@ authoring metadata in one undoable edit while preserving composition settings,
 reusable assets/collections and editor guides. This prevents a newly authored
 scene from exposing a stale bake that belongs to removed objects.
 
+For boxed 3D, send raw base64 GLB 2 (`model/gltf-binary`) or self-contained
+glTF 2 (`model/gltf+json`) bytes through `import_asset`, then use its returned
+model layer id with `update_model3d`. The encoded input limit accommodates a
+16 MiB raw model; the importer checks decoded size and dependencies separately.
+Discover `update_model3d` with `get_capabilities({toolName:'update_model3d'})`.
+For example, `{layerId:'MODEL_ID',patch:{rotation:{y:30},camera:{yaw:45}},box:{width:600}}`
+deep-merges static inner fields and resizes the outer 2D box in pixels. Read
+`get_scene` first and supply its revision and read token. Internal `model3d.*`
+fields are outside the main 2D Timeline authoring scope.
+Native **Edit content** supports private numeric model/camera clips with a local
+Keys/Curve Timeline. This is a manual UI workflow, not a new MCP/script clip API.
+Generic patches preserve v2 private clips and refuse edits to their owned base
+channels; use the owning content editor. Imported GLB rig clips remain unsupported.
+
 Native spline, particle, state-machine, advanced track and audio clip edits are
 available through single-tool discovery and mutation batches, or directly in
 the legacy catalog. Scripts also expose the existing domain handles. Specialized
@@ -176,7 +193,7 @@ does not contain every field needed to preserve such data.
 
 Set `CHORONO_MCP_TOOL_PROFILE=legacy` in the **STDIO MCP server process**
 environment when a client needs all original tools directly advertised. The
-legacy catalog lists 95 callable names with corrected descriptions
+legacy catalog lists 99 callable names with corrected descriptions
 and schemas. The default is `standard`; unknown profile values fail at startup.
 Changing the browser/Next environment alone does not select the client's STDIO
 catalog. Reload or reconnect the MCP client after changing the build or profile;
@@ -269,3 +286,8 @@ is added. The ledger is bounded and reports `truncated` rather than inventing
 an actor for missing information. General key upsert semantics remain unchanged.
 Rebuild/restart editor and STDIO together; source arguments remain compatible
 with 2.0.0. [Maintainer contract and bounds](../../src/lib/editor/authoring/README.md).
+
+
+3D0–3D6 native detail tools use model source v3. Node/clip structural authoring remains a native UI workflow; MCP import/static presentation edits and prepared preview/portable output keep their existing revision/token contracts. See [model detail implementation](../tr/model-detail-3d-packages.md).
+
+Native spline plans reuse editor command/solver guards, return actual draft PNGs and commit once using the returned plan-bound token. They are not batchable. See the [spline contract](../tr/mcp-spline-editing.md) and [script compatibility audit](../tr/script-api-compatibility-audit.md).

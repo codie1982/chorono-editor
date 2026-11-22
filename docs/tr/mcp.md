@@ -1,7 +1,7 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.1.0: varsayılan `standard` keşif kataloğu 58 odaklı aracı yayımlar.
-95 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 62 odaklı aracı yayımlar.
+99 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
 Chorono MCP, STDIO üzerinden standart MCP konuşan yerel bir sunucudur. Claude Desktop, Claude Code ve Codex aynı editör bağlantısını kullanabilir. Ayrıca bir model API anahtarı gerekmez: model istemcide çalışır, MCP editörde araçları yürütür.
@@ -71,7 +71,7 @@ kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları k
 | Alan | Araçlar |
 | --- | --- |
 | Keşif | `list_sessions`, `get_capabilities`, `get_handoff_context`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
-| Nesneler | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
+| Nesneler | `create_layer`, `update_layer`, `update_model3d`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
 | Mesh2D | `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` |
 | Animasyon | `create_timeline`, `update_timeline`, `upsert_keyframes` |
 | Bake / fizik | `prepare_rigid_body_bake`, `prepare_voronoi_fracture_bake`, `get_bake_job`, `preview_bake_job`, `cancel_bake_job`, `discard_bake_job`, `commit_bake_job`, `inspect_physics_bake`, `clear_physics_bake`; tek çağrılı uyumluluk için `bake_rigid_bodies`, `bake_voronoi_fracture` |
@@ -89,6 +89,27 @@ timeline track'leri üzerinden oynar. Audio, destekleyen bir çağıran açıkç
 dahil etmedikçe ayrı profil/çıktıdır. Track optimizasyonu redundant key'leri
 kaldırabileceğinden kabul, key dizilerinin birebir eşitliğini değil
 değerlendirilmiş değer ve render karelerinin eşliğini karşılaştırır.
+
+### Kutulu 3D model
+
+`import_asset` ile `.glb` için `model/gltf-binary`, kaynakları gömülü `.gltf`
+için `model/gltf+json` MIME türünü ve ham base64 içeriğini gönderin. Dosya yolu
+veya `data:` URL'si gönderilmez. Şema, 16 MiB ham modelin base64 karşılığını
+kabul eder; import parser'ı dosya boyutu, bağımlılıklar ve çözülecek iş yükünü
+ayrıca denetler. Dönen `addedLayerIds` içindeki gerçek model katmanı id'sini
+kullanın.
+
+Statik iç model konumu/dönüşü/ölçeği, kamera ve ışık için `update_model3d`
+şemasını `get_capabilities({toolName:'update_model3d'})` ile okuyun. Örnek
+işlem argümanları: `{layerId:'MODEL_ID',patch:{rotation:{y:30},camera:{yaw:45}},box:{width:600}}`.
+`box` dış 2D piksel boyutudur; iç konum/kamera hedefi normalize sunum
+birimlerindedir, açılar derecedir. Patch eksik kardeş alanları ve asset kimliğini
+korur. Değişiklikten hemen önce `get_scene` okuyup dış çağrıya onun
+`expectedRevision` ve `readToken` değerlerini ekleyin. Ana 2D Timeline'da
+`model3d.*` kanalları keylenmez. Native **Edit content** UI'sı private model/kamera
+klipleri için ayrı Content Timeline/Keys/Curve sunar; MCP/script klip authoring
+API'si açılmadı. v2 klipleri ve sahipli base kanallarını generic patch ile
+değiştirmeyin; ilgili içerik editörünü kullanın. [Kaynak ve sınırlar](model-content-clips.md).
 
 ### Keşif ve uzman araçlar
 
@@ -224,7 +245,7 @@ Re-bake iki generation'ı ve bütün child katmanlarını atomik sahiplenir.
 Servis yoksa built-in renderer still PNG veya video PNG-sequence ZIP'i üretir.
 `backend:chorono` açık seçilirse sessiz fallback yerine bağlantı hatası verir.
 
-`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 95 aracın
+`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 99 aracın
 uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
 Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
 `catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
@@ -261,7 +282,7 @@ Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
 
 Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
 `CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
-`legacy`, iyileştirilmiş açıklama/şemalarla 95 adı yayımlar; `standard`
+`legacy`, iyileştirilmiş açıklama/şemalarla 99 adı yayımlar; `standard`
 varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
 değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
 bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.
@@ -405,3 +426,10 @@ Kullanıcıya ait authoring/hermes animasyon verileri korunur. Kayıt sınırlı
 istenmeyen değişiklik izni değildir. Genel key upsert semantiği değişmedi.
 2.1.0 için editör/STDIO birlikte yeniden başlatılıp bağlanır; source argümanları
 2.0.0 ile aynıdır. [Bakım sözleşmesi](../../src/lib/editor/authoring/README.md).
+
+
+3D0–3D6 native detail tools use model source v3. Node/clip structural authoring remains a native UI workflow; MCP import/static presentation edits and prepared preview/portable output keep their existing revision/token contracts. See [model detail implementation](model-detail-3d-packages.md).
+
+## Spline düzenleme ve script eşliği
+
+`prepare_spline_edit` → önizleme inceleme → `apply_spline_edit` / `discard_spline_edit` akışı Point/Edge/Object, çizerek birleştirme, Offset, Chamfer, Fillet ve Boolean işlemlerini kapsar. Hazırlama kaynak okuma yetkisi ister; uygulama hazırlamanın döndürdüğü **yeni plan tokenını** kullanır. [Sözleşme ve örnekler](mcp-spline-editing.md), [script uyumluluk incelemesi](script-api-compatibility-audit.md).

@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ADD_LAYER_GROUPS } from '@/lib/icons/iconMap'
-import { buildAddLayerMenu } from './LayerAddition'
+import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
 
 describe('shared Add catalogue', () => {
   it('matches all available + Add categories and dispatches each exact kind once', () => {
-    const add = vi.fn(), menu = buildAddLayerMenu(add)
+    const add = vi.fn(), root = buildAddLayerMenu(add)[0]
+    if (root.kind !== 'submenu') throw new Error('Expected Add submenu')
+    const menu = root.items
     const groups = ADD_LAYER_GROUPS.filter(group => group.items.some(item => item.available))
     expect(menu.map(item => item.kind !== 'separator' && item.label)).toEqual(groups.map(group => group.title))
     menu.forEach((item, index) => {

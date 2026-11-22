@@ -8,6 +8,7 @@ export type ShortcutContext =
   | 'layerPanel'
   | 'assetLibrary'
   | 'preview'
+  | 'model3d'
 
 export interface KeyBinding {
   type: 'keyboard'
@@ -21,8 +22,12 @@ export interface KeyBinding {
 
 export interface GestureBinding {
   type: 'gesture'
-  gesture: 'drag' | 'scroll' | 'pinch'
+  gesture: 'drag' | 'scroll' | 'pinch' | 'rotate'
   modifiers?: ('shift' | 'alt' | 'meta' | 'ctrl')[]
+  /** Pointer button for a drag gesture; omitted for button-independent gestures. */
+  button?: 'left' | 'middle' | 'right'
+  /** Finger count shown for a desktop trackpad gesture. */
+  fingers?: 1 | 2
 }
 
 export type Binding = KeyBinding | GestureBinding

@@ -5,7 +5,9 @@ position key'leridir; kaynak path geometrisi ve Follow Path timing ayrı kalır.
 
 ## Kullanım
 
-1. Nesneyi ve düzenlenecek Timeline'ı seçin, viewport'ta **Motion Keys** açın.
+1. Nesneyi ve düzenlenecek Timeline'ı seçin. Nesnede sağ tık → **Edit motion
+   keys**, sağ dock'taki **Motion Keys** panelini açar/öne getirir. Viewport'ta
+   sabit düğme veya geniş araç penceresi yoktur; çizgi ve key'ler orada kalır.
 2. **Edit:** elmasa tıklamak key'leri seçer ve yerel zamana gider. Shift seçim
    ekler/çıkarır. Seçili noktaları sürükleyin veya oklarla 1 composition px,
    Shift+oklarla 10 px taşıyın. Sürüklemede Shift eksen kilididir.
@@ -19,6 +21,46 @@ position key'leridir; kaynak path geometrisi ve Follow Path timing ayrı kalır.
 6. **Duplicate keys** belirtilen ms ofsetiyle yeni kimlikler oluşturur.
    **Delete keys** veya canvas odaktayken Delete yalnız seçili motion key'lerini
    siler. Timeline/Curve Editor ile aynı key ID seçimi kullanılır.
+7. Segment üzerine gelince ilgili key aralığı kalınlaşır. Sağ tık menüsü **Add
+   keyframe here**, Linear/Ease In/Ease Out/Ease In Out/Hold/Bezier sunar. Eklenen
+   key'in zamanı örneklenen yolun yerel ms değeridir; pozisyon o zamanda yeniden
+   değerlendirilir. Native splitter iki eksenin eğrisini koruyarak yeni key'leri
+   aynı Timeline/Curve Editor'a ekler. Fractional ms yuvarlanmaz.
+8. Noktada sağ tık → **Bezier · aligned handles** veya **Corner Bezier ·
+   independent handles**. Seçili noktanın önceki/sonraki segmentlerinde kontrol
+   çizgileri ve tutamaçları görünür. Corner iki tarafı bağımsız bırakır; aligned
+   aynı node etrafındaki diğer kontrolü aynalar. Sürüklemenin son pointer-up
+   örneği tek Undo komutudur. Panelde **Done** nesne düzenlemeye döner.
+
+**Pan modunda key veya tutamaç düzenlenmez.** Overlay pointer ve keyboard
+authoring'i bırakır; görünür yol korunur. Sağ tık ile motion düzenlemeye girmek
+Pan'ı kapatır. Aktif tutamaç drag'i sırasında Pan'a geçiş ortak gesture sahibini
+iptal eder. Sağ paneli başka tab ile değiştirmek rota sahibini taşımadığından
+draft'ı yeniden üretmez; dock geri açıldığında aynı kontroller gösterilir.
+
+Yolun referansı render edilen **anchor/pivot** noktasıdır. Geometrik merkez
+yalnız pivot merkezdeyse aynı noktadır. Parent matrisi her key'in kendi zamanında
+hesaplanır; world kontrolü yazarken o zamanın inverse matrisi kullanılır.
+
+Kontroller mevcut skaler X/Y `customBezier` easing'ini düzenler. Bu ilk dilim
+ayrı bir spatial spline kaynak türü eklemez. Özellikle iki endpoint değeri eşit
+olan düz bir eksende easing modeli nonconstant kıvrım temsil edemez: işlem
+diagnostic ile reddedilir; ek position key veya spline Follow Path kullanılmalıdır.
+Animasyonlu parent altında kontrol, node zamanındaki parent'a projekte edilir;
+gerçek world yol yine evaluator'dan örneklenir ve kübik olduğu varsayılmaz.
+`motionTangentMode?: 'aligned' | 'broken'` optional key metadata'sı viewport'taki
+node bağlantısını saklar. Legacy `tangentMode`'un segment içi temporal anlamı
+değişmez; yeni metadata değer hesaplamasını veya export süresini değiştirmez.
+
+15 Kasım 2026 kabulü: 393 dosyada 3.164 test, TypeScript, MCP build ve durdurulmuş
+Next üzerinden production build geçti. Native motion fixture'da 15 kontrol;
+Timeline key-range fixture'da 5 kontrol geçti. Sparse X/Y, reflected/animated
+parent, mouse-up son örneği, tek Undo/Redo, panelin viewport dışında açılması,
+Pan'ın kaynak yazmaması ve yeni key'in Timeline'da görünmesi kontrol edildi.
+Canlı editörde eski kaynak üzerine test sahnesi yüklenmedi; saved recovery'den
+açılan oturumda nesne menüsü sağ Motion Keys panelini öne getirdi. Pivot güncel
+sahnede 347,3945×209,0430 boyutun merkezi olan 173,6973×104,5215 idi ve çizilen
+motion noktası bu anchor'a karşılık geliyordu.
 
 Bir noktada aynı zamana ait x/y key'leri birlikte temsil edilir. Timeline veya
 Curve Editor'da bunlardan birinin seçilmesi noktayı vurgular; viewport'tan nokta
@@ -40,6 +82,9 @@ Mevcut animasyona key eklemek/taşımak da doğal olarak komşu hareketi etkiler
 | `src/lib/timeline/trajectory/commands.ts` | Native set/move/delete/retime/duplicate/draw komut yüzeyi |
 | `src/components/MotionPathOverlay.tsx` | Bir nesne ve açık Timeline kapsamındaki çizgi, noktalar ve araç koordinasyonu |
 | `src/components/canvas/motion/` | Toolbar, inspector, rota taslağı, keyboard ve pointer adapter'ları |
+| `src/lib/timeline/trajectory/curveCommands.ts` | Guard'lı segment easing, node linkage ve kontrol taşıma komutları |
+| `src/lib/timeline/trajectory/curveHandles.ts` / `hitTesting.ts` | Native kontrol projeksiyonu ve budget'lı yol hit hesabı |
+| `MotionKeysPanel` | Dock host'u; source/draft sahibi değildir, mevcut kontroller portal ile bağlanır |
 | `src/components/canvas/interactions/EditorPointerSession.ts` | Nesne ve key gesture'larının ortak transaction/capture/cancel yaşam döngüsü |
 | `src/components/SceneCanvas.tsx` | Composition/client dönüşümü, snap adapter'ı ve kesin authoring frame |
 | `src/app/page.tsx` | Timeline/Curve/viewport ortak key ID seçimi ve playhead |
@@ -58,7 +103,8 @@ if (edit.command) editor.dispatchCommand(edit.command)
 
 Public komutlar React, canvas ve DOM'dan bağımsızdır. UI `EditorCommand`'ı
 mevcut editör geçmişine verir. Projection modeli sahne kayıtlarını/index'i
-immutable snapshot olarak ödünç alır; yeni source JSON türü oluşturmaz.
+immutable snapshot olarak ödünç alır; native key ve optional node linkage
+metadata'sını kullanır. Runtime class veya DOM kaydetmez.
 
 ## Koordinat, zaman ve koruma kuralları
 

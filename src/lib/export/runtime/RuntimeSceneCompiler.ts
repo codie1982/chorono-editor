@@ -1,5 +1,6 @@
 import type { ChronoScene, Layer, StateMachineDefinition, Timeline } from '../../types'
 import type { RuntimeAnimation } from '../../types/runtime'
+import { compositionForOutput } from '../../paint/paintSource'
 
 export interface RuntimeSceneCompilerOptions {
   /** Audio is delivered by the separate mixer/export path unless explicitly retained. */
@@ -14,6 +15,8 @@ export interface RuntimeSceneCompilerOptions {
  * Visual `hidden` state is intentionally retained because renderers use it to
  * decide whether a layer paints. Physics recipes, ownership records, guides,
  * asset collections and authoring provenance are source-only and are omitted.
+ * Composition output honors backgroundInExport through the shared paint
+ * projection, while the editor's original composition remains unchanged.
  * Returned records reuse immutable nested source values; the source is never
  * mutated. Audio is excluded by default because runtime JSON and mixed audio
  * are separate Chorono deliverables.
@@ -30,7 +33,7 @@ export class RuntimeSceneCompiler {
     return {
       formatVersion: scene.formatVersion,
       ...(scene.mode ? { mode: scene.mode } : {}),
-      composition: scene.composition,
+      composition: compositionForOutput(scene.composition),
       assets: options.includeAudio ? scene.assets : scene.assets.filter(asset => asset.type !== 'audio'),
       layers,
       timelines: scene.timelines.map(timeline => stripExcludedLayerTracks(timeline, excludedLayerIds)),

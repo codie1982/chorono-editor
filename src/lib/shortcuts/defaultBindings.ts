@@ -1,6 +1,8 @@
 import type { ShortcutDefinition } from './ShortcutDefinition'
+import { model3dShortcutDefinitions } from '../model3d/inspection/viewShortcuts'
 
 export const defaultBindings: ShortcutDefinition[] = [
+  ...model3dShortcutDefinitions,
   // ── Global ──────────────────────────────────────────────────────────────
   { id: 'global.undo',   label: 'Undo',   contexts: ['global'], binding: { type: 'keyboard', key: 'z', meta: true } },
   { id: 'global.redo',   label: 'Redo',   contexts: ['global'], binding: { type: 'keyboard', key: 'z', meta: true, shift: true } },
@@ -37,6 +39,7 @@ export const defaultBindings: ShortcutDefinition[] = [
 
   // ── Canvas — selection ───────────────────────────────────────────────────
   { id: 'canvas.select.solo', label: 'Solo Selection', contexts: ['canvas', 'layerPanel'], binding: { type: 'keyboard', key: 's' }, description: 'Solo selected objects or complete groups; press again on the same selection to exit Solo' },
+  { id: 'canvas.select.clear', label: 'Clear Layer Selection', contexts: ['canvas'], binding: { type: 'keyboard', key: 'escape' }, description: 'Clear layer selection after active drawing/drag tools have cancelled' },
   { id: 'canvas.select.duplicate',  label: 'Duplicate Layer',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true } },
   { id: 'canvas.select.cloneQuick', label: 'Clone Quick',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true, alt: true }, description: 'Clone with animation tracks copied' },
   { id: 'canvas.select.copy',       label: 'Copy Keyframes',     contexts: ['canvas', 'timeline'], binding: { type: 'keyboard', key: 'c', meta: true } },

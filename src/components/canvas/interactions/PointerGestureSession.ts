@@ -94,7 +94,7 @@ export class PointerGestureSession {
     target.addEventListener('pointerup', this.onUp, true)
     target.addEventListener('pointercancel', this.onCancel, true)
     target.addEventListener('blur', this.onBlur)
-    target.addEventListener('keydown', this.onKey)
+    target.addEventListener('keydown', this.onKey, true)
     this.capture?.addEventListener('lostpointercapture', this.onLostCapture)
     try {
       if (this.pointerId !== undefined) this.capture?.setPointerCapture?.(this.pointerId)
@@ -132,7 +132,7 @@ export class PointerGestureSession {
     target.removeEventListener('pointerup', this.onUp, true)
     target.removeEventListener('pointercancel', this.onCancel, true)
     target.removeEventListener('blur', this.onBlur)
-    target.removeEventListener('keydown', this.onKey)
+    target.removeEventListener('keydown', this.onKey, true)
     this.capture?.removeEventListener('lostpointercapture', this.onLostCapture)
     try { if (this.pointerId !== undefined) this.capture?.releasePointerCapture?.(this.pointerId) }
     catch { this.trace?.record('native-release-failed', { reason: 'capture-unavailable' }) }
@@ -177,6 +177,7 @@ export class PointerGestureSession {
   }
   private readonly onBlur = () => { this.cancel('blur') }
   private readonly onKey = (event: KeyboardEvent) => {
+    // Active gestures cancel before document-level selection shortcuts run.
     if (event.key === 'Escape' && !this.disposed && !this.terminating) {
       event.preventDefault(); this.cancel('escape')
     }

@@ -9,6 +9,10 @@ import {
 import { prepareSetKey } from '../timeline/authoring/setKey'
 import { makeKeyframeBatchCmd, type KeyframeBatchOptions } from '../timeline/authoring/keyframeBatch'
 import { readPropertyPath } from '../scene/properties/readPropertyPath'
+import { assertTimelineEditTarget } from '../timeline/authoring/timelinePropertyScope'
+import type { TimelineAuthoringContext } from '../timeline/authoring/TimelineAuthoringContext'
+import { LayerIndex } from '../scene/LayerIndex'
+import { layerRegistry } from '../registry'
 
 export interface EditorCommand {
   /** Human-readable label shown in undo history (e.g. "Move Keyframe") */
@@ -21,37 +25,43 @@ export interface EditorCommand {
 
 // ── Add keyframe ──────────────────────────────────────────────────────────────
 
+/** Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data. */
 export function makeAddKfCmd(
   timelineId: string,
   target: string,
   kf: Keyframe,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   let before: ChronoScene | null = null
-  return { label: 'Add Keyframe', execute: scene => { before = scene; return upsertKeyframe(scene, timelineId, target, kf) },
+  return { label: 'Add Keyframe', execute: scene => { before = scene; return upsertKeyframe(scene, timelineId, target, kf, { context }) },
     undo: scene => before ? { ...scene, timelines: scene.timelines.map(timeline => timeline.id === timelineId
       ? before!.timelines.find(item => item.id === timelineId) ?? timeline : timeline) } : scene }
 }
 
 // ── Delete keyframe ───────────────────────────────────────────────────────────
 
+/** Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data. */
 export function makeDeleteKfCmd(
   timelineId: string,
   target: string,
   kf: Keyframe,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
-  return { ...makeBulkDeleteKfCmd([{ timelineId, target, kf }]), label: 'Delete Keyframe' }
+  return { ...makeBulkDeleteKfCmd([{ timelineId, target, kf }], context), label: 'Delete Keyframe' }
 }
 
 // ── Move keyframe ─────────────────────────────────────────────────────────────
 
+/** Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data. */
 export function makeMoveKfCmd(
   timelineId: string,
   target: string,
   kfId: string,
   fromMs: number,
   toMs: number,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
-  return makeKeyframeBatchCmd('Move Keyframe', { moves: [{ timelineId, target, kfId, fromMs, toMs }] })
+  return makeKeyframeBatchCmd('Move Keyframe', { moves: [{ timelineId, target, kfId, fromMs, toMs }] }, { context })
 }
 
 // ── Bulk move keyframes ───────────────────────────────────────────────────────
@@ -82,9 +92,12 @@ export interface KfDeletion {
 /** Delete by stable identity, never by inferred time. Grouped timeline/target
  * lookups filter each affected track once: O(items + scene tracks + affected
  * keys), rather than cloning the scene for every deletion. Unaffected tracks
- * retain references; empty tracks keep controllers/modifiers/settings.
- * Snapshot restoration preserves legacy coincident keys and all metadata. */
-export function makeBulkDeleteKfCmd(items: KfDeletion[]): EditorCommand {
+ * retain references; empty tracks keep controllers/modifiers/settings. Any
+ * isolated target rejects the whole forward batch; undo restores source data.
+ * Snapshot restoration preserves legacy coincident keys and all metadata.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
+export function makeBulkDeleteKfCmd(items: KfDeletion[], context?: TimelineAuthoringContext): EditorCommand {
   let before = new Map<string, Track[]>()
   const groups = new Map<string, Map<string, Set<string>>>()
   for (const item of items) {
@@ -97,6 +110,8 @@ export function makeBulkDeleteKfCmd(items: KfDeletion[]): EditorCommand {
   return {
     label: `Delete ${items.length} Keyframes`,
     execute: (scene) => {
+      const layers = new LayerIndex(scene.layers)
+      items.forEach(item => assertTimelineEditTarget(scene, item.timelineId, item.target, context, layers))
       before = new Map(scene.timelines.filter(timeline => groups.has(timeline.id)).map(timeline => [timeline.id, timeline.tracks]))
       return { ...scene, timelines: scene.timelines.map(timeline => {
         const targets = groups.get(timeline.id)
@@ -142,16 +157,19 @@ const DEFAULT_SNAPSHOT_PROPS = [
 
 /** Compatibility snapshot of explicitly supplied authored inputs, used while
  * committing inspector/canvas edits. Set Key without a supplied edit samples
- * interpolation through prepareSetKey instead. Missing payloads stay absent. */
+ * interpolation through prepareSetKey instead. Missing payloads stay absent.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeKeyframeLayerSnapshotCmd(timelineId: string, layer: Layer, timeMs: number,
-  properties: readonly string[] = DEFAULT_SNAPSHOT_PROPS): EditorCommand {
+  properties: readonly string[] = DEFAULT_SNAPSHOT_PROPS, context?: TimelineAuthoringContext): EditorCommand {
   let plan: ReturnType<typeof prepareSetKey> | null = null, baseline: ChronoScene | null = null
   return { label: `Keyframe ${layer.name}`, execute(scene) {
     if (baseline !== scene) {
       const selectedTargets = new Set(properties.map(path => `layers.${layer.id}.${path}`))
       const authoredValues = new Map<string, AnimatableValue>()
-      for (const path of properties) { const value = readPropertyPath(layer, path); if (value !== undefined) authoredValues.set(`layers.${layer.id}.${path}`, value as AnimatableValue) }
-      plan = prepareSetKey(scene, { timelineId, layerIds: [layer.id], timeMs, keyset: 'selected', selectedTargets, authoredValues }); baseline = scene
+      const definition = context?.kind === 'content' ? layerRegistry.findForLayer(layer) : undefined
+      for (const path of properties) { const value = definition?.readContentTimelineValue?.(layer, path) ?? readPropertyPath(layer, path); if (value !== undefined) authoredValues.set(`layers.${layer.id}.${path}`, value as AnimatableValue) }
+      plan = prepareSetKey(scene, { timelineId, layerIds: [layer.id], timeMs, keyset: 'selected', selectedTargets, authoredValues, context }); baseline = scene
     }
     return plan?.command?.execute(scene) ?? scene
   }, undo: scene => plan?.command?.undo(scene) ?? scene }
@@ -159,16 +177,21 @@ export function makeKeyframeLayerSnapshotCmd(timelineId: string, layer: Layer, t
 
 // ── Update value (keyframe inspector edit) ────────────────────────────────────
 
+/** Edit one scope-owned channel value; foreign targets reject before mutation.
+ * Undo uses the original source value, including for older saved history.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeUpdateKfValueCmd(
   timelineId: string,
   target: string,
   kfId: string,
   fromValue: AnimatableValue,
   toValue: AnimatableValue,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   return {
     label: 'Edit Keyframe Value',
-    execute: (scene) => updateKfValue(scene, timelineId, target, kfId, toValue),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, target, context); return updateKfValue(scene, timelineId, target, kfId, toValue) },
     undo:    (scene) => updateKfValue(scene, timelineId, target, kfId, fromValue),
   }
 }
@@ -247,12 +270,16 @@ export function makeAlignToFrameCmd(
 // in value space). Useful for holding a value across a span without
 // converting both endpoints to hold easing.
 
+/** Flatten a scope-owned numeric segment; execution honors the owning layer's scope.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeFlattenSegmentCmd(
   scene:       ChronoScene,
   timelineId:  string,
   target:      string,
   kfAId:       string,
   kfBId:       string,
+  context?: TimelineAuthoringContext,
 ): EditorCommand | null {
   const tl = scene.timelines.find((t) => t.id === timelineId)
   const tr = tl?.tracks.find((t) => t.target === target)
@@ -264,7 +291,7 @@ export function makeFlattenSegmentCmd(
   const toValue   = kfA.value
   return {
     label: 'Flatten Segment',
-    execute: (s) => updateKfValue(s, timelineId, target, kfBId, toValue),
+    execute: (s) => { assertTimelineEditTarget(s, timelineId, target, context); return updateKfValue(s, timelineId, target, kfBId, toValue) },
     undo:    (s) => updateKfValue(s, timelineId, target, kfBId, fromValue),
   }
 }
@@ -277,9 +304,13 @@ export function makeFlattenSegmentCmd(
 
 export interface KfValueRef { kfId: string; target: string; timelineId: string }
 
+/** Reverse scope-owned numeric values together; isolated targets reject atomically.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeReverseValuesCmd(
   scene: ChronoScene,
   items: KfValueRef[],
+  context?: TimelineAuthoringContext,
 ): EditorCommand | null {
   if (items.length < 2) return null
   type Snap = { timelineId: string; target: string; kfId: string; priorVal: number }
@@ -298,6 +329,8 @@ export function makeReverseValuesCmd(
   return {
     label: 'Reverse Values',
     execute(s) {
+      const layers = new LayerIndex(s.layers)
+      snaps.forEach(item => assertTimelineEditTarget(s, item.timelineId, item.target, context, layers))
       let next = s
       for (const sn of snaps) next = updateKfValue(next, sn.timelineId, sn.target, sn.kfId, mirroredFor(sn.priorVal))
       return next
@@ -312,17 +345,23 @@ export function makeReverseValuesCmd(
 
 // ── Update easing ─────────────────────────────────────────────────────────────
 
+/** Change outer-channel easing while preserving the complete original key on
+ * undo. Internal leaves require an explicit owning content host; scene defaults stay protected.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeUpdateEasingCmd(
   timelineId: string,
   target: string,
   kfId: string,
   fromEasing: EasingDefinition,
   toEasing: EasingDefinition,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   let original: Keyframe | undefined
   return {
     label: 'Change Easing',
     execute: (scene) => {
+      assertTimelineEditTarget(scene, timelineId, target, context)
       original ??= scene.timelines.find(timeline => timeline.id === timelineId)?.tracks
         .find(track => track.target === target)?.keyframes.find(key => key.id === kfId)
       return updateKfEasing(scene, timelineId, target, kfId, toEasing)

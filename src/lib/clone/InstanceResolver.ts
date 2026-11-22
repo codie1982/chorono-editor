@@ -22,11 +22,12 @@
 //   effectsChain, startMs, endMs, hidden, locked, solo, pinned,
 //   frozen, colorLabel, tappable, draggable, dragConfig, paramBindings
 
+import { applyModelInstanceInputs } from '../model3d/content/modelInstanceInputs'
 import type { Layer } from '../types'
 import type { LayerLookup } from '@/lib/scene/LayerIndex'
 
 /** Visual fields cherry-picked from the source. */
-const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
+export const INSTANCE_SOURCE_FIELDS: readonly (keyof Layer)[] = [
   'type',
   'shape',
   'shapeKind',
@@ -41,6 +42,7 @@ const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
   'image',
   'video',
   'audio',
+  'model3d',
   'frameSequence',
   'pathStroke',
   'motionPath',
@@ -84,7 +86,7 @@ export function resolveInstanceLayer(
   const composed: Layer = {
     ...layer, // base = instance (transform / opacity / id / name / parentId / effects / etc.)
   }
-  for (const key of SOURCE_VISUAL_KEYS) {
+  for (const key of INSTANCE_SOURCE_FIELDS) {
     const value = resolvedSource[key]
     if (value !== undefined) {
       // The cast is safe: SOURCE_VISUAL_KEYS lists Layer-typed keys.
@@ -96,6 +98,7 @@ export function resolveInstanceLayer(
   // forbids.)
   if (!composed.type) composed.type = resolvedSource.type
 
+  if (composed.type === 'model3d') composed.model3d = applyModelInstanceInputs(composed.model3d, layer.model3dInputValues)
   return composed
 }
 

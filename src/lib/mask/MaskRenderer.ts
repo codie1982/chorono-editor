@@ -49,9 +49,9 @@ export interface MaskRenderArgs {
 /**
  * Composites masks with temporary, exclusively borrowed Canvas2D surfaces.
  * The pool owns backing-store residency; this renderer retains no scene pixels
- * or versioned mask results. A mask list uses one content and one sequential
- * silhouette lease, independent of its length. Nested renders borrow distinct
- * surfaces. All leases return on success and on callback/compositing failures.
+ * or versioned mask results. A single mask uses two leases. Multiple masks
+ * add one accumulated matte lease, independent of their count.
+ * Nested renders borrow distinct surfaces. All leases return on failure.
  */
 export class MaskRenderer {
   /** Shares the application's scratch budget unless a caller injects an isolated pool. */
@@ -74,41 +74,83 @@ export class MaskRenderer {
       const contentCtx = content.context
       args.renderHost(contentCtx)
 
-      for (const mask of masks) {
+      const withSilhouette = (
+        mask: MaskDefinition,
+        paint: (canvas: HTMLCanvasElement, x: number, y: number, full: boolean) => void,
+      ): boolean => {
         const maskLayer = args.getLayer(mask.maskLayerId)
-        if (!maskLayer) continue
+        if (!maskLayer) return false
 
         const full = args.compositionSize
         const silhouette = this.surfaces.acquire(full?.width ?? args.width, full?.height ?? args.height)
         try {
           const maskCtx = silhouette.context
-          if (mask.feather && mask.feather > 0) {
-            maskCtx.filter = `blur(${mask.feather}px)`
-          }
           const { x, y } = args.origin ?? { x: 0, y: 0 }
-          if (!full && (x || y)) maskCtx.translate(-x, -y)
-          args.renderMask(maskLayer, maskCtx)
-          if (!full && (x || y)) maskCtx.translate(x, y)
-          maskCtx.filter = 'none'
+          maskCtx.save()
+          try {
+            if (mask.feather && mask.feather > 0) maskCtx.filter = `blur(${mask.feather}px)`
+            if (!full && (x || y)) maskCtx.translate(-x, -y)
+            args.renderMask(maskLayer, maskCtx)
+          } finally {
+            // A mask renderer may leave an active clip or transform. Restore it
+            // before filling the inverse alpha across the entire domain.
+            maskCtx.restore()
+          }
 
           if (mask.inverted) {
             maskCtx.save()
-            maskCtx.globalCompositeOperation = 'difference'
+            // XOR with opaque white computes inverse *alpha*. Difference only
+            // changes RGB and makes a transparent silhouette fully opaque.
+            maskCtx.globalCompositeOperation = 'xor'
             maskCtx.fillStyle = '#FFFFFF'
             maskCtx.fillRect(0, 0, silhouette.canvas.width, silhouette.canvas.height)
             maskCtx.restore()
           }
 
-          contentCtx.save()
-          contentCtx.globalAlpha = mask.opacity ?? 1
-          contentCtx.globalCompositeOperation =
-              mask.mode === 'subtract' ? 'destination-out'
-            : 'destination-in'
-          if (full) contentCtx.drawImage(silhouette.canvas,x,y,args.width,args.height,0,0,args.width,args.height)
-          else contentCtx.drawImage(silhouette.canvas, 0, 0)
-          contentCtx.restore()
+          paint(silhouette.canvas, x, y, !!full)
         } finally {
           silhouette.release()
+        }
+        return true
+      }
+
+      const composite = (target: CanvasRenderingContext2D, mask: MaskDefinition,
+        operation: GlobalCompositeOperation, canvas: HTMLCanvasElement, x: number, y: number, full: boolean) => {
+        target.save()
+        target.globalAlpha = Math.max(0, Math.min(1, mask.opacity ?? 1))
+        target.globalCompositeOperation = operation
+        if (full) target.drawImage(canvas, x, y, args.width, args.height, 0, 0, args.width, args.height)
+        else target.drawImage(canvas, 0, 0)
+        target.restore()
+      }
+
+      if (masks.length === 1) {
+        const mask = masks[0]
+        withSilhouette(mask, (canvas, x, y, full) => composite(contentCtx, mask,
+          mask.mode === 'subtract' ? 'destination-out' : 'destination-in', canvas, x, y, full))
+      } else {
+        const matte = this.surfaces.acquire(args.width, args.height)
+        try {
+          const matteCtx = matte.context
+          let hasMatte = false
+          for (const mask of masks) {
+            const applied = withSilhouette(mask, (canvas, x, y, full) => {
+              if (!hasMatte && mask.mode === 'subtract') {
+                matteCtx.fillStyle = '#FFFFFF'
+                matteCtx.fillRect(0, 0, args.width, args.height)
+              }
+              composite(matteCtx, mask, mask.mode === 'subtract' ? 'destination-out'
+                : mask.mode === 'intersect' && hasMatte ? 'destination-in' : 'source-over',
+              canvas, x, y, full)
+            })
+            hasMatte ||= applied
+          }
+          if (hasMatte) {
+            contentCtx.globalCompositeOperation = 'destination-in'
+            contentCtx.drawImage(matte.canvas, 0, 0)
+          }
+        } finally {
+          matte.release()
         }
       }
 

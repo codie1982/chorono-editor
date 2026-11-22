@@ -44,9 +44,13 @@ function getMeasureContext(): CanvasRenderingContext2D | null {
 function estimate(style: TextStyle): TextMetrics2D {
   const display = style.uppercase ? style.value.toUpperCase() : style.value
   const lines = display.split('\n')
-  const longest = lines.reduce((m, l) => Math.max(m, l.length), 0)
+  const longest = lines.reduce((m, l) => Math.max(m, Array.from(l).length), 0)
   const lineHeight = style.lineHeight ?? 1.2
   const letter = style.letterSpacing ?? 0
+  if (style.direction === 'vertical') return {
+    width: Math.max(1, Math.ceil(lines.length * style.fontSize * lineHeight)),
+    height: Math.max(1, Math.ceil(longest * style.fontSize + Math.max(0, longest - 1) * letter)),
+  }
   return {
     width:  Math.max(1, Math.ceil(longest * style.fontSize * 0.55 + Math.max(0, longest - 1) * letter)),
     height: Math.max(1, Math.ceil(lines.length * style.fontSize * lineHeight)),
@@ -79,6 +83,13 @@ export function measureTextLayout(style: TextStyle, assets?:readonly Asset[]): T
 
   const display = uppercase ? value.toUpperCase() : value
   const lines = display.split('\n')
+  if (style.direction === 'vertical') {
+    const longest = lines.reduce((m, line) => Math.max(m, Array.from(line).length), 0)
+    return {
+      width: Math.max(1, Math.ceil(lines.length * fontSize * lineHeight)),
+      height: Math.max(1, Math.ceil(longest * fontSize + Math.max(0, longest - 1) * letterSpacing)),
+    }
+  }
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${resolveTextFontFamily(fontFamily,assets)}`
 
   let maxWidth = 0

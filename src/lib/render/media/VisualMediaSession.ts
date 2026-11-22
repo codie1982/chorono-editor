@@ -1,3 +1,4 @@
+import { modelAssetService, type ModelLease } from '../../model3d/resources/ModelAssetService'
 import { visualAssetService, type VisualAssetService, type VisualLease } from '../../asset/visual'
 import type { AssetElementMap } from '../../asset/visual/AssetElementMap'
 import { VisualDemandResolver } from './VisualDemandResolver'
@@ -12,7 +13,7 @@ import {
   type MeshDeformationLease,
 } from '../../asset/meshDeformation'
 
-interface Consumer { demand: VisualDemand; controller: AbortController; state: 'idle' | 'loading' | 'ready' | 'error'; lease?: VisualLease|FontLease|MeshDeformationLease; error?: string; detach?: () => void }
+interface Consumer { demand: VisualDemand; controller: AbortController; state: 'idle' | 'loading' | 'ready' | 'error'; lease?: VisualLease|FontLease|MeshDeformationLease|ModelLease; error?: string; detach?: () => void }
 let nextScope = 0
 
 /**
@@ -95,6 +96,7 @@ export class VisualMediaSession implements MediaFrameBridge {
     const records: MediaElementRecord[] = []
     const fonts:FontBindingRecord[]=[]
     const deformations: MeshDeformationBindingRecord[] = []
+    const models = new Map<string, () => import('../../model3d/types').Model3DResource | undefined>()
     this.consumers.forEach((consumer, key) => {
       if (consumer.demand.asset.type === 'meshDeformation') {
         const lease = consumer.lease as MeshDeformationLease | undefined
@@ -117,6 +119,7 @@ export class VisualMediaSession implements MediaFrameBridge {
       }
       if (!consumer.lease) return
       const { asset, layerId } = consumer.demand,value=consumer.lease.value
+      if ('draw' in value) { models.set(asset.id, () => this.consumers.get(key) === consumer && consumer.lease?.value === value ? value : undefined); return }
       if(!('element'in value))return
       const element=value.element
       records.push({ assetId: asset.id, layerId, element, live: () => this.consumers.get(key) === consumer && consumer.lease?.value===value })
@@ -126,6 +129,7 @@ export class VisualMediaSession implements MediaFrameBridge {
       frameDemand ? this : undefined,
       new FontBindingsSnapshot(fonts),
       new MeshDeformationBindingsSnapshot(deformations),
+      assetId => models.get(assetId)?.(),
     )
   }
   /** Readiness/errors only; no acquire or LRU refresh. IDs refer to source assets. */
@@ -159,7 +163,9 @@ export class VisualMediaSession implements MediaFrameBridge {
       if (this.inFlight >= 2) break
       this.inFlight++; consumer.state = 'loading'
       const { asset, layerId, key } = consumer.demand
-      const preparation:Promise<VisualLease|FontLease|MeshDeformationLease>=asset.type==='font'
+      const preparation:Promise<VisualLease|FontLease|ModelLease|MeshDeformationLease>=asset.type==='model3d'
+        ?modelAssetService.acquire(asset,{signal:consumer.controller.signal})
+        :asset.type==='font'
         ?this.fontService.acquire(asset,{signal:consumer.controller.signal})
         :asset.type === 'meshDeformation'
           ?this.deformationService.acquire(asset, { signal: consumer.controller.signal })

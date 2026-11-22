@@ -29,6 +29,9 @@ export interface ResizeInput {
   snapPixel: boolean
   /** Smallest allowed dimension. */
   minSize: number
+  /** Optional per-dimension source capability, in local px. Omitted preserves
+   * legacy behavior. Aspect-lock reduces both dimensions by the same factor. */
+  maxSize?: number
   /** Composition bounds the layer is clamped within. */
   boundsWidth: number
   boundsHeight: number
@@ -43,6 +46,9 @@ export interface ResizeResult {
   anchorY: number
 }
 
+/** Calculate a baseline-relative resize without mutation. Optional maxSize must
+ * be finite and at least minSize; invalid capabilities throw before producing
+ * geometry. Legacy composition clipping and anchor semantics remain unchanged. */
 export function calculateResize(input: ResizeInput): ResizeResult {
   const {
     x: ox, y: oy, width: ow, height: oh,
@@ -76,9 +82,20 @@ export function calculateResize(input: ResizeInput): ResizeResult {
   nw = Math.max(minSize, nw)
   nh = Math.max(minSize, nh)
 
-  // Snap to Pixel during resize → integer position + integer dim. Grid/Object
-  // snap is intentionally NOT applied to resize (a moving edge has no canonical
-  // rect to snap against and per-axis grid-snap produces jarring jumps).
+  if (input.maxSize !== undefined) {
+    const max = input.maxSize
+    if (!Number.isFinite(max) || max < minSize) throw new RangeError('Maximum resize size must be finite and at least the minimum size.')
+    if (proportional) {
+      const factor = Math.min(1, max / nw, max / nh)
+      nw *= factor; nh *= factor
+    }
+    nw = Math.min(max, Math.max(minSize, nw)); nh = Math.min(max, Math.max(minSize, nh))
+    if (h.includes('w')) nx = ox + ow - nw
+    if (h.includes('n')) ny = oy + oh - nh
+  }
+
+  // Legacy local-pixel rounding. World grid/object acquisition belongs to the
+  // handle adapter, which disables rounding after an exact geometric hit.
   if (snapPixel) {
     nx = Math.round(nx); ny = Math.round(ny)
     if (proportional && ow > 0 && oh > 0) {
@@ -86,7 +103,14 @@ export function calculateResize(input: ResizeInput): ResizeResult {
       // would break the requested aspect ratio on every pointer sample.
       const factor = Math.max(minSize / ow, minSize / oh, Math.round(nw) / ow)
       nw = ow * factor; nh = oh * factor
-    } else { nw = Math.round(nw); nh = Math.round(nh) }
+      if (input.maxSize !== undefined) {
+        const bounded = Math.min(1, input.maxSize / nw, input.maxSize / nh)
+        nw *= bounded; nh *= bounded
+      }
+    } else {
+      nw = Math.round(nw); nh = Math.round(nh)
+      if (input.maxSize !== undefined) { nw = Math.min(nw, input.maxSize); nh = Math.min(nh, input.maxSize) }
+    }
   }
 
   nx = clamp(nx, 0, Math.max(0, cw - nw))

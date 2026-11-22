@@ -1,3 +1,4 @@
+import { splitBezier } from '../geometry/bezier/curves'
 // ── Bezier Path Editing Operations ────────────────────────────────────────────
 // Pure functions — every op returns a new path; nothing is mutated.
 
@@ -267,25 +268,6 @@ export function hitTestSegment(
   return best
 }
 
-/** De Casteljau split: returns left and right cubics that, composed, equal the
- *  original between t=0..1. Used by insertAnchorOnSegment to add a midpoint
- *  without changing the curve's visual shape. */
-function deCasteljauSplit(
-  p0: XY, p1: XY, p2: XY, p3: XY, t: number,
-): { left: [XY, XY, XY, XY]; right: [XY, XY, XY, XY] } {
-  const lerp = (a: XY, b: XY): XY => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
-  const q0 = lerp(p0, p1)
-  const q1 = lerp(p1, p2)
-  const q2 = lerp(p2, p3)
-  const r0 = lerp(q0, q1)
-  const r1 = lerp(q1, q2)
-  const s0 = lerp(r0, r1) // split point — on the curve
-  return {
-    left:  [p0, q0, r0, s0],
-    right: [s0, r1, q2, p3],
-  }
-}
-
 /** Insert a new anchor on the given segment at parameter t, splitting the
  *  cubic so the path's visual shape stays identical. The two adjacent
  *  anchors' handles are updated to match the split.
@@ -302,7 +284,7 @@ export function insertAnchorOnSegment(
   if (!cp) return path
   const { p0, p1, p2, p3 } = cp
 
-  const { left, right } = deCasteljauSplit(p0, p1, p2, p3, t)
+  const [left, right] = splitBezier([p0, p1, p2, p3], t)
 
   const aIdx = segmentIndex
   const bIdx = (segmentIndex + 1) % path.anchors.length

@@ -1,0 +1,6 @@
+export { emptySplineSelection, pruneSplineSelection, selectSplineIds } from './state'
+export type { SplineEditMode, SplinePickMode, SplineSelection } from './state'
+export { pickSplineElement, subShapeData, splineEdgePath } from './geometry'
+export type { SplinePick } from './geometry'
+export { splineIdsInRegion } from './region'
+export { splineSelectionPoints, splineSelectionPivot, transformSplineSelection } from './transformSelection'

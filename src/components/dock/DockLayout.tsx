@@ -1,6 +1,6 @@
 'use client'
 import { useRef, useCallback, useState } from 'react'
-import type { DockNode, DockSplit } from './types'
+import type { DockNode, DockSplit, DockTheme } from './types'
 import type { PanelRegistry } from './registry'
 import DockLeafComponent from './DockLeaf'
 
@@ -13,6 +13,7 @@ interface Props {
   onCollapse?: (leafId: string, collapsed: boolean) => void
   /** Forwarded by parent split so leaves know which side they're on. */
   collapseSide?: 'h-right' | 'h-left' | 'v-bottom' | 'v-top'
+  theme?: DockTheme
 }
 
 /**
@@ -21,7 +22,7 @@ interface Props {
  *  - Leaf nodes  → DockLeafComponent (tabs + body + drop overlay)
  */
 export default function DockLayout({
-  node, registry, onTabSelect, onClosePanel, onResize, onCollapse, collapseSide,
+  node, registry, onTabSelect, onClosePanel, onResize, onCollapse, collapseSide, theme = 'default',
 }: Props) {
   if (node.kind === 'leaf') {
     return (
@@ -34,6 +35,7 @@ export default function DockLayout({
           ? (next) => onCollapse(node.id, next)
           : undefined}
         collapseSide={collapseSide}
+        theme={theme}
       />
     )
   }
@@ -45,6 +47,7 @@ export default function DockLayout({
       onClosePanel={onClosePanel}
       onResize={onResize}
       onCollapse={onCollapse}
+      theme={theme}
     />
   )
 }
@@ -56,11 +59,12 @@ interface SplitProps {
   onClosePanel?: (panelId: string) => void
   onResize:    (splitId: string, ratio: number) => void
   onCollapse?: (leafId: string, collapsed: boolean) => void
+  theme: DockTheme
 }
 
 const COLLAPSED_PX = 24
 
-function DockSplitComponent({ split, registry, onTabSelect, onClosePanel, onResize, onCollapse }: SplitProps) {
+function DockSplitComponent({ split, registry, onTabSelect, onClosePanel, onResize, onCollapse, theme }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   /** Suspends the size CSS transition while the user is actively dragging
    *  the splitter so the panel tracks the cursor with zero lag. */
@@ -136,6 +140,7 @@ function DockSplitComponent({ split, registry, onTabSelect, onClosePanel, onResi
           onClosePanel={onClosePanel}
           onResize={onResize}
           onCollapse={onCollapse}
+          theme={theme}
           collapseSide={aSide}
         />
       </div>
@@ -143,11 +148,21 @@ function DockSplitComponent({ split, registry, onTabSelect, onClosePanel, onResi
       {showSplitter && (
         <div
           onPointerDown={beginSplitterDrag}
+          role="separator" aria-label={`${theme === 'model3d' ? 'Resize 3D panels' : 'Resize panels'} ${isH ? 'horizontally' : 'vertically'}`}
+          aria-orientation={isH ? 'vertical' : 'horizontal'} aria-valuenow={Math.round(split.ratio * 100)}
+          aria-valuemin={10} aria-valuemax={90} tabIndex={0}
+          onKeyDown={event => {
+            const step = event.shiftKey ? .1 : .05
+            const delta = isH ? (event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0)
+              : (event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0)
+            if (delta) { event.preventDefault(); onResize(split.id, split.ratio + delta) }
+          }}
           className={`shrink-0 z-20 transition-colors duration-150
             ${isH
-              ? 'w-1 cursor-col-resize hover:bg-blue-500/60'
-              : 'h-1 cursor-row-resize hover:bg-blue-500/60'}
-            ${isDragging ? 'bg-blue-500/80' : 'bg-gray-800'}`}
+              ? 'w-1 cursor-col-resize'
+              : 'h-1 cursor-row-resize'}
+            ${theme === 'model3d' ? 'hover:bg-cyan-700 focus-visible:bg-cyan-700' : 'hover:bg-blue-500/60 focus-visible:bg-blue-500/60'}
+            ${isDragging ? theme === 'model3d' ? 'bg-cyan-700' : 'bg-blue-500/80' : theme === 'model3d' ? 'bg-[#263244]' : 'bg-gray-800'}`}
         />
       )}
 
@@ -164,6 +179,7 @@ function DockSplitComponent({ split, registry, onTabSelect, onClosePanel, onResi
           onClosePanel={onClosePanel}
           onResize={onResize}
           onCollapse={onCollapse}
+          theme={theme}
           collapseSide={bSide}
         />
       </div>

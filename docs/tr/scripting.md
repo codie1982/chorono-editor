@@ -9,9 +9,9 @@ Claude ve Codex için MCP `run_script` kullanılır. Kod izole QuickJS içinde e
 Önce `list_sessions`, `get_capabilities`, `chorono://scripting` ve `get_scene` okuyun. Birden fazla editör varsa `sessionId` seçin. Bağlı sürümün nesne türleri, özellik şemaları, particle presetleri ve sınırları capabilities içinde bulunur.
 
 1. Sahneyi ve revision'ı okuyun; ilgisiz çalışmayı koruyun.
-2. `run_script({code,dryRun:true,expectedRevision,requestId})` çağırın.
+2. `get_scene` içindeki revision ve tek kullanımlık readToken ile `run_script({code,dryRun:true,expectedRevision,readToken,requestId})` çağırın.
 3. Dönen nesne/timeline özetini, logları ve `planId` değerini inceleyin.
-4. Aynı çalışan MCP sunucusunda `apply_script_plan({planId,expectedRevision,requestId})` ile planı uygulayın. Kodu tekrar çalıştırmayın; plan üretilmiş kimlikleri korur. Plan beş dakika sonra, sahne değiştiğinde veya sunucu yeniden başladığında geçersizleşir; ayrı kısa ömürlü stdio süreçleri plan paylaşmaz.
+4. Planın döndürdüğü **yeni** readToken ve revision ile aynı çalışan MCP sunucusunda `apply_script_plan({planId,expectedRevision,readToken,requestId})` çağırın. Kodu tekrar çalıştırmayın; plan üretilmiş kimlikleri korur. Plan beş dakika sonra, sahne değiştiğinde veya sunucu yeniden başladığında geçersizleşir; ayrı kısa ömürlü stdio süreçleri plan paylaşmaz.
 5. Gerçek `render_preview` görüntülerini inceleyin; doğrulayıp `save_project` ile kaydedin.
 
 Hata durumunda çalışma sahnesi uygulanmaz. Başarılı uygulama tek geri alma adımıdır. Import, oynatma, çalışma zamanı olayları, önizleme, kayıt ve export ayrı MCP araçlarıdır; script içinde tarayıcı/dosya API'si açmazlar.
@@ -31,6 +31,12 @@ scene.log(scene.snapshot().layers.length, scene.assets.length);
 ```
 
 `layer.patch(partial)` nesneleri özyinelemeli birleştirir, dizileri değiştirir; belirtilmeyen alt alanları korur. `layer.set(partial)` eski davranışını korur: `audio`, `style`, `transform` gibi iç içe bir nesne verildiğinde o nesnenin tamamını değiştirir. Okunan kopyayı değiştirmek sahneyi değiştirmez; düzenleme için handle/entity komutlarını kullanın. Katmanın kimliği patch ile değiştirilemez.
+
+`set`, `patch` ve konum/boyut/renk gibi statik kısa yollar artık ortak korumadan geçer. Katmanın veya atasının locked/frozen olması, değişen alanın herhangi bir timeline'da key/controller ile yönetilmesi ya da binding/wire/expression/path tarafından sürülmesi işlemi reddeder. Animasyonlu değeri `key` ile düzenleyin. Kilidi açmak için önce yalnızca `{locked:false}` / `{frozen:false}` yazın; kilit açmayı geometri değişikliğiyle birleştirmeyin. Mevcut formula/binding kaydını ham patch ile silip korumayı aşmak mümkün değildir.
+
+Değişen değerler tür, sonlu sayı, tanımlı aralık/seçenek ve geometri bütünlüğü açısından doğrulanır; değerler otomatik düzeltilmez. Dokunulmayan eski alanlar korunur. `set({transform:{x:10}})` eksik bir transform bırakacağı için reddedilir; `patch({transform:{x:10}})` diğer transform alanlarını korur. Alan animasyonluysa bu ikinci çağrı da reddedilir. Ayrıntılar ve sürüm uyumluluğu: [Script kaynak korumaları](script-source-guards.md).
+
+Script yalnızca 2D kaynağı düzenler. Mevcut `model3d` katmanının dış 2D kutusu yerleştirilebilir/key alabilir; iç `model3d` verisi, iç track'ler ve bunlara bağlı referanslar korunur. 3D içerik oluşturma, kopyalama, silme ve iç kamera/model düzenleme yerel MCP araçlarının ayrı kapsamıdır. Capabilities içindeki `scriptAuthoring` bu ayrımı bildirir.
 
 ## Kod ile birden fazla animasyon
 

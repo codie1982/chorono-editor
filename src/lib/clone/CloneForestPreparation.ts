@@ -36,7 +36,7 @@ export function prepareCloneOccurrences(scene: ChronoScene, sources: readonly La
     let layers = sources.map(source => {
       const resolved = resolveInstanceLayer(source, scene.layers)
       if (!resolved) throw new Error('The instance source is missing, cyclic or exceeds the supported chain depth.')
-      const cloneSource = options.mode === 'instance' ? source : { ...resolved, instanceOf: undefined }
+      const cloneSource = options.mode === 'instance' ? source : { ...resolved, instanceOf: undefined, ...(resolved.type === 'model3d' ? { model3dInputValues: undefined } : {}) }
       let item = cloneSingleLayer(cloneSource, { mode: options.mode ?? 'copy' })
       while (layerIds.has(item.clonedLayer.id)) item = cloneSingleLayer(cloneSource, { mode: options.mode ?? 'copy' })
       layerIds.add(item.clonedLayer.id); idMap[source.id] = item.clonedLayer.id

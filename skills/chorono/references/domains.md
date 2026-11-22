@@ -154,7 +154,9 @@ Create a layer with `scene.addSpline(kind,params,options)`, then use `layer.spli
 
 Append/contour creation returns `{subShapeIds,contourIds,pointIds,handleIds,segmentIds}`; `addPoint` returns a point id; `splitSegment` returns `{pointId,segmentIds}`. Reuse these returned ids. Split progress must be strictly between 0 and 1. Read the resulting geometry after topology edits instead of guessing new ids.
 
-Geometry edits preserve the layer's transform, parent, pivot and size. Handle movement follows the native point-type constraints. Locked points/handles and locked or frozen ancestor layers are respected. Instance geometry can be read, but edits require explicitly opening the source layer. Destructive edits remove tracks targeting deleted spline elements in the same undoable operation, preventing stale animation data from recreating deleted points.
+Geometry edits preserve the layer's transform, parent, pivot and size. Handle movement follows the native point-type constraints. Hidden, locked or frozen ancestor layers and point/handle locks are respected. Instance geometry can be read, but edits require explicitly opening the source layer. Unsafe edits to keyed/driven geometry or removal of referenced element IDs refuse atomically; animation tracks are never implicitly deleted. This intentionally replaces the old destructive track-pruning behavior.
+
+`spline.edit(operation)` shares native simple command policies for explicit Point/Edge/Object topology, append, Continue/Auto Close drawing, transforms, paint and Attach/Detach. It returns detached result IDs, not UI selection. Native worker solver plans use `prepare_spline_edit` → inspect → `apply_spline_edit` or `discard_spline_edit`; see [spline-editing.md](spline-editing.md). Those asynchronous plans are separate from the bounded, synchronous legacy modeling methods below.
 
 Modeling methods: `offsetContour(contourId,distance,direction)` and `outlineContour(contourId,distance,direction)` return a new sibling layer ID; use outward/inward for closed contours and left/right for open contours. `chamferCorners(contourId,pointIds,distance)` and `filletCorners(contourId,pointIds,radius)` replace one contour and refuse conflicting animation. Distances are positive layer-local pixels. Curves are sampled to 0.25 local pixels; curved fillets are tangent cubic approximations. Use the Spline Modeling dock tab for Preview/Apply/Cancel.
 
@@ -195,7 +197,7 @@ scene.useTimeline(timeline.id);
 
 const guide = scene.addSpline('line',{x1:-140,y1:0,x2:140,y2:0},{x:360,y:260,name:'Emission guide'});
 if (!guide) throw new Error('Line spline unavailable');
-guide.patch({style:{fill:{opacity:0},stroke:{color:'#526885',width:2}}});
+guide.patch({style:{fill:{type:'solid',color:'#526885',opacity:0},stroke:{color:'#526885',width:2}}});
 const segmentId = Object.keys(guide.spline.data.segments)[0];
 guide.spline.setQuadraticControl(segmentId,{x:0,y:-110});
 const inserted = guide.spline.splitSegment(segmentId,0.5);

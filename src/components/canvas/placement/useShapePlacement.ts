@@ -4,6 +4,7 @@ import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import type { Layer } from '@/lib/types'
 import { canPlaceShape } from '@/lib/editor/placement'
 import { ShapePlacementSession } from './ShapePlacementSession'
+import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
 
 export interface ShapePlacementOptions {
   template: Layer | null
@@ -14,6 +15,8 @@ export interface ShapePlacementOptions {
    * placement may rearm the same tool with a fresh factory template/ID. */
   onComplete: (id?: string) => void
   onWarning?: (message: string) => void
+  snapPoint?: (point: { x: number; y: number }) => { x: number; y: number }
+  resolveSnap?: (point: Vec2) => SnapResult
 }
 
 /**
@@ -35,6 +38,7 @@ export function useShapePlacement(options: ShapePlacementOptions) {
   latest.current = options
   const session = useRef<ShapePlacementSession | null>(null)
   const [draft, setDraft] = useState<Layer | null>(null)
+  const [snappedPoint, setSnappedPoint] = useState<Vec2 | undefined>()
   const documentSignal = options.editor.getDocumentSignal()
 
   const cancel = useCallback(() => {
@@ -71,8 +75,11 @@ export function useShapePlacement(options: ShapePlacementOptions) {
       const next = new ShapePlacementSession({
         getEditor: () => latest.current.editor, canvas, template: current.template, start: event, eventTarget: window,
         onDraft: setDraft,
-        onClose: id => { session.current = null; setDraft(null); latest.current.onComplete(id) },
+        onClose: id => { session.current = null; setDraft(null); setSnappedPoint(undefined); latest.current.onComplete(id) },
         onWarning: message => latest.current.onWarning?.(message),
+        snapPoint: point => latest.current.snapPoint?.(point) ?? point,
+        resolveSnap: point => latest.current.resolveSnap?.(point) ?? { snapped: false, point: latest.current.snapPoint?.(point) ?? point, delta: { x: 0, y: 0 }, guides: [] },
+        onSnapPoint: setSnappedPoint,
       })
       session.current = next
     } catch (error) {
@@ -84,5 +91,5 @@ export function useShapePlacement(options: ShapePlacementOptions) {
     return true
   }, [])
 
-  return { begin, draft, cancel }
+  return { begin, draft, cancel, snappedPoint }
 }

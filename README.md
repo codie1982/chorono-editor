@@ -9,6 +9,9 @@ Chorono is an open-source, local-first 2D animation and motion graphics editor. 
 - **Continue where you left off.** Save a portable editable project and reopen it for the next revision.
 
 The editor runs on your computer with Node.js 20+, npm, Git and a modern browser.
+The editing workspace requires at least **1280 × 720 CSS pixels** and a mouse or
+trackpad. Phones, smaller windows and touch-only tablets show a display-support
+screen. Exported players retain their responsive/mobile playback behavior.
 
 **v0.4.0:** editable spline Offset/Outline, Chamfer and Fillet; consolidated
 Snap controls, Agent handoff and restored 2D precision feedback.
@@ -160,7 +163,7 @@ At ~50k particles the CPU draw alone (49.5 ms) blows the 16.6 ms/60 FPS budget; 
 #### Smart Selection Engine
 - **Select Similar** — Match by scale, rotation, edge distance, type, opacity
 - **Select by Transform** — Rule-based selection (AND/OR/NOT logic)
-- **Canvas tools** — Box, Lasso, Circle, Paint selection modes
+- **Canvas regions** — Box (default), Lasso, Circle and Paint preferences; empty-space drags select with Select/Move/Rotate/Scale/Anchor, object drags move the object
 - **Inside vs Touching** — 3ds Max Window/Crossing containment toggle
 - **Non-intrusive** — Selection state lives in UI layer, doesn't mutate scene
 
@@ -422,7 +425,7 @@ Run `npm run mcp:build`, `npm run mcp:setup`, then `npm run dev:mcp` (or build a
 - **Multiple animations** — Explicit timelines, modifiers, controllers, preview isolation and runtime controls
 - **Persistence** — Portable scene JSON with embedded local media, runtime JSON, SVG and image sequence exports
 
-For code-driven scene design, scripts can read a complete detached `scene.snapshot()`, inspect `layer.data` / `layer.get(path)`, and preserve nested settings with `layer.patch(...)`. Script-selected timelines also govern clone/array animation copies. Existing state machines, parameters, bindings, triggers and wires can be edited without rebuilding the scene. Native audio clip helpers share the editor's trim/split/gain commands. Animated layer data is applied before rendering, including particles, repeaters, shape geometry, typography, effects and masks. See the [scripting guide](docs/en/scripting.md) ([Türkçe](docs/tr/scripting.md)) for actual APIs, typed values, limits and the dry-run/commit workflow. Three.js/modeling support is separate future work.
+For code-driven scene design, scripts can read a complete detached `scene.snapshot()`, inspect `layer.data` / `layer.get(path)`, and preserve nested settings with `layer.patch(...)`. Script-selected timelines also govern clone/array animation copies. Existing state machines, parameters, bindings, triggers and wires can be edited without rebuilding the scene. Native audio clip helpers share the editor's trim/split/gain commands. Animated layer data is applied before rendering, including particles, repeaters, shape geometry, typography, effects and masks. The boxed 3D first slice imports GLB/glTF through MCP `import_asset` and edits static model/camera/lighting fields through `update_model3d`; a full 3D modeling workspace remains future work. See the [scripting guide](docs/en/scripting.md) ([Türkçe](docs/tr/scripting.md)) for actual APIs, typed values, limits and the dry-run/commit workflow.
 
 ---
 

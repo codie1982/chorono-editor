@@ -21,6 +21,11 @@ interface Props {
   layer: Layer
   pointId: string | null
   dispatchCommand: (cmd: EditorCommand) => void
+  /** Guarded host adoption; standalone legacy inspectors retain their command path. */
+  /** Optional mode-owned deletion, including final two-anchor contour cleanup. */
+  onDelete?: () => void
+  onApply?: (next: SplinePathData, operation: 'point' | 'handle' | 'topology', id: string) => void
+  readOnlyReason?: string | null
 }
 
 const TYPES: { value: SplinePointType; label: string }[] = [
@@ -30,7 +35,11 @@ const TYPES: { value: SplinePointType; label: string }[] = [
   { value: 'bezierCorner', label: 'Bezier Corner' },
 ]
 
-export default function SplinePointInspector({ layer, pointId, dispatchCommand }: Props) {
+/** Existing single-point editor with optional host guards. onApply adopts
+ * immutable geometry through the owning edit context; legacy standalone hosts
+ * keep native commands. readOnlyReason blocks source writes without removing
+ * point/handle information or key data. No own selection/resource lifetime. */
+export default function SplinePointInspector({ layer, pointId, dispatchCommand, onApply, onDelete, readOnlyReason }: Props) {
   if (layer.type !== 'spline' || !layer.spline || !pointId) return null
   const spline = layer.spline
   const point = spline.points[pointId]
@@ -40,17 +49,19 @@ export default function SplinePointInspector({ layer, pointId, dispatchCommand }
   const inH  = handles.find(h => h.kind === 'in')
   const outH = handles.find(h => h.kind === 'out')
 
-  const apply = (next: SplinePathData) => {
-    if (next !== spline) dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))
+  const apply = (next: SplinePathData, operation: 'point' | 'handle' | 'topology' = 'topology', id = pointId) => {
+    if (readOnlyReason || next === spline) return
+    if (onApply) onApply(next, operation, id)
+    else dispatchCommand(makeUpdateLayerCmd(layer.id, { spline: next }, layer))
   }
 
   return (
-    <div className="border-t border-gray-700 px-3 py-2 space-y-2" data-panel="spline-point">
+    <fieldset disabled={!!readOnlyReason} className="min-w-0 border-t border-gray-700 px-3 py-2 space-y-2" data-panel="spline-point">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-gray-200 uppercase tracking-wide">Spline Point</span>
         <DocumentationHelp topic="editor/canvas/compound-splines" className="ml-auto mr-1" />
         <button
-          onClick={() => apply(deleteSplinePoint(spline, pointId))}
+          onClick={() => onDelete ? onDelete() : apply(deleteSplinePoint(spline, pointId))}
           className="text-[11px] text-red-400 hover:text-red-300"
         >
           Delete
@@ -70,19 +81,20 @@ export default function SplinePointInspector({ layer, pointId, dispatchCommand }
       </label>
 
       <Vector2Input label="Point position" propertyPath={`spline.points.${pointId}`} value={point}
-        onChange={position => apply(moveSplinePoint(spline, pointId, position.x, position.y))} />
+        onChange={position => apply(moveSplinePoint(spline, pointId, position.x, position.y), 'point')} />
 
       {/* In handle */}
       {inH && (
         <Vector2Input label="In handle" propertyPath={`spline.handles.${inH.id}`} value={inH}
-          onChange={position => apply(moveSplineHandle(spline, pointId, 'in', position.x, position.y))} />
+          onChange={position => apply(moveSplineHandle(spline, pointId, 'in', position.x, position.y), 'handle', inH.id)} />
       )}
 
       {/* Out handle */}
       {outH && (
         <Vector2Input label="Out handle" propertyPath={`spline.handles.${outH.id}`} value={outH}
-          onChange={position => apply(moveSplineHandle(spline, pointId, 'out', position.x, position.y))} />
+          onChange={position => apply(moveSplineHandle(spline, pointId, 'out', position.x, position.y), 'handle', outH.id)} />
       )}
-    </div>
+      {readOnlyReason && <p className="text-xs text-amber-300">{readOnlyReason}</p>}
+    </fieldset>
   )
 }

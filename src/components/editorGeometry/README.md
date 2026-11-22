@@ -28,6 +28,15 @@ available for spline and Mesh2D layers. Basic
 shapes keep their parametric controls in Properties. Spline fill, stroke,
 and trim and Mesh2D fill also stay in Properties.
 
+The page hosts this panel inside `SplineToolsPanel` with `contained` enabled.
+Its Boolean preview and line drawing controls remain above the geometry pane;
+Source uses the shared Point/Edge/Object `SplineEditInspector`. The former
+`splineTools` and `splineModeling` dock IDs migrate to the single `geometryEdit`
+tab. Edit mode/Boolean session ownership stays in the page, so closing or
+switching tabs never erases a pending operation. Geometry and Boolean workers,
+source protection and recipe/projection logic come from the integrated 3D
+development branch's shared **2D** spline modules.
+
 **Modeling operations** lists available spline tools. Each operation has its
 own settings and a local preview. Switching layers or operations discards the
 draft. Apply checks the source revision and dispatches one undoable command.

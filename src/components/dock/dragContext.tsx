@@ -3,7 +3,7 @@ import {
   createContext, useContext, useState, useRef, useCallback, useEffect,
   type ReactNode,
 } from 'react'
-import type { DockEdge } from './types'
+import type { DockEdge, DockTheme } from './types'
 
 interface DragInfo {
   panelId: string
@@ -32,6 +32,7 @@ export function useDockDrag(): DragContextValue {
 interface ProviderProps {
   children: ReactNode
   onDrop: (panelId: string, targetLeafId: string, edge: DockEdge) => void
+  theme?: DockTheme
 }
 
 /** Click-vs-drag threshold (px) — pointer must move at least this far before
@@ -48,7 +49,7 @@ const DRAG_THRESHOLD_PX = 4
  * `beginDrag` defers calling `setDrag` until the pointer has actually moved
  * past DRAG_THRESHOLD_PX — so a plain click on a tab is still a click.
  */
-export function DockDragProvider({ children, onDrop }: ProviderProps) {
+export function DockDragProvider({ children, onDrop, theme = 'default' }: ProviderProps) {
   const [drag, setDrag] = useState<DragInfo | null>(null)
   const [hoverTarget, setHoverTarget] = useState<{ leafId: string; edge: DockEdge } | null>(null)
 
@@ -136,8 +137,7 @@ export function DockDragProvider({ children, onDrop }: ProviderProps) {
       {children}
       {drag && (
         <div
-          className="fixed pointer-events-none z-[100] text-xs font-medium text-white
-                     bg-blue-600/90 px-2 py-1 rounded shadow-lg"
+          className={`fixed pointer-events-none z-[100] text-xs font-medium text-white px-2 py-1 rounded shadow-lg ${theme === 'model3d' ? 'bg-[#164e63]' : 'bg-blue-600/90'}`}
           style={{ left: drag.pointerX + 12, top: drag.pointerY + 12 }}
         >
           ⤓ Moving panel

@@ -11,8 +11,7 @@ import { transformGroup, appearanceGroup } from '../sharedSchemas'
 // contract consumed by the timeline (animatable detection), AI CapabilityContext
 // and any future schema tooling — keep it in sync with the panel.
 //
-// Runtime animation reality (renderer.ts:drawText): only `text.fontSize` is
-// currently evaluated from keyframe overrides. Other props edit statically.
+// Runtime reads fontSize, letterSpacing and lineHeight from keyframe overrides.
 const textGroup = (): PropertyGroup => ({
   title: 'Text',
   schemas: [
@@ -23,6 +22,7 @@ const textGroup = (): PropertyGroup => ({
     { id: 'fontSize',      path: 'text.fontSize',      group: 'Text', label: 'Size',           valueType: 'number',  animatable: true,  defaultValue: 24, min: 1 },
     { id: 'color',         path: 'text.color',         group: 'Text', label: 'Color',          valueType: 'color',   animatable: true,  defaultValue: '#FFFFFF' },
     { id: 'letterSpacing', path: 'text.letterSpacing', group: 'Text', label: 'Letter Spacing', valueType: 'number',  animatable: true,  defaultValue: 0 },
+    { id: 'lineHeight',    path: 'text.lineHeight',    group: 'Text', label: 'Line Height',    valueType: 'number',  animatable: true,  defaultValue: 1.2, min: 0.5, max: 5 },
     { id: 'uppercase',     path: 'text.uppercase',     group: 'Text', label: 'Uppercase',      valueType: 'boolean', animatable: false, defaultValue: false },
     { id: 'underline',     path: 'text.underline',     group: 'Text', label: 'Underline',      valueType: 'boolean', animatable: false, defaultValue: false },
   ],

@@ -57,6 +57,6 @@ function commitClone(editor: EditorStateReturn, base: ChronoScene, drag: Extract
 /** Human-readable undo labels describe the edited responsibility. */
 function dragLabel(kind: ActiveDrag['kind'], count: number): string {
   const name = { move: 'Move', rotate: 'Rotate', scaleAxis: 'Scale', resize: 'Resize', anchor: 'Move anchor',
-    pathPoint: 'Edit path point', newAnchorDraw: 'Add path point', splinePoint: 'Edit spline point', splineHandle: 'Edit spline handle' }[kind]
+    pathPoint: 'Edit path point', newAnchorDraw: 'Add path point', splinePoint: 'Edit spline point', splineHandle: 'Edit spline handle', splineGeometry: 'Transform spline selection' }[kind]
   return count > 1 ? `${name} ${count} layers` : name
 }

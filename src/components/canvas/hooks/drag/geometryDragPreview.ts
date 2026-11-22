@@ -3,9 +3,13 @@ import type { ActiveDrag } from '../../types/canvasDragTypes'
 import type { CanvasDragPreview, CanvasPointerSample } from './dragTypes'
 import { moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
 import { moveSplinePoint, moveSplineHandle } from '@/lib/spline'
+import { transformSplineSelection } from '@/lib/spline/selection'
+import { angleDegFromPivot, wrapAngle180 } from '@/lib/canvas/math/rotateMath'
+import { moveSplinePoints } from '@/lib/spline/edit/moveSplinePoints'
 import { calculateAnchorMove } from '@/lib/canvas/math/anchorMath'
 import { calculateResize } from '@/lib/canvas/math/resizeMath'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { MAX_MODEL_BOX_SIDE } from '@/lib/model3d/source/modelDefaults'
 import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
 
@@ -36,11 +40,25 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
         : moveOutHandle(original.path, drag.anchorIndex, (anchor.outX ?? anchor.x) + local.x, (anchor.outY ?? anchor.y) + local.y)
     return previewLayer(base, original, { ...original, path }, changedRecord(original.path, path) ? ['path'] : [])
   }
+  if (drag.kind === 'splineGeometry') {
+    if (!original.spline) return previewLayer(base, original, original, [])
+    const local = drag.worldToLocal.applyToVector(delta), { pivot, startLocal } = drag
+    const end = { x: startLocal.x + local.x, y: startLocal.y + local.y }
+    const angle = wrapAngle180(angleDegFromPivot(pivot.x, pivot.y, end.x, end.y) - angleDegFromPivot(pivot.x, pivot.y, startLocal.x, startLocal.y))
+    const initialRadius = Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y)
+    const scale = Math.max(.01, Math.hypot(end.x - pivot.x, end.y - pivot.y) / Math.max(1e-6, initialRadius))
+    const transform = drag.operation === 'move' ? { x: local.x, y: local.y }
+      : drag.operation === 'rotate' ? { rotation: event.shiftKey ? Math.round(angle / 15) * 15 : angle }
+      : { scaleX: scale, scaleY: scale }
+    const spline = transformSplineSelection(original.spline, new Set(drag.pointIds), transform)
+    return previewLayer(base, original, { ...original, spline }, changedRecord(original.spline, spline) ? ['spline'] : [],
+      drag.operation === 'rotate' ? `${(transform.rotation ?? angle).toFixed(1)}°` : drag.operation === 'scale' ? `${(scale * 100).toFixed(1)}%` : `${local.x.toFixed(1)}, ${local.y.toFixed(1)} px`)
+  }
   if (drag.kind === 'splinePoint' || drag.kind === 'splineHandle') {
     if (!original.spline) return previewLayer(base, original, original, [])
     const local = drag.worldToLocal.applyToVector(delta)
     const spline = drag.kind === 'splinePoint'
-      ? moveSplinePoint(original.spline, drag.pointId, drag.startX + local.x, drag.startY + local.y)
+      ? drag.pointIds ? moveSplinePoints(original.spline, drag.pointIds, local.x, local.y) : moveSplinePoint(original.spline, drag.pointId, drag.startX + local.x, drag.startY + local.y)
       : moveSplineHandle(original.spline, drag.pointId, drag.handleKind, drag.startX + local.x, drag.startY + local.y)
     return previewLayer(base, original, { ...original, spline }, changedRecord(original.spline, spline) ? ['spline'] : [])
   }
@@ -75,6 +93,7 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
     anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x * multiplier, dy: local.y * multiplier,
     proportional, snapPixel: snap.pixel, minSize: 4,
 
+    maxSize: original.type === 'model3d' ? MAX_MODEL_BOX_SIDE : undefined,
     boundsWidth: Number.MAX_SAFE_INTEGER, boundsHeight: Number.MAX_SAFE_INTEGER }
   let size = calculateResize(input)
   const matrix = drag.worldToLocal?.invert()

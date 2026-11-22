@@ -47,13 +47,15 @@ Tüm şekil katmanları dolgu (düz veya degrade), kontur, yol kırpma ve tüm s
 
 ### Metin
 
-Metin katmanları stillendirilmiş metin render eder. Her metin özelliğini — konum, ölçek, renk, opaklık, karakter aralığı ve daha fazlasını — animasyonlayabilirsiniz. Metin katmanları şunları destekler:
+Metin eklediğinizde yazı alanı doğrudan canvas üzerinde açılır. Mevcut metni çift tıklayarak yeniden düzenleyin; `Ctrl/⌘ + Enter` uygular, `Esc` iptal eder. Özellikler panelindeki İçerik alanı da çok satırlı metni kabul eder.
 
-- Font ailesi, ağırlık, boyut, satır yüksekliği, harf aralığı.
-- Dolgu ve kontur (düz renk veya degrade).
-- Hizalamalı (sol, orta, sağ, iki yana yaslı) çok satırlı bloklar.
-- Metin animatörü aracılığıyla karakter başına animasyon (bireysel harfleri rigleme).
+- Yatay satırlar veya sağdan sola sütunlanan dikey, dik duran harfler; sol, orta ve sağ hizalama.
+- Font ailesi, ağırlık, boyut, harf aralığı ve satır yüksekliği. Font boyutu, harf aralığı ve satır yüksekliği zaman çizelgesinde anahtarlanabilir.
+- Düz renk, degrade veya içe aktarılmış görsel dokusu; kontur, gölge ve katman opaklığı.
+- **Metni maske olarak kullan:** Metin panelinden hedef katmanı seçin. Metin düzenlenebilir kalır ve harflerin alfa alanı hedefi gösterir. Hedefin Efektler > Maskeler bölümünde ekle, çıkar, kesiştir, ters çevirme, opaklık ve yumuşatma ayarlanır. Birden fazla **ekle** maskesi birleşir.
 - **Spline'a Dönüştür** — metni düzenlenebilir bezier konturlarına parçalar.
+
+Maske kaynağı çıktıda bağımsız çizilmez; editörde seçildiğinde soluk bir önizlemesi görünür. SVG vektör dışa aktarımı metin dokusunu, degrade dolgusunu ve katman maskelerini henüz taşımaz; raster/video çıktısında canvas sonucu kullanılır.
 
 ### Resim
 

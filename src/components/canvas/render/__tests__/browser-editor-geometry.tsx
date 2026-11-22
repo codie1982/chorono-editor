@@ -26,7 +26,7 @@ const times = [0, 6000, 12000, 24000, 36000, 47999]
  * pins are supplied by the existing production preparation bridge. Neither
  * localStorage nor a connected user document is touched. */
 function Subject({ scene, assets, side, state }: { scene: ChronoScene; assets: AssetCache; side: Side; state: State }) {
-  const editor = useEditorState(scene), snap = useSnapSettings()
+  const editor = useEditorState(scene), snap = useSnapSettings({ persist: false })
   const overrides = useMemo(() => evaluateTimelines(scene.timelines, state.timeMs), [scene, state.timeMs])
   useEffect(() => { snap.setEnabled(false) }, []) // test profile: clean artboard
   const Component = side ? Canvas : ReferenceCanvas

@@ -1,3 +1,5 @@
+import { prepareEditorSplineReply } from './spline/prepareEditorSplineReply'
+import type { SplineExecutors } from './spline/prepareSplineWorkload'
 import { AuthoringHintCollector } from '../editor/authoring/AuthoringHints'
 import { commandAuthoringHints } from '../editor/authoring/AuthoringCommand'
 import type { AuthoringHints } from '../types/authoring'
@@ -45,6 +47,8 @@ import { RigidBakeOwnershipInspector } from '../physics/RigidBakeOwnership'
 import { FractureRenderColliderAnalyzer } from '../fracture/FractureRenderColliderAnalyzer'
 
 export interface MCPHost {
+  /** Optional platform adapters; production uses the native bounded workers. */
+  splineExecutors?: SplineExecutors
   editor: EditorStateReturn
   assets: AssetElementMap
   selectedTimelineId: string
@@ -132,6 +136,10 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     }
     if (method === 'apply_scene') return commit(args.scene, args.label ?? 'MCP change', args.authoringHints ?? {})
     await validateToolCall(requestedMethod, args)
+    if (method === 'prepare_spline_edit') {
+      return { revision, documentEpoch, ...await prepareEditorSplineReply(before,
+        { ...args, operation: args.operation, timeMs: args.timeMs ?? host.currentTimeMs }, scope, ensureWritable, editor.getDocumentSignal(), signal, host.splineExecutors) }
+    }
     if (method === 'undo' || method === 'redo') {
       ensureWritable(); editor[method](); const next = editor.getScene()
       return { revision: editor.getRevision(), ...summarize(next), changeSummary: summarizeSourceChanges(before, next) }

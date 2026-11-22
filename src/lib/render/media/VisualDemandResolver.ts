@@ -1,3 +1,4 @@
+import { compositionFill, imagePaintAssetIds } from '../../paint/paintSource'
 import type { Asset, Layer } from '../../types'
 import { rendererRegistry } from '../../registry'
 import { createLayerWorldMatrixResolver } from '../../geometry/resolveLayerWorldMatrix'
@@ -40,7 +41,8 @@ export class VisualDemandResolver {
     const { frame, context, selected } = input, { scene, sourceScene, overrides, timeMs, index } = frame
     this.index(scene.assets)
     this.absent.clear()
-    if (!this.nativeAssets.length) {
+    const backgroundIds = input.includeBackground !== false && !input.rootIds ? imagePaintAssetIds(compositionFill(scene.composition)) : []
+    if (!this.nativeAssets.length && !backgroundIds.length) {
       if (this.sourceLayers !== sourceScene.layers) {
         this.sourceLayers = sourceScene.layers
         this.possible = sourceScene.layers.some(layer => layer.image || layer.video || layer.frameSequence
@@ -59,7 +61,7 @@ export class VisualDemandResolver {
     const add = (id: string, layer: Layer | undefined, required: boolean) => {
       const asset = this.byId.get(id)
       if (!asset) { this.absent.add(id); return }
-      if (!['image', 'spriteSheet', 'video', 'font', 'meshDeformation'].includes(asset.type)) return
+      if (!['image', 'spriteSheet', 'video', 'font', 'meshDeformation', 'model3d'].includes(asset.type)) return
       const layerId = asset.type === 'video' ? layer?.id ?? `unknown:${id}` : undefined
       let key:string
       try {key=asset.type==='font'?describeFont(asset).key:JSON.stringify(['visual',asset.id, asset.url, layerId ?? null])}
@@ -67,6 +69,7 @@ export class VisualDemandResolver {
       const old = result.get(key)
       result.set(key, { key, asset, layerId, required: required || !!old?.required })
     }
+    backgroundIds.forEach(id => add(id, undefined, true))
     const fonts=fontCatalog(scene.assets)
     const variants=fonts.fonts.length?fontFamilyVariants(sourceScene.timelines):new Map<string,readonly string[]>()
     const addFonts=(families:readonly string[],required:boolean)=>families.forEach(css=>fonts.find(css).forEach(font=>add(font.asset.id,undefined,required)))
@@ -130,6 +133,6 @@ export class VisualDemandResolver {
   private index(assets: readonly Asset[]): void {
     if (assets === this.assets) return
     this.assets = assets; this.byId.clear(); assets.forEach(asset => this.byId.set(asset.id, asset))
-    this.nativeAssets = assets.filter(asset => ['image', 'spriteSheet', 'video', 'font', 'meshDeformation'].includes(asset.type))
+    this.nativeAssets = assets.filter(asset => ['image', 'spriteSheet', 'video', 'font', 'meshDeformation', 'model3d'].includes(asset.type))
   }
 }

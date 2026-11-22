@@ -22,6 +22,11 @@ bağımsız bir sahne katmanı değildir. Spline → Mesh2D de aynı üçgenleyi
 
 ## Mevcut koddan doğrulananlar
 
+`codex/developing-3d-mode` branch'inin `18db0874` kaynakları entegrasyona
+alındı. Aşağıdaki planar/Boolean hesapları bu branch'ten geliyor; dönüşüm
+için bağımsız kopyaları yazılmayacak. Kaynak branch'in kaydedilmemiş 3D/WIP
+dosyaları bu commit birleşiminin parçası değildir.
+
 - `ShapeToPathConverter`: köşe yarıçapı ve shape parametrelerinden gerçek
   M/L/C/Q/Z sınırını üretir. Sadece `size` kutusundan tahmin yapılmamalı.
 - `ShapeBoundaryMesh2DGenerator`: kapalı şekli deterministik bir ara Spline'a
@@ -32,6 +37,23 @@ bağımsız bir sahne katmanı değildir. Spline → Mesh2D de aynı üçgenleyi
 - `SplineBoundaryMesh2DGenerator`: içbükey ve delikli konturları Earcut 3.2.4
   ile üçgenler; alan sapması, üçgen yönü ve ortak topology validator ile denetler.
   Varsayılan örnekleme toleransı 0,25 yerel pikseldir; zoom'dan bağımsızdır.
+- `geometry/planar/boundaries.ts`: `classifyPlanarBoundaries` dış sınır/delik
+  rollerini evenodd nesting ve nonzero winding ile ayırır. `planar/contours.ts`
+  alan, içerme, temas ve self-intersection denetimlerinde robust-predicates
+  kullanır. Var olan Mesh ring adaptörüyle semantik/tolerans farkları açıkça
+  karşılaştırılıp bu ortak owner üzerinden birleştirilecek; eski mesh çıktıları
+  sessizce değiştirilmeyecek.
+- `geometry/boolean/layerOperand.ts`: Basic Shape/Spline/SubShape girdisini
+  ortak yerel geometri sözleşmesine çevirir, full-ring seam'ini normalize eder.
+  `PolygonClippingBackend` Union/Subtract/Intersect için mevcut backend'dir.
+- `booleanOperations` ve `editor/boolean`: kaynakları koruyan kalıcı Boolean
+  recipe, tek Undo komutu, derived geometri cache/projection ve output flatten
+  yolunu sağlar. Conversion stage yaşam döngüsü bunların source-recipe,
+  preview/admission ve renderer/bounds/output sözleşmelerini tekrar kullanacak.
+  Boolean topoloji hesabı ile dönüşüm aynı işlem değildir; her Basic Shape'i
+  dönüştürürken gereksiz Union uygulanmayacak. `polygonPathToSpline` Boolean'ın
+  poligonal çıktısına aittir; doğrudan Spline hedefinde Bézier eğrilerini
+  poligona düşürmek için kullanılmayacak.
 - Eski `makeConvertToSplineCmd`, adına rağmen `type: 'path'` üretir. Yeni
   normalized `type: 'spline'` sözleşmesi bununla karıştırılmamalı; eski çağıranlar
   uyumlu kalacak, yeni dönüşüm açıkça adlandırılmış bir uygulama kullanacak.
@@ -58,6 +80,10 @@ bağımsız bir sahne katmanı değildir. Spline → Mesh2D de aynı üçgenleyi
    dolmamalı. Convex bilgisi tanı/uygun optimizasyon içindir; ikinci, uyumsuz
    bir üçgenleyici gerektirmez. Çakışma/self-intersection otomatik tahminle
    onarılmaz; tanı ve kaynak konumu gösterilir.
+   Bu adım yeni bir Boolean/alan motoru değil, `classifyPlanarBoundaries`,
+   ortak contour predicates ve mevcut Mesh ring adaptörlerinin kontrollü
+   entegrasyonudur. İçbükey köşe sınıflandırmasında robust orientation işareti
+   kontur yönüyle birlikte yorumlanır; flatten toleransı UI zoom'undan bağımsızdır.
 4. **Spline hedefi.** Parametrik son sınırı düzenlenebilir normalized Spline
    olarak üret. Fill rule, fill/stroke, opacity, transform, origin, parent ve
    zaman kapsamını koru. Açık line/arc/wave/spiral Spline olarak desteklenir.

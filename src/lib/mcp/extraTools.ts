@@ -1,9 +1,7 @@
+import { SPLINE_TOOLS } from './spline/tools'
+import { extra } from './tools/extraTool'
 import { LIMITS, type JsonObject, type ToolDefinition } from './protocol'
-
-/** Build a bridge-only tool definition. Descriptions do not change validation. */
-function extra(name: string, description: string, properties: JsonObject = {}, required: string[] = [], readOnly = false): ToolDefinition {
-  return { name, description, inputSchema: { type: 'object', properties, required }, annotations: { readOnlyHint: readOnly, openWorldHint: false } }
-}
+import { MAX_MODEL_BYTES } from '../model3d/source/readModelDocument'
 
 const timeMs = { type: 'number', minimum: 0, description: 'Absolute timeline time in milliseconds. Omit to use the current editor playhead.' }
 const timelineIds = {
@@ -232,6 +230,7 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
     'Commit the exact scene prepared by run_script dryRun, preserving its generated ids without executing code again. Requires the same editor and unchanged scene revision; expired, consumed or foreign plans fail. Successful plans are consumed. Returns JSON text with revision, scene summaries, logs and commandCount; use run_script to prepare a new plan.', {
       planId: { type: 'string', description: 'Unconsumed planId returned by run_script dryRun in this editor session within the last five minutes.' },
     }, ['planId']),
+  ...SPLINE_TOOLS,
   extra('batch_actions',
     'Apply ordered native scene actions atomically as one undo step. Later actions see earlier changes; any failure discards the batch. Returns JSON text with revision, composition, layer/timeline summaries and addedLayerIds. Supports ActionRegistry mutations only, not scripts, reads, playback or file tools; use run_script for procedural authoring.', {
       actions: {
@@ -350,12 +349,12 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
       timelineIds,
     }, ['intent']),
   extra('import_asset',
-    'Import supplied base64 file bytes through the editor import pipeline as one undoable scene edit. Returns JSON text with revision, scene summaries and addedLayerIds; parser/validation errors do not commit. No arbitrary local path or server-side URL fetch is accepted. Use list_assets to reuse existing assets; load_project restores a saved Chorono project.', {
+    'Import supplied base64 file bytes through the editor import pipeline as one undoable scene edit, including a self-contained GLB 2 or glTF 2 model. Returns JSON text with revision, scene summaries and addedLayerIds; parser/validation errors do not commit. No arbitrary local path or server-side URL fetch is accepted. Use list_assets to reuse existing assets; load_project restores a saved Chorono project.', {
       name: { type: 'string', description: 'Source filename including extension, for example logo.png. Used by the import pipeline; not a local filesystem path.' },
       timelineId: { type: 'string', description: 'For audio placement, target timeline id; defaults to the selected timeline.' },
       startMs: { type: 'number', minimum: 0, description: 'For audio placement, start time in milliseconds; defaults to the current playhead.' },
       mimeType: { type: 'string', description: 'MIME type matching the supplied bytes, for example image/png or image/svg+xml.' },
-      data: { type: 'string', maxLength: 16 * 1024 * 1024, description: 'Raw base64-encoded file bytes, without a data: URL prefix. Maximum 16 MiB of encoded text; supported formats follow the editor import pipeline.' },
+      data: { type: 'string', maxLength: 4 * Math.ceil(MAX_MODEL_BYTES / 3), description: 'Raw base64-encoded file bytes, without a data: URL prefix. Encoded limit permits a 16 MiB raw GLB/glTF source; each format has its own native admission rules.' },
     }, ['name', 'mimeType', 'data']),
   extra('validate_scene',
     'Check the connected scene structure and runtime-export compatibility without changing the scene or writing files. Returns JSON text with revision, valid and warnings or errors; structural validation failures return a tool error. Use before export_runtime; validation does not inspect rendered appearance, so use render_preview for visual quality.', {}, [], true),

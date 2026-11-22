@@ -166,6 +166,8 @@ export interface ScaleAxisState {
 /** BL-73 Sprint 4 — dragging a spline on-curve point. */
 export interface SplinePointDrag {
   kind: 'splinePoint'
+  /** Optional multi-point selection; omitted preserves the legacy single-point drag. */
+  pointIds?: readonly string[]
   layerId: string
   originalLayer: Layer
   pointId: string
@@ -194,6 +196,22 @@ export interface SplineHandleDrag {
   worldToLocal: Matrix2D
 }
 
+/** Local sub-object transform. The complete inverse and local anchor pivot are
+ * pinned at gesture start, with unique point IDs and immutable source geometry.
+ * No layer transform or keyframe target is edited by this drag. */
+export interface SplineGeometryDrag {
+  kind: 'splineGeometry'
+  layerId: string
+  originalLayer: Layer
+  pointIds: readonly string[]
+  operation: 'move' | 'rotate' | 'scale'
+  startClientX: number
+  startClientY: number
+  startLocal: { x: number; y: number }
+  pivot: { x: number; y: number }
+  worldToLocal: Matrix2D
+}
+
 export type ActiveDrag =
   | MoveState
   | ResizeState
@@ -204,6 +222,7 @@ export type ActiveDrag =
   | ScaleAxisState
   | SplinePointDrag
   | SplineHandleDrag
+  | SplineGeometryDrag
 
 /** CSS cursor for each resize handle (diagonal pairs share a cursor). */
 export const HANDLE_CURSORS: Record<Handle, string> = {

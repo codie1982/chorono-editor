@@ -1,3 +1,4 @@
+import type { Model3DResource } from '../../model3d/types'
 import type { AssetElementMap } from '../../asset/visual/AssetElementMap'
 import type { MediaFrameBridge } from './types'
 import type { FontBindings } from '../../asset/fonts'
@@ -18,14 +19,16 @@ export class MediaElementSnapshot extends Map<string, HTMLImageElement | HTMLVid
   declare readonly media?: MediaFrameBridge
   declare readonly fonts?: FontBindings
   declare readonly meshDeformations?: MeshDeformationBindings
+  declare readonly modelForAsset?: (assetId: string) => Model3DResource | undefined
   /** Preserve Map serialization/iteration shape: bridge and owner records are
    * non-enumerable runtime state, never accidental JSON source metadata. */
-  constructor(records: readonly MediaElementRecord[], media?: MediaFrameBridge, fonts?: FontBindings, meshDeformations?: MeshDeformationBindings) {
+  constructor(records: readonly MediaElementRecord[], media?: MediaFrameBridge, fonts?: FontBindings, meshDeformations?: MeshDeformationBindings, modelForAsset?: (assetId: string) => Model3DResource | undefined) {
     super()
     Object.defineProperties(this, {
       media: { value: media, enumerable: false },
       fonts: { value: fonts, enumerable: false },
       meshDeformations: { value: meshDeformations, enumerable: false },
+      modelForAsset: { value: modelForAsset, enumerable: false },
       images: { value: new Map<string, MediaElementRecord>(), enumerable: false },
       videos: { value: new Map<string, MediaElementRecord>(), enumerable: false },
     })

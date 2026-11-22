@@ -12,8 +12,9 @@ import { useFindSelected } from '@/components/layerHierarchy/useFindSelected'
  * is separate from property collapse. Filters and Find are local; every source
  * operation resolves current committed scene through the existing editor.
  */
-export function useTimelineHierarchy({ scene, editor, timeline, trackIndex, filter, selectedId, selectedIds }: {
+export function useTimelineHierarchy({ scene, editor, timeline, trackIndex, filter, selectedId, selectedIds, layerScope }: {
   scene: ChronoScene; editor: EditorStateReturn; timeline: Timeline | null; trackIndex: LayerTrackIndex
+  layerScope?: ReadonlySet<string> | null
   filter: string; selectedId: string | null; selectedIds: ReadonlySet<string>
 }) {
   const [collapsedBranches, setCollapsedBranches] = useState<Set<string>>(() => new Set())
@@ -25,8 +26,8 @@ export function useTimelineHierarchy({ scene, editor, timeline, trackIndex, filt
   }, [editor.getScene, editor.dispatchCommand])
   const branches = useLayerBranches({ layers: scene.layers, selectedId, selectedIds, setCollapsedIds: setCollapsedBranches, onSetFlag: setFlag })
   const model = useMemo(() => buildTimelineLayerRows(scene.layers, timeline, { collapsedIds: collapsedBranches,
-    filter, selectedOnly, selectedId, selectedIds, revealIds: find.revealIds, trackIndex }),
-  [scene.layers, timeline, collapsedBranches, filter, selectedOnly, selectedId, selectedIds, find.revealIds, trackIndex])
+    filter, selectedOnly, layerScope, selectedId, selectedIds, revealIds: find.revealIds, trackIndex }),
+  [scene.layers, timeline, layerScope, collapsedBranches, filter, selectedOnly, selectedId, selectedIds, find.revealIds, trackIndex])
   const toggleBranch = useCallback((id: string) => setCollapsedBranches(previous => {
     const next = new Set(previous)
     if (next.has(id)) next.delete(id); else next.add(id)

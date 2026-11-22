@@ -20,6 +20,7 @@ export interface RuntimePackage {
 }
 
 export type RuntimeWarningCode =
+  | 'UNSUPPORTED_3D'
   | 'REQUIRES_LIVE_EXPRESSIONS'
   | 'INVALID_EXPRESSION'
   | 'UNSUPPORTED_EFFECT'
@@ -34,7 +35,7 @@ export interface RuntimeWarning {
   layerId?: string
 }
 
-export type RuntimeErrorCode = RuntimeWarningCode | 'EMPTY_SCENE' | 'INVALID_COMPOSITION'
+export type RuntimeErrorCode = RuntimeWarningCode | 'EMPTY_SCENE' | 'INVALID_COMPOSITION' | 'INVALID_PAINT'
 
 export interface RuntimeError {
   code:    RuntimeErrorCode

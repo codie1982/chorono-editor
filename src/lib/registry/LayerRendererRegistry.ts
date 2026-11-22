@@ -42,10 +42,10 @@ export interface LayerRendererPlugin<T extends Layer = Layer> {
   id: string
   paint?: LayerPaintCapability
   /** Optional certificate: this plugin never directly reads assets, font families
-   * or referenced media layers for ANY supported property values. Masks and
+   * or referenced media layers for ANY supported property values. A predicate certifies the supplied source layer only. Masks and
    * ordinary sceneChildren remain the dispatcher's responsibility. Missing means
    * dynamic/unknown dependencies: never skip based on an empty current query. */
-  nativeMediaFree?: boolean
+  nativeMediaFree?: boolean | ((layer: T) => boolean)
   /** Complete direct media/source references for residency. Omit for unknown
    * plugins: preparation conservatively retains all project visual/font sources.
    * fontFamilies contains authored CSS family lists, resolved in the scene's

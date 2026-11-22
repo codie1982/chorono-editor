@@ -4,8 +4,8 @@ import { defaultLayout, findLeafOfPanel, isValidLayout } from './layoutOps'
 import type { DockNode } from './types'
 
 describe('retired settings panel migration', () => {
-  it('renames the legacy modeling tab in place and preserves the active tab', () => {
-    const legacy: DockNode = { kind: 'leaf', id: 'custom', panels: ['assets', 'splineModeling', 'properties'], activeIndex: 1, collapsed: true }
+  it.each(['splineModeling', 'splineTools'])('renames legacy %s in place and preserves the active tab', legacyId => {
+    const legacy: DockNode = { kind: 'leaf', id: 'custom', panels: ['assets', legacyId, 'properties'], activeIndex: 1, collapsed: true }
     const next = migrateDockLayout(legacy)
     expect(next).toEqual({ ...legacy, panels: ['assets', 'geometryEdit', 'properties'] })
     expect(migrateDockLayout(next)).toBe(next)
@@ -26,7 +26,7 @@ describe('retired settings panel migration', () => {
     const before = structuredClone(tree), next = migrateDockLayout(tree), leaf = findLeafOfPanel(next, 'properties')!
     expect(tree).toEqual(before); expect(next).toMatchObject({ id: 'custom', ratio: .37 })
     expect(leaf).toEqual({ ...before.children[1], panels: ['properties', 'assets'], activeIndex: 0 })
-    expect(findLeafOfPanel(next, 'canvas')).toBe(tree.children[0])
+    expect(findLeafOfPanel(next, 'canvas')).toEqual(before.children[0])
     expect(findLeafOfPanel(next, 'snap')).toBeNull(); expect(findLeafOfPanel(next, 'shortcuts')).toBeNull()
     expect(isValidLayout(next, new Set(['canvas', 'timeline', 'properties', 'assets']))).toBe(true)
     expect(migrateDockLayout(next)).toBe(next)

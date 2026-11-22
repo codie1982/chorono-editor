@@ -40,7 +40,7 @@ function Host({ session }: { session: BrowserRecoverySession }) {
   const [count, setCount] = useState(3), [gain, setGain] = useState(0)
   const [timeMs, setTimeMs] = useState(0), [schema, setSchema] = useState(false), [selected, select] = useState('hero'), [project, setProject] = useState('')
   const identity = useSessionIdentity()!, scene = editor.scene, layer = scene.layers.find(item => item.id === selected)!
-  const assets = useAssetCache(scene.assets), snap = useSnapSettings()
+  const assets = useAssetCache(scene.assets), snap = useSnapSettings({ persist: false })
   const frame = useMemo(() => evaluateSceneFrame(scene, timeMs, { externalTime: { timelineId: 'animation', localTimeMs: timeMs } }), [scene, timeMs])
   const update = (next: typeof layer) => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, next, layer))
   useEffect(() => {

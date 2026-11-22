@@ -142,6 +142,7 @@ export const LAYER_TYPE_ICON: Record<string, string> = {
   particleEmitter: 'noise',  // BL-13: row 3, col 7 (existing sprite)
   text:             'text',
   image:            'image',
+  model3d:          'group',
   video:            'video',
   audio:            'audio',
   pathStroke:       'motionPath',
@@ -191,6 +192,13 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Blob',             type: 'blob',             icon: 'blob',             available: true  }, // BL-24
       { label: 'Spiral',           type: 'spiral',           icon: 'spiral',           available: true  }, // BL-24
       { label: 'Wave',             type: 'wave',             icon: 'wave',             available: true  }, // BL-24
+    ],
+  },
+  {
+    title: '3D Objects',
+    items: [
+      { label: 'Empty 3D Scene', type: 'empty3dScene', icon: 'group', available: true },
+      { label: 'Import GLB / glTF', type: 'model3d', icon: 'group', available: true },
     ],
   },
   {

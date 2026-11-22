@@ -9,6 +9,9 @@ export function remapCloneLayerReferences(layer: Layer, ids: Readonly<Record<str
   const ref = (id: string) => ids[id] ?? id
   const area = layer.particleEmitter?.emitter.area
   return { ...layer,
+    ...(layer.booleanOperation ? { booleanOperation: { ...layer.booleanOperation, resultLayerId: ref(layer.booleanOperation.resultLayerId),
+      inputs: layer.booleanOperation.inputs.map(input => ({ ...input, layerId: ref(input.layerId) })) } } : {}),
+    ...(layer.booleanResultFor ? { booleanResultFor: ref(layer.booleanResultFor) } : {}),
     ...(layer.propertyExpressions ? { propertyExpressions: remapPropertyExpressions(layer.propertyExpressions, ids) } : {}),
     ...(layer.parentId ? { parentId: ref(layer.parentId) } : {}),
     ...(layer.followPath ? { followPath: { ...layer.followPath, pathLayerId: ref(layer.followPath.pathLayerId) } } : {}),

@@ -9,6 +9,8 @@ import { buildViewportKeyframeCommands } from '@/lib/editor/viewportKeyframes'
 import { previewTransformDrag, transformPreview } from './transformDragPreview'
 import { previewGeometryDrag } from './geometryDragPreview'
 import { commitCanvasDrag } from './commitCanvasDrag'
+import { newModelLayer } from '@/lib/model3d/source/modelDefaults'
+import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 
 const pointer = { pointerId: 1, clientX: 10, clientY: 0, shiftKey: false, metaKey: false, ctrlKey: false }
 const transform = { x: 0, y: 0, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 0, anchorY: 0 }
@@ -114,6 +116,26 @@ describe('evaluated canvas previews and atomic commits', () => {
 })
 
 describe('geometry-local pointer edits', () => {
+  it('resizes a parented model box within its capability without changing 3D data or keys, in one Undo', () => {
+    const parent = layer('parent', { type: 'group', transform: { ...transform, x: 100, y: 80, rotationDeg: 25, scaleX: 1.5 } })
+    const original = { ...newModelLayer('model', 'model-asset'), parentId: parent.id }
+    const base = scene([parent, original]), world = resolveLayerWorldMatrix(original, base)
+    const drag = { kind: 'resize' as const, layerId: original.id, originalLayer: original, startClientX: 0, startClientY: 0,
+      handle: 'nw' as const, worldToLocal: world.invert(), displayTransform: original.transform }
+    const preview = previewGeometryDrag({ base, drag, event: pointer, delta: world.applyToVector({ x: -10000, y: -10000 }),
+      snap: { grid: false, pixel: false, size: 10 } })
+    const next = preview.scene.layers[1], corner = resolveLayerWorldMatrix(next, preview.scene).applyToPoint({ x: next.size!.width, y: next.size!.height })
+    const fixed = world.applyToPoint({ x: original.size!.width, y: original.size!.height })
+    expect(next.size).toEqual({ width: 4096, height: 4096 })
+    expect(corner.x).toBeCloseTo(fixed.x); expect(corner.y).toBeCloseTo(fixed.y)
+    expect(next.parentId).toBe(parent.id); expect(next.model3d).toBe(original.model3d)
+    expect(preview.scene.timelines).toBe(base.timelines)
+    const commit = vi.fn<(command: EditorCommand) => void>()
+    commitCanvasDrag({ commitTransaction: commit } as unknown as EditorStateReturn, base, drag, preview, { onSelectLayer: vi.fn() })
+    expect(commit).toHaveBeenCalledOnce()
+    const command = commit.mock.calls[0][0]
+    expect(command.undo(command.execute(base))).toEqual(base)
+  })
   it('commits a provisional pen anchor without recentering the existing custom pivot', () => {
     const original = layer('path', { type: 'path', transform: { ...transform, rotationDeg: 60, scaleX: 2, anchorX: 8, anchorY: 9 },
       path: { closed: false, anchors: [{ x: 5, y: 6 }] } })

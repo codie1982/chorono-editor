@@ -19,6 +19,10 @@ import { SUBTREE_FLAG_ACTIONS } from '@/components/layerHierarchy/SubtreeOperati
 import type { SubtreeFlag } from '@/lib/editor/branches/SubtreeCommands'
 import type { Layer } from '@/lib/types'
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
+import { itemDetailMenu } from '@/components/detail/detailMenu'
+import { buildSplineEditModeMenu } from '@/components/splineEdit/buildSplineEditModeMenu'
+import type { SplineEditMode } from '@/lib/spline/selection'
 
 // Same palette as TimelinePanel + LayerPanel so colour labels stay
 // consistent across surfaces (BL-38 parity).
@@ -35,8 +39,15 @@ const COLOR_LABELS: { label: string; hex: string | null }[] = [
 ]
 
 export interface SceneExplorerMenuHandlers {
+  addLayer?: (kind: string) => void
+  editContent?: (id: string) => void
+  editOperation?: (id: string) => void
+  isBooleanMember?: (id: string) => boolean
+  splineEditMode?: (id: string, mode: SplineEditMode) => void
   rename:        (id: string) => void
   duplicate:     (id: string) => void
+  /** Atomic forest duplication when the host supports multi-selection. */
+  duplicateLayers?: (ids: readonly string[]) => void
   deleteLayers:  (ids: string[]) => void
   groupLayers:   (ids: string[]) => void
   ungroupGroup?: (id: string) => void
@@ -64,6 +75,14 @@ export interface BuildMenuOptions {
   handlers: SceneExplorerMenuHandlers
 }
 
+/** Route menus/shortcuts through the same atomic forest capability. Legacy
+ * hosts receive one singleton callback per explicit ID; modern hosts one call
+ * for the whole immutable selection. This function owns no source or history. */
+export function duplicateExplorerSelection(ids: readonly string[], handlers: Pick<SceneExplorerMenuHandlers, 'duplicate' | 'duplicateLayers'>) {
+  if (handlers.duplicateLayers) handlers.duplicateLayers(ids)
+  else ids.forEach(id => handlers.duplicate(id))
+}
+
 export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
   const { target, selectionIds, allLayers, handlers } = opts
   const ids = selectionIds.length > 0 ? selectionIds : [target.id]
@@ -85,6 +104,9 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
   })
 
   const items: MenuItem[] = [
+    ...(!multi && handlers.isBooleanMember?.(target.id) && handlers.editOperation ? [{ kind: 'action' as const, label: 'Edit Operation', onSelect: () => handlers.editOperation!(target.id) }] : []),
+    ...(!multi && target.spline && !target.booleanResultFor && handlers.splineEditMode ? [buildSplineEditModeMenu({ onEnter: mode => handlers.splineEditMode!(target.id, mode) })] : []),
+    ...itemDetailMenu(target, ids.length, handlers.editContent ? () => handlers.editContent!(target.id) : undefined),
     {
       kind:     'action',
       label:    'Rename',
@@ -96,9 +118,7 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
       kind:     'action',
       label:    multi ? `Duplicate (${ids.length})` : 'Duplicate',
       shortcut: '⌘D',
-      // Duplicating N layers is a small loop — page.tsx already handles it
-      // for the multi-select case via duplicateSelectedLayer.
-      onSelect: () => ids.forEach((id) => handlers.duplicate(id)),
+      onSelect: () => duplicateExplorerSelection(ids, handlers),
     },
     {
       kind:     'action',
@@ -147,9 +167,9 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
 
   // ── Grouping ─────────────────────────────────────────────────────────────
   items.push({ kind: 'separator' })
-  items.push({
+  if (multi) items.push({
     kind:     'action',
-    label:    multi ? `Group (${ids.length})` : 'Wrap in Group',
+    label:    `Group (${ids.length})`,
     shortcut: '⌘G',
     disabled: ids.length < 1,
     onSelect: () => handlers.groupLayers(ids),
@@ -178,5 +198,6 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
     })),
   })
 
+  if (handlers.addLayer) items.push({ kind: 'separator' }, ...buildAddLayerMenu(handlers.addLayer))
   return items
 }

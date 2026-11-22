@@ -1,4 +1,5 @@
 import { BoundedBinaryReader, BoundedTextReader } from '../resources/io'
+import { ModelHandler } from './handlers/asset/ModelHandler'
 import { GifImportService } from './gif'
 import { editorMediaPreparation } from '../resources/jobs'
 import { editorResourceBudget } from '../resources/budget'
@@ -43,6 +44,7 @@ export function initImportPipeline(): void {
   _initialized = true
 
   // ── Asset handlers ──────────────────────────────────────────────────────────
+  importManager.registerHandler(new ModelHandler())
   importManager.registerHandler(new GifHandler(new GifImportService({ budget: editorResourceBudget, executor: editorMediaPreparation })))   // before ImageHandler — claims image/gif
   importManager.registerHandler(new ImageHandler())
   importManager.registerHandler(new SpriteSheetHandler())  // explicit format only (image/spritesheet)

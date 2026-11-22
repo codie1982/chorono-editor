@@ -18,6 +18,7 @@ type MagicEntry = {
 }
 
 const MAGIC_SIGNATURES: MagicEntry[] = [
+  { bytes: [0x67, 0x6c, 0x54, 0x46], format: 'model/gltf-binary' },
   // Images
   { bytes: [0xFF, 0xD8, 0xFF],                         format: 'image/jpeg' },
   { bytes: [0x89, 0x50, 0x4E, 0x47],                   format: 'image/png'  },
@@ -51,6 +52,7 @@ const MAGIC_SIGNATURES: MagicEntry[] = [
 // ── Extension Map ─────────────────────────────────────────────────────────────
 
 const EXTENSION_MAP: Record<string, ImportFormat> = {
+  '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json',
   // Images
   '.png':   'image/png',
   '.jpg':   'image/jpeg',
@@ -88,6 +90,7 @@ const EXTENSION_MAP: Record<string, ImportFormat> = {
 // ── MIME Map ──────────────────────────────────────────────────────────────────
 
 const MIME_MAP: Record<string, ImportFormat> = {
+  'model/gltf-binary': 'model/gltf-binary', 'model/gltf+json': 'model/gltf+json',
   'image/png':               'image/png',
   'image/jpeg':              'image/jpeg',
   'image/webp':              'image/webp',
@@ -240,6 +243,7 @@ export class FileTypeDetector {
    */
   static label(format: ImportFormat): string {
     const labels: Partial<Record<ImportFormat, string>> = {
+      'model/gltf-binary': 'GLB 3D Model', 'model/gltf+json': 'glTF 3D Model',
       'image/png':  'PNG Image',
       'image/jpeg': 'JPEG Image',
       'image/webp': 'WebP Image',
@@ -277,6 +281,7 @@ export class FileTypeDetector {
    */
   static isSupported(format: ImportFormat): boolean {
     const supported: ImportFormat[] = [
+      'model/gltf-binary', 'model/gltf+json',
       'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif',
       'image/svg+xml',
       'video/mp4', 'video/mov', 'video/webm',

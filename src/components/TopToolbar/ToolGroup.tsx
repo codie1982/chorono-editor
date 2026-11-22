@@ -1,5 +1,6 @@
 'use client'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { legacySelectionStyle, selectionRegionForTool, type SelectionRegionStyle } from '@/lib/selection/selectionGesture'
 
 export type ToolMode =
   | 'select' | 'pan' | 'pen'
@@ -14,15 +15,14 @@ export type ToolMode =
   | 'shape-draw'
 
 /** True for any of the four canvas-shape selection tools. */
-export function isSelectionTool(m: ToolMode): m is SelectionToolMode {
-  return m === 'selection-box' || m === 'selection-lasso'
-      || m === 'selection-circle' || m === 'selection-paint'
+export function isSelectionTool(m: ToolMode): boolean {
+  return legacySelectionStyle(m) !== null
 }
 
 export type SelectionToolMode = 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
 
-/** Selection containment mode (BL-60 Faz 3). Applies only when a canvas
- *  selection tool is active. `'inside'` = layer's bounds must fit fully
+/** Selection containment preference for every ordinary viewport tool.
+ * `'inside'` = layer's bounds must fit fully
  *  in the dragged shape; `'touching'` = any overlap counts. */
 export type SelectionContainMode = 'inside' | 'touching'
 
@@ -31,6 +31,9 @@ interface ToolGroupProps {
   onChange: (m: ToolMode) => void
   /** Shared toggle restores the editor's previous tool instead of Select. */
   onPanToggle?: () => void
+  /** Always-selected region preference, independent of the manipulation tool. */
+  selectionStyle?: SelectionRegionStyle
+  onSelectionStyleChange?: (style: SelectionRegionStyle) => void
   /** Persistent marquee type; changing it does not replace the Select tool. */
   selectionMode?: SelectionToolMode
   onSelectionModeChange?: (mode: SelectionToolMode) => void
@@ -75,16 +78,18 @@ function Divider() {
  * Tool group — 3DS Max-style isolated transform modes plus the legacy
  * Select / Pan / Pen utilities. Move/Rotate/Scale/Anchor each hide all
  * other gizmos so the user always sees only the handles relevant to the
- * current operation.
+ * current operation. Region style and containment are independent preferences
+ * for empty-space selection, not exclusive manipulation tools.
  */
 export default function ToolGroup({
-  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange,
-  selectionMode = 'selection-box', onSelectionModeChange = () => {},
+  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange, selectionStyle = 'box', onSelectionStyleChange, selectionMode, onSelectionModeChange,
 }: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
-  const showContainToggle = containMode != null && onContainModeChange != null
+  const style = legacySelectionStyle(mode) ?? (selectionMode ? legacySelectionStyle(selectionMode) : null) ?? selectionStyle
+  const chooseStyle = (value: SelectionRegionStyle) => onSelectionStyleChange ? onSelectionStyleChange(value) : onSelectionModeChange ? onSelectionModeChange(`selection-${value}` as SelectionToolMode) : onChange(`selection-${value}` as ToolMode)
+  const showContainToggle = selectionRegionForTool(mode, style) != null && containMode != null && onContainModeChange != null
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1">
       <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/compound-splines' : 'editor/canvas/tools'} compact />
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -135,30 +140,31 @@ export default function ToolGroup({
 
       <Divider />
 
-      {/* BL-60 Faz 3 — Canvas selection tools */}
-      <ToolBtn active={selectionMode === 'selection-box'} hint="Box Select" shortcut="B" onClick={() => onSelectionModeChange('selection-box')}>
+      {/* Independent region preference: one style always stays selected. */}
+      <div role="group" aria-label="Selection region style" className="flex items-center gap-1">
+      <ToolBtn active={style === 'box'} hint="Box Select" shortcut="B" onClick={() => chooseStyle('box')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect x="2.5" y="2.5" width="11" height="11" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={selectionMode === 'selection-lasso'} hint="Lasso Select" shortcut="L" onClick={() => onSelectionModeChange('selection-lasso')}>
+      <ToolBtn active={style === 'lasso'} hint="Lasso Select" shortcut="L" onClick={() => chooseStyle('lasso')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 6 Q2 2 7 2 Q12 2 13 6 Q13 11 7 11 Q4 11 4 13 L6 14" strokeDasharray="1.5 1" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={selectionMode === 'selection-circle'} hint="Circle Select" shortcut="O" onClick={() => onSelectionModeChange('selection-circle')}>
+      <ToolBtn active={style === 'circle'} hint="Circle Select" shortcut="O" onClick={() => chooseStyle('circle')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="5.5" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={selectionMode === 'selection-paint'} hint="Paint Select" shortcut="W" onClick={() => onSelectionModeChange('selection-paint')}>
+      <ToolBtn active={style === 'paint'} hint="Paint Select" shortcut="W" onClick={() => chooseStyle('paint')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 13 L10 6 L11 5 L13 7 L12 8 L5 15 L2 14 Z" fill="currentColor" fillOpacity="0.15" />
         </svg>
       </ToolBtn>
 
-      {/* BL-60 Faz 3 — Containment mode toggle (visible only with a selection
-          tool active). One icon switch selects Inside / Touching. */}
+      </div>
+      {/* Shared containment for all ordinary manipulation tools. */}
       {showContainToggle && (
         <>
           <Divider />

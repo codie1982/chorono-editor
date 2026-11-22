@@ -32,11 +32,11 @@ export const STANDARD_TOOL_NAMES: readonly string[] = Object.freeze([
   'inspect_physics_bake', 'clear_physics_bake',
   'upsert_keyframes', 'create_timeline', 'update_timeline', 'clone_layer',
   'array_layer', 'group_layers', 'ungroup_layer', 'delete_layer', 'run_script',
-  'apply_script_plan', 'batch_actions', 'render_preview', 'evaluate_frame',
+  'apply_script_plan', 'prepare_spline_edit', 'apply_spline_edit', 'discard_spline_edit', 'batch_actions', 'render_preview', 'evaluate_frame',
   'get_runtime', 'control_playback', 'control_runtime', 'validate_scene',
   'save_project', 'load_project', 'list_projects', 'import_asset', 'export_runtime',
   'export_svg', 'export_sequence', 'render_2d', 'export_audio', 'render_audio_preview',
-  'get_audio_state', 'undo', 'redo', 'update_composition',
+  'get_audio_state', 'undo', 'redo', 'update_composition', 'update_model3d',
 ])
 
 /** Resolve only explicit own aliases. Unknown names remain unchanged so the

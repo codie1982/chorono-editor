@@ -1,3 +1,6 @@
+import { flattenBooleanOperationsForOutput } from '../../booleanOperations/projectOperations'
+import { compositionForOutput } from '../../paint/paintSource'
+import { assertModelPlaybackExport } from '../../model3d/source/modelCapabilities'
 import type {ChronoScene} from '../../types'
 import {assetSourcePool} from '../../asset/sources'
 import {measureJson,utf8ByteLength} from '../../format/json'
@@ -51,6 +54,7 @@ export async function sceneTextInScope(scene:ChronoScene,kind:SceneTextKind,scop
     const result=await svgInScope(scene,scope,signal,options.svg)
     return describeText(result.svg,result.filename,'image/svg+xml;charset=utf-8',result.warnings)
   }
+  if(kind==='html')assertModelPlaybackExport(scene)
   if(kind==='html')return htmlInScope(scene,scope,signal,options)
   const temporary=scope.child()
   try{
@@ -71,6 +75,8 @@ export async function sceneTextInScope(scene:ChronoScene,kind:SceneTextKind,scop
  * Optional strings are bounded to 4096 UTF-16 units before native replacement.
  */
 async function htmlInScope(scene:ChronoScene,scope:OutputScope,signal:AbortSignal|undefined,options:SceneTextOptions):Promise<TextOutputResult>{
+  scene = flattenBooleanOperationsForOutput(scene)
+  scene = { ...scene, composition: compositionForOutput(scene.composition) }
   const temporary=scope.child()
   try{
     const values=[options.html?.title??scene.composition.id??'',options.html?.runtimeUrl??'',options.html?.pageBackground??'']

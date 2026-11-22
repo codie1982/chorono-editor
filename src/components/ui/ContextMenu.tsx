@@ -20,6 +20,8 @@ export interface MenuActionItem {
   label:     string
   shortcut?: string                  // e.g. '⌘D' — shown right-aligned
   disabled?: boolean
+  /** Explain a capability/ownership restriction without widening the menu label. */
+  disabledReason?: string
   /** Optional small leading icon — anything renderable. */
   icon?:     ReactNode
   onSelect:  () => void
@@ -201,13 +203,15 @@ function MenuLayer({
               item={item}
               isOpen={isOpen}
               onEnter={(e) => handleRowEnter(i, item, e.currentTarget as HTMLElement)}
-              onActivate={() => {
+              onActivate={(row) => {
                 if (item.kind === 'action' && !item.disabled) {
                   item.onSelect()
                   onClose()
                 } else if (item.kind === 'submenu' && !item.disabled) {
-                  // Click → toggle the submenu (helps with touch / keyboard)
-                  setOpenSub(isOpen ? null : i)
+                  // Pointer entry may already open this row before click.
+                  // Activation keeps it open and also works without hover.
+                  setSubAnchor(row.getBoundingClientRect())
+                  setOpenSub(i)
                 }
               }}
             />
@@ -235,11 +239,13 @@ function MenuLayer({
 
 // ── Single row ──────────────────────────────────────────────────────────────
 
+/** A menu row supports pointer activation and focused Enter/Space/Right.
+ * Submenu activation is idempotent; dismissal belongs to the owning menu. */
 function Row({ item, isOpen, onEnter, onActivate }: {
   item:       MenuActionItem | MenuSubmenuItem
   isOpen:     boolean
   onEnter:    (e: React.MouseEvent<HTMLDivElement>) => void
-  onActivate: () => void
+  onActivate: (row: HTMLElement) => void
 }) {
   const disabled = item.disabled === true
   // Theme: idle = gray-200 text on transparent; hover/active = white on blue-600.
@@ -254,10 +260,19 @@ function Row({ item, isOpen, onEnter, onActivate }: {
   return (
     <div
       role="menuitem"
+      tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled}
+      aria-haspopup={item.kind === 'submenu' ? 'menu' : undefined}
+      aria-expanded={item.kind === 'submenu' ? isOpen : undefined}
+      title={item.kind === 'action' ? item.disabledReason : undefined}
       className={`group flex items-center gap-2 px-3 py-1 text-[13px] ${rowClass}`}
       onMouseEnter={onEnter}
-      onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate() } }}
+      onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate(e.currentTarget) } }}
+      onKeyDown={event => {
+        if (!disabled && (event.key === 'Enter' || event.key === ' ' || item.kind === 'submenu' && event.key === 'ArrowRight')) {
+          event.preventDefault(); event.stopPropagation(); onActivate(event.currentTarget)
+        }
+      }}
     >
       {'icon' in item && item.icon ? <span className="w-4 text-center">{item.icon}</span> : null}
       <span className="flex-1 truncate">{item.label}</span>

@@ -16,6 +16,8 @@ describe('timeline keyframe focus and click routing', () => {
   it('is focusable so pointer selection can leave the filter input', () => {
     const { props } = keyframe()
     const html = renderToStaticMarkup(createElement(TimelineKeyframe, props))
+    expect(html).toContain('cursor:ew-resize')
+    expect(html).not.toContain('cursor-grab')
     expect(html).toMatch(/data-kf-id="key"[^>]*tabindex="0"[^>]*role="button"/)
   })
 

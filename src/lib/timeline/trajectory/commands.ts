@@ -1,6 +1,7 @@
 /** Public source-editing contract for viewport and other trajectory adapters.
  * Model/sampling exports remain in index.ts to avoid depending on commands. */
 export { setTrajectoryPoint, moveTrajectoryNodes } from './positionCommands'
+export { setTrajectorySegmentEasing, setTrajectoryHandleMode, setTrajectoryNodeCurve, moveTrajectoryHandle } from './curveCommands'
 export { deleteTrajectoryNodes, retimeTrajectoryNodes, duplicateTrajectoryNodes } from './selectionCommands'
 export { drawTrajectory, type DrawTrajectoryOptions } from './drawCommand'
 export type { TrajectoryNodeRef, TrajectoryCommandScope, TrajectoryEditResult } from './commandTypes'

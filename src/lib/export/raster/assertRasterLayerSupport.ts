@@ -1,5 +1,6 @@
 import type {ChronoScene} from '../../types'
 import {rendererRegistry,type LayerRendererRegistry} from '../../registry'
+import { assertBooleanOutput } from '../../booleanOperations/projectOperations'
 
 /** Refuse a final raster/preview with an unregistered visual source instead of
  * successfully encoding a silently missing layer. The complete source tree is
@@ -10,6 +11,7 @@ import {rendererRegistry,type LayerRendererRegistry} from '../../registry'
  * second hardcoded list. No source mutation or native resource acquisition.
  */
 export function assertRasterLayerSupport(scene:ChronoScene,registry:Pick<LayerRendererRegistry,'find'>=rendererRegistry):void{
+  assertBooleanOutput(scene)
   const missing=scene.layers.find(layer=>layer.type!=='audio'&&!registry.find(layer))
   if(missing)throw new Error(`Raster output has no renderer for layer "${missing.name}" (${missing.id}, ${missing.type}). Register a compatible renderer or bake/convert this layer before output.`)
 }

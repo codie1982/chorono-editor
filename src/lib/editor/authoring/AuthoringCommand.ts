@@ -1,3 +1,4 @@
+import { assertBooleanOutput } from '../../booleanOperations/projectOperations'
 import type { ChronoScene } from '../../types'
 import type { AuthoringHints, AuthoringStamp } from '../../types/authoring'
 import type { EditorCommand } from '../commands-keyframe'
@@ -50,6 +51,7 @@ function expandedHints(before: ChronoScene, next: ChronoScene, hints: AuthoringH
  */
 export function executeAuthoredCommand(command: EditorCommand, before: ChronoScene, fallback?: AuthoringStamp): ChronoScene {
   const next = command.execute(before), hints = commandAuthoringHints(command)
+  assertBooleanOutput(next)
   assertScenePropertyExpressions(next)
   next.layers.forEach(assertNumericInputExpressions)
   const stamp: AuthoringStamp = hints.stamp ?? fallback ?? { actor: { kind: 'human' }, transactionId: globalThis.crypto?.randomUUID?.() }

@@ -52,7 +52,7 @@ function tracePointer(phase: string, event?: PointerEvent) {
  * ordinary selection, evaluated animation and the same public key-command
  * callback as the main page. It never changes gap or guide implementation. */
 function Subject({ fixture }: { fixture: Fixture }) {
-  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings({ persist: false })
   const [selection, setSelection] = useState(() => createLayerSelection(fixture.selected, fixture.primary))
   const ids = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds]), timeMs = fixture.timeMs ?? 500
   const frame = useMemo(() => evaluateTimelines(editor.scene.timelines, timeMs), [editor.scene.timelines, timeMs])

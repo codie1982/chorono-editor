@@ -12,6 +12,10 @@
 
 'use client'
 import { useState } from 'react'
+import { modelInstanceInputGroup } from '@/lib/model3d/content/modelInstanceInputs'
+import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
+import type { ChronoScene } from '@/lib/types'
+import { modelClipReadOnlyReason } from '@/lib/model3d/animation/modelClipOwnership'
 import type { Layer } from '@/lib/types'
 import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
@@ -27,6 +31,7 @@ import type { GradientFill } from '@/lib/types'
 
 interface Props {
   layer: Layer
+  scene?: ChronoScene
   onLayerChange: (layer: Layer) => void
   /**
    * Optional filter — return false to skip a section. Used by PropertiesPanel
@@ -34,15 +39,20 @@ interface Props {
    * Appearance, Shape, etc. for richly-customised layer types).
    */
   filterGroup?: (group: PropertyGroup) => boolean
+  /** Optional capability-owned projection of the same authoritative schemas. */
+  groups?: readonly PropertyGroup[]
+  /** Read-only driver/ownership explanation; literal controls cannot bypass it. */
+  disabledReason?: (schema: PropertySchema) => string | null
 }
 
 /** Render registered source schemas. Numeric fields retain their explicit source
  * path for formula commands; literal changes use the shared immutable writer.
  * No source is mutated or expression evaluated by rendering the inspector. */
-export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props) {
+export default function SchemaPanel({ layer, onLayerChange, filterGroup, groups: suppliedGroups, disabledReason, scene }: Props) {
+  const readOnlyReason = (schema: PropertySchema) => disabledReason?.(schema) ?? modelClipReadOnlyReason(layer, schema.path)
   const def = layerRegistry.findForLayer(layer)
-  if (!def?.getPropertyGroups) return null
-  const groups = def.getPropertyGroups(layer)
+  if (!def?.getPropertyGroups && !suppliedGroups) return null
+  const groups = layer.type === 'model3d' && layer.instanceOf && scene ? [modelInstanceInputGroup(layer, resolveInstanceLayer(layer, scene.layers)?.model3d)] : suppliedGroups ?? def!.getPropertyGroups(layer)
 
   return (
     <>
@@ -59,15 +69,16 @@ export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props
             </div>
             <div className="grid grid-cols-2 gap-2">
               {visible.map(schema => (
-                <div key={schema.id} className={schema.fullWidth ? 'col-span-2' : ''}>
+                <fieldset key={schema.id} aria-label={schema.label} disabled={!!readOnlyReason(schema)} className={`min-w-0 ${schema.fullWidth ? 'col-span-2' : ''}`}>
                   <SchemaField
                     schema={schema}
                     value={readPropertyPath(layer, schema.path) ?? schema.defaultValue}
-                    onChange={(v) => onLayerChange(def.applyPropertyChange
+                    onChange={(v) => { if (!readOnlyReason(schema)) onLayerChange(def?.applyPropertyChange
                       ? def.applyPropertyChange(layer, schema.path, v)
-                      : writePropertyPath(layer, schema.path, v, true))}
+                      : writePropertyPath(layer, schema.path, v, true)) }}
                   />
-                </div>
+                  {readOnlyReason(schema) && <p className="text-xs text-amber-200 mt-1">{readOnlyReason(schema)}</p>}
+                </fieldset>
               ))}
             </div>
           </div>

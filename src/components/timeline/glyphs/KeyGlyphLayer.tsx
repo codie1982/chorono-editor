@@ -1,10 +1,12 @@
 'use client'
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 import { KeyGlyphLayout, type KeyGlyphPoint } from '@/lib/timeline/glyphs/KeyGlyphLayout'
 
 export interface KeyGlyphAccessibility { descriptionId?: string; ordinal?: string }
 interface Props {
+  /** Dense hit targets inherit the owning editor gesture cursor. */
+  pointerCursor?: CSSProperties['cursor']
   points: readonly KeyGlyphPoint[]; width: number; height: number; label: string; left?: number
   selected: ReadonlySet<string>; radius?: number
   palette?: readonly [string, string, string]
@@ -66,7 +68,7 @@ export function KeyGlyphLayer(props: Props) {
   }
   const nativeTarget = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-glyph-item],[data-glyph-nav]')
 
-  return <div ref={root} className="absolute top-0 bottom-0 [&_[data-glyph-control]:focus]:z-40" style={{ left: props.left ?? 0, width: props.width }}
+  return <div ref={root} className="absolute top-0 bottom-0 [&_[data-glyph-control]:focus]:z-40" style={{ left: props.left ?? 0, width: props.width, cursor: layout.dense && (hover || pressed) ? props.pointerCursor : undefined }}
     tabIndex={-1} role="group" aria-label={`${props.label} keyframes`}
     data-key-glyph-layer={layout.dense ? 'dense' : 'native'} data-glyph-count={layout.count} data-glyph-cells={layout.cellCount}
     onFocusCapture={event => { const id = itemOf(event.target); if (id) setCursor(id) }}

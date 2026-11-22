@@ -1,4 +1,5 @@
 'use client'
+import type { TimelineAuthoringContext } from '@/lib/timeline/authoring/TimelineAuthoringContext'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChronoScene, EasingDefinition, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -9,6 +10,8 @@ import { makeUpdateEasingCmd } from '@/lib/editor/commands-keyframe'
 
 const DEFAULT_BEZIER = { cx1: 0.42, cy1: 0, cx2: 0.58, cy2: 1 }
 interface Args {
+  context?: TimelineAuthoringContext
+  onWarning?: (message: string) => void
   editor: EditorStateReturn
   timelineId: string | null
   getTrackViewport: (target: string) => CurveViewport
@@ -69,7 +72,8 @@ export function useBezierHandleDrag(args: Args) {
     if (drag.a.tangentMode === 'aligned') bezier = drag.handle === 'p1'
       ? { ...bezier, cx2: 1 - cx, cy2: 1 - cy } : { ...bezier, cx1: 1 - cx, cy1: 1 - cy }
     drag.pending = { type: 'customBezier', bezier }
-    latest.current.editor.previewTransaction(updateKfEasing(drag.base, drag.timelineId, drag.target, drag.a.id, drag.pending))
+    try { latest.current.editor.previewTransaction(updateKfEasing(drag.base, drag.timelineId, drag.target, drag.a.id, drag.pending)) }
+    catch (error) { latest.current.onWarning?.((error as Error).message) }
   }, [])
   const end = useCallback((event: PointerEvent) => {
     const drag = session.current
@@ -77,7 +81,8 @@ export function useBezierHandleDrag(args: Args) {
     if (JSON.stringify(drag.original) === JSON.stringify(drag.pending)) { cancel(); return }
     session.current = null
     release(drag)
-    latest.current.editor.commitTransaction(makeUpdateEasingCmd(drag.timelineId, drag.target, drag.a.id, drag.original, drag.pending))
+    try { latest.current.editor.commitTransaction(makeUpdateEasingCmd(drag.timelineId, drag.target, drag.a.id, drag.original, drag.pending, latest.current.context)) }
+    catch (error) { latest.current.editor.cancelTransaction(); latest.current.onWarning?.((error as Error).message) }
     setActive(false)
     latest.current.onDragEnd?.()
   }, [cancel])

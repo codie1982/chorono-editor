@@ -22,6 +22,7 @@ export type LayerCategory =
   | 'Mesh & Surface'
   | 'Text'
   | 'Media'
+  | '3D Objects'
   | 'Effects'
   | 'Masks'
   | 'Groups'
@@ -39,6 +40,25 @@ export interface LayerDefinition<T extends Layer = Layer> {
   iconKey: string
 
   category: LayerCategory
+
+  /** Internal property subtrees owned by an isolated feature editor. The outer
+   * 2D Timeline must not create/edit these tracks. Existing source tracks stay
+   * serializable/evaluable for compatibility. Omission preserves legacy kinds.
+   * Paths are layer-relative and use the shared parent/child overlap rule. */
+  readonly timelineExcludedPaths?: readonly string[]
+
+  /** Exact leaf channels permitted in this feature's isolated Timeline context.
+   * Must lie under timelineExcludedPaths; declaring a parent subtree does not
+   * grant structural/asset edits. Static inspector schemas may remain non-keyable
+   * in the main scene. Omission means no internal Timeline authoring capability.
+   * This metadata alone creates neither a clip nor a detail Timeline UI.
+   */
+  readonly contentTimelinePaths?: readonly string[]
+  /** Dynamic exact leaves bound to an existing content inventory; no wildcard authority. */
+  getContentTimelinePaths?(layer: T): readonly string[]
+  /** Optional stable-ID virtual value resolver for feature-owned channels.
+   * Authoring reads only; the feature's frame adapter resolves render writes. */
+  readContentTimelineValue?(layer: T, path: string): unknown
 
   /** Default instance constructor — called by `page.tsx addLayer`. */
   createDefault(): T

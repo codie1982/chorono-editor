@@ -24,6 +24,10 @@ export type LayerWorldBoundsResolver = (layer: Layer) => PathBounds | null
 /** Optional scheduling policy; the geometric result and memo ownership are
  * unchanged. Callers must keep source/override inputs immutable for the scope. */
 export interface LayerWorldBoundsOptions {
+  /** Optional affine from world/composition coordinates to a requested space.
+   * Applied before analytic/path bounds, preserving exact rotated parent axes.
+   * Borrowed and never mutated; omitted keeps legacy composition-pixel bounds. */
+  worldToSpace?: Matrix2D
   /** Delay evaluation, scene projection and indexing until the first query.
    * Useful for editor frames with no visible bounds consumer. Default false
    * preserves eager callers' preparation/error timing. */
@@ -151,7 +155,8 @@ export function createLayerWorldBoundsResolver(
       return bounds
     }
 
-    const matrix = resolveLayerWorldMatrix(effective, scene, timeMs, frame, layerIndex)
+    const world = resolveLayerWorldMatrix(effective, scene, timeMs, frame, layerIndex)
+    const matrix = options?.worldToSpace ? options.worldToSpace.multiply(world) : world
     if (effective.type === 'spline') {
       const data = effective.spline
       if (!data || !Object.values(data.subShapes).some(sub => sub.contourIds.some(id => {
@@ -214,12 +219,15 @@ export function createLayerWorldBoundsResolver(
       const size = !hasAnimatedSize && !fontMapped && effective.size ? effective.size : measureTextLayout({
         ...effective.text,
         fontSize: getLayerValue(frame, effective.id, 'text.fontSize', effective.text.fontSize),
+        letterSpacing: getLayerValue(frame, effective.id, 'text.letterSpacing', effective.text.letterSpacing ?? 0),
+        lineHeight: getLayerValue(frame, effective.id, 'text.lineHeight', effective.text.lineHeight ?? 1.2),
       },scene.assets)
-      const left = effective.text.textAlign === 'center' ? -size.width / 2
+      const left = effective.text.direction === 'vertical' ? 0
+        : effective.text.textAlign === 'center' ? -size.width / 2
         : effective.text.textAlign === 'right' ? -size.width : 0
       return rectangleBounds(size.width, size.height, matrix, left)
     }
-    if (['image', 'video', 'frameSequence'].includes(effective.type) && effective.size) {
+    if (['image', 'video', 'frameSequence', 'model3d'].includes(effective.type) && effective.size) {
       return rectangleBounds(effective.size.width, effective.size.height, matrix)
     }
     return null

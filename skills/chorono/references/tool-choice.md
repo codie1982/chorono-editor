@@ -1,7 +1,7 @@
 # Choose a native tool
 
 Use the tool names actually advertised by the connected MCP client. In MCP
-2.1.0 the default `standard` catalog exposes 58 focused tools; older clients or
+2.1.0 the default `standard` catalog exposes 62 focused tools; older clients or
 the `legacy` profile may advertise the original names. The `tools` array in
 `get_capabilities({})` remains the original compatibility inventory. For the
 current discovery surface, use `get_capabilities({summary:true})` and read
@@ -17,6 +17,7 @@ arguments. Script signatures remain in `chorono://scripting`.
 | Inspect one timeline | `get_timeline` | Reads its tracks and keys. Legacy name is `describe_timeline`. |
 | Create a registered layer kind | `create_layer` | Takes the existing registry `kind` and optional layer `patch`; legacy name is `create_object`. Use real kinds from capabilities. |
 | Change an ordinary exposed layer field | `update_layer` | Uses flat named fields such as `fillColor`; preserve other data. It is not a generic recursive object patch. |
+| Edit a boxed 3D model | `update_model3d` | Deep-merges static pose/camera/light fields and optional 2D box size on an imported source model. Import bytes through `import_asset`. |
 | Add or update typed keys | `upsert_keyframes` | Takes explicit `timelineId`, `layerId`, `property` and `keyframes`; legacy name is `set_keyframes`. It does not replace the entire track. |
 | Verify evaluated values | `evaluate_frame` | Includes bindings, parameter wires and runtime inputs. Legacy `evaluate_at_time` / `evaluate_timeline_values` is timeline-only. |
 | Verify pixels | `render_preview` | Produces actual PNG content; evaluated values alone do not prove appearance. |
@@ -119,3 +120,5 @@ profile only when the workflow needs its direct tool list. Normal authoring does
 not require changing local configuration.
 
 `get_scene` preserves optional source attribution in `scene.authoring`; `get_layer` adds descriptive self/subtree contribution information. Actor metadata is not a write permission. Missing provenance stays unknown.
+
+For Point/Edge/Object source edits and native spline CPU solvers, use the single prepare_spline_edit → inspect PNG/changeSummary → apply_spline_edit or discard_spline_edit workflow. It is not a mutation batch. Simple procedural source edits may use layer.spline.edit; asynchronous solvers are not synchronous script calls. Read [spline-editing.md](spline-editing.md) for exact boundaries.

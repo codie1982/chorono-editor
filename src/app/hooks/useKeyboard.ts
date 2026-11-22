@@ -11,6 +11,8 @@ import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 export type TimelineProperty = 'position' | 'scale' | 'rotation' | 'opacity'
 
 interface Handlers {
+  /** Suspend this host while a separate detail authoring surface owns shortcuts. */
+  enabled?: boolean
   onUndo: () => void
   onRedo: () => void
   onPlayToggle: () => void
@@ -23,6 +25,8 @@ interface Handlers {
   onDuplicateSelected: () => void
   /** Solo the selected objects/groups, or exit an identical Solo selection. */
   onSoloSelected?: () => void
+  /** Canvas/list selection only. Active tools keep first refusal on Escape. */
+  onClearSelection?: () => void
   onCopy?: () => void
   onPaste?: () => void
   onShowHelp?: () => void
@@ -80,10 +84,11 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
  */
 export function useKeyboard(handlers: Handlers) {
   const {
+    enabled = true,
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected, onSoloSelected,
+    onDeleteSelected, onDuplicateSelected, onSoloSelected, onClearSelection,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
@@ -96,6 +101,7 @@ export function useKeyboard(handlers: Handlers) {
   } = handlers
 
   useEffect(() => {
+    if (!enabled) return
     // Build the id → action map fresh each effect run so it closes over the
     // latest handlers. Missing handlers leave the slot undefined (no-op).
     const actions: Record<string, (() => void) | undefined> = {
@@ -120,6 +126,7 @@ export function useKeyboard(handlers: Handlers) {
 
       'canvas.select.duplicate':  onDuplicateSelected,
       'canvas.select.solo': onSoloSelected,
+      'canvas.select.clear': onClearSelection,
       'canvas.select.cloneQuick': onCloneQuick,
       'canvas.select.copy':       onCopy,
       'canvas.select.paste':      onPaste,
@@ -185,10 +192,11 @@ export function useKeyboard(handlers: Handlers) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [
+    enabled,
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected, onSoloSelected,
+    onDeleteSelected, onDuplicateSelected, onSoloSelected, onClearSelection,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,

@@ -14,7 +14,7 @@ export const SOURCE_EDITING_CAPABILITIES = Object.freeze({ version: 1, required:
     creationSeparateFromLastWriter: true, undoRedo: 'snapshot-restore', runtime: 'omitted',
     addressEncoding: 'JSON string tuples', recordLimit: 8000, fieldLimit: 16000, charLimit: 2097152 } })
 
-const SOURCE_EXTRAS = new Set(['run_script', 'apply_script_plan', 'batch_actions', 'load_project',
+const SOURCE_EXTRAS = new Set(['run_script', 'apply_script_plan', 'prepare_spline_edit', 'apply_spline_edit', 'batch_actions', 'load_project',
   'import_asset', 'normalize_audio_clip', 'bake_rigid_bodies', 'bake_voronoi_fracture',
   'prepare_rigid_body_bake', 'prepare_voronoi_fracture_bake', 'commit_bake_job',
   'clear_physics_bake',

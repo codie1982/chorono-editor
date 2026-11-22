@@ -5,7 +5,7 @@
 //
 // BL-26 scope (this file):
 //   - snapRect()   — canvas object snap (delegates to CanvasSnapCollector)
-//   - snapPoint()  — single-point snap (stub for BL-27 vertex/segment)
+//   - resolvePoint()/snapPoint() — complete spline vertices + axis targets
 //   - snapAngle()  — rotate gizmo angle snap (BL-28 will activate)
 //   - snapScale()  — scale gizmo/selection percentage increments
 //
@@ -16,6 +16,7 @@ import { canvasSnap, type CanvasSnapContext } from './CanvasSnapCollector'
 import type { SnapResult, SnapRect, Vec2 } from './SnapCandidate'
 import { snapRect as resolveTargets } from './AlignmentGuides'
 import { validGridSpacing, gridSnappingEnabled } from './gridSettings'
+import { nearestSplineVertex } from './splineVertexSnap'
 
 /** Engine settings — mirrors useSnapSettings hook, decoupled from React. */
 export interface SnapEngineSettings {
@@ -114,16 +115,22 @@ export class SnapEngine {
     return delta
   }
 
-  /** Point/pointer acquisition uses the same targets and screen radius as
-   * dragging bounds. Returns guides for editor feedback; never warps the OS
-   * cursor or mutates the input. A zero-size rectangle has one unique anchor. */
+  /** Point acquisition prefers the nearest complete spline anchor within the
+   * CSS-pixel radius, then falls back to ordinary per-axis targets. This keeps
+   * vertex identity/coordinates together even when grid/pixel are also on.
+   * Rectangle movement retains its old bounds-only contract. No cursor warp. */
   resolvePoint(point: Vec2, context: CanvasSnapContext): SnapResult {
+    const vertex = this.settings.enabled && this.settings.targets.vertex
+      ? nearestSplineVertex(context.splineVertices ?? [], point, this.radiusWorld(context.zoom)) : undefined
+    if (vertex) return { snapped: true, point: { x: vertex.x, y: vertex.y }, delta: { x: vertex.x - point.x, y: vertex.y - point.y }, guides: [],
+      candidate: { type: 'vertex', point: { x: vertex.x, y: vertex.y }, priority: 1, label: 'Spline vertex', sourceLayerId: vertex.layerId, vertex } }
     return this.snapRect({ ...point, width: 0, height: 0 }, context)
   }
 
   /**
-   * Single-point snap. BL-27 will collect vertex / segment targets here
-   * (pen tool path-aware snap). Today reduces to grid + pixel only.
+   * With a prepared context, use the same vertex/axis acquisition contract.
+   * Legacy context-free callers retain their unconditional grid/pixel policy.
+   * Segment projection is reserved; no segment snap is advertised here.
    */
   snapPoint(p: Vec2, context?: CanvasSnapContext): Vec2 {
     if (context) return this.resolvePoint(p, context).point

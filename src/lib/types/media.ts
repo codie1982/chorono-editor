@@ -76,6 +76,7 @@ export interface FrameSequenceData {
  * because those values are still part of this union.
  */
 export type AssetType =
+  | 'model3d'
   | 'image'
   | 'video'
   | 'audio'

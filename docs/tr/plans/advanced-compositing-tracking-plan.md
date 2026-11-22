@@ -24,6 +24,12 @@ Bu faz 2D editörde temel video kurgu ve kaynak videoya bağlı yerel analizi
 kapsar; ayrı Video Editor modu açmaz. Analiz sonuçlarının 3D kamera çözümünde
 kullanımı [3D planının](../production-3d-roadmap.md) ayrı teslimidir.
 
+12 Kasım ortak detay genişlemesi: video/texture ve ileride compositing araçları
+[ortak öğe detay host'unu](shared-item-detail-editor.md) kendi adapter'larıyla
+kullanır; ikinci detay oturumu/cache altyapısı kurulmaz. Host'un varlığı CFX7
+çoklu video/cache, CFX7K chroma/despill veya CFX10 ortak derinlik teslimi değildir;
+bu özellikler burada belirtilen sonraki sırada ve kendi kabul kapılarında kalır.
+
 ## 2. Sonraki fazın teslim sırası
 
 | Kod | Teslim | Bağımlılık ve tamamlanma koşulu |

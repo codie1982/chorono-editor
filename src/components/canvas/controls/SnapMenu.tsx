@@ -14,6 +14,7 @@ interface SnapMenuProps {
   toGuides:  boolean;   onToggleGuides:  () => void
   toGrid:    boolean;   onToggleGrid:    () => void
   toPixel:   boolean;   onTogglePixel:   () => void
+  toVertex?: boolean; onToggleVertex?: () => void
   gridSize:  number;    onGridSizeChange: (n: number) => void
   radiusPx: number; onRadiusChange: (n: number) => void
   onClearTargets: () => void
@@ -61,6 +62,8 @@ export function SnapMenu(p: SnapMenuProps) {
     { label: 'Snap to Grid', value: p.toGrid, onToggle: p.onToggleGrid, disabled: !p.enabled || p.gridVisible === false,
       hint: p.gridVisible === false ? 'Show the viewport grid to enable grid snapping.' : undefined },
     { label: 'Snap to Pixel',   value: p.toPixel,   onToggle: p.onTogglePixel,   disabled: !p.enabled },
+    ...(p.onToggleVertex ? [{ label: 'Snap to Spline Vertices', value: !!p.toVertex, onToggle: p.onToggleVertex, disabled: !p.enabled,
+      hint: 'Exact spline anchors while drawing. Open endpoints in the edited spline can be joined.' }] : []),
   ]
 
   return (

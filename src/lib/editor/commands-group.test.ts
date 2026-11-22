@@ -28,7 +28,7 @@ describe('group creation placement', () => {
   it.each([false, true])('preserves every child world matrix at all times and centers the pivot (nested=%s)', nested => {
     const scene = fixture(nested), source = JSON.stringify(scene), ids = ['shape', 'spline']
     const measure = createLayerWorldBoundsResolver(scene, 500)
-    const bounds = unionBounds(measure(scene.layers[0]), measure(scene.layers.at(-1)!))!
+    const bounds = unionBounds(measure(scene.layers[0]), measure(scene.layers.at(-1)!)!)
     const command = makeGroupSiblingLayersCmd(scene, ids, { timeMs: 500 })!, next = command.execute(scene)
     const group = next.layers.find(layer => layer.id === command.groupId)!
     const pivot = resolveLayerWorldMatrix(group, next, 500).applyToPoint({ x: group.transform.anchorX, y: group.transform.anchorY })
@@ -52,7 +52,7 @@ describe('group creation placement', () => {
     scene.layers[0] = { ...scene.layers[0], hidden: true }
     const command = makeGroupCmd(['shape', 'spline']), grouped = command.execute(scene)
     const measure = createLayerWorldBoundsResolver({ ...scene, layers: scene.layers.map(layer => ({ ...layer, hidden: false })) })
-    const boundsWithHidden = unionBounds(measure(scene.layers[0]), measure(scene.layers[1]))!
+    const boundsWithHidden = unionBounds(measure(scene.layers[0]), measure(scene.layers[1])!)
     const pivot = grouped.layers.find(layer => layer.id === command.groupId)!.transform
     expect(pivot.anchorX).toBeCloseTo(boundsWithHidden.x + boundsWithHidden.width / 2)
     expect(pivot.anchorY).toBeCloseTo(boundsWithHidden.y + boundsWithHidden.height / 2)

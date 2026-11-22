@@ -12,7 +12,7 @@ import {
   buildSnapTargets, snapRect as snapRectLegacy,
   type Rect, type SnapTarget,
 } from './AlignmentGuides'
-import type { SnapResult, SnapRect } from './SnapCandidate'
+import type { SnapResult, SnapRect, SplineVertexTarget } from './SnapCandidate'
 import type { SceneGuide } from '../geometry/guides/SceneGuide'
 
 export interface CanvasSnapContext {
@@ -29,6 +29,8 @@ export interface CanvasSnapContext {
   parentBounds?: readonly Rect[]
   /** CSS pixels per composition pixel; the engine converts screen hit radius. */
   zoom?: number
+  /** Optional prepared anchors; callers exclude moving geometry as needed. */
+  splineVertices?: readonly SplineVertexTarget[]
 }
 
 /** Pluggable collector contract — every future collector implements this. */

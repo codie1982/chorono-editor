@@ -7,19 +7,26 @@
 //   - "Which layers reference this asset?"
 //   - "Is this asset an orphan?"
 
-import type { Layer }  from '../types/core'
+import { modelAssetIds } from '../model3d/content/modelContent'
+import type { Composition, Layer }  from '../types/core'
 import type { Asset }  from './types'
 import type { AssetUsage } from './types'
 
+/** Mutable reverse source-reference index; no media handles are retained.
+ * Layer IDs and the optional composition paint reference are distinct owners.
+ * Inactive image paint still counts so orphan cleanup cannot delete a source
+ * that switching back to Image will reuse. Call build after composition edits. */
 export class AssetIndex {
   /** assetId → set of layerIds */
   private index = new Map<string, Set<string>>()
+  private backgroundId?: string
 
   /**
-   * Build the index from scratch given the current scene layers.
+   * Rebuild source references, including optional active/inactive background paint.
    */
-  build(layers: Layer[]): void {
+  build(layers: Layer[], composition?: Composition): void {
     this.index.clear()
+    this.backgroundId = composition?.backgroundFill?.image?.assetId
     for (const layer of layers) {
       const assetIds = this.extractAssetIds(layer)
       for (const assetId of assetIds) {
@@ -65,11 +72,11 @@ export class AssetIndex {
    * Get reference count for an asset.
    */
   getRefCount(assetId: string): number {
-    return this.index.get(assetId)?.size ?? 0
+    return (this.index.get(assetId)?.size ?? 0) + Number(this.hasCompositionReference(assetId))
   }
 
   /**
-   * Returns true if no layer references this asset.
+   * Returns true if neither layers nor the composition reference this asset.
    */
   isOrphan(assetId: string): boolean {
     return this.getRefCount(assetId) === 0
@@ -92,7 +99,7 @@ export class AssetIndex {
     return {
       assetId,
       layerIds,
-      refCount: layerIds.length,
+      refCount: this.getRefCount(assetId),
     }
   }
 
@@ -107,15 +114,20 @@ export class AssetIndex {
     return result
   }
 
+  /** Background ownership is distinct from layer IDs, including inactive paint. */
+  hasCompositionReference(assetId: string): boolean { return this.backgroundId === assetId }
+
   /** Clear the index */
   clear(): void {
-    this.index.clear()
+    this.index.clear(); this.backgroundId = undefined
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
   private extractAssetIds(layer: Layer): string[] {
     const ids: string[] = []
+    ids.push(...modelAssetIds(layer.model3d))
+    if (layer.style?.fill?.image?.assetId) ids.push(layer.style.fill.image.assetId)
     if (layer.image?.assetId)  ids.push(layer.image.assetId)
     if (layer.video?.assetId)  ids.push(layer.video.assetId)
     if (layer.audio?.assetId)  ids.push(layer.audio.assetId)

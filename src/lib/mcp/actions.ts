@@ -14,6 +14,8 @@ import { layerPatchSchema, particlePatchSchema } from './schema/registryPayloadS
 import { modifierSchema } from './schema/modifierSchema'
 import { trackPatchSchema } from './schema/trackPatchSchema'
 import { registerMesh2DMCPActions } from './actions/Mesh2DMCPActions'
+import { model3dPatchSchema, model3dBoxSchema } from './schema/model3dPatchSchema'
+import { patchModelPresentation } from '../model3d/source/modelPatch'
 
 let ready: Promise<void> | undefined
 const str = { type: 'string', description: 'String value in the native model; use returned stable ids for references.' }
@@ -27,7 +29,7 @@ const target = { type: 'string', description: 'Full track target, for example la
 function scripted(label: string, scene: ChronoScene, run: (api: SceneAPI) => void): EditorCommand {
   let working = scene
   const commands: EditorCommand[] = []
-  const api = createSceneAPI({ getScene: () => working, applyCommand: cmd => { commands.push(cmd); working = cmd.execute(working) } }, () => {})
+  const api = createSceneAPI({ getScene: () => working, applyCommand: cmd => { commands.push(cmd); working = cmd.execute(working) } }, () => {}, { nativeCommandAdapter: true })
   run(api)
   return makeBatchCmd(label, commands)
 }
@@ -99,6 +101,14 @@ export function bootstrapMCPActions(): Promise<void> {
       if ('id' in p.patch || 'type' in p.patch) throw new Error('Cannot change object id or type')
       layer.set(p.patch)
     })
+    register('update_model3d', 'Deep-merge static boxed 3D model pose, camera and lighting settings, with optional outer 2D box size. Omitted fields and source asset identity remain unchanged. One Undo step; internal model channels are not keyed on the main 2D Timeline.',
+      { layerId, patch: { ...model3dPatchSchema(), description: 'Partial internal model placement, camera or lighting. Rotation, yaw, pitch and FOV are degrees; coordinates use normalized presentation units. Omit when changing only the box.' }, box: model3dBoxSchema() },
+      ['layerId'], (p, api) => {
+        const layer = api.get(p.layerId)
+        if (!layer) throw new Error('Layer not found')
+        const next = patchModelPresentation(layer.data, p.patch ?? {}, p.box)
+        layer.set({ model3d: next.model3d, ...(p.box ? { size: next.size } : {}) })
+      })
     register('update_timeline', 'Shallowly update one existing timeline in one undo step. Fields/arrays supplied in patch replace in full; id and tracks remain unchanged. Use update_track for track data. durationMs, marker and segment times are timeline-local milliseconds.', { timelineId, patch: { ...obj, description: 'Partial Timeline fields excluding id/tracks: durationMs, loop, pingPong, autoplay, workArea, layerIds, markers, segments or events. Read current arrays before replacement; omitted fields remain unchanged.' } }, ['timelineId', 'patch'], (p, api) => api.timeline(p.timelineId).set(p.patch))
     register('clone_timeline', 'Duplicate an animation including keyframes, curves, modifiers, events and segments with a new timeline id.', { timelineId, newId: str }, ['timelineId', 'newId'], (p, api) => { api.cloneTimeline(p.timelineId, p.newId) })
     register('delete_timeline', 'Delete one timeline. Refuses timelines referenced by state machines.', { timelineId }, ['timelineId'], (p, api) => api.deleteTimeline(p.timelineId))

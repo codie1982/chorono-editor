@@ -322,7 +322,7 @@ export function defaultLayout(): DockNode {
               { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas', 'stateMachine'], activeIndex: 0 },
               {
                 kind: 'leaf', id: 'properties-leaf',
-                panels: ['properties', 'geometryEdit', 'physicsSimulations', 'jobsBake', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview',  'shortcuts'],
+                panels: ['properties', 'geometryEdit', 'physicsSimulations', 'jobsBake', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview'],
                 activeIndex: 0,
               },
             ],

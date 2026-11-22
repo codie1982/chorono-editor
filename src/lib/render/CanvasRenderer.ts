@@ -81,6 +81,8 @@ export interface CanvasRenderOptions {
    *   { color }     → explicit solid colour override
    */
   background?: 'scene' | 'transparent' | { color: string }
+  /** Preview mode is also used in-editor; only output hosts apply export visibility. */
+  output?: boolean
 }
 
 /**
@@ -160,11 +162,12 @@ export class CanvasRenderer {
       rendererRegistry, this.lodCache, options.lod, area, paint) : undefined
     let completed = false
     try {
-    drawCompositionBackground(ctx, composition, options.background ?? 'scene')
+    drawCompositionBackground(ctx, composition, options.background ?? 'scene', assets, options.output === true)
     if (editorChrome && options.grid?.inFront === false) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
 
     const visibility = new LayerDrawVisibility(layers, timeMs, layerIndex)
     assets.media?.request({ frame: prepared, context: ctx, area: options.visibleArea,
+      includeBackground: (options.background ?? 'scene') === 'scene' && !(options.output && composition.backgroundInExport === false),
       padding: options.mediaPadding, prefetchMs: options.mediaPrefetchMs,
       selected: new Set([...Array.from(options.selectedLayerIds ?? []), ...(selectedLayerId ? [selectedLayerId] : [])]) })
 
@@ -176,6 +179,19 @@ export class CanvasRenderer {
     for (const layer of layerIndex.roots) {
       if (!visibility.root(layer)) continue
       this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, layerIndex, timeMs, isSelected(layer.id), renderMode, options.selectionOutline ?? true, options.editorOverlays ?? {}, boundsForFrame, sourceScene, paint, true, lod, visibility)
+    }
+
+    // A mask source is omitted from the final composition. Show its ink faintly
+    // only while selected in the editor so the author can position the text.
+    const selectedMask = editorChrome && selectedLayerId ? layerIndex.get(selectedLayerId) : undefined
+    if (selectedMask && !selectedMask.parentId && visibility.active(selectedMask)
+        && layers.some(layer => layer.masks?.some(mask => mask.maskLayerId === selectedMask.id))) {
+      ctx.save()
+      try {
+        ctx.globalAlpha *= 0.35
+        this.renderLayer(ctx, selectedMask, overrides, paramValues, assets, scene, layerIndex, timeMs,
+          true, renderMode, options.selectionOutline ?? true, options.editorOverlays ?? {}, boundsForFrame, sourceScene, paint, true, lod)
+      } finally { ctx.restore() }
     }
 
     // ── Optional grid overlay (editor only) ───────────────────────────────

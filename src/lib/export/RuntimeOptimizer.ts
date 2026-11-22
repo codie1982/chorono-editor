@@ -1,3 +1,5 @@
+import { flattenBooleanOperationsForOutput } from '../booleanOperations/projectOperations'
+import { assertModelPlaybackExport } from '../model3d/source/modelCapabilities'
 // ── RuntimeOptimizer ──────────────────────────────────────────────────────────
 //
 // Strips editor-only metadata and collapses redundant data BEFORE the JSON is
@@ -22,6 +24,8 @@ export class RuntimeOptimizer {
   constructor(private readonly compiler: RuntimeSceneCompiler = defaultRuntimeSceneCompiler) {}
 
   optimize(scene: ChronoScene): RuntimeAnimation {
+    scene = flattenBooleanOperationsForOutput(scene)
+    assertModelPlaybackExport(scene)
     let s = this.compiler.compile(scene)
     s = this.normalizeKeyframes(s)
     s = this.removeRedundantKeyframes(s)

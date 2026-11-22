@@ -77,6 +77,8 @@ Use ordinary synchronous loops for repeated objects and staggered keyframe times
 
 For path motion, create `scene.addPath(points,{role:'motion',name:...})` or an appropriate spline, then `layer.followPath(path.id,{orientToPath:true})` and key `followPath.progress` from 0 to 1. Use capability definitions for spline parameters, trim and repeater properties.
 
+Manual viewport edits use object right-click → Edit motion keys and the Motion Keys dock panel. Segment/node menus and control handles edit the same native X/Y keys; preserve optional `motionTangentMode` node linkage when revising existing keys. This is separate from per-segment temporal `tangentMode`. Native easing handles cannot bend an axis whose endpoint values are equal; use an intermediate position key or an explicit spline Follow Path for that case. `Timeline.playKeyRange` is an editor-only playback preference, not an animation/export trim instruction.
+
 For particles, select a real preset from `get_capabilities`, then use `scene.addEmitter(preset,options)` and `configureParticles`, or the native particle tools. Bound particle counts to the intended scene; inspect frames and avoid increasing counts merely to hide composition problems.
 
 For deeper editing, use `layer.particles` for validated preset/config/life-gradient/motion-modifier operations, `layer.spline` for native point/handle/contour editing, and `scene.explorer` for hierarchy queries, grouping and reparenting. See [domains.md](domains.md) for signatures, returned ids, coordinate spaces and a complete path-emitter example.
@@ -85,9 +87,27 @@ For grouping, create a group and parent child handles with `child.parent(group)`
 
 ## Read, merge and animate data
 
+Native S2D-3 Boolean preview is transient: select 2–8 closed Shape/Spline
+layers or spline Objects, then Spline & Boolean panel / viewport context menu → Boolean
+preview. Union/Subtract/Intersect, explicit A−B/B−A and composition-pixel curve
+tolerance do not alter source, keys or history. It is excluded from exports and
+session JSON. S2D-4 UI Apply persists a normal group recipe with original inputs
+and a generated spline child. MCP uses `prepare_spline_edit` with
+`operation.kind:'boolean'`, followed by `apply_spline_edit`; `ownerId` re-edits
+an existing recipe. See [spline-editing.md](spline-editing.md).
+`combineMode` metadata is not a solver. Never emulate Apply by replacing human
+sources, delete/reparent a protected child, key generated vertex topology or
+create linked operation instances. Outer group/result transform and style edits
+and whole-group independent Copy remain supported. Existing input drivers reject
+Apply rather than lose keys. See `docs/tr/boolean-operation.md` for ownership,
+sampling, cache/output limits and lifecycle; preview limits remain documented in
+`docs/tr/boolean-preview.md`.
+
 `scene.snapshot()` returns the full editable scene as detached JSON. `scene.assets`, `assetCollections`, `parameters`, `triggers`, `bindings`, `parameterWires`, `stateMachines` and `initialState` expose copies. A layer's `data` contains its complete settings, and `get('style.fill.color')` reads one nested value. Modify the scene with handles rather than changing these copies.
 
 Use `layer.patch({style:{stroke:{width:3}}})` to preserve sibling fields. `layer.set({style:...})` replaces the complete style object. Arrays are replaced by `patch`, not merged element by element. Do not change layer identity.
+
+Static writes refuse fields owned by keys/controllers in any timeline or by bindings/wires/formulas/path drivers. Use `key` to change an animated value. Existing formula and binding records cannot be erased by raw replacement; use their owning workflow. Locked/frozen ancestors block writes; unlock separately from geometry changes. Invalid edited values and incomplete required containers are refused without clamping. A new fill/stroke needs its source discriminator/required fields, e.g. `{fill:{type:'solid',color:'#526885',opacity:0}}` or `{stroke:{color:'#526885',width:2}}`.
 
 Animation overrides are applied to layer data before drawing, including shape, text, effect, mask, particle and repeater settings. Numbers interpolate with easing; color paths interpolate channels; ordinary strings and booleans switch at key boundaries; Vec2 values interpolate components. Numeric modifiers/controllers/bake operate on numbers. Use exact property paths from capabilities/data and inspect real frames. For geometry motion, key scalar coordinates of existing points/handles while preserving topology; whole-object geometry morphing is not supported.
 

@@ -39,3 +39,4 @@ export type {
   Mesh2DValidationResult,
   Mesh2DValidationSeverity,
 } from './mesh2d'
+export { transformPathDefinition } from './transformPathDefinition'

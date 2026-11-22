@@ -1,6 +1,6 @@
 'use client'
 import { useRef, useState, useEffect } from 'react'
-import type { DockLeaf, DockEdge } from './types'
+import type { DockLeaf, DockEdge, DockTheme } from './types'
 import type { PanelRegistry } from './registry'
 import { useDockDrag } from './dragContext'
 import ContextMenu, { useContextMenu } from '@/components/ui/ContextMenu'
@@ -15,6 +15,7 @@ interface Props {
    *  the panel content. 'h-right' = panel is to the LEFT of a vertical
    *  splitter; chevron points right when collapsed (expand to the right). */
   collapseSide?: 'h-right' | 'h-left' | 'v-bottom' | 'v-top'
+  theme?: DockTheme
 }
 
 const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
@@ -26,7 +27,7 @@ const EDGE_THRESHOLD = 0.25  // outer 25% of each side → edge drop zone
  * closing and merging panels update its scope without a separate stored list.
  */
 export default function DockLeafComponent({
-  leaf, registry, onTabSelect, onClosePanel, onToggleCollapse, collapseSide,
+  leaf, registry, onTabSelect, onClosePanel, onToggleCollapse, collapseSide, theme = 'default',
 }: Props) {
   // NOTE on hook ordering — every hook below MUST be called on every
   // render, even when the leaf is collapsed. The early-return for the
@@ -96,8 +97,7 @@ export default function DockLeafComponent({
     return (
       <div
         key={leaf.id}
-        className={`relative flex flex-col items-center justify-start
-                    bg-gray-900 border border-gray-800 ${railAnim}`}
+        className={`relative flex flex-col items-center justify-start border ${theme === 'model3d' ? 'bg-[#0b1220] border-[#263244]' : 'bg-gray-900 border-gray-800'} ${railAnim}`}
         style={{
           width:  (collapseSide?.startsWith('h')) ? '24px'  : '100%',
           height: (collapseSide?.startsWith('v')) ? '24px'  : '100%',
@@ -126,7 +126,7 @@ export default function DockLeafComponent({
       ref={containerRef}
       key={leaf.id}
       data-panel={activePanelId}
-      className="relative flex flex-col h-full bg-gray-900 border border-gray-800 overflow-hidden dock-leaf-in"
+      className={`relative flex flex-col h-full overflow-hidden dock-leaf-in border ${theme === 'model3d' ? 'bg-[#0b1220] border-[#263244]' : 'bg-gray-900 border-gray-800'}`}
     >
       {/* Tab strip — also the drag handle. Collapse button sits on the
           INNER edge (the side touching the work area) so the affordance
@@ -137,7 +137,7 @@ export default function DockLeafComponent({
             · bottom panel→ button on the right (top edge — fine)
           Only horizontal splits get the mirrored placement; vertical splits
           keep the conventional far-right position. */}
-      <div className="flex items-center bg-gray-800/80 border-b border-gray-700 shrink-0 h-7">
+      <div role="tablist" className={`flex min-w-0 items-center overflow-x-auto border-b shrink-0 h-7 [&::-webkit-scrollbar]:h-1 ${theme === 'model3d' ? 'bg-[#141e2e] border-[#263244]' : 'bg-gray-800/80 border-gray-700'}`}>
         {collapseSide === 'h-left' && onToggleCollapse && (
           <button
             onClick={() => onToggleCollapse(true)}
@@ -157,7 +157,8 @@ export default function DockLeafComponent({
               <div
                 key={pid}
                 data-dock-tab={pid}
-                role="tab"
+                role="tab" tabIndex={0} aria-label={def.title}
+                onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabSelect(pid) } }}
                 aria-selected={isActive}
                 data-panel={pid}
                 onPointerDown={(e) => {
@@ -172,12 +173,12 @@ export default function DockLeafComponent({
                 className={`relative shrink-0 px-2 h-full flex items-center gap-1 text-xs cursor-grab active:cursor-grabbing
                   border-r border-gray-700/60 select-none whitespace-nowrap group
                   ${isActive
-                    ? 'bg-gray-900 text-gray-100 border-t-2 border-t-blue-500'
+                    ? `text-gray-100 border-t-2 ${theme === 'model3d' ? 'bg-[#0b1220] border-t-cyan-500' : 'bg-gray-900 border-t-blue-500'}`
                     : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
                 title="Drag to rearrange — drop on another panel's edge"
               >
                 {def.title}
-                {onClosePanel && (
+                {onClosePanel && def.closable !== false && (
                   <button
                     data-close-btn
                     onClick={(e) => {
@@ -240,15 +241,14 @@ export default function DockLeafComponent({
       {drag && localEdge && (
         <div className="absolute inset-0 pointer-events-none z-40 dock-overlay-in">
           {localEdge === 'center' ? (
-            <div className="absolute inset-2 border-2 border-blue-400/80 bg-blue-500/10 rounded
-                            flex items-center justify-center transition-all duration-150">
-              <span className="text-xs font-medium text-blue-200 bg-blue-900/80 px-3 py-1 rounded shadow">
+            <div className={`absolute inset-2 border-2 rounded flex items-center justify-center transition-all duration-150 ${theme === 'model3d' ? 'border-cyan-500/80 bg-cyan-900/20' : 'border-blue-400/80 bg-blue-500/10'}`}>
+              <span className={`text-xs font-medium px-3 py-1 rounded shadow ${theme === 'model3d' ? 'text-cyan-100 bg-[#164e63]' : 'text-blue-200 bg-blue-900/80'}`}>
                 + Add tab
               </span>
             </div>
           ) : (
             <div
-              className="absolute bg-blue-500/40 border-2 border-blue-400 transition-all duration-150"
+              className={`absolute border-2 transition-all duration-150 ${theme === 'model3d' ? 'bg-cyan-700/40 border-cyan-500' : 'bg-blue-500/40 border-blue-400'}`}
               style={dropZoneStyle}
             />
           )}

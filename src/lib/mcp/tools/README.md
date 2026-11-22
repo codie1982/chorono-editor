@@ -8,8 +8,9 @@ and profile configuration; `ToolCatalogIndex` owns immutable metadata, not scene
 state. It is composed once after `bootstrapMCPActions` from existing native
 ActionRegistry definitions and transport/file extras.
 
-`standard` advertises 40 earned workflows; `legacy` advertises the 77 original
-names. Both can call every original name and nine new aliases. Only the STDIO
+`standard` advertises 44 earned workflows; `legacy` advertises the 77 original
+names plus the boxed-model `update_model3d` command. Both can call every original
+name and nine aliases. Only the STDIO
 process reads `CHORONO_MCP_TOOL_PROFILE`; the browser's environment cannot choose
 a client's discovery list. Invalid configuration fails startup. There is no
 Glama-specific catalog, dynamic remote registration or second command engine.
@@ -50,3 +51,5 @@ It also does not change shallow replacement, timeline-only evaluation or legacy
 key identity/collision rules merely because a clearer alias is available. E−1.4 separately implements exact-time identity/easing preservation in the common source upsert; the catalog documents that actual behavior.
 Compatibility tests cover discovery, alias schema equality, legacy behavior,
 dedupe, stale revisions, atomic failure/undo and typed input/clearing cases.
+
+Spline source operation schemas live with editor/spline/operations; transport definitions/preview orchestration live in mcp/spline. Prepare/Apply/Discard are distinct lifecycle tools, not aliases or batchable actions. Their compiled schemas also validate the synchronous SplineHandle.edit input.

@@ -5,6 +5,8 @@ import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { emptyScene, newRectLayer } from '@/lib/defaults'
 import CurveEditor from './CurveEditor'
 import type { Track } from '@/lib/types'
+import { newModelLayer } from '@/lib/model3d/source/modelDefaults'
+import { contentTimelineContext } from '@/lib/timeline/authoring/TimelineAuthoringContext'
 
 function render(selected: string[], extraTracks: Track[] = []) {
   const scene = emptyScene()
@@ -74,6 +76,20 @@ describe('Curve Editor selection layout', () => {
 
 
 describe('Curve Editor shared branch selection', () => {
+  it('projects only exact model content keys in a private host, preserving the main scene default', () => {
+    const scene = emptyScene(), model = newModelLayer('model')
+    scene.layers = [model]
+    scene.timelines = [{ id: 'content', durationMs: 1000, autoplay: false, loop: false, tracks: ['model3d.camera.yaw', 'transform.x'].map((path, i) => ({
+      target: `layers.model.${path}`, keyframes: [{ id: `key-${i}`, timeMs: 0, value: 20, easing: { type: 'linear' } }],
+    })) }]
+    const props = { scene, editor: {} as EditorStateReturn, selectedLayerId: model.id, selectedTimelineId: 'content', currentTimeMs: 0,
+      onTimeChange() {}, selectedKfIds: new Set<string>(), onSelectKeyframes() {} }
+    const main = renderToStaticMarkup(createElement(CurveEditor, props))
+    const detail = renderToStaticMarkup(createElement(CurveEditor, { ...props, context: contentTimelineContext(scene, model.id, 'content') }))
+    expect(main).toContain('data-curve-key-id="key-1"'); expect(main).not.toContain('data-curve-key-id="key-0"')
+    expect(detail).toContain('data-curve-key-id="key-0"'); expect(detail).not.toContain('data-curve-key-id="key-1"')
+    expect(detail).not.toContain('aria-label="Bake ')
+  })
   it('includes numeric keys from both selected branches while excluding an ancestor own keys and unrelated source', () => {
     const scene = emptyScene()
     scene.layers = ['parent', 'a', 'b', 'other'].map(id => ({ ...newRectLayer(), id, name: id, ...(id === 'a' ? { parentId: 'parent' } : {}) }))

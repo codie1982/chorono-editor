@@ -14,9 +14,10 @@ const a = { ...newRectLayer(), id: 'shape', name: 'Shape', size: { width: 160, h
 a.transform = { ...a.transform, x: 130, y: 140, anchorX: 80, anchorY: 45, rotationDeg: 15 }
 const b = newSplineLayerFromPrimitive('rectangle', { width: 150, height: 110 })!
 b.id = 'spline'; b.name = 'Spline'; b.transform = { ...b.transform, x: 480, y: 310, rotationDeg: -10 }
-const source = { ...emptyScene(), layers: [a, b] }
+const empty = emptyScene()
+const source = { ...empty, composition: { ...empty.composition, width: 800, height: 500 }, layers: [a, b] }
 const boundsFor = createLayerWorldBoundsResolver(source)
-const bounds = unionBounds(boundsFor(a), boundsFor(b))!
+const bounds = unionBounds(boundsFor(a), boundsFor(b)!)
 const expectedCenter = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
 const initial = new Map(source.layers.map(layer => [layer.id, resolveLayerWorldMatrix(layer, source).toArray()]))
 const assets = new Map()
@@ -56,7 +57,7 @@ function Subject() {
         selectedLayerId={selection.primaryId} selectedLayerIds={ids} isPlaying={false} toolMode="select"
         onSelectLayer={(id, shift) => setSelection(previous => !id ? createLayerSelection([])
           : shift ? toggleLayerSelection(previous, id) : createLayerSelection([id]))}
-        onAddLayerKind={setAddition} menuHandlers={{ group }} />
+        menuHandlers={{ group, addLayer: setAddition }} />
     </section>
   </main>
 }

@@ -7,7 +7,8 @@ import { defaultLayout, findLeafOfPanel, removePanel, renamePanel, setActiveTab 
  * selection or history migration. Reapplying is identity-preserving. */
 export function migrateDockLayout(tree: DockNode): DockNode {
   let result = renamePanel(tree, 'splineModeling', 'geometryEdit')
-  for (const id of ['snap', 'shortcuts', 'splineModeling']) {
+  result = renamePanel(result, 'splineTools', 'geometryEdit')
+  for (const id of ['snap', 'shortcuts', 'splineModeling', 'splineTools']) {
     const leaf = findLeafOfPanel(result, id)
     if (!leaf) continue
     const selected = leaf.panels[leaf.activeIndex]
