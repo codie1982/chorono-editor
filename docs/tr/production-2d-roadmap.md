@@ -3812,3 +3812,13 @@ tamamlandı; diğer ana paketlerin önceliği değişmedi.
 ### Spline MCP ve script eşliği — 16 Kasım 2026
 
 Son S2D araçları [ortak MCP plan akışı](mcp-spline-editing.md) ile açılır. Point/Edge/Object, append/Continue/Auto Close, topology/Attach/Detach/paint ve Offset/Chamfer/Fillet/Boolean aynı native koruma ve hesaplamaları kullanır. Basit işlemler `.spline.edit` içinde de kullanılabilir; CPU solverlar async MCP planıdır. [Script uyumluluk incelemesi](script-api-compatibility-audit.md) gerçek kapsamı, düzeltilen animation silme davranışını ve özel 3D API sınırlarını kaydeder. Ana geliştirme sırası değiştirilmez.
+
+#### 22 Kasım 2026 · Transform eksenleri ve doğrudan Boolean seçimi
+
+Toolbox Axes Scene/Local, nesne Move/Scale ve Spline Edit taşıma/Shift kısıtları
+için ortak değerlendirilen referans kullanır; aktif root/parent dönüşleri korunur.
+Native gesture/Undo ve shear tanıları mevcut transform owner'ında kalır. Add
+Spline Operation select yerine Union/Subtract/Intersect/XOR toggle düğmeleri
+seçili Object bankını doğrudan uygular; + aynı layer Object'leri ve Explorer
+spline/shape girdilerini ortak Boolean recipe'ye ekler. Dış sınır, gerçek delikler,
+seçim dışı Object'ler, kaynak kayıtları ve tek aksiyon Undo/Redo native testlidir.

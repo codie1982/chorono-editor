@@ -3,7 +3,7 @@ import { newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
 import { createCircleSpline, createDonutSpline } from '@/lib/spline'
 import { assertSplineTopology } from '@/lib/spline/topology'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
-import { fixture, current, frames, layer, tap, click, choose, assert, equal, pickExplorerRow as rowPick } from './splineHarness'
+import { fixture, current, frames, layer, tap, click, assert, equal, pickExplorerRow as rowPick } from './splineHarness'
 
 /** Drive the real Scene Explorer row activation path, including its bulk
  * selection callback, against private source. Add picks must intercept before
@@ -17,7 +17,7 @@ export async function checkSplineExplorerAttach(): Promise<string> {
   const shape = newRectLayer(); shape.id = 'explorer-shape'
   scene.layers.push(circle, donut, shape)
   flushSync(() => { current().editor.resetScene(scene); current().select('spline'); current().setTime(0); current().setTool('select') })
-  await frames(); await click('Spline object mode'); await choose('Spline add operation', 'attach'); await click('Add existing splines')
+  await frames(); await click('Spline object mode'); await click('Spline operation Attach'); await click('Add existing splines')
   const initial = structuredClone(current().editor.getScene())
   const assertTarget = () => {
     assert(current().selected === 'spline' && current().controller.attaching && current().controller.active, 'Explorer pick replaced the Edit target or exited Add')
@@ -57,6 +57,6 @@ export async function checkSplineExplorerAttach(): Promise<string> {
   equal(current().editor.getScene(), initial, 'Normal Explorer selection changed source')
   // Leave the successful native UI in the same armed state for visual review.
   flushSync(() => current().select('spline')); await frames()
-  await click('Spline object mode'); await choose('Spline add operation', 'attach'); await click('Add existing splines'); await rowPick(circle.id)
+  await click('Spline object mode'); await click('Spline operation Attach'); await click('Add existing splines'); await rowPick(circle.id)
   return 'Scene Explorer click/Shift/Cmd/Enter attaches through the shared native owner; target, world positions and paint stay fixed; viewport picks interoperate; each pick has one Undo/Redo; normal selection resumes after Add ends.'
 }

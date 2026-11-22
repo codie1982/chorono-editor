@@ -107,8 +107,13 @@ and keyboard activation, holes, transformed parents, target paint, individual
 history, empty/invalid picks, cancellation and restored normal list selection
 through production UI. Explorer failures use the host's existing warning surface
 (the page uses a toast) and preserve the target rather than falling through.
-The Operation picker defaults to Union and also offers Subtract, Intersect and
-XOR, using the existing persisted Boolean plan/backend rather than a second
+The operation toggle buttons default to Union and also offer Subtract, Intersect
+and XOR. Clicking applies the current Object bank immediately (first selected
+Object is A); fewer than two Objects only changes the next-pick preference.
++ enables picks of other Objects in this compound spline or whole splines/shapes
+from the viewport/Scene Explorer, extending the same recipe. Unselected Objects
+remain visible and original sources remain retained. All routes use the
+existing persisted Boolean plan/backend rather than a second
 clipping algorithm. `useSplineAttachPicking` routes these to
 `editor/boolean/pickOperation.ts`; the old transfer action remains explicitly
 available as Attach for open/closed contours. The shared operation action hook
@@ -136,8 +141,8 @@ See the [modifier architecture](../../lib/modifiers/README.md),
 [Spline editing](../../../docs/tr/spline-subobject-editing.md).
 
 Spline Edit reuses MoveAxisGizmo at the selected Point/Edge/Object anchor center.
-Axis arrows constrain composition X/Y before the complete world-to-local inverse;
-Shift constrains free point/body movement through the existing applyAxisLock math.
+Axis arrows constrain the captured Scene/Local X/Y frame before the complete
+world-to-local inverse; Shift uses the same frame and shared applyAxisLock math.
 Geometry changes use the same native pointer transaction and keep Layer TRS/origin,
 keys and the session ghost fixed. No transform frame is restored in Edit mode.
 The modifier stack has a full frame and a bounded scroll region; selection reveal
@@ -146,3 +151,21 @@ scope owns native keyboard input so scrolling/buttons cannot nudge scene geometr
 New spline paint is Fill None and solid black Stroke 3 px, with opt-in fill only
 in Properties. Conversion supplies the same fallback when no visible authored
 stroke exists; saved/user paint stays authoritative.
+
+The main toolbox's **Axes · Scene / Local** selector belongs to `useToolMode`,
+not scene JSON or Undo. It survives selection and tool changes, defaulting to
+Scene on editor startup. `lib/canvas/math/transformAxes.ts` normalizes the active
+root's evaluated world-matrix columns (parents, reflection and inherited shear
+included). Scene uses identity. One captured frame drives both constant-size
+Move/Scale arrow hit bands and native layer/Edit drag constraints; changing
+space cancels a live gesture through the existing context guard. Multi-selection
+uses the active root's common axes and the existing independent-root preparation;
+children are not transformed twice. Edit gestures keep layer TRS/keys/ghost fixed.
+
+Scale uses the same basis on each root through `scaleTransformTargets`; it
+rejects world/local combinations that require unrepresentable TRS shear instead
+of approximating geometry. Selection-frame resizing, numeric fields explicitly
+labelled local, rotation rings and keyboard navigation keep their own documented
+contracts. `scripts/perf/spline-edit.mjs` verifies both spaces under an animated,
+nonuniform parent; `scripts/perf/spline-attach.mjs` verifies the Boolean buttons,
+interior-edge removal, same-layer + picks, Explorer picks, Undo and raster output.

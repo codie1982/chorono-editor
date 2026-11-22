@@ -60,7 +60,8 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
 export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modifierControls = true, modeControls = true }: Props) {
   const [warning, setWarning] = useState('')
   const booleanActions = useBooleanOperationActions({ layerId: layer.id, getScene, dispatch: dispatchCommand,
-    disabled, isTransactionActive, onSelectLayer: onSelectLayer ? id => onSelectLayer(id) : undefined, warning: setWarning })
+    disabled, isTransactionActive, timeMs, overrides, selectedObjectIds: () => controller.bank.object,
+    onSelectLayer: onSelectLayer ? id => onSelectLayer(id) : undefined, warning: setWarning })
   const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning })
   const object = controller.mode === 'object' && controller.ids.length === 1 ? layer.spline?.subShapes[controller.ids[0]] : undefined
   const [name, setName] = useState(object?.name ?? '')

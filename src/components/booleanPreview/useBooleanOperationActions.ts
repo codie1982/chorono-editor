@@ -3,7 +3,8 @@ import type { ChronoScene } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import type { BooleanOperation } from '@/lib/geometry/boolean'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
-import { makeSetBooleanOperationCmd } from '@/lib/editor/boolean/pickOperation'
+import { makeSelectedSplineBooleanCmd, makeSetBooleanOperationCmd } from '@/lib/editor/boolean/pickOperation'
+import type { OverrideMap } from '@/lib/evaluator'
 import { makeMergeBooleanPathsCmd, makeSeparateBooleanInputsCmd } from '@/lib/editor/boolean/operationCommands'
 
 /** Shared native operation actions for Add Spline and Boolean Preview. Source
@@ -12,6 +13,7 @@ import { makeMergeBooleanPathsCmd, makeSeparateBooleanInputsCmd } from '@/lib/ed
 export function useBooleanOperationActions(options: {
   layerId: string | null; getScene(): ChronoScene; dispatch(command: EditorCommand): void
   disabled?: boolean; isTransactionActive?(): boolean; onSelectLayer?(id: string): void; warning(message: string): void
+  selectedObjectIds?(): readonly string[]; timeMs?: number; overrides?: OverrideMap
 }) {
   const owner = booleanOwner(options.getScene(), options.layerId)
   const run = (action: 'merge' | 'separate' | BooleanOperation): boolean => {
@@ -26,7 +28,20 @@ export function useBooleanOperationActions(options: {
       options.warning(''); return true
     } catch (error) { options.warning(error instanceof Error ? error.message : String(error)); return false }
   }
-  return { owner, canFinish: !!options.onSelectLayer,
+  /** Operation buttons act on the current Object bank immediately, or only
+   * choose a future pick policy when fewer than two Objects are selected. */
+  const applyObjects = (operation: BooleanOperation): boolean => {
+    if (owner) return owner.booleanOperation?.operation === operation || run(operation)
+    try {
+      if (!options.layerId || options.disabled || options.isTransactionActive?.()) throw new Error('Finish the current edit before applying a spline operation.')
+      const scene = options.getScene()
+      if (booleanOwner(scene, options.layerId)) throw new Error('The Boolean operation changed. Select it again before editing.')
+      const command = makeSelectedSplineBooleanCmd(scene, options.layerId, options.selectedObjectIds?.() ?? [], operation, options.timeMs, options.overrides)
+      if (command) options.dispatch(command)
+      options.warning(''); return true
+    } catch (error) { options.warning(error instanceof Error ? error.message : String(error)); return false }
+  }
+  return { owner, canFinish: !!options.onSelectLayer, applyObjects,
     primaryName: owner?.booleanOperation ? options.getScene().layers.find(layer => layer.id === owner.booleanOperation!.inputs[0].layerId)?.name : undefined,
     setOperation: (operation: BooleanOperation) => run(operation), merge: () => run('merge'), separate: () => run('separate') }
 }

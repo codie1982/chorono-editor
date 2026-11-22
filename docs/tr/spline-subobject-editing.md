@@ -213,6 +213,21 @@ kanıtlar ilgili ignored artifacts dizininde tutulur.
   önceki Line Objects kalır. Her bitiş tek Undo/Redo'dur. Backspace son geçici
   anchor'ı siler. Box primitive iptali, mode/document değişimi ve stale revision/
   time korumaları geçici draft'ı temizlemeyi sürdürür; kalıcı kaynakları silmez.
+- Toolbox **Axes · Scene / Local** ortak viewport tercihidir. Scene okları
+  artboard yatay/dikey eksenlerinde tutar; Local aktif nesnenin değerlendirilen
+  dönüşünü ve parent zincirini izler. Taşıma okları, Shift eksen kilidi ve
+  nesne Scale okları aynı referansı kullanır; çoklu seçimde aktif root referanstır.
+  Tercih araç/seçim değişiminde korunur, sahne/Undo'ya yazılmaz; başlangıç Scene'dir.
+  Edit taşıması geometriyi değiştirir, layer transform/origin/ghost sabit kalır.
+  Sürükleme sırasında eksen referansını değiştirmek geçici hareketi iptal eder.
+- **Add Spline** alanındaki Union/Subtract/Intersect/XOR toggle düğmeleri seçili
+  Object'lere tek Undo ile doğrudan uygulanır. İlk seçili Object A'dır. İkiden
+  az seçim varsa düğme sonraki eklemelerin işlemini belirler. **+**, aynı spline'da
+  başka Object veya viewport/Scene Explorer'dan spline/shape girdisi seçmeyi açar.
+  Union sonucunda iç örtüşme kenarları kalkar, gerçek delikler ve kopuk konturlar
+  korunur; seçim dışındaki Object'ler görünür kalır. Kaynaklar recipe içinde
+  saklanır. Merge Paths sonucu toleransla örneklenmiş düzenlenebilir konturlara
+  dönüştürür, Separate Inputs özgün kaynakları geri verir.
 - **Move / Rotate / Scale** araçları aktif seçili alt geometriyi sürükler. Point,
   Edge veya Object, aynı benzersiz anchor kümesine çözülür. Delikli objenin tüm
   konturları ve bağlı Bézier handle'ları birlikte dönüşür. İki ucu seçilmiş explicit

@@ -6,7 +6,7 @@ import { flattenClosedPath } from '@/lib/geometry/flattenClosedPath'
 import { ringArea } from '@/lib/geometry/boolean/rings'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
-import { current, frames, canvas, client, pointer, click, choose, key, assert, equal, pickExplorerRow } from './splineHarness'
+import { current, frames, canvas, client, pointer, click, key, assert, equal, pickExplorerRow } from './splineHarness'
 
 /** Full native Boolean Add → re-edit → append → Merge/point edit → Separate
  * acceptance. Analytic rectangle areas validate the shared solver independently
@@ -16,7 +16,7 @@ export async function checkSplineBooleanAdd(): Promise<string> {
   scene.layers = [200, 250, 350].map((x, index) => ({ ...newSplineLayerFromData(createRectangleSpline({ width: 100, height: 100 }), { x, y: 150, name: ['Target A', 'Input B', 'Input C'][index] }), id: ['boolean-a', 'boolean-b', 'boolean-c'][index] }))
   flushSync(() => { current().editor.resetScene(scene); current().select('boolean-a'); current().setTime(0); current().setTool('select') })
   await frames(); await click('Spline object mode')
-  assert(document.querySelector<HTMLSelectElement>('[aria-label="Spline add operation"]')?.value === 'union', 'Add Spline must default to Union')
+  assert(document.querySelector<HTMLButtonElement>('[aria-label="Spline operation Union"]')?.getAttribute('aria-pressed') === 'true', 'Add Spline must default to Union')
   const initial = structuredClone(current().editor.getScene())
   await click('Add existing splines'); await pickExplorerRow('boolean-b')
   const owner = () => { const found = current().editor.getScene().layers.find(layer => layer.booleanOperation); assert(found, 'The native pick did not create a Boolean recipe'); return found }
@@ -31,7 +31,7 @@ export async function checkSplineBooleanAdd(): Promise<string> {
   }
   checkArea(15000)
   for (const [mode, area] of [['subtract', 5000], ['intersect', 5000], ['xor', 10000], ['union', 15000]] as const) {
-    await choose('Spline add operation', mode); checkArea(area); assertTarget()
+    await click(`Spline operation ${mode === 'xor' ? 'XOR' : mode[0].toUpperCase() + mode.slice(1)}`); checkArea(area); assertTarget()
     assert(owner().id === id, 'Changing operation created a second Boolean group')
   }
   const beforeAppend = structuredClone(current().editor.getScene())
@@ -64,6 +64,6 @@ export async function checkSplineBooleanAdd(): Promise<string> {
   assert(!current().editor.getScene().layers.some(layer => layer.booleanOperation || layer.booleanResultFor), 'Separate did not release the recipe')
   for (const source of initial.layers) equal(current().editor.getScene().layers.find(layer => layer.id === source.id)?.spline, source.spline, 'Separate lost original geometry')
   await click('Undo'); equal(current().editor.getScene(), appended, 'Separate was not one Undo')
-  await choose('Spline add operation', 'xor'); await click('Add existing splines')
+  await click('Spline operation XOR'); await click('Add existing splines')
   return 'Boolean Add defaults to Union; Explorer and viewport use one recipe; Union/Subtract/Intersect/XOR satisfy area identities, preserve original sources, re-edit and append with Undo/Redo. Merge produces editable points; Separate and Undo restore original inputs.'
 }

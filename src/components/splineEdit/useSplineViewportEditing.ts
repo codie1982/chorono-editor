@@ -86,8 +86,16 @@ export function useSplineViewportEditing(options: Options) {
       // Skip the target in ordered body hits so overlapping source splines
       // remain pickable without changing hierarchy, visibility or overrides.
       const source = options.editor.getScene()
-      const hit = hitTestLayersAt(source, timeMs, x, y, overrides).find(id => id !== layer!.id)
-      attachPick(hit ?? null)
+      // A visible Object in this compound spline is a valid new Boolean input.
+      // Clicking already-selected inputs must not hide overlapping external
+      // splines from the existing layer-pick path.
+      const objectHit = geometry && controller.attachOperation !== 'attach'
+        ? pickSplineElement(geometry.worldSpline, 'object', x, y, 8 / options.zoom) : null
+      if (objectHit?.kind === 'object' && !controller.bank.object.includes(objectHit.id)) attachPick(layer!.id, objectHit.id)
+      else {
+        const hit = hitTestLayersAt(source, timeMs, x, y, overrides).find(id => id !== layer!.id)
+        attachPick(hit ?? null)
+      }
       return true
     }
     const target = pick(x, y)
