@@ -220,6 +220,10 @@ uygulandı. Spline/Mesh kategorileri ve sınıfa ait ayarlar ortak Edit stack
 kaldırma, kaynak Rebuild ve Bake tek Undo komutlarıdır. Smooth ve Subdivision uygulandı: Subdivision varsayılanı constrained Delaunay,
 ayrı Grid/Karelaj seçeneği gerçek kare hücreler ve sınıra uyan geçiş yüzleri üretir.
 Ayarlar Execute ile listedeki sıraya göre tek sonuç olarak uygulanır.
+Shape → Spline kontur görünümüne, Spline → Mesh delikleri koruyan dolgulu
+üçgen yüzeye geçer; kapatılan paint türü saklanır. Edit Mesh yerel geometri
+dönüşümünü ayrı bir stack adımı olarak uygular, nesnenin transform/origin'ini
+korur. Edit viewport ghost'u girişteki geometriyi gösterir ve export'a taşınmaz.
 Yeni topolojiyi kabul eden altyapı
 [modifier sözleşmesinde](../../src/lib/modifiers/README.md) belgelenmiştir.
 Sahnede ayrı bir Spline ara nesnesi zorunlu tutulmaz. Canlı geometri driver'ları

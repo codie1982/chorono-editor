@@ -65,6 +65,14 @@ transform resize gesture, preserving source points, topology and modifier recipe
 During frame resize, the origin/selection-center marker follows the live preview
 transform. The opposite-handle pivot used by resize math does not replace that
 marker; fixed rotation/axis-scale tool pivots retain their existing behavior.
+Inside Edit mode, whole-mesh drags use the native pointer transaction with a
+`meshGeometry` adapter and one persisted **Edit Mesh** stage. Spline sub-object
+gestures keep their existing source-point commands. Both preserve object TRS and
+anchor; mesh arrow nudges use local geometry commands as well. Generated Spline
+results never fall through to root transforms. `GeometryEditGhost` retains one
+boundary string, world matrix and origin from entry, releases on exit, and draws
+only viewport chrome. Mesh live boundaries are orange, the initial silhouette is
+dashed/translucent, and the original origin remains visible.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.

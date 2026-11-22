@@ -1898,6 +1898,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     }}
                     splineEdit={splineEdit}
                     geometryEditActive={geometryEdit.active}
+                    onExitGeometryEdit={geometryEdit.exit}
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineOutline.result}

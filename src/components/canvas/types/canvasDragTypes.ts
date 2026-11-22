@@ -212,6 +212,13 @@ export interface SplineGeometryDrag {
   worldToLocal: Matrix2D
 }
 
+/** Whole-mesh local geometry gesture; its stable modifier ID belongs to this
+ * preview/commit session. Layer placement, anchor, topology and UVs stay fixed. */
+export interface MeshGeometryDrag extends Omit<SplineGeometryDrag, 'kind' | 'pointIds'> {
+  kind: 'meshGeometry'
+  modifierId: string
+}
+
 export type ActiveDrag =
   | MoveState
   | ResizeState
@@ -223,6 +230,7 @@ export type ActiveDrag =
   | SplinePointDrag
   | SplineHandleDrag
   | SplineGeometryDrag
+  | MeshGeometryDrag
 
 /** CSS cursor for each resize handle (diagonal pairs share a cursor). */
 export const HANDLE_CURSORS: Record<Handle, string> = {

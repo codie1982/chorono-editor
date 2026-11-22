@@ -13,6 +13,7 @@ import { useSplineEditSelection } from '@/components/splineEdit/useSplineEditSel
 import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
 import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
 import { checkLiveMeshCenter } from './checkLiveMeshCenter'
+import { Mesh2DBoundaryRingExtractor } from '@/lib/geometry/mesh2d'
 
 /** Synthetic, unpersisted frame-with-hole plus separate island. Every command
  * and canvas/panel below is production code; no connected document is touched. */
@@ -48,8 +49,18 @@ function Subject() {
     editor.dispatchCommand(plan.command); setSelected([plan.layerId])
   }
   const spline = layer?.spline, mesh = layer?.mesh2d
-  const hole = mesh && layer?.id !== 'rounded' ? !containsMesh2DPoint(mesh.geometry, 100, 100) && containsMesh2DPoint(mesh.geometry, 10, 100) : null
-  return <main className="h-screen bg-gray-900 text-xs text-gray-100">
+  // This private fixture has one convex rectangular hole. Test its current
+  // centroid so local Edit transforms cannot turn a fixed-coordinate check
+  // into a false failure while the hole itself is preserved.
+  const hole = useMemo(() => {
+    if (!mesh || layer?.id === 'rounded') return null
+    const holes = new Mesh2DBoundaryRingExtractor().extract(mesh.geometry).filter(ring => ring.role === 'hole')
+    return holes.length === 1 && holes.every(ring => {
+      const center = ring.points.reduce((sum, point) => ({ x: sum.x + point.x / ring.points.length, y: sum.y + point.y / ring.points.length }), { x: 0, y: 0 })
+      return !containsMesh2DPoint(mesh.geometry, center.x, center.y)
+    })
+  }, [mesh, layer?.id])
+  return <main className="flex h-screen flex-col bg-gray-900 text-xs text-gray-100">
     <nav className="flex gap-4 p-3">
       <button onClick={() => setSelected(editor.scene.layers.filter(layer => layer.id !== 'rounded').map(layer => layer.id))}>Select frame and island</button>
       <button onClick={() => setSelected(['rounded'])}>Select rounded shape</button>
@@ -60,15 +71,18 @@ function Subject() {
       }}>Check live mesh center</button>}
     </nav>
     {centerCheck && <output aria-label="Live mesh center check" className="block px-3 pb-3">{centerCheck}</output>}
+    {editMode.active && <output aria-label="Edit object transform" className="block px-3 pb-3">
+      Object transform {JSON.stringify(layer?.transform)}
+    </output>}
     <output aria-label="Conversion acceptance" className="block px-3 pb-3">
       Type {layer?.type} · Elements {spline ? Object.keys(spline.subShapes).length : '—'} ·
       Contours {spline ? Object.keys(spline.contours).length : mesh?.boundaryRings?.length ?? '—'} ·
       Hole {hole === null ? 'pending' : hole ? 'PASS' : 'FAIL'} · Vertices {mesh?.geometry.topology.vertexIds.length ?? '—'} · Triangles {(mesh?.geometry.topology.triangleIndices.length ?? 0) / 3} · Quads {(mesh?.geometry.topology.quadIndices?.length ?? 0) / 4} · Modifiers {layer?.modifierStack?.modifiers.length ?? layer?.geometryConversion?.stages.length ?? 0}
     </output>
-    <div className="flex h-[calc(100vh-80px)]">
+    <div className="flex min-h-0 flex-1">
       <section className="min-w-0 flex-1"><SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} timeMs={0}
         menuHandlers={{ convertToSpline: () => convert('spline'), convertToMesh2D: () => convert('mesh2d') }}
-        selectedLayerId={selected[0] ?? null} selectedLayerIds={ids} isPlaying={false} toolMode={tool} splineEdit={splineEdit} geometryEditActive={editMode.active}
+        selectedLayerId={selected[0] ?? null} selectedLayerIds={ids} isPlaying={false} toolMode={tool} splineEdit={splineEdit} geometryEditActive={editMode.active} onExitGeometryEdit={editMode.exit}
         onSelectLayer={(id, shift) => setSelected(previous => !id ? [] : shift ? Array.from(new Set([...previous, id])) : [id])} /></section>
       <aside className="w-[400px] border-l border-gray-700">
         <GeometryEditPanel key={`${layer?.id}:${layer?.type}`} layer={layer} selectedIds={selected}

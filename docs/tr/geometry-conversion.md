@@ -52,7 +52,13 @@ vertekslere bağlanmaz; önce pinleri kaldırın veya clip'i açıkça yeniden b
   kayıtlarını saklar. Genel `Modifier`, `ModifierRegistry`, `ModifierStack.execute`
   geometriden bağımsızdır; tür/topoloji kuralları geometri adaptöründedir.
   Eski `geometryConversion` v1 okunur, yalnız açık düzenlemede yeni stack'e taşınır. Dönüşüm ilk nesnenin layer kimliğini, parent'ını, origin'ini,
-  transform'unu, paint ve lifetime'ını korur. Kaynak matrisleri bu nesnenin yerel
+  transform'unu ve lifetime'ını korur. Shape → Spline girişinde dolgu None olur,
+  görünür stroke korunur veya 2 yerel piksel kontur oluşturulur. Dolgunun son
+  etkin türü `style.fill.disabledType` ile, renk/gradient/image verileri aynı fill
+  içinde saklanır. Spline → Mesh girişinde bu dolgu geri açılır; yalnız stroke'u
+  olan bir kaynak için kontur renginde solid yüzey oluşturulur. Aynı türde
+  modifier Execute, kullanıcının sonradan yaptığı fill/stroke düzenlemesini değiştirmez.
+  Kaynak matrisleri bu nesnenin yerel
   uzayına gider; world transform vertekslere ikinci kez uygulanmaz. Ara Spline
   için sahnede gizli bir layer oluşturulmaz. Copy bağımsız kaynak kayıtları alır;
   Instance mevcut visual-source alan sözleşmesiyle çözümlenir.
@@ -65,6 +71,11 @@ vertekslere bağlanmaz; önce pinleri kaldırın veya clip'i açıkça yeniden b
   vertex'lerini adresler. Stroke/trim mevcut Spline paint kodundan geçer; iç
   triangle kenarları çizilmez. Deformation sırasında güncel vertex konumları
   kullanılır. Image fill aynı paint ve media dependency owner'larından geçer.
+- Edit modunda Mesh taşıma/döndürme/ölçekleme, `meshTransform` (**Edit Mesh**)
+  modifier'ıyla yerel vertekslere uygulanır. Layer transform/origin ve keyframe'ler
+  değişmez; UV/topoloji korunur. Düzenleme başlangıcındaki geometri viewport'ta
+  yarı saydam kesikli ghost olarak kalır, export'a girmez. Spline alt-nesne
+  düzenlemeleri mevcut source-point komutlarını kullanır ve aynı ghost'u gösterir.
 
 ## Sınırlar ve sayısal davranış
 

@@ -23,6 +23,7 @@ export interface CanvasDragCommitOptions {
  * The optional legacy notification runs only when no atomic builder is supplied. */
 export function commitCanvasDrag(editor: EditorStateReturn, base: ChronoScene, drag: ActiveDrag,
   preview: CanvasDragPreview, options: CanvasDragCommitOptions): void {
+  if (preview.geometryCommand) { editor.commitTransaction(preview.geometryCommand); return }
   if (drag.kind === 'move' && drag.cloneMode) {
     commitClone(editor, base, drag, preview, options)
     return
@@ -57,6 +58,6 @@ function commitClone(editor: EditorStateReturn, base: ChronoScene, drag: Extract
 /** Human-readable undo labels describe the edited responsibility. */
 function dragLabel(kind: ActiveDrag['kind'], count: number): string {
   const name = { move: 'Move', rotate: 'Rotate', scaleAxis: 'Scale', resize: 'Resize', anchor: 'Move anchor',
-    pathPoint: 'Edit path point', newAnchorDraw: 'Add path point', splinePoint: 'Edit spline point', splineHandle: 'Edit spline handle', splineGeometry: 'Transform spline selection' }[kind]
+    pathPoint: 'Edit path point', newAnchorDraw: 'Add path point', splinePoint: 'Edit spline point', splineHandle: 'Edit spline handle', splineGeometry: 'Transform spline selection', meshGeometry: 'Transform mesh geometry' }[kind]
   return count > 1 ? `${name} ${count} layers` : name
 }

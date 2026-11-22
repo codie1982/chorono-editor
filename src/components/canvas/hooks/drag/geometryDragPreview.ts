@@ -12,6 +12,7 @@ import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { MAX_MODEL_BOX_SIDE } from '@/lib/model3d/source/modelDefaults'
 import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
+import { makeTransformMeshGeometryCmd } from '@/lib/editor/modifiers/commands'
 
 type GeometryDrag = Exclude<ActiveDrag, { kind: 'move' | 'rotate' | 'scaleAxis' }>
 interface GeometryPreviewInput {
@@ -40,8 +41,7 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
         : moveOutHandle(original.path, drag.anchorIndex, (anchor.outX ?? anchor.x) + local.x, (anchor.outY ?? anchor.y) + local.y)
     return previewLayer(base, original, { ...original, path }, changedRecord(original.path, path) ? ['path'] : [])
   }
-  if (drag.kind === 'splineGeometry') {
-    if (!original.spline) return previewLayer(base, original, original, [])
+  if (drag.kind === 'splineGeometry' || drag.kind === 'meshGeometry') {
     const local = drag.worldToLocal.applyToVector(delta), { pivot, startLocal } = drag
     const end = { x: startLocal.x + local.x, y: startLocal.y + local.y }
     const angle = wrapAngle180(angleDegFromPivot(pivot.x, pivot.y, end.x, end.y) - angleDegFromPivot(pivot.x, pivot.y, startLocal.x, startLocal.y))
@@ -50,6 +50,16 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
     const transform = drag.operation === 'move' ? { x: local.x, y: local.y }
       : drag.operation === 'rotate' ? { rotation: event.shiftKey ? Math.round(angle / 15) * 15 : angle }
       : { scaleX: scale, scaleY: scale }
+    if (drag.kind === 'meshGeometry') {
+      const settings = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1,
+        pivotX: pivot.x, pivotY: pivot.y, ...transform }
+      if (!settings.x && !settings.y && !settings.rotation && settings.scaleX === 1 && settings.scaleY === 1)
+        return previewLayer(base, original, original, [])
+      const command = makeTransformMeshGeometryCmd(base, original.id, drag.modifierId, settings)
+      const scene = command.execute(base), next = scene.layers.find(layer => layer.id === original.id)!
+      return { ...previewLayer(base, original, next, ['modifierStack'], `Edit Mesh · ${drag.operation}`), scene, geometryCommand: command }
+    }
+    if (!original.spline) return previewLayer(base, original, original, [])
     const spline = transformSplineSelection(original.spline, new Set(drag.pointIds), transform)
     return previewLayer(base, original, { ...original, spline }, changedRecord(original.spline, spline) ? ['spline'] : [],
       drag.operation === 'rotate' ? `${(transform.rotation ?? angle).toFixed(1)}°` : drag.operation === 'scale' ? `${(scale * 100).toFixed(1)}%` : `${local.x.toFixed(1)}, ${local.y.toFixed(1)} px`)

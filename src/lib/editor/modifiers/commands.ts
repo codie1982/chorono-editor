@@ -159,3 +159,14 @@ export function prepareConvertModifierStack(scene: ChronoScene, layerId: string,
   } else append('convertSpline')
   return { layerId, command: replace(scene, layer, { ...stack, modifiers }, `Convert to ${target === 'spline' ? 'Spline' : '2D Mesh'}`) }
 }
+
+/** One geometry-only viewport edit. The gesture owns a stable, new instance ID
+ * and recomputes every preview from its original scene. Upstream recipes and
+ * layer TRS/anchor/animation remain intact; the whole stage commits in one Undo. */
+export function makeTransformMeshGeometryCmd(scene: ChronoScene, layerId: string, modifierId: string,
+  settings: Readonly<Record<string, unknown>>): EditorCommand {
+  const layer = editable(scene, layerId), stack = modifierStackService.stackFor(layer)
+  if (layer.type !== 'mesh2d' || stack.modifiers.some(item => item.id === modifierId)) throw new Error('Select a Mesh and a new geometry edit ID.')
+  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings }
+  return replace(scene, layer, { ...stack, modifiers: [...stack.modifiers, record] }, 'Transform mesh geometry')
+}
