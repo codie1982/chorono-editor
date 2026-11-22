@@ -108,12 +108,10 @@ import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
 import { modifierOutputReadOnly } from '@/lib/modifiers'
-import { SplineChamferControls } from '@/components/splineEdit/chamfer/SplineChamferControls'
-import { SplineFilletControls } from '@/components/splineEdit/fillet/SplineFilletControls'
-import { SplineOutlineControls } from '@/components/splineEdit/outline/SplineOutlineControls'
 import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
 import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
 import { useSplineDrawingPreferences } from '@/components/splineEdit/useSplineDrawingPreferences'
+import { splineEditTools } from '@/components/splineEdit/tools/splineEditTools'
 import { SplineEditInspector } from '@/components/splineEdit/SplineEditInspector'
 import { useSplineAttachPicking } from '@/components/splineEdit/useSplineAttachPicking'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
@@ -1919,6 +1917,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineOutline.result}
+                    splineToolActions={splineEditTools({ layer: selectedLayer, scene, mode: splineEdit.mode, active: splineEdit.active, disabled: isPlaying || manualPreview || !!detail.session, busy: editor.isTransactionActive(), controllers: { offset: splineOutline, chamfer: splineChamfer, fillet: splineFillet }, onOpen: openSplineTools })}
                     chamferPreview={splineChamfer.result}
                     filletPreview={splineFillet.result}
                     onEditOperation={editBooleanOperation}
@@ -2107,6 +2106,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                 <GeometryEditPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
                   editMode={geometryEdit}
+                  onSplineSourceBaked={id => splineEdit.focusResult({ layerId: id, mode: 'object' })}
                   selectedIds={Array.from(isolatedSelectedIds)} conversionDisabled={isPlaying || manualPreview || !!detail.session}
                   splineModeControls={<SplineModeControls controller={splineEdit}
                     disabled={modifierOutputReadOnly(selectedLayer) || isPlaying || manualPreview || !!detail.session || !!selectedLayer?.locked || !!selectedLayer?.hidden || !!selectedLayer?.frozen || !!selectedLayer?.instanceOf} />}
@@ -2115,11 +2115,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
                   isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
                   onSelectLayer={id => selectLayer(id)} onClearPoint={splineEdit.clear} onLayerChange={updateLayer}
-                  splineToolPreview={splineChamfer.active ? <SplineChamferControls expanded controller={splineChamfer} />
-                    : splineFillet.active ? <SplineFilletControls expanded controller={splineFillet} />
-                    : splineOutline.active ? <SplineOutlineControls expanded controller={splineOutline} /> : undefined}
                   splineSourceSettings={selectedLayer?.spline && !selectedLayer.booleanResultFor && splineEdit.layerId === selectedLayer.id ? (
-                    <SplineEditInspector modeControls={false} modifierControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
+                    <SplineEditInspector modeControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
                           outline={splineOutline}
                           chamfer={splineChamfer}
                           fillet={splineFillet}

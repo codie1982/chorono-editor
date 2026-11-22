@@ -13,7 +13,7 @@ import { mergeSplineData } from '../../spline/factory/mergeSplineData'
  * generator (0.25 local-pixel sampling, butt caps for open contours) and Boolean
  * union for overlapping bands. Width is total width, not one-side displacement. */
 export class OutlineModifier extends SplineModifier {
-  static readonly descriptor: GeometryModifierDescriptor = { type: 'outline', label: 'Outline', category: 'spline', inputs: ['spline'], output: 'spline', addable: true,
+  static readonly descriptor: GeometryModifierDescriptor = { type: 'outline', label: 'Outline', category: 'spline', inputs: ['spline'], output: 'spline', addable: true, legacySplineTool: true,
     fields: [{ key: 'widthPx', label: 'Width', kind: 'number', min: .02, max: 20000, step: .1, unit: 'px' },
       { key: 'contourIds', label: 'Contours', kind: 'contours' }] }
   /** Defaults for a newly owned instance; empty targets mean all eligible elements. */

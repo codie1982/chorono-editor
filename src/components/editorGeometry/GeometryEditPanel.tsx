@@ -6,6 +6,7 @@ import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import type { SplineModelingPanelProps } from '@/components/panels/SplineModelingPanel'
 import { modifierOutputReadOnly } from '@/lib/modifiers'
 import type { Layer } from '@/lib/types'
+import { SplineSourceHistory } from './SplineSourceHistory'
 import ModifierStackPanel from './ModifierStackPanel'
 import type { GeometryEditMode } from './useGeometryEditMode'
 
@@ -23,6 +24,8 @@ export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, '
   readonly splineToolPreview?: ReactNode
   /** Host-owned transient session; inactive panels retain selection identity only. */
   readonly editMode?: GeometryEditMode
+  /** Queue sub-object focus after a legacy source becomes editable. */
+  readonly onSplineSourceBaked?: (layerId: string) => void
 }
 
 /** Edit dock retains selected-layer identity outside its transient session.
@@ -52,13 +55,13 @@ export default function GeometryEditPanel(props: GeometryEditPanelProps) {
   </div>
 }
 
-/** Mode controls and point editing remain separate from the persistent stack. */
+/** Native Spline tools precede the closed compatibility/source drawer. */
 function SplineSettings({ layer, splineModeControls, splineSourceSettings, splineToolPreview, ...props }: GeometryEditPanelProps & { layer: Layer }) {
   return <>
     {splineModeControls ? <section className="space-y-2" aria-label="Spline editing mode"><h3 className="font-semibold">Edit mode</h3>{splineModeControls}</section> : splineSourceSettings}
-    {splineToolPreview}
-    <ModifierStackPanel {...props} layer={layer} />
     {splineModeControls && splineSourceSettings}
+    {!splineSourceSettings && splineToolPreview}
+    <SplineSourceHistory {...props} layer={layer} />
     {!splineSourceSettings && !modifierOutputReadOnly(layer) && <p className="text-gray-400">Choose Point, Edge or Object to edit this Spline in the viewport.</p>}
   </>
 }

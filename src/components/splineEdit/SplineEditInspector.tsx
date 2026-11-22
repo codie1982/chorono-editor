@@ -23,11 +23,10 @@ import { useBooleanOperationActions } from '../booleanPreview/useBooleanOperatio
 import { splineSelectionPoints, transformSplineSelection } from '@/lib/spline/selection'
 import { DocumentationHelp } from '../help/DocumentationHelp'
 import type { SplineFilletController } from './fillet/useSplineFillet'
-import { SplineFilletControls } from './fillet/SplineFilletControls'
+import { SplineEditToolbox } from './tools/SplineEditToolbox'
+import { splineEditTools, splinePointTypes } from './tools/splineEditTools'
 import type { SplineChamferController } from './chamfer/useSplineChamfer'
-import { SplineChamferControls } from './chamfer/SplineChamferControls'
 import type { SplineOutlineController } from './outline/useSplineOutline'
-import { SplineOutlineControls } from './outline/SplineOutlineControls'
 
 interface Props {
   layer: Layer; controller: SplineEditController; getScene(): ChronoScene
@@ -45,8 +44,6 @@ interface Props {
   onBeginAttach?(): void
   fillet?: SplineFilletController
   chamfer?: SplineChamferController
-  /** False when the Edit dock hosts modifier settings beside its picker. */
-  modifierControls?: boolean
   /** False when a containing dock keeps mode toggles above its modifier list. */
   modeControls?: boolean
   outline?: SplineOutlineController
@@ -58,11 +55,12 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
  * never world scaling. Object is a SubShape, including all its contours/holes.
  * Root transforms and shared paint belong to Properties; this panel owns only
  * source geometry, topology and the active sub-object selection. */
-export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modifierControls = true, modeControls = true }: Props) {
+export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modeControls = true }: Props) {
   const [warning, setWarning] = useState('')
   const booleanActions = useBooleanOperationActions({ layerId: layer.id, getScene, dispatch: dispatchCommand,
     disabled, isTransactionActive, timeMs, overrides, nonDestructive: controller.nonDestructive, onMaterialized: controller.focusResult, selectedObjectIds: () => controller.bank.object,
     onSelectLayer: onSelectLayer ? id => onSelectLayer(id) : undefined, warning: setWarning })
+  const tools = splineEditTools({ layer, scene: getScene(), mode: controller.mode, active: controller.active, disabled, busy: isTransactionActive?.(), controllers: { chamfer, fillet, offset: outline } })
   const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning })
   const structurePaths = (kind: 'compound' | 'separate') => {
     try {
@@ -98,19 +96,20 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
   const points = ids.map(id => data.points[id]).filter(Boolean)
   const pointType = points.length && points.every(point => point.type === points[0].type) ? points[0].type : ''
   const contours = object?.contourIds.map(id => data.contours[id]).filter(Boolean) ?? []
-  return <section aria-label="Spline edit properties" className="space-y-3 text-xs text-gray-300">
+  return <section aria-label="Spline edit properties" data-spline-mode={controller.mode} className="space-y-3 text-xs text-gray-300">
     {modeControls && <>
       <div className="flex items-center gap-2"><h3 className="font-semibold">Edit mode</h3><DocumentationHelp topic="editor/canvas/splines" /></div>
       <SplineModeControls controller={controller} disabled={readonly} />
     </>}
     {!controller.active ? <p className="text-gray-400">Point edits vertices, Edge edits segments, Object selects a complete Spline element.</p> : <>
+      <h4 className="font-semibold">Selection properties</h4>
       <p aria-live="polite">{ids.length} {controller.mode}{ids.length === 1 ? '' : 's'} selected</p>
       {controller.mode === 'point' && (ids.length === 1 ? <SplinePointInspector layer={layer} pointId={ids[0]} dispatchCommand={dispatchCommand}
         readOnlyReason={readonly ? 'Source editing is unavailable in this context.' : drivenSplineEditReason(layer, getScene(), 'points', ids[0])}
         onDelete={() => topology.perform({ kind: 'delete' })} onApply={(next, kind, id) => apply(kind === 'topology' ? { kind } : { kind, ids: [id] }, () => next)} />
         : ids.length > 1 ? <label className="block space-y-1">Point type<select aria-label="Selected spline point type" disabled={readonly} value={pointType} className={selectClass}
           onChange={event => apply({ kind: 'topology' }, source => ids.reduce((next, id) => setSplinePointType(next, id, event.target.value as SplinePointType), source), 'Set spline point types')}>
-          <option value="" disabled>Mixed</option>{['corner', 'smooth', 'bezier', 'bezierCorner'].map(type => <option key={type} value={type}>{type}</option>)}
+          <option value="" disabled>Mixed</option>{splinePointTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
         </select><span className="block text-gray-400">Select one point to edit its position and handles.</span></label> : <p>Click a point or drag an empty area to select points.</p>)}
       {controller.mode === 'edge' && (edges.length ? <div className="space-y-2">
         <label className="block space-y-1">Segment type<select aria-label="Spline segment type" disabled={readonly} value={edgeType} className={selectClass}
@@ -137,14 +136,12 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
       {!!ids.length && <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Selection actions</summary>
         <div className="mt-3"><SplineTopologyControls scene={getScene()} layer={layer} controller={controller} actions={topology} disabled={readonly} /></div>
       </details>}
-      {modifierControls && chamfer && controller.mode === 'point' && (!!ids.length || chamfer.active) && <SplineChamferControls controller={{ ...chamfer, disabled: chamfer.disabled || !!fillet?.active }} />}
-      {modifierControls && fillet && controller.mode === 'point' && (!!ids.length || fillet.active) && <SplineFilletControls controller={{ ...fillet, disabled: fillet.disabled || !!chamfer?.active }} />}
-      {modifierControls && outline && controller.mode !== 'point' && (!!ids.length || outline.active) && <SplineOutlineControls controller={outline} />}
+      <SplineEditToolbox mode={controller.mode} actions={tools} chamfer={chamfer} fillet={fillet} outline={outline} />
+      {controller.mode === 'object' && <SplineAttachControls controller={controller} disabled={readonly} onBegin={onBeginAttach} booleanActions={booleanActions} onStructure={structurePaths} />}
       {!!ids.length && <SplineTransformControls key={`${layer.id}:${controller.mode}:${ids.join(',')}`} disabled={readonly} onApply={transform => {
         const points = splineSelectionPoints(data, controller.mode, ids)
         apply({ kind: 'geometry', ids: Array.from(points) }, source => transformSplineSelection(source, points, transform), 'Transform spline selection')
       }} />}
-      <SplineAttachControls controller={controller} disabled={readonly} onBegin={onBeginAttach} booleanActions={booleanActions} onStructure={structurePaths} />
       {onDraw && onAutoClose && <details open={drawingLine || undefined} className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Draw new spline elements</summary>
         <div className="mt-3"><SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={(kind, endpoint) => { controller.setAttaching(false); onDraw(kind, endpoint) }} disabled={readonly} /></div>
       </details>}

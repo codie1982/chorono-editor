@@ -6,7 +6,7 @@ import { numberSetting, targetSetting } from '../settings'
 
 /** Local-space straight corner cuts using the canonical native Chamfer solver. */
 export class ChamferModifier extends CornerModifier {
-  static readonly descriptor: GeometryModifierDescriptor = { type: 'chamfer', label: 'Chamfer', category: 'spline', inputs: ['spline'], output: 'spline', addable: true,
+  static readonly descriptor: GeometryModifierDescriptor = { type: 'chamfer', label: 'Chamfer', category: 'spline', inputs: ['spline'], output: 'spline', addable: true, legacySplineTool: true,
     fields: [{ key: 'distancePx', label: 'Cut distance', kind: 'number', min: .1, max: 10000, step: .1, unit: 'px' },
       { key: 'pointIds', label: 'Corners', kind: 'points' }] }
   /** Defaults for a newly owned instance; empty targets mean all eligible elements. */

@@ -33,11 +33,12 @@ describe('Geometry Edit dock', () => {
     expect(html).not.toMatch(/Convert Spline|Convert 2D Mesh|Add Spline modifiers/)
   })
 
-  it('puts mode settings before the Spline-only Add modifiers chooser', () => {
+  it('puts spline settings before closed source history without a modifier chooser', () => {
     const layer = newSplineLayerFromData(createRectangleSpline({ width: 80, height: 50 }))
     const props = panelProps(layer)
     const html = renderToStaticMarkup(<GeometryEditPanel {...props} splineSourceSettings={<p>Point inspector</p>} />)
-    expect(html).toMatch(/Point inspector[\s\S]*Spline modifiers[\s\S]*Add Spline modifiers/)
+    expect(html).toMatch(/Point inspector[\s\S]*Source \/ History/)
+    expect(html).not.toMatch(/Add Spline modifiers|<details[^>]*open/)
     expect(html).not.toMatch(/Create Mesh2D from closed spline|Mesh modifiers|>Source<|Spline modeling amount/)
     expect(props.dispatchCommand).not.toHaveBeenCalled()
   })

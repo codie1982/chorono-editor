@@ -3,15 +3,16 @@ import type { Layer, ChronoScene } from '@/lib/types'
 import type { SplinePick } from '@/lib/spline/selection'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import { setSplinePointType, deleteSplinePoint, setSegmentType, insertPointOnSegment, setContourClosed, reverseContour } from '@/lib/spline'
+import { splinePointTypes, type SplineToolAction } from './tools/splineEditTools'
 import ContextMenu, { type MenuItem } from '../ui/ContextMenu'
 import { splineEditCommand } from './commands'
 import type { SplineEditController } from './useSplineEditSelection'
 
 /** Mode-local actions over current source. The native topology guard refuses
  * competing key/wire writers; menus never substitute root layer deletion. */
-export function SplineEditMenu({ x, y, target, layer, controller, getScene, dispatch, warning, close, prefix = [] }: {
+export function SplineEditMenu({ x, y, target, layer, controller, getScene, dispatch, warning, close, prefix = [], tools = [] }: {
   x: number; y: number; target: SplinePick | null; layer: Layer; controller: SplineEditController
-  getScene(): ChronoScene; dispatch(command: EditorCommand): void; warning(message: string): void; close(): void; prefix?: MenuItem[]
+  getScene(): ChronoScene; dispatch(command: EditorCommand): void; warning(message: string): void; close(): void; prefix?: MenuItem[]; tools?: readonly SplineToolAction[]
 }) {
   const ids = controller.ids
   const mutate = (fn: Parameters<typeof splineEditCommand>[3]) => {
@@ -21,7 +22,7 @@ export function SplineEditMenu({ x, y, target, layer, controller, getScene, disp
   }
   const items: MenuItem[] = []
   if (target && controller.mode === 'point') {
-    for (const [label, type] of [['Corner', 'corner'], ['Smooth', 'smooth'], ['Bezier (Mirror)', 'bezier'], ['Bezier Corner', 'bezierCorner']] as const)
+    for (const {label, value: type} of splinePointTypes)
       items.push({ kind: 'action', label, onSelect: () => mutate(source => ids.reduce((next, id) => setSplinePointType(next, id, type), source)) })
     items.push({ kind: 'action', label: 'Delete selected points', onSelect: () => mutate(source => ids.reduce((next, id) => deleteSplinePoint(next, id), source)) })
   } else if (target?.kind === 'edge' && controller.mode === 'edge') {
@@ -34,6 +35,7 @@ export function SplineEditMenu({ x, y, target, layer, controller, getScene, disp
     items.push({ kind: 'action', label: closed ? 'Open contours' : 'Close contours', onSelect: () => mutate(source => contours.reduce((next, id) => setContourClosed(next, id, !closed), source)) },
       { kind: 'action', label: 'Reverse direction', onSelect: () => mutate(source => contours.reduce((next, id) => reverseContour(next, id), source)) })
   }
+  items.push(...tools.map(tool => ({ kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason, onSelect: () => { tool.run(); close() } })))
   if (items.length) items.push({ kind: 'separator' })
   items.push(...(['point', 'edge', 'object'] as const).map(mode => ({ kind: 'action' as const, label: `Edit spline ${mode}`, onSelect: () => { controller.enter(mode); close() } })),
     { kind: 'action', label: 'Done editing spline', onSelect: () => { controller.exit(); close() } })

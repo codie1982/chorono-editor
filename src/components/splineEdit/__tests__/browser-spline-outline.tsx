@@ -17,7 +17,7 @@ async function load(open = true) {
 }
 /** Open the real progressive-disclosure controls before interacting with them. */
 async function openControls() {
-  const details = document.querySelector<HTMLDetailsElement>('[aria-label="Spline Offset and Outline"]')!
+  const details = document.querySelector<HTMLDetailsElement>('[aria-label="Spline Offset Path"]')!
   assert(details, 'Offset controls are missing')
   if (!details.open) { flushSync(() => details.querySelector('summary')!.click()); await frames() }
 }
@@ -30,7 +30,7 @@ async function number(label: string, value: number) {
 async function settled() {
   for (let i = 0; i < 600; i++) {
     await frames(1)
-    const controls = document.querySelector('[aria-label="Spline Offset and Outline"]')!
+    const controls = document.querySelector('[aria-label="Spline Offset Path"]')!
     if (!controls.textContent?.includes('Calculating Offset')) return
   }
   throw new Error('Offset worker did not settle before acceptance deadline')
@@ -53,6 +53,21 @@ async function run() {
     checks.push('Actual worker preview follows the cut circle under an animated/nonuniform parent; Cancel preserves exact source/history and exported pixels')
 
     await openControls(); await click('Preview Offset'); await choose('Offset direction', 'right'); await settled(); await click('Apply Offset')
+    const replaced = structuredClone(current().editor.getScene())
+    assert(Object.keys(layer().spline!.subShapes).length === 1, 'Default Offset appended instead of replacing')
+    const originalId = Object.keys(original.subShapes)[0]
+    assert(layer().spline!.subShapes[originalId] && current().controller.ids[0] === originalId, 'Replacement lost the original Object ownership/focus')
+    assert(!layer().modifierStack && !layer().geometryConversion, 'Native Offset created a stack entry')
+    for (const id of Object.keys(original.points)) assert(!layer().spline!.points[id], 'Replacement retained old selected contour points')
+    equal(layer().transform, before.layers[1].transform, 'Replacement changed real TRS/pivot')
+    equal(replaced.timelines, before.timelines, 'Replacement changed animation')
+    await click('Undo'); equal(current().editor.getScene(), before, 'Replacement was not one Undo')
+    await click('Redo'); equal(current().editor.getScene(), replaced, 'Replacement Redo changed IDs')
+    await click('Undo')
+    checks.push('Default Offset replaces selected contours, keeps Object identity/TRS/paint/keys, adds no modifier and has one Undo/Redo')
+    await openControls(); await click('Preview Offset'); await choose('Offset direction', 'right'); await settled()
+    const keep = document.querySelector<HTMLInputElement>('[aria-label="Keep Offset source"]')!
+    assert(!keep.checked, 'Keep source should be off by default'); flushSync(() => keep.click()); await frames(); await settled(); await click('Apply Offset')
     const applied = structuredClone(current().editor.getScene()), data = layer().spline!
     assertSplineTopology(data)
     assert(Object.keys(data.subShapes).length === 2 && current().controller.ids.length === 1, 'Apply did not append/focus one new Object')
@@ -83,16 +98,20 @@ async function run() {
     assert(!document.querySelector('[aria-label="Spline Offset preview"]') && !applyButton(), 'Time change left a stale preview applicable')
     equal(current().editor.getScene(), closed, 'Time cancellation modified source')
     await load(); await click('Spline edge mode'); const edge = Object.keys(layer().spline!.segments)[0]
-    flushSync(() => current().controller.enter('edge', [edge])); await frames(); await openControls(); await click('Preview Offset'); await number('Offset distance', 20); await settled()
-    assert(!applyButton().disabled && document.querySelector('[aria-label="Spline Offset and Outline"]')?.textContent?.includes('complete contour'), 'Edge selection did not disclose/promote the complete contour')
+    flushSync(() => current().controller.enter('edge', [edge])); await frames(); await openControls()
+    const preview = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'Preview Offset')!
+    assert(preview.disabled && document.querySelector('[aria-label="Spline Offset Path"]')?.textContent?.includes('every edge'), 'Partial selection silently promoted to the complete contour')
+    flushSync(() => current().controller.enter('edge', Object.keys(layer().spline!.segments))); await frames()
+    await openControls(); await click('Preview Offset'); await number('Offset distance', 20); await settled()
+    assert(!applyButton().disabled, 'Complete edge selection cannot offset')
     await click('Cancel Offset'); assert(!current().editor.canUndo, 'Edge preview/cancel created history')
-    checks.push('Time change aborts/hides pending work; Edge mode previews the full owning contour without source/history writes')
+    checks.push('Time change cancels pending work; partial Edge selection has an explicit disabled reason, while complete contour edges can preview')
     await load(); await openControls(); await click('Preview Offset'); await number('Offset distance', 20); await choose('Offset direction', 'right'); await settled()
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
   finally { button.disabled = false }
 }
 
-document.body.innerHTML = '<style>body{margin:16px;background:#101827;color:#e5e7eb;font:14px system-ui}nav button,#run{padding:8px;border:1px solid #475569;border-radius:5px;margin:4px}#host{max-width:1280px}pre{white-space:pre-wrap}</style><h1>Spline Offset / Outline acceptance</h1><p>Real CPU worker, viewport, source preservation, raster, history and endpoint connections.</p><button id="run">Run Outline checks</button><p id="status">Ready</p><section id="host"></section><pre id="report">No checks run</pre>'
+document.body.innerHTML = '<style>body{margin:16px;background:#101827;color:#e5e7eb;font:14px system-ui}nav button,#run{padding:8px;border:1px solid #475569;border-radius:5px;margin:4px}#host{max-width:1280px}pre{white-space:pre-wrap}</style><h1>Spline Offset Path acceptance</h1><p>Real CPU worker, viewport, source preservation, raster, history and endpoint connections.</p><button id="run">Run Outline checks</button><p id="status">Ready</p><section id="host"></section><pre id="report">No checks run</pre>'
 createRoot(document.getElementById('host')!).render(<Subject />)
 document.getElementById('run')!.onclick = () => void run()

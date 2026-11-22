@@ -15,7 +15,7 @@ import { Matrix2D } from '../../geometry/Matrix2D'
  * remain open. Output replaces selected contours, never appends a scene layer. */
 export class OffsetModifier extends SplineModifier {
   static readonly descriptor: GeometryModifierDescriptor = {
-    type: 'offset', label: 'Offset', category: 'spline', inputs: ['spline'], output: 'spline', addable: true,
+    type: 'offset', label: 'Offset', category: 'spline', inputs: ['spline'], output: 'spline', addable: true, legacySplineTool: true,
     fields: [
       { key: 'distancePx', label: 'Distance', kind: 'number', min: .01, max: 10000, step: .1, unit: 'px' },
       { key: 'side', label: 'Direction', kind: 'select', options: ['inside', 'outside', 'left', 'right', 'both'].map(value => ({ value, label: value })) },

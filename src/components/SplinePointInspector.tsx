@@ -6,6 +6,7 @@
 // undoable makeUpdateLayerCmd commands via the mutation helpers.
 
 'use client'
+import { splinePointTypes } from './splineEdit/tools/splineEditTools'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 
 import { Vector2Input } from '@/components/inputs/Vector2Input'
@@ -28,12 +29,7 @@ interface Props {
   readOnlyReason?: string | null
 }
 
-const TYPES: { value: SplinePointType; label: string }[] = [
-  { value: 'corner',       label: 'Corner' },
-  { value: 'smooth',       label: 'Smooth' },
-  { value: 'bezier',       label: 'Bezier' },
-  { value: 'bezierCorner', label: 'Bezier Corner' },
-]
+const TYPES = splinePointTypes
 
 /** Existing single-point editor with optional host guards. onApply adopts
  * immutable geometry through the owning edit context; legacy standalone hosts

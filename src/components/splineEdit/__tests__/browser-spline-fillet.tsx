@@ -7,7 +7,7 @@ import { buildSplineData } from '@/lib/spline/util/buildSplineData'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { assertSplineTopology, deleteSplineEdges } from '@/lib/spline/topology'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
-import { Subject, fixture, current, frames, layer, tap, click, choose, assert, equal, raster, canvas } from './splineHarness'
+import { Subject, fixture, current, frames, layer, tap, click, key, choose, assert, equal, raster, canvas } from './splineHarness'
 
 /** Disposable fixture with animated rotated/nonuniform parent. Select corners
  * through the production Point-mode viewport handlers, not test-only UI state. */
@@ -57,6 +57,7 @@ async function run() {
 
     await openControls(); await click('Preview Fillet'); await number(12); await settled(); await click('Apply Fillet')
     const applied = structuredClone(current().editor.getScene()), data = layer().spline!
+    assert(!layer().modifierStack, 'Native Fillet created a modifier stack')
     assertSplineTopology(data); assert(Object.keys(data.points).length > 4 && current().controller.ids.length === 4, 'Apply did not focus both cut pairs')
     equal(applied.timelines, before.timelines, 'Fillet damaged manual keys'); equal(layer().style, before.layers[1].style, 'Fillet changed paint')
     equal(parseSceneJson(JSON.stringify(applied), true), applied, 'Fillet failed portable save/open')
@@ -85,7 +86,7 @@ async function run() {
     await choose('Add spline object', 'line'); await tap(layer().spline!.points[arc.pointIds[0]]); await tap(layer().spline!.points[offsetArc.pointIds[0]])
     const joined = Object.values(layer().spline!.contours)[0]
     await choose('Add spline object', 'line'); await tap(layer().spline!.points[joined.pointIds[0]]); await tap(layer().spline!.points[joined.pointIds.at(-1)!])
-    await click('Spline point mode'); await tap(layer().spline!.points[arc.pointIds[0]]); await tap(layer().spline!.points[arc.pointIds.at(-1)!], { shiftKey: true })
+    key('1'); await frames(); await tap(layer().spline!.points[arc.pointIds[0]]); await tap(layer().spline!.points[arc.pointIds.at(-1)!], { shiftKey: true })
     const bandBefore = structuredClone(current().editor.getScene())
     assert(Object.values(layer().spline!.contours)[0].closed && current().controller.ids.length === 2, 'Closed band corners could not be selected')
     await openControls(); await click('Preview Fillet'); await number(5); await settled()
@@ -109,9 +110,10 @@ async function run() {
     equal(current().editor.getScene(), invalid, 'Time cancellation changed source')
     await load(); await openControls(); await click('Preview Fillet'); await number(8); await click('Spline edge mode'); await frames(30)
     assert(!document.querySelector('[aria-label="Spline Fillet preview"]'), 'Mode change kept Fillet overlay')
-    const keyed = await load(false, true); await openControls(); await click('Preview Fillet'); await settled()
-    assert(applyButton()!.disabled && document.querySelector('[role="alert"]'), 'Coordinate-driven geometry was overwritten')
-    await click('Cancel Fillet'); equal(current().editor.getScene(), keyed, 'Driver refusal changed manual source')
+    const keyed = await load(false, true); await openControls()
+    const blocked = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'Preview Fillet')!
+    assert(blocked.disabled && document.querySelector('[aria-label="Spline Fillet"]')?.textContent?.match(/keyed|timeline/i), 'Coordinate-driven geometry was not blocked before preview')
+    equal(current().editor.getScene(), keyed, 'Driver refusal changed manual source')
     checks.push('Time/mode changes invalidate and abort pending work; coordinate key ownership refuses without changing animations')
 
     await load(); await openControls(); await click('Preview Fillet'); await number(18); await settled()

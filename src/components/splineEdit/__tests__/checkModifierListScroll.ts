@@ -10,6 +10,9 @@ export async function checkModifierListScroll(): Promise<string> {
   const modifiers = Array.from({ length: 20 }, (_, index) => geometryModifierRegistry.newRecord('offset', `scroll-${index}`, input, false))
   scene.layers[1] = modifierStackService.withGeometry(layer, { ...stack, modifiers }, input)
   flushSync(() => { current().editor.resetScene(scene); current().select('spline'); current().setTool('select') }); await frames()
+  const history = document.querySelector<HTMLDetailsElement>('[aria-label="Source / History"]')!
+  assert(history && !history.open, 'Spline source history must start closed')
+  flushSync(() => history.querySelector('summary')!.click()); await frames()
   const region = document.querySelector<HTMLElement>('[aria-label="Ordered modifiers"]')!
   const frame = document.querySelector<HTMLElement>('[aria-label="Modifier stack"]')!
   assert(parseFloat(getComputedStyle(frame).borderLeftWidth) > 0, 'Modifier stack has no enclosing frame')

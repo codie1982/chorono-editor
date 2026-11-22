@@ -21,5 +21,7 @@ export interface GeometryModifierDescriptor extends ModifierDescriptor {
   readonly output: GeometryKind
   /** True only when source-point editing remains unambiguous after this step. */
   readonly preservesSourceEditing?: boolean
+  /** Existing records/programmatic callers remain supported; hidden from new UI instances. */
+  readonly legacySplineTool?: boolean
 }
 export type GeometryModifierStackData = ModifierStackData<ModifierGeometry>
