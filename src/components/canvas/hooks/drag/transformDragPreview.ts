@@ -81,6 +81,15 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
       if (drag.axisLock === 'x' || (event.shiftKey && locked.dy === 0)) dy = 0
       if (drag.axisLock === 'y' || (event.shiftKey && locked.dx === 0)) dx = 0
     }
+    // Command/Ctrl-drag copy gestures use the same snap engine to keep the
+    // duplicate on the horizontal or vertical axis without requiring Shift.
+    // This also applies when the moving bounds are unavailable (for example
+    // an empty/off-artboard geometry proxy).
+    if (drag.cloneMode && engine) {
+      const axisSnapped = engine.snapTranslationAxis({ x: dx, y: dy }, input.zoom)
+      dx = axisSnapped.x
+      dy = axisSnapped.y
+    }
     result = translateTransformTargets(targets, { x: dx, y: dy })
     label = `${drag.cloneMode ? drag.cloneMode === 'instance' ? '⧉ Instance   ' : '⧉ Copy   ' : ''}ΔX ${Math.round(dx)}   ΔY ${Math.round(dy)}`
   } else if (drag.kind === 'rotate') {
@@ -96,7 +105,8 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     label = `${angle.toFixed(1)}°  (${targets.length} layers)`
   } else if (drag.selectionResize) {
     const { bounds: box, handle } = drag.selectionResize, proportional = event.shiftKey || event.ctrlKey || event.metaKey
-    let resize = selectionResize(box, handle, delta, proportional)
+    const centered = (event.metaKey || event.ctrlKey) && event.shiftKey
+    let resize = selectionResize(box, handle, delta, proportional, centered)
     if (!resize) throw new Error('The selection bounds cannot be resized. Select geometry with nonzero bounds.')
     const handleFor = (value: NonNullable<typeof resize>) => resizeHandlePoint({ x: value.pivot.x + (box.x - value.pivot.x) * value.factorX,
       y: value.pivot.y + (box.y - value.pivot.y) * value.factorY, width: box.width * value.factorX, height: box.height * value.factorY }, handle)
@@ -113,7 +123,7 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
       const acquired = snapResizeHandle(point, direction, engine.radiusWorld(input.zoom), p => engine.resolvePoint(p, {
         canvasWidth: dimensions.width, canvasHeight: dimensions.height, otherLayers: bounds.others, parentBounds: bounds.parents,
         customGuides: readSceneGuides(base).guides, zoom: input.zoom }))
-      resize = selectionResize(box, handle, { x: acquired.point.x - originalPoint.x, y: acquired.point.y - originalPoint.y }, proportional)!
+      resize = selectionResize(box, handle, { x: acquired.point.x - originalPoint.x, y: acquired.point.y - originalPoint.y }, proportional, centered)!
       const reached = handleFor(resize)
       guides = reachedResizeGuides(reached, acquired.guides); if (guides.length) snapPoint = reached
     }

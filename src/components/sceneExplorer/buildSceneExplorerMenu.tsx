@@ -80,6 +80,7 @@ export function buildSceneExplorerMenu(opts: BuildMenuOptions): MenuItem[] {
   const flagSubmenu = (field: 'locked' | 'hidden' | 'solo' | 'pinned', label: string): MenuItem => ({
     kind:  'action',
     label: multi ? `${label} (${ids.length})` : label,
+    ...(field === 'solo' ? { shortcut: 'S' } : {}),
     onSelect: () => handlers.bulkToggleFlag(ids, field, computeNext(field)),
   })
 

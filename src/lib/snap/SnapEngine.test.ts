@@ -79,6 +79,23 @@ describe('SnapEngine.snapRect', () => {
   })
 })
 
+describe('SnapEngine.snapTranslationAxis', () => {
+  it('keeps a clone moving horizontally when the vertical drift is within snap tolerance', () => {
+    const engine = new SnapEngine({ ...baseSettings, radiusPx: 8 })
+    expect(engine.snapTranslationAxis({ x: 120, y: 4 })).toEqual({ x: 120, y: 0 })
+  })
+
+  it('keeps a clone moving vertically when the horizontal drift is within snap tolerance', () => {
+    const engine = new SnapEngine({ ...baseSettings, radiusPx: 8 })
+    expect(engine.snapTranslationAxis({ x: 3, y: 90 })).toEqual({ x: 0, y: 90 })
+  })
+
+  it('does not axis-snap when the master snap switch is disabled', () => {
+    const engine = new SnapEngine({ ...baseSettings, enabled: false })
+    expect(engine.snapTranslationAxis({ x: 120, y: 4 })).toEqual({ x: 120, y: 4 })
+  })
+})
+
 describe('SnapEngine.snapPoint', () => {
   it('is identity when snap disabled', () => {
     const e = new SnapEngine({ ...baseSettings, enabled: false })

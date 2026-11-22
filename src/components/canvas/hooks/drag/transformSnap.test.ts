@@ -3,7 +3,7 @@ import { emptyScene, newRectLayer } from '@/lib/defaults'
 import { prepareTransformTargets } from '@/lib/canvas/math/preparedTransforms'
 import { beginRotationGesture } from '@/lib/canvas/math/rotationGesture'
 import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
-import type { RotateState, ScaleAxisState } from '../../types/canvasDragTypes'
+import type { MoveState, RotateState, ScaleAxisState } from '../../types/canvasDragTypes'
 import { previewTransformDrag } from './transformDragPreview'
 
 const event = { pointerId: 1, clientX: 0, clientY: 0, shiftKey: false, ctrlKey: false, metaKey: false }
@@ -23,6 +23,29 @@ function preview(drag: RotateState | ScaleAxisState, x: number, y: number, cfg =
     dimensions: { width: 1000, height: 1000 }, bounds: { moving: null, others: [] } })
 }
 describe('viewport transform snapping with Move disabled', () => {
+  it('axis-snaps command-drag copies without changing ordinary move behavior', () => {
+    const target = prepare(['a']).targets
+    const drag: MoveState = {
+      kind: 'move', layerId: a.id, originalLayer: a, targets: target,
+      movingLayers: [{ id: a.id, originalLayer: a, baseX: a.transform.x, baseY: a.transform.y }],
+      startClientX: 0, startClientY: 0, width: 60, height: 40, cloneMode: 'copy',
+    }
+    const clone = previewTransformDrag({
+      base, drag, event, pointerWorld: { x: 120, y: 4 }, delta: { x: 120, y: 4 },
+      dimensions: { width: 1000, height: 1000 }, bounds: { moving: null, others: [] },
+      engine: new SnapEngine({ ...settings, enabled: true, radiusPx: 8 }),
+    })
+    expect(clone.scene.layers[0].transform.x).toBe(120)
+    expect(clone.scene.layers[0].transform.y).toBe(0)
+
+    const ordinary = previewTransformDrag({
+      base, drag: { ...drag, cloneMode: undefined }, event, pointerWorld: { x: 120, y: 4 },
+      delta: { x: 120, y: 4 }, dimensions: { width: 1000, height: 1000 },
+      bounds: { moving: null, others: [] }, engine: new SnapEngine({ ...settings, enabled: true, radiusPx: 8 }),
+    })
+    expect(ordinary.scene.layers[0].transform.y).toBe(4)
+  })
+
   it('quantizes single local rotation from the evaluated starting angle', () => {
     const targets = prepare(['a']).targets, gesture = beginRotationGesture(a, base, 0, { x: 100, y: 0 })!
     const drag: RotateState = { kind: 'rotate', originalRotation: a.transform.rotationDeg, layerId: a.id, originalLayer: a, targets, gesture,

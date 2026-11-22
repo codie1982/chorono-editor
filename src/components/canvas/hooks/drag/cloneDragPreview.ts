@@ -23,8 +23,10 @@ export function previewCloneDrag(base: ChronoScene, drag: MoveState,
   event: CanvasPointerSample): CanvasDragPreview {
   if (Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) < 3
       || !moved.changes.length) return { ...moved, scene: base, changes: [], overrides: new Map() }
-  const command = plan.atOffsets(cloneDragOffsets(drag, moved))
-  return { ...moved, scene: command.execute(base), overrides: new Map(), cloneCommand: command }
+  const offsets = cloneDragOffsets(drag, moved)
+  const command = plan.atOffsets(offsets)
+  return { ...moved, scene: command.execute(base), overrides: new Map(), cloneCommand: command,
+    cloneOffset: Object.values(offsets)[0] ?? { x: 0, y: 0 } }
 }
 
 /** Root-parent-local delta from the evaluated drag pose, shared by the live

@@ -4,6 +4,20 @@ import { defaultLayout, findLeafOfPanel, isValidLayout } from './layoutOps'
 import type { DockNode } from './types'
 
 describe('retired settings panel migration', () => {
+  it('renames the legacy modeling tab in place and preserves the active tab', () => {
+    const legacy: DockNode = { kind: 'leaf', id: 'custom', panels: ['assets', 'splineModeling', 'properties'], activeIndex: 1, collapsed: true }
+    const next = migrateDockLayout(legacy)
+    expect(next).toEqual({ ...legacy, panels: ['assets', 'geometryEdit', 'properties'] })
+    expect(migrateDockLayout(next)).toBe(next)
+  })
+
+  it('keeps an existing Edit tab and does not reopen one that was closed', () => {
+    const mixed: DockNode = { kind: 'leaf', id: 'custom', panels: ['splineModeling', 'geometryEdit', 'assets'], activeIndex: 1 }
+    expect(migrateDockLayout(mixed)).toEqual({ ...mixed, panels: ['geometryEdit', 'assets'], activeIndex: 0 })
+    const closed: DockNode = { ...mixed, panels: ['assets'], activeIndex: 0 }
+    expect(migrateDockLayout(closed)).toBe(closed)
+  })
+
   it('removes only legacy Snap/Shortcuts while preserving active panels, ratios and closed state', () => {
     const tree: DockNode = { kind: 'split', id: 'custom', direction: 'h', ratio: .37, children: [
       { kind: 'leaf', id: 'main', panels: ['canvas', 'timeline'], activeIndex: 1 },

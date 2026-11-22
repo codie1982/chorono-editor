@@ -7,17 +7,19 @@ export type ToolMode =
   /** Mesh2D texture placement handles; does not transform the layer itself. */
   | 'texture'
   // BL-60 Faz 3 — Canvas selection tools (drag a shape, select layers inside)
-  | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+  | SelectionToolMode
   // BL-73 — Spline drawing (drag-to-create / multi-click line)
   | 'spline-draw'
   /** Persistent native shape placement selected through Layer → Add. */
   | 'shape-draw'
 
 /** True for any of the four canvas-shape selection tools. */
-export function isSelectionTool(m: ToolMode): boolean {
+export function isSelectionTool(m: ToolMode): m is SelectionToolMode {
   return m === 'selection-box' || m === 'selection-lasso'
       || m === 'selection-circle' || m === 'selection-paint'
 }
+
+export type SelectionToolMode = 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
 
 /** Selection containment mode (BL-60 Faz 3). Applies only when a canvas
  *  selection tool is active. `'inside'` = layer's bounds must fit fully
@@ -29,6 +31,9 @@ interface ToolGroupProps {
   onChange: (m: ToolMode) => void
   /** Shared toggle restores the editor's previous tool instead of Select. */
   onPanToggle?: () => void
+  /** Persistent marquee type; changing it does not replace the Select tool. */
+  selectionMode?: SelectionToolMode
+  onSelectionModeChange?: (mode: SelectionToolMode) => void
   /** When true, pen tool is auto-active because a path layer is selected. */
   penAuto?: boolean
   /** BL-60 Faz 3 — Current containment mode for canvas selection tools. */
@@ -74,9 +79,10 @@ function Divider() {
  */
 export default function ToolGroup({
   mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange,
+  selectionMode = 'selection-box', onSelectionModeChange = () => {},
 }: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
-  const showContainToggle = isSelectionTool(mode) && containMode != null && onContainModeChange != null
+  const showContainToggle = containMode != null && onContainModeChange != null
   return (
     <div className="flex items-center gap-1">
       <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/compound-splines' : 'editor/canvas/tools'} compact />
@@ -106,7 +112,7 @@ export default function ToolGroup({
           <path d="M8 1 L8 5 L12 5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'scale'} hint="Scale" shortcut="S" onClick={() => onChange('scale')}>
+      <ToolBtn active={mode === 'scale'} hint="Scale" shortcut="Shift+S" onClick={() => onChange('scale')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="6" height="6" />
           <rect x="9" y="9" width="4" height="4" strokeDasharray="1 1" />
@@ -130,22 +136,22 @@ export default function ToolGroup({
       <Divider />
 
       {/* BL-60 Faz 3 — Canvas selection tools */}
-      <ToolBtn active={mode === 'selection-box'} hint="Box Select" shortcut="B" onClick={() => onChange('selection-box')}>
+      <ToolBtn active={selectionMode === 'selection-box'} hint="Box Select" shortcut="B" onClick={() => onSelectionModeChange('selection-box')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect x="2.5" y="2.5" width="11" height="11" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-lasso'} hint="Lasso Select" shortcut="L" onClick={() => onChange('selection-lasso')}>
+      <ToolBtn active={selectionMode === 'selection-lasso'} hint="Lasso Select" shortcut="L" onClick={() => onSelectionModeChange('selection-lasso')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 6 Q2 2 7 2 Q12 2 13 6 Q13 11 7 11 Q4 11 4 13 L6 14" strokeDasharray="1.5 1" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-circle'} hint="Circle Select" shortcut="O" onClick={() => onChange('selection-circle')}>
+      <ToolBtn active={selectionMode === 'selection-circle'} hint="Circle Select" shortcut="O" onClick={() => onSelectionModeChange('selection-circle')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="5.5" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-paint'} hint="Paint Select" shortcut="W" onClick={() => onChange('selection-paint')}>
+      <ToolBtn active={selectionMode === 'selection-paint'} hint="Paint Select" shortcut="W" onClick={() => onSelectionModeChange('selection-paint')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 13 L10 6 L11 5 L13 7 L12 8 L5 15 L2 14 Z" fill="currentColor" fillOpacity="0.15" />
         </svg>

@@ -18,11 +18,14 @@ import {
 import type { Asset, Layer } from '@/lib/types'
 import Mesh2DTextureControls from './Mesh2DTextureControls'
 
+export type Mesh2DSettingsSection = 'source' | 'texture' | 'deformation' | 'pins'
+
 interface Props {
   readonly layer: Layer
   readonly allLayers: readonly Layer[]
   readonly allAssets?: readonly Asset[]
   readonly onLayerChange: (layer: Layer) => void
+  readonly section?: Mesh2DSettingsSection
 }
 
 /**
@@ -32,8 +35,9 @@ interface Props {
  * one complete layer snapshot to the owning editor command path, so tolerance
  * plus derived geometry form one undo step. Errors stay adjacent to the source
  * controls and never partially update the selected layer.
+ * Set section to show only the requested controls in a dock inspector.
  */
-export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], onLayerChange }: Props) {
+export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], onLayerChange, section }: Props) {
   const mesh = layer.mesh2d
   const source = layer.mesh2d?.source
   const boundarySource = source?.kind === 'splineBoundary' || source?.kind === 'shapeBoundary'
@@ -105,7 +109,10 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
 
   return (
     <div className="flex flex-col gap-3">
-      {fractureSource && <section aria-labelledby="mesh2d-fracture-source-heading" className="flex flex-col gap-2">
+      {section === 'source' && !boundarySource && !fractureSource && (
+        <p className="text-gray-400">Stored mesh · {mesh.geometry.topology.triangleIndices.length / 3} triangles</p>
+      )}
+      {(!section || section === 'source') && fractureSource && <section aria-labelledby="mesh2d-fracture-source-heading" className="flex flex-col gap-2">
         <h3 id="mesh2d-fracture-source-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
           Fracture Fragment
         </h3>
@@ -129,7 +136,7 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
         </p>
       </section>}
 
-      {boundarySource && (source.kind === 'splineBoundary' || source.kind === 'shapeBoundary') && <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
+      {(!section || section === 'source') && boundarySource && (source.kind === 'splineBoundary' || source.kind === 'shapeBoundary') && <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
         <h3 id="mesh2d-source-heading" className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
           {source.kind === 'shapeBoundary' ? 'Shape Source' : 'Spline Source'}
         </h3>
@@ -173,9 +180,9 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
         </p>
       </section>}
 
-      <Mesh2DTextureControls layer={layer} allAssets={allAssets} onLayerChange={onLayerChange} onDiagnostic={setError} />
+      {(!section || section === 'texture') && <Mesh2DTextureControls layer={layer} allAssets={allAssets} onLayerChange={onLayerChange} onDiagnostic={setError} />}
 
-      <section aria-labelledby="mesh2d-deformation-heading" className="flex flex-col gap-2">
+      {(!section || section === 'deformation') && <section aria-labelledby="mesh2d-deformation-heading" className="flex flex-col gap-2">
         <h3 id="mesh2d-deformation-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Deformation Clip</h3>
         <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
           Binary clip asset
@@ -211,9 +218,9 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
               ? `Clip linked: ${deformationAsset.name}. Topology is validated during decode.`
               : 'Rest mesh playback active.'}
         </div>
-      </section>
+      </section>}
 
-      <section aria-labelledby="mesh2d-pins-heading" className="flex flex-col gap-2">
+      {(!section || section === 'pins') && <section aria-labelledby="mesh2d-pins-heading" className="flex flex-col gap-2">
         <div className="flex items-center justify-between border-t border-gray-700 pt-2">
           <h3 id="mesh2d-pins-heading" className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Pins</h3>
           <span role="status" aria-live="polite" className={`text-[10px] ${pinsCurrent ? 'text-emerald-400' : 'text-amber-300'}`}>
@@ -235,7 +242,7 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
         <p className="min-h-8 text-[10px] leading-snug text-gray-500">
           Pins use stable vertex ids. Green markers are current; amber markers require reselection after topology changes.
         </p>
-      </section>
+      </section>}
 
       {error && <p role="alert" className="rounded border border-red-800/60 bg-red-950/30 px-2 py-1.5 text-[10px] leading-snug text-red-300">{error}</p>}
     </div>

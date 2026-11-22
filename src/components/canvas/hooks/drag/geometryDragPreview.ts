@@ -68,31 +68,38 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
   if (!original.size) return previewLayer(base, original, original, [])
   const displayed = drag.displayTransform ?? original.transform
   const local = drag.worldToLocal?.applyToVector(delta) ?? delta
+  const proportional = event.metaKey || event.ctrlKey
+  const centered = proportional && event.shiftKey
+  const multiplier = centered ? 2 : 1
   const input = { x: 0, y: 0, width: original.size.width, height: original.size.height,
-    anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x, dy: local.y,
-    proportional: event.metaKey || event.ctrlKey, snapPixel: snap.pixel, minSize: 4,
+    anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x * multiplier, dy: local.y * multiplier,
+    proportional, snapPixel: snap.pixel, minSize: 4,
 
     boundsWidth: Number.MAX_SAFE_INTEGER, boundsHeight: Number.MAX_SAFE_INTEGER }
   let size = calculateResize(input)
-  const matrix = drag.worldToLocal?.invert(), proportional = event.metaKey || event.ctrlKey
+  const matrix = drag.worldToLocal?.invert()
+  const offsetFor = (value: typeof size) => ({
+    x: centered || proportional && !/[we]/.test(drag.handle) ? (original.size!.width - value.width) / 2
+      : drag.handle.includes('w') ? original.size!.width - value.width : 0,
+    y: centered || proportional && !/[ns]/.test(drag.handle) ? (original.size!.height - value.height) / 2
+      : drag.handle.includes('n') ? original.size!.height - value.height : 0,
+  })
   const localHandle = (value: typeof size) => resizeHandlePoint({ ...value,
-    x: drag.handle.includes('w') ? original.size!.width - value.width : 0,
-    y: drag.handle.includes('n') ? original.size!.height - value.height : 0 }, drag.handle)
+    ...offsetFor(value) }, drag.handle)
   let candidateGuides: CanvasDragPreview['guides'] = []
   if (matrix && resolveSnap) {
     const originalHandle = resizeHandlePoint({ x: 0, y: 0, ...original.size }, drag.handle)
-    const direction = proportional ? { x: (drag.handle.includes('w') ? -1 : drag.handle.includes('e') ? 1 : .5) * original.size.width,
-      y: (drag.handle.includes('n') ? -1 : drag.handle.includes('s') ? 1 : .5) * original.size.height }
+    const direction = proportional ? { x: (drag.handle.includes('w') ? -1 : drag.handle.includes('e') ? 1 : 0) * original.size.width,
+      y: (drag.handle.includes('n') ? -1 : drag.handle.includes('s') ? 1 : 0) * original.size.height }
       : drag.handle.length === 1 ? { x: 'ew'.includes(drag.handle) ? 1 : 0, y: 'ns'.includes(drag.handle) ? 1 : 0 } : null
     const acquired = snapResizeHandle(matrix.applyToPoint(localHandle(size)), direction && matrix.applyToVector(direction), snapRadiusWorld, resolveSnap)
     if (acquired.guides.length) {
       const endpoint = drag.worldToLocal!.applyToPoint(acquired.point)
-      size = calculateResize({ ...input, dx: endpoint.x - originalHandle.x, dy: endpoint.y - originalHandle.y, snapPixel: false })
+      size = calculateResize({ ...input, dx: (endpoint.x - originalHandle.x) * multiplier, dy: (endpoint.y - originalHandle.y) * multiplier, snapPixel: false })
       candidateGuides = reachedResizeGuides(matrix.applyToPoint(localHandle(size)), acquired.guides)
     }
   }
-  const left = drag.handle.includes('w') ? original.size.width - size.width : 0
-  const top = drag.handle.includes('n') ? original.size.height - size.height : 0
+  const { x: left, y: top } = offsetFor(size)
   // The custom pivot is authored independently of geometry size. Keep a fixed:
   // M = T(x+a) R S T(-a); preserving the opposite corner requires only R·S
   // times its local size shift. Proportional reanchoring would change the

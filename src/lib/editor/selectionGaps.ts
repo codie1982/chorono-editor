@@ -1,5 +1,5 @@
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
-import type { ChronoScene } from '../types'
+import type { ChronoScene, Layer } from '../types'
 import { type OverrideMap } from '../evaluator'
 import { createLayerWorldBoundsResolver, type LayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
 import { selectionNeighbors, type SelectionNeighborItem } from '../geometry/layout/selectionNeighbors'
@@ -50,6 +50,12 @@ export const SELECTION_GAP_LIMITS = Object.freeze({ roots: 256, pairs: 128 })
  * frame. Parent+child selections normalize through the same root policy as
  * viewport transforms. Geometry bounds include parent transforms/instances and
  * exclude stroke/effect padding; unsupported/hidden geometry is diagnosed.
+ * Neighbors are searched independently within each root's exact layer.type.
+ * Shape sub-kinds share the shape bucket; shape/spline and other distinct types
+ * never form pairs. Group roots use group, not their descendants' types.
+ * Type buckets follow first authored appearance, retaining neighbor ordering
+ * within each bucket. Filtering precedes neighbor search so a different type
+ * cannot hide a farther same-type neighbor. Pair limits apply globally.
  * Time uses composition milliseconds, all gaps/endpoints composition pixels.
  *
  * Active containing root stays fixed when it belongs to a pair; otherwise the
@@ -79,16 +85,18 @@ export function prepareSelectionGaps(scene: ChronoScene, ids: Iterable<string>, 
     const frame = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
     const boundsFor = options.boundsFor ?? createLayerWorldBoundsResolver(scene, timeMs, frame)
     const worldFor = createLayerWorldMatrixResolver(scene, timeMs, frame, index)
-    const items: SelectionNeighborItem[] = []
+    const itemsByType = new Map<Layer['type'], SelectionNeighborItem[]>()
     for (const layer of selection.roots) {
       const bounds = worldFor(layer).toArray().every(Number.isFinite) ? boundsFor(layer) : null
       if (!bounds || !Object.values(bounds).every(Number.isFinite) || bounds.width < 0 || bounds.height < 0
           || !Number.isFinite(bounds.x + bounds.width) || !Number.isFinite(bounds.y + bounds.height)) {
         diagnostics.push(`'${layer.name}' has no measurable finite geometry in this frame.`); continue
       }
+      const items = itemsByType.get(layer.type) ?? []
       items.push({ id: layer.id, bounds: Object.freeze({ ...bounds }) })
+      itemsByType.set(layer.type, items)
     }
-    const neighbors = selectionNeighbors(items)
+    const neighbors = Array.from(itemsByType.values()).flatMap(items => selectionNeighbors(items))
     truncated = neighbors.length > SELECTION_GAP_LIMITS.pairs
     if (truncated) diagnostics.push(`Showing ${SELECTION_GAP_LIMITS.pairs} of ${neighbors.length} exact neighbor measurements.`)
     gaps = neighbors.slice(0, SELECTION_GAP_LIMITS.pairs).map(pair => {

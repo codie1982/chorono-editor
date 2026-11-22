@@ -1,6 +1,8 @@
 import type { MenuItem } from '@/components/ui/ContextMenu'
 import type { AgentHandoffIntent, AgentHandoffRequest, AgentHandoffTarget } from '@/lib/agentHandoff/prompt'
 
+// TODO(helpers): Add Send to Agent guidance when the helper prompt/catalog
+// and execution contract are ready. Development tasks never become menu rows.
 const choices: ReadonlyArray<{ intent: AgentHandoffIntent; label: string }> = [
   { intent: 'explain', label: 'Explain this selection' },
   { intent: 'diagnose', label: 'Find a problem here' },

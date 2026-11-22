@@ -64,8 +64,9 @@ export function calculateResize(input: ResizeInput): ResizeResult {
     const wRatio = nw / ow
     const hRatio = nh / oh
     const useWidth = Math.abs(wRatio - 1) >= Math.abs(hRatio - 1)
-    if (useWidth) nh = Math.max(minSize, nw / aspect)
-    else          nw = Math.max(minSize, nh * aspect)
+    const factor = Math.max(minSize / ow, minSize / oh, useWidth ? wRatio : hRatio)
+    nw = ow * factor
+    nh = oh * factor
     // Re-anchor x/y on handles that pull from top/left
     if (h === 'nw' || h === 'sw' || h === 'w') nx = ox + (ow - nw)
     if (h === 'nw' || h === 'ne' || h === 'n') ny = oy + (oh - nh)
@@ -80,7 +81,12 @@ export function calculateResize(input: ResizeInput): ResizeResult {
   // rect to snap against and per-axis grid-snap produces jarring jumps).
   if (snapPixel) {
     nx = Math.round(nx); ny = Math.round(ny)
-    nw = Math.round(nw); nh = Math.round(nh)
+    if (proportional && ow > 0 && oh > 0) {
+      // Quantize one extent, then derive the other: independent rounding
+      // would break the requested aspect ratio on every pointer sample.
+      const factor = Math.max(minSize / ow, minSize / oh, Math.round(nw) / ow)
+      nw = ow * factor; nh = oh * factor
+    } else { nw = Math.round(nw); nh = Math.round(nh) }
   }
 
   nx = clamp(nx, 0, Math.max(0, cw - nw))

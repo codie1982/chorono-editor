@@ -2,7 +2,7 @@
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { layerHelpTopic } from '@/components/help/documentation'
-import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
+import { activateLayerAddition, buildAddLayerMenu } from '@/components/layerHierarchy/LayerAddition'
 import { useMemo, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
@@ -123,32 +123,10 @@ export default function LayerPanel({
     return next
   })
 
-  /** Every media route uses the same captured-document picker guard. */
-  const pickFile = (accept: string, handler: (file: File) => void) => {
-    openDocumentFilePicker({ accept, getDocumentSignal, onFiles: files => handler(files[0]) })
-  }
-
   /** Media pickers close immediately; persistent native tools keep their
    * palette available for the next shape or direct same-item toggle. */
   const handleAddItem = (type: string) => {
-    switch (type) {
-      case 'image':
-        setMenuOpen(false)
-        return pickFile('image/*', onAddImage)
-      case 'video':
-        setMenuOpen(false)
-        return pickFile('video/*', onAddVideo)
-      case 'audio':
-        setMenuOpen(false)
-        return pickFile('audio/*', onAddAudio)
-      case 'svgImport':
-        setMenuOpen(false)
-        return pickFile('.svg,image/svg+xml', file => onImportSvg?.(file))
-      default:
-        // All shape kinds, text, pathStroke, bezierPath, pathStroke —
-        // registry-driven via page.tsx addLayer().
-        setMenuOpen(onAdd(type) === true)
-    }
+    setMenuOpen(activateLayerAddition(type, { onAdd, onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal }))
   }
 
   const activeGroup = ADD_LAYER_GROUPS.find(g => g.title === activeCategory) ?? ADD_LAYER_GROUPS[0]
@@ -443,7 +421,7 @@ export default function LayerPanel({
               <LayerFlag
                 active={!!layer.solo}
                 onChars="S" offChars="s"
-                title="Solo"
+                title="Solo selection (S)"
                 onClick={(e) => { e.stopPropagation(); onToggleFlag(layer.id, 'solo') }}
                 highlightClass={layer.solo ? 'text-amber-400 font-bold' : ''}
               />
@@ -533,21 +511,7 @@ export default function LayerPanel({
 
       {/* ── Empty-area right-click → Add Layer shortcut ─────────────────── */}
       {emptyCtxMenu.isOpen && (() => {
-        const addItems = ADD_LAYER_GROUPS
-          .map(group => {
-            const available = group.items.filter(i => i.available)
-            if (available.length === 0) return null
-            return {
-              kind: 'submenu' as const,
-              label: group.title,
-              items: available.map(item => ({
-                kind: 'action' as const,
-                label: item.label,
-                onSelect: () => { handleAddItem(item.type); emptyCtxMenu.close() },
-              })),
-            }
-          })
-          .filter(Boolean) as import('@/components/ui/ContextMenu').MenuItem[]
+        const addItems = buildAddLayerMenu(kind => { handleAddItem(kind); emptyCtxMenu.close() })
         return (
           <ContextMenu
             x={emptyCtxMenu.state!.x} y={emptyCtxMenu.state!.y}

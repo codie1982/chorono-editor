@@ -14,6 +14,18 @@ function registeredPanels(): Set<string> {
 }
 
 describe('resource panel dock integration', () => {
+  it('places Edit next to Properties and restores it as an independent tab', () => {
+    const tree = defaultLayout()
+    const propertiesLeaf = findLeafOfPanel(tree, 'properties')!
+    expect(findLeafOfPanel(tree, 'geometryEdit')).toBe(propertiesLeaf)
+    expect(findLeafOfPanel(tree, 'splineModeling')).toBeNull()
+    const closed = removePanel(tree, 'geometryEdit')
+    const opened = addPanelToLayout(closed, 'geometryEdit', 'properties')
+    const leaf = findLeafOfPanel(opened, 'geometryEdit')!
+    expect(leaf.id).toBe(propertiesLeaf.id)
+    expect(leaf.panels[leaf.activeIndex]).toBe('geometryEdit')
+  })
+
   it('accepts old saved layouts missing the new panel and preserves closed panels', () => {
     const old = removePanel(defaultLayout(), 'resourceMonitor')
     const closed = removePanel(old, 'properties')

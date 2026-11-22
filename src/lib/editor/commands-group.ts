@@ -12,6 +12,8 @@ import type { ChronoScene, Layer, Track, Keyframe } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 import { newGroupLayer } from '@/lib/registry/definitions/scene/GroupDefinition'
 import { Matrix2D } from '../geometry/Matrix2D'
+import { groupSelectionPivot, type GroupPlacementOptions } from './branches/GroupPlacement'
+import { localTransform } from './branches/WorldPlacement'
 
 /** Generate a fresh keyframe id without depending on the global counter. */
 const freshKfId = () => `kf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
@@ -21,9 +23,18 @@ export interface GroupCmdResult extends EditorCommand {
   groupId: string
 }
 
-export function makeGroupCmd(layerIds: string[]): GroupCmdResult {
+/** Wrap selected layers without translating their parent coordinate space.
+ * Sibling selections receive a pivot at their current union geometry center;
+ * source child transforms and all animation tracks remain identical. The new
+ * group's matrix is identity (x/y=0, unit scale), with the measured local anchor
+ * defining future rotation/scale. Legacy mixed-parent callers retain local-space
+ * grouping without a guessed center. Undo restores each original parent exactly;
+ * the eager group id is stable across redo. Scene inputs are never mutated.
+ */
+export function makeGroupCmd(layerIds: string[], options: GroupPlacementOptions = {}): GroupCmdResult {
   // Create the group eagerly so the id is known before execute() runs.
   const group: Layer = newGroupLayer()
+  let previousParents = new Map<string, Layer>()
 
   return {
     label:  `Group ${layerIds.length} layer${layerIds.length === 1 ? '' : 's'}`,
@@ -35,11 +46,13 @@ export function makeGroupCmd(layerIds: string[]): GroupCmdResult {
       const targets = scene.layers.filter(l => layerIds.includes(l.id))
       if (targets.length === 0) return scene
 
+      previousParents = new Map(targets.map(layer => [layer.id, layer]))
+
       const sharedParent = targets[0].parentId
       const allSameParent = targets.every(l => l.parentId === sharedParent)
-      const groupWithParent: Layer = allSameParent
-        ? { ...group, parentId: sharedParent }
-        : group
+      const pivot = allSameParent ? groupSelectionPivot(scene, targets, options) : { x: 0, y: 0 }
+      const groupWithParent: Layer = { ...group, parentId: allSameParent ? sharedParent : undefined,
+        transform: { ...group.transform, x: 0, y: 0, anchorX: pivot.x, anchorY: pivot.y } }
 
       // Insert the group just BEFORE the topmost target's index so render order
       // is preserved (children-rendered-in-array-order semantics).
@@ -66,17 +79,11 @@ export function makeGroupCmd(layerIds: string[]): GroupCmdResult {
     },
 
     undo(scene: ChronoScene): ChronoScene {
-      // Remove the group; restore children's previous parentId by reading
-      // from the group's original parentId field (children may have been
-      // root before — they go back to root by reverting parentId).
-      const groupLayer = scene.layers.find(l => l.id === group.id)
-      const restoredParentId = groupLayer?.parentId
-
       return {
         ...scene,
         layers: scene.layers
           .filter(l => l.id !== group.id)
-          .map(l => layerIds.includes(l.id) ? { ...l, parentId: restoredParentId } : l),
+          .map(l => previousParents.get(l.id) ?? l),
       }
     },
   }
@@ -130,31 +137,26 @@ export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorComma
       //    translate-only; now rotation + scale are preserved so the visual
       //    layout doesn't change when ungrouping a rotated/scaled group.
       const gt = groupSnapshot.transform
-      const groupMat = Matrix2D.translation(gt.x, gt.y)
+      const groupMat = Matrix2D.translation(gt.x + gt.anchorX, gt.y + gt.anchorY)
         .rotate(gt.rotationDeg ?? 0)
         .scale(gt.scaleX ?? 1, gt.scaleY ?? 1)
+        .translate(-gt.anchorX, -gt.anchorY)
+      const identityGroup = gt.x === 0 && gt.y === 0 && gt.rotationDeg === 0 && gt.scaleX === 1 && gt.scaleY === 1
 
       const layers = s.layers
         .filter(l => l.id !== groupId)
         .map(l => {
           if (l.parentId !== groupId) return l
           const ct = l.transform
-          const childMat = Matrix2D.translation(ct.x, ct.y)
+          const childMat = Matrix2D.translation(ct.x + ct.anchorX, ct.y + ct.anchorY)
             .rotate(ct.rotationDeg ?? 0)
             .scale(ct.scaleX ?? 1, ct.scaleY ?? 1)
+            .translate(-ct.anchorX, -ct.anchorY)
           const composed = groupMat.multiply(childMat)
-          const d = composed.decompose()
           return {
             ...l,
             parentId: newParentId,
-            transform: {
-              ...l.transform,
-              x: d.x,
-              y: d.y,
-              rotationDeg: d.rotation,
-              scaleX: d.scaleX,
-              scaleY: d.scaleY,
-            },
+            transform: identityGroup ? ct : localTransform(composed, ct),
           }
         })
 

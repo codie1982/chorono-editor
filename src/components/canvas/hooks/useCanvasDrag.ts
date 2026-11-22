@@ -56,6 +56,8 @@ export interface UseCanvasDragOptions {
   /** Timeline/playhead/playback scope. Changing it cancels the current gesture. */
   contextKey?: string
   onWarning?: (message: string) => void
+  /** Stores the latest copy gesture so repeated Duplicate commands can use it. */
+  onAfterCloneDrag?: (offset: { x: number; y: number }) => void
 }
 
 export interface UseCanvasDragReturn {
@@ -147,7 +149,8 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         commit: (snapshot, preview) => commitCanvasDrag(latest.current.editorRef.current, snapshot, drag, preview, {
           buildLayerCommitCommands: start.buildLayerCommitCommands,
           onAfterLayerCommit: start.onAfterLayerCommit, onSelectLayer: latest.current.onSelectLayer,
-          onSelectLayers: latest.current.onSelectLayers, onWarning: latest.current.onWarning }),
+          onSelectLayers: latest.current.onSelectLayers, onWarning: latest.current.onWarning,
+          onAfterCloneDrag: latest.current.onAfterCloneDrag }),
         clear: () => {
           dragRef.current = null; sessionRef.current = null
           const live = latest.current

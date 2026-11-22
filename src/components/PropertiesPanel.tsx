@@ -13,7 +13,6 @@ import {
   togglePathClosed, reversePath,
 } from '@/lib/path/pathOps'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
-import Mesh2DSourcePanel from '@/components/PropertiesPanel/Mesh2DSourcePanel'
 import ParamBindButton from '@/components/PropertiesPanel/ParamBindButton'
 import ScrubInput  from '@/components/inputs/ScrubInput'
 import { BooleanInput } from '@/components/inputs/BooleanInput'
@@ -602,18 +601,13 @@ export default function PropertiesPanel({
               />
             )}
 
-            {/* Mesh2D source settings regenerate validated positions and
-                topology atomically. Transform & Appearance remain in the
-                shared hand-written sections above. */}
+            {/* Mesh2D source, texture, deformation and pins are in Edit. */}
             {layer.type === 'mesh2d' && (
-              <>
-                <Mesh2DSourcePanel layer={layer} allLayers={allLayers} allAssets={scene?.assets} onLayerChange={onLayerChange} />
-                <SchemaPanel
-                  layer={layer}
-                  onLayerChange={onLayerChange}
-                  filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance'}
-                />
-              </>
+              <SchemaPanel
+                layer={layer}
+                onLayerChange={onLayerChange}
+                filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance' && g.title !== 'Geometry'}
+              />
             )}
 
             {/* ── Shape özellikleri ──────────────────────────────────── */}

@@ -21,6 +21,8 @@ interface Handlers {
   onNudgeSelected?: (dx: number, dy: number) => void
   onDeleteSelected: () => void
   onDuplicateSelected: () => void
+  /** Solo the selected objects/groups, or exit an identical Solo selection. */
+  onSoloSelected?: () => void
   onCopy?: () => void
   onPaste?: () => void
   onShowHelp?: () => void
@@ -42,8 +44,8 @@ interface Handlers {
   onTimelinePrevKeyframe?: () => void
   onTimelineNextKeyframe?: () => void
   /** Returns the active editor panel's context. Drives which binding
-   *  wins when the same key is mapped in multiple contexts (e.g. S = Scale
-   *  tool on the canvas, Show Scale track in the timeline). */
+   *  wins when the same key is mapped in multiple contexts (e.g. S = Solo
+   *  selection on the canvas, Show Scale track in the timeline). */
   getContext?: () => ShortcutContext
   /** Drag previews must finish or cancel before another command changes history. */
   isTransactionActive?: () => boolean
@@ -73,7 +75,7 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
  * active context) to a shortcut id, then dispatch the matching handler.
  *
  * Context-awareness means the same physical key can do different things
- * depending on the active panel: `S` is the Scale tool on the canvas
+ * depending on the active panel: `S` solos the selection on the canvas
  * but "Show Scale track" in the timeline.
  */
 export function useKeyboard(handlers: Handlers) {
@@ -81,7 +83,7 @@ export function useKeyboard(handlers: Handlers) {
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected,
+    onDeleteSelected, onDuplicateSelected, onSoloSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
@@ -117,6 +119,7 @@ export function useKeyboard(handlers: Handlers) {
       'canvas.nudge.down10':  onNudgeSelected ? () => onNudgeSelected(0, 10) : undefined,
 
       'canvas.select.duplicate':  onDuplicateSelected,
+      'canvas.select.solo': onSoloSelected,
       'canvas.select.cloneQuick': onCloneQuick,
       'canvas.select.copy':       onCopy,
       'canvas.select.paste':      onPaste,
@@ -173,6 +176,7 @@ export function useKeyboard(handlers: Handlers) {
       e.preventDefault()
       // Holding a toggle key must not alternate tools on native key repeat.
       if (e.repeat && id === 'timeline.keyframe.set') return
+      if (e.repeat && id === 'canvas.select.solo') return
       if (e.repeat && (id === 'canvas.tool.pan' || id === 'canvas.tool.panLegacy')) return
       if (isTransactionActive?.()) return
       action()
@@ -184,7 +188,7 @@ export function useKeyboard(handlers: Handlers) {
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected,
+    onDeleteSelected, onDuplicateSelected, onSoloSelected,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,

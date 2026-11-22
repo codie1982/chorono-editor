@@ -13,7 +13,7 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.tool.pen',              label: 'Pen Tool',           contexts: ['canvas'], binding: { type: 'keyboard', key: 'p' } },
   { id: 'canvas.tool.move',             label: 'Move Tool',          contexts: ['canvas'], binding: { type: 'keyboard', key: 'g' } },
   { id: 'canvas.tool.rotate',           label: 'Rotate Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'r' } },
-  { id: 'canvas.tool.scale',            label: 'Scale Tool',         contexts: ['canvas'], binding: { type: 'keyboard', key: 's' } },
+  { id: 'canvas.tool.scale',            label: 'Scale Tool',         contexts: ['canvas'], binding: { type: 'keyboard', key: 's', shift: true } },
   { id: 'canvas.tool.anchor',           label: 'Anchor Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'a' } },
   { id: 'canvas.tool.texture',          label: 'Texture Tool',       contexts: ['canvas'], binding: { type: 'keyboard', key: 't' } },
   { id: 'canvas.tool.box-select',       label: 'Box Select',         contexts: ['canvas'], binding: { type: 'keyboard', key: 'b' } },
@@ -36,6 +36,7 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'global.deleteBackspace',   label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'backspace' } },
 
   // ── Canvas — selection ───────────────────────────────────────────────────
+  { id: 'canvas.select.solo', label: 'Solo Selection', contexts: ['canvas', 'layerPanel'], binding: { type: 'keyboard', key: 's' }, description: 'Solo selected objects or complete groups; press again on the same selection to exit Solo' },
   { id: 'canvas.select.duplicate',  label: 'Duplicate Layer',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true } },
   { id: 'canvas.select.cloneQuick', label: 'Clone Quick',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true, alt: true }, description: 'Clone with animation tracks copied' },
   { id: 'canvas.select.copy',       label: 'Copy Keyframes',     contexts: ['canvas', 'timeline'], binding: { type: 'keyboard', key: 'c', meta: true } },

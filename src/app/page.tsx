@@ -26,6 +26,7 @@ import type { ShortcutContext } from '@/lib/shortcuts'
 import { deletionTargetForPanel, panelFromAttribute, shortcutContextForPanel, type EditorPanel } from '@/lib/editor/keyboardContext'
 import { resolveSelectedKeyframes } from '@/lib/timeline/keyframeSelection'
 import { buildViewportNudgeCommand } from '@/lib/editor/viewportNudge'
+import { makeSelectionSoloCmd } from '@/lib/editor/selectionSolo'
 import { combineLayerSelection, createLayerSelection, retainLayerSelection, toggleLayerSelection } from '@/lib/selection/layerSelection'
 import { useSnapSettings }     from './hooks/useSnapSettings'
 import { useKeyframeClipboard } from './hooks/useKeyframeClipboard'
@@ -72,6 +73,7 @@ import {
 import { makeBulkDeleteKfCmd, makeKeyframeLayerSnapshotCmd, makeAddKfCmd, type KfDeletion } from '@/lib/editor/commands-keyframe'
 import { buildViewportKeyframeCommands, type ViewportLayerChange } from '@/lib/editor/viewportKeyframes'
 import { makeAddLayerToTimelineCmd, makeRemoveLayerFromTimelineCmd } from '@/lib/editor/commands-timeline'
+import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
 import type { SplinePrimitiveKind } from '@/lib/types/spline'
@@ -84,6 +86,7 @@ const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
 }
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'
+import { activateLayerAddition } from '@/components/layerHierarchy/LayerAddition'
 import { useLayerIsolation } from '@/app/hooks/useLayerIsolation'
 import { LayerIsolationBar } from '@/components/layerHierarchy/LayerFocusControls'
 import type { TimelineRevealRequest } from '@/lib/timeline/hierarchy/TimelineRevealRequest'
@@ -93,7 +96,7 @@ import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import SplinePointInspector from '@/components/SplinePointInspector'
-import SplineModelingPanel from '@/components/panels/SplineModelingPanel'
+import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
 import { NumericPropertyProvider } from '@/components/inputs/expressions/NumericPropertyContext'
 import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
 import { newSplineLayerFromData } from '@/lib/defaults'
@@ -115,7 +118,7 @@ import SpriteSheetImportModal from '@/components/modals/SpriteSheetImportModal'
 import { IMPORT_ACCEPT } from '@/lib/import/acceptFormats'
 import type { ImportPreflight } from '@/lib/import/types'
 import ToolGroup, {
-  type ToolMode, type SelectionContainMode,
+  type ToolMode, type SelectionContainMode, type SelectionToolMode, isSelectionTool,
 } from '@/components/TopToolbar/ToolGroup'
 import ToastContainer  from '@/components/Toast/ToastContainer'
 import { toast }       from '@/lib/toast/toast'
@@ -214,7 +217,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const selectedLayerIds = useMemo(() => new Set(layerSelection.selectedIds), [layerSelection.selectedIds])
   /** BL-73 — active spline primitive being drawn (null = not drawing). */
   const [splineDrawKind, setSplineDrawKind] = useState<SplinePrimitiveKind | null>(null)
-  const { mode: toolMode, setMode: setToolMode, setPan: setPanMode, togglePan, chooseTool } = useToolMode()
+  const { mode: toolMode, setMode: setToolMode, setPan: setPanMode, togglePan } = useToolMode()
+  const [selectionToolMode, setSelectionToolMode] = useState<SelectionToolMode>('selection-box')
+  const changeToolMode = useCallback((next: ToolMode) => {
+    if (isSelectionTool(next)) { setSelectionToolMode(next); setToolMode('select'); return }
+    if (next === 'pan') { togglePan(); return }
+    setToolMode(next)
+  }, [setToolMode, togglePan])
   const [manualPreview, setManualPreview] = useState(false)
   /** BL-73 Sprint 5 — selected spline point id (mirrored from SceneCanvas) for the point inspector. */
   const [splinePointId, setSplinePointId] = useState<string | null>(null)
@@ -240,7 +249,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets',
-    'particles', 'physicsSimulations', 'jobsBake', 'player', 'scriptConsole', 'resourceMonitor', 'splineModeling', 'motionKeys',
+    'particles', 'physicsSimulations', 'jobsBake', 'player', 'scriptConsole', 'resourceMonitor', 'geometryEdit', 'motionKeys',
   ])
 
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
@@ -594,6 +603,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     const splineKind = SPLINE_MENU_TO_KIND[kind]
     if (splineKind) {
       shapeCreation.close()
+      selectLayer(null)
       setManualPreview(false); runtime.stopSegment(); handlePause()
       setSplineDrawKind(splineKind)
       setToolMode('spline-draw')
@@ -744,6 +754,21 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     setLayerSelection(previous => retainLayerSelection(previous, valid))
   }, [scene.layers, dispatchCommand, editor.getScene])
 
+  /** Deletes the current layer selection as one atomic command. Selected
+   * descendants are folded into their selected ancestor so nested content is
+   * removed once and one undo restores the complete prior scene. */
+  const deleteSelectedLayers = useCallback(() => {
+    const ids = Array.from(selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : [])
+    if (ids.length === 0) return
+    const selected = new Set(ids)
+    const roots = scene.layers.filter(layer => selected.has(layer.id)
+      && (!layer.parentId || !selected.has(layer.parentId)))
+    if (roots.length === 0) return
+    dispatchCommand(makeBatchCmd(`Delete ${ids.length} layer${ids.length === 1 ? '' : 's'}`,
+      roots.map(layer => makeDeleteLayerCmd(layer))))
+    setLayerSelection(createLayerSelection([]))
+  }, [scene.layers, selectedLayerIds, selectedLayerId, dispatchCommand])
+
   // Which panel last received a pointer-down. Lets the global Delete shortcut
   // act in-context: in the timeline it strips the layer's animation, elsewhere
   // (canvas / layer list) it deletes the layer itself.
@@ -762,7 +787,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   }, [])
 
   // Maps the last-focused panel to a shortcut context so the same key can do
-  // different things in the canvas vs the timeline (e.g. S = Scale tool on the
+  // different things in the canvas vs the timeline (e.g. S = Solo selection on the
   // canvas, Show Scale track in the timeline). Stable identity (reads a ref).
   const getShortcutContext = useCallback(
     (): ShortcutContext => shortcutContextForPanel(activePanelRef.current),
@@ -795,8 +820,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   }, [scene.timelines, selectedTlId, dispatchCommand])
 
   const toggleLayerFlag = useCallback((id: string, field: 'locked' | 'hidden' | 'solo' | 'pinned') => {
+    if (field === 'solo') {
+      const ids = selectedLayerIds.has(id) ? selectedLayerIds : [id]
+      const command = makeSelectionSoloCmd(editor.getScene(), ids)
+      if (command) dispatchCommand(command)
+      return
+    }
     dispatchCommand(makeToggleLayerCmd(id, field))
-  }, [dispatchCommand])
+  }, [dispatchCommand, editor.getScene, selectedLayerIds])
 
   const reorderLayer = useCallback((from: number, to: number) => {
     if (from === to) return
@@ -840,10 +871,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
 
     // Identity grouping preserves sibling animation; other parents need conversion.
     try {
-      const command = makeGroupSiblingLayersCmd(editor.getScene(), [draggedId, targetId])
+      const command = makeGroupSiblingLayersCmd(editor.getScene(), [draggedId, targetId], { timeMs: currentTimeMs, overrides: frame.overrides })
       if (command) { dispatchCommand(command); selectLayer(command.groupId) }
     } catch (error) { toast.error('Cannot group layers', { detail: (error as Error).message }) }
-  }, [scene.layers, editor.getScene, dispatchCommand, moveLayerInTree, selectLayer])
+  }, [scene.layers, editor.getScene, dispatchCommand, moveLayerInTree, selectLayer, currentTimeMs, frame.overrides])
 
   /**
    * Stagger: apply the same preset to every selected layer, offsetting each
@@ -866,6 +897,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   /** One editor entry point for Duplicate, quick clone and modal clone.
    * Commands resolve current source IDs, normalize selected roots and preserve
    * every relevant timeline. Selection updates only after a successful dispatch. */
+  const duplicatePatternRef = useRef<{ x: number; y: number } | null>(null)
+  const rememberDuplicatePattern = useCallback((offset: { x: number; y: number }) => {
+    if (Number.isFinite(offset.x) && Number.isFinite(offset.y)
+        && (Math.abs(offset.x) > 0.001 || Math.abs(offset.y) > 0.001)) {
+      duplicatePatternRef.current = { x: offset.x, y: offset.y }
+    }
+  }, [])
+
   const cloneSourceIds = useCallback((sourceIds: readonly string[], params: {
     count?: number; offsetX?: number; offsetY?: number; duplicateAnimation?: boolean
     mode?: import('@/lib/clone/CloneTypes').CloneMode
@@ -888,7 +927,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   }, [editor, dispatchCommand, replaceLayerSelection])
   const selectedCloneIds = useCallback(() => selectedLayerIds.size
     ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : [], [selectedLayerIds, selectedLayerId])
-  const duplicateSelectedLayer = useCallback(() => { cloneSourceIds(selectedCloneIds()) }, [cloneSourceIds, selectedCloneIds])
+  const duplicateSelectedLayer = useCallback(() => {
+    const pattern = duplicatePatternRef.current ?? { x: 20, y: 20 }
+    cloneSourceIds(selectedCloneIds(), { offsetX: pattern.x, offsetY: pattern.y })
+  }, [cloneSourceIds, selectedCloneIds])
 
   // ── BL-59 — Clone & Array System ──────────────────────────────────────────
   //
@@ -1110,10 +1152,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const groupLayers = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return
     try {
-      const command = makeGroupSiblingLayersCmd(editor.getScene(), ids)
+      const command = makeGroupSiblingLayersCmd(editor.getScene(), ids, { timeMs: currentTimeMs, overrides: frame.overrides })
       if (command) { dispatchCommand(command); selectLayer(command.groupId) }
     } catch (error) { toast.error('Cannot group layers', { detail: (error as Error).message }) }
-  }, [editor.getScene, dispatchCommand, selectLayer])
+  }, [editor.getScene, dispatchCommand, selectLayer, currentTimeMs, frame.overrides])
   const groupSelected = useCallback(() => groupLayers(selectedLayerIds.size > 0
     ? Array.from(selectedLayerIds) : selectedLayerId ? [selectedLayerId] : []),
   [selectedLayerIds, selectedLayerId, groupLayers])
@@ -1322,9 +1364,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       const target = deletionTargetForPanel(activePanelRef.current, selectedKeyframes.length > 0, !!selectedLayerId, selectedLayer?.type)
       if (target === 'keyframes') deleteSelectedKeyframes()
       else if (target === 'animation' && selectedLayerId) deleteLayerAnimation(selectedLayerId)
-      else if (target === 'layer' && selectedLayerId) deleteLayer(selectedLayerId)
+      else if (target === 'layer') deleteSelectedLayers()
     },
     onDuplicateSelected: duplicateSelectedLayer,
+    onSoloSelected: () => {
+      const ids = selectedLayerIds.size ? selectedLayerIds : selectedLayerId ? [selectedLayerId] : []
+      const command = makeSelectionSoloCmd(editor.getScene(), ids)
+      if (command) dispatchCommand(command)
+    },
     onCopy:  () => clipboard.copySelected(),
     onPaste: () => {
       const pastedIds = clipboard.pasteAtPlayhead()
@@ -1336,7 +1383,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     // BL-59 — Clone & Array shortcuts
     onCloneQuick:      cloneQuick,
     onOpenArrayModal:  openArrayModal,
-    onToolChange:      chooseTool,
+    onToolChange:      changeToolMode,
     onTimelineToggleKeyframe: toggleTimelineKeyframe,
     onTimelinePrevKeyframe:   () => seekToKeyframe('prev'),
     onTimelineNextKeyframe:   () => seekToKeyframe('next'),
@@ -1356,12 +1403,12 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       { id: 'canvas',         title: 'Canvas',         render: () => null },
       { id: 'stateMachine',   title: 'State Machine',  render: () => null },
       { id: 'properties',     title: 'Properties',     render: () => null },
-      { id: 'splineModeling', title: 'Spline Modeling', render: () => null },
+      { id: 'geometryEdit', title: 'Edit', render: () => null },
       { id: 'motionKeys', title: 'Motion Keys', render: () => null },
       { id: 'timeline',       title: 'Timeline',       render: () => null },
       { id: 'curveEditor',    title: 'Curve Editor',   render: () => null },
       { id: 'dopeSheet',      title: 'Dope Sheet',     render: () => null },
-      { id: 'curveModifiers', title: 'Modifiers',      render: () => null },
+      { id: 'curveModifiers', title: 'Animation Modifiers', render: () => null },
       { id: 'parameters',     title: 'Parameters',     render: () => null },
       { id: 'events',         title: 'Events',         render: () => null },
       { id: 'motionBinding',  title: 'Bindings',       render: () => null },
@@ -1424,7 +1471,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
 
         <ToolGroup
           mode={toolMode}
-          onChange={setToolMode}
+          onChange={changeToolMode}
+          selectionMode={selectionToolMode}
+          onSelectionModeChange={setSelectionToolMode}
           onPanToggle={togglePan}
           penAuto={!!(scene.layers.find(l => l.id === selectedLayerId)?.type === 'path')}
           containMode={selectionContainMode}
@@ -1580,6 +1629,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                         dispatchCommand(makeBulkUpdateLayersCmd(ids, { colorLabel: color ?? undefined }, color ? 'Set color label' : 'Clear color label'))
                       },
                       bulkToggleFlag: (ids, field, nextValue) => {
+                        if (field === 'solo') {
+                          const command = makeSelectionSoloCmd(editor.getScene(), ids)
+                          if (command) dispatchCommand(command)
+                          return
+                        }
                         dispatchCommand(makeBulkToggleFlagCmd(ids, field, nextValue))
                       },
                       isolate: (ids) => layerIsolation.enter(ids),
@@ -1629,6 +1683,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     timeMs={currentTimeMs}
                     selectedLayerId={isolatedPrimaryId}
                     selectedLayerIds={isolatedSelectedIds}
+                    selectionToolMode={selectionToolMode}
                     assets={assetCache}
                     onSelectLayer={selectLayer}
                     onSelectLayers={ids => replaceLayerSelection(ids, ids[0])}
@@ -1682,8 +1737,15 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       shapeCreation.close(); setManualPreview(false); runtime.stopSegment(); handlePause()
                       selectLayer(targetId); setSplineDrawKind('line'); setToolMode('spline-draw')
                     }}
+                    onAddLayerKind={kind => { activateLayerAddition(kind, { onAdd: addLayer,
+                      onAddImage: addImageLayerFromFile, onAddVideo: addVideoLayerFromFile,
+                      onAddAudio: addAudioLayerFromFile, onImportSvg: importSvgFile,
+                      getDocumentSignal: editor.getDocumentSignal }) }}
                     onSplineDrawCommit={() => { setSplineDrawKind(null); setToolMode('select') }}
-                    onSplinePointSelected={setSplinePointId}
+                    onSplinePointSelected={id => {
+                      setSplinePointId(id)
+                      if (id) dock.dispatchRestorePanel('geometryEdit')
+                    }}
                     snap={snap}
                     onSelectByGeometry={(ids, mode) => {
                       const incoming = new Set(ids)
@@ -1693,6 +1755,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}
+                    onAfterCloneDrag={rememberDuplicatePattern}
                     buildLayerCommitCommands={viewportKeyCommands}
                     ghostSettings={ghostSettings}
                     selectedTimeline={selectedTimelineForGhost}
@@ -1722,8 +1785,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       duplicate:  duplicateSelectedLayer,
                       group:      groupSelected,
                       ungroup:    ungroupSelected,
-                      canUngroup: selectedLayer?.type === 'group',
-                      deleteLayer: () => selectedLayerId && deleteLayer(selectedLayerId),
+                      canUngroup: Array.from(selectedLayerIds).some(id => scene.layers.find(layer => layer.id === id)?.type === 'group'),
+                      deleteLayer: deleteSelectedLayers,
                       animateProperty: (propPath: string) =>
                         selectedLayerId && keyframeSelectedLayers([propPath]),
                       alignLeft:   () => alignSelected('left'),
@@ -1805,16 +1868,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 id: 'properties', title: 'Properties',
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
-                    {selectedLayer?.type === 'spline' && <div className="mx-3 mt-2 grid gap-2">
+                    {(selectedLayer?.type === 'spline' || selectedLayer?.type === 'mesh2d') && <div className="mx-3 mt-2 grid gap-2">
                       <button type="button"
-                        onClick={() => dock.dispatchRestorePanel('splineModeling')}
+                        onClick={() => dock.dispatchRestorePanel('geometryEdit')}
                         className="min-h-9 rounded border border-blue-600 px-3 py-2 text-left text-xs text-blue-200 transition-colors hover:bg-blue-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
-                        Open Spline Modeling · Offset / Outline / Chamfer / Fillet
-                      </button>
-                      <button type="button"
-                        onClick={createMesh2DFromSpline}
-                        className="min-h-9 rounded border border-cyan-700 bg-cyan-950/20 px-3 py-2 text-left text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
-                        Create Mesh2D from closed spline
+                        Open Edit
                       </button>
                     </div>}
                     {canCreateShapeBoundaryMesh2D(selectedLayer ?? undefined) && <div className="mx-3 mt-2 grid gap-2">
@@ -1848,16 +1906,6 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       onEditWire={wireModal.openForEdit}
                       dispatchCommand={dispatchCommand}
                     />
-                    {selectedLayer?.type === 'spline' && splinePointId && (
-                      <NumericPropertyProvider scene={scene} layerId={selectedLayer.id} dispatch={dispatchCommand} getScene={editor.getScene}
-                        isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
-                      <SplinePointInspector
-                        layer={selectedLayer}
-                        pointId={splinePointId}
-                        dispatchCommand={dispatchCommand}
-                      />
-                      </NumericPropertyProvider>
-                    )}
                     {selectedKfIds.size > 0 && (
                       <KeyframeInspector
                         scene={scene}
@@ -1870,11 +1918,18 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 ),
               },
               {
-                id: 'splineModeling', title: 'Spline Modeling',
-                render: () => <SplineModelingPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splinePointId}
+                id: 'geometryEdit', title: 'Edit',
+                render: () => <NumericPropertyProvider scene={scene} layerId={selectedLayerId ?? undefined} dispatch={dispatchCommand} getScene={editor.getScene}
+                  isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
+                <GeometryEditPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splinePointId}
                   getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
                   isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
-                  onSelectLayer={id => selectLayer(id)} onClearPoint={() => setSplinePointId(null)} />,
+                  onSelectLayer={id => selectLayer(id)} onClearPoint={() => setSplinePointId(null)} onLayerChange={updateLayer}
+                  onCreateMeshFromSpline={createMesh2DFromSpline}
+                  splineSourceSettings={selectedLayer?.type === 'spline' && splinePointId ? (
+                    <SplinePointInspector layer={selectedLayer} pointId={splinePointId} dispatchCommand={dispatchCommand} />
+                  ) : undefined} />
+                </NumericPropertyProvider>,
               },
               {
                 id: 'motionKeys', title: 'Motion Keys',
@@ -1968,7 +2023,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 ),
               },
               {
-                id: 'curveModifiers', title: 'Modifiers',
+                id: 'curveModifiers', title: 'Animation Modifiers',
                 render: () => (
                   <CurveModifierStackPanel
                     scene={scene}

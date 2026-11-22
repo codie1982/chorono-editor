@@ -75,7 +75,7 @@ export default function BulkOperationsToolbar({
       >🔒</button>
       <button
         className={btn(soloSt.allOn, soloSt.mixed)}
-        title="Toggle Solo (★)"
+        title="Solo selection (S)"
         onClick={() => onBulkToggleFlag(ids, 'solo', soloSt.nextValue)}
       >★</button>
       <button

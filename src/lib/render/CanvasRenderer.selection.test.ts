@@ -77,6 +77,14 @@ function render(layers: Layer[], selectedId: string, options = {}) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CanvasRenderer selection outlines', () => {
+  it('renders only a nested Solo child, then the whole subtree for group Solo', () => {
+    const group: Layer = { ...newRectLayer(), id: 'solo-group', type: 'group' }
+    const child = { ...newRectLayer(), id: 'solo-child', parentId: group.id, solo: true }
+    const sibling = { ...newRectLayer(), id: 'solo-sibling', parentId: group.id }
+    const outside = { ...newRectLayer(), id: 'solo-outside' }
+    expect(render([group, child, sibling, outside], '', { selectionOutline: false }).fills).toHaveLength(1)
+    expect(render([{ ...group, solo: true }, { ...child, solo: false }, sibling, outside], '', { selectionOutline: false }).fills).toHaveLength(2)
+  })
   it('shows selected Mesh2D triangles only for the enabled editor diagnostic', () => {
     const layer = newStructuredGridMesh2DLayer()
     const cleanEditor = render([layer], layer.id, { selectionOutline: false })

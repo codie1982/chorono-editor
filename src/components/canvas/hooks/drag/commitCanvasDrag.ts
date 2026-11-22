@@ -13,6 +13,9 @@ export interface CanvasDragCommitOptions {
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   onSelectLayers?: (ids: readonly string[]) => void
   onWarning?: (message: string) => void
+  /** Receives the evaluated root-parent-local offset used by a committed
+   * clone drag, allowing the next Duplicate command to repeat that pattern. */
+  onAfterCloneDrag?: (offset: { x: number; y: number }) => void
 }
 
 /** Commit source edits and their animation commands in the same transaction.
@@ -40,6 +43,8 @@ function commitClone(editor: EditorStateReturn, base: ChronoScene, drag: Extract
     ? prepareCloneDrag(base, drag).atOffsets(cloneDragOffsets(drag, preview)) : undefined)
   if (!command) { editor.cancelTransaction(); return }
   editor.commitTransaction(command)
+  const offsets = cloneDragOffsets(drag, preview)
+  options.onAfterCloneDrag?.(preview.cloneOffset ?? Object.values(offsets)[0] ?? { x: 0, y: 0 })
   if (command.diagnostics.length) options.onWarning?.(command.diagnostics.join(' '))
   const ids = command.result.suggestedSelection
   if (options.onSelectLayers) options.onSelectLayers(ids)

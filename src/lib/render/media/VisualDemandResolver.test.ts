@@ -19,6 +19,17 @@ function setup(layers: Layer[], assets = layers.filter(l => l.image).map(l => as
 const ids = (input: MediaFrameInput) => new VisualDemandResolver().resolve(input).map(d => d.asset.id).sort()
 
 describe('canonical frame media dependency demand', () => {
+  it('demands only nested Solo media through effect groups, but retains complete referenced mask groups', () => {
+    const group: Layer = { ...newRectLayer(), id: 'g', type: 'group', effects: { blur: 2 } }
+    group.transform = { ...group.transform, x: 0, y: 0 }
+    const nested: Layer = { ...group, id: 'nested', parentId: group.id }
+    const child = { ...image('child'), parentId: nested.id, solo: true }
+    const sibling = { ...image('sibling'), parentId: nested.id }
+    expect(ids(setup([group, nested, child, sibling, image('outside')]).input)).toEqual(['child'])
+    const host = image('host'); host.solo = true
+    host.masks = [{ id: 'group-mask', maskLayerId: group.id, mode: 'intersect', inverted: false, feather: 0 }]
+    expect(ids(setup([host, group, nested, { ...child, solo: false }, sibling]).input)).toEqual(['child', 'host', 'sibling'])
+  })
   it('reports missing referenced source metadata instead of claiming an empty required set is ready', () => {
     const { input, resolver } = setup([image('missing')], [])
     expect(resolver.resolve(input)).toEqual([]); expect(resolver.missing).toEqual(['missing'])

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyScene, newRectLayer, newTimeline } from '../defaults'
+import { emptyScene, newRectLayer, newTimeline, newSplineLayerFromPrimitive } from '../defaults'
 import type { ChronoScene, Layer } from '../types'
 import { evaluateTimelines } from '../evaluator'
 import { createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
@@ -24,6 +24,35 @@ function commandFor(scene: ChronoScene, changes: readonly ViewportLayerChange[],
 }
 
 describe('editable selected neighbor measurements', () => {
+  it('does not measure between a basic shape and a geometrically similar spline', () => {
+    const shape = rect('shape', 0, 0)
+    const spline = { ...newSplineLayerFromPrimitive('rectangle', { width: 100, height: 100 })!, id: 'spline',
+      transform: { ...shape.transform, x: 200 } }
+    const scene = { ...emptyScene(), layers: [shape, spline] }, before = structuredClone(scene)
+    const plan = prepareSelectionGaps(scene, ['shape', 'spline'], 0)
+    expect(plan.gaps).toEqual([])
+    expect(plan.diagnostics).toEqual([])
+    expect(scene).toEqual(before)
+  })
+
+  it.each(['x', 'y'] as const)('finds same-type %s neighbors across intervening types and edits only that pair', axis => {
+    const spline = newSplineLayerFromPrimitive('rectangle', { width: 100, height: 100 })!
+    const layers = [rect('shape-a', 0, 0), { ...rect('spline-a', 0, 0), type: 'spline' as const, spline: spline.spline },
+      rect('shape-b', 0, 0), { ...rect('spline-b', 0, 0), type: 'spline' as const, spline: spline.spline }]
+      .map((layer, index) => ({ ...layer, transform: { ...layer.transform, [axis]: index * 150 } }))
+    const scene = { ...emptyScene(), layers }
+    const options = { boundsFor: (layer: Layer) => ({ x: layer.transform.x, y: layer.transform.y, width: 100, height: 100 }) }
+    const plan = prepareSelectionGaps(scene, layers.map(layer => layer.id), 0, undefined, 'spline-a', options)
+    expect(plan.gaps.map(gap => [gap.axis, gap.beforeId, gap.afterId, gap.gap])).toEqual([
+      [axis, 'shape-a', 'shape-b', 200], [axis, 'spline-a', 'spline-b', 200],
+    ])
+    const gap = plan.gaps[0], changes = plan.edit(gap.id, 50)
+    expect(changes.map(change => change.next.id)).toEqual(['shape-b'])
+    const command = commandFor(scene, changes), after = command.execute(scene)
+    expect(after.layers[2].transform[axis]).toBe(150)
+    expect(after.layers[1]).toBe(layers[1]); expect(after.layers[3]).toBe(layers[3])
+    expect(command.undo(after)).toEqual(scene)
+  })
   it('shows only the four-object example nearest cardinal pairs, retaining authored order', () => {
     const scene = { ...emptyScene(), layers: [rect('top', 0, 0), rect('middle', 0, 150), rect('bottom', 0, 300), rect('right', 250, 150)] }
     const plan = prepareSelectionGaps(scene, ['right', 'top', 'middle', 'bottom'], 0)
@@ -54,8 +83,10 @@ describe('editable selected neighbor measurements', () => {
 
   it('moves group geometry once for parent+child selections and resolves active child to its root', () => {
     const group = { ...rect('group', 20, 10), type: 'group' as const }
-    const child = { ...rect('child', 0, 0), parentId: group.id }, other = rect('other', 220, 10)
-    const scene = { ...emptyScene(), layers: [group, child, other] }
+    const child = { ...rect('child', 0, 0), parentId: group.id }
+    const other = { ...rect('other', 220, 10), type: 'group' as const }
+    const peerChild = { ...rect('peer-child', 0, 0), parentId: other.id }
+    const scene = { ...emptyScene(), layers: [group, child, other, peerChild] }
     const plan = prepareSelectionGaps(scene, ['child', 'group', 'other'], 0, undefined, 'child')
     expect(plan.rootIds).toEqual(['group', 'other'])
     expect(plan.gaps[0].fixedId).toBe('group')

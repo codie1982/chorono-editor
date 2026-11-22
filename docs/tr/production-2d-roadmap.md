@@ -204,6 +204,15 @@ flowchart TD
 Bu diyagram v0.5.0 kapsam kapanışı, v0.6.0 masaüstü/çıktı hattı ve v0.10.0
 ileri 2D hedefini gösterir. v0.7.0–v0.9.0 kapsamı bu okla belirlenmiş sayılmaz;
 ayrıca planlanacaktır.
+
+### 22 Kasım 2026 — Basic Shape dönüşüm planı
+
+Edit panelindeki **Convert → Spline / 2D Mesh** hedefleri için ortak son-geometri
+değerlendirme, içbükey/dışbükey kontur ve delik analizi, mevcut Earcut hattının
+yeniden kullanımı ve kalıcı conversion stack sözleşmesi
+[Basic Shape dönüşüm planında](plans/basic-shape-conversion-plan.md) tanımlandı.
+Bu kayıt öneridir; yeni dönüşüm stack'i uygulanmış sayılmaz. Sahnede ayrı bir
+Spline ara nesnesi zorunlu tutulmaz.
 Her ok zorunlu kod bağımlılığı sayılmaz. 3D teslimleri ve iki plan
 arasındaki öncelik [3D ana planında](production-3d-roadmap.md) izlenir.
 Tam export compiler bileşen source

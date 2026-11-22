@@ -8,6 +8,7 @@
 
 import type { Layer } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
+import { keyableChannels } from '@/lib/timeline/authoring/keyableChannels'
 import type { MenuItem } from '@/components/ui/ContextMenu'
 
 export interface CanvasMenuHandlers {
@@ -66,6 +67,8 @@ export interface CanvasMenuHandlers {
 
   // Lock
   toggleLock?:    () => void
+  /** Atomic selection-wide lock, distinct from the single-target handler. */
+  toggleSelectionLock?: () => void
 
   // Transform
   rotate90CW?:    () => void
@@ -90,6 +93,9 @@ export interface BuildMenuArgs {
   canUngroup:   boolean          // true when at least one selected layer is a group
   canPaste:     boolean
   handlers:     CanvasMenuHandlers
+  /** Complete selection for common-property animation filtering. A multi
+   * selection without this scope omits Animate rather than using one layer. */
+  selectedLayers?: readonly Layer[]
 }
 
 /**
@@ -97,12 +103,16 @@ export interface BuildMenuArgs {
  * a stub onSelect that does nothing AND the row is disabled — this way the
  * menu always shows the full surface area while clearly marking which
  * features aren't wired yet (avoids the "is this hidden or missing?" trap).
+ * Multiple selection has an explicit menu: target-only commands must not be
+ * exposed there. Animate lists only properties supported by every member.
  */
 export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
   const h         = args.handlers
   const isGroup   = args.canUngroup
   const multi     = args.multiCount > 1
   const isLocked  = args.layer.locked === true
+
+  if (multi) return buildMultipleSelectionMenu(args)
 
   return [
     // ── Copy / Paste submenu ───────────────────────────────────────────────
@@ -175,20 +185,7 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
     sep(),
 
     // ── Align (multi-select only) ─────────────────────────────────────────
-    {
-      kind: 'submenu', label: 'Align', disabled: !multi,
-      items: [
-        action('Align Left',    undefined, h.alignLeft),
-        action('Align Center',  undefined, h.alignCenter),
-        action('Align Right',   undefined, h.alignRight),
-        action('Align Top',     undefined, h.alignTop),
-        action('Align Middle',  undefined, h.alignMiddle),
-        action('Align Bottom',  undefined, h.alignBottom),
-        sep(),
-        action('Distribute Horizontally', undefined, h.distributeHorizontally, args.multiCount < 3),
-        action('Distribute Vertically',   undefined, h.distributeVertically,   args.multiCount < 3),
-      ],
-    },
+    buildAlignMenu(args),
 
     // ── Arrange (z-order) ─────────────────────────────────────────────────
     {
@@ -215,6 +212,48 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
   ]
 }
 
+/** Selection-wide commands verified at the canvas/page integration boundary.
+ * Ungroup, origin, arrange, transforms and source-specific clone actions
+ * currently address only the primary/context layer and are deliberately absent.
+ * Clipboard and clone handlers own the full selection; Paste owns its clipboard.
+ */
+function buildMultipleSelectionMenu(args: BuildMenuArgs): MenuItem[] {
+  // TODO(helpers): Explain repeated Cmd/Ctrl-drag offsets near Duplicate;
+  // decide help versus an explicit option before adding any UI.
+  const h = args.handlers
+  const layers = args.selectedLayers
+  const animation = layers?.length === args.multiCount
+    ? buildAnimateSubmenu(args.layer, h.animateProperty, layers) : []
+  return [
+    { kind: 'submenu', label: 'Copy / Paste', items: [
+      action('Cut', '⌘X', h.cut), action('Copy', '⌘C', h.copy),
+      action('Paste', '⌘V', h.paste, !args.canPaste), action('Duplicate', '⌘D', h.duplicate),
+    ] },
+    { kind: 'submenu', label: 'Clone / Array', items: [
+      action('Clone (quick)', '⌥⌘D', h.cloneQuick ?? h.duplicate),
+      action('Clone with settings…', undefined, h.cloneSettings),
+      action('Array…', '⇧⌘A', h.arraySettings),
+    ] },
+    action('Group', '⌘G', h.group), action('Delete', '⌫', h.deleteLayer),
+    ...(animation.length ? [sep(), { kind: 'submenu' as const, label: 'Animate', items: animation }] : []),
+    sep(), buildAlignMenu(args),
+    ...(h.toggleSelectionLock ? [sep(), action(layers?.every(layer => layer.locked) ? 'Unlock selection' : 'Lock selection',
+      '⌘L', h.toggleSelectionLock)] : []),
+  ]
+}
+
+/** Shared selection alignment surface. Distribution needs at least three members. */
+function buildAlignMenu(args: BuildMenuArgs): MenuItem {
+  const h = args.handlers
+  return { kind: 'submenu', label: 'Align', disabled: args.multiCount < 2, items: [
+    action('Align Left', undefined, h.alignLeft), action('Align Center', undefined, h.alignCenter),
+    action('Align Right', undefined, h.alignRight), action('Align Top', undefined, h.alignTop),
+    action('Align Middle', undefined, h.alignMiddle), action('Align Bottom', undefined, h.alignBottom),
+    sep(), action('Distribute Horizontally', undefined, h.distributeHorizontally, args.multiCount < 3),
+    action('Distribute Vertically', undefined, h.distributeVertically, args.multiCount < 3),
+  ] }
+}
+
 // ── Internal builders ───────────────────────────────────────────────────────
 
 function action(
@@ -239,10 +278,13 @@ function noop() { /* placeholder — disabled rows never call this */ }
 function buildAnimateSubmenu(
   layer: Layer,
   animateProperty?: (path: string) => void,
+  selection: readonly Layer[] = [layer],
 ): MenuItem[] {
-  // Group → category headers (separator + items) to match the screenshot
+  const channels = selection.length > 1 ? selection.map(member =>
+    new Set(keyableChannels(member, [], 'all', new Set()).map(channel => channel.path))) : null
   const allowed = ANIMATABLE_PROPERTIES.filter(
-    (p) => isPropertyAnimatableOn(p, layer.type),
+    (p) => selection.every(member => isPropertyAnimatableOn(p, member.type))
+      && (!channels || channels.every(paths => paths.has(p.path))),
   )
   const byGroup = new Map<string, typeof allowed>()
   for (const p of allowed) {

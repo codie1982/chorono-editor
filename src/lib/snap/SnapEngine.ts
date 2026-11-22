@@ -90,6 +90,30 @@ export class SnapEngine {
     return { snapped: guides.length > 0, point: { x: nx, y: ny }, delta: { x: nx - rect.x, y: ny - rect.y }, guides }
   }
 
+  /**
+   * Snap a clone translation to the nearest composition axis when the
+   * pointer is already travelling almost horizontally or vertically.
+   *
+   * The tolerance combines the configured screen-pixel snap radius with an
+   * 8° angular corridor. It is intentionally gated by the master snap switch
+   * and does not affect ordinary move drags; clone callers opt into this
+   * interaction-specific rule explicitly.
+   */
+  snapTranslationAxis(delta: Vec2, zoom = 1): Vec2 {
+    if (!this.settings.enabled || !Number.isFinite(delta.x) || !Number.isFinite(delta.y)) return delta
+    const radius = this.radiusWorld(zoom)
+    const angular = Math.tan(8 * Math.PI / 180)
+    const horizontalTolerance = Math.max(radius, Math.abs(delta.x) * angular)
+    const verticalTolerance = Math.max(radius, Math.abs(delta.y) * angular)
+    if (Math.abs(delta.x) >= Math.abs(delta.y) && Math.abs(delta.y) <= horizontalTolerance) {
+      return { x: delta.x, y: 0 }
+    }
+    if (Math.abs(delta.y) > Math.abs(delta.x) && Math.abs(delta.x) <= verticalTolerance) {
+      return { x: 0, y: delta.y }
+    }
+    return delta
+  }
+
   /** Point/pointer acquisition uses the same targets and screen radius as
    * dragging bounds. Returns guides for editor feedback; never warps the OS
    * cursor or mutates the input. A zero-size rectangle has one unique anchor. */

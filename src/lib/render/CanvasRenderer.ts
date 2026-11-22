@@ -163,7 +163,7 @@ export class CanvasRenderer {
     drawCompositionBackground(ctx, composition, options.background ?? 'scene')
     if (editorChrome && options.grid?.inFront === false) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
 
-    const visibility = new LayerDrawVisibility(layers, timeMs)
+    const visibility = new LayerDrawVisibility(layers, timeMs, layerIndex)
     assets.media?.request({ frame: prepared, context: ctx, area: options.visibleArea,
       padding: options.mediaPadding, prefetchMs: options.mediaPrefetchMs,
       selected: new Set([...Array.from(options.selectedLayerIds ?? []), ...(selectedLayerId ? [selectedLayerId] : [])]) })
@@ -175,7 +175,7 @@ export class CanvasRenderer {
       editorChrome && (id === selectedLayerId || !!options.selectedLayerIds?.has(id))
     for (const layer of layerIndex.roots) {
       if (!visibility.root(layer)) continue
-      this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, layerIndex, timeMs, isSelected(layer.id), renderMode, options.selectionOutline ?? true, options.editorOverlays ?? {}, boundsForFrame, sourceScene, paint, true, lod)
+      this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, layerIndex, timeMs, isSelected(layer.id), renderMode, options.selectionOutline ?? true, options.editorOverlays ?? {}, boundsForFrame, sourceScene, paint, true, lod, visibility)
     }
 
     // ── Optional grid overlay (editor only) ───────────────────────────────
@@ -207,6 +207,7 @@ export class CanvasRenderer {
     paint?: PaintFrame,
     allowCulling = true,
     lod?: GroupLodFrame,
+    visibility?: LayerDrawVisibility,
   ): void {
     // Nested repeaters/groups remain bounded even when animated counts exceed
     // the static scene's workload. No authored data is changed by this budget.
@@ -269,7 +270,7 @@ export class CanvasRenderer {
       if (plugin) paint?.dispatch(layer)
 
       // ── Dispatch via registry ─────────────────────────────────────────────
-      const renderContextFor = (canvas: CanvasRenderingContext2D, childCulling = allowCulling && directPaint(layer) && plugin?.paint?.sceneChildren === true, diagnostics = true): RenderContext => ({
+      const renderContextFor = (canvas: CanvasRenderingContext2D, childCulling = allowCulling && directPaint(layer) && plugin?.paint?.sceneChildren === true, diagnostics = true, sceneVisibility: LayerDrawVisibility | null | undefined = visibility): RenderContext => ({
         canvas,
         scene,
         layerIndex,
@@ -288,7 +289,9 @@ export class CanvasRenderer {
           const child = layerIndex.get(id)
           if (!child) return
           if (!layerDrawActive(child, timeMs)) return
-          this.renderLayer(canvas, child, overrides, paramValues, assets, scene, layerIndex, timeMs, false, renderMode, selectionOutline, editorOverlays, boundsForFrame, sourceScene, diagnostics ? paint : undefined, childCulling, diagnostics && childCulling ? lod : undefined)
+          const childVisibility = plugin?.paint?.sceneChildren ? sceneVisibility ?? undefined : undefined
+          if (childVisibility && !childVisibility.sceneChild(child)) return
+          this.renderLayer(canvas, child, overrides, paramValues, assets, scene, layerIndex, timeMs, false, renderMode, selectionOutline, editorOverlays, boundsForFrame, sourceScene, diagnostics ? paint : undefined, childCulling, diagnostics && childCulling ? lod : undefined, childVisibility)
         },
       })
       const renderContext = renderContextFor(ctx)
@@ -316,7 +319,7 @@ export class CanvasRenderer {
               resolveLayerWorldMatrix(target, scene, timeMs, overrides, layerIndex).applyToCanvas(offCtx)
               offCtx.globalAlpha *= Math.max(0, Math.min(1, target.opacity))
               const p = rendererRegistry.find(target)
-              if (p) { paint?.dispatch(target); p.render(renderContextFor(offCtx, false), target) }
+              if (p) { paint?.dispatch(target); p.render(renderContextFor(offCtx, false, true, null), target) }
             } finally { offCtx.restore() }
           }
 

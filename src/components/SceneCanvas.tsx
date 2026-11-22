@@ -13,7 +13,7 @@ import { selectionGeometry, usesGeometryDrivenSelectionFrame } from './canvas/ov
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import { drivenChannelReason } from '@/lib/timeline/authoring/keyableChannels'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
-import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
+import { makeUpdateLayerCmd, makeBulkToggleFlagCmd } from '@/lib/editor/commands-layer'
 import type { CloneMode } from '@/lib/clone/CloneTypes'
 // BL-73 — Spline drawing tools
 import type { SplinePrimitiveKind } from '@/lib/types/spline'
@@ -25,6 +25,7 @@ import {
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import { SnapEngine, type SnapEngineSettings } from '@/lib/snap/SnapEngine'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
+import type { SelectionToolMode } from './TopToolbar/ToolGroup'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 import type { ViewportLayerChange } from '@/lib/editor/viewportKeyframes'
 import type { SnapSettingsHook } from '@/app/hooks/useSnapSettings'
@@ -42,6 +43,7 @@ import ContextMenu, { useContextMenu } from './ui/ContextMenu'
 import { agentHandoffMenu } from './agentHandoff/menu'
 import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import { buildCanvasMenu, type CanvasMenuHandlers } from './canvas/buildCanvasMenu'
+import { buildAddLayerMenu } from './layerHierarchy/LayerAddition'
 import {
   rotate90CW, rotate90CCW, flipHorizontal, flipVertical, centerOrigin,
 } from '@/lib/editor/layerTransforms'
@@ -54,12 +56,15 @@ import { AffineSelectionFrame } from './canvas/overlays/AffineSelectionFrame'
 import { OffArtboardOverlay } from './canvas/overlays/OffArtboardOverlay'
 import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
 import { AnchorHandle } from './canvas/overlays/AnchorHandle'
+import { SelectionOriginsOverlay } from './canvas/overlays/SelectionOriginsOverlay'
+import { SoloModeOverlay } from './canvas/overlays/SoloModeOverlay'
 import { MoveAxisGizmo, ScaleAxisGizmo } from './canvas/overlays/AxisGizmos'
 import { RotateRing } from './canvas/overlays/RotateRing'
 import { SnapPointOverlay } from './canvas/overlays/SnapPointOverlay'
 import { TransformHUD } from './canvas/overlays/TransformHUD'
 import { CanvasGuideWorkspace } from './canvas/guides/CanvasGuideWorkspace'
 import { FitMenu } from './canvas/controls/FitMenu'
+import { ZoomScaleMenu } from './canvas/controls/ZoomScaleMenu'
 import { SnapSettingsMenu } from './canvas/controls/SnapSettingsMenu'
 import { gridSnappingEnabled } from '@/lib/snap/gridSettings'
 import { ViewMenu } from './canvas/controls/ViewMenu'
@@ -103,12 +108,16 @@ interface Props {
   /** Multi-selection set — when set has >1 entries, drag operations move
    *  ALL of them together (group-style transform). */
   selectedLayerIds?: Set<string>
+  /** Persistent marquee type; blank-canvas drags use it while Select remains active. */
+  selectionToolMode?: SelectionToolMode
   /** Copy a focused MCP task prompt from a canvas right-click. */
   onAgentHandoff?: (request: AgentHandoffRequest) => void
   assets: AssetElementMap
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   /** Replace selection atomically with every new forest root after drag-copy. */
   onSelectLayers?: (ids: readonly string[]) => void
+  /** Remembers the last Cmd/Ctrl clone-drag offset for repeated Duplicate. */
+  onAfterCloneDrag?: (offset: { x: number; y: number }) => void
   /** Optional pre-computed override map from the interactive runtime hook
    *  (already merges timeline + param + binding overrides). */
   overrides?:    OverrideMap
@@ -161,6 +170,8 @@ interface Props {
   onSplineDrawCommit?: () => void
   /** Enter line drawing into this spline, or null for a new layer. */
   onDrawSplineLine?: (layerId: string | null) => void
+  /** Same registry/media addition workflow as Layers + Add. */
+  onAddLayerKind?: (kind: string) => void
   /** BL-73 Sprint 5 — mirrors the selected spline point id up to the page so
    *  the properties panel can show a point editor. */
   onSplinePointSelected?: (pointId: string | null) => void
@@ -268,18 +279,18 @@ const PADDING   = 24
 const NO_MOTION_KEYS: ReadonlySet<string> = new Set()
 
 export default function SceneCanvas({
-  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, assets, onSelectLayer, onSelectLayers, onAgentHandoff,
+  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, selectionToolMode = 'selection-box', assets, onSelectLayer, onSelectLayers, onAgentHandoff,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
   onSelectByGeometry, selectionContainMode = 'touching',
   fullscreen, onToggleFullscreen,
-  menuHandlers, onAfterLayerCommit, buildLayerCommitCommands,
+  menuHandlers, onAfterLayerCommit, onAfterCloneDrag, buildLayerCommitCommands,
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming, motionControlsHost, onOpenMotionControls,
   arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
   physicsOverlay, onPhysicsBondSelect,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
-  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected,
+  splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onDrawSplineLine, onAddLayerKind, onSplinePointSelected,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -390,6 +401,17 @@ export default function SceneCanvas({
   const ctxMenu = useContextMenu()
   const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
   const ctxPointRef = useRef<{ x: number; y: number } | null>(null)
+  const ctxSelectionAtOpenRef = useRef<string | null>(null)
+  const selectionKey = useMemo(() => `${selectedLayerId ?? ''}|${Array.from(selectedLayerIds ?? []).sort().join(',')}`,
+    [selectedLayerId, selectedLayerIds])
+  useEffect(() => {
+    if (!ctxMenu.isOpen || ctxSelectionAtOpenRef.current == null) return
+    if (ctxSelectionAtOpenRef.current !== selectionKey) {
+      ctxMenu.close()
+      setCtxTargetLayerId(null)
+      ctxSelectionAtOpenRef.current = null
+    }
+  }, [ctxMenu.isOpen, ctxMenu.close, selectionKey])
   // ── Right-click on empty canvas area → fit / zoom shortcuts ──────────────
   const emptyCanvasCtx = useContextMenu()
   // ── BL-73 Sprint 5 — right-click on a spline point / segment / contour ───
@@ -519,7 +541,7 @@ export default function SceneCanvas({
     snapLayerIds,
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
-    onAfterLayerCommit, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
+    onAfterLayerCommit, onAfterCloneDrag, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
     timeMs, overrides, ...meshFrameQuery,
     contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
     onWarning: setTransformWarning,
@@ -661,16 +683,19 @@ export default function SceneCanvas({
     }
 
     // ── BL-60 Faz 3: Canvas selection tools (box / lasso / circle / paint) ──
-    if ((toolMode === 'selection-box' || toolMode === 'selection-lasso' ||
-         toolMode === 'selection-circle' || toolMode === 'selection-paint')
-        && onSelectByGeometry) {
+    const marqueeTool = toolMode === 'selection-box' || toolMode === 'selection-lasso'
+      || toolMode === 'selection-circle' || toolMode === 'selection-paint'
+      ? toolMode : toolMode === 'select' ? selectionToolMode : null
+    const marqueeHit = marqueeTool && toolMode === 'select'
+      ? hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery) : null
+    if (marqueeTool && onSelectByGeometry && (!marqueeHit || toolMode !== 'select')) {
       e.preventDefault()
       const mode: 'replace' | 'add' | 'subtract' =
         e.shiftKey ? 'add' : e.altKey ? 'subtract' : 'replace'
       const tool =
-        toolMode === 'selection-box'    ? 'box' :
-        toolMode === 'selection-lasso'  ? 'lasso' :
-        toolMode === 'selection-circle' ? 'circle' : 'paint'
+        marqueeTool === 'selection-box'    ? 'box' :
+        marqueeTool === 'selection-lasso'  ? 'lasso' :
+        marqueeTool === 'selection-circle' ? 'circle' : 'paint'
       beginSelectionDrag(tool, mode, cx, cy, e.pointerId)
       return
     }
@@ -808,7 +833,7 @@ export default function SceneCanvas({
     beginMoveForSelection(ids, layer.id, e, null, requestedCloneMode)
   }, [scene, geometryScene, geometryOverrides, timeMs, width, height, overrides, onSelectLayer,
     editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode, meshFrameQuery,
-    onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
+    onLayerClickInPreview, toolMode, selectionToolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
     beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan])
 
@@ -1134,8 +1159,6 @@ export default function SceneCanvas({
     ...(layer?.spline && !layer.locked && !layer.frozen && !layer.hidden ? [{ kind: 'action' as const,
       label: splineContinuation(layer.spline, selectedSplinePointId) ? 'Continue spline' : 'Add line to spline',
       onSelect: () => onDrawSplineLine(layer.id) }] : []),
-    { kind: 'action', label: 'Draw new spline line', onSelect: () => onDrawSplineLine(null) },
-    { kind: 'separator' },
   ]
 
   return (
@@ -1170,6 +1193,7 @@ export default function SceneCanvas({
         if (placingShape && !(e.target as Element).closest('button,input,select,textarea,[role="toolbar"],[role="menu"]')) shapePlacement.begin(e)
       }}
     >
+      <SoloModeOverlay active={displayScene.layers.some(layer => layer.type !== 'audio' && !!layer.solo)} />
       <div
         className="relative"
         style={{
@@ -1269,7 +1293,13 @@ export default function SceneCanvas({
                 }
               }
 
-              const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
+              // Context menus must remain reachable for selected locked layers
+              // so Lock selection can be reversed without changing selection.
+              // This projection is hit-test-only; source lock flags stay intact.
+              const contextScene = { ...geometryScene, layers: geometryScene.layers.map(layer =>
+                layer.locked && selectedLayerIds?.has(layer.id) ? { ...layer, locked: false } : layer) }
+              const hit = canvasSelectionPickTarget(hitTestLayer(contextScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery),
+                layerIndex, selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), false)
               if (!hit) {
                 e.preventDefault()
                 emptyCanvasCtx.open(e)
@@ -1278,7 +1308,12 @@ export default function SceneCanvas({
               e.preventDefault()
               // Bring the right-clicked layer into selection so menu actions
               // operate on what the user pointed at — matches every other editor.
-              if (hit !== selectedLayerId) onSelectLayer(hit)
+              // Preserve a multi-selection when the context click lands on
+              // one of its members; otherwise establish a new single-layer
+              // scope for the context menu.
+              const keepsSelection = !!(selectedLayerIds?.size && selectedLayerIds.has(hit))
+              if (!keepsSelection) onSelectLayer(hit)
+              ctxSelectionAtOpenRef.current = keepsSelection ? selectionKey : `${hit}|${hit}`
               setCtxTargetLayerId(hit)
               ctxPointRef.current = { x: Math.round(cx), y: Math.round(cy) }
               ctxMenu.open(e)
@@ -1541,7 +1576,7 @@ export default function SceneCanvas({
             if (!layer || layer.hidden) return null
             const bounds = boundsForFrame(layer)
             if (!bounds) return null
-            return <div key={id} className={`absolute pointer-events-none border border-blue-400/90 box-border ${isOffArtboardBounds(bounds, { width, height }) ? 'border-dashed' : ''}`}
+            return <div key={id} className={`absolute pointer-events-none border-2 border-cyan-300/95 bg-blue-500/[0.06] box-border shadow-[0_0_0_1px_rgba(15,23,42,0.75),0_0_8px_rgba(96,165,250,0.3)] ${isOffArtboardBounds(bounds, { width, height }) ? 'border-dashed' : ''}`}
               style={{ left: bounds.x * zoom, top: bounds.y * zoom, width: bounds.width * zoom, height: bounds.height * zoom }} />
           })}
 
@@ -1617,9 +1652,13 @@ export default function SceneCanvas({
             />
           )}
 
-          {/* Rotate shows the actual center; only Anchor mode can drag it. */}
-          {(gizmo.anchor || gizmo.ring) && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
+          {/* Persistent origins and a distinct shared rotation center. */}
+          {!hideEditorUI && !motionEditing && !arrayEditing && !placingShape && !panMode && selectedLayerIds && selectedLayerIds.size > 1 && (
+            <SelectionOriginsOverlay scene={scene} selectedIds={selectedLayerIds} timeMs={timeMs} overrides={displayOverrides} zoom={zoom} />
+          )}
+          {!hideEditorUI && !motionEditing && !arrayEditing && !placingShape && !panMode && selectedLayer && !selectedLayer.hidden && (
             <AnchorHandle
+              kind={multiSelectionBounds && !gizmo.anchor ? 'pivot' : 'origin'}
               x={selectedWorldPivot.x * zoom}
               y={selectedWorldPivot.y * zoom}
               isDragging={dragRef.current?.kind === 'anchor'}
@@ -1746,10 +1785,10 @@ export default function SceneCanvas({
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
           <button onClick={zoomOut}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom out (Cmd+scroll)">−</button>
-          <button onClick={actualSize}
-            className="min-w-[42px] text-center px-1.5 py-0.5 rounded hover:bg-gray-700" title="Reset to 100% + recentre">
-            {Math.round(zoom * 100)}%
-          </button>
+          <ZoomScaleMenu
+            zoom={zoom}
+            onZoom={(scale) => scale === 1 ? actualSize() : zoomTo(scale)}
+          />
           <button onClick={zoomIn}
             className="px-1.5 py-0.5 rounded hover:bg-gray-700" title="Zoom in (Cmd+scroll)">+</button>
           <span className="w-px h-3 bg-gray-700 mx-0.5" />
@@ -1787,7 +1826,7 @@ export default function SceneCanvas({
                       bg-gray-900/70 px-2 py-0.5 rounded whitespace-nowrap">
         {panMode
           ? '✋ Pan mode · drag the work area · M / H or ✋ returns to the previous tool'
-          : 'Drag = move · Arrows = 1px · Shift+Arrows = 10px · Shift = axis-lock · Handles to resize · ⌘ = aspect-lock · ⌘+scroll = zoom · Mid-mouse = pan'}
+          : 'Drag = move · Arrows = 1px · Shift+Arrows = 10px · Shift = axis-lock · Handles to resize · ⌘ = aspect-lock · ⌘+Shift = scale from center · ⌘+scroll = zoom · Mid-mouse = pan'}
       </div>
 
       {/* ── Right-click context menu ─────────────────────────────────────────
@@ -1865,6 +1904,12 @@ export default function SceneCanvas({
           toggleLock: () => editor.dispatchCommand(
             makeUpdateLayerCmd(target.id, { ...target, locked: !target.locked }, target),
           ),
+          toggleSelectionLock: () => {
+            const ids = Array.from(selectedLayerIds ?? [])
+            const source = editor.getScene()
+            const allLocked = ids.length > 0 && ids.every(id => source.layers.find(layer => layer.id === id)?.locked)
+            editor.dispatchCommand(makeBulkToggleFlagCmd(ids, 'locked', !allLocked))
+          },
 
           // ── Z-order (in-place layer array reorder) ──────────────────────
           bringForward: () => moveLayerZ(scene, editor, target.id, +1),
@@ -1876,11 +1921,12 @@ export default function SceneCanvas({
         const items = buildCanvasMenu({
           layer:      target,
           multiCount,
+          selectedLayers: scene.layers.filter(layer => selectedLayerIds?.has(layer.id)),
           canUngroup: menuHandlers?.canUngroup ?? false,
           canPaste:   menuHandlers?.canPaste   ?? false,
           handlers,
         })
-        items.unshift(...splineDrawItems(target))
+        if (multiCount <= 1) items.unshift(...splineDrawItems(target))
         if (onAgentHandoff) items.unshift(agentHandoffMenu({
           layerIds: selectedLayerIds?.has(target.id) ? Array.from(selectedLayerIds) : [target.id],
           ...(ctxPointRef.current ? { point: ctxPointRef.current } : {}),
@@ -1890,7 +1936,7 @@ export default function SceneCanvas({
             x={ctxMenu.state!.x}
             y={ctxMenu.state!.y}
             items={items}
-            onClose={() => { ctxMenu.close(); setCtxTargetLayerId(null) }}
+            onClose={() => { ctxMenu.close(); setCtxTargetLayerId(null); ctxSelectionAtOpenRef.current = null }}
           />
         )
       })()}
@@ -1900,7 +1946,8 @@ export default function SceneCanvas({
         const hasSel = !!selectedLayerId
         const close  = emptyCanvasCtx.close
         const items: import('./ui/ContextMenu').MenuItem[] = [
-          ...splineDrawItems(selectedLayer),
+          ...(onAddLayerKind ? [{ kind: 'submenu' as const, label: 'Add', items: buildAddLayerMenu(kind => { close(); onAddLayerKind(kind) }) },
+            { kind: 'separator' as const }] : []),
           { kind: 'action', label: 'Fit to View',   shortcut: 'F',   onSelect: () => { fitAll();         close() } },
           { kind: 'action', label: 'Fit Width',                       onSelect: () => { fitWidth();       close() } },
           { kind: 'action', label: 'Fit Height',                      onSelect: () => { fitHeight();      close() } },

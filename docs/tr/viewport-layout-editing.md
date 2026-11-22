@@ -10,8 +10,15 @@ uygulandı. Aşağıdaki ilk kabul sonuçlarına ek doğrulama o belgededir.
 
 ## Komşu ölçüleri ve sayısal düzenleme
 
-İki veya daha fazla nesne seçildiğinde yatay/dikey yakın komşuların kenar
-boşlukları görünür. Yatay komşuların y aralıkları, dikey komşuların x aralıkları
+İki veya daha fazla nesne seçildiğinde **aynı `layer.type` içindeki** yatay/dikey
+yakın komşuların kenar boşlukları görünür. Shape–spline gibi farklı türler
+arasında ölçüm yapılmaz. Dikdörtgen ve daire gibi basic shape alt türleri aynı
+`shape` türüne dahildir. Group kökü yalnız başka bir group köküyle eşleşir;
+çocuklarının türü kökün türünün yerine geçmez. Karışık seçimlerde her türün
+komşuları ayrı aranır; araya giren farklı türden bir nesne aynı türdeki komşuyu
+engellemez. Tek üyeli türler gap üretmez.
+
+Yatay komşuların y aralıkları, dikey komşuların x aralıkları
 örtüşmelidir. Köşe teması veya çapraz nesne çiftleri ölçü üretmez. Her nesne
 her yönde en yakın uygun komşuyu seçer; aynı çift iki kez çizilmez. Üç nesneli
 bir sırada iki aralık gösterilir. Solda üç üst üste ve orta sağda bir nesne
@@ -45,6 +52,42 @@ kalır. İptal edip güncel etiketi açın; eski ölçü güncel sahne üstüne 
 Input değişimi yalnız yerel UI state'idir; Apply öncesi kaynak preview'i yoktur.
 
 ## Cetvel ve guide kullanımı
+
+Grup oluşturma, seçili kardeş nesnelerin mevcut frame'deki birleşik geometri
+sınırının orta noktasını grubun origin/pivot'u yapar. Grubun matrisi identity
+kalır: x/y=0 ve unit scale; merkez parent-local anchorX/Y'de tutulur. Böylece
+çocukların konumu, özel pivot'ları, transform'ları ve animasyon key'leri değişmez.
+Önceden boş grup fabrikasından gelen +40/+40 translation artık gruplamaya
+uygulanmaz. Nested grupta merkez world'den ortak parent'ın koordinatlarına
+çevrilir; hidden seçili geometri de hesaba katılır. Group ve Undo tek işlemdir.
+
+Boş canvas'ta sağ tık → **Add**, Layers **+ Add** kataloğundaki mevcut
+kategorileri gösterir. **Add → Spline Objects → Line** yeni bir spline çizimi
+başlatır; bağımsız “Draw new spline line” ana menü satırı yoktur. Var olan
+spline'ın **Continue spline / Add line to spline** işlemi nesne bağlamında
+kalmaya devam eder. Medya importları aynı document-scoped dosya seçicisini
+kullanır; çizim aracı seçimi tek başına kaynak/undo kaydı oluşturmaz.
+
+Görsel katmanlardan birinde **Solo** açıksa viewport çevresinde sarı çerçeve ve
+sol altta **SOLO** etiketi görünür. Gösterge pan/zoom'dan etkilenmez; Solo
+filtrelemesi sürdüğü için playback sırasında da kalır. Son görsel Solo
+kapatılınca kaybolur. Yalnız ses Solo'su görsel viewport'u filtrelemediğinden bu
+çerçeveyi açmaz. Gösterge editör arayüzüne aittir, export'a dahil edilmez.
+
+Canvas, Layers ve Scene Explorer bağlamında **S**, mevcut seçimi Solo yapar.
+Tek seçim yalnız o nesneyi, çoklu seçim seçili nesneleri, grup seçimi grubun
+tüm alt ağacını gösterir. Önceki görsel Solo seçimi yenisiyle değiştirilir;
+aynı seçimde tekrar S, Solo'yu kapatır. Seçim değişikliği tek başına Solo'yu
+değiştirmez. Panel satırındaki Solo düğmesi seçili satırlardan birine
+tıklandığında tüm seçime, seçilmemiş satırda yalnız o satıra uygulanır.
+Scene Explorer toplu Solo düğmesi ve sağ tık işlemi de aynı komutu kullanır.
+Boş seçimde S işlem yapmaz; basılı tutmak tekrar tekrar açıp kapatmaz.
+Grup içindeki tek nesne Solo olduğunda üst grup dönüşümü korunur, kardeş
+nesneler çizilmez. Hidden ve zaman aralığı kuralları geçerliliğini korur.
+Ses Solo'su ayrı alandır; görsel seçim onu değiştirmez. Solo işlemi tek Undo
+adımıdır. **Scale aracı Shift+S** kullanır; timeline'daki S, Scale track
+görünürlüğünü değiştirmeye devam eder. Metin alanları, menüler, diyaloglar
+ve devam eden sürükleme sırasında bu kısayol sahneyi değiştirmez.
 
 Cetvel ve imleç çizgileri aynı canvas DOM rect/composition koordinatlarını
 kullanır. Pan/zoom ve DPR değişiklikleri ikinci bir koordinat sistemi oluşturmaz.
