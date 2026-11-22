@@ -56,6 +56,7 @@ export class RuntimeValidator {
         { kind: 'model3d', id: layer.model3d?.assetId },
         { kind: 'image', id: layer.image?.assetId },
         { kind: 'image paint', id: imagePaintAssetIds(layer.style?.fill)[0] },
+        { kind: 'stroke pattern', id: layer.style?.stroke?.type === 'pattern' ? layer.style.stroke.image?.assetId : undefined },
         { kind: 'video', id: layer.video?.assetId },
         { kind: 'audio', id: layer.audio?.assetId },
       ]

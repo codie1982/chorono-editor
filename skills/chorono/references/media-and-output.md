@@ -106,3 +106,22 @@ or invent a script peak-measurement method. Other native clip edits still use
 the discovered batchable commands described above.
 
 Run `validate_scene` and inspect representative image previews before saving the final handoff. A successful JSON save does not prove that media loaded, text fits or the animation loops cleanly.
+
+Spline Properties offers No Fill, Solid Color, Linear/Radial/Angle/Reflected/Diamond
+Gradient and Pattern Fill. These reuse existing `fill.type` values: gradients use
+`gradient.type: 'linear'|'radial'|'angle'|'reflected'|'diamond'`, with 2–256 stops.
+Each stop is `{offset:0..1,color,opacity?:0..100}`; stop opacity multiplies color
+alpha. Fill opacity remains independent (0–100). Pattern uses image paint with
+`image.repeat:true`, an image asset ID and the existing fit/offset/scale/rotation.
+All payloads survive None and portable save/load. Angle SVG export reports its
+720-sector vector approximation; Canvas/raster uses continuous native conic paint.
+Diamond's transient Canvas texture follows render resolution up to 2048 px/side
+and is governed by the shared render budget, never saved in scene JSON.
+
+Spline Stroke paint additionally supports `type:'pattern'` with `image` placement
+(the same versioned image asset contract, repeated along the painted line).
+`dashArray` is local-pixel dash/gap data; optional `dashEnabled:false` retains its
+sequence while painting solid. `lineCap` butt/round/square, `lineJoin` miter/round/
+bevel and `alignment` inside/center/outside remain existing source fields. Closed
+spline alignments use true fill-rule masks, independent of whether Fill is enabled;
+open/mixed contours paint Center. Stroke width and opacity remain independent.

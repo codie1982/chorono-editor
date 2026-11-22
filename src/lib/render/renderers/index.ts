@@ -10,7 +10,7 @@
 //   3. Registering both in registry/bootstrap.ts
 // No other file changes — open/closed principle satisfied.
 
-import { imagePaint, imagePaintAssetIds } from '../../paint/paintSource'
+import { imagePaint, imagePaintAssetIds, stylePaintAssetIds } from '../../paint/paintSource'
 import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry'
@@ -27,7 +27,7 @@ export { mesh2DRendererPlugin }
 export const shapeRendererPlugin: LayerRendererPlugin = {
   id: 'shape',
   nativeMediaFree: layer => !layer.style?.fill?.image,
-  mediaDependencies: layer => ({ assetIds: imagePaintAssetIds(layer.style?.fill) }),
+  mediaDependencies: layer => ({ assetIds: stylePaintAssetIds(layer.style) }),
   // Outside stroke uses destination-over, which depends on the live backdrop.
   paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => layer.style?.stroke?.alignment !== 'outside' && !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'shape' && !!layer.size,
@@ -93,7 +93,7 @@ export const pathStrokeRendererPlugin: LayerRendererPlugin = {
 export const bezierPathRendererPlugin: LayerRendererPlugin = {
   id: 'bezierPath',
   nativeMediaFree: layer => !layer.style?.fill?.image,
-  mediaDependencies: layer => ({ assetIds: imagePaintAssetIds(layer.style?.fill) }),
+  mediaDependencies: layer => ({ assetIds: stylePaintAssetIds(layer.style) }),
   paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'path' && !!layer.path,
   render(ctx: RenderContext, layer: Layer): void {
@@ -162,7 +162,7 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
 export const splineRendererPlugin: LayerRendererPlugin = {
   id: 'spline',
   nativeMediaFree: layer => !layer.style?.fill?.image,
-  mediaDependencies: layer => ({ assetIds: imagePaintAssetIds(layer.style?.fill) }),
+  mediaDependencies: layer => ({ assetIds: stylePaintAssetIds(layer.style) }),
   paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'spline' && !!layer.spline,
   render(ctx: RenderContext, layer: Layer): void {

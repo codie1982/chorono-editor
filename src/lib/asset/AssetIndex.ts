@@ -129,6 +129,7 @@ export class AssetIndex {
     const ids: string[] = []
     ids.push(...modelAssetIds(layer.model3d), ...modifierAssetIds(layer))
     if (layer.style?.fill?.image?.assetId) ids.push(layer.style.fill.image.assetId)
+    if (layer.style?.stroke?.image?.assetId) ids.push(layer.style.stroke.image.assetId)
     if (layer.image?.assetId)  ids.push(layer.image.assetId)
     if (layer.video?.assetId)  ids.push(layer.video.assetId)
     if (layer.audio?.assetId)  ids.push(layer.audio.assetId)

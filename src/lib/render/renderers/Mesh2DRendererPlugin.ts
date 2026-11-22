@@ -6,14 +6,14 @@ import { isMesh2DPinSelectionCurrent, resolveMesh2DDeformation } from '@/lib/mes
 import { drawMesh2DLayer, drawMesh2DPins, drawMesh2DWireframe } from '../mesh2dRenderer'
 import { renderMesh2DOnGPU } from '../gpu/mesh2d/Mesh2DGPUDispatch'
 import { drawMesh2DBoundaryStroke } from '../mesh2dBoundaryStroke'
-import { imagePaint, imagePaintAssetIds } from '../../paint/paintSource'
+import { imagePaint, stylePaintAssetIds } from '../../paint/paintSource'
 
 /** Canvas2D adapter for portable fixed-topology Mesh2D layers. */
 export const mesh2DRendererPlugin: LayerRendererPlugin = {
   id: 'mesh2d',
   mediaDependencies: layer => ({
     assetIds: [
-      ...imagePaintAssetIds(layer.style?.fill),
+      ...stylePaintAssetIds(layer.style),
       ...(layer.mesh2d?.appearance?.kind === 'texture' && layer.mesh2d.appearance.textureAssetId
         ? [layer.mesh2d.appearance.textureAssetId]
         : []),
@@ -44,7 +44,7 @@ export const mesh2DRendererPlugin: LayerRendererPlugin = {
     if (!texture || renderMesh2DOnGPU(ctx, layer, texture, deformation.positions ?? layer.mesh2d?.geometry.positions ?? []) !== 'rendered') {
       drawMesh2DLayer(ctx.canvas, layer, ctx.overrides, texture, deformation.positions, ctx.assets, ctx.paramValues)
     }
-    drawMesh2DBoundaryStroke(ctx.canvas, layer, ctx.overrides, deformation.positions ?? layer.mesh2d?.geometry.positions ?? [])
+    drawMesh2DBoundaryStroke(ctx.canvas, layer, ctx.overrides, deformation.positions ?? layer.mesh2d?.geometry.positions ?? [], ctx.assets)
   },
   renderEditorOverlay(ctx: RenderContext, layer: Layer, preferences): void {
     const deformationAssetId = layer.mesh2d?.deformation?.assetId

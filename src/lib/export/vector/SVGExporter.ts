@@ -133,7 +133,7 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
   return {
     svg,
     filename: `${composition.id || 'scene'}.svg`,
-    warnings,
+    warnings: [...warnings, ...gradients.warnings],
   }
 }
 
@@ -237,6 +237,12 @@ function buildSpline(layer: Layer, ctx: BuildCtx, xform: string, opacity: string
   if (!all.commands.length) return ''
   const box = computePathBounds(all) ?? { x: 0, y: 0, width: 0, height: 0 }
   const paint = { assets: ctx.scene.assets, box }, rule = ` fill-rule="${data.fillRule}"`
+  const stroke = layer.style?.stroke
+  if (stroke && stroke.alignment && stroke.alignment !== 'center' && Object.values(data.contours).every(contour => contour.closed)) {
+    const d = pathToSvgString(all), region = ctx.gradients.registerStrokeRegion(d, data.fillRule, box, stroke.alignment, stroke.width)
+    const fill = `<path d="${d}"${rule}${buildStyleAttrs({ ...layer.style, stroke: undefined }, ctx.gradients, paint)}${xform}${opacity}/>`
+    return fill + `<path d="${d}" ${region}${buildStyleAttrs({ fill: { type: 'none' }, stroke: { ...stroke, width: stroke.width * 2 } }, ctx.gradients, paint)}${xform}${opacity}/>`
+  }
   if (Object.values(data.contours).every(contour => contour.closed)) return `<path d="${pathToSvgString(all)}"${rule}${buildStyleAttrs(layer.style, ctx.gradients, paint)}${xform}${opacity}/>`
   const fill = closed.commands.length ? `<path d="${pathToSvgString(closed)}"${rule}${buildStyleAttrs({ ...layer.style, stroke: undefined }, ctx.gradients, paint)}${xform}${opacity}/>` : ''
   return fill + `<path d="${pathToSvgString(all)}"${buildStyleAttrs({ ...layer.style, fill: { type: 'none' } }, ctx.gradients, paint)}${xform}${opacity}/>`

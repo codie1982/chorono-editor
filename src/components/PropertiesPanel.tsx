@@ -1,4 +1,5 @@
 'use client'
+import { SplinePaintControls } from './paint/SplinePaintControls'
 import { ImagePaintControls } from './paint/ImagePaintControls'
 import { CompositionBackgroundControls } from './paint/CompositionBackgroundControls'
 import { withFillType, strokeType, withStrokeType } from '@/lib/paint/paintSource'
@@ -557,17 +558,14 @@ export default function PropertiesPanel({
               </Field>
             </Section>
 
-            {/* ── Spline Fill / Stroke / Trim (schema-driven) ──────────────
-                Splines declare these groups (incl. the gradient fill option) via
-                their LayerDefinition. Transform & Appearance are hand-written
-                above, so filter them out here to avoid duplicate sections. */}
-            {layer.type === 'spline' && (
-              <SchemaPanel
-                layer={layer}
-                onLayerChange={onLayerChange}
-                filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance'}
-              />
-            )}
+            {/* Appearance belongs to Properties; Edit owns only geometry. */}
+            {layer.type === 'spline' && <>
+              <SplinePaintControls style={layer.style ?? {}} assets={scene?.assets ?? []}
+                closed={!!layer.spline && Object.values(layer.spline.contours).every(contour => contour.closed)}
+                onChange={style => onLayerChange({ ...layer, style })} />
+              <SchemaPanel layer={layer} scene={scene} onLayerChange={onLayerChange}
+                filterGroup={g => !['Transform', 'Appearance', 'Fill', 'Stroke'].includes(g.title)} />
+            </>}
 
             {/* Mesh2D source, texture, deformation and pins are in Edit. */}
             {layer.type === 'mesh2d' && (

@@ -77,7 +77,7 @@ export const fillGroup = (): PropertyGroup => ({
 export const strokeGroup = (): PropertyGroup => ({
   title: 'Stroke',
   schemas: [
-    { id: 'strokeType', path: 'style.stroke.type', group: 'Stroke', label: 'Stroke Type', valueType: 'select', animatable: false, defaultValue: 'solid', options: [{ value: 'none', label: 'None' }, { value: 'solid', label: 'Color' }, { value: 'gradient', label: 'Gradient' }] },
+    { id: 'strokeType', path: 'style.stroke.type', group: 'Stroke', label: 'Stroke Type', valueType: 'select', animatable: false, defaultValue: 'solid', options: [{ value: 'none', label: 'None' }, { value: 'solid', label: 'Color' }, { value: 'gradient', label: 'Gradient' }, { value: 'pattern', label: 'Pattern' }] },
     { id: 'strokeColor', path: 'style.stroke.color', group: 'Stroke', label: 'Color', valueType: 'color',  animatable: true, defaultValue: '#FFFFFF', showWhen: l => strokeType(l.style?.stroke) !== 'none' },
     { id: 'strokeWidth', path: 'style.stroke.width', group: 'Stroke', label: 'Width', valueType: 'number', animatable: true, defaultValue: 0, min: 0, max: 100, showWhen: l => strokeType(l.style?.stroke) !== 'none' },
     { id: 'strokeCap',   path: 'style.stroke.lineCap',  group: 'Stroke', label: 'Cap',  valueType: 'select', animatable: false, defaultValue: 'butt',

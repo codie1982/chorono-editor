@@ -6,10 +6,11 @@ import { changedScriptPaths } from './ScriptDataChanges'
 /** Validate one edited gradient in source units. Stops remain in authored order;
  * offsets are 0..1, angles are degrees and CSS colors are never coerced. */
 function gradient(value: GradientFill): void {
-  if (!value || !['linear','radial'].includes(value.type) || !Array.isArray(value.stops) || value.stops.length < 2 || value.stops.length > 256) throw new Error('Invalid gradient: use linear/radial with 2..256 stops.')
+  if (!value || !['linear','radial','angle','reflected','diamond'].includes(value.type) || !Array.isArray(value.stops) || value.stops.length < 2 || value.stops.length > 256) throw new Error('Invalid gradient: use a supported gradient type with 2..256 stops.')
   if (value.angle !== undefined && (typeof value.angle !== 'number' || !Number.isFinite(value.angle))) throw new Error('Gradient angle must be finite.')
   for (const stop of value.stops) {
     if (!stop || typeof stop.offset !== 'number' || !Number.isFinite(stop.offset) || stop.offset < 0 || stop.offset > 1 || typeof stop.color !== 'string') throw new Error('Invalid gradient stop.')
+    if (stop.opacity !== undefined && (!Number.isFinite(stop.opacity) || stop.opacity < 0 || stop.opacity > 100)) throw new Error('Gradient stop alpha must be 0..100.')
     validateExpressionResult('color', stop.color)
   }
 }
@@ -31,6 +32,8 @@ export function assertScriptPaint(before: Layer | undefined, after: Layer): void
   if (fill && touched('fill.type') && !['solid','gradient','image','none'].includes(fill.type)) throw new Error('Invalid fill type.')
   if (fill && (touched('fill.gradient') && fill.gradient !== undefined || touched('fill.type') && fill.type === 'gradient')) gradient(fill.gradient!)
   if (stroke) {
+    if (stroke.type === 'pattern' && !stroke.image) throw new Error('Pattern stroke requires image placement.')
+    if (stroke.dashEnabled !== undefined && typeof stroke.dashEnabled !== 'boolean') throw new Error('Invalid dash enabled value.')
     if ((touched('stroke.color') || !before?.style?.stroke) && typeof stroke.color !== 'string') throw new Error('Stroke requires a CSS color.')
     if (touched('stroke.color')) validateExpressionResult('color', stroke.color)
     if ((touched('stroke.width') || !before?.style?.stroke) && (typeof stroke.width !== 'number' || !Number.isFinite(stroke.width) || stroke.width < 0)) throw new Error('Stroke width must be non-negative.')

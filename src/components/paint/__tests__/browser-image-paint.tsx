@@ -1,3 +1,4 @@
+import { checkSplinePaint } from './checkSplinePaint'
 import { useLayoutEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
@@ -50,7 +51,7 @@ const equal = (a: unknown, b: unknown, message: string) => assert(JSON.stringify
 async function frames(n = 3) { for (let i = 0; i < n; i++) await new Promise(requestAnimationFrame) }
 async function until(test: () => boolean, message: string) { const deadline = performance.now() + 15000; while (!test() && performance.now() < deadline) await frames(1); assert(test(), message) }
 async function select(label: string, value: string) { const field = document.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!; assert(field, `Missing ${label}`); flushSync(() => { field.value = value; field.dispatchEvent(new Event('change', { bubbles: true })) }); await frames() }
-async function number(label: string, value: string) { const field = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!; assert(field, `Missing ${label}`); flushSync(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true })) }); await frames() }
+async function number(label: string, value: string) { const field = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!; assert(field, `Missing ${label}`); flushSync(() => field.focus()); flushSync(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true })) }); await frames(); flushSync(() => field.blur()); await frames() }
 async function click(text: string) { const button = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent?.trim() === text)!; assert(button, `Missing ${text}`); flushSync(() => button.click()); await frames() }
 /** Decode real output, rather than trusting the export options/source values. */
 async function pixels(blob: Blob): Promise<{ bytes: Uint8ClampedArray; width: number }> {
@@ -141,6 +142,7 @@ async function run() {
     flushSync(() => checkbox.click()); await frames(); output = await raster(); assert(sample(output, 300, 200)[3] === 255, 'Included image background missing from PNG')
     checks.push('Background remains in viewport while PNG, every sequence frame and SVG honour export inclusion; explicit output color wins')
     equal(JSON.stringify(live!.editor.getScene().timelines), keys, 'Background edits changed keys')
+    checks.push(...await checkSplinePaint({ editor: () => live!.editor, frames, select, number, click, raster, pixels }, assetId))
     status.textContent = `PASS · ${checks.length} checks`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
   finally { button.disabled = false }

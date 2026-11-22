@@ -1,4 +1,4 @@
-import type { Composition, ImagePaint, ShapeFill, ShapeStroke } from '../types'
+import type { Composition, ImagePaint, ShapeFill, ShapeStroke, ShapeStyle } from '../types'
 
 /** Retain inactive paint payloads and remember the last active mode on None.
  * Re-enabling removes the remembered mode; no input or keyframes are changed. */
@@ -17,7 +17,12 @@ export function imagePaint(fill: ShapeFill | undefined): ImagePaint | undefined 
  * inactive payloads so switching paint does not turn a retained source orphan. */
 export function imagePaintAssetIds(fill: ShapeFill | undefined): readonly string[] { const id = imagePaint(fill)?.assetId; return id ? [id] : [] }
 /** Legacy stroke gradients remain active until an explicit type overrides them. */
-export function strokeType(stroke: ShapeStroke | undefined): 'solid' | 'gradient' | 'none' { return !stroke ? 'none' : stroke.type ?? (stroke.gradient ? 'gradient' : 'solid') }
+export function strokeType(stroke: ShapeStroke | undefined): 'solid' | 'gradient' | 'pattern' | 'none' { return !stroke ? 'none' : stroke.type ?? (stroke.gradient ? 'gradient' : 'solid') }
+/** Active style image demand includes pattern strokes; inactive references are
+ * retained by the existing asset index for portable save/cleanup ownership. */
+export function stylePaintAssetIds(style?: ShapeStyle): readonly string[] {
+  return [...imagePaintAssetIds(style?.fill), ...(strokeType(style?.stroke) === 'pattern' && style?.stroke?.image?.assetId ? [style.stroke.image.assetId] : [])]
+}
 /** Legacy composition fields are read through one adapter; no source migration. */
 export function compositionFill(composition: Composition): ShapeFill {
   return composition.backgroundFill ?? (composition.backgroundGradient ? { type: 'gradient', gradient: composition.backgroundGradient }
@@ -33,5 +38,6 @@ export function compositionForOutput(composition: Composition): Composition {
 export function withStrokeType(stroke: ShapeStroke | undefined, type: NonNullable<ShapeStroke['type']>): ShapeStroke {
   const next: ShapeStroke = { color: '#FFFFFF', width: 2, ...stroke, type }
   if (type === 'gradient' && !next.gradient) next.gradient = { type: 'linear', angle: 90, stops: [{ offset: 0, color: next.color }, { offset: 1, color: '#FFFFFF' }] }
+  if (type === 'pattern' && !next.image) next.image = { version: 1, assetId: '', fit: 'contain', scale: .25, repeat: true }
   return next
 }

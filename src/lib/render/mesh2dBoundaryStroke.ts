@@ -1,3 +1,4 @@
+import type { AssetElementMap } from '../asset/visual/AssetElementMap'
 import type { Layer } from '../types'
 import type { OverrideMap } from '../evaluator'
 import { pathDefinitionToSpline } from '../geometry/conversion/ShapeToSplineConverter'
@@ -9,8 +10,8 @@ import { mesh2DBoundaryPath } from '../geometry/mesh2d'
  * follows the current borrowed positions. Internal triangulation edges never
  * paint. No source mutation, topology recomputation, assets or caches owned. */
 export function drawMesh2DBoundaryStroke(ctx: CanvasRenderingContext2D, layer: Layer,
-  overrides: OverrideMap, positions: ArrayLike<number>): void {
+  overrides: OverrideMap, positions: ArrayLike<number>, assets?: AssetElementMap): void {
   if (!layer.style?.stroke || !layer.mesh2d?.boundaryRings?.length) return
   const spline = pathDefinitionToSpline(mesh2DBoundaryPath(layer.mesh2d.boundaryRings, positions), 'evenodd')
-  drawSplineLayer(ctx, { ...layer, spline, style: { ...layer.style, fill: undefined } }, overrides)
+  drawSplineLayer(ctx, { ...layer, spline, style: { ...layer.style, fill: undefined } }, overrides, undefined, assets)
 }

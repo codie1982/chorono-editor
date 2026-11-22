@@ -4,7 +4,9 @@ import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, S
 import { buildPathOnCanvas } from './geometry/PathCommand'
 import { splineToPathDefinition } from './spline/splineToPath'
 import { computeSplineBounds } from './spline/geometry/computeSplineBounds'
-import { trimSplinePath } from './spline/render/trimSplinePath'
+import { drawSplineStroke } from './render/paint/drawSplineStroke'
+import { imagePaintPattern } from './render/paint/drawImagePaint'
+import { activeStrokeDash } from './paint/strokeStyle'
 import { hitTestSplineFill, hitTestSplineSegment } from './spline/geometry/hitTest'
 import { resolveLayerWorldMatrix } from './geometry/resolveLayerWorldMatrix'
 import { createLayerWorldBoundsResolver } from './geometry/resolveLayerWorldBounds'
@@ -50,7 +52,7 @@ function buildCanvasGradient(
   ctx: CanvasRenderingContext2D,
   fill: ShapeFill,
   w: number, h: number,
-): CanvasGradient | null {
+): CanvasGradient | CanvasPattern | null {
   return buildGradient(ctx, fill.gradient, w, h)
 }
 
@@ -114,7 +116,7 @@ export function drawShape(
     // ── Trim Path resolution ──────────────────────────────────────────────
     // If stroke.trim is defined (even with defaults), evaluate animated values
     // and use ctx.setLineDash + lineDashOffset to clip the visible segment.
-    let lineDash: number[] = dashArray
+    let lineDash: number[] = activeStrokeDash(style.stroke)
     let lineDashOffset = 0
 
     if (style.stroke.trim || ['start', 'end', 'offset'].some(key => overrides.has(`layers.${layer.id}.style.stroke.trim.${key}`))) {
@@ -141,7 +143,9 @@ export function drawShape(
     ctx.globalAlpha *= so / 100
     // Stroke can be solid colour OR a gradient. Reuse the fill gradient
     // builder — same math (linear angle / radial from centre).
-    const strokeStyle: string | CanvasGradient = (strokeType(style.stroke) === 'gradient' && style.stroke.gradient)
+    const strokeStyle: string | CanvasGradient | CanvasPattern = strokeType(style.stroke) === 'pattern'
+      ? imagePaintPattern(ctx, style.stroke.image, { x: 0, y: 0, width: w, height: h }, assets) ?? 'transparent'
+      : (strokeType(style.stroke) === 'gradient' && style.stroke.gradient)
       ? (buildCanvasGradient(ctx, { type: 'gradient', gradient: style.stroke.gradient } as any, w, h) ?? color)
       : color
     ctx.strokeStyle    = strokeStyle
@@ -236,7 +240,7 @@ export function drawBezierPath(
     const boundStroke = paramValues ? getStringParamBinding(layer, 'style.stroke.color', paramValues) : undefined
     const color = boundStroke ?? resolveRenderColor(overrides, layer.id, 'style.stroke.color', staticStrokeColor ?? '#FFFFFF')
 
-    let lineDash       = dashArray
+    let lineDash       = activeStrokeDash(style.stroke)
     let lineDashOffset = 0
 
     if (style.stroke.trim || ['start', 'end', 'offset'].some(key => overrides.has(`layers.${layer.id}.style.stroke.trim.${key}`))) {
@@ -259,7 +263,9 @@ export function drawBezierPath(
     ctx.globalAlpha *= so / 100
     // Stroke can be solid colour OR a gradient. Reuse the fill gradient
     // builder — same math (linear angle / radial from centre).
-    const strokeStyle: string | CanvasGradient = (strokeType(style.stroke) === 'gradient' && style.stroke.gradient)
+    const strokeStyle: string | CanvasGradient | CanvasPattern = strokeType(style.stroke) === 'pattern'
+      ? imagePaintPattern(ctx, style.stroke.image, { x: 0, y: 0, width: w, height: h }, assets) ?? 'transparent'
+      : (strokeType(style.stroke) === 'gradient' && style.stroke.gradient)
       ? (buildCanvasGradient(ctx, { type: 'gradient', gradient: style.stroke.gradient } as any, w, h) ?? color)
       : color
     ctx.strokeStyle    = strokeStyle
@@ -304,36 +310,7 @@ export function drawSplineLayer(
     drawPathFill(ctx, layer, overrides, bounds, assets, paramValues, fillRule)
   }
 
-  if (style.stroke && strokeType(style.stroke) !== 'none') {
-    const sw = getLayerValue(overrides, layer.id, 'style.stroke.width',   style.stroke.width)
-    // A default closed spline has width 0; its width can still be animated.
-    if (sw <= 0) return
-    const so = getLayerValue(overrides, layer.id, 'style.stroke.opacity', style.stroke.opacity ?? 100)
-    const { color = '#FFFFFF', dashArray = [], lineCap = 'butt', lineJoin = 'miter' } = style.stroke
-    const trim = style.stroke.trim
-    const hasTrim = !!trim || ['start', 'end', 'offset'].some(key =>
-      overrides.has(`layers.${layer.id}.style.stroke.trim.${key}`))
-    const strokePath = hasTrim ? trimSplinePath(
-      pathDef,
-      getLayerValue(overrides, layer.id, 'style.stroke.trim.start', trim?.start ?? 0),
-      getLayerValue(overrides, layer.id, 'style.stroke.trim.end', trim?.end ?? 1),
-      getLayerValue(overrides, layer.id, 'style.stroke.trim.offset', trim?.offset ?? 0),
-    ) : pathDef
-    if (strokePath.commands.length === 0) return
-    buildPathOnCanvas(ctx, strokePath)
-    ctx.save()
-    ctx.globalAlpha   *= so / 100
-    ctx.strokeStyle = (strokeType(style.stroke) === 'gradient' ? buildGradient(ctx, style.stroke.gradient, bounds.width, bounds.height, bounds.x, bounds.y) : null)
-      ?? resolveColor('style.stroke.color', color)
-    ctx.lineWidth      = sw
-    ctx.lineCap        = lineCap
-    ctx.lineJoin       = lineJoin
-    ctx.setLineDash(dashArray)
-    ctx.lineDashOffset = 0
-    ctx.stroke()
-    ctx.setLineDash([])
-    ctx.restore()
-  }
+  drawSplineStroke(ctx, layer, overrides, bounds, pathDef, assets, () => resolveColor('style.stroke.color', style.stroke?.color ?? '#FFFFFF'))
 }
 
 /**

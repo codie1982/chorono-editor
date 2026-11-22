@@ -17,6 +17,8 @@ export function ImagePaintControls({ value, assets, onChange, onImport }: {
   const images = assets.filter(asset => asset.type === 'image')
   const update = (patch: Partial<ImagePaint>) => onChange({ ...value, ...patch })
   return <div className="space-y-2 rounded border border-gray-700 p-2">
+    <label className="flex items-center gap-2 text-xs text-gray-300"><input type="checkbox" aria-label="Repeat image as pattern" checked={value.repeat ?? false}
+      onChange={event => update({ repeat: event.target.checked })} />Repeat as pattern</label>
     <label className="block space-y-1 text-xs text-gray-400"><span>Image asset</span><select aria-label="Image asset" value={value.assetId} onChange={event => update({ assetId: event.target.value })} className={paintSelectClass}>
       <option value="">Choose an image…</option>
       {value.assetId && !images.some(asset => asset.id === value.assetId) && <option value={value.assetId}>Missing image · {value.assetId}</option>}
