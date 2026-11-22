@@ -228,6 +228,8 @@ Aynı Edit Mesh üzerinde hareketler birikir; her hareket ayrı Undo/Redo olur.
 Edit'e yeniden giriş aynı etkin son Edit Mesh'i kullanır; ghost o anki geometriyi
 yeni başlangıç alır. Add Spline `+` seçme modu mevcut spline katmanlarını aktif
 spline'a dahil eder; konum/konturlar korunur ve her ekleme tek Undo/Redo olur.
+Viewport ve Scene Explorer seçimleri aynı Attach sahibinden geçer; Explorer
+satırına tıklama veya Enter/Space hedef seçimini değiştirmeden ekleme yapar.
 Yeni spline'lar stroke-only oluşur; isteğe bağlı Fill ve diğer paint alanları
 yalnız Properties'te bulunur, Edit içinde tekrarlanmaz.
 Yeni topolojiyi kabul eden altyapı

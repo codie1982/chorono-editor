@@ -115,6 +115,7 @@ import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
 import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
 import { useSplineDrawingPreferences } from '@/components/splineEdit/useSplineDrawingPreferences'
 import { SplineEditInspector } from '@/components/splineEdit/SplineEditInspector'
+import { useSplineAttachPicking } from '@/components/splineEdit/useSplineAttachPicking'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
 import { useBooleanPreview } from '@/components/booleanPreview/useBooleanPreview'
 import { useSplineFillet } from '@/components/splineEdit/fillet/useSplineFillet'
@@ -597,6 +598,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     setLayerSelection(previous => id == null ? createLayerSelection([])
       : shiftHeld ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))
   }, [])
+  const pickSplineToAttach = useSplineAttachPicking({ layer: selectedLayer, controller: splineEdit,
+    getScene: editor.getScene, dispatch: dispatchCommand, timeMs: currentTimeMs, overrides: frame.overrides,
+    disabled: isPlaying || manualPreview || !!detail.session, isTransactionActive: editor.isTransactionActive,
+    warning: message => { if (message) toast.warning('Add Spline', { detail: message }) } })
   const shapeCreation = useShapeCreationTool({ toolMode, setToolMode, onSelect: selectLayer,
     documentSignal: editor.getDocumentSignal(), getScene: editor.getScene })
   useEffect(() => {
@@ -1748,6 +1753,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     selectedIds={selectedLayerIds}
                     onSelect={(id, shift, meta) => selectLayer(id, shift || meta)}
                     onSelectLayers={replaceLayerSelection}
+                    onPickLayer={pickSplineToAttach}
                     onRename={renameLayer}
                     onToggleFlag={toggleLayerFlag}
                     onMoveInTree={moveLayerInTree}

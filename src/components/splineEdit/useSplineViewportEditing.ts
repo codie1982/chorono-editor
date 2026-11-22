@@ -16,7 +16,7 @@ import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 import type { SplineEditController } from './useSplineEditSelection'
 import { splineEditCommand } from './commands'
 import { hitTestLayersAt } from '@/lib/renderer'
-import { useSplineTopologyActions } from './useSplineTopologyActions'
+import { useSplineAttachPicking } from './useSplineAttachPicking'
 
 interface Options {
   controller: SplineEditController; layer: Layer | null | undefined; scene: ChronoScene; editor: EditorStateReturn
@@ -45,7 +45,7 @@ export function useSplineViewportEditing(options: Options) {
   const geometry = useMemo(() => layer ? resolveSplineEditGeometry(layer, scene, timeMs, overrides) : null, [layer, scene, timeMs, overrides])
   const canPick = active && !options.panMode && options.toolMode !== 'pan' && !!geometry
   const writable = !!layer && !layer.hidden && !layer.locked && !layer.frozen && !layer.instanceOf
-  const topology = useSplineTopologyActions({ layer, controller, getScene: options.editor.getScene,
+  const attachPick = useSplineAttachPicking({ layer, controller, getScene: options.editor.getScene,
     dispatch: options.editor.dispatchCommand, timeMs, overrides, disabled: !canPick || !writable,
     isTransactionActive: options.editor.isTransactionActive, warning: options.warning })
   useEffect(() => { if (controller.attaching && (!canPick || !writable)) controller.setAttaching(false) }, [controller.attaching, controller.setAttaching, canPick, writable])
@@ -67,9 +67,7 @@ export function useSplineViewportEditing(options: Options) {
       // remain pickable without changing hierarchy, visibility or overrides.
       const source = options.editor.getScene()
       const hit = hitTestLayersAt(source, timeMs, x, y, overrides).find(id => id !== layer!.id)
-      if (!hit) return true // Empty clicks keep target and add mode intact.
-      if (source.layers.find(item => item.id === hit)?.type !== 'spline') options.warning('Choose an existing spline object to add.')
-      else topology.perform({ kind: 'attach', sourceId: hit })
+      attachPick(hit ?? null)
       return true
     }
     const target = pick(x, y)

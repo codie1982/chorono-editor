@@ -64,6 +64,10 @@ interface Props {
   // Selection + edit
   onSelect: (id: string, shiftHeld: boolean, metaHeld: boolean) => void
   onSelectLayers?: (ids: readonly string[], primaryId: string | null) => void
+  /** Transient pick tools may consume a row activation before normal single,
+   * range or additive selection. Returning true preserves the target selection.
+   * Applies to click and keyboard activation; does not mutate row source data. */
+  onPickLayer?: (id: string) => boolean
   onRename: (id: string, name: string) => void
 
   // Flag toggles (lock/hidden/solo/pinned)
@@ -97,7 +101,7 @@ interface Props {
 
 export default function SceneExplorerPanel({
   layers, timeline, selectedId, selectedIds, layerScope,
-  onSelect, onSelectLayers, onRename, onToggleFlag,
+  onSelect, onSelectLayers, onPickLayer, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
   contextHandlers, onClearSelection, onAgentHandoff,
   isLayerAnimated, doesLayerHaveEffects,
@@ -246,8 +250,11 @@ export default function SceneExplorerPanel({
   const layout = useMemo(() => RowLayout.fixed(rows.length, SCENE_EXPLORER_ROW_HEIGHT), [rows.length])
   const rowKeys = useMemo(() => rows.map(row => row.id), [rows])
   const selectableKeys = useMemo(() => rows.filter(row => row.kind === 'layer').map(row => row.id), [rows])
-  const selectRow = useLayerListSelection({ order: selectableKeys, selectedId, selectedIds,
+  const selectListRow = useLayerListSelection({ order: selectableKeys, selectedId, selectedIds,
     onSelect: (id, additive) => onSelect(id, false, additive), onSelectLayers })
+  const selectRow = (id: string, shift = false, additive = false) => {
+    if (!onPickLayer?.(id)) selectListRow(id, shift, additive)
+  }
   const canFocusRow = useCallback((index: number) => rows[index].kind === 'layer', [rows])
   const windowed = useRowWindow(layout, rowKeys, scrollRef, undefined, canFocusRow)
   useSelectedLayerReveal({ layers, selectedId, selectedIds, setCollapsedIds,

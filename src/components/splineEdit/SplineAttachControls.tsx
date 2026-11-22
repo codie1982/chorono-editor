@@ -15,8 +15,8 @@ export function SplineAttachControls({ controller, disabled, onBegin }: { contro
       </button>
     </div>
     <p aria-live="polite" className="text-gray-400">{controller.attaching
-      ? 'Click existing splines in the viewport to add them. Esc, right-click or + finishes.'
-      : 'Press +, then pick existing spline objects in the viewport.'}</p>
+      ? 'Pick existing splines in the viewport or Scene Explorer. Esc, right-click in the viewport or + finishes.'
+      : 'Press +, then pick spline objects in the viewport or Scene Explorer.'}</p>
     {controller.attaching && <p className="text-gray-400">Added objects use this spline’s appearance and leave their original layer.</p>}
   </section>
 }

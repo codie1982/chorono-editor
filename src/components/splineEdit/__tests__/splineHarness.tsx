@@ -5,6 +5,8 @@ import { useSplineDrawingPreferences } from '../useSplineDrawingPreferences'
 import type { SplinePrimitiveKind } from '@/lib/types/spline'
 import type { SplineDrawResult } from '../drawing/drawingCommand'
 import SceneCanvas from '@/components/SceneCanvas'
+import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
+import { useSplineAttachPicking } from '../useSplineAttachPicking'
 import { SplineLineDrawingControls } from '../SplineAutoCloseControl'
 import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
 import { SplinePaintControls } from '@/components/paint/SplinePaintControls'
@@ -43,13 +45,17 @@ function fixture(keyed = false): ChronoScene {
 }
 interface Live { editor: EditorStateReturn; controller: SplineEditController; selected: string | null; select(id: string | null): void; time: number; setTime(value: number): void; setTool(value: string): void; reset(keyed?: boolean): void }
 let live: Live | undefined
-function Subject() {
+function Subject({ explorer = false }: { explorer?: boolean } = {}) {
   const [initial] = useState(fixture), editor = useEditorState(initial), snap = useSnapSettings({ persist: false })
   const [drawKind, setDrawKind] = useState<SplinePrimitiveKind | null>(null), [endpoint, setEndpoint] = useState<string | null>(null), [result, setResult] = useState<SplineDrawResult | null>(null)
   const preferences = useSplineDrawingPreferences()
   const [selected, setSelected] = useState<string | null>('spline'), [time, setTime] = useState(0), [tool, setTool] = useState('select')
   const layer = editor.scene.layers.find(item => item.id === selected) ?? null, controller = useSplineEditSelection(layer, editor.getDocumentSignal())
   const frame = useMemo(() => evaluateSceneFrame(editor.scene, time), [editor.scene, time])
+  const [attachWarning, setAttachWarning] = useState('')
+  const attachPick = useSplineAttachPicking({ layer, controller, getScene: editor.getScene,
+    dispatch: editor.dispatchCommand, timeMs: time, overrides: frame.overrides,
+    isTransactionActive: editor.isTransactionActive, warning: setAttachWarning })
   const outline = useSplineOutline({ scene: editor.scene, controller, timeMs: time, overrides: frame.overrides, documentSignal: editor.getDocumentSignal(),
     disabled: tool === 'spline-draw', getScene: editor.getScene, dispatch: editor.dispatchCommand, isTransactionActive: editor.isTransactionActive })
   useEffect(() => { if (result) { controller.enter(result.mode, result.ids); setResult(null) } }, [result, controller.enter])
@@ -60,7 +66,15 @@ function Subject() {
     onClearSelection: () => setSelected(null), onDeleteSelected: () => { if (layer) editor.dispatchCommand(makeDeleteLayerCmd(layer)) }, getContext: () => 'canvas', isTransactionActive: editor.isTransactionActive,
     onNudgeSelected: (x, y) => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { transform: { ...layer.transform, x: layer.transform.x + x, y: layer.transform.y + y } }, layer)) } })
   return <><nav className="flex gap-2"><button onClick={() => reset()}>Reset private scene</button><button onClick={() => setSelected('parent')}>Select parent</button><button onClick={() => setSelected('spline')}>Select spline</button><button onClick={() => { setSelected(null); controller.exit(); arm('line') }}>Draw new line</button><button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button></nav>
-    <div className="flex border border-gray-600 h-[650px]"><SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={outline.result}
+    <div className="flex border border-gray-600 h-[650px]">
+      {explorer && <section aria-label="Scene Explorer" className="w-[250px] shrink-0 flex flex-col">
+        {attachWarning && <p role="alert">{attachWarning}</p>}
+        <SceneExplorerPanel layers={editor.scene.layers} timeline={editor.scene.timelines[0] ?? null}
+          selectedId={selected} selectedIds={new Set(selected ? [selected] : [])}
+          onSelect={setSelected} onSelectLayers={(ids, primary) => setSelected(primary ?? ids[0] ?? null)} onPickLayer={attachPick}
+          onRename={() => {}} onToggleFlag={() => {}} onMoveInTree={() => {}} />
+      </section>}
+      <SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={outline.result}
       selectedLayerIds={new Set(selected ? [selected] : [])} onSelectLayer={setSelected} onSelectByGeometry={ids => setSelected(Array.from(ids)[0] ?? null)}
       timeMs={time} overrides={frame.overrides} isPlaying={false} previewMode={false} toolMode={tool as 'select'} panMode={tool === 'pan'} splineEdit={controller}
       splineDrawKind={drawKind} splineAppendTargetId={selected} splineContinuationPointId={endpoint} splineAutoClose={preferences.autoClose}
