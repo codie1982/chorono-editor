@@ -112,6 +112,7 @@ import { SplineChamferControls } from '@/components/splineEdit/chamfer/SplineCha
 import { SplineFilletControls } from '@/components/splineEdit/fillet/SplineFilletControls'
 import { SplineOutlineControls } from '@/components/splineEdit/outline/SplineOutlineControls'
 import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
+import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
 import { useSplineDrawingPreferences } from '@/components/splineEdit/useSplineDrawingPreferences'
 import { SplineEditInspector } from '@/components/splineEdit/SplineEditInspector'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
@@ -370,6 +371,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const wrapAtEnd = useMemo(() => hasInfinitePlayback(scene.timelines), [scene.timelines])
   const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
   const splineEdit = useSplineEditSelection(selectedLayerIds.size <= 1 ? selectedLayer : null, editor.getDocumentSignal())
+  const geometryEdit = useGeometryEditMode(selectedLayerIds.size === 1 ? selectedLayer : null, splineEdit, editor.getDocumentSignal())
   useEffect(() => {
     if (!pendingSplineResult) return
     if (pendingSplineResult.layerId === selectedLayerId && selectedLayer?.spline) splineEdit.enter(pendingSplineResult.mode, pendingSplineResult.ids)
@@ -1895,6 +1897,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       if (result) setPendingSplineResult(result)
                     }}
                     splineEdit={splineEdit}
+                    geometryEditActive={geometryEdit.active}
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineOutline.result}
@@ -2084,6 +2087,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 <NumericPropertyProvider scene={scene} layerId={selectedLayerId ?? undefined} dispatch={dispatchCommand} getScene={editor.getScene}
                   isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                 <GeometryEditPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
+                  editMode={geometryEdit}
                   selectedIds={Array.from(isolatedSelectedIds)} conversionDisabled={isPlaying || manualPreview || !!detail.session}
                   splineModeControls={<SplineModeControls controller={splineEdit}
                     disabled={modifierOutputReadOnly(selectedLayer) || isPlaying || manualPreview || !!detail.session || !!selectedLayer?.locked || !!selectedLayer?.hidden || !!selectedLayer?.frozen || !!selectedLayer?.instanceOf} />}

@@ -7,6 +7,7 @@ import type { SplineModelingPanelProps } from '@/components/panels/SplineModelin
 import { modifierOutputReadOnly } from '@/lib/modifiers'
 import type { Layer } from '@/lib/types'
 import ModifierStackPanel from './ModifierStackPanel'
+import type { GeometryEditMode } from './useGeometryEditMode'
 
 export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, 'operation'> {
   readonly selectedPointIds?: readonly string[]
@@ -20,21 +21,31 @@ export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, '
   readonly splineModeControls?: ReactNode
   /** Active context-menu tool preview; separate from persisted modifiers. */
   readonly splineToolPreview?: ReactNode
+  /** Host-owned transient session; inactive panels retain selection identity only. */
+  readonly editMode?: GeometryEditMode
 }
 
-/** Edit dock separates mode/selection properties and a persistent ordered stack. Mode controls stay ahead of advanced tools;
- * only the selected modifier mounts its settings. Scene/history remain editor-owned. */
+/** Edit dock retains selected-layer identity outside its transient session.
+ * Only active sessions mount source tools and the persistent ordered stack;
+ * the selected modifier owns its settings. Scene/history remain editor-owned. */
 export default function GeometryEditPanel(props: GeometryEditPanelProps) {
   const { layer } = props
   const multiple = (props.selectedIds?.length ?? 1) > 1
   const supported = layer && ['shape', 'spline', 'mesh2d'].includes(layer.type)
+  const editing = !props.editMode || props.editMode.active
   return <div className="h-full min-h-0 space-y-4 overflow-auto bg-gray-900 p-3 text-xs text-gray-200" data-panel="geometry-edit">
     {supported && <header className="flex items-center justify-between gap-2">
       <h2 className="truncate font-semibold" title={layer.name}>{multiple ? `${props.selectedIds!.length} objects selected` : layer.name}</h2>
       {!multiple && <span className="shrink-0 text-gray-400">{layer.type === 'shape' ? 'Basic Shape' : layer.type === 'spline' ? 'Spline' : '2D Mesh'}</span>}
     </header>}
-    {!multiple && layer?.type === 'spline' && layer.spline && <SplineSettings key={layer.id} {...props} layer={layer} />}
-    {!multiple && layer?.type === 'mesh2d' && layer.mesh2d && <MeshSettings key={layer.id} {...props} layer={layer} />}
+    {!multiple && supported && layer.type !== 'shape' && props.editMode && <button type="button"
+      disabled={!editing && (props.conversionDisabled || layer.locked || layer.hidden || layer.frozen || !!layer.instanceOf)}
+      onClick={editing ? props.editMode.exit : props.editMode.enter}
+      className="min-h-9 rounded border border-orange-400/60 bg-orange-500/10 px-3 py-1.5 text-orange-100 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-50">
+      {editing ? 'Exit edit mode' : 'Enter edit mode'}
+    </button>}
+    {editing && !multiple && layer?.type === 'spline' && layer.spline && <SplineSettings key={layer.id} {...props} layer={layer} />}
+    {editing && !multiple && layer?.type === 'mesh2d' && layer.mesh2d && <MeshSettings key={layer.id} {...props} layer={layer} />}
     {!multiple && layer?.type === 'shape' && layer.modifierStack && <ModifierStackPanel {...props} layer={layer} />}
     {!multiple && layer?.type === 'shape' && <p className="text-gray-400">Basic Shape parameters are in Properties. Select a Spline or 2D Mesh for geometry editing.</p>}
     {!supported && <p className="text-gray-400">Select a Spline or 2D Mesh to edit its geometry.</p>}
@@ -52,9 +63,9 @@ function SplineSettings({ layer, splineModeControls, splineSourceSettings, splin
   </>
 }
 
-/** Mesh-only modifier list and separate source/texture/pin settings. Deformation
- * Clip is the currently supported Mesh modifier; appearance is not mislabeled
- * as a Spline modifier. Native mesh controls retain their command contracts. */
+/** Mesh-only modifier list and separate source/texture/pin settings. Modifier
+ * registration owns the available algorithms; native source controls retain
+ * their command contracts and are mounted only during an Edit session. */
 function MeshSettings({ layer, ...props }: GeometryEditPanelProps & { layer: Layer }) {
   const [selected, setSelected] = useState<Mesh2DSettingsSection>('source')
   const scene = props.getScene()

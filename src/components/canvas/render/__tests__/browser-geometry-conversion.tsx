@@ -9,6 +9,9 @@ import type { Layer } from '@/lib/types'
 import { prepareGeometryConversion, type ConversionTarget } from '@/lib/editor/commands-geometry-conversion'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { containsMesh2DPoint } from '@/lib/geometry/mesh2d/Mesh2DGeometryQueries'
+import { useSplineEditSelection } from '@/components/splineEdit/useSplineEditSelection'
+import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
+import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
 
 /** Synthetic, unpersisted frame-with-hole plus separate island. Every command
  * and canvas/panel below is production code; no connected document is touched. */
@@ -32,8 +35,11 @@ const assets = new Map()
 function Subject() {
   const editor = useEditorState(initial), snap = useSnapSettings()
   const [selected, setSelected] = useState(layers.map(layer => layer.id))
+  const [tool, setTool] = useState<'select' | 'move' | 'scale' | 'rotate'>('select')
   const ids = useMemo(() => new Set(selected), [selected])
   const layer = editor.scene.layers.find(item => item.id === selected[0]) ?? null
+  const splineEdit = useSplineEditSelection(selected.length === 1 ? layer : null, editor.getDocumentSignal())
+  const editMode = useGeometryEditMode(selected.length === 1 ? layer : null, splineEdit, editor.getDocumentSignal())
   const convert = (target: ConversionTarget) => {
     const plan = prepareGeometryConversion(editor.getScene(), selected, target)
     editor.dispatchCommand(plan.command); setSelected([plan.layerId])
@@ -45,6 +51,7 @@ function Subject() {
       <button onClick={() => setSelected(editor.scene.layers.filter(layer => layer.id !== 'rounded').map(layer => layer.id))}>Select frame and island</button>
       <button onClick={() => setSelected(['rounded'])}>Select rounded shape</button>
       <button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button>
+      {(['select', 'move', 'scale', 'rotate'] as const).map(mode => <button key={mode} aria-pressed={tool === mode} onClick={() => setTool(mode)}>{mode}</button>)}
     </nav>
     <output aria-label="Conversion acceptance" className="block px-3 pb-3">
       Type {layer?.type} · Elements {spline ? Object.keys(spline.subShapes).length : '—'} ·
@@ -54,13 +61,15 @@ function Subject() {
     <div className="flex h-[calc(100vh-80px)]">
       <section className="min-w-0 flex-1"><SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} timeMs={0}
         menuHandlers={{ convertToSpline: () => convert('spline'), convertToMesh2D: () => convert('mesh2d') }}
-        selectedLayerId={selected[0] ?? null} selectedLayerIds={ids} isPlaying={false} toolMode="select"
+        selectedLayerId={selected[0] ?? null} selectedLayerIds={ids} isPlaying={false} toolMode={tool} splineEdit={splineEdit} geometryEditActive={editMode.active}
         onSelectLayer={(id, shift) => setSelected(previous => !id ? [] : shift ? Array.from(new Set([...previous, id])) : [id])} /></section>
       <aside className="w-[400px] border-l border-gray-700">
         <GeometryEditPanel key={`${layer?.id}:${layer?.type}`} layer={layer} selectedIds={selected}
+          editMode={editMode}
           getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
           isTransactionActive={editor.isTransactionActive} dispatchCommand={editor.dispatchCommand}
           onSelectLayer={id => setSelected([id])} selectedPointId={null} onClearPoint={() => {}}
+          splineModeControls={<SplineModeControls controller={splineEdit} />}
           onLayerChange={next => { const before = editor.getScene().layers.find(item => item.id === next.id)!; editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, before)) }} />
       </aside>
     </div>

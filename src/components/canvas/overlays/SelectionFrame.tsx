@@ -67,8 +67,8 @@ export function SelectionFrame({
           title="Drag to rotate (Shift = snap 15°)"
           className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2
                      bg-white border border-blue-400 rounded-full shadow-sm pointer-events-auto
-                     hover:scale-125 hover:border-blue-300 transition-transform"
-          style={{ left: `${r.cx}px`, top: `${r.cy}px`, cursor: 'alias' }}
+                     hover:scale-125 hover:border-blue-300 transition-transform cursor-rotate"
+          style={{ left: `${r.cx}px`, top: `${r.cy}px` }}
         />
       ))}
 

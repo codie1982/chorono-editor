@@ -17,9 +17,9 @@ export function selectionGeometry(layer: Layer, frame: OverrideMap, assets: read
 
 /**
  * Identifies layers whose authored geometry, rather than `size`, owns the
- * editor selection frame. Mesh2D source controls regenerate their triangles;
- * exposing a generic size-box resize would move only retained metadata and
- * desynchronise the visible mesh. Call this with an instance-resolved layer.
+ * editor selection frame. Its handles scale the layer transform rather than
+ * resizing retained size metadata, preserving mesh/spline source geometry.
+ * Call this with an instance-resolved layer.
  */
 export function usesGeometryDrivenSelectionFrame(layer: Layer | null | undefined): boolean {
   return layer?.type === 'path' || layer?.type === 'spline'

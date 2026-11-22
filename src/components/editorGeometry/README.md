@@ -54,6 +54,14 @@ worker previews; those are separate one-shot geometry tools. The optional
 `splineToolPreview` slot shows their active Apply/Cancel controls above the stack. Edit-mode toggles
 stay above the stack; the inspector appears below. Active mode replaces the layer
 bbox with an orange boundary, red selected elements and a named viewport badge.
+The page's `useGeometryEditMode` scopes Edit-panel visibility to one selection and
+document. Outside Edit mode the panel keeps the selected name/type and an **Enter
+edit mode** action; source controls, modifier settings and mesh tools mount only
+inside the session. Mesh/generated-spline settings sessions have a viewport badge
+and suppress layer gizmos; writable splines reuse the Point/Edge/Object controller.
+Exit, mode-toggle exit, selection change and document replacement restore layer
+tools without writing source/history. Normal geometry-driven frames use the shared
+transform resize gesture, preserving source points, topology and modifier recipes.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.

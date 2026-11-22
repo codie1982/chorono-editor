@@ -42,7 +42,7 @@ export function AffineSelectionFrame({ width, height, zoom, worldMatrix,
       const y = point.y + (point.y - center.y) / length * 16
       return <div key={`rotate-${index}`} title="Drag to rotate (Shift = snap 15°)"
         onPointerDown={onRotatePointerDown}
-        className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 pointer-events-auto grid place-items-center cursor-alias"
+        className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 pointer-events-auto grid place-items-center cursor-rotate"
         style={{ left: x, top: y }}><span className="h-2 w-2 rounded-full bg-white border border-blue-500 shadow" /></div>
     })}
     {onHandlePointerDown && handles.map(handle => <div key={handle.id}
