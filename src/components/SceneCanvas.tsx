@@ -1,4 +1,5 @@
 'use client'
+import { transformAxisFrame, type TransformSpace } from '@/lib/canvas/math/transformAxes'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
 import { projectBooleanOperations } from '@/lib/booleanOperations/projectOperations'
 import { useEditorDisplayAvailable } from '@/components/editorDisplay/useEditorDisplay'
@@ -221,6 +222,8 @@ interface Props {
    *  'touching' (default) = any layer whose bounds overlap the drawn shape
    *  'inside'             = only layers whose bounds fit fully within the shape */
   selectionContainMode?: 'inside' | 'touching'
+  /** Shared toolbox basis for interactive Move/Scale and Edit constraints. */
+  transformSpace?: TransformSpace
   /** Persistent region preference for empty-space drags, independent of tool. */
   selectionStyle?: SelectionRegionStyle
   /** Precision settings owned by the page and edited through the main Snap menu. */
@@ -326,7 +329,7 @@ export default function SceneCanvas({
   textEditRequestId, onTextEditRequestDone,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
-  onSelectByGeometry, selectionContainMode = 'touching', selectionStyle = 'box',
+  onSelectByGeometry, selectionContainMode = 'touching', selectionStyle = 'box', transformSpace = 'scene',
   fullscreen, onToggleFullscreen,
   menuHandlers, onAfterLayerCommit, onAfterCloneDrag, buildLayerCommitCommands,
   contentInspection = false,
@@ -589,7 +592,7 @@ export default function SceneCanvas({
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onAfterCloneDrag, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
     timeMs, overrides, ...meshFrameQuery,
-    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}:${panMode}:${toolMode}:${splineEditController.layerId}:${splineEditController.active}:${splineEditController.mode}:${geometryEditActive}`,
+    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${transformSpace}:${motionEditing}:${arrayEditing}:${placingShape}:${panMode}:${toolMode}:${splineEditController.layerId}:${splineEditController.active}:${splineEditController.mode}:${geometryEditActive}`,
     onWarning: setTransformWarning,
   })
 
@@ -613,7 +616,7 @@ export default function SceneCanvas({
   })
 
   const splineViewport = useSplineViewportEditing({ controller: splineEditController, layer: splineSource, scene, editor, canvasRef,
-    overrides, timeMs, zoom, panMode, toolMode, containment: selectionContainMode, drag: { dragRef, startDrag }, getContext: getShortcutContext,
+    overrides, timeMs, zoom, panMode, toolMode, transformSpace, containment: selectionContainMode, drag: { dragRef, startDrag }, getContext: getShortcutContext,
     enabled: !hideEditorUI && !contentInspection && !motionEditing && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && !pathPickMode,
     isSelecting: () => isSelectionActive(), warning: setTransformWarning })
   const preferredRegion = selectionToolMode?.replace('selection-', '') as SelectionRegionStyle | undefined
@@ -646,7 +649,7 @@ export default function SceneCanvas({
       interactionTrace.recordEvent('object', 'start-rejected', { reason: 'transform-preparation', activeId })
       setTransformWarning(prepared.reason); return
     }
-    const primary = prepared.targets.find(target => target.id === activeId) ?? prepared.targets[0]
+    const primary = prepared.activeTarget
     if (!primary) return
     event.preventDefault()
     setTransformWarning(null)
@@ -659,12 +662,13 @@ export default function SceneCanvas({
       startClientX: event.clientX, startClientY: event.clientY,
       width: primary.originalLayer.size?.width ?? 80,
       height: primary.originalLayer.size?.height ?? 24,
+      axisFrame: transformAxisFrame(transformSpace, primary.worldMatrix),
       axisLock, cloneMode: cloneMode ?? resolveCloneDragMode(event),
     }
     // The body or an off-artboard proxy may be replaced during selection or
     // cross back inside. Capture the persistent native canvas, not its proxy.
     startDrag({ pointerId: event.pointerId, currentTarget: canvasRef.current ?? event.currentTarget })
-  }, [scene, timeMs, overrides, editor, dragRef, startDrag, pivotMode, motionEditing, arrayEditing])
+  }, [scene, timeMs, overrides, editor, dragRef, startDrag, pivotMode, motionEditing, arrayEditing, transformSpace])
 
   /** Outside-composition wireframes use the same root selection and native
    * transform owner as painted bodies. Pan bubbles to the viewport; ordinary
@@ -788,7 +792,7 @@ export default function SceneCanvas({
         e.preventDefault(); e.stopPropagation(); editor.beginTransaction()
         dragRef.current = { kind: 'meshGeometry', layerId: selectedLayer.id, originalLayer: selectedLayer,
           modifierId, operation, startClientX: e.clientX, startClientY: e.clientY,
-          startLocal, pivot, worldToLocal: inverse }
+          startLocal, pivot, worldToLocal: inverse, axisFrame: transformAxisFrame(transformSpace, matrix) }
         startDrag(e)
       } catch (error) { setTransformWarning(error instanceof Error ? error.message : String(error)) }
       return
@@ -853,7 +857,7 @@ export default function SceneCanvas({
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
     beginMoveForSelection, layerIndex, splineViewport, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan, modelCamera,
-    regionSelectionEnabled, regionStyle, hideEditorUI, geometryEditing, meshEditModifierId])
+    regionSelectionEnabled, regionStyle, hideEditorUI, geometryEditing, meshEditModifierId, transformSpace])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -946,17 +950,17 @@ export default function SceneCanvas({
     const ids = selectedLayerIds?.size ? Array.from(selectedLayerIds) : [selectedLayerId]
     const prepared = prepareTransformTargets(scene, ids, timeMs, overrides, { activeId: selectedLayerId, pivotMode })
     if (!prepared.ok) { setTransformWarning(prepared.reason); return }
-    const primary = prepared.targets.find(target => target.id === selectedLayerId) ?? prepared.targets[0]
+    const primary = prepared.activeTarget
     if (!primary) return
     setTransformWarning(null)
     editor.beginTransaction()
     dragRef.current = {
       kind: 'scaleAxis', layerId: primary.id, originalLayer: primary.originalLayer,
-      axis, startClientX: e.clientX, startClientY: e.clientY,
+      axis, axisFrame: transformAxisFrame(transformSpace, primary.worldMatrix), startClientX: e.clientX, startClientY: e.clientY,
       targets: prepared.targets, pivotX: prepared.pivot.x, pivotY: prepared.pivot.y,
     }
     startDrag(e)
-  }, [scene, timeMs, overrides, selectedLayerId, selectedLayerIds, editor, dragRef, startDrag, pivotMode])
+  }, [scene, timeMs, overrides, selectedLayerId, selectedLayerIds, editor, dragRef, startDrag, pivotMode, transformSpace])
 
   /** Common bounding handles scale the whole selection about the opposite
    * handle, while retaining each root's source geometry and custom anchor. */
@@ -975,7 +979,7 @@ export default function SceneCanvas({
     }, null)
     const resize = bounds && selectionResize(bounds, handle, { x: 0, y: 0 }, false)
     if (!bounds || !resize) { setTransformWarning('This selection has no resizable bounds.'); return }
-    const primary = prepared.targets.find(target => target.id === selectedLayerId) ?? prepared.targets[0]
+    const primary = prepared.activeTarget
     if (!primary) return
     setTransformWarning(null)
     editor.beginTransaction()
@@ -1007,7 +1011,7 @@ export default function SceneCanvas({
     const ids = selectedLayerIds?.size ? Array.from(selectedLayerIds) : [selectedLayerId]
     const prepared = prepareTransformTargets(scene, ids, timeMs, overrides, { activeId: selectedLayerId, pivotMode })
     if (!prepared.ok) { setTransformWarning(prepared.reason); return }
-    const primary = prepared.targets.find(target => target.id === selectedLayerId) ?? prepared.targets[0]
+    const primary = prepared.activeTarget
     if (!primary) return
     const gesture = prepared.targets.length === 1
       ? beginRotationGesture(primary.originalLayer, scene, timeMs, pointer, overrides) ?? undefined
@@ -1141,6 +1145,7 @@ export default function SceneCanvas({
     ? prepareTransformTargets(scene, selectedLayerIds, timeMs, displayOverrides,
       { activeId: selectedLayerId ?? undefined, pivotMode }) : null,
   [scene, selectedLayerIds, selectedLayerId, timeMs, displayOverrides, hideEditorUI, pivotMode])
+  const selectedAxisFrame = transformAxisFrame(transformSpace, multiPreparation?.ok ? multiPreparation.activeTarget.worldMatrix : selectedWorldMatrix)
   // Rotation/axis-scale tools display their fixed operation pivot. A frame
   // resize instead pins an opposite handle for its calculation; that corner is
   // not the object's origin or the selection's live rotation center.
@@ -1658,17 +1663,17 @@ export default function SceneCanvas({
             onRotatePointerDown={gizmo.cornerRot ? beginRotate : undefined} />}
 
           {/* Move-mode axis arrows — X (red) / Y (blue) / center square.
-              Anchored at the layer's pivot in world space, screen-aligned so
-              they don't rotate with the layer (matches 3DS Max behaviour). */}
+              Anchored at the shared world pivot; directions follow the toolbox's
+              Scene/Local preference and the evaluated active root. */}
           {splineViewport.moveGizmo && <div role="group" aria-label="Spline edit move axes">
             <MoveAxisGizmo x={splineViewport.moveGizmo.point.x * zoom} y={splineViewport.moveGizmo.point.y * zoom}
-              onAxisPointerDown={splineViewport.moveGizmo.start} />
+              axisFrame={splineViewport.moveGizmo.axisFrame} onAxisPointerDown={splineViewport.moveGizmo.start} />
           </div>}
           {gizmo.axisMove && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <MoveAxisGizmo
               x={selectedWorldPivot.x * zoom}
               y={selectedWorldPivot.y * zoom}
-              onAxisPointerDown={beginAxisMove}
+              axisFrame={selectedAxisFrame} onAxisPointerDown={beginAxisMove}
             />
           )}
 
@@ -1679,7 +1684,7 @@ export default function SceneCanvas({
             <ScaleAxisGizmo
               x={selectedWorldPivot.x * zoom}
               y={selectedWorldPivot.y * zoom}
-              onAxisPointerDown={beginScaleAxis}
+              axisFrame={selectedAxisFrame} onAxisPointerDown={beginScaleAxis}
             />
           )}
 

@@ -17,10 +17,12 @@ import type { SplineEditController } from './useSplineEditSelection'
 import { splineEditCommand } from './commands'
 import { hitTestLayersAt } from '@/lib/renderer'
 import { useSplineAttachPicking } from './useSplineAttachPicking'
+import { transformAxisFrame, type TransformSpace } from '@/lib/canvas/math/transformAxes'
 
 interface Options {
   controller: SplineEditController; layer: Layer | null | undefined; scene: ChronoScene; editor: EditorStateReturn
   canvasRef: RefObject<HTMLCanvasElement>; overrides?: OverrideMap; timeMs: number; zoom: number
+  transformSpace?: TransformSpace
   enabled: boolean; panMode: boolean; toolMode?: string; containment: 'inside' | 'touching'
   drag: Pick<UseCanvasDragReturn, 'dragRef' | 'startDrag'>
   isSelecting?: () => boolean
@@ -43,6 +45,7 @@ export function useSplineViewportEditing(options: Options) {
   const selected = controller.active && controller.layerId === layer?.id
   const active = selected && options.enabled
   const geometry = useMemo(() => layer ? resolveSplineEditGeometry(layer, scene, timeMs, overrides) : null, [layer, scene, timeMs, overrides])
+  const axisFrame = transformAxisFrame(options.transformSpace ?? 'scene', geometry?.worldMatrix)
   const canPick = active && !options.panMode && options.toolMode !== 'pan' && !!geometry
   const writable = !!layer && !layer.hidden && !layer.locked && !layer.frozen && !layer.instanceOf
   const attachPick = useSplineAttachPicking({ layer, controller, getScene: options.editor.getScene,
@@ -60,7 +63,7 @@ export function useSplineViewportEditing(options: Options) {
     return id
   }
   /** Body and axis controls share the same validated native geometry gesture;
-   * constraints are world axes, converted through the complete parent inverse. */
+   * constraints use the captured toolbox axes, then the complete parent inverse. */
   const beginGeometry = (pointIds: ReadonlySet<string>, operation: 'move' | 'rotate' | 'scale',
     start: { x: number; y: number }, event: React.PointerEvent, axisLock: 'x' | 'y' | null = null) => {
     if (!canPick || !writable || !geometry || !layer?.spline || options.drag.dragRef.current || options.editor.isTransactionActive()) return
@@ -72,7 +75,7 @@ export function useSplineViewportEditing(options: Options) {
       if (!pivot || operation !== 'move' && Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y) < 1e-6) return
       options.editor.beginTransaction()
       options.drag.dragRef.current = { kind: 'splineGeometry', layerId: layer.id, originalLayer: layer, pointIds: Array.from(pointIds),
-        operation, axisLock, startClientX: event.clientX, startClientY: event.clientY, startLocal, pivot, worldToLocal: geometry.worldToLocal }
+        operation, axisLock, axisFrame, startClientX: event.clientX, startClientY: event.clientY, startLocal, pivot, worldToLocal: geometry.worldToLocal }
       options.drag.startDrag(event)
     } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
   }
@@ -109,7 +112,7 @@ export function useSplineViewportEditing(options: Options) {
     if (!source) return true
     options.editor.beginTransaction()
     const base = { layerId: layer.id, originalLayer: layer, startClientX: event.clientX, startClientY: event.clientY,
-      startX: source.x, startY: source.y, worldToLocal: geometry.worldToLocal }
+      startX: source.x, startY: source.y, axisFrame, worldToLocal: geometry.worldToLocal }
     options.drag.dragRef.current = target.kind === 'handle'
       ? { ...base, kind: 'splineHandle', pointId: target.pointId, handleKind: target.handleKind }
       : { ...base, kind: 'splinePoint', pointId: id, pointIds: ids }
@@ -165,7 +168,7 @@ export function useSplineViewportEditing(options: Options) {
   const movePoints = layer?.spline ? splineSelectionPoints(layer.spline, controller.mode, controller.ids) : new Set<string>()
   const movePivot = canPick && writable && !controller.attaching && ['select', 'move', undefined].includes(options.toolMode)
     && geometry ? splineSelectionPivot(geometry.worldSpline, movePoints) : null
-  const moveGizmo = movePivot ? { point: movePivot, start: (axis: 'x' | 'y' | null) => (event: React.PointerEvent) => {
+  const moveGizmo = movePivot ? { point: movePivot, axisFrame, start: (axis: 'x' | 'y' | null) => (event: React.PointerEvent) => {
     if (event.button !== 0) return
     event.preventDefault(); event.stopPropagation()
     const canvas = options.canvasRef.current

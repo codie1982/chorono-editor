@@ -3,7 +3,7 @@ import type { MoveState, RotateState, ScaleAxisState } from '../../types/canvasD
 import type { CanvasDragPreview, CanvasPointerSample, CanvasLayerChange } from './dragTypes'
 import { translateTransformTargets, rotateTransformTargets, scaleTransformTargets,
   type PreparedTransformTarget } from '@/lib/canvas/math/preparedTransforms'
-import { applyAxisLock } from '@/lib/canvas/math/moveMath'
+import { constrainAxisDelta } from '@/lib/canvas/math/transformAxes'
 import { scaleFactorFromDelta, MIN_SCALE } from '@/lib/canvas/math/scaleMath'
 import { angleDegFromPivot, wrapAngle180 } from '@/lib/canvas/math/rotateMath'
 import { rotationFromPointer } from '@/lib/canvas/math/rotationGesture'
@@ -68,7 +68,7 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
   let result: ReturnType<typeof translateTransformTargets>
   let label: string
   if (drag.kind === 'move') {
-    const locked = applyAxisLock(delta.x, delta.y, drag.axisLock, event.shiftKey)
+    const locked = constrainAxisDelta(delta, drag.axisLock, event.shiftKey, drag.axisFrame)
     let dx = locked.dx, dy = locked.dy
     if (bounds.moving && (dx !== 0 || dy !== 0)) {
       const rect = { ...bounds.moving, x: bounds.moving.x + dx, y: bounds.moving.y + dy }
@@ -78,17 +78,29 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
       if (snap) { dx = snap.point.x - bounds.moving.x; dy = snap.point.y - bounds.moving.y; guides = snap.guides
         if (guides.length) snapPoint = { x: guides.find(g => g.axis === 'v')?.position ?? snap.point.x, y: guides.find(g => g.axis === 'h')?.position ?? snap.point.y } }
       // Axis constraints survive object/grid snap as well as the raw pointer.
-      if (drag.axisLock === 'x' || (event.shiftKey && locked.dy === 0)) dy = 0
-      if (drag.axisLock === 'y' || (event.shiftKey && locked.dx === 0)) dx = 0
+      const constrained = constrainAxisDelta({ x: dx, y: dy }, locked.axis, false, drag.axisFrame)
+      dx = constrained.dx; dy = constrained.dy
     }
     // Command/Ctrl-drag copy gestures use the same snap engine to keep the
     // duplicate on the horizontal or vertical axis without requiring Shift.
     // This also applies when the moving bounds are unavailable (for example
     // an empty/off-artboard geometry proxy).
     if (drag.cloneMode && engine) {
-      const axisSnapped = engine.snapTranslationAxis({ x: dx, y: dy }, input.zoom)
-      dx = axisSnapped.x
-      dy = axisSnapped.y
+      const coordinates = drag.axisFrame?.invert().applyToVector({ x: dx, y: dy }) ?? { x: dx, y: dy }
+      const axisSnapped = engine.snapTranslationAxis(coordinates, input.zoom)
+      const world = drag.axisFrame?.applyToVector(axisSnapped) ?? axisSnapped
+      const constrained = constrainAxisDelta(world, locked.axis, false, drag.axisFrame)
+      dx = constrained.dx; dy = constrained.dy
+    }
+    // Show only guides actually reached after the axis constraint. A snap in
+    // screen axes must never pull a Local drag away from its selected axis.
+    if (bounds.moving) {
+      const rect = bounds.moving
+      guides = guides.filter(guide => (guide.axis === 'v'
+        ? [rect.x + dx, rect.x + dx + rect.width / 2, rect.x + dx + rect.width]
+        : [rect.y + dy, rect.y + dy + rect.height / 2, rect.y + dy + rect.height])
+        .some(value => Math.abs(value - guide.position) < 1e-5))
+      if (!guides.length) snapPoint = undefined
     }
     result = translateTransformTargets(targets, { x: dx, y: dy })
     label = `${drag.cloneMode ? drag.cloneMode === 'instance' ? '⧉ Instance   ' : '⧉ Copy   ' : ''}ΔX ${Math.round(dx)}   ΔY ${Math.round(dy)}`
@@ -131,18 +143,19 @@ export function previewTransformDrag(input: TransformPreviewInput): CanvasDragPr
     label = `${(resize.factorX * 100).toFixed(0)}% × ${(resize.factorY * 100).toFixed(0)}%  (${targets.length} layers)`
   } else {
     const axis = event.shiftKey ? 'both' : drag.axis
-    const factor = scaleFactorFromDelta(delta.x, delta.y, axis)
+    const coordinates = drag.axisFrame?.invert().applyToVector(delta) ?? delta
+    const factor = scaleFactorFromDelta(coordinates.x, coordinates.y, axis)
     // Preserve reflections; clamp positive factors instead of forcing a negative
     // authored scale to positive via the legacy clampScale helper.
     const fx = Math.max(MIN_SCALE, axis === 'y' ? 1 : engine?.snapScale(factor.factorX) ?? factor.factorX)
     const fy = Math.max(MIN_SCALE, axis === 'x' ? 1 : engine?.snapScale(factor.factorY) ?? factor.factorY)
-    if (targets.length === 1) {
+    if (targets.length === 1 && !drag.axisFrame) {
       const transform = targets[0].transform
       return transformPreview(base, targets, new Map([[targets[0].id, { ...transform,
         scaleX: transform.scaleX * fx, scaleY: transform.scaleY * fy }]]), [], `${(fx * 100).toFixed(0)}% × ${(fy * 100).toFixed(0)}%`)
     }
     if (drag.pivotX === undefined || drag.pivotY === undefined) throw new Error('The selection scale pivot is missing.')
-    result = scaleTransformTargets(targets, { x: drag.pivotX, y: drag.pivotY }, fx, fy)
+    result = scaleTransformTargets(targets, { x: drag.pivotX, y: drag.pivotY }, fx, fy, drag.axisFrame)
     label = `${(fx * 100).toFixed(0)}% × ${(fy * 100).toFixed(0)}%  (${targets.length} layers)`
   }
   if (!result.ok) throw new Error(result.reason)

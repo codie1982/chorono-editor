@@ -251,7 +251,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [splineContinuationPointId, setSplineContinuationPointId] = useState<string | null>(null)
   const [pendingSplineResult, setPendingSplineResult] = useState<SplineEditRequest | null>(null)
   const splineDrawingPreferences = useSplineDrawingPreferences()
-  const { mode: toolMode, setMode: setToolMode, setPan: setPanMode, togglePan, chooseTool, selectionStyle, setSelectionStyle } = useToolMode()
+  const { mode: toolMode, setMode: setToolMode, setPan: setPanMode, togglePan, chooseTool, selectionStyle, setSelectionStyle, transformSpace, setTransformSpace } = useToolMode()
   const changeToolMode = chooseTool
   const [manualPreview, setManualPreview] = useState(false)
   const [selectedTlId,     setSelectedTl]    = useState<string>(scene.timelines[0]?.id ?? '')
@@ -1613,6 +1613,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
 
         <ToolGroup
           mode={toolMode}
+          transformSpace={transformSpace}
+          onTransformSpaceChange={setTransformSpace}
           onChange={changeToolMode}
           onPanToggle={togglePan}
           selectionStyle={selectionStyle}
@@ -1919,6 +1921,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     }}
                     selectionContainMode={selectionContainMode}
                     selectionStyle={selectionStyle}
+                    transformSpace={transformSpace}
                     fullscreen={fullscreenCanvas}
                     onToggleFullscreen={() => setFullscreenCanvas((v) => !v)}
                     onAfterLayerCommit={autoKeyChangedProps}

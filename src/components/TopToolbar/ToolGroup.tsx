@@ -1,5 +1,6 @@
 'use client'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import type { TransformSpace } from '@/lib/canvas/math/transformAxes'
 import { legacySelectionStyle, selectionRegionForTool, type SelectionRegionStyle } from '@/lib/selection/selectionGesture'
 
 export type ToolMode =
@@ -27,6 +28,8 @@ export type SelectionToolMode = 'selection-box' | 'selection-lasso' | 'selection
 export type SelectionContainMode = 'inside' | 'touching'
 
 interface ToolGroupProps {
+  transformSpace?: TransformSpace
+  onTransformSpaceChange?: (space: TransformSpace) => void
   mode:     ToolMode
   onChange: (m: ToolMode) => void
   /** Shared toggle restores the editor's previous tool instead of Select. */
@@ -83,6 +86,7 @@ function Divider() {
  */
 export default function ToolGroup({
   mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange, selectionStyle = 'box', onSelectionStyleChange, selectionMode, onSelectionModeChange,
+  transformSpace = 'scene', onTransformSpaceChange,
 }: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
   const style = legacySelectionStyle(mode) ?? (selectionMode ? legacySelectionStyle(selectionMode) : null) ?? selectionStyle
@@ -124,6 +128,14 @@ export default function ToolGroup({
           <path d="M9 9 L13 13 M9 13 L13 13 L13 9" />
         </svg>
       </ToolBtn>
+      {onTransformSpaceChange && <label className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-gray-600 bg-gray-800 px-2 text-xs text-gray-300">
+        Axes
+        <select aria-label="Transform axes" value={transformSpace} onChange={event => onTransformSpaceChange(event.target.value as TransformSpace)}
+          title="Scene: horizontal / vertical. Local: follows the active object's rotation and parents."
+          className="min-w-0 rounded bg-gray-800 py-1 text-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">
+          <option value="scene">Scene</option><option value="local">Local</option>
+        </select>
+      </label>}
       <ToolBtn active={mode === 'anchor'} hint="Anchor / Pivot" shortcut="A" onClick={() => onChange('anchor')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="3" />

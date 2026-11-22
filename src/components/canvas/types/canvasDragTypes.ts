@@ -10,6 +10,8 @@ import type { PathBounds } from '@/lib/geometry/computePathBounds'
 export type Handle = SelectionResizeHandle
 
 export interface MoveState {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'move'
   /** Primary (the layer actually clicked). Used for snapshot + selection focus. */
   layerId: string
@@ -136,6 +138,8 @@ export interface NewAnchorDrawDrag {
 /** Scale-mode axis gizmo drag — modifies transform.scaleX / scaleY
  *  rather than the layer's width/height (which is what ResizeState does). */
 export interface ScaleAxisState {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'scaleAxis'
   layerId: string
   originalLayer: Layer
@@ -165,6 +169,8 @@ export interface ScaleAxisState {
 
 /** BL-73 Sprint 4 — dragging a spline on-curve point. */
 export interface SplinePointDrag {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'splinePoint'
   /** Optional multi-point selection; omitted preserves the legacy single-point drag. */
   pointIds?: readonly string[]
@@ -182,6 +188,8 @@ export interface SplinePointDrag {
 
 /** BL-73 Sprint 4 — dragging a spline bezier handle. */
 export interface SplineHandleDrag {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'splineHandle'
   layerId: string
   originalLayer: Layer
@@ -200,12 +208,14 @@ export interface SplineHandleDrag {
  * pinned at gesture start, with unique point IDs and immutable source geometry.
  * No layer transform or keyframe target is edited by this drag. */
 export interface SplineGeometryDrag {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'splineGeometry'
   layerId: string
   originalLayer: Layer
   pointIds: readonly string[]
   operation: 'move' | 'rotate' | 'scale'
-  /** Hard composition/world-axis constraint from the screen-aligned Edit gizmo. */
+  /** Hard X/Y constraint in the captured toolbox axis frame. */
   axisLock?: 'x' | 'y' | null
   startClientX: number
   startClientY: number

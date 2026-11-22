@@ -15,6 +15,8 @@ import { SplineEditInspector } from '../SplineEditInspector'
 import { useSplineOutline } from '../outline/useSplineOutline'
 import { useSplineEditSelection, type SplineEditController } from '../useSplineEditSelection'
 import { useEditorState, type EditorStateReturn } from '@/app/hooks/useEditorState'
+import { useToolMode } from '@/app/hooks/useToolMode'
+import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
 import { useKeyboard } from '@/app/hooks/useKeyboard'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
 import { emptyScene, newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
@@ -49,7 +51,8 @@ function Subject({ explorer = false }: { explorer?: boolean } = {}) {
   const [initial] = useState(fixture), editor = useEditorState(initial), snap = useSnapSettings({ persist: false })
   const [drawKind, setDrawKind] = useState<SplinePrimitiveKind | null>(null), [endpoint, setEndpoint] = useState<string | null>(null), [result, setResult] = useState<SplineDrawResult | null>(null)
   const preferences = useSplineDrawingPreferences()
-  const [selected, setSelected] = useState<string | null>('spline'), [time, setTime] = useState(0), [tool, setTool] = useState('select')
+  const [selected, setSelected] = useState<string | null>('spline'), [time, setTime] = useState(0)
+  const tools = useToolMode(), tool = tools.mode, setTool = (value: string) => tools.setMode(value as ToolMode)
   const layer = editor.scene.layers.find(item => item.id === selected) ?? null, controller = useSplineEditSelection(layer, editor.getDocumentSignal())
   const frame = useMemo(() => evaluateSceneFrame(editor.scene, time), [editor.scene, time])
   const [attachWarning, setAttachWarning] = useState('')
@@ -60,12 +63,13 @@ function Subject({ explorer = false }: { explorer?: boolean } = {}) {
     disabled: tool === 'spline-draw', getScene: editor.getScene, dispatch: editor.dispatchCommand, isTransactionActive: editor.isTransactionActive })
   useEffect(() => { if (result) { controller.enter(result.mode, result.ids); setResult(null) } }, [result, controller.enter])
   const arm = (kind: SplinePrimitiveKind, endpointId?: string) => { setDrawKind(kind); setEndpoint(endpointId ?? null); setTool('spline-draw') }
-  const reset = (keyed = false) => { editor.resetScene(fixture(keyed)); setSelected('spline'); setTime(0); setTool('select'); setDrawKind(null); setEndpoint(null) }
+  const reset = (keyed = false) => { editor.resetScene(fixture(keyed)); setSelected('spline'); setTime(0); setTool('select'); tools.setTransformSpace('scene'); setDrawKind(null); setEndpoint(null) }
   useLayoutEffect(() => { live = { editor, controller, selected, select: setSelected, time, setTime, setTool, reset } })
   useKeyboard({ onUndo: editor.undo, onRedo: editor.redo, onPlayToggle: () => {}, onStepBack: () => {}, onStepForward: () => {}, onDuplicateSelected: () => {},
     onClearSelection: () => setSelected(null), onDeleteSelected: () => { if (layer) editor.dispatchCommand(makeDeleteLayerCmd(layer)) }, getContext: () => 'canvas', isTransactionActive: editor.isTransactionActive,
     onNudgeSelected: (x, y) => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { transform: { ...layer.transform, x: layer.transform.x + x, y: layer.transform.y + y } }, layer)) } })
   return <><nav className="flex gap-2"><button onClick={() => reset()}>Reset private scene</button><button onClick={() => setSelected('parent')}>Select parent</button><button onClick={() => setSelected('spline')}>Select spline</button><button onClick={() => { setSelected(null); controller.exit(); arm('line') }}>Draw new line</button><button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button></nav>
+    <div className="overflow-x-auto"><ToolGroup mode={tool} onChange={tools.chooseTool} transformSpace={tools.transformSpace} onTransformSpaceChange={tools.setTransformSpace} /></div>
     <div className="flex border border-gray-600 h-[650px]">
       {explorer && <section aria-label="Scene Explorer" className="w-[250px] shrink-0 flex flex-col">
         {attachWarning && <p role="alert">{attachWarning}</p>}
@@ -76,7 +80,7 @@ function Subject({ explorer = false }: { explorer?: boolean } = {}) {
       </section>}
       <SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={outline.result}
       selectedLayerIds={new Set(selected ? [selected] : [])} onSelectLayer={setSelected} onSelectByGeometry={ids => setSelected(Array.from(ids)[0] ?? null)}
-      timeMs={time} overrides={frame.overrides} isPlaying={false} previewMode={false} toolMode={tool as 'select'} panMode={tool === 'pan'} splineEdit={controller}
+      timeMs={time} overrides={frame.overrides} isPlaying={false} previewMode={false} toolMode={tool} transformSpace={tools.transformSpace} panMode={tool === 'pan'} splineEdit={controller}
       splineDrawKind={drawKind} splineAppendTargetId={selected} splineContinuationPointId={endpoint} splineAutoClose={preferences.autoClose}
       onDrawSplineLine={(_, point) => arm('line', point)} onSplineDrawCommit={next => { setDrawKind(null); setEndpoint(null); setTool('select'); if (next) setResult(next) }}
       selectedTimeline={editor.scene.timelines[0]} getShortcutContext={() => 'canvas'} />
