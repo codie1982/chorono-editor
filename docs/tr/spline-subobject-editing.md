@@ -405,3 +405,19 @@ Point modunda keskin köşeleri seçip **Fillet → Preview Fillet** açın. Rad
 composition px olarak ölçülür; Apply tek Undo, Cancel kaynak/history yazmadan
 çalışır. Yeni yay komşu eğrilere teğettir; sığmayan veya belirsiz yarıçap
 açıklamayla reddedilir. [Kullanım ve sınırlar](spline-fillet.md).
+
+
+### 22 Kasım — gerçek modifier stack ile düzenleme sınırı
+
+Edit panelindeki **Add modifiers** artık ayrı kalıcı örnekler oluşturur. Her
+örnek kendi şema/varsayılan/doğrulamasını taşır. Ayarlar taslakta bekler; Execute
+özgün kaynaktan bütün zinciri çalıştırıp yalnız son sonucu tek Undo ile uygular.
+Etkin Offset/Outline/Chamfer/Fillet çıktısı üretilen geometridir; doğrudan nokta
+düzenlemek için adımları kapatın veya Bake stack kullanın. Conversion-only
+Spline'da nokta düzenlemeleri Convert Spline adımının authored override'ına
+yazılır; açık Rebuild bunları sıfırlar. Viewport edit-mode renkleri ve seçim
+bankası korunur. Eski context-menu worker Preview/Apply araçları ayrı tek seferlik
+araçlardır ve generated-result yazma korumasını paylaşır.
+
+Genel taban geometriye bağlı değildir; Spline/Mesh sözleşmeleri ayrı geometri
+adaptöründedir. [Modifier mimarisi ve genişletme örneği](../../src/lib/modifiers/README.md).

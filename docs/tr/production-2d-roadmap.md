@@ -213,7 +213,13 @@ yeniden kullanımı ve kalıcı conversion stack sözleşmesi
 [Basic Shape dönüşüm planında](plans/basic-shape-conversion-plan.md) tanımlandı.
 Statik geometri conversion v1 uygulandı: sağ tık menüsünde iki hedef,
 kalıcı modifier kayıtları, ortak Boolean Union ile içbükey dış sınır/delik ve
-ayrık element çözümü, kaynak Rebuild, Mesh toleransı ve son stage kaldırma.
+ayrık element çözümü, kaynak Rebuild, Mesh toleransı ve bağımlılığa uygun adım kaldırma.
+Ardından genel `Modifier` tabanı, registry ve sıralı `ModifierStack.execute`
+uygulandı. Spline/Mesh kategorileri ve sınıfa ait ayarlar ortak Edit stack
+üzerinden çalışır; taslaklar Execute ile tek sonuca uygulanır. Aç/kapat, sıra,
+kaldırma, kaynak Rebuild ve Bake tek Undo komutlarıdır. Smooth/detay artırma
+algoritmaları ayrı sonraki işlerdir; yeni topolojiyi kabul eden altyapı
+[modifier sözleşmesinde](../../src/lib/modifiers/README.md) belgelenmiştir.
 Sahnede ayrı bir Spline ara nesnesi zorunlu tutulmaz. Canlı geometri driver'ları
 sessizce bake edilmez; bu sürümde açık tanıyla reddedilir. Gerçek uygulama
 sözleşmesi ve sınırlar [Edit geometri dönüşümlerinde](geometry-conversion.md).

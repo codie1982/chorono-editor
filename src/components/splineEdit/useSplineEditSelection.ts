@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import { emptySplineSelection, pruneSplineSelection, selectSplineIds, type SplineEditMode, type SplinePickMode, type SplineSelection } from '@/lib/spline/selection'
+import { modifierOutputReadOnly } from '@/lib/modifiers/ModifierStackService'
 
 export interface SplineEditController {
   readonly layerId: string | null
@@ -23,7 +24,7 @@ interface State { layerId: string | null; document?: AbortSignal; active: boolea
  * history or clipboard. Reset/deletion prunes synchronously for consumers and
  * commits cleanup after render so Undo cannot revive stale selections. */
 export function useSplineEditSelection(layer: Layer | null | undefined, document?: AbortSignal): SplineEditController {
-  const layerId = layer?.type === 'spline' && layer.spline && !layer.booleanResultFor ? layer.id : null
+  const layerId = layer?.type === 'spline' && layer.spline && !layer.booleanResultFor && !modifierOutputReadOnly(layer) ? layer.id : null
   const fresh = useCallback((): State => ({ layerId, document, active: false, mode: 'point', bank: emptySplineSelection() }), [layerId, document])
   const [state, setState] = useState<State>(fresh)
   const clean = useCallback((before: State): State => {

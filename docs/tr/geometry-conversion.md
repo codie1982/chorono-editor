@@ -11,22 +11,25 @@ kaldırılır; içbükey dış sınır ve kapalı boşluklar korunur. Ayrık ada
 Spline içinde ayrı editable SubShape elementleridir; delikler kendi dış
 konturunun elementine bağlıdır. Mesh'te bunlar ayrık yüzeyler ve gerçek deliklerdir.
 
-Edit'in **Conversion history** bölümü özgün geometriyi, **Editable Spline** ve
-varsa **2D Mesh output** adımlarını gösterir. Bu geçmiş, **Add modifiers** ile
-seçilen Spline/Mesh işlemlerinden ayrıdır. Kaynak yeniden hesaplama ve dönüşüm
-ayarları burada açılır. Mesh toleransı 0,01–10 yerel pikseldir; varsayılan 0,25.
-Satırdaki onay ikonu bekleyen Mesh ayarını tek Undo ile uygular; çöp kutusu
-ikonu ilgili son dönüşüm adımını kaldırır. Bir stage sonraki Mesh stage'inin
-girdisiyse kaldırma ikonu açıklamalı olarak pasiftir: önce aşağıdaki Mesh kaldırılır.
-Altta ayrı Apply Mesh Settings / Remove last modifier düğmeleri yoktur.
+Edit'te **Source → sıralı modifierlar → sonuç** tek stack olarak gösterilir.
+Dönüşüm adımları da bu listenin gerçek elemanlarıdır. **Add modifiers** mevcut
+çıktı türüne göre Spline ve Mesh kategorilerini ayrı gösterir. Her örneğin kendi
+ayarları, aç/kapat, yukarı/aşağı ve kaldırma ikonları vardır. Bağımlılığa aykırı
+sıra/kaldırma açık hata verir ve nesne değişmez.
 
-Mesh üzerindeki **Edit Spline input**, Mesh stage'ini kaldırıp kaydedilmiş Spline
-kontrol noktalarına döner; düzenlemeden sonra sağ tık Convert ile Mesh'e geçilir.
-**Original Basic Shape → Rebuild from source**, korunmuş parametrik kaynaktan
-hesaplar. Boyut, köşe yarıçapı ve mevcut sayısal shape parametreleri düzenlenebilir.
-Bu açık yeniden oluşturma, sonradan yapılmış Spline nokta düzenlemelerini sıfırlar.
-Pin/deformation varsa topology değişimi eski vertex kimliklerine sessizce
-bağlanmasın diye önce bunların kaldırılması gerekir.
+Ayar yazmak geometriyi değiştirmez. **Execute stack** bütün bekleyen ayarları
+özgün kaynaktan başlayarak sırayla hesaplar; yalnız son başarılı sonuç tek Undo
+adımında uygulanır. Satırdaki onay ikonu o satırın taslağını aynı tam zincirden
+geçirir. Mesh toleransı 0,01–10 yerel pikseldir; varsayılan 0,25. Altta ayrı
+Apply Mesh Settings / Remove last modifier düğmeleri yoktur.
+
+Mesh dönüşüm satırını kaldırmak Spline girdisine döndürür. **Source → Rebuild
+from source**, korunmuş parametrik kaynaktan hesaplar; boyut, köşe yarıçapı ve
+mevcut sayısal shape parametreleri düzenlenebilir. Bu açık eylem, dönüştürülmüş
+Spline nokta düzenlemelerini sıfırlar. Etkin geometri modifierı varken üretilen
+noktalar doğrudan yazılamaz: ilgili adımları kapatın veya **Bake stack** kullanın.
+Pin veya bağlanmış deformation clip varsa rest/topoloji değişimi sessizce eski
+vertekslere bağlanmaz; önce pinleri kaldırın veya clip'i açıkça yeniden bağlayın.
 
 ## Mimari ve veri akışı
 
@@ -45,8 +48,10 @@ bağlanmasın diye önce bunların kaldırılması gerekir.
   ids, 'spline' | 'mesh2d')`, `{ layerId, command }` döndürür. Komut yakalanan
   layer/timeline snapshot'ı değişmişse reddeder; Undo özgün kimlikleri, sırayı
   ve timeline üyeliğini geri getirir.
-- `Layer.geometryConversion` v1, kaynak geometri snapshot'ları ve sıralı stage
-  kayıtlarını saklar. Dönüşüm ilk nesnenin layer kimliğini, parent'ını, origin'ini,
+- `Layer.modifierStack` v1, özgün kaynak ve sıralı `{ id, type, enabled, settings }`
+  kayıtlarını saklar. Genel `Modifier`, `ModifierRegistry`, `ModifierStack.execute`
+  geometriden bağımsızdır; tür/topoloji kuralları geometri adaptöründedir.
+  Eski `geometryConversion` v1 okunur, yalnız açık düzenlemede yeni stack'e taşınır. Dönüşüm ilk nesnenin layer kimliğini, parent'ını, origin'ini,
   transform'unu, paint ve lifetime'ını korur. Kaynak matrisleri bu nesnenin yerel
   uzayına gider; world transform vertekslere ikinci kez uygulanmaz. Ara Spline
   için sahnede gizli bir layer oluşturulmaz. Copy bağımsız kaynak kayıtları alır;
@@ -66,7 +71,10 @@ bağlanmasın diye önce bunların kaldırılması gerekir.
 Bu sürüm **statik geometri dönüşümüdür**. Tek nesnenin transform/paint animasyonu
 korunur; size/shapeParams/cornerRadius/Spline geometri kanallarını yöneten
 animasyon veya canlı driver varsa işlem açık hata verir. Bir frame'i sessizce
-bake etmez. Canlı, zamana bağlı conversion değerlendirmesi sonraki aşamadır.
+bake etmez. Zamana bağlı modifier parametreleri sonraki aşamadır; Deformation Clip mevcut
+composition-ms oynatımını kullanır. Ortak altyapı Smooth ve detay artıran Mesh
+algoritmalarına açıktır; bu iki algoritma henüz menüye eklenmemiştir.
+[Mimari, kayıt biçimi ve örnek](../../src/lib/modifiers/README.md).
 
 Çoklu union, mevcut Boolean static-input politikasıyla aynı parent altında,
 aynı lifetime'a sahip, çizim sırasında bitişik sibling kaynaklar ister. Sonuç

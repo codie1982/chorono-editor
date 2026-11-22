@@ -49,7 +49,7 @@ function Subject() {
     <output aria-label="Conversion acceptance" className="block px-3 pb-3">
       Type {layer?.type} · Elements {spline ? Object.keys(spline.subShapes).length : '—'} ·
       Contours {spline ? Object.keys(spline.contours).length : mesh?.boundaryRings?.length ?? '—'} ·
-      Hole {hole === null ? 'pending' : hole ? 'PASS' : 'FAIL'} · Modifiers {layer?.geometryConversion?.stages.length ?? 0}
+      Hole {hole === null ? 'pending' : hole ? 'PASS' : 'FAIL'} · Modifiers {layer?.modifierStack?.modifiers.length ?? layer?.geometryConversion?.stages.length ?? 0}
     </output>
     <div className="flex h-[calc(100vh-80px)]">
       <section className="min-w-0 flex-1"><SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} timeMs={0}

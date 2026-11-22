@@ -3,7 +3,7 @@ import { useState } from 'react'
 import ContextMenu from '@/components/ui/ContextMenu'
 
 /** Type-filtered chooser reusing the editor's keyboard/outside-dismiss menu.
- * Selection opens draft settings; only the modifier's Apply writes scene data. */
+ * Selection asks the host to create a real instance. The registry owns options; */
 export function ModifierPicker<T extends string>({ kind, items, selected, disabled, onSelect }: {
   kind: 'Spline' | 'Mesh'; items: readonly { id: T; label: string }[]
   selected: T | ''; disabled?: boolean; onSelect(value: T | ''): void

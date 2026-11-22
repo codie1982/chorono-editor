@@ -1,60 +1,60 @@
 # Geometry Edit dock
 
-Register `geometryEdit` as **Edit** in the dock registry. Use the same editor
-callbacks as the former Spline Modeling dock, with `onLayerChange` for Mesh2D
-settings and `splineSourceSettings` for the selected spline point inspector.
+`geometryEdit` is the separate **Edit** dock. Basic Shapes point to Properties;
+conversion stays in viewport right-click **Convert → Spline / 2D Mesh**. The dock
+contains edit-mode controls and a single persistent ordered modifier stack.
 
 ```tsx
-<GeometryEditPanel
-  layer={selectedLayer}
-  selectedIds={Array.from(selectedLayerIds)}
-  conversionDisabled={isPlaying || manualPreview || !!detail.session}
-  selectedPointId={splinePointId}
-  getScene={editor.getScene}
-  getRevision={editor.getRevision}
+<GeometryEditPanel layer={selectedLayer} selectedIds={[selectedLayer.id]}
+  selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
+  selectedPointIds={splineEdit.bank.point}
+  selectedContourIds={selectedContourIds}
+  getScene={editor.getScene} getRevision={editor.getRevision}
   getDocumentSignal={editor.getDocumentSignal}
   isTransactionActive={editor.isTransactionActive}
-  dispatchCommand={dispatchCommand}
-  onSelectLayer={selectLayer}
-  onClearPoint={() => setSplinePointId(null)}
-  onLayerChange={updateLayer}
+  dispatchCommand={dispatchCommand} onSelectLayer={selectLayer}
+  onClearPoint={splineEdit.clear} onLayerChange={updateLayer}
+  conversionDisabled={isPlaying || manualPreview || !!detail.session}
+  splineModeControls={<SplineModeControls controller={splineEdit}
+    disabled={modifierOutputReadOnly(selectedLayer)} />}
   splineSourceSettings={pointInspector}
 />
 ```
 
-The page owns the shared spline controller and worker previews. Supply
-`splineModeControls` with `SplineModeControls`, and `splineSourceSettings` with
-`SplineEditInspector modeControls={false} modifierControls={false}`. The dock
-keeps mode toggles first, the **+ Add modifiers** picker second, and contextual
-selection properties below. The numeric provider remains around the whole dock.
+`ModifierStackPanel` owns only local selection/drafts/errors. Registry descriptors
+provide category, supported input types and setting fields. Spline offers Offset,
+Outline, Chamfer and Fillet; Mesh offers Deformation Clip. New registered
+strategies appear without panel switches. Repeated types are distinct instances.
+Conversion steps occupy their actual positions in the same stack, not a separate
+history. A non-addable conversion remains in the viewport menu.
 
-Spline choices are Offset, Outline, Chamfer and Fillet. Mesh exposes its supported
-Deformation Clip modifier separately; Geometry, Texture and Pins remain settings.
-`activeSplineModifier`, `onSplineModifierSelect` and `splineModifierSettings` let
-the page host existing worker-backed controls without a second preview owner.
-The native picker opens draft settings; Apply retains each operation's current
-source/Undo contract. It does not claim a new general live procedural stack.
-Closing settings cancels the owning preview; context-started previews select the
-same modifier row. Standalone callers retain the SplineModelingPanel fallback.
+Typing settings never writes geometry. **Execute stack** stages all row drafts
+and dispatches one complete native command. The row's accessible checkmark
+executes that row's settings through the same complete pipeline. Up/down,
+enable and trash also use validated stack commands. Dependency errors appear
+in a focusable alert; no partial Layer is committed. Record identity invalidates
+stale drafts on Undo/Redo. Closing/changing selection discards UI drafts only.
 
-There is no Convert action or duplicate Source tab in this dock. Basic Shapes
-point users to Properties; representation conversion stays in viewport right-click.
-Saved representation steps are under **Conversion history**, with an accessible
-apply checkmark and removal trash icon in the relevant row. Only the final stage
-can be removed; dependency tooltips explain why Spline removal is disabled while
-Mesh still consumes it. Source rebuild and topology invalidation policies remain
-in `commands-geometry-conversion.ts`.
+Source shows captured geometry and explicit **Rebuild from source** controls.
+Rebuild clears converted point overrides; **Bake stack** makes the validated
+result ordinary editable geometry. Generated points are read-only while geometry
+modifiers are enabled. Mode buttons are disabled accordingly; conversion-only
+Splines remain directly editable. Mesh texture and pins retain existing owners.
 
-The page hosts this panel in `SplineToolsPanel contained`. Boolean preview and
-line drawing retain their original owners. The old `splineTools`/`splineModeling`
-dock IDs migrate to `geometryEdit`.
+`ModifierSettingsForm` renders class-owned schemas without geometry algorithms.
+`ModifierSourceSettings` owns source-parameter drafts. `ModifierActionIcon` supplies
+decorative SVGs; native buttons provide labels, keyboard focus and tooltips.
+There are no TODO placeholders or obsolete bottom Apply/Remove-last buttons.
 
-Clicking Point/Edge/Object enters that level; clicking the pressed mode exits.
-Viewport editing replaces layer frames/gizmos with a light orange local boundary,
-red selected sub-elements and a named edit badge. Leaving the mode restores normal
-layer tools. Changing level/tool/pan cancels in-flight geometry gestures. Native
-Delete uses the same mode-aware topology owner as Selection actions.
+The page still owns native Point/Edge/Object selection and existing context-menu
+worker previews; those are separate one-shot geometry tools. The optional
+`splineToolPreview` slot shows their active Apply/Cancel controls above the stack. Edit-mode toggles
+stay above the stack; the inspector appears below. Active mode replaces the layer
+bbox with an orange boundary, red selected elements and a named viewport badge.
+Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
+mode-aware topology owner. A generated modifier result is never overwritten by
+those direct source tools.
 
-See [geometry conversion](../../../docs/tr/geometry-conversion.md) and
-[Spline editing](../../../docs/tr/spline-subobject-editing.md) for source contracts,
-serialization, coordinate units and standalone browser acceptance commands.
+See the [modifier architecture](../../lib/modifiers/README.md),
+[conversion contract](../../../docs/tr/geometry-conversion.md) and
+[Spline editing](../../../docs/tr/spline-subobject-editing.md).

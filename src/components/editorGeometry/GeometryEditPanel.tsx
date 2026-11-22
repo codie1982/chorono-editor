@@ -3,26 +3,14 @@
 import { useState, type ReactNode } from 'react'
 import Mesh2DSourcePanel, { type Mesh2DSettingsSection } from '@/components/PropertiesPanel/Mesh2DSourcePanel'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
-import SplineModelingPanel, {
-  SPLINE_MODELING_OPERATIONS,
-  type SplineModelingOperation,
-  type SplineModelingPanelProps,
-} from '@/components/panels/SplineModelingPanel'
+import type { SplineModelingPanelProps } from '@/components/panels/SplineModelingPanel'
+import { modifierOutputReadOnly } from '@/lib/modifiers'
 import type { Layer } from '@/lib/types'
-import ConversionStackPanel from './ConversionStackPanel'
-import { ModifierPicker } from './ModifierPicker'
+import ModifierStackPanel from './ModifierStackPanel'
 
-const SPLINE_MODIFIER_HELP: Record<SplineModelingOperation, string> = {
-  offset: 'Create a parallel copy of a contour.',
-  outline: 'Turn a contour into a border shape.',
-  chamfer: 'Cut selected corners with straight edges.',
-  fillet: 'Round selected corners with curves.',
-}
 export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, 'operation'> {
-  /** Page-owned worker previews remain authoritative for native modifiers. */
-  readonly splineModifierSettings?: Partial<Record<SplineModelingOperation, ReactNode>>
-  readonly activeSplineModifier?: SplineModelingOperation
-  readonly onSplineModifierSelect?: (operation: SplineModelingOperation | '') => void
+  readonly selectedPointIds?: readonly string[]
+  readonly selectedContourIds?: readonly string[]
   readonly selectedIds?: readonly string[]
   readonly conversionDisabled?: boolean
   readonly onLayerChange: (layer: Layer) => void
@@ -30,12 +18,11 @@ export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, '
   readonly splineSourceSettings?: ReactNode
   /** Shared mode toggles stay above the modifier picker and long properties. */
   readonly splineModeControls?: ReactNode
-  /** Creates a separate Mesh2D using the existing source-preserving command. */
-  readonly onCreateMeshFromSpline?: () => void
+  /** Active context-menu tool preview; separate from persisted modifiers. */
+  readonly splineToolPreview?: ReactNode
 }
 
-/** Edit dock separates mode/selection properties, type-specific modifier
- * pickers and conversion history. Mode controls stay ahead of advanced tools;
+/** Edit dock separates mode/selection properties and a persistent ordered stack. Mode controls stay ahead of advanced tools;
  * only the selected modifier mounts its settings. Scene/history remain editor-owned. */
 export default function GeometryEditPanel(props: GeometryEditPanelProps) {
   const { layer } = props
@@ -48,29 +35,20 @@ export default function GeometryEditPanel(props: GeometryEditPanelProps) {
     </header>}
     {!multiple && layer?.type === 'spline' && layer.spline && <SplineSettings key={layer.id} {...props} layer={layer} />}
     {!multiple && layer?.type === 'mesh2d' && layer.mesh2d && <MeshSettings key={layer.id} {...props} layer={layer} />}
-    {!multiple && layer?.geometryConversion && <ConversionStackPanel
-      key={`${layer.id}:${layer.type}:${layer.geometryConversion?.stages.length ?? 0}`} {...props} layer={layer} />}
+    {!multiple && layer?.type === 'shape' && layer.modifierStack && <ModifierStackPanel {...props} layer={layer} />}
     {!multiple && layer?.type === 'shape' && <p className="text-gray-400">Basic Shape parameters are in Properties. Select a Spline or 2D Mesh for geometry editing.</p>}
     {!supported && <p className="text-gray-400">Select a Spline or 2D Mesh to edit its geometry.</p>}
   </div>
 }
 
-/** Spline-only modifier choices never expose Mesh controls. The supplied native
- * inspector owns Point/Edge/Object selection and stays visible above the list. */
-function SplineSettings({ layer, splineModeControls, splineSourceSettings, splineModifierSettings, activeSplineModifier, onSplineModifierSelect, ...props }: GeometryEditPanelProps & { layer: Layer }) {
-  const [localModifier, setModifier] = useState<SplineModelingOperation | ''>('')
-  const modifier = activeSplineModifier ?? localModifier
-  const modifierControls = <section aria-label="Spline modifiers" className="space-y-2 border-t border-gray-700 pt-3">
-      <ModifierPicker kind="Spline" selected={modifier} disabled={props.conversionDisabled || layer.locked || layer.frozen || !!layer.instanceOf}
-        items={SPLINE_MODELING_OPERATIONS} onSelect={value => { if (value && value === modifier) return; setModifier(value); onSplineModifierSelect?.(value) }} />
-      <p className="text-gray-400">{modifier ? SPLINE_MODIFIER_HELP[modifier] : 'Choose a modifier to open its settings and preview the result.'}</p>
-      {modifier && (splineModifierSettings?.[modifier] ?? <SplineModelingPanel {...props} layer={layer} operation={modifier} />)}
-    </section>
+/** Mode controls and point editing remain separate from the persistent stack. */
+function SplineSettings({ layer, splineModeControls, splineSourceSettings, splineToolPreview, ...props }: GeometryEditPanelProps & { layer: Layer }) {
   return <>
     {splineModeControls ? <section className="space-y-2" aria-label="Spline editing mode"><h3 className="font-semibold">Edit mode</h3>{splineModeControls}</section> : splineSourceSettings}
-    {modifierControls}
+    {splineToolPreview}
+    <ModifierStackPanel {...props} layer={layer} />
     {splineModeControls && splineSourceSettings}
-    {!splineSourceSettings && <p className="text-gray-400">Choose Point, Edge or Object to edit this Spline in the viewport.</p>}
+    {!splineSourceSettings && !modifierOutputReadOnly(layer) && <p className="text-gray-400">Choose Point, Edge or Object to edit this Spline in the viewport.</p>}
   </>
 }
 
@@ -81,18 +59,17 @@ function MeshSettings({ layer, ...props }: GeometryEditPanelProps & { layer: Lay
   const [selected, setSelected] = useState<Mesh2DSettingsSection>('source')
   const scene = props.getScene()
   return <section aria-label="Mesh editing" className="space-y-3">
-    <ModifierPicker kind="Mesh" selected={selected === 'deformation' ? selected : ''} disabled={props.conversionDisabled || layer.locked || layer.frozen || !!layer.instanceOf}
-      items={[{ id: 'deformation', label: 'Deformation Clip' }]} onSelect={value => setSelected(value || 'source')} />
+    <ModifierStackPanel {...props} layer={layer} />
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mesh settings">
       {([{ id: 'source', label: 'Geometry' }, { id: 'texture', label: 'Texture' }, { id: 'pins', label: 'Pins' }] as const).map(item =>
         <button key={item.id} type="button" aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}
           className={`min-h-8 rounded border px-2 py-1.5 focus-visible:outline focus-visible:outline-orange-300 ${selected === item.id ? 'border-orange-400/70 bg-orange-500/10 text-orange-100' : 'border-gray-700 bg-gray-800'}`}>{item.label}</button>)}
     </div>
-    {!(layer.geometryConversion && selected === 'source') && <Mesh2DSourcePanel key={selected} layer={layer} allLayers={scene.layers}
+    {!((layer.geometryConversion || layer.modifierStack) && selected === 'source') && <Mesh2DSourcePanel key={selected} layer={layer} allLayers={scene.layers}
       allAssets={scene.assets} onLayerChange={props.onLayerChange} section={selected} />}
-    {selected === 'source' && (layer.geometryConversion && layer.mesh2d ? <p className="text-gray-400">
+    {selected === 'source' && ((layer.geometryConversion || layer.modifierStack) && layer.mesh2d ? <p className="text-gray-400">
       {layer.mesh2d.geometry.positions.length / 2} vertices · {layer.mesh2d.geometry.topology.triangleIndices.length / 3} triangles.
-      Open Conversion history below to change the source or curve sampling.
+      Select a modifier or Source above to change the geometry.
     </p> : <SchemaPanel layer={layer} onLayerChange={props.onLayerChange} filterGroup={group => group.title === 'Geometry'} />)}
   </section>
 }
