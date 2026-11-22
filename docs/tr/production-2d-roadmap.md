@@ -9,8 +9,9 @@ dilimleri tamamlandı. **22 Kasım 2026 sürüm kararıyla v0.5.0 kapsamı burad
 donduruldu.** Önceden v0.5.0 için düşünülen 10 → 11 → 12; canonical
 import/export ve final render → mevcut çıktılar için job/otomasyon MVP'si →
 hedefli optimizasyon ve kabul sırası, yeni bağımlılık kararları gerektirdiği
-için **v0.6.0'a taşındı**. v0.6.0 kapsamı yalnız masaüstü editör dönüşümü ile
-Öncelik 10–12'dir ve [v0.6.0 ana planında](plans/v0.6.0-master-plan.md)
+için **v0.6.0'a taşındı**. v0.6.0 kapsamı masaüstü editör dönüşümü, aynı
+uygulama paketine gömülü Chorono Render ve Öncelik 10–12'dir; ayrıntılar
+[v0.6.0 ana planında](plans/v0.6.0-master-plan.md)
 tutulur. FRACTURE4/5, emitter/particle, Fabric, Blob/liquid, smoke/fire ve
 Character Motion [v0.10.0 ileri 2D planına](plans/v0.10.0-advanced-2d-plan.md)
 taşındı. v0.7.0–v0.9.0 arasındaki düzenlemeler henüz kararlaştırılmadı. 2D içinde kullanılan 3D katman, 3D kamera ve
@@ -155,10 +156,10 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
 | v0.5.0 kapsamı donduruldu | Simulation Core, rigid ve Voronoi | FRACTURE3'e kadar mevcut kapsam tamamlandı; yeni çıktı altyapısı eklenmez. Yalnız mevcut teslimlerde release blocker hata bulunursa düzeltilir. |
-| v0.6.0 giriş kapısı | Masaüstü shell ve çıktı adapter kararları | Shell/Next runtime, Chorono Render, codec/container, dosya sahipliği, worker/process, asset/font/audio, kaynak bütçesi, MCP, dağıtım ve güvenlik kararları gerçek fixture ile kapatılır. |
-| v0.6.0 — masaüstü editör | Yerel uygulama kabuğu ve native servisler | Open/save/recovery, native file/output, process/MCP yaşam döngüsü, paketleme, signing/update ve temiz makine kabulü. |
+| v0.6.0 giriş kapısı | Masaüstü shell ve çıktı adapter kararları | Shell/Next runtime, paket içine gömülecek Chorono Render modül sınırı, codec/container, dosya sahipliği, worker/process, asset/font/audio, kaynak bütçesi, MCP, dağıtım ve güvenlik kararları gerçek fixture ile kapatılır. |
+| v0.6.0 — masaüstü editör | Yerel uygulama kabuğu, gömülü Chorono Render ve native servisler | Open/save/recovery, native file/output, tek paket/launcher/update altında render process'i ve MCP yaşam döngüsü, paketleme, signing/update ve temiz makine kabulü. Ayrı Chorono Render kurulumu/discovery yoktur. |
 | v0.6.0 — Öncelik 10 | Import/export tutarlılığı, Render Preview ve yüksek kaliteli final render | Bağımlılık kapısından sonra tek canonical frame/compiler; hedef çözünürlükte redraw, Final Native/High ve açık capability/fallback. |
-| v0.6.0 — Öncelik 11 | Mevcut çıktılar için çoklu iş ve otomasyon MVP'si | Frozen source'lu bounded queue, progress/cancel/retry, output manifest; mevcut raster/sequence/Chorono Render MP4. |
+| v0.6.0 — Öncelik 11 | Mevcut çıktılar için çoklu iş ve otomasyon MVP'si | Frozen source'lu bounded queue, progress/cancel/retry, output manifest; mevcut raster/sequence ve uygulama içindeki Chorono Render MP4. |
 | v0.6.0 — Öncelik 12 | Hedefli optimizasyon ve birleşik v0.6.0 kabulü | Yalnız ölçülmüş blocker'lar; Four Seasons, UI/MCP, portable, görsel parity, test/MCP/build ve release notu. |
 | v0.10.0 — ileri 2D | FRACTURE4/5, emitter/particle, Cloth, Blob/liquid, smoke/fire ve Character Motion | Aradaki sürümlerden ve V10-0 yeniden doğrulamasından sonra; masaüstü/çıktı v0.6.0'da kalır. |
 | Sürümü belirlenecek | Tamamlayıcı 2D araçlar | Particle V2+, runtime console, gelişmiş text ve çizim/fırça bu v0.10.0 kararına dahil edilmedi. |

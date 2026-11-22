@@ -1,6 +1,6 @@
 # 2D Export Tutarlılığı — öncelik 1
 
-Tarih: 4 Kasım 2026. Güncelleme: 22 Kasım 2026; viewport'tan bağımsız yüksek kaliteli final render ve Render Preview planı §9'dadır. Durum: E0/E1 canonical runtime alan-sınırı ilk dilimi uygulandı; tam E1 loader/giriş birliği ile E2/E3 açıktır. Kapsam yalnız `2danimation`. Üst yol haritası: [2D üretim planı](../production-2d-roadmap.md). Tam E/FQ kapsamı v0.5.0'dan çıkarılıp masaüstü çıktı bağımlılıklarıyla birlikte [v0.6.0 ana planındaki](v0.6.0-master-plan.md) Öncelik 10 → 11 → 12 sırasına taşındı; v0.5.0 bunu beklemez.
+Tarih: 4 Kasım 2026. Güncelleme: 22 Kasım 2026; viewport'tan bağımsız yüksek kaliteli final render ve Render Preview planı §9'dadır. Durum: E0/E1 canonical runtime alan-sınırı ilk dilimi uygulandı; tam E1 loader/giriş birliği ile E2/E3 açıktır. Kapsam yalnız `2danimation`. Üst yol haritası: [2D üretim planı](../production-2d-roadmap.md). Tam E/FQ kapsamı v0.5.0'dan çıkarılıp masaüstü çıktı bağımlılıkları ve ayrı kurulum gerektirmeyen, uygulama paketine gömülü Chorono Render ile birlikte [v0.6.0 ana planındaki](v0.6.0-master-plan.md) Öncelik 10 → 11 → 12 sırasına taşındı; v0.5.0 bunu beklemez.
 
 ## 1. Teslim hedefi
 
