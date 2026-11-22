@@ -116,6 +116,17 @@ serves both Add Spline and Boolean Preview: Merge Paths materializes just that
 recipe to editable, tolerance-sampled line segments; Separate Inputs restores
 original components. Exact original Bézier controls remain in retained inputs
 until Merge (and in its Undo). Same-parent/stacking/static-source guards remain.
+Line drawing uses `SplineLineDraft` as its private placed-anchor owner in
+composition pixels. Explicit return to the start/opposite endpoint closes at
+the shared 10 CSS px tolerance when Auto Close is enabled (the default). A snapped
+anchor in the edited spline finishes the path while Auto Close is on: open endpoints reuse native Join,
+closed circle/curve anchors are positional and preserve their original Béziers.
+With Auto Close off, returning to the start or snapping to another anchor keeps
+drawing; Enter/Escape save placed anchors open and right-click follows Auto Close. Each
+finish is one native command/Undo; one anchor creates no source. Backspace affects
+only the current draft; stale/document/mode teardown and box cancellation never
+overwrite source. `scripts/perf/spline-connections.mjs` exercises real context-menu
+drawing, circle closure, both exit surfaces, existing arc joins, history and raster.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.
@@ -123,3 +134,15 @@ those direct source tools.
 See the [modifier architecture](../../lib/modifiers/README.md),
 [conversion contract](../../../docs/tr/geometry-conversion.md) and
 [Spline editing](../../../docs/tr/spline-subobject-editing.md).
+
+Spline Edit reuses MoveAxisGizmo at the selected Point/Edge/Object anchor center.
+Axis arrows constrain composition X/Y before the complete world-to-local inverse;
+Shift constrains free point/body movement through the existing applyAxisLock math.
+Geometry changes use the same native pointer transaction and keep Layer TRS/origin,
+keys and the session ghost fixed. No transform frame is restored in Edit mode.
+The modifier stack has a full frame and a bounded scroll region; selection reveal
+scrolls only that region. Header, picker and settings stay outside it. Its focus
+scope owns native keyboard input so scrolling/buttons cannot nudge scene geometry.
+New spline paint is Fill None and solid black Stroke 3 px, with opt-in fill only
+in Properties. Conversion supplies the same fallback when no visible authored
+stroke exists; saved/user paint stays authoritative.

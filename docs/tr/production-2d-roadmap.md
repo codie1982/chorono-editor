@@ -234,6 +234,13 @@ Add Spline Operation menüsü mevcut Boolean recipe/çözücüsünü kullanır:
 Union/Subtract/Intersect/XOR kaynakları korur; Merge Paths sonucu düzenlenebilir
 konturlara uygular, Separate Inputs özgün bileşenleri açar. Tüm aksiyonlar Undo'ludur;
 Merge eğrileri kayıtlı toleransla doğrusal segmentlere örnekler.
+Line çizimi Auto Close (varsayılan açık) ile başlangıca dönünce kapanır; kapalı circle'ın
+başka snap anchor'ında ayrı Line Object olarak biter. Esc ve canvas/pasteboard
+sağ tık yerleştirilmiş segmentleri kalıcı tutar; her bitiş ayrı Undo/Redo'dur.
+Auto Close kapalıyken kapalı forma/snapa rağmen çizim devam eder. Edit geometri
+seçimleri X/Y taşıma okları ve Shift eksen kilidi kullanır; modifier listesi
+çerçeveli ve kendi içinde kaydırılabilirdir. Yeni spline boyası dolgu None, siyah
+stroke 3 px olur; Properties'ten Fill açılabilir.
 Yeni spline'lar stroke-only oluşur; isteğe bağlı Fill ve diğer paint alanları
 yalnız Properties'te bulunur, Edit içinde tekrarlanmaz.
 Yeni topolojiyi kabul eden altyapı

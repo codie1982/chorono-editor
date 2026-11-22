@@ -11,7 +11,7 @@ describe('representation-entry paint', () => {
     const source: ShapeStyle = { fill, stroke: { width: 0, color: '#ffffff' } }, saved = structuredClone(source)
     const spline = geometryConversionPaint(source, 'shape', 'spline')!
     expect(spline.fill).toEqual({ ...fill, type: 'none', disabledType: type })
-    expect(spline.stroke).toMatchObject({ width: 2, color: '#123456', type: 'solid' })
+    expect(spline.stroke).toMatchObject({ width: 3, color: '#000000', type: 'solid' })
     expect(geometryConversionPaint(spline, 'spline', 'mesh2d')!.fill).toEqual(fill)
     expect(source).toEqual(saved)
   })

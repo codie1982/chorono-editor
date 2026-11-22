@@ -1,5 +1,6 @@
 import type { ShapeStyle } from '../types/style'
 import { strokeType, withFillType, withStrokeType } from './paintSource'
+import { defaultSplineStyle } from '../spline/paint/defaultSplineStyle'
 
 /** Apply representation-entry paint defaults, shared by modifier and legacy
  * conversion adapters. Shape/Mesh → Spline disables fill while retaining its
@@ -15,9 +16,10 @@ export function geometryConversionPaint(style: ShapeStyle | undefined, previousK
   const fill = style?.fill, stroke = style?.stroke
   if (nextKind === 'spline') {
     const visible = stroke && strokeType(stroke) !== 'none' && stroke.width > 0 && (stroke.opacity ?? 100) > 0
+    const fallback = defaultSplineStyle().stroke!
     const contour = visible ? stroke : { ...withStrokeType(stroke, 'solid'),
-      width: stroke && stroke.width > 0 ? stroke.width : 2,
-      color: stroke && stroke.width > 0 ? stroke.color : fill?.color ?? fill?.gradient?.stops[0]?.color ?? '#3B82F6',
+      width: stroke && stroke.width > 0 ? stroke.width : fallback.width,
+      color: stroke && stroke.width > 0 ? stroke.color : fallback.color,
       opacity: stroke && (stroke.opacity ?? 100) > 0 ? stroke.opacity : 100 }
     return { ...style, fill: withFillType(fill, 'none'), stroke: contour }
   }
