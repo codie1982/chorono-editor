@@ -1105,11 +1105,13 @@ export default function SceneCanvas({
     ? prepareTransformTargets(scene, selectedLayerIds, timeMs, displayOverrides,
       { activeId: selectedLayerId ?? undefined, pivotMode }) : null,
   [scene, selectedLayerIds, selectedLayerId, timeMs, displayOverrides, hideEditorUI, pivotMode])
-  // A running gesture displays the same fixed pivot used by its calculation.
+  // Rotation/axis-scale tools display their fixed operation pivot. A frame
+  // resize instead pins an opposite handle for its calculation; that corner is
+  // not the object's origin or the selection's live rotation center.
   const activeDrag = dragRef.current
   const gesturePivot = activeDrag?.kind === 'rotate'
     ? { x: activeDrag.anchorWorldX, y: activeDrag.anchorWorldY }
-    : activeDrag?.kind === 'scaleAxis' && activeDrag.pivotX !== undefined && activeDrag.pivotY !== undefined
+    : activeDrag?.kind === 'scaleAxis' && !activeDrag.selectionResize && activeDrag.pivotX !== undefined && activeDrag.pivotY !== undefined
       ? { x: activeDrag.pivotX, y: activeDrag.pivotY } : null
   const selectedWorldPivot = toolMode === 'anchor' ? actualWorldPivot
     : gesturePivot ?? (multiPreparation?.ok ? multiPreparation.pivot : actualWorldPivot)

@@ -62,6 +62,9 @@ and suppress layer gizmos; writable splines reuse the Point/Edge/Object controll
 Exit, mode-toggle exit, selection change and document replacement restore layer
 tools without writing source/history. Normal geometry-driven frames use the shared
 transform resize gesture, preserving source points, topology and modifier recipes.
+During frame resize, the origin/selection-center marker follows the live preview
+transform. The opposite-handle pivot used by resize math does not replace that
+marker; fixed rotation/axis-scale tool pivots retain their existing behavior.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.

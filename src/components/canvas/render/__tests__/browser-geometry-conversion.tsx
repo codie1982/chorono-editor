@@ -12,6 +12,7 @@ import { containsMesh2DPoint } from '@/lib/geometry/mesh2d/Mesh2DGeometryQueries
 import { useSplineEditSelection } from '@/components/splineEdit/useSplineEditSelection'
 import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
 import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
+import { checkLiveMeshCenter } from './checkLiveMeshCenter'
 
 /** Synthetic, unpersisted frame-with-hole plus separate island. Every command
  * and canvas/panel below is production code; no connected document is touched. */
@@ -25,6 +26,7 @@ function rectangle(id: string, x: number, y: number, width: number, height: numb
 const layers = [rectangle('top', 100, 100, 200, 30), rectangle('bottom', 100, 270, 200, 30),
   rectangle('left', 100, 130, 30, 140), rectangle('right', 270, 130, 30, 140), rectangle('island', 380, 100, 80, 80)]
 const rounded = rectangle('rounded', 500, 300, 180, 130)
+rounded.transform = { ...rounded.transform, anchorX: 90, anchorY: 65 }
 rounded.style = { ...rounded.style, cornerRadius: 25 }
 const base = emptyScene()
 const initial = { ...base, composition: { ...base.composition, width: 800, height: 500 }, layers: [...layers, rounded] }
@@ -36,6 +38,7 @@ function Subject() {
   const editor = useEditorState(initial), snap = useSnapSettings()
   const [selected, setSelected] = useState(layers.map(layer => layer.id))
   const [tool, setTool] = useState<'select' | 'move' | 'scale' | 'rotate'>('select')
+  const [centerCheck, setCenterCheck] = useState('')
   const ids = useMemo(() => new Set(selected), [selected])
   const layer = editor.scene.layers.find(item => item.id === selected[0]) ?? null
   const splineEdit = useSplineEditSelection(selected.length === 1 ? layer : null, editor.getDocumentSignal())
@@ -45,14 +48,18 @@ function Subject() {
     editor.dispatchCommand(plan.command); setSelected([plan.layerId])
   }
   const spline = layer?.spline, mesh = layer?.mesh2d
-  const hole = mesh ? !containsMesh2DPoint(mesh.geometry, 100, 100) && containsMesh2DPoint(mesh.geometry, 10, 100) : null
+  const hole = mesh && layer?.id !== 'rounded' ? !containsMesh2DPoint(mesh.geometry, 100, 100) && containsMesh2DPoint(mesh.geometry, 10, 100) : null
   return <main className="h-screen bg-gray-900 text-xs text-gray-100">
     <nav className="flex gap-4 p-3">
       <button onClick={() => setSelected(editor.scene.layers.filter(layer => layer.id !== 'rounded').map(layer => layer.id))}>Select frame and island</button>
       <button onClick={() => setSelected(['rounded'])}>Select rounded shape</button>
       <button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button>
       {(['select', 'move', 'scale', 'rotate'] as const).map(mode => <button key={mode} aria-pressed={tool === mode} onClick={() => setTool(mode)}>{mode}</button>)}
+      {layer?.id === 'rounded' && layer.type === 'mesh2d' && <button onClick={() => {
+        void checkLiveMeshCenter().then(setCenterCheck, error => setCenterCheck(`FAIL · ${String(error)}`))
+      }}>Check live mesh center</button>}
     </nav>
+    {centerCheck && <output aria-label="Live mesh center check" className="block px-3 pb-3">{centerCheck}</output>}
     <output aria-label="Conversion acceptance" className="block px-3 pb-3">
       Type {layer?.type} · Elements {spline ? Object.keys(spline.subShapes).length : '—'} ·
       Contours {spline ? Object.keys(spline.contours).length : mesh?.boundaryRings?.length ?? '—'} ·
