@@ -40,7 +40,7 @@ imports. The geometry adapter supplies those domain contracts separately.
 ## Minimal general example
 
 This example intentionally uses numbers, showing that the base is not tied to
-geometry. A concrete Mesh Smooth or subdivision algorithm uses the same classes
+geometry. The concrete Mesh Smooth and Subdivision algorithms use the same classes
 with `ModifierGeometry` and `GeometryModifierDescriptor` instead.
 
 ```ts
@@ -72,8 +72,10 @@ const result = pending.execute() // 20; commit only after successful execution
 ```
 
 Production classes currently registered: Convert Spline, Convert 2D Mesh,
-Offset, Outline, Chamfer, Fillet, Deformation Clip. **Smooth and subdivision are
-future algorithms, not implemented menu entries.** `MeshExtension.test.ts`
+Offset, Outline, Chamfer, Fillet, Smooth, Subdivision and Deformation Clip.
+Subdivision defaults to constrained Delaunay and separately offers Grid/Karelaj;
+it does not use midpoint 1→4 triangle splitting.
+[Mesh modeling algorithms and limits](../../geometry/mesh2d/modeling/README.md). `MeshExtension.test.ts`
 registers a test-only grid detail strategy using the existing grid generator,
 verifying that new connectivity works without changing runner or panel.
 

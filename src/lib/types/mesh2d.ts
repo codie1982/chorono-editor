@@ -82,9 +82,17 @@ export interface FractureFragmentMesh2DSource {
   readonly generatorVersion: 1
 }
 
+/** Geometry-owned snapshot after modeling or Bake. The original generator
+ * belongs to Layer.modifierStack.source, never a misleading regeneration link
+ * on the derived mesh. Portable runtime consumes geometry directly. */
+export interface AuthoredMesh2DSource {
+  readonly kind: 'authored'
+  readonly schemaVersion: 1
+}
+
 /** Persisted source recipes supported by the 2D mesh subsystem. */
 export type Mesh2DSource = StructuredGridMesh2DSource | SplineBoundaryMesh2DSource
-  | ShapeBoundaryMesh2DSource | FractureFragmentMesh2DSource
+  | ShapeBoundaryMesh2DSource | FractureFragmentMesh2DSource | AuthoredMesh2DSource
 
 /**
  * Fixed connectivity for a Mesh2D source.
@@ -98,6 +106,10 @@ export interface Mesh2DTopology {
   readonly schemaVersion: 1
   readonly vertexIds: readonly string[]
   readonly triangleIndices: readonly number[]
+  /** Optional full Grid cells in positive cyclic order, grouped by four.
+   * Each quad is backed by renderer triangles (a,b,c) and (a,c,d). Boundary
+   * transition faces remain triangles; missing preserves legacy topology. */
+  readonly quadIndices?: readonly number[]
   /** Non-cryptographic deterministic change detector for connectivity. */
   readonly topologyHash: string
 }

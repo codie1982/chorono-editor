@@ -136,6 +136,11 @@ export default function Mesh2DSourcePanel({ layer, allLayers, allAssets = [], on
         </p>
       </section>}
 
+      {(!section || section === 'source') && source?.kind === 'authored' && <p className="rounded border border-gray-700 p-2 text-xs text-gray-400">
+        Authored Mesh · {mesh.geometry.topology.vertexIds.length} vertices · {mesh.geometry.topology.triangleIndices.length / 3} triangles.
+        Use the Edit modifier stack to refine this geometry.
+      </p>}
+
       {(!section || section === 'source') && boundarySource && (source.kind === 'splineBoundary' || source.kind === 'shapeBoundary') && <section aria-labelledby="mesh2d-source-heading" className="flex flex-col gap-2">
         <h3 id="mesh2d-source-heading" className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1 border-t border-gray-700">
           {source.kind === 'shapeBoundary' ? 'Shape Source' : 'Spline Source'}

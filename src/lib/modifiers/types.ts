@@ -29,6 +29,7 @@ export interface ModifierField {
 export interface ModifierDescriptor {
   readonly type: string
   readonly label: string
+  readonly description?: string
   readonly category: string
   readonly fields: readonly ModifierField[]
   readonly addable: boolean

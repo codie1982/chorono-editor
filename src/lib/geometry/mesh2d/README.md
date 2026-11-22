@@ -115,7 +115,7 @@ Grid**. Its Geometry inspector changes call the registered derived-data edit
 strategy, which validates and regenerates source plus geometry as one immutable
 layer snapshot. That snapshot is one ordinary editor update/undo operation.
 The Canvas2D plugin renders content in editor, preview and export. The
-viewport's **View → Show mesh triangles** option draws the selected mesh
+viewport's **View → Show mesh topology** option draws the selected mesh
 wireframe as editor-only chrome. It is off by default, is not serialized, and
 never appears in preview or export. Save/load, copy and live instances use the
 ordinary Layer JSON contracts and keep runtime/GPU buffers out of source data.
@@ -132,3 +132,13 @@ share a 3D modeling object. It supports boundary triangulation for closed
 spline/shape sources, not quality remeshing or interior refinement. Cloth rest
 data and variable-topology Blob/fluid surfaces remain separate later
 subsystems.
+
+
+## Smooth and Subdivision
+
+The modeling solvers and strategy contract are exported from this module.
+Subdivision defaults to constrained Delaunay and separately supports square
+Grid/Karelaj cells. Optional quad-cell topology has matching renderer triangles;
+legacy triangle-only hashes remain unchanged. Modified/baked output uses an
+authored geometry source instead of a misleading generator recipe.
+See [algorithms, UV behavior, source contracts and budgets](modeling/README.md).

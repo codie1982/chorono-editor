@@ -82,7 +82,20 @@ export function drawMesh2DWireframe(
   ctx.strokeStyle = 'rgba(147, 197, 253, 0.9)'
   ctx.lineWidth = 1 / scale
   ctx.setLineDash([3 / scale, 2 / scale])
-  buildMesh2DPath(ctx, triangles)
+  if (geometry.topology.quadIndices?.length) {
+    // Quad cells retain renderer triangles but their internal diagonal is not
+    // part of the authored grid topology shown to the user.
+    const hidden = new Set<string>(), edges = new Map<string, [number, number]>()
+    const key = (a: number, b: number) => a < b ? `${a}:${b}` : `${b}:${a}`
+    const quads = geometry.topology.quadIndices
+    for (let i = 0; i < quads.length; i += 4) hidden.add(key(quads[i], quads[i + 2]))
+    triangles.forEach(triangle => triangle.indices.forEach((a, i) => {
+      const b = triangle.indices[(i + 1) % 3], id = key(a, b)
+      if (!hidden.has(id)) edges.set(id, [a, b])
+    }))
+    ctx.beginPath()
+    edges.forEach(([a, b]) => { ctx.moveTo(positions[a * 2], positions[a * 2 + 1]); ctx.lineTo(positions[b * 2], positions[b * 2 + 1]) })
+  } else buildMesh2DPath(ctx, triangles)
   ctx.stroke()
   ctx.restore()
 }

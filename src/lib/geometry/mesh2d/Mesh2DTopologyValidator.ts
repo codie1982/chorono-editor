@@ -24,6 +24,7 @@ export interface Mesh2DValidationDiagnostic {
     | 'non-manifold-edge'
     | 'orphan-vertex'
     | 'topology-hash-mismatch'
+    | 'invalid-quad-cell'
   readonly message: string
   readonly vertexIndex?: number
   readonly triangleIndex?: number
@@ -69,6 +70,7 @@ export class Mesh2DTopologyValidator {
     if (geometry.topology.vertexIds.length !== vertexCount) this.error(diagnostics, 'vertex-id-count', 'Vertex id count must match position pair count')
     if (geometry.topology.triangleIndices.length % 3 !== 0) this.error(diagnostics, 'triangle-index-count', 'Triangle indices must be grouped in triples')
 
+    this.validateQuads(geometry, diagnostics)
     this.validateVertexPayload(geometry, diagnostics)
     this.validateTextureReferenceBounds(geometry, diagnostics)
     const indicesValid = this.validateTriangles(geometry, diagnostics)
@@ -85,6 +87,24 @@ export class Mesh2DTopologyValidator {
       diagnostics,
       vertexCount: Number.isInteger(vertexCount) ? vertexCount : Math.floor(vertexCount),
       triangleCount: Number.isInteger(triangleCount) ? triangleCount : Math.floor(triangleCount),
+    }
+  }
+
+  /** Optional Grid cells are explicit metadata backed by exactly the same
+   * oriented renderer faces. Legacy triangle-only hashes/contracts are unchanged. */
+  private validateQuads(geometry: Mesh2DGeometry, diagnostics: Mesh2DValidationDiagnostic[]): void {
+    const quads = geometry.topology.quadIndices
+    if (quads === undefined) return
+    if (!Array.isArray(quads) || quads.length % 4 !== 0) { this.error(diagnostics, 'invalid-quad-cell', 'Quad indices must be grouped by four'); return }
+    const faces = new Set<string>(), triangles = geometry.topology.triangleIndices
+    const key = (a: number, b: number, c: number) => a < b && a < c ? `${a}:${b}:${c}` : b < c ? `${b}:${c}:${a}` : `${c}:${a}:${b}`
+    for (let i = 0; i < triangles.length; i += 3) faces.add(key(triangles[i], triangles[i + 1], triangles[i + 2]))
+    const cells = new Set<string>()
+    for (let i = 0; i < quads.length; i += 4) {
+      const [a, b, c, d] = quads.slice(i, i + 4), id = [a, b, c, d].slice().sort((x, y) => x - y).join(':')
+      if (new Set([a, b, c, d]).size !== 4 || ![a, b, c, d].every(vertex => Number.isSafeInteger(vertex) && vertex >= 0 && vertex < geometry.positions.length / 2)
+        || cells.has(id) || !faces.has(key(a, b, c)) || !faces.has(key(a, c, d))) this.error(diagnostics, 'invalid-quad-cell', 'Quad cell must reference four vertices and matching positively ordered triangle faces')
+      cells.add(id)
     }
   }
 

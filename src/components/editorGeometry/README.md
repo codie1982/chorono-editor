@@ -23,7 +23,10 @@ contains edit-mode controls and a single persistent ordered modifier stack.
 
 `ModifierStackPanel` owns only local selection/drafts/errors. Registry descriptors
 provide category, supported input types and setting fields. Spline offers Offset,
-Outline, Chamfer and Fillet; Mesh offers Deformation Clip. New registered
+Outline, Chamfer and Fillet; Mesh offers Smooth, Subdivision and Deformation Clip. Subdivision owns a
+Delaunay-first algorithm selector, Grid/Karelaj, levels and base cell size. Smooth
+owns amount, iterations and Keep boundary. Optional descriptor descriptions
+explain each operation without panel-specific algorithm branches. New registered
 strategies appear without panel switches. Repeated types are distinct instances.
 Conversion steps occupy their actual positions in the same stack, not a separate
 history. A non-addable conversion remains in the viewport menu.

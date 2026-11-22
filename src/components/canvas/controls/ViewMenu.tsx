@@ -42,7 +42,7 @@ export function ViewMenu(p: ViewMenuProps) {
     { label: 'Show guides',          value: p.showGuides,  onToggle: p.onToggleGuides,    kbd: 'Alt + L' },
   ]
   if (p.onToggleMeasurements) rows.push({ label: 'Show selection gaps', value: !!p.showMeasurements, onToggle: p.onToggleMeasurements })
-  if (p.onToggleMeshTriangles) rows.push({ label: 'Show mesh triangles', value: !!p.showMeshTriangles, onToggle: p.onToggleMeshTriangles })
+  if (p.onToggleMeshTriangles) rows.push({ label: 'Show mesh topology', value: !!p.showMeshTriangles, onToggle: p.onToggleMeshTriangles })
 
   return (
     <div ref={ref} className="relative">

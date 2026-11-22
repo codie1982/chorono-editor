@@ -73,6 +73,7 @@ export function registerMesh2DMCPActions(registry: ActionRegistry): void {
     toCommand: (params: { layerId: string; flattenTolerance?: number }, scene: ChronoScene) => {
       const layer = requireMesh2D(scene, params.layerId)
       const source = layer.mesh2d!.source
+      if (source.kind === 'authored') throw new Error('Modeled Mesh2D owns its geometry. Use its modifier stack or the baked snapshot; it has no external regeneration source.')
       if (source.kind === 'structuredGrid') throw new Error('Structured-grid Mesh2D has no external source to regenerate')
       if (source.kind === 'fractureFragment') throw new Error('Fracture fragment Mesh2D is bake-owned; use Physics Re-bake instead')
       const sourceLayer = requireLayer(scene, source.sourceLayerId)

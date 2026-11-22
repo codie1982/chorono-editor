@@ -5,7 +5,9 @@ import { hashCanonicalRecords } from '@/lib/hash/CanonicalRecordHash'
  * Produces a deterministic connectivity change detector for Mesh2D topology.
  *
  * The hash includes the schema, stable vertex ids and triangle ordering, but not
- * positions or UVs: moving existing vertices does not change connectivity. Two
+ * positions or UVs: moving existing vertices does not change connectivity.
+ * Optional quad-cell records extend v1 only when present; legacy triangle-only
+ * hashes remain byte-for-byte identical. Two
  * independent 32-bit FNV-1a passes reduce accidental collisions while keeping
  * the implementation synchronous and browser-portable. This is not a security
  * or content-integrity hash; portable asset integrity must use the repository's
@@ -22,13 +24,14 @@ export class Mesh2DTopologyHasher {
    * Throws when an id contains the reserved record separator, which prevents
    * ambiguous canonical encodings.
    */
-  hash(topology: Pick<Mesh2DTopology, 'schemaVersion' | 'vertexIds' | 'triangleIndices'>): string {
+  hash(topology: Pick<Mesh2DTopology, 'schemaVersion' | 'vertexIds' | 'triangleIndices' | 'quadIndices'>): string {
     return hashMesh2DCanonical(`mesh2d-topology-v${Mesh2DTopologyHasher.algorithmVersion}`, [
       `schema:${topology.schemaVersion}`,
       `vertices:${topology.vertexIds.length}`,
       ...topology.vertexIds,
       `triangles:${topology.triangleIndices.length}`,
       ...topology.triangleIndices.map(String),
+      ...(topology.quadIndices?.length ? ['quads:' + topology.quadIndices.length, ...topology.quadIndices.map(String)] : []),
     ])
   }
 }

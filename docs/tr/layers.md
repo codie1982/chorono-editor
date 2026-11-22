@@ -390,3 +390,14 @@ Sağ tıklama menüsünde ayrıca: **Dönüşüme Göre Seç**, benzer bir dön�
 **Özel logo ana hatları:** Bir Metin katmanı ekleyin, logo metninizi yazın, ardından Özellikler Panelinde **Spline'a Dönüştür**'e tıklayın. Nokta düzenleme moduna geçin ve bireysel harf eğrilerini ayarlayın. El yazısıyla yazma efekti için kontur **Yol Kırpma**'yı %0'dan %100'e animasyonlayın.
 
 **Videoyu maskeleme:** Bir Grup içine video katmanı yerleştirin. Aynı grubun içine bir şekil katmanı çizin ve Özellikler Panelinde **Maske Olarak Kullan**'ı etkinleştirin. Video artık şeklin ana hatlarına kırpılır.
+
+
+### Mesh modifierları — 22 Kasım 2026
+
+Edit → Mesh modifiers listesinde Smooth ve Subdivision vardır. Smooth Amount,
+Iterations ve Keep boundary ayarlarını taşır. Subdivision'da Algorithm varsayılanı
+Delaunay'dir; Grid/Karelaj ayrı kare hücre stratejisidir. Levels ve Base cell size
+detayı kontrol eder. Taslak ayarlar Execute ile listedeki sırada tek sonuca
+uygulanır; önceki çıktı tekrar kaynak olarak kullanılmaz. Yeni kaynak türü
+`authored` geometri snapshot'ıdır; özgün generator stack source'unda kalır.
+[Sayısal sözleşme, UV ve kaynak sınırları](../../src/lib/geometry/mesh2d/modeling/README.md).

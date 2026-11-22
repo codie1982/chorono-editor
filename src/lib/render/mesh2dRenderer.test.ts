@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { drawMesh2DLayer, drawMesh2DPins, drawMesh2DWireframe } from './mesh2dRenderer'
+import { MeshSubdivision } from '@/lib/geometry/mesh2d/modeling/subdivision/MeshSubdivision'
+import { StructuredGridMesh2DGenerator } from '@/lib/geometry/mesh2d/StructuredGridMesh2DGenerator'
 import { emptyScene } from '@/lib/defaults'
 import { hitTestLayer } from '@/lib/renderer'
 import { MeshDeformationClip } from '@/lib/mesh2d'
@@ -36,6 +38,15 @@ function recordingContext() {
 }
 
 describe('Mesh2D canvas rendering', () => {
+  it('shows full Grid cell boundaries without their renderer-only diagonals', () => {
+    const input = new StructuredGridMesh2DGenerator().generate({ width: 20, height: 20, columns: 1, rows: 1 }).geometry
+    const geometry = new MeshSubdivision().subdivide(input, { algorithm: 'grid', levels: 1, cellSizePx: 40 }, 'grid')
+    const { ctx, strokes } = recordingContext()
+    drawMesh2DWireframe(ctx, geometry)
+    expect(geometry.topology.quadIndices).toHaveLength(4)
+    expect(strokes[0].path.filter(item => item[0] === 'L')).toHaveLength(4)
+  })
+
   it('uses real triangle geometry for scene picking rather than its size box', () => {
     const layer = newStructuredGridMesh2DLayer()
     layer.transform = { x: 0, y: 0, anchorX: 0, anchorY: 0, rotationDeg: 0, scaleX: 1, scaleY: 1 }

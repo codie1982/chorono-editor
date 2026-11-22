@@ -83,6 +83,7 @@ export type {
   SplineBoundaryMesh2DSource,
   ShapeBoundaryMesh2DSource,
   FractureFragmentMesh2DSource,
+  AuthoredMesh2DSource,
   Mesh2DSource,
   Mesh2DTopology,
   Mesh2DGeometry,

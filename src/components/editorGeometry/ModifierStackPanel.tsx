@@ -96,6 +96,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
     })}
     {selectedRecord && selectedDescriptor && activeDraft && <div className="space-y-3 rounded border border-gray-700 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{selectedDescriptor.label}</h4><span className="text-gray-400">{selectedDescriptor.category === 'spline' ? 'Spline' : 'Mesh'} modifier</span></div>
+      {selectedDescriptor.description && <p className="text-gray-400">{selectedDescriptor.description}</p>}
       <ModifierSettingsForm descriptor={selectedDescriptor} settings={activeDraft} disabled={disabled} assets={scene.assets}
         pointIds={props.selectedPointIds ?? (props.selectedPointId ? [props.selectedPointId] : [])} contourIds={props.selectedContourIds}
         onChange={patch => setDrafts(before => ({ ...before, [selectedRecord.id]: { base: selectedRecord, patch: { ...(before[selectedRecord.id]?.base === selectedRecord ? before[selectedRecord.id].patch : {}), ...patch } } }))} />

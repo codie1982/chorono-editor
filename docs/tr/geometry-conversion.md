@@ -73,7 +73,8 @@ korunur; size/shapeParams/cornerRadius/Spline geometri kanallarını yöneten
 animasyon veya canlı driver varsa işlem açık hata verir. Bir frame'i sessizce
 bake etmez. Zamana bağlı modifier parametreleri sonraki aşamadır; Deformation Clip mevcut
 composition-ms oynatımını kullanır. Ortak altyapı Smooth ve detay artıran Mesh
-algoritmalarına açıktır; bu iki algoritma henüz menüye eklenmemiştir.
+algoritmalarını taşır. Smooth ve Delaunay/Grid seçilebilen Subdivision, Mesh
+modifier listesinde kendi ayarlarıyla çalışır. [Sayısal sözleşme ve sınırlar](../../src/lib/geometry/mesh2d/modeling/README.md).
 [Mimari, kayıt biçimi ve örnek](../../src/lib/modifiers/README.md).
 
 Çoklu union, mevcut Boolean static-input politikasıyla aynı parent altında,

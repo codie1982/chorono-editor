@@ -8,6 +8,8 @@ import { OffsetModifier } from './spline/OffsetModifier'
 import { OutlineModifier } from './spline/OutlineModifier'
 import { ChamferModifier } from './spline/ChamferModifier'
 import { FilletModifier } from './spline/FilletModifier'
+import { SmoothModifier } from './mesh/SmoothModifier'
+import { SubdivisionModifier } from './mesh/SubdivisionModifier'
 import { MeshDeformationModifier } from './mesh/MeshDeformationModifier'
 
 /** Composition root for the built-in strategies. Algorithms are not selected
@@ -15,7 +17,7 @@ import { MeshDeformationModifier } from './mesh/MeshDeformationModifier'
 export function createGeometryModifierRegistry(): GeometryModifierRegistry {
   const registry = new ModifierRegistry<ModifierGeometry, ModifierContext, GeometryModifierDescriptor>()
   for (const implementation of [ConvertSplineModifier, ConvertMeshModifier, OffsetModifier, OutlineModifier,
-    ChamferModifier, FilletModifier, MeshDeformationModifier]) {
+    ChamferModifier, FilletModifier, SmoothModifier, SubdivisionModifier, MeshDeformationModifier]) {
     registry.register({ descriptor: implementation.descriptor, create: record => new implementation(record), defaults: implementation.defaults })
   }
   return registry

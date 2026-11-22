@@ -22,7 +22,7 @@ function geometryFor(stack: GeometryModifierStackData, layerId: string): Modifie
   if (known >= 0) { const entry = cache.splice(known, 1)[0]; cache.push(entry); return entry.geometry }
   const geometry = modifierStackService.evaluator.execute(stack, { layerId })
   const bytes = geometry.kind === 'spline' ? (Object.keys(geometry.spline.points).length + Object.keys(geometry.spline.handles).length) * 512
-    : geometry.kind === 'mesh2d' ? (geometry.mesh.geometry.positions.length + geometry.mesh.geometry.uvs.length + geometry.mesh.geometry.topology.triangleIndices.length) * 8 : 1024
+    : geometry.kind === 'mesh2d' ? (geometry.mesh.geometry.positions.length + geometry.mesh.geometry.uvs.length + geometry.mesh.geometry.topology.triangleIndices.length + (geometry.mesh.geometry.topology.quadIndices?.length ?? 0)) * 8 : 1024
   while (cache.length && (cache.length >= 8 || cache.reduce((n, entry) => n + entry.bytes, 0) + bytes > MAX_BYTES)) cache.shift()
   if (bytes <= MAX_BYTES) cache.push({ source: new WeakRef(stack), geometry, bytes })
   return geometry

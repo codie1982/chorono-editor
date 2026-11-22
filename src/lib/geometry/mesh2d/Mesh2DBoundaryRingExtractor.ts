@@ -1,3 +1,4 @@
+import { ringArea } from '../planar/contours'
 import type { Mesh2DGeometry } from '@/lib/types/mesh2d'
 import { Mesh2DAdjacencyBuilder } from './Mesh2DAdjacencyBuilder'
 import { Mesh2DTopologyValidator } from './Mesh2DTopologyValidator'
@@ -130,13 +131,9 @@ function pointAt(geometry: Mesh2DGeometry, index: number): { x: number; y: numbe
   return { x: geometry.positions[index * 2], y: geometry.positions[index * 2 + 1] }
 }
 
+/** Shared translated-origin area avoids cancellation for distant local meshes. */
 function area2(points: readonly { readonly x: number; readonly y: number }[]): number {
-  let area = 0
-  for (let index = 0; index < points.length; index++) {
-    const current = points[index], next = points[(index + 1) % points.length]
-    area += current.x * next.y - next.x * current.y
-  }
-  return area
+  return 2 * ringArea(points)
 }
 
 function pointInPolygon(

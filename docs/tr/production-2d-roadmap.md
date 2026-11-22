@@ -217,8 +217,10 @@ ayrık element çözümü, kaynak Rebuild, Mesh toleransı ve bağımlılığa u
 Ardından genel `Modifier` tabanı, registry ve sıralı `ModifierStack.execute`
 uygulandı. Spline/Mesh kategorileri ve sınıfa ait ayarlar ortak Edit stack
 üzerinden çalışır; taslaklar Execute ile tek sonuca uygulanır. Aç/kapat, sıra,
-kaldırma, kaynak Rebuild ve Bake tek Undo komutlarıdır. Smooth/detay artırma
-algoritmaları ayrı sonraki işlerdir; yeni topolojiyi kabul eden altyapı
+kaldırma, kaynak Rebuild ve Bake tek Undo komutlarıdır. Smooth ve Subdivision uygulandı: Subdivision varsayılanı constrained Delaunay,
+ayrı Grid/Karelaj seçeneği gerçek kare hücreler ve sınıra uyan geçiş yüzleri üretir.
+Ayarlar Execute ile listedeki sıraya göre tek sonuç olarak uygulanır.
+Yeni topolojiyi kabul eden altyapı
 [modifier sözleşmesinde](../../src/lib/modifiers/README.md) belgelenmiştir.
 Sahnede ayrı bir Spline ara nesnesi zorunlu tutulmaz. Canlı geometri driver'ları
 sessizce bake edilmez; bu sürümde açık tanıyla reddedilir. Gerçek uygulama
