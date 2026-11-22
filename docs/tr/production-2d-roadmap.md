@@ -3822,3 +3822,12 @@ Spline Operation select yerine Union/Subtract/Intersect/XOR toggle düğmeleri
 seçili Object bankını doğrudan uygular; + aynı layer Object'leri ve Explorer
 spline/shape girdilerini ortak Boolean recipe'ye ekler. Dış sınır, gerçek delikler,
 seçim dışı Object'ler, kaynak kayıtları ve tek aksiyon Undo/Redo native testlidir.
+
+### Spline Edit ve paint — 22 Kasım 2026
+
+1/2/3 Point/Edge/Object, Mesh vertex/edge edit, bütünleşik Spline Boolean/Paths,
+Fill/Stroke seçenekleri ve native doğrulama girişleri
+[Spline Edit ve görünüm sözleşmesinde](spline-edit-and-paint.md) belgelenir.
+Outline geometrik bant v2 için [uygulama planı](plans/spline-outline-band-v2-plan.md)
+hazırdır; sabit kalınlık ve köşelerde artan vertex yoğunluğu kararı kesindir,
+v2 henüz uygulanmış değildir.

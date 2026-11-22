@@ -36,6 +36,11 @@ imports. The geometry adapter supplies those domain contracts separately.
   local affine to positions, preserving layer TRS/origin, UVs, topology and IDs.
   An Edit session owns one stable stage ID shared by drags and arrow nudges.
   Each movement composes AFTER existing settings and keeps its own Undo/Redo.
+  Point/Edge edits optionally persist `vertexEdits: { topologyHash, offsets }`
+  after the affine, using stable IDs and local-pixel deltas. Whole-object edits
+  transform these deltas as vectors; partial edits accumulate selected IDs only.
+  Stale connectivity or collapsed/reversed faces refuse atomically. See
+  [Spline/Mesh Edit and paint contracts](../../../docs/tr/spline-edit-and-paint.md).
   Entry reuses an enabled tail Edit Mesh; otherwise the first movement appends
   one. Non-tail/disabled stage updates and compositions requiring shear refuse
   atomically. Numeric settings use the same ordered Execute pipeline. Clip/pin/fracture ownership rules remain
