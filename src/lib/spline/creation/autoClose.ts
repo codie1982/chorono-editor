@@ -1,4 +1,5 @@
-/** Screen-space closure policy for a line/continued contour. At least three
+/** Screen-space closure hit policy for a line/continued contour, independent
+ * from the UI's right-click Auto Close preference. At least three
  * distinct anchors are required; CSS distance stays constant across pan/zoom.
  * Only the owning contour's opposite endpoint is eligible (never auto-weld).
  * Degenerate collinear closed contours remain valid stroke-only geometry. */

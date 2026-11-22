@@ -2,7 +2,8 @@ import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import { createCircleSpline, mergeSplineData } from '@/lib/spline'
 import { assertSplineTopology, deleteSplineEdges } from '@/lib/spline/topology'
-import { Subject, fixture, current, frames, layer, canvas, client, world, pointer, tap, click, key, choose, assert, equal, raster } from './splineHarness'
+import { Subject, fixture, current, frames, layer, canvas, client, world, pointer, tap, click, key, choose, assert, equal, raster, setSplineVertexSnapping as vertexSnapping } from './splineHarness'
+import { checkClosedCircleLineDrawing } from './checkClosedCircleLineDrawing'
 
 /** Private fixture only: two circular arcs with an animated affine parent.
  * No page route, production-session storage or real user document is accessed. */
@@ -12,17 +13,15 @@ async function loadArcs() {
   flushSync(() => { current().editor.resetScene(scene); current().select('spline'); current().setTime(400); current().setTool('select') })
   await frames(); await click('Spline point mode'); return structuredClone(current().editor.getScene())
 }
-/** Toggle the actual controlled Snap-menu checkbox; never set private state. */
-async function vertexSnapping(checked: boolean) {
-  const trigger = document.querySelector<HTMLButtonElement>('button[title="Snap settings"]')!
-  flushSync(() => trigger.click()); await frames()
-  const box = document.querySelector<HTMLInputElement>('[aria-label="Snap to Spline Vertices"]')!
-  assert(box, 'Vertex snap control is missing')
-  if (box.checked !== checked) { flushSync(() => box.click()); await frames() }
-  await click('Close Snap settings')
-}
 /** Three production paint frames for hover/render adoption, not a clock delay. */
 async function hover(point: { x: number; y: number }) { pointer(canvas(), 'pointermove', client(world(point))); await frames() }
+
+/** Existing endpoint joins explicitly opt into automatic completion. */
+async function chooseLine() {
+  await choose('Add spline object', 'line')
+  const checkbox = document.querySelector<HTMLInputElement>('[aria-label="Line drawing options"] [aria-label="Spline Auto Close"]')!
+  if (!checkbox.checked) { flushSync(() => checkbox.click()); await frames() }
+}
 
 async function run() {
   const status = document.getElementById('status')!, report = document.getElementById('report')!, checks: string[] = []
@@ -30,7 +29,7 @@ async function run() {
   try {
     const before = await loadArcs(); await vertexSnapping(true)
     const original = layer().spline!, contours = Object.values(original.contours), start = original.points[contours[0].pointIds.at(-1)!], end = original.points[contours[1].pointIds[0]]
-    await choose('Add spline object', 'line'); await hover({ x: start.x + 3, y: start.y + 2 })
+    await chooseLine(); await hover({ x: start.x + 3, y: start.y + 2 })
     const marker = document.querySelector<HTMLElement>('[data-testid="geometry-snap-point"]')!, expected = world(start)
     assert(marker && Math.abs(Number(marker.dataset.x) - expected.x) < 1e-6 && Math.abs(Number(marker.dataset.y) - expected.y) < 1e-6, 'Hover feedback did not acquire the exact transformed vertex')
     await tap({ x: start.x + 3, y: start.y + 2 }); equal(current().editor.getScene(), before, 'First endpoint committed source early')
@@ -46,7 +45,7 @@ async function run() {
     checks.push('Actual Add Line snaps from nearby pointer positions, joins two open arcs, preserves source IDs/manual animation and performs one Undo/Redo')
 
     const remaining = Object.values(layer().spline!.contours)[0], a = layer().spline!.points[remaining.pointIds.at(-1)!], b = layer().spline!.points[remaining.pointIds[0]]
-    await choose('Add spline object', 'line'); await tap({ x: a.x + 2, y: a.y + 2 }); await tap({ x: b.x + 2, y: b.y + 2 })
+    await chooseLine(); await tap({ x: a.x + 2, y: a.y + 2 }); await tap({ x: b.x + 2, y: b.y + 2 })
     const closed = structuredClone(current().editor.getScene()); assertSplineTopology(layer().spline!)
     assert(Object.values(layer().spline!.contours)[0].closed, 'Second bridge did not close the band')
     equal(Object.keys(layer().spline!.points), Object.keys(original.points), 'Closure duplicated points')
@@ -58,19 +57,19 @@ async function run() {
 
     const reset = await loadArcs(); await vertexSnapping(false)
     const contour = Object.values(layer().spline!.contours)[0], p = layer().spline!.points[contour.pointIds[0]], q = layer().spline!.points[contour.pointIds.at(-1)!]
-    await choose('Add spline object', 'line'); await tap(p); await tap(q); key('Enter'); await frames()
+    await chooseLine(); await tap(p); await tap(q); key('Enter'); await frames()
     assert(Object.keys(layer().spline!.subShapes).length === 3, 'Disabled vertex snap still auto-joined topology')
     await click('Undo'); equal(current().editor.getScene(), reset, 'Independent line Undo changed source')
-    await vertexSnapping(true); await choose('Add spline object', 'line'); await tap(p); await hover({ x: 40, y: -120 }); key('Escape'); await frames()
+    await vertexSnapping(true); await chooseLine(); await tap(p); await hover({ x: 40, y: -120 }); key('Escape'); await frames()
     equal(current().editor.getScene(), reset, 'Cancelled endpoint drawing mutated source')
     checks.push('Vertex checkbox off preserves independent Add Line; Escape cancels a snapped endpoint draft without a source/history edit')
 
-    await choose('Add spline object', 'line'); await tap(p)
+    await chooseLine(); await tap(p)
     flushSync(() => current().setTime(500)); await frames(); await tap(q)
     equal(current().editor.getScene(), reset, 'Changed time committed a stale connection')
     assert(Array.from(document.querySelectorAll('[role="status"]')).some(item => item.textContent?.includes('changed')), 'Stale connection did not explain its rejection')
     checks.push('A time change rejects the captured gesture and leaves all existing source and keys intact')
-    await loadArcs(); await vertexSnapping(true)
+    checks.push(await checkClosedCircleLineDrawing())
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
   finally { button.disabled = false }

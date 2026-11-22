@@ -9,11 +9,12 @@ import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import {
   splineParamsFromBox, isBoxDragKind, createPolylineSpline,
   createSplinePrimitive, splineToPathDefinition, translateSplineData,
-  splineContinuation, transformSplineData, shouldAutoClose,
+  splineContinuation, transformSplineData,
 } from '@/lib/spline'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { splineDrawingCommand, type SplineDrawResult } from '@/components/splineEdit/drawing/drawingCommand'
 import { useSplineBoxDrawing } from '@/components/splineEdit/drawing/useSplineBoxDrawing'
+import { SplineLineDraft } from '@/components/splineEdit/drawing/SplineLineDraft'
 import type { PointerGestureSample } from '../interactions/PointerGestureSession'
 import { pathToSvgString } from '@/lib/geometry'
 import type { SnapResult } from '@/lib/snap/SnapCandidate'
@@ -56,7 +57,8 @@ export interface UseSplineDrawingReturn {
  * BL-73 spline drawing tools: box-drag primitives (rect / ellipse / arc / …)
  * and multi-click polyline. Owns the in-progress draw refs + the live preview
  * state, commits new contours or continues an existing open endpoint, and
- * handles Enter/right-click finish and Escape cancellation. Captured document,
+ * handles Enter/Escape/right-click completion of placed line anchors. Box
+ * cancellation and stale/context teardown still discard only transient previews. Captured document,
  * revision, target and local time reject stale commits without replacing manual
  * edits. Temporary points/listeners belong to this hook and die on mode exit.
  */
@@ -64,14 +66,14 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
   const {
     canvasRef, compositionRef, sceneRef, editorRef,
     toolMode, splineDrawKind, splineAppendTargetId, onSplineDrawCommit, timeMs = 0, overrides,
-    onSelectLayer, setDragHud, continuationPointId, onWarning, autoClose = false, resolveSnap,
+    onSelectLayer, setDragHud, continuationPointId, onWarning, autoClose = true, resolveSnap,
   } = opts
 
   // In-progress draw lives in refs (mutated without re-render); the live
   // preview svg path is mirrored to React state. Line draw: accumulated click
   // points persist across discrete clicks.
   const splineBoxRef  = useRef<{ startX: number; startY: number; pointerId: number } | null>(null)
-  const splineLineRef = useRef<{ points: Array<{ x: number; y: number }>; endpointId?: string; closePoint?: { x: number; y: number }; existingCount?: number } | null>(null)
+  const splineLineRef = useRef<SplineLineDraft | null>(null)
   const sessionRef = useRef<{ revision: number; document: AbortSignal; targetId: string | null; timeMs: number } | null>(null)
   const warningRef = useRef(onWarning); warningRef.current = onWarning
   const targetRef = useRef(splineAppendTargetId); targetRef.current = splineAppendTargetId
@@ -204,10 +206,11 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     const raw = clientToComp(e)
     if (!raw) return
     if (!(e.target instanceof Node) || !canvasRef.current?.contains(e.target)) { setSnappedPoint(null); return }
-    const { point: p } = acquirePoint(raw)
     const zoom = canvasRef.current!.getBoundingClientRect().width / compositionRef.current!.width
-    const close = frameRef.current.autoClose && shouldAutoClose(line.points, line.closePoint ?? line.points[0], p, zoom, line.existingCount)
-    const pts = [...line.points, close ? line.closePoint ?? line.points[0] : p]
+    const close = frameRef.current.autoClose && line.closesAt(raw, zoom)
+    const { point: p } = close ? { point: line.closePoint } : acquirePoint(raw)
+    if (close) setSnappedPoint(line.closePoint)
+    const pts = [...line.points, p]
     const d = 'M ' + pts.map(pt => `${pt.x} ${pt.y}`).join(' L ') + (close && !line.endpointId ? ' Z' : '')
     setSplinePreview({ d, fill: close && !line.endpointId })
   }, [clientToComp, acquirePoint])
@@ -222,7 +225,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     setSplinePreview(null)
     setSnappedPoint(null)
     setDragHud(null)
-    if (!line || line.points.length < 2 && !joinEndpointId && !(closed && line.endpointId && (line.existingCount ?? 0) >= 2)) { onSplineDrawCommitRef.current?.(); return }
+    if (!line || !line.canFinish(closed, joinEndpointId)) { sessionRef.current = null; onSplineDrawCommitRef.current?.(); return }
     // Center geometry on the points' bounding box; transform sits at that center.
     const xs = line.points.map(p => p.x), ys = line.points.map(p => p.y)
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2
@@ -252,7 +255,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
 
   useEffect(() => () => cancelSplineDraw(), [cancelSplineDraw])
 
-  // Keyboard: Enter finishes an open line, Esc cancels, Backspace removes the
+  // Keyboard: Enter/Escape finish placed line anchors; Backspace removes the
   // last placed point. Active only while in spline-draw mode.
   useEffect(() => {
     if (toolMode !== 'spline-draw') return
@@ -260,20 +263,20 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
       // A retained main viewport cannot finish/cancel drawing behind another
       // authoring surface; inert does not suppress window capture listeners.
       if (canvasRef.current?.closest('[inert]') || document.querySelector('dialog[open]')) return
-      if ((e.target as Element | null)?.closest?.('input,textarea,select,[contenteditable=true],[role=menu]')) return
+      const target = e.target as Element | null
+      if (target?.closest?.('input,textarea,select,[contenteditable=true],[role=menu],[data-editor-input-scope]') && !target.matches('input[aria-label="Spline Auto Close"]')) return
       if (['Escape', 'Enter', 'Backspace'].includes(e.key)) e.stopPropagation()
       if (e.key === 'Escape') {
         e.preventDefault()
-        cancelSplineDraw()
-        onSplineDrawCommitRef.current?.()
+        if (splineLineRef.current) finishSplineLine(false)
+        else { cancelSplineDraw(); onSplineDrawCommitRef.current?.() }
       } else if (e.key === 'Enter') {
         if (splineLineRef.current) { e.preventDefault(); finishSplineLine(false) }
       } else if (e.key === 'Backspace') {
         const line = splineLineRef.current
         if (line && line.points.length > 0) {
           e.preventDefault()
-          line.points.pop()
-          if (line.points.length === 0) { cancelSplineDraw(); onSplineDrawCommitRef.current?.() }
+          if (line.backspace() === 0) { cancelSplineDraw(); onSplineDrawCommitRef.current?.() }
           else setSplinePreview({ d: 'M ' + line.points.map(p => `${p.x} ${p.y}`).join(' L '), fill: false })
         }
       }
@@ -294,29 +297,30 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     if (kind === 'line') {
       // Multi-click polyline. First click starts; later clicks add points;
       // Auto Close can join this contour after three anchors.
+      const line = splineLineRef.current
+      if (frameRef.current.autoClose && line?.closesAt({ x: cx, y: cy }, canvasRef.current!.getBoundingClientRect().width / compositionRef.current!.width)) {
+        finishSplineLine(true); return
+      }
       const { point, vertex } = acquirePoint({ x: cx, y: cy })
       cx = point.x; cy = point.y
       const endpoint = vertex && vertex.layerId === targetRef.current && vertex.openEndpoint ? vertex : undefined
-      const line = splineLineRef.current
       if (!line) {
-        const source = editorRef.current!.getScene().layers.find(layer => layer.id === targetRef.current)?.spline
+        const scene = editorRef.current!.getScene(), target = scene.layers.find(layer => layer.id === targetRef.current), source = target?.spline
         const continuation = source && endpoint ? splineContinuation(source, endpoint.pointId) : null
         const contour = continuation && source?.contours[continuation.contourId]
-        splineLineRef.current = { points: [{ x: cx, y: cy }], endpointId: continuation?.pointId,
-          existingCount: contour ? contour.pointIds.length - 1 : undefined }
+        const opposite = contour && source!.points[continuation!.prepend ? contour.pointIds.at(-1)! : contour.pointIds[0]]
+        splineLineRef.current = new SplineLineDraft({ x: cx, y: cy }, { targetId: targetRef.current, endpointId: continuation?.pointId,
+          closePoint: opposite && target ? resolveLayerWorldMatrix(target, scene, frameRef.current.timeMs, frameRef.current.overrides).applyToPoint(opposite) : undefined,
+          existingCount: contour ? contour.pointIds.length - 1 : undefined })
         window.addEventListener('pointermove', handleSplineLineMove)
       } else {
-        if (endpoint && line.endpointId) {
+        if (frameRef.current.autoClose && endpoint && line.endpointId) {
           if (endpoint.pointId !== line.endpointId) finishSplineLine(false, endpoint.pointId)
           return // Re-clicking the starting endpoint never creates a zero-length edge.
         }
-        const first = line.closePoint ?? line.points[0]
-        if (frameRef.current.autoClose && shouldAutoClose(line.points, first, { x: cx, y: cy }, canvasRef.current!.getBoundingClientRect().width / compositionRef.current!.width, line.existingCount)) {
-          finishSplineLine(true)
-        } else {
-          line.points.push({ x: cx, y: cy })
-          setSplinePreview({ d: 'M ' + line.points.map(point => `${point.x} ${point.y}`).join(' L '), fill: false })
-        }
+        if (!line.add({ x: cx, y: cy }, !frameRef.current.autoClose)) return
+        if (frameRef.current.autoClose && line.finishesAt(vertex)) finishSplineLine(false)
+        else setSplinePreview({ d: 'M ' + line.points.map(point => `${point.x} ${point.y}`).join(' L '), fill: false })
       }
       return
     }
@@ -344,7 +348,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     const point = world.points[endpoint.pointId]
     const closePoint = world.points[endpoint.prepend ? contour.pointIds.at(-1)! : contour.pointIds[0]]
     beginSession()
-    splineLineRef.current = { points: [{ x: point.x, y: point.y }], endpointId: endpoint.pointId, closePoint, existingCount: contour.pointIds.length - 1 }
+    splineLineRef.current = new SplineLineDraft(point, { targetId: splineAppendTargetId, endpointId: endpoint.pointId, closePoint, existingCount: contour.pointIds.length - 1 })
     setSplinePreview({ d: `M ${point.x} ${point.y}`, fill: false })
     window.addEventListener('pointermove', handleSplineLineMove)
     // The gesture owns its captured source/time until commit or cancellation.

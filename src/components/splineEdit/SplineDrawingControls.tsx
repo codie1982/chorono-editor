@@ -21,6 +21,6 @@ export function SplineDrawingControls({ data, controller, autoClose, onAutoClose
     </select>
     <button type="button" disabled={disabled || !endpoint} className="rounded border border-gray-600 px-2 py-1.5 disabled:opacity-40" onClick={() => { if (endpoint) onDraw('line', endpoint.pointId) }}>Continue selected endpoint</button>
     {!drawingLine && <SplineAutoCloseControl checked={autoClose} onChange={onAutoClose} />}
-    <p className="text-gray-400">Add Line starts a new Object unless Spline Vertices snap acquires an open endpoint in this layer. Click another open endpoint to join, with optional intermediate points. Auto Close joins this contour on right-click; Enter finishes open.</p>
+    <p className="text-gray-400">Add Line starts a new Object unless Spline Vertices snap acquires an open endpoint in this layer. Auto Close enables return-to-start closure and completion at another spline point. With it off, both keep drawing. Enter/Esc save placed points open; right-click follows Auto Close. Closed source curves are preserved.</p>
   </fieldset>
 }

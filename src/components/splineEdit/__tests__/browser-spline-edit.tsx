@@ -150,8 +150,10 @@ async function run() {
     assert(!Object.values(short.spline!.contours)[0].closed, 'Two anchors produced an invalid closed shape')
     await click('Undo')
     await click('Draw new line'); await tap({ x: -110, y: -120 }); await tap({ x: -15, y: -120 }); await tap({ x: -15, y: -65 }); key('Escape'); await frames()
-    equal(current().editor.getScene().layers, lineBaseline.layers, 'Escape committed an Auto Close draft')
-    checks.push('New line exposes Auto Close without selection: right-click closes only when enabled; one Undo/Redo, no extra pointer point, short/open and Escape remain safe')
+    const escaped = current().editor.getScene().layers.find(item => !lineBaseline.layers.some(old => old.id === item.id))!
+    assert(escaped && !Object.values(escaped.spline!.contours)[0].closed && Object.keys(escaped.spline!.points).length === 3, 'Escape lost placed anchors or unexpectedly closed the line')
+    await click('Undo'); equal(current().editor.getScene().layers, lineBaseline.layers, 'Escape finish was not one Undo')
+    checks.push('New line exposes Auto Close without selection: right-click follows the preference; Escape saves placed points open; each finish has one Undo/Redo')
     await reset(); await click('Spline object mode'); await click('Select spline object Donut B')
     const beforeObject = structuredClone(current().editor.getScene()), donutSource = Object.values(layer().spline!.subShapes).find(object => object.name === 'Donut B')!
     const donutPoints = donutSource.contourIds.flatMap(id => layer().spline!.contours[id].pointIds)

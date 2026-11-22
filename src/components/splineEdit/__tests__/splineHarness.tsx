@@ -116,6 +116,15 @@ async function pickExplorerRow(id: string, modifiers: MouseEventInit = {}, keybo
     : new MouseEvent('click', { bubbles: true, ...modifiers })))
   await frames()
 }
+/** Toggle the real controlled Spline Vertices setting without mutating source. */
+async function setSplineVertexSnapping(checked: boolean) {
+  const trigger = document.querySelector<HTMLButtonElement>('button[title="Snap settings"]')!
+  flushSync(() => trigger.click()); await frames()
+  const checkbox = document.querySelector<HTMLInputElement>('[aria-label="Snap to Spline Vertices"]')
+  assert(checkbox, 'Vertex snap control is missing')
+  if (checkbox.checked !== checked) { flushSync(() => checkbox.click()); await frames() }
+  await click('Close Snap settings')
+}
 /** Drive native select events, preserving the production controlled-input path. */
 async function choose(label: string, value: string) { const el = document.querySelector<HTMLSelectElement>(`[aria-label="${label}"]`); assert(el, `Missing ${label}`); flushSync(() => { el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })) }); await frames() }
 function key(name: string, modifiers = {}) { flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...modifiers }))) }
@@ -129,4 +138,4 @@ async function raster() { const scene = current().editor.getScene(), output = aw
   try { const bitmap = await createImageBitmap(output.value.blob); try { cv.width = bitmap.width; cv.height = bitmap.height; const ctx = cv.getContext('2d')!; ctx.drawImage(bitmap, 0, 0); return ctx.getImageData(0, 0, cv.width, cv.height).data } finally { bitmap.close() } }
   finally { output.release(); cv.width = cv.height = 0 } }
 
-export { Subject, fixture, current, frames, layer, canvas, world, client, pointer, tap, drag, click, key, choose, reset, raster, assert, equal, contextAt, pickExplorerRow }
+export { Subject, fixture, current, frames, layer, canvas, world, client, pointer, tap, drag, click, key, choose, reset, raster, assert, equal, contextAt, pickExplorerRow, setSplineVertexSnapping }

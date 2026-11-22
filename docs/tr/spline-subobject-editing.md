@@ -191,16 +191,28 @@ kanıtlar ilgili ignored artifacts dizininde tutulur.
   başlangıç/son ucu seçiliyken açılır. Başlangıçtan devam, yeni noktaları ters sırayla
   başa ekler; mevcut yön/segmentler/handle'lar korunur. Diğer konturlarla otomatik
   Join/Weld yapılmaz. Enter açık bitirir; sağ tık Auto Close tercihine göre kapatır veya açık bırakır.
-- **Auto Close** varsayılan kapalı, yerel tarayıcı tercihidir (`chorono.spline-drawing.v1`).
+- **Auto Close** varsayılan açık, yerel tarayıcı tercihidir (`chorono.spline-drawing.v1`).
   Yeni Line aracı seçildiğinde, henüz katman seçimi/ilk nokta yokken de ayrı
   Spline & Boolean panelindeki Draw Line bölümünde görünür. Açıkken sağ tık,
   farenin konumundan bağımsız olarak son yerleştirilen anchor'ı ilk/opposite
   anchor'a bağlar; imlecin konumuna yeni nokta eklenmez. En az üç anchor gerekir;
   iki noktalı line açık kalır, tek noktalı draft kaynak oluşturmaz. Enter açık
-  bitirir; Escape draft'ı iptal eder. Ayrıca kendi başlangıç/opposite uç noktasının 10 CSS px
-  yakınına tıklamak kapanış preview'si ve tek kapanış segmenti üretir. Zoom'a bağlı
-  dünya toleransı kullanılır; çift endpoint yazılmaz. Kapalıyken yakın tıklama
-  kapanış yapmaz; Object → Close contours ile açıkça kapatılabilir.
+  bitirir. Escape de yerleştirilmiş noktaları açık Line olarak kaydeder ve araçtan
+  çıkar; tek nokta kaynak/history oluşturmaz. Başlangıç/opposite uç noktasının
+  10 CSS px yakınına tıklamak, Auto Close açıkken kapanış preview'si ve
+  tek kapanış segmenti üretir. Zoom'a bağlı dünya toleransı kullanılır; çift
+  endpoint veya sıfır uzunluklu kenar yazılmaz. Auto Close kapalıyken başlangıca
+  dönüş ve başka spline anchor'ına snap çizimi bitirmez; noktalar eklenmeye devam
+  eder. Esc/Enter veya sağ tık açık Line olarak kaydedip araçtan çıkarır. Açıkça
+  kaydedilmiş kullanıcı tercihi korunur; eksik/bozuk storage varsayılanı true'dur.
+- Auto Close açıkken kapalı circle/spline'ın snap ile alınmış başka bir anchor'ına ulaşmak çizimi
+  tamamlar. Kapalı eğri değiştirilmez; aynı spline'a ayrı, açık Line Object
+  eklenir. Yalnız açık uçlar mevcut native Join komutuyla topolojik bağlanır;
+  kapalı circle'a branch/weld veya görünmez kapatma yayı uydurulmaz.
+- Esc ve canvas/pasteboard sağ tık yalnız güncel yerleştirilmiş Line'ı bitirir;
+  önceki Line Objects kalır. Her bitiş tek Undo/Redo'dur. Backspace son geçici
+  anchor'ı siler. Box primitive iptali, mode/document değişimi ve stale revision/
+  time korumaları geçici draft'ı temizlemeyi sürdürür; kalıcı kaynakları silmez.
 - **Move / Rotate / Scale** araçları aktif seçili alt geometriyi sürükler. Point,
   Edge veya Object, aynı benzersiz anchor kümesine çözülür. Delikli objenin tüm
   konturları ve bağlı Bézier handle'ları birlikte dönüşür. İki ucu seçilmiş explicit
