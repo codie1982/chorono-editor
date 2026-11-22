@@ -2,7 +2,7 @@
 
 - **Kayıt tarihi:** 22 Kasım 2026
 - **Branch:** `codex/mesh2d-mesh0`
-- **Durum:** Faz 2 TODO; v0.5.0 Faz 1 release blocker'ı değil
+- **Durum:** v0.6.0 planı; v0.5.0 release blocker'ı değil
 - **Başlangıç tabanı:** FRACTURE3 kabulü `acc68a08`'e kadar kayıtlıdır; yeniden
   başlarken branch HEAD ve bu belgeden sonraki migration'lar ayrıca doğrulanır.
 
@@ -25,7 +25,7 @@ araştırdı:
 Prototip tamamlanmadı, test edilmedi, UI/MCP/portable entegrasyonu almadı ve
 commitlenmedi. Ara tipler `src/lib/types/fracture.ts` içindeki mevcut union
 sınırına yanlış konumda eklenerek TypeScript yapısını bozmuştu. Bu yarım kaynak
-Faz 1 ağacından kaldırıldı; `src/lib/types/fracture.ts` ile
+v0.5.0 ağacından kaldırıldı; `src/lib/types/fracture.ts` ile
 `src/lib/fracture/index.ts` FRACTURE3'ün geçerli haline geri getirildi.
 
 Sonuç olarak:
@@ -242,5 +242,5 @@ event-sequence/checkpoint kapsamı karıştırılmaz.
    genişletme.
 5. Her dikey dilimi ayrı, çalışan commit grubunda kapat; kaynak kırıkken UI/MCP
    aşamasına geçme.
-6. Faz 1 branch'i release'e hazırlanıyorsa FRACTURE4'e aynı branch'te yeniden
-   başlanacağı varsayılmaz; önce açık branch/kapsam kararı kaydedilir.
+6. v0.6.0 geliştirmesine başlamadan önce ayrı branch/kapsam ve masaüstü/ortak
+   dependency kapılarının durumu kaydedilir.
