@@ -78,7 +78,9 @@ vertekslere bağlanmaz; önce pinleri kaldırın veya clip'i açıkça yeniden b
   düzenlemeleri mevcut source-point komutlarını kullanır ve aynı ghost'u gösterir.
   Aynı Edit oturumundaki hareketler tek Edit Mesh'te sırayla birikir; her hareket
   ayrı Undo/Redo adımıdır. Ghost, geometri/ayar/Undo/Redo/playhead değişiminde
-  yeniden yakalanmaz; oturumdan çıkıp girince yeni başlangıç alınır. Araçların
+  yeniden yakalanmaz; oturumdan çıkıp girince o anki hesaplanmış geometri yeni
+  ghost başlangıcı alınır. Son sıradaki etkin Edit Mesh aynı kimlikle kullanılır;
+  giriş/çıkış Undo oluşturmaz, sonraki hareket ayrı Undo/Redo adımıdır. Araçların
   arasına başka modifier eklenirse mevcut Edit Mesh'i listenin sonuna taşımak
   veya oturumu yeniden açmak gerekir; sırayı sessizce değiştirmez.
 - Yeni açık/kapalı spline oluşturma da stroke-only varsayılanını kullanır.

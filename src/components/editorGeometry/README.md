@@ -71,6 +71,9 @@ Inside Edit mode, whole-mesh drags use the native pointer transaction with a
 each movement composes its local affine into that stage in a separate Undo step.
 The entry ghost does not reset after Execute, Undo/Redo or a playhead change;
 temporary preview/playback hiding keeps its snapshot until the session exits.
+Re-entering Edit reuses the existing enabled tail Edit Mesh instance and captures
+the current evaluated geometry as a new ghost baseline. Enter/exit adds no Undo
+step; the next movement has its own Undo/Redo and leaves that new ghost unchanged.
 Spline sub-object gestures keep their existing source-point commands. Both preserve object TRS and
 anchor; mesh arrow nudges use local geometry commands as well. Generated Spline
 results never fall through to root transforms. `GeometryEditGhost` retains one
