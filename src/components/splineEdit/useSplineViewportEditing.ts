@@ -22,6 +22,7 @@ import { transformAxisFrame, type TransformSpace } from '@/lib/canvas/math/trans
 interface Options {
   controller: SplineEditController; layer: Layer | null | undefined; scene: ChronoScene; editor: EditorStateReturn
   canvasRef: RefObject<HTMLCanvasElement>; overrides?: OverrideMap; timeMs: number; zoom: number
+  onSelectLayer?(id: string | null): void
   transformSpace?: TransformSpace
   enabled: boolean; panMode: boolean; toolMode?: string; containment: 'inside' | 'touching'
   drag: Pick<UseCanvasDragReturn, 'dragRef' | 'startDrag'>
@@ -49,7 +50,7 @@ export function useSplineViewportEditing(options: Options) {
   const canPick = active && !options.panMode && options.toolMode !== 'pan' && !!geometry
   const writable = !!layer && !layer.hidden && !layer.locked && !layer.frozen && !layer.instanceOf
   const attachPick = useSplineAttachPicking({ layer, controller, getScene: options.editor.getScene,
-    dispatch: options.editor.dispatchCommand, timeMs, overrides, disabled: !canPick || !writable,
+    dispatch: options.editor.dispatchCommand, timeMs, overrides, disabled: !canPick || !writable, onSelectLayer: options.onSelectLayer,
     isTransactionActive: options.editor.isTransactionActive, warning: options.warning })
   useEffect(() => { if (controller.attaching && (!canPick || !writable)) controller.setAttaching(false) }, [controller.attaching, controller.setAttaching, canPick, writable])
   useEffect(() => { setHover(null); setMenu(null) }, [controller.layerId, controller.active, controller.mode, controller.attaching, options.enabled, options.panMode, timeMs, options.editor.getDocumentSignal()])

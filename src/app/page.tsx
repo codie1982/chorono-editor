@@ -599,7 +599,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       : shiftHeld ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))
   }, [])
   const pickSplineToAttach = useSplineAttachPicking({ layer: selectedLayer, controller: splineEdit,
-    getScene: editor.getScene, dispatch: dispatchCommand, timeMs: currentTimeMs, overrides: frame.overrides,
+    getScene: editor.getScene, dispatch: dispatchCommand, timeMs: currentTimeMs, overrides: frame.overrides, onSelectLayer: selectLayer,
     disabled: isPlaying || manualPreview || !!detail.session, isTransactionActive: editor.isTransactionActive,
     warning: message => { if (message) toast.warning('Add Spline', { detail: message }) } })
   const shapeCreation = useShapeCreationTool({ toolMode, setToolMode, onSelect: selectLayer,
@@ -621,6 +621,13 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     else { selectLayer(id); setPendingSplineResult({ layerId: id, mode, ids: [] }) }
     openSplineTools()
   }, [isPlaying, manualPreview, detail.session, editor.isTransactionActive, editor.getScene, splineEdit.layerId, splineEdit.enter, selectedLayerIds.size, selectLayer, openSplineTools])
+  /** Digits enter one shared Edit level without changing source or restarting a session. */
+  const enterGeometryEditLevel = useCallback((mode: 'point' | 'edge' | 'object') => {
+    if (isPlaying || manualPreview || detail.session || editor.isTransactionActive() || selectedLayerIds.size !== 1) return
+    const layer = editor.getScene().layers.find(item => item.id === selectedLayerId)
+    if (!layer || !['spline', 'mesh2d'].includes(layer.type) || layer.locked || layer.hidden || layer.frozen || layer.instanceOf) return
+    setToolMode('select'); geometryEdit.enter(mode); openSplineTools()
+  }, [isPlaying, manualPreview, detail.session, editor, selectedLayerIds.size, selectedLayerId, setToolMode, geometryEdit.enter, openSplineTools])
   useEffect(() => {
     if (selectedLayer?.spline && !isPlaying && !manualPreview && !detail.session) openSplineTools()
   }, [selectedLayer?.id, splineEdit.active, isPlaying, manualPreview, !!detail.session, openSplineTools])
@@ -1494,6 +1501,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     onStepBack:    (frames) => handleSeek(Math.max(0, currentTimeMs - (frames * 1000) / frameRate)),
     onStepForward: (frames) => handleSeek(Math.min(maxDuration, currentTimeMs + (frames * 1000) / frameRate)),
     onNudgeSelected: nudgeSelected,
+    onGeometryEditMode: enterGeometryEditLevel,
     onClearSelection: () => {
       // An armed/active authoring tool consumes the first Escape itself.
       if (shapeCreation.kind || toolMode === 'pen' || toolMode === 'spline-draw' || pathPickMode || motionKeyEditing || arrayAuthoring.active || fullscreenCanvas) return
@@ -1907,6 +1915,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     splineEdit={splineEdit}
                     geometryEditActive={geometryEdit.active}
                     onExitGeometryEdit={geometryEdit.exit}
+                    geometryEditMode={geometryEdit.mode}
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineOutline.result}
@@ -2092,7 +2101,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
               },
               {
                 id: 'geometryEdit', title: 'Edit',
-                render: () => <SplineToolsPanel contained booleanPreview={booleanPreview}
+                render: () => <SplineToolsPanel contained booleanPreview={booleanPreview} showBooleanPreview={!splineEdit.active || booleanPreview.active}
                   lineDrawing={toolMode === 'spline-draw' && splineDrawKind === 'line' ? { autoClose: splineDrawingPreferences.autoClose, onAutoClose: splineDrawingPreferences.setAutoClose } : undefined}>
                 <NumericPropertyProvider scene={scene} layerId={selectedLayerId ?? undefined} dispatch={dispatchCommand} getScene={editor.getScene}
                   isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>

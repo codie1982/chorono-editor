@@ -9,6 +9,7 @@ import { assertLayerAncestors } from '../../scene/hierarchy/assertLayerAncestors
 
 import { modifierGeometryDriverReason } from '../../modifiers/sourcePolicy'
 import { accumulateMeshTransform, readMeshTransformSettings } from '../../modifiers/mesh/meshTransformSettings'
+import { accumulateMeshVertexEdits } from '../../modifiers/mesh/meshVertexEdits'
 /** Static geometry authority. Transform/paint playback remains supported;
  * source/topology drivers cannot be silently captured at one evaluated pose. */
 function editable(scene: ChronoScene, id: string): Layer {
@@ -167,15 +168,18 @@ export function prepareConvertModifierStack(scene: ChronoScene, layerId: string,
  * Non-tail/disabled/other-type IDs refuse instead of silently changing order.
  * Each command has its own exact Undo snapshot, independent of the shared ID. */
 export function makeTransformMeshGeometryCmd(scene: ChronoScene, layerId: string, modifierId: string,
-  settings: Readonly<Record<string, unknown>>): EditorCommand {
+  settings: Readonly<Record<string, unknown>>, vertexIds?: readonly string[]): EditorCommand {
   const layer = editable(scene, layerId), stack = modifierStackService.stackFor(layer)
   if (layer.type !== 'mesh2d') throw new Error('Select a Mesh to edit its geometry.')
   const index = stack.modifiers.findIndex(item => item.id === modifierId), previous = stack.modifiers[index]
   if (previous && (index !== stack.modifiers.length - 1 || previous.type !== 'meshTransform' || !previous.enabled))
     throw new Error('Keep the active Edit Mesh enabled at the end of the stack, or exit and re-enter Edit mode.')
   const delta = readMeshTransformSettings(settings)
-  const combined = previous ? accumulateMeshTransform(readMeshTransformSettings(previous.settings), delta) : delta
-  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings: { ...combined } }
+  const combined = vertexIds ? previous ? readMeshTransformSettings(previous.settings)
+    : { ...delta, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }
+    : previous ? accumulateMeshTransform(readMeshTransformSettings(previous.settings), delta) : delta
+  const vertexEdits = accumulateMeshVertexEdits(previous?.settings, layer.mesh2d!.geometry, delta, vertexIds)
+  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings: { ...combined, ...(vertexEdits ? { vertexEdits } : {}) } }
   const modifiers = previous ? stack.modifiers.map((item, i) => i === index ? record : item) : [...stack.modifiers, record]
   return replace(scene, layer, { ...stack, modifiers }, 'Transform mesh geometry')
 }

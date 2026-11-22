@@ -3,14 +3,18 @@ import type { Layer } from '@/lib/types'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { pathToSvgString } from '@/lib/geometry/PathCommand'
 import { splineToPathDefinition } from '@/lib/spline/splineToPath'
+import { Mesh2DBoundaryRingExtractor } from '@/lib/geometry/mesh2d/Mesh2DBoundaryRingExtractor'
 import { mesh2DBoundaryPath } from '@/lib/geometry/mesh2d'
+import type { SplineSourceGhost } from '@/lib/editor/boolean/materializeSplineBoolean'
 import { AnchorHandle } from './AnchorHandle'
 
 /** Convert borrowed rendered geometry into a local outline, never a scene copy. */
 function outline(layer: Layer): string {
   if (layer.spline) return pathToSvgString(splineToPathDefinition(layer.spline))
   const mesh = layer.mesh2d
-  return mesh?.boundaryRings ? pathToSvgString(mesh2DBoundaryPath(mesh.boundaryRings, mesh.geometry.positions)) : ''
+  if (!mesh) return ''
+  const rings = mesh.boundaryRings ?? new Mesh2DBoundaryRingExtractor().extract(mesh.geometry).map(ring => ring.vertexIndices)
+  return pathToSvgString(mesh2DBoundaryPath(rings, mesh.geometry.positions))
 }
 
 /** Edit-session-only original silhouette and fixed origin. Mount on entry and
@@ -18,8 +22,8 @@ function outline(layer: Layer): string {
  * boundary string, matrix and pivot are retained, never a source scene or GPU
  * resource. Zoom is applied at display time; this overlay never enters exports.
  * Mesh live outlines remain orange while the original is dashed/translucent. */
-export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible = true }: {
-  layer: Layer; worldMatrix: Matrix2D; zoom: number; document: AbortSignal; visible?: boolean
+export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible = true, outlineVisible = true, sourceGhosts = [] }: {
+  layer: Layer; worldMatrix: Matrix2D; zoom: number; document: AbortSignal; visible?: boolean; outlineVisible?: boolean; sourceGhosts?: readonly SplineSourceGhost[]
 }) {
   const current = useMemo(() => outline(layer), [layer.spline, layer.mesh2d?.geometry, layer.mesh2d?.boundaryRings])
   const snapshot = useRef<{ id: string; type: string; document: AbortSignal;
@@ -35,9 +39,12 @@ export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible 
   const screenMatrix = (matrix: Matrix2D) => `matrix(${matrix.toArray().map(value => value * zoom).join(' ')})`
   return <>
     <svg role="img" aria-label="Original geometry ghost" className="absolute inset-0 z-20 overflow-visible pointer-events-none">
-      <path data-edit-ghost d={original.path} transform={screenMatrix(original.matrix)}
+      {outlineVisible && !sourceGhosts.length && <path data-edit-ghost d={original.path} transform={screenMatrix(original.matrix)}
         fill={layer.type === 'mesh2d' ? '#94a3b8' : 'none'} fillOpacity={.12} fillRule="evenodd"
-        stroke="#64748b" strokeOpacity={.65} strokeWidth={1.5} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />
+        stroke="#64748b" strokeOpacity={.65} strokeWidth={1.5} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />}
+      {sourceGhosts.map((ghost, index) => <path key={index} data-boolean-source-ghost d={ghost.path}
+        transform={`matrix(${ghost.matrix.map(value => value * zoom).join(' ')})`} fill="none"
+        stroke="#94a3b8" strokeOpacity={.28} strokeWidth={1.25} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />)}
       {layer.mesh2d && <path data-mesh-edit-boundary d={current} transform={screenMatrix(worldMatrix)} fill="none"
         stroke="#FDBA74" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
     </svg>

@@ -17,6 +17,8 @@ export async function checkSplineBooleanAdd(): Promise<string> {
   flushSync(() => { current().editor.resetScene(scene); current().select('boolean-a'); current().setTime(0); current().setTool('select') })
   await frames(); await click('Spline object mode')
   assert(document.querySelector<HTMLButtonElement>('[aria-label="Spline operation Union"]')?.getAttribute('aria-pressed') === 'true', 'Add Spline must default to Union')
+  const preserve = document.querySelector<HTMLInputElement>('[aria-label="Non-destructive spline Boolean"]')!
+  flushSync(() => preserve.click()); await frames()
   const initial = structuredClone(current().editor.getScene())
   await click('Add existing splines'); await pickExplorerRow('boolean-b')
   const owner = () => { const found = current().editor.getScene().layers.find(layer => layer.booleanOperation); assert(found, 'The native pick did not create a Boolean recipe'); return found }
@@ -43,7 +45,7 @@ export async function checkSplineBooleanAdd(): Promise<string> {
   await click('Undo'); equal(current().editor.getScene(), beforeAppend, 'Appending an input was not one Undo')
   await click('Redo'); equal(current().editor.getScene(), appended, 'Append Redo failed')
   parseSceneJson(JSON.stringify(appended))
-  const outputId = owner().booleanOperation!.resultLayerId
+  const outputId = owner().id
   await click('Merge Paths')
   const baked = structuredClone(current().editor.getScene())
   assert(current().selected === outputId && !baked.layers.some(layer => layer.booleanOperation || layer.booleanResultFor), 'Merge did not select ordinary editable spline geometry')

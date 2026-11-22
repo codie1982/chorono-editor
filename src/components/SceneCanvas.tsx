@@ -42,6 +42,7 @@ import PathGuideOverlay from './PathGuideOverlay'
 import PathEditOverlay from './PathEditOverlay'
 import type { SplineDrawResult } from './splineEdit/drawing/drawingCommand'
 import SplineEditOverlay from './SplineEditOverlay'
+import { BooleanEditOverlay } from './booleanPreview/BooleanEditOverlay'
 import { useSplineEditSelection, type SplineEditController } from './splineEdit/useSplineEditSelection'
 import { useSplineViewportEditing } from './splineEdit/useSplineViewportEditing'
 import { SplineEditMenu } from './splineEdit/SplineEditMenu'
@@ -64,6 +65,8 @@ import { SelectionFrame } from './canvas/overlays/SelectionFrame'
 import { AffineSelectionFrame } from './canvas/overlays/AffineSelectionFrame'
 import { GeometryEditGhost } from './canvas/overlays/GeometryEditGhost'
 import { useGeometryEditKeyboard } from './canvas/mesh2d/useGeometryEditKeyboard'
+import { useMeshViewportEditing } from './canvas/mesh2d/useMeshViewportEditing'
+import { MeshComponentOverlay } from './canvas/mesh2d/MeshComponentOverlay'
 import { useMeshEditSession } from './canvas/mesh2d/useMeshEditSession'
 import { OffArtboardOverlay } from './canvas/overlays/OffArtboardOverlay'
 import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
@@ -205,6 +208,7 @@ interface Props {
   /** Shared transient sub-object and preview owners; previews use composition pixels and never enter exports. */
   splineEdit?: SplineEditController
   /** Panel-owned mesh/generated-geometry settings session; hides layer gizmos. */
+  geometryEditMode?: 'point' | 'edge' | 'object'
   geometryEditActive?: boolean
   onExitGeometryEdit?: () => void
   onOpenSplineTools?: () => void
@@ -339,7 +343,7 @@ export default function SceneCanvas({
   arrayAuthoring, shapePlacementLayer = null, shapePlacementHint, onShapePlacementComplete,
   physicsOverlay, onPhysicsBondSelect,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
-  splineDrawKind = null, splineAppendTargetId = null, splineContinuationPointId = null, splineAutoClose = false, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected, splineEdit: suppliedSplineEdit, geometryEditActive = false, onExitGeometryEdit, onOpenSplineTools, booleanPreview, outlinePreview, chamferPreview, filletPreview, onEditOperation, onBooleanPreview,
+  splineDrawKind = null, splineAppendTargetId = null, splineContinuationPointId = null, splineAutoClose = false, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected, splineEdit: suppliedSplineEdit, geometryEditActive = false, geometryEditMode = 'object', onExitGeometryEdit, onOpenSplineTools, booleanPreview, outlinePreview, chamferPreview, filletPreview, onEditOperation, onBooleanPreview,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -592,7 +596,7 @@ export default function SceneCanvas({
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onAfterCloneDrag, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
     timeMs, overrides, ...meshFrameQuery,
-    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${transformSpace}:${motionEditing}:${arrayEditing}:${placingShape}:${panMode}:${toolMode}:${splineEditController.layerId}:${splineEditController.active}:${splineEditController.mode}:${geometryEditActive}`,
+    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${transformSpace}:${motionEditing}:${arrayEditing}:${placingShape}:${panMode}:${toolMode}:${splineEditController.layerId}:${splineEditController.active}:${splineEditController.mode}:${geometryEditActive}:${geometryEditMode}`,
     onWarning: setTransformWarning,
   })
 
@@ -616,24 +620,28 @@ export default function SceneCanvas({
   })
 
   const splineViewport = useSplineViewportEditing({ controller: splineEditController, layer: splineSource, scene, editor, canvasRef,
-    overrides, timeMs, zoom, panMode, toolMode, transformSpace, containment: selectionContainMode, drag: { dragRef, startDrag }, getContext: getShortcutContext,
+    overrides, timeMs, zoom, panMode, toolMode, transformSpace, onSelectLayer, containment: selectionContainMode, drag: { dragRef, startDrag }, getContext: getShortcutContext,
     enabled: !hideEditorUI && !contentInspection && !motionEditing && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && !pathPickMode,
     isSelecting: () => isSelectionActive(), warning: setTransformWarning })
   const preferredRegion = selectionToolMode?.replace('selection-', '') as SelectionRegionStyle | undefined
   const geometryEditing = splineViewport.active || (geometryEditActive && !hideEditorUI && !contentInspection && !motionEditing && !arrayEditing && !placingShape)
   const geometrySessionActive = geometryEditActive || splineEditController.active
   const meshEditModifierId = useMeshEditSession(geometryEditActive, splineSource, editor.getDocumentSignal())
+  const meshComponents = useMeshViewportEditing({ active: geometryEditing && !splineViewport.active && !panMode && toolMode !== 'pan',
+    mode: geometryEditMode, layer: splineSource, scene, editor, timeMs, overrides, zoom, transformSpace, toolMode, canvasRef,
+    drag: { dragRef, startDrag }, modifierId: meshEditModifierId, warning: setTransformWarning })
   useGeometryEditKeyboard({ active: geometryEditing && !splineViewport.active && !panMode && toolMode !== 'pan',
     layer: splineSource, editor, timeMs, overrides, canvasRef, getContext: getShortcutContext,
-    modifierId: meshEditModifierId, exit: onExitGeometryEdit, warning: setTransformWarning })
+    modifierId: meshEditModifierId, selectedVertexIds: meshComponents.active ? meshComponents.vertices : undefined, clearSelection: meshComponents.clear, exit: onExitGeometryEdit, warning: setTransformWarning })
   const regionStyle = selectionRegionForTool(toolMode, preferredRegion ?? selectionStyle) ?? (splineViewport.active && toolMode === 'pen' ? preferredRegion ?? selectionStyle ?? 'box' : null)
   const regionSelectionEnabled = !!regionStyle && !hideEditorUI && !panMode && !motionEditing && !arrayEditing && !placingShape && !pathPickMode
   const regionSelect = splineViewport.active
-    ? (ids: Set<string>, mode: 'replace' | 'add' | 'subtract') => splineEditController.select(Array.from(ids), mode) : onSelectByGeometry
+    ? (ids: Set<string>, mode: 'replace' | 'add' | 'subtract') => splineEditController.select(Array.from(ids), mode)
+    : meshComponents.active ? meshComponents.select : onSelectByGeometry
   const { selectionOverlay, beginSelectionDrag, isSelectionActive } = useSelectionTools({ canvasRef, sceneRef: geometrySceneRef, width, height,
     frame: { timeMs, overrides: geometryOverrides, ...meshFrameQuery }, selectionContainMode, onSelectByGeometry: regionSelect,
-    query: splineViewport.active ? splineViewport.query : undefined, enabled: regionSelectionEnabled,
-    contextKey: `${toolMode}:${regionStyle}:${selectionContainMode}:${timeMs}:${editor.getRevision()}:${splineViewport.active}:${splineEditController.mode}` })
+    query: splineViewport.active ? splineViewport.query : meshComponents.active ? region => meshComponents.query(region, selectionContainMode) : undefined, enabled: regionSelectionEnabled,
+    contextKey: `${toolMode}:${regionStyle}:${selectionContainMode}:${timeMs}:${editor.getRevision()}:${splineViewport.active}:${splineEditController.mode}:${geometryEditActive}:${geometryEditMode}` })
 
   /** Prepare independent selected roots once. Body and axis dragging share
    * the same evaluated baseline and parent-space conversion contract. */
@@ -775,6 +783,14 @@ export default function SceneCanvas({
     // Geometry Edit never falls through to layer movement. Mesh drags append
     // a local affine stage, preserving the original object TRS and anchor.
     if (geometryEditing) {
+      if (meshComponents.active) {
+        if (meshComponents.pointerDown(cx, cy, e)) return
+        if (regionSelectionEnabled && regionStyle) {
+          e.preventDefault(); e.stopPropagation()
+          beginSelectionDrag(regionStyle, selectionModeForModifiers(e), cx, cy, e.pointerId, e)
+        } else meshComponents.clear()
+        return
+      }
       const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       if (hit !== selectedLayerId) { if (hit) onSelectLayer(hit); return }
       if (selectedLayer?.type !== 'mesh2d' || !['select', 'move', 'rotate', 'scale'].includes(toolMode ?? 'select')) return
@@ -857,7 +873,7 @@ export default function SceneCanvas({
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
     beginMoveForSelection, layerIndex, splineViewport, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan, modelCamera,
-    regionSelectionEnabled, regionStyle, hideEditorUI, geometryEditing, meshEditModifierId, transformSpace])
+    regionSelectionEnabled, regionStyle, hideEditorUI, geometryEditing, meshEditModifierId, transformSpace, meshComponents])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1082,6 +1098,9 @@ export default function SceneCanvas({
     if (!selectedLayer || (hideEditorUI && !geometrySessionActive)) return null
     return resolveLayerWorldMatrix(selectedLayer, scene, timeMs, displayOverrides)
   }, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI, geometrySessionActive])
+  const selectedBooleanOwner = booleanOwner(scene, selectedLayerId)
+  const booleanEditResult = selectedBooleanOwner && geometryScene.layers.find(layer => layer.id === selectedBooleanOwner.booleanOperation?.resultLayerId)
+  const booleanSourceEditing = splineViewport.active && !!selectedBooleanOwner && !!booleanEditResult?.spline && !booleanEditResult.hidden
   const selectedMeshTexture = useMemo(() => {
     if (rawSelectedLayer?.type !== 'mesh2d' || rawSelectedLayer.mesh2d?.appearance?.kind !== 'texture') return null
     const assetId = rawSelectedLayer.mesh2d.appearance.textureAssetId
@@ -1242,7 +1261,7 @@ export default function SceneCanvas({
       </div>}
       {geometryEditing && !splineViewport.active && <div role="status" aria-label="Viewport geometry edit mode"
         className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded border border-orange-400/70 bg-orange-950/95 px-3 py-1.5 text-xs font-semibold text-orange-100">
-        {splineSource?.type === 'mesh2d' ? 'MESH EDIT' : 'SPLINE EDIT · Modifiers'}
+        {splineSource?.type === 'mesh2d' ? `MESH EDIT · ${geometryEditMode[0].toUpperCase() + geometryEditMode.slice(1)}` : 'SPLINE EDIT · Modifiers'}
       </div>}
       <div
         className="relative"
@@ -1537,14 +1556,20 @@ export default function SceneCanvas({
 
           {geometrySessionActive && selectedFrameLayer && selectedWorldMatrix && <GeometryEditGhost
             key={selectedFrameLayer.id} layer={selectedFrameLayer} worldMatrix={selectedWorldMatrix}
-            zoom={zoom} document={editor.getDocumentSignal()} visible={geometryEditing} />}
+            zoom={zoom} document={editor.getDocumentSignal()} visible={geometryEditing} outlineVisible={!booleanSourceEditing} sourceGhosts={splineEditController.sourceGhosts} />}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
           {splineViewport.active && selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
             && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
-            <SplineEditOverlay layer={selectedFrameLayer ?? selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
-              hover={splineViewport.hover} selection={splineEditController} />
+            <SplineEditOverlay layer={booleanSourceEditing ? selectedLayer : selectedFrameLayer ?? selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
+              hover={splineViewport.hover} selection={splineEditController} sourceGhost={booleanSourceEditing} />
           )}
+
+          {booleanSourceEditing && selectedBooleanOwner && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape && <BooleanEditOverlay
+            scene={scene} owner={selectedBooleanOwner} result={booleanEditResult} timeMs={timeMs} overrides={displayOverrides} zoom={zoom} />}
+
+          {meshComponents.active && meshComponents.model && <MeshComponentOverlay model={meshComponents.model}
+            mode={meshComponents.mode} ids={meshComponents.ids} zoom={zoom} />}
 
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
               Circle / Paint). zoom multiplier maps composition pixels to
@@ -2011,7 +2036,7 @@ export default function SceneCanvas({
           { kind: 'action', label: 'Fit to View',   shortcut: 'F',   onSelect: () => { fitAll();         close() } },
           { kind: 'action', label: 'Fit Width',                       onSelect: () => { fitWidth();       close() } },
           { kind: 'action', label: 'Fit Height',                      onSelect: () => { fitHeight();      close() } },
-          { kind: 'action', label: 'Actual Size',   shortcut: '1',   onSelect: () => { actualSize();     close() } },
+          { kind: 'action', label: 'Actual Size',   shortcut: '0',   onSelect: () => { actualSize();     close() } },
           { kind: 'separator' },
           { kind: 'submenu', label: 'Zoom', items: [
             { kind: 'action', label: '25%',  onSelect: () => { zoomTo(0.25); close() } },

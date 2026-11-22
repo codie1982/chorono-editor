@@ -3,6 +3,8 @@ import type { GeometryModifierDescriptor, ModifierGeometry } from '../geometryTy
 import type { Mesh2DGeometry } from '../../types/mesh2d'
 import { computeMesh2DLocalBounds } from '../../geometry/mesh2d'
 import { meshTransformMatrix, readMeshTransformSettings } from './meshTransformSettings'
+import { readMeshVertexEdits } from './meshVertexEdits'
+import { Mesh2DTopologyValidator } from '../../geometry/mesh2d/Mesh2DTopologyValidator'
 
 /** Editable local-geometry affine stage. Positions move; layer TRS/anchor,
  * topology, IDs and UVs remain unchanged. Positive scale preserves winding and
@@ -31,18 +33,27 @@ export class MeshTransformModifier extends MeshModifier {
   /** Refuse non-finite, singular or unbounded local affine settings. */
   validate(): void {
     readMeshTransformSettings(this.settings)
+    readMeshVertexEdits(this.settings)
   }
   /** Apply one local-pixel affine, preserving a texture's original reference box. */
   protected evaluateMesh(input: Mesh2DGeometry): Mesh2DGeometry {
     const s = readMeshTransformSettings(this.settings)
-    if (!s.x && !s.y && !s.rotation && s.scaleX === 1 && s.scaleY === 1) return input
+    const edits = readMeshVertexEdits(this.settings)
+    if (edits && edits.topologyHash !== input.topology.topologyHash) throw new Error('Mesh topology changed. Reset vertex edits before continuing.')
+    if (!edits && !s.x && !s.y && !s.rotation && s.scaleX === 1 && s.scaleY === 1) return input
+    const offsets = new Map(edits?.offsets.map(([id, x, y]) => [id, { x, y }]))
+    const known = new Set(input.topology.vertexIds)
+    if (edits && edits.offsets.some(([id]) => !known.has(id))) throw new Error('An edited mesh vertex no longer exists.')
     const matrix = meshTransformMatrix(s)
     const positions: number[] = []
     for (let i = 0; i < input.positions.length; i += 2) {
       const point = matrix.applyToPoint({ x: input.positions[i], y: input.positions[i + 1] })
-      positions.push(point.x, point.y)
+      const offset = offsets.get(input.topology.vertexIds[i / 2])
+      positions.push(point.x + (offset?.x ?? 0), point.y + (offset?.y ?? 0))
     }
     const box = input.textureReferenceBounds ?? computeMesh2DLocalBounds(input)
-    return { ...input, positions, ...(box ? { textureReferenceBounds: box } : {}) }
+    const result = { ...input, positions, ...(box ? { textureReferenceBounds: box } : {}) }
+    if (edits && !new Mesh2DTopologyValidator().validate(result).valid) throw new Error('This vertex edit collapses or reverses a mesh face.')
+    return result
   }
 }

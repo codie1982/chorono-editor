@@ -1,9 +1,10 @@
 'use client'
 import { useSplineTopologyActions } from './useSplineTopologyActions'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
+import { materializeSplineBoolean } from '@/lib/editor/boolean/materializeSplineBoolean'
 import { makePickBooleanCmd } from '@/lib/editor/boolean/pickOperation'
 
-type Options = Omit<Parameters<typeof useSplineTopologyActions>[0], 'onSelectLayer'>
+type Options = Parameters<typeof useSplineTopologyActions>[0]
 
 /** Adapt existing-layer picks from any editor surface to shared native Attach
  * or persisted Boolean actions, selected by the UI mode/current recipe.
@@ -32,7 +33,13 @@ export function useSplineAttachPicking(options: Options): (sourceId: string | nu
       else try {
         const command = makePickBooleanCmd(scene, layer.id, sourceId, operation, options.timeMs, options.overrides,
           { sourceObjectId: objectId, targetObjectIds: controller.bank.object })
-        if (command) options.dispatch(command)
+        if (command && (controller.nonDestructive || owner)) options.dispatch(command)
+        else if (command) {
+          if (!options.onSelectLayer) throw new Error('This host cannot select the resulting spline.')
+          const plan = materializeSplineBoolean(scene, command, layer.id, options.timeMs, options.overrides)
+          options.dispatch(plan.command); options.onSelectLayer(plan.layerId)
+          controller.focusResult({ layerId: plan.layerId, ids: plan.ids, ghosts: plan.ghosts, mode: 'object', operation, attaching: true })
+        }
         options.warning('')
       } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
     }

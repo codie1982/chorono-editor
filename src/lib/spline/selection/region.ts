@@ -1,26 +1,12 @@
+import { regionContains as contains, regionPolygon as polygon } from '../../selection/regionGeometry'
 import type { SplinePathData } from '../../types/spline'
 import type { SelectionRegion } from '../../selection/selectionGesture'
-import { pointInRect, pointInCircle, pointInPolygon, segmentsIntersect } from '../../selection/canvasShapes'
+import { pointInPolygon, segmentsIntersect } from '../../selection/canvasShapes'
 import { PathSampler } from '../../path/PathSampler'
 import { hitTestSplineFill, hitTestSplineSegment } from '../geometry/hitTest'
 import { subShapeData, splineEdgePath } from './geometry'
 import type { SplineEditMode } from './state'
 
-type Point = { x: number; y: number }
-/** Shared region membership; all coordinates are in the caller's single space. */
-function contains(region: SelectionRegion, point: Point): boolean {
-  if (region.kind === 'box') return pointInRect(point, region)
-  if (region.kind === 'lasso') return pointInPolygon(point, region.points)
-  return pointInCircle(point, { x: region.cx, y: region.cy, r: region.r })
-}
-/** Polygon boundary for box/lasso crossing tests; circular regions use the
- * existing spline segment distance picker instead of a second distance solver. */
-function polygon(region: SelectionRegion): readonly Point[] {
-  if (region.kind === 'lasso') return region.points
-  if (region.kind !== 'box') return []
-  return [{ x: region.x, y: region.y }, { x: region.x + region.w, y: region.y },
-    { x: region.x + region.w, y: region.y + region.h }, { x: region.x, y: region.y + region.h }]
-}
 /** Selection sampling reuses canonical curve conversion/PathSampler, at 32
  * subdivisions per curve (approximate, not Boolean topology). Boundaries of
  * separate contours never become a fabricated connecting segment. Inside

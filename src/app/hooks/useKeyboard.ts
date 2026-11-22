@@ -38,6 +38,8 @@ interface Handlers {
   onOpenArrayModal?: () => void
   /** Single-key tool shortcuts (V/M/H/P/G/R/S/A). Pan is a toggle request. No-op if absent. */
   onToolChange?: (mode: ToolMode) => void
+  /** Enter a component level for the selected editable Spline/Mesh; digits are idempotent. */
+  onGeometryEditMode?: (mode: 'point' | 'edge' | 'object') => void
   /** Timeline context — reveal a property track (P/S/R/T) or all keyed (U). */
   onTimelineShowProperty?: (prop: TimelineProperty | 'all') => void
   /** Timeline context — add/remove a keyframe for a property at the playhead. */
@@ -92,7 +94,7 @@ export function useKeyboard(handlers: Handlers) {
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
-    onToolChange,
+    onToolChange, onGeometryEditMode,
     onTimelineShowProperty, onTimelineToggleKeyframe,
     onTimelinePrevKeyframe, onTimelineNextKeyframe, onSetKey, onTimelineNavigate,
     getContext,
@@ -123,6 +125,10 @@ export function useKeyboard(handlers: Handlers) {
       'canvas.nudge.right10': onNudgeSelected ? () => onNudgeSelected(10, 0) : undefined,
       'canvas.nudge.up10':    onNudgeSelected ? () => onNudgeSelected(0, -10) : undefined,
       'canvas.nudge.down10':  onNudgeSelected ? () => onNudgeSelected(0, 10) : undefined,
+
+      'canvas.edit.point': onGeometryEditMode ? () => onGeometryEditMode('point') : undefined,
+      'canvas.edit.edge': onGeometryEditMode ? () => onGeometryEditMode('edge') : undefined,
+      'canvas.edit.object': onGeometryEditMode ? () => onGeometryEditMode('object') : undefined,
 
       'canvas.select.duplicate':  onDuplicateSelected,
       'canvas.select.solo': onSoloSelected,
@@ -200,7 +206,7 @@ export function useKeyboard(handlers: Handlers) {
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
-    onToolChange,
+    onToolChange, onGeometryEditMode,
     onTimelineShowProperty, onTimelineToggleKeyframe,
     onTimelinePrevKeyframe, onTimelineNextKeyframe, onSetKey, onTimelineNavigate,
     getContext,

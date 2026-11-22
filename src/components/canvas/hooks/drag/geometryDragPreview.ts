@@ -57,7 +57,7 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
         pivotX: pivot.x, pivotY: pivot.y, ...transform }
       if (!settings.x && !settings.y && !settings.rotation && settings.scaleX === 1 && settings.scaleY === 1)
         return previewLayer(base, original, original, [])
-      const command = makeTransformMeshGeometryCmd(base, original.id, drag.modifierId, settings)
+      const command = makeTransformMeshGeometryCmd(base, original.id, drag.modifierId, settings, drag.vertexIds)
       const scene = command.execute(base), next = scene.layers.find(layer => layer.id === original.id)!
       return { ...previewLayer(base, original, next, ['modifierStack'], `Edit Mesh · ${drag.operation}`), scene, geometryCommand: command }
     }

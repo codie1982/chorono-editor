@@ -59,3 +59,13 @@ there is no mouse cursor, snapping tolerance gesture or global preference write.
 Coordinates are layer-local logical px; solver amounts/tolerance are composition
 px. `timeMs` evaluates parent placement; `timelineIds` is required for deterministic
 edits in state-machine scenes. Inspect source drivers before modifying geometry.
+
+The editor's Spline Boolean & Paths section integrates Union/Subtract/Intersect/
+XOR, Compound Path, Merge Paths and Separate Paths. Default interactive area
+actions materialize one editable spline in a single Undo. Non-Destructive keeps
+the existing retained-input recipe until Merge; Merge collapses the parent itself
+into a spline. `Separate Paths` groups independent outer contours with their
+holes; `Separate Inputs` restores original Boolean sources. These UI choices do
+not change the documented scripting `boolean` operation's retained-recipe contract.
+Canvas shortcuts 1/2/3 enter Point/Edge/Object for selected Spline/Mesh; they do
+not run in text/numeric inputs, modal widgets, timeline or 3D detail contexts.

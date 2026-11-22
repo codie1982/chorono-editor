@@ -228,6 +228,8 @@ export interface SplineGeometryDrag {
  * preview/commit session. Layer placement, anchor, topology and UVs stay fixed. */
 export interface MeshGeometryDrag extends Omit<SplineGeometryDrag, 'kind' | 'pointIds'> {
   kind: 'meshGeometry'
+  /** Selected stable vertices; omission preserves whole-mesh Object editing. */
+  vertexIds?: readonly string[]
   modifierId: string
 }
 

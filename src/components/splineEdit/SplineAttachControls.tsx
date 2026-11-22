@@ -12,14 +12,14 @@ const operations = [
 
 /** Existing-layer pick mode and shared Boolean actions. Owns no geometry or
  * history: all surfaces reuse the guarded Attach/Boolean native commands. */
-export function SplineAttachControls({ controller, disabled, onBegin, booleanActions }: {
-  controller: SplineEditController; disabled?: boolean; onBegin?(): void; booleanActions: BooleanOperationActions
+export function SplineAttachControls({ controller, disabled, onBegin, booleanActions, onStructure }: {
+  controller: SplineEditController; disabled?: boolean; onBegin?(): void; booleanActions: BooleanOperationActions; onStructure?(kind: 'compound' | 'separate'): void
 }) {
   const recipe = booleanActions.owner?.booleanOperation
   const operation = recipe?.operation ?? controller.attachOperation
   return <section aria-label="Add to this Spline" className="space-y-2 rounded border border-gray-700 p-2">
     <div className="flex items-center justify-between gap-2">
-      <h4 className="font-medium">Add Spline</h4>
+      <h4 className="font-medium">Spline Boolean &amp; Paths</h4>
       <button type="button" aria-label="Add existing splines" aria-pressed={controller.attaching}
         title="Pick existing spline objects to attach"
         disabled={disabled} onClick={() => { if (!controller.attaching) onBegin?.(); controller.setAttaching(!controller.attaching) }}
@@ -27,6 +27,11 @@ export function SplineAttachControls({ controller, disabled, onBegin, booleanAct
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2v12M2 8h12" /></svg>
       </button>
     </div>
+    <label className="flex items-center gap-2 text-gray-300">
+      <input type="checkbox" aria-label="Non-destructive spline Boolean" checked={!!recipe || controller.nonDestructive}
+        disabled={disabled || !!recipe} onChange={event => controller.setNonDestructive(event.target.checked)} />
+      Non-Destructive · keep sources
+    </label>
     <div role="group" aria-label="Spline area operation" className="flex flex-wrap gap-1.5">
       {operations.map(([value, label, hint]) => <button key={value} type="button" aria-label={`Spline operation ${label}`}
         aria-pressed={operation === value} title={hint} disabled={disabled || value === 'attach' && !!recipe}
@@ -37,11 +42,15 @@ export function SplineAttachControls({ controller, disabled, onBegin, booleanAct
           if (controller.mode !== 'object') controller.enter('object')
         }}>{label}</button>)}
     </div>
+    <div role="group" aria-label="Spline path structure" className="flex flex-wrap gap-2">
+      <button type="button" disabled={disabled || !!recipe} className="min-h-8 rounded border border-gray-600 px-2 py-1.5 disabled:opacity-40" onClick={() => onStructure?.('compound')}>Compound Path</button>
+      <button type="button" disabled={disabled || !!recipe} className="min-h-8 rounded border border-gray-600 px-2 py-1.5 disabled:opacity-40" onClick={() => onStructure?.('separate')}>Separate Paths</button>
+    </div>
     <p aria-live="polite" className="text-gray-400">{controller.attaching
       ? 'Pick another Object in this spline, or a spline / shape in the viewport or Scene Explorer. Esc, right-click or + finishes.'
-      : 'Select Objects, then click an operation to combine them. Use + to pick more inputs with the active operation.'}</p>
-    <p className="text-gray-400">{operation === 'attach' ? 'Keeps open/closed contours; added objects use this spline’s appearance and leave their original layer.'
-      : 'Closed areas only. Original inputs stay editable; the result uses A’s appearance. Subtract removes added areas from A.'}</p>
+      : 'Select Objects, then click an operation to create an editable spline. Use + to pick more inputs with the active operation.'}</p>
+    <p className="text-gray-400">{recipe || controller.nonDestructive ? 'Sources stay editable. Merge Paths commits an editable spline; Separate Inputs restores the originals.' : operation === 'attach' ? 'Keeps open/closed contours; added objects use this spline’s appearance and leave their original layer.'
+      : 'Closed areas only. Applies immediately to an editable spline with A’s appearance. Undo restores the original inputs. Subtract removes B from A.'}</p>
     {recipe && <>
       <p className="text-gray-400">A: {booleanActions.primaryName} · {recipe.inputs.length} inputs. Operation buttons recalculate all inputs.{recipe.reverse && ' Subtraction order: B − A.'}</p>
       <div className="flex flex-wrap gap-2">

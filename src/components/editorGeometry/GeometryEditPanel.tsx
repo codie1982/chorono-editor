@@ -40,7 +40,7 @@ export default function GeometryEditPanel(props: GeometryEditPanelProps) {
     </header>}
     {!multiple && supported && layer.type !== 'shape' && props.editMode && <button type="button"
       disabled={!editing && (props.conversionDisabled || layer.locked || layer.hidden || layer.frozen || !!layer.instanceOf)}
-      onClick={editing ? props.editMode.exit : props.editMode.enter}
+      onClick={() => editing ? props.editMode!.exit() : props.editMode!.enter()}
       className="min-h-9 rounded border border-orange-400/60 bg-orange-500/10 px-3 py-1.5 text-orange-100 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-50">
       {editing ? 'Exit edit mode' : 'Enter edit mode'}
     </button>}
@@ -70,6 +70,13 @@ function MeshSettings({ layer, ...props }: GeometryEditPanelProps & { layer: Lay
   const [selected, setSelected] = useState<Mesh2DSettingsSection>('source')
   const scene = props.getScene()
   return <section aria-label="Mesh editing" className="space-y-3">
+    {props.editMode && <div role="group" aria-label="Mesh selection mode" className="grid grid-cols-3 gap-1.5">
+      {(['point', 'edge', 'object'] as const).map((mode, index) => <button type="button" key={mode}
+        aria-label={`Mesh ${mode} mode`} aria-pressed={props.editMode!.active && props.editMode!.mode === mode} aria-keyshortcuts={String(index + 1)}
+        onClick={() => props.editMode!.enter(mode)} className={`min-h-9 rounded border px-2 py-1.5 focus-visible:outline focus-visible:outline-orange-300 ${props.editMode!.mode === mode ? 'border-orange-400 bg-orange-500/20 text-orange-100' : 'border-gray-600 bg-gray-800'}`}>
+        {mode[0].toUpperCase() + mode.slice(1)} <kbd className="ml-1 text-xs opacity-60">{index + 1}</kbd>
+      </button>)}
+    </div>}
     <ModifierStackPanel {...props} layer={layer} />
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mesh settings">
       {([{ id: 'source', label: 'Geometry' }, { id: 'texture', label: 'Texture' }, { id: 'pins', label: 'Pins' }] as const).map(item =>
