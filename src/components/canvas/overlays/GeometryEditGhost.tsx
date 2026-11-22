@@ -14,22 +14,24 @@ function outline(layer: Layer): string {
 }
 
 /** Edit-session-only original silhouette and fixed origin. Mount on entry and
- * unmount on exit; document/layer/frame changes replace the snapshot. Only one
+ * unmount on exit; document/layer changes replace the snapshot. Only one
  * boundary string, matrix and pivot are retained, never a source scene or GPU
  * resource. Zoom is applied at display time; this overlay never enters exports.
  * Mesh live outlines remain orange while the original is dashed/translucent. */
-export function GeometryEditGhost({ layer, worldMatrix, zoom, document, timeMs }: {
-  layer: Layer; worldMatrix: Matrix2D; zoom: number; document: AbortSignal; timeMs: number
+export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible = true }: {
+  layer: Layer; worldMatrix: Matrix2D; zoom: number; document: AbortSignal; visible?: boolean
 }) {
   const current = useMemo(() => outline(layer), [layer.spline, layer.mesh2d?.geometry, layer.mesh2d?.boundaryRings])
-  const snapshot = useRef<{ id: string; type: string; document: AbortSignal; timeMs: number;
+  const snapshot = useRef<{ id: string; type: string; document: AbortSignal;
     path: string; matrix: Matrix2D; origin: { x: number; y: number } }>()
   if (!snapshot.current || snapshot.current.id !== layer.id || snapshot.current.type !== layer.type
-    || snapshot.current.document !== document || snapshot.current.timeMs !== timeMs) {
-    snapshot.current = { id: layer.id, type: layer.type, document, timeMs, path: current, matrix: worldMatrix,
+    || snapshot.current.document !== document) {
+    snapshot.current = { id: layer.id, type: layer.type, document, path: current, matrix: worldMatrix,
       origin: worldMatrix.applyToPoint({ x: layer.transform.anchorX, y: layer.transform.anchorY }) }
   }
   const original = snapshot.current
+  // Playback/preview can hide chrome without ending the source Edit session.
+  if (!visible) return null
   const screenMatrix = (matrix: Matrix2D) => `matrix(${matrix.toArray().map(value => value * zoom).join(' ')})`
   return <>
     <svg role="img" aria-label="Original geometry ghost" className="absolute inset-0 z-20 overflow-visible pointer-events-none">

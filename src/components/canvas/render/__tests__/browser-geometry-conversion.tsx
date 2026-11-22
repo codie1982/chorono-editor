@@ -13,6 +13,7 @@ import { useSplineEditSelection } from '@/components/splineEdit/useSplineEditSel
 import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
 import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
 import { checkLiveMeshCenter } from './checkLiveMeshCenter'
+import { checkMeshEditSession } from './checkMeshEditSession'
 import { Mesh2DBoundaryRingExtractor } from '@/lib/geometry/mesh2d'
 
 /** Synthetic, unpersisted frame-with-hole plus separate island. Every command
@@ -40,6 +41,7 @@ function Subject() {
   const [selected, setSelected] = useState(layers.map(layer => layer.id))
   const [tool, setTool] = useState<'select' | 'move' | 'scale' | 'rotate'>('select')
   const [centerCheck, setCenterCheck] = useState('')
+  const [sessionCheck, setSessionCheck] = useState('')
   const ids = useMemo(() => new Set(selected), [selected])
   const layer = editor.scene.layers.find(item => item.id === selected[0]) ?? null
   const splineEdit = useSplineEditSelection(selected.length === 1 ? layer : null, editor.getDocumentSignal())
@@ -69,8 +71,12 @@ function Subject() {
       {layer?.id === 'rounded' && layer.type === 'mesh2d' && <button onClick={() => {
         void checkLiveMeshCenter().then(setCenterCheck, error => setCenterCheck(`FAIL · ${String(error)}`))
       }}>Check live mesh center</button>}
+      {layer?.type === 'mesh2d' && editMode.active && <button onClick={() => {
+        void checkMeshEditSession(editor, layer.id).then(setSessionCheck, error => setSessionCheck(`FAIL · ${String(error)}`))
+      }}>Check Edit session</button>}
     </nav>
     {centerCheck && <output aria-label="Live mesh center check" className="block px-3 pb-3">{centerCheck}</output>}
+    {sessionCheck && <output aria-label="Edit session check" className="block px-3 pb-3">{sessionCheck}</output>}
     {editMode.active && <output aria-label="Edit object transform" className="block px-3 pb-3">
       Object transform {JSON.stringify(layer?.transform)}
     </output>}

@@ -8,6 +8,7 @@ import { uid } from '../../spline/util/uid'
 import { assertLayerAncestors } from '../../scene/hierarchy/assertLayerAncestors'
 
 import { modifierGeometryDriverReason } from '../../modifiers/sourcePolicy'
+import { accumulateMeshTransform, readMeshTransformSettings } from '../../modifiers/mesh/meshTransformSettings'
 /** Static geometry authority. Transform/paint playback remains supported;
  * source/topology drivers cannot be silently captured at one evaluated pose. */
 function editable(scene: ChronoScene, id: string): Layer {
@@ -160,13 +161,21 @@ export function prepareConvertModifierStack(scene: ChronoScene, layerId: string,
   return { layerId, command: replace(scene, layer, { ...stack, modifiers }, `Convert to ${target === 'spline' ? 'Spline' : '2D Mesh'}`) }
 }
 
-/** One geometry-only viewport edit. The gesture owns a stable, new instance ID
- * and recomputes every preview from its original scene. Upstream recipes and
- * layer TRS/anchor/animation remain intact; the whole stage commits in one Undo. */
+/** One geometry-only edit against the gesture-start scene. A new session ID
+ * appends a stage; an existing enabled tail Edit Mesh composes the delta AFTER
+ * its current affine. Repeated previews never accumulate on a preview result.
+ * Non-tail/disabled/other-type IDs refuse instead of silently changing order.
+ * Each command has its own exact Undo snapshot, independent of the shared ID. */
 export function makeTransformMeshGeometryCmd(scene: ChronoScene, layerId: string, modifierId: string,
   settings: Readonly<Record<string, unknown>>): EditorCommand {
   const layer = editable(scene, layerId), stack = modifierStackService.stackFor(layer)
-  if (layer.type !== 'mesh2d' || stack.modifiers.some(item => item.id === modifierId)) throw new Error('Select a Mesh and a new geometry edit ID.')
-  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings }
-  return replace(scene, layer, { ...stack, modifiers: [...stack.modifiers, record] }, 'Transform mesh geometry')
+  if (layer.type !== 'mesh2d') throw new Error('Select a Mesh to edit its geometry.')
+  const index = stack.modifiers.findIndex(item => item.id === modifierId), previous = stack.modifiers[index]
+  if (previous && (index !== stack.modifiers.length - 1 || previous.type !== 'meshTransform' || !previous.enabled))
+    throw new Error('Keep the active Edit Mesh enabled at the end of the stack, or exit and re-enter Edit mode.')
+  const delta = readMeshTransformSettings(settings)
+  const combined = previous ? accumulateMeshTransform(readMeshTransformSettings(previous.settings), delta) : delta
+  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings: { ...combined } }
+  const modifiers = previous ? stack.modifiers.map((item, i) => i === index ? record : item) : [...stack.modifiers, record]
+  return replace(scene, layer, { ...stack, modifiers }, 'Transform mesh geometry')
 }

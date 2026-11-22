@@ -1,9 +1,8 @@
 import { MeshModifier } from './MeshModifier'
 import type { GeometryModifierDescriptor, ModifierGeometry } from '../geometryTypes'
 import type { Mesh2DGeometry } from '../../types/mesh2d'
-import { Matrix2D } from '../../geometry/Matrix2D'
 import { computeMesh2DLocalBounds } from '../../geometry/mesh2d'
-import { numberSetting } from '../settings'
+import { meshTransformMatrix, readMeshTransformSettings } from './meshTransformSettings'
 
 /** Editable local-geometry affine stage. Positions move; layer TRS/anchor,
  * topology, IDs and UVs remain unchanged. Positive scale preserves winding and
@@ -31,17 +30,13 @@ export class MeshTransformModifier extends MeshModifier {
   }
   /** Refuse non-finite, singular or unbounded local affine settings. */
   validate(): void {
-    for (const key of ['x', 'y']) numberSetting(this.settings, key, -1e6, 1e6)
-    for (const key of ['pivotX', 'pivotY']) numberSetting(this.settings, key, -1e7, 1e7)
-    for (const key of ['scaleX', 'scaleY']) numberSetting(this.settings, key, .01, 100)
-    numberSetting(this.settings, 'rotation', -36000, 36000)
+    readMeshTransformSettings(this.settings)
   }
   /** Apply one local-pixel affine, preserving a texture's original reference box. */
   protected evaluateMesh(input: Mesh2DGeometry): Mesh2DGeometry {
-    const s = this.settings as ReturnType<typeof MeshTransformModifier.defaults>
+    const s = readMeshTransformSettings(this.settings)
     if (!s.x && !s.y && !s.rotation && s.scaleX === 1 && s.scaleY === 1) return input
-    const matrix = Matrix2D.translation(s.x, s.y).translate(s.pivotX, s.pivotY)
-      .rotate(s.rotation).scale(s.scaleX, s.scaleY).translate(-s.pivotX, -s.pivotY)
+    const matrix = meshTransformMatrix(s)
     const positions: number[] = []
     for (let i = 0; i < input.positions.length; i += 2) {
       const point = matrix.applyToPoint({ x: input.positions[i], y: input.positions[i + 1] })

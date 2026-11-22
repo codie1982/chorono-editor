@@ -34,8 +34,11 @@ imports. The geometry adapter supplies those domain contracts separately.
   commits that result once after complete success; Undo restores the exact source.
 - `mesh/MeshTransformModifier.ts`: Edit Mesh applies a bounded positive-scale
   local affine to positions, preserving layer TRS/origin, UVs, topology and IDs.
-  Viewport gestures own one stable stage ID and one Undo; numeric settings use
-  the same ordered Execute pipeline. Clip/pin/fracture ownership rules remain
+  An Edit session owns one stable stage ID shared by drags and arrow nudges.
+  Each movement composes AFTER existing settings and keeps its own Undo/Redo.
+  Entry reuses an enabled tail Edit Mesh; otherwise the first movement appends
+  one. Non-tail/disabled stage updates and compositions requiring shear refuse
+  atomically. Numeric settings use the same ordered Execute pipeline. Clip/pin/fracture ownership rules remain
   enforced by the Mesh adapter; bake/remove incompatible ownership first.
 - `editor/modifiers/commands.ts`: add, settings, execute, enable, move, remove,
   source rebuild and bake. `makeExecuteModifierStackCmd(scene, id, patches)`

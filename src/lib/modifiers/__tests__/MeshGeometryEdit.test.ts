@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { emptyScene, newRectLayer, cloneLayerForDuplicate } from '../../defaults'
 import { prepareGeometryConversion } from '../../editor/commands-geometry-conversion'
-import { makeTransformMeshGeometryCmd, makeToggleModifierCmd } from '../../editor/modifiers/commands'
+import { makeTransformMeshGeometryCmd, makeToggleModifierCmd, prepareAddModifier } from '../../editor/modifiers/commands'
 import { parseSceneJson } from '../../format/scene/SceneJsonConverter'
 import { defaultRuntimeSceneCompiler } from '../../export/runtime/RuntimeSceneCompiler'
 import { previewGeometryDrag } from '../../../components/canvas/hooks/drag/geometryDragPreview'
@@ -19,6 +19,48 @@ function fixture() {
 const identity = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, pivotX: 0, pivotY: 0 }
 
 describe('Edit Mesh geometry and fixed object origin', () => {
+  it('accumulates ordered move/rotate/scale in one stage with separate exact Undo commands', () => {
+    const before = fixture(), layer = before.layers[0], pivot = { pivotX: 10, pivotY: 20 }
+    const move = makeTransformMeshGeometryCmd(before, layer.id, 'session', { ...identity, ...pivot, x: 20, y: -7 })
+    const moved = move.execute(before)
+    const rotate = makeTransformMeshGeometryCmd(moved, layer.id, 'session', { ...identity, ...pivot, rotation: 90 })
+    const rotated = rotate.execute(moved)
+    const scale = makeTransformMeshGeometryCmd(rotated, layer.id, 'session', { ...identity, ...pivot, scaleX: 2, scaleY: 2 })
+    const scaled = scale.execute(rotated), mesh = scaled.layers[0].mesh2d!.geometry
+    for (let i = 0; i < mesh.positions.length; i += 2) {
+      const x = layer.mesh2d!.geometry.positions[i] + 20, y = layer.mesh2d!.geometry.positions[i + 1] - 7
+      expect(mesh.positions[i]).toBeCloseTo(10 - (y - 20) * 2)
+      expect(mesh.positions[i + 1]).toBeCloseTo(20 + (x - 10) * 2)
+    }
+    expect(scaled.layers[0].modifierStack!.modifiers.filter(item => item.type === 'meshTransform')).toHaveLength(1)
+    expect(scaled.layers[0].transform).toEqual(layer.transform)
+    expect(scale.undo(scaled)).toBe(rotated); expect(rotate.undo(rotated)).toBe(moved); expect(move.undo(moved)).toBe(before)
+    expect(scale.execute(rotate.execute(move.execute(before)))).toEqual(scaled)
+    expect(parseSceneJson(JSON.stringify(scaled), true).layers[0]).toEqual(scaled.layers[0])
+  })
+  it('does not exhaust the stack for repeated edits and restores each movement independently', () => {
+    let scene = fixture()
+    const initial = scene, id = scene.layers[0].id, history: { before: typeof scene; command: EditorCommand }[] = []
+    for (let i = 0; i < 40; i++) {
+      const command = makeTransformMeshGeometryCmd(scene, id, 'session', { ...identity, x: 1, y: 2 })
+      history.push({ before: scene, command }); scene = command.execute(scene)
+    }
+    expect(scene.layers[0].modifierStack!.modifiers).toHaveLength(3)
+    expect(scene.layers[0].mesh2d!.geometry.positions[0]).toBeCloseTo(initial.layers[0].mesh2d!.geometry.positions[0] + 40)
+    for (const entry of history.reverse()) { scene = entry.command.undo(scene); expect(scene).toBe(entry.before) }
+    expect(scene).toBe(initial)
+  })
+  it('refuses changing a disabled/non-tail stage or a composition requiring shear atomically', () => {
+    const before = fixture(), id = before.layers[0].id
+    const rotated = makeTransformMeshGeometryCmd(before, id, 'session', { ...identity, rotation: 45 }).execute(before)
+    const saved = structuredClone(rotated)
+    expect(() => makeTransformMeshGeometryCmd(rotated, id, 'session', { ...identity, scaleX: 2 })).toThrow(/shear/)
+    expect(rotated).toEqual(saved)
+    const disabled = makeToggleModifierCmd(rotated, id, 'session', false).execute(rotated)
+    expect(() => makeTransformMeshGeometryCmd(disabled, id, 'session', identity)).toThrow(/enabled at the end/)
+    const plan = prepareAddModifier(rotated, id, 'meshSmooth'), downstream = plan.command.execute(rotated)
+    expect(() => makeTransformMeshGeometryCmd(downstream, id, 'session', identity)).toThrow(/end of the stack/)
+  })
   it('moves local vertices through a persisted stage, preserving layer TRS, UVs, topology and exact Undo', () => {
     const before = fixture(), source = before.layers[0], geometry = source.mesh2d!.geometry
     const command = makeTransformMeshGeometryCmd(before, source.id, 'edit-move', { ...identity, x: 20, y: -7 })

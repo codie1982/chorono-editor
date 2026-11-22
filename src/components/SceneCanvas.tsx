@@ -63,6 +63,7 @@ import { SelectionFrame } from './canvas/overlays/SelectionFrame'
 import { AffineSelectionFrame } from './canvas/overlays/AffineSelectionFrame'
 import { GeometryEditGhost } from './canvas/overlays/GeometryEditGhost'
 import { useGeometryEditKeyboard } from './canvas/mesh2d/useGeometryEditKeyboard'
+import { useMeshEditSession } from './canvas/mesh2d/useMeshEditSession'
 import { OffArtboardOverlay } from './canvas/overlays/OffArtboardOverlay'
 import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
 import { AnchorHandle } from './canvas/overlays/AnchorHandle'
@@ -106,7 +107,6 @@ import { unionBounds } from '@/lib/geometry/boundsMath'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
 import { selectionResize } from '@/lib/canvas/math/selectionResize'
 import { makeTransformMeshGeometryCmd } from '@/lib/editor/modifiers/commands'
-import { uid as geometryEditUid } from '@/lib/spline/util/uid'
 import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
 import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
 import type { ShortcutContext } from '@/lib/shortcuts'
@@ -618,9 +618,11 @@ export default function SceneCanvas({
     isSelecting: () => isSelectionActive(), warning: setTransformWarning })
   const preferredRegion = selectionToolMode?.replace('selection-', '') as SelectionRegionStyle | undefined
   const geometryEditing = splineViewport.active || (geometryEditActive && !hideEditorUI && !contentInspection && !motionEditing && !arrayEditing && !placingShape)
+  const geometrySessionActive = geometryEditActive || splineEditController.active
+  const meshEditModifierId = useMeshEditSession(geometryEditActive, splineSource, editor.getDocumentSignal())
   useGeometryEditKeyboard({ active: geometryEditing && !splineViewport.active && !panMode && toolMode !== 'pan',
     layer: splineSource, editor, timeMs, overrides, canvasRef, getContext: getShortcutContext,
-    exit: onExitGeometryEdit, warning: setTransformWarning })
+    modifierId: meshEditModifierId, exit: onExitGeometryEdit, warning: setTransformWarning })
   const regionStyle = selectionRegionForTool(toolMode, preferredRegion ?? selectionStyle) ?? (splineViewport.active && toolMode === 'pen' ? preferredRegion ?? selectionStyle ?? 'box' : null)
   const regionSelectionEnabled = !!regionStyle && !hideEditorUI && !panMode && !motionEditing && !arrayEditing && !placingShape && !pathPickMode
   const regionSelect = splineViewport.active
@@ -779,7 +781,8 @@ export default function SceneCanvas({
         const pivot = { x: selectedLayer.transform.anchorX, y: selectedLayer.transform.anchorY }
         const operation = toolMode === 'rotate' ? 'rotate' : toolMode === 'scale' ? 'scale' : 'move'
         if (operation !== 'move' && Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y) < 1e-6) return
-        const modifierId = geometryEditUid('mesh-edit')
+        const modifierId = meshEditModifierId
+        if (!modifierId) return
         makeTransformMeshGeometryCmd(scene, selectedLayer.id, modifierId,
           { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, pivotX: pivot.x, pivotY: pivot.y })
         e.preventDefault(); e.stopPropagation(); editor.beginTransaction()
@@ -850,7 +853,7 @@ export default function SceneCanvas({
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
     beginMoveForSelection, layerIndex, splineViewport, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan, modelCamera,
-    regionSelectionEnabled, regionStyle, hideEditorUI, geometryEditing])
+    regionSelectionEnabled, regionStyle, hideEditorUI, geometryEditing, meshEditModifierId])
 
   // ── Handle pointerdown → start resize ────────────────────────────────────
   const beginResize = useCallback((handle: Handle) => (e: React.PointerEvent) => {
@@ -1072,9 +1075,9 @@ export default function SceneCanvas({
   // static fallback so empty paths / unconfigured followPath layers still
   // get a sensible gizmo origin.
   const selectedWorldMatrix = useMemo(() => {
-    if (!selectedLayer || hideEditorUI) return null
+    if (!selectedLayer || (hideEditorUI && !geometrySessionActive)) return null
     return resolveLayerWorldMatrix(selectedLayer, scene, timeMs, displayOverrides)
-  }, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI])
+  }, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI, geometrySessionActive])
   const selectedMeshTexture = useMemo(() => {
     if (rawSelectedLayer?.type !== 'mesh2d' || rawSelectedLayer.mesh2d?.appearance?.kind !== 'texture') return null
     const assetId = rawSelectedLayer.mesh2d.appearance.textureAssetId
@@ -1524,9 +1527,9 @@ export default function SceneCanvas({
             <PathEditOverlay layer={selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix} />
           )}
 
-          {geometryEditing && selectedFrameLayer && selectedWorldMatrix && <GeometryEditGhost
+          {geometrySessionActive && selectedFrameLayer && selectedWorldMatrix && <GeometryEditGhost
             key={selectedFrameLayer.id} layer={selectedFrameLayer} worldMatrix={selectedWorldMatrix}
-            zoom={zoom} document={editor.getDocumentSignal()} timeMs={timeMs} />}
+            zoom={zoom} document={editor.getDocumentSignal()} visible={geometryEditing} />}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
           {splineViewport.active && selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
