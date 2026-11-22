@@ -9,11 +9,11 @@ dilimleri tamamlandı. **22 Kasım 2026 sürüm kararıyla v0.5.0 kapsamı burad
 donduruldu.** Önceden v0.5.0 için düşünülen 10 → 11 → 12; canonical
 import/export ve final render → mevcut çıktılar için job/otomasyon MVP'si →
 hedefli optimizasyon ve kabul sırası, yeni bağımlılık kararları gerektirdiği
-için **v0.6.0'a taşındı**. Uygulama öncesi bağımlılık kapısı ve birleşik kapsam
-[v0.6.0 ana planındadır](plans/v0.6.0-master-plan.md). Yeni fizik, kumaş, sıvı
-veya effect solver'ı v0.5.0'a eklenmez; FRACTURE4/5, emitter/particle, Fabric,
-Blob/liquid, smoke/fire, Character Motion, tamamlayıcı 2D araçlar ve masaüstü
-editör dönüşümü v0.6.0 altında planlanır. 2D içinde kullanılan 3D katman, 3D kamera ve
+için **v0.6.0'a taşındı**. v0.6.0 kapsamı yalnız masaüstü editör dönüşümü ile
+Öncelik 10–12'dir ve [v0.6.0 ana planında](plans/v0.6.0-master-plan.md)
+tutulur. FRACTURE4/5, emitter/particle, Fabric, Blob/liquid, smoke/fire ve
+Character Motion [v0.10.0 ileri 2D planına](plans/v0.10.0-advanced-2d-plan.md)
+taşındı. v0.7.0–v0.9.0 arasındaki düzenlemeler henüz kararlaştırılmadı. 2D içinde kullanılan 3D katman, 3D kamera ve
 3D compositing teslimleri [ayrı 3D ana planındadır](production-3d-roadmap.md).
 Bu ayrım daha önce onaylanan **planlar arası** uygulama önceliğini tek başına
 değiştirmez; [eski birleşik sıra](plans/geometry-material-boxed3d-sequence.md)
@@ -23,8 +23,8 @@ kaydıdır; güncel kapsam ve durum için bu giriş ile §1 esas alınır.
 FRACTURE4'e yeniden başlanacaksa yarım prototipin gerçek durumu, temizlenen
 dosyalar, korunacak hash/snapshot/collider sözleşmeleri ve F4-0–F4-6 sırası
 [FRACTURE4 devralma kaydından](plans/fracture4-damage-deformation-handoff.md)
-izlenir. Bu v0.6.0 kapsam kararı bağımsız tam 3D workspace, Game Engine modu,
-mobil paketleme veya CFX genişlemesini içeri almaz.
+izlenir. v0.6.0 ve v0.10.0 kapsam kararları bağımsız tam 3D workspace, Game
+Engine modu, mobil paketleme veya CFX genişlemesini içeri almaz.
 
 3D modelleme, 3D karakter ve 3D render teslimleri bu belgede sıralanmaz;
 [3D ana planında](production-3d-roadmap.md) izlenir. İki hattın aynı işi ikinci
@@ -83,6 +83,8 @@ v0.6.0 geliştirme branch'i henüz açılmadı. Bu tur yalnız kapsamı
 uygulama branch'i varsayılmaz. Geliştirme başladığında gerçek branch adı,
 başlangıç commit'i ve her V6 dikeyinin commit aralığı hem bu bölüme hem
 [v0.6.0 ana planına](plans/v0.6.0-master-plan.md) yazılmalıdır.
+v0.10.0 geliştirme branch'i de henüz açılmadı; aradaki sürümler ve V10-0
+bağımlılık doğrulaması tamamlanmadan aktif sıra sayılmaz.
 
 Bu branch'teki gerçekleşmiş dilimlerin kullanıcı tarafından uygulanacak test
 sırası ve kanıt şablonu
@@ -153,18 +155,13 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
 | v0.5.0 kapsamı donduruldu | Simulation Core, rigid ve Voronoi | FRACTURE3'e kadar mevcut kapsam tamamlandı; yeni çıktı altyapısı eklenmez. Yalnız mevcut teslimlerde release blocker hata bulunursa düzeltilir. |
-| v0.6.0 giriş kapısı | Masaüstü shell, çıktı/solver bağımlılıkları ve adapter kararları | Shell/Next runtime, Chorono Render, codec/container, dosya sahipliği, worker/process, asset/font/audio, kaynak bütçesi, MCP, dağıtım ve güvenlik kararları gerçek fixture ile kapatılır. |
+| v0.6.0 giriş kapısı | Masaüstü shell ve çıktı adapter kararları | Shell/Next runtime, Chorono Render, codec/container, dosya sahipliği, worker/process, asset/font/audio, kaynak bütçesi, MCP, dağıtım ve güvenlik kararları gerçek fixture ile kapatılır. |
 | v0.6.0 — masaüstü editör | Yerel uygulama kabuğu ve native servisler | Open/save/recovery, native file/output, process/MCP yaşam döngüsü, paketleme, signing/update ve temiz makine kabulü. |
-| v0.6.0 — ileri destruction | FRACTURE4/5 | Damage deformation, rest/deformed snapshot, collider policy; event sequence, checkpoint/seek ve on-demand recursive replay. |
-| v0.6.0 — ortak fizik yüzeyi | Emitter/particle ve source/collider/surface | Shape/spline/text/Mesh2D kaynakları, rigid particle, emitter/drain, collision ve bounded surface follow. |
-| v0.6.0 — Fabric | Kumaş | Mesh2D cloth, pin/stretch/bend/wind/collision, deformation bake ve solver-kapalı playback. |
-| v0.6.0 — Blob/liquid | Sıvı yüzeyi | Particle liquid, birleşen/ayrılan damla surface, obstacle/emitter/drain ve ayrı bake payload'ları. |
-| v0.6.0 — smoke/fire | 2D grid akış | Density/fuel/temperature/velocity, obstacle/moving boundary ve grid cache/bake. |
-| v0.6.0 — Character Motion | Sprite/rig karakter hattı | Named clips, Active Clip, minimum State Machine, Char Detail, FK ve kullanım kanıtlanırsa sınırlı two-bone IK. |
-| v0.6.0 — tamamlayıcı araçlar | Kalan Faz 2 2D üretim araçları | Particle V2+, runtime console, gelişmiş text ve çizim/fırça dikeyleri. |
 | v0.6.0 — Öncelik 10 | Import/export tutarlılığı, Render Preview ve yüksek kaliteli final render | Bağımlılık kapısından sonra tek canonical frame/compiler; hedef çözünürlükte redraw, Final Native/High ve açık capability/fallback. |
 | v0.6.0 — Öncelik 11 | Mevcut çıktılar için çoklu iş ve otomasyon MVP'si | Frozen source'lu bounded queue, progress/cancel/retry, output manifest; mevcut raster/sequence/Chorono Render MP4. |
 | v0.6.0 — Öncelik 12 | Hedefli optimizasyon ve birleşik v0.6.0 kabulü | Yalnız ölçülmüş blocker'lar; Four Seasons, UI/MCP, portable, görsel parity, test/MCP/build ve release notu. |
+| v0.10.0 — ileri 2D | FRACTURE4/5, emitter/particle, Cloth, Blob/liquid, smoke/fire ve Character Motion | Aradaki sürümlerden ve V10-0 yeniden doğrulamasından sonra; masaüstü/çıktı v0.6.0'da kalır. |
+| Sürümü belirlenecek | Tamamlayıcı 2D araçlar | Particle V2+, runtime console, gelişmiş text ve çizim/fırça bu v0.10.0 kararına dahil edilmedi. |
 | Mevcut seriden sonraki ayrı 2D faz — CFX1–CFX9 | İleri katman/kompozisyon/efekt, maske, video kurgu ve yerel tracking | [CFX ayrıntıları](plans/advanced-compositing-tracking-plan.md); 3D compositing/kamera çözümü [3D planında](production-3d-roadmap.md). |
 
 Canonical import/export ve final render kapanışı v0.6.0 Öncelik 10'a taşındı;
@@ -196,18 +193,16 @@ flowchart TD
     S --> R[v0.5.0 kapsam kapanışı]
     R -. v0.6.0 bağımlılık kapısı .-> D[Desktop shell / render / codec / process / output / MCP kararları]
     D --> DESK[v0.6.0 masaüstü editör temeli]
-    D --> F[v0.6.0 FRACTURE4–5 / emitter-particle / kumaş / Blob-sıvı / smoke-fire / Character]
-    G --> F
     DESK --> E[v0.6.0 Öncelik 10 / import-export ve final render]
-    F --> E
     E --> M[v0.6.0 Öncelik 11 / mevcut çıktı otomasyon MVP]
     M --> O[v0.6.0 Öncelik 12 / hedefli optimizasyon ve release kabulü]
+    O -. v0.7–v0.9 ara düzenlemeleri ayrıca kararlaştırılır .-> A10[v0.10.0 FRACTURE4–5 / emitter-particle / kumaş / Blob-sıvı / smoke-fire / Character]
     O -. Mevcut seri kabulünden sonraki ayrı faz .-> CFX[CFX1–CFX9: katman / maske / efekt / video / tracking]
 ```
 
-Bu diyagram v0.5.0 kapsam kapanışı ile v0.6.0'ın masaüstü, ileri 2D ve çıktı
-hatlarını gösterir. İleri 2D katmanları kendi dikey save/load/render kapılarını
-geçmeden birleşik Öncelik 10 kabulüne girmez.
+Bu diyagram v0.5.0 kapsam kapanışı, v0.6.0 masaüstü/çıktı hattı ve v0.10.0
+ileri 2D hedefini gösterir. v0.7.0–v0.9.0 kapsamı bu okla belirlenmiş sayılmaz;
+ayrıca planlanacaktır.
 Her ok zorunlu kod bağımlılığı sayılmaz. 3D teslimleri ve iki plan
 arasındaki öncelik [3D ana planında](production-3d-roadmap.md) izlenir.
 Tam export compiler bileşen source
@@ -787,18 +782,18 @@ büyütmek final native geometri çizimi sayılmaz.
 | FRACTURE1 — fragment mesh ve kompleks kaynak | Concave/delikli clipping; fragment triangle/UV/topology hash, adjacency, compound collider ve portable generation manifest. |
 | FRACTURE2 — bonded cluster | Auto/manual cluster, ortak sınır bond'ları, dayanım/damage, connected-component split ve kütle/momentum koruyan body rebuild. |
 | FRACTURE3 — secondary destruction — ilk dilim tamamlandı | Precomputed recursive child generation, kararlı lineage/kimlik, generation ve toplam fragment/triangle/byte bütçesi; portable forest, ürün UI/MCP ve canlı kabul. On-demand runtime üretim FRACTURE4+ kararıdır. |
-| FRACTURE4/5 — v0.6.0 planı | FRACTURE4 Mesh2D dent/bend/shear ve rest/deformed snapshot; FRACTURE5 `fractureEventSequence`, checkpoint/seek ve ileri native replay. İki dilim de v0.5.0 release kapısı değildir. |
+| FRACTURE4/5 — v0.10.0 planı | FRACTURE4 Mesh2D dent/bend/shear ve rest/deformed snapshot; FRACTURE5 `fractureEventSequence`, checkpoint/seek ve ileri native replay. v0.6.0 release kapısı değildir. |
 | BLOB0 — nokta alanı ve çizim | “+” noktalar, radius/weight/threshold, alan→contour→fill; iki küme yaklaşınca birleşir ve uzaklaşınca ayrılır, boş yüzey/delik desteklenir. |
 | BLOB1 — native grup ve düzeltme | Açık merge owner, nokta/grup animasyonu, sayısal kontrol, tek undo, seçili kareyi Mesh2D snapshot'a dönüştürme; kaynak ve layer sırası korunur. |
 | BLOB2 — fluid adapter ve bake | PBF particle clip'inden normalize yüzey; fizik yeniden çalışmadan görünüm değişimi; değişken topology surface/raster/native playback ve final render parity. |
 | Ortak teslim kapısı | Portable round-trip, canonical export/runtime capability, MCP şema/skill güncellemesi, cancel/stale, kaynak bütçesi ve gerçek render QA. Desteklenmeyen export açık tanı/raster fallback verir. |
 
-Güncel 2D sırada Mesh2D ve FRACTURE1–3 tamamlanmıştır. FRACTURE4/5, kumaş,
-Blob/fluid, emitter/particle, smoke/fire ve Character Motion v0.6.0 ana planına
-alınmıştır. Aynı sürüm masaüstü editör temeli ile **10 → 11 → 12** çıktı
-hattını da içerir; uygulama sırası bağımlılık kapısı ve dikey kabul sonuçlarıyla
-yönetilir. Blob temel dilimi sıvının bitmiş görünümünden önce gelir. PBF'nin ham
-particle doğruluk prototipi Blob araçlarından bağımsız
+Güncel 2D sırada Mesh2D ve FRACTURE1–3 tamamlanmıştır. v0.6.0 yalnız masaüstü
+editör temeli ile **10 → 11 → 12** çıktı hattını içerir. FRACTURE4/5, kumaş,
+Blob/fluid, emitter/particle, smoke/fire ve Character Motion v0.10.0'a
+taşınmıştır; v0.7.0–v0.9.0 kapsamı ayrıca kararlaştırılır. Blob temel dilimi
+sıvının bitmiş görünümünden önce gelir. PBF'nin ham particle doğruluk prototipi
+Blob araçlarından bağımsız
 çalışabilir.
 Bu bölüm yalnız planlama yapar; algoritma, nesne veya API
 uygulanmış sayılmaz.
@@ -3439,6 +3434,7 @@ geçti ve browser console warning/error listesi boştu. Portable kanıt
 (`1.348.566` byte,
 `sha256 9e9225bffae2a402a4694d22e08e84f6eebb266f8af1f0888c2cb42bff7be77d`)
 olarak kaydedildi. FRACTURE3 ilk dilimi kapanmıştır. 22 Kasım kapsam kararıyla
-FRACTURE4 damage deformation ve FRACTURE5 event/checkpoint bake v0.6.0 ana
-planına alındı. v0.5.0 burada kapsam kapanışına girer; masaüstü editör, ileri
-2D dikeyleri ve Öncelik 10–12 v0.6.0 bağımlılık kapısından sonra başlar.
+FRACTURE4 damage deformation ve FRACTURE5 event/checkpoint bake v0.10.0 ileri
+2D planına alındı. v0.5.0 burada kapsam kapanışına girer; v0.6.0 yalnız
+masaüstü editör ve Öncelik 10–12'yi kapsar. Aradaki v0.7.0–v0.9.0 düzenlemeleri
+ayrıca planlanacaktır.

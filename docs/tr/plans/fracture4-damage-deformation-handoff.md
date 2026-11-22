@@ -2,7 +2,8 @@
 
 - **Kayıt tarihi:** 22 Kasım 2026
 - **Branch:** `codex/mesh2d-mesh0`
-- **Durum:** v0.6.0 planı; v0.5.0 release blocker'ı değil
+- **Durum:** v0.10.0 planı; v0.5.0/v0.6.0 release blocker'ı değil
+- **Üst plan:** [v0.10.0 ileri 2D planı](v0.10.0-advanced-2d-plan.md)
 - **Başlangıç tabanı:** FRACTURE3 kabulü `acc68a08`'e kadar kayıtlıdır; yeniden
   başlarken branch HEAD ve bu belgeden sonraki migration'lar ayrıca doğrulanır.
 
@@ -242,5 +243,5 @@ event-sequence/checkpoint kapsamı karıştırılmaz.
    genişletme.
 5. Her dikey dilimi ayrı, çalışan commit grubunda kapat; kaynak kırıkken UI/MCP
    aşamasına geçme.
-6. v0.6.0 geliştirmesine başlamadan önce ayrı branch/kapsam ve masaüstü/ortak
-   dependency kapılarının durumu kaydedilir.
+6. v0.10.0 geliştirmesine başlamadan önce ayrı branch/kapsam ile v0.7.0–v0.9.0
+   değişikliklerinin ortak dependency sözleşmelerine etkisi kaydedilir.
