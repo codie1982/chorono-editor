@@ -21,7 +21,7 @@ export type SplineSourceOperation =
   | { kind: 'attach'; sourceLayerId: string }
   | { kind: 'detach'; objectIds: string[] }
 export type SplineOperation = SplineSourceOperation
-  | { kind: 'offset'; selection: SplineSelection; settings: OutlineSettings }
+  | { kind: 'offset'; selection: SplineSelection; settings: OutlineSettings; resultMode?: 'append' | 'replace' }
   | { kind: 'chamfer'; pointIds: string[]; distancePx: number }
   | { kind: 'fillet'; pointIds: string[]; radiusPx: number }
   | { kind: 'boolean'; targets?: { layerId: string; subShapeId?: string }[]; settings: OperationSettings; ownerId?: string }

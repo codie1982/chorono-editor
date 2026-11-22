@@ -40,7 +40,7 @@ export async function prepareSplineWorkload(scene: ChronoScene, input: SplineWor
   } else {
     if (!layerId) throw new Error('layerId is required except for Boolean operations.')
     if (op.kind === 'offset') {
-      const plan = prepareSplineOutline(scene, layerId, op.selection.mode, op.selection.ids, op.settings, timeMs, frame.overrides)
+      const plan = prepareSplineOutline(scene, layerId, op.selection.mode, op.selection.ids, op.settings, timeMs, frame.overrides, { resultMode: op.resultMode })
       const calculated = await executors.outline.execute(plan.request, signal), prepared = plan.command(calculated)
       command = prepared.command; result = { layerId, mode: 'object', ids: prepared.ids, outputVertices: calculated.outputVertices, bevelFallbacks: calculated.bevelFallbacks }
     } else if (op.kind === 'chamfer') {

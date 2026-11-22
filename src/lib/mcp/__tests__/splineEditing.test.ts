@@ -29,15 +29,16 @@ async function prepare(editor: ReturnType<typeof fakeEditor>, layerId: string | 
 const access = (plan: any) => ({ planId: plan.planId, expectedRevision: plan.revision, readToken: plan.readToken })
 
 describe('native spline MCP plans and source ownership', () => {
-  it.each(['chamfer', 'fillet', 'offset'] as const)('prepares/applies %s once, keeps manual keys and exact IDs, restores through one Undo/Redo', async kind => {
+  it.each(['chamfer', 'fillet', 'offset', 'offsetReplace'] as const)('prepares/applies %s once, keeps manual keys and exact IDs, restores through one Undo/Redo', async kind => {
     const { editor, scene, layer } = setup()
     try {
       const points = Object.keys(layer.spline!.points).slice(0, 2), objects = Object.keys(layer.spline!.subShapes)
-      const operation: SplineOperation = kind === 'offset' ? { kind, selection: { mode: 'object', ids: objects }, settings: { distancePx: 10, side: 'inside', join: 'round', miterLimit: 4, tolerancePx: .25 } }
+      const operation: SplineOperation = kind === 'offset' || kind === 'offsetReplace' ? { kind: 'offset', ...(kind === 'offsetReplace' ? { resultMode: 'replace' as const } : {}), selection: { mode: 'object', ids: objects }, settings: { distancePx: 10, side: 'inside', join: 'round', miterLimit: 4, tolerancePx: .25 } }
         : kind === 'chamfer' ? { kind, pointIds: points, distancePx: 10 } : { kind, pointIds: points, radiusPx: 10 }
       const plan = await prepare(editor, layer.id, operation)
       expect(editor.host.editor.getScene()).toEqual(scene); expect(editor.historyLength()).toBe(0); expect(plan.scene).toBeUndefined(); expect(plan.data).toBeUndefined()
       const applied = await editor.rawCall('apply_spline_edit', { ...access(plan), requestId: 'once' }), after = structuredClone(editor.host.editor.getScene())
+      if (kind === 'offset' || kind === 'offsetReplace') expect(Object.keys(after.layers[0].spline!.subShapes)).toHaveLength(kind === 'offsetReplace' ? 1 : 2)
       expect(applied.result.ids).toEqual(plan.result.ids); expect(editor.historyLength()).toBe(1); expect(after.timelines).toEqual(scene.timelines)
       expect(await editor.rawCall('apply_spline_edit', { ...access(plan), requestId: 'once' })).toEqual(applied)
       await editor.call('undo'); expect(editor.host.editor.getScene()).toEqual(scene)
