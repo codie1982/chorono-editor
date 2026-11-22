@@ -1,13 +1,17 @@
 'use client'
 import { useSplineTopologyActions } from './useSplineTopologyActions'
+import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
+import { makePickBooleanCmd } from '@/lib/editor/boolean/pickOperation'
 
 type Options = Omit<Parameters<typeof useSplineTopologyActions>[0], 'onSelectLayer'>
 
-/** Adapt existing-layer picks from any editor surface to the same native Attach
+/** Adapt existing-layer picks from any editor surface to shared native Attach
+ * or persisted Boolean actions, selected by the UI mode/current recipe.
  * action. Returns true while Add Spline owns the pick, including self, empty,
  * invalid or busy picks, so callers never replace the active target selection.
- * Each accepted source uses one guarded command/Undo and focuses imported IDs
- * after commit. No gesture, geometry, history or persistent state is owned here. */
+ * Each accepted source uses one guarded command/Undo. Attach focuses imported
+ * IDs; Boolean keeps editable original inputs and their active target. No
+ * gesture, derived geometry, history or persistent state is owned here. */
 export function useSplineAttachPicking(options: Options): (sourceId: string | null) => boolean {
   const actions = useSplineTopologyActions(options)
   return sourceId => {
@@ -20,7 +24,16 @@ export function useSplineAttachPicking(options: Options): (sourceId: string | nu
     if (!sourceId || sourceId === layer.id) return true
     if (options.getScene().layers.find(item => item.id === sourceId)?.type !== 'spline') {
       options.warning('Choose an existing spline object to add.')
-    } else actions.perform({ kind: 'attach', sourceId })
+    } else {
+      const scene = options.getScene(), owner = booleanOwner(scene, layer.id)
+      const operation = owner?.booleanOperation?.operation ?? controller.attachOperation
+      if (operation === 'attach') actions.perform({ kind: 'attach', sourceId })
+      else try {
+        const command = makePickBooleanCmd(scene, layer.id, sourceId, operation, options.timeMs, options.overrides)
+        if (command) options.dispatch(command)
+        options.warning('')
+      } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
+    }
     return true
   }
 }

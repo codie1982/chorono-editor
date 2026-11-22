@@ -107,6 +107,15 @@ function pointer(target: EventTarget, type: string, point: { x: number; y: numbe
 async function tap(point: { x: number; y: number }, modifiers = {}) { const pos = client(world(point)); pointer(canvas(), 'pointerdown', pos, modifiers); await frames(); pointer(window, 'pointerup', pos, modifiers); await frames() }
 async function drag(from: { x: number; y: number }, to: { x: number; y: number }) { pointer(canvas(), 'pointerdown', client(world(from))); await frames(); pointer(window, 'pointermove', client(world(to))); await frames(); pointer(window, 'pointerup', client(world(to))); await frames() }
 async function click(label: string) { const el = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(item => item.getAttribute('aria-label') === label || item.textContent?.trim() === label); assert(el, `Missing ${label}`); flushSync(() => el.click()); await frames() }
+/** Activate an actual virtualized Explorer row before its list selection path. */
+async function pickExplorerRow(id: string, modifiers: MouseEventInit = {}, keyboard = false) {
+  const row = document.querySelector(`[aria-label="Scene Explorer"] [data-virtual-row="${id}"]`)
+  assert(row, `Missing Scene Explorer row ${id}`)
+  flushSync(() => row.dispatchEvent(keyboard
+    ? new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    : new MouseEvent('click', { bubbles: true, ...modifiers })))
+  await frames()
+}
 /** Drive native select events, preserving the production controlled-input path. */
 async function choose(label: string, value: string) { const el = document.querySelector<HTMLSelectElement>(`[aria-label="${label}"]`); assert(el, `Missing ${label}`); flushSync(() => { el.value = value; el.dispatchEvent(new Event('change', { bubbles: true })) }); await frames() }
 function key(name: string, modifiers = {}) { flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...modifiers }))) }
@@ -120,4 +129,4 @@ async function raster() { const scene = current().editor.getScene(), output = aw
   try { const bitmap = await createImageBitmap(output.value.blob); try { cv.width = bitmap.width; cv.height = bitmap.height; const ctx = cv.getContext('2d')!; ctx.drawImage(bitmap, 0, 0); return ctx.getImageData(0, 0, cv.width, cv.height).data } finally { bitmap.close() } }
   finally { output.release(); cv.width = cv.height = 0 } }
 
-export { Subject, fixture, current, frames, layer, canvas, world, client, pointer, tap, drag, click, key, choose, reset, raster, assert, equal, contextAt }
+export { Subject, fixture, current, frames, layer, canvas, world, client, pointer, tap, drag, click, key, choose, reset, raster, assert, equal, contextAt, pickExplorerRow }

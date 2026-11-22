@@ -230,6 +230,10 @@ yeni başlangıç alır. Add Spline `+` seçme modu mevcut spline katmanlarını
 spline'a dahil eder; konum/konturlar korunur ve her ekleme tek Undo/Redo olur.
 Viewport ve Scene Explorer seçimleri aynı Attach sahibinden geçer; Explorer
 satırına tıklama veya Enter/Space hedef seçimini değiştirmeden ekleme yapar.
+Add Spline Operation menüsü mevcut Boolean recipe/çözücüsünü kullanır:
+Union/Subtract/Intersect/XOR kaynakları korur; Merge Paths sonucu düzenlenebilir
+konturlara uygular, Separate Inputs özgün bileşenleri açar. Tüm aksiyonlar Undo'ludur;
+Merge eğrileri kayıtlı toleransla doğrusal segmentlere örnekler.
 Yeni spline'lar stroke-only oluşur; isteğe bağlı Fill ve diğer paint alanları
 yalnız Properties'te bulunur, Edit içinde tekrarlanmaz.
 Yeni topolojiyi kabul eden altyapı

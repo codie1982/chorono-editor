@@ -26,5 +26,11 @@ export function BooleanPreviewControls({ controller: c }: { controller: BooleanP
       <div className="flex gap-2"><button type="button" className={input + ' bg-blue-700'} disabled={!c.canApply} onClick={c.apply}>Apply Boolean</button><button type="button" className={input} onClick={c.close}>Cancel</button></div>
       <p className="text-gray-400">Purple overlay: area geometry. Apply keeps original sources under an operation group; the result uses A’s paint. Independent input animation is preserved by refusing Apply.</p>
     </>}
+    {c.selectedOperationId && <div className="space-y-2">
+      <div className="flex gap-2"><button type="button" className={input} disabled={!c.canFinishOperation} onClick={c.mergeOperation}>Merge Paths</button>
+        <button type="button" className={input} disabled={!c.canFinishOperation} onClick={c.separateOperation}>Separate Inputs</button></div>
+      <p className="text-gray-400">Merge applies the saved tolerance to editable spline contours. Separate restores the original inputs. Both support Undo.</p>
+      {!c.active && c.error && <p role="alert" className="text-amber-300">{c.error}</p>}
+    </div>}
   </section>
 }

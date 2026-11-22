@@ -3,7 +3,7 @@
 ## Kullanım ve kaynak sözleşmesi
 
 Spline & Boolean panelinde 2–8 kapalı Shape/Spline katmanı veya aynı spline'ın
-Object modunda alt objeleri seçilir. Preview Boolean → Union/Subtract/Intersect,
+Object modunda alt objeleri seçilir. Preview Boolean → Union/Subtract/Intersect/XOR,
 A−B/B−A, tolerans → **Apply Boolean**. **Cancel** hiçbir kaynak/history komutu
 oluşturmaz. Grup, kaynak veya sonuç üzerinde sağ tık → **Edit Operation** aynı
 paneli açar. İşlemi oluşturmak veya değiştirmek tek Undo/Redo adımıdır.
@@ -28,11 +28,52 @@ birleştirmez. Kısmen kullanılan spline'da seçilmeyen Objects kendi stil ve k
 - Bütün grup **independent Copy** ile kopyalanır; recipe/input/result layer
   referansları remap edilir. Kısmi Copy, linked Instance, sıradan Ungroup veya
   tek protected child silme/reparent işlemi reddedilir. Bütün grup silinebilir ve Undo edilir.
-- Editable-path bake, nested Boolean ve bağımsız giriş animasyonlarını birleştirme
-  bu teslimin kapsamı değildir. Preview, Apply için uyumsuz bazı animated girişleri
+- Nested Boolean ve bağımsız giriş animasyonlarını birleştirme desteklenmez.
+  Editable-path materialization aşağıdaki Merge Paths komutuyla yapılır. Preview, Apply için uyumsuz bazı animated girişleri
   salt alan önizlemesi olarak gösterebilir; Apply tanısı ayrıca görünür.
 
-## Veri ve modüller
+## Add Spline ile ortak işlem ve Merge Paths
+
+Add Spline içindeki Operation seçicisinde Union (varsayılan), Subtract,
+Intersect ve Exclude/XOR bulunur. `+` açıldıktan sonra viewport veya Scene
+Explorer'dan seçilen mevcut kapalı spline, aynı `prepareBooleanOperation`
+recipe grubuna girer. A ilk hedef, kalan girdiler B'dir; Subtract A−union(B),
+Intersect bütün girdilerin ortak alanı, XOR bütün girdilerin tek/çift paritesidir.
+İşlem türünü sonradan değiştirmek tüm özgün girdilerden yeniden hesaplar.
+Kesişim hesabı, hole/island/winding ve tolerans ayrı uygulanmaz:
+`PolygonClippingBackend`, preview, conversion ve cold-load ile ortaktır.
+
+`editor/boolean/pickOperation.ts` ilk pick'te mevcut planı oluşturur; sonraki
+pick'ler aynı recipe'ye girdi ekler. Parent ve bitişik-kardeş stacking sınırları
+korunur. Taşınmış owner'a girdi eklemek statik, TRS ile temsil edilebilen bir
+reparent gerektirir; `branches/WorldPlacement.localTransform` kullanılır, shear
+ve animasyonlu owner dönüşümü reddedilir. Her pick/tür değişimi bir Undo'dur.
+Kaynak katman/vertex kimlikleri ve geometrileri korunur; yalnız parent/local
+transform gerekli durumda dünya konumu korunarak değişir.
+
+**Attach · keep contours** eski açık/kapalı contour ekleme davranışıdır; Boolean
+alan işlemi değildir. Recipe varken Attach seçmek için önce Separate Inputs
+kullanılır. Açık stroke'lar Boolean'a sessizce kapatılmaz.
+
+**Merge Paths**, Add Spline ve mevcut Boolean panelinde aynı native
+`makeMergeBooleanPathsCmd` komutunu çağırır. Yalnız seçilen recipe normal bir
+group + düzenlenebilir sonuç spline'ına uygulanır. Sonuç ID/TRS/paint/animasyonu,
+owner'ın outer animasyonu ve kısmen tüketilmeyen Objects korunur; tam tüketilen
+girdiler kaldırılır. Diğer Boolean grupları recipe olarak kalır. Undo özgün
+recipe ve girdileri aynen geri getirir.
+
+Mevcut çözücü C/Q eğrileri kayıtlı toleransla örnekler. Merge sonucu gerçek spline
+point/segment kayıtlarıdır fakat segmentler **doğrusaldır**; özgün Bézier kolları
+birebir geri kurulmaz. Kaynak Bézier geometrisi Merge öncesi ve Undo'da korunur.
+Delikler, ayrık alanlar ve geçerli boş sonuç korunur; convex hull uygulanmaz.
+
+**Separate Inputs** aynı owner'ı normal group'a çevirir ve özgün girdileri yeniden
+gösterir. Sonucun dış okuyucusu veya kendi animasyonu varsa bağlantı/key kaybını
+önlemek için reddedilir. Merge ve Separate ayrı birer Undo/Redo'dur.
+Bu iki yeni aksiyon UI/native komut girişleridir; MCP `spline_edit` Boolean
+sözleşmesine eklenen yeni operation değeri yalnız `xor`'dur.
+
+## Veri ve modüller (recipe)
 
 `src/lib/types/booleanOperation.ts`: normal group'taki `booleanOperation` v1:
 operation/reverse/tolerancePx, inputs `{layerId, subShapeId?}`, resultLayerId ve

@@ -33,7 +33,15 @@ After conflict, read current source and prepare again rather than force Apply.
 | `offset` | Object/Edge selection, distance, side, join, miter limit and tolerance in composition px. New editable Object(s); source retained. |
 | `chamfer` | Selected point IDs, distancePx along adjacent edges; ≤128 points. |
 | `fillet` | Selected point IDs, radiusPx; ≤64 points. Ambiguous/intersecting solutions refuse. |
-| `boolean` | Ordered 2–8 closed Shape/Spline targets, or existing recipe `ownerId` to re-edit. Union/Subtract/Intersect, reverse and tolerance. `layerId` may be omitted. |
+| `boolean` | Ordered 2–8 closed Shape/Spline targets, or existing recipe `ownerId` to re-edit. Union/Subtract/Intersect/XOR, reverse and tolerance. `layerId` may be omitted. |
+
+Boolean `operation` values are `union`, `subtract`, `intersect`, `xor`. These
+retain original inputs in a recipe group. The editor's Add Spline picker shares
+this solver/recipe with preview; Attach is a separate contour transfer mode.
+UI **Merge Paths** materializes editable tolerance-sampled line segments; it
+does not recover exact original Bézier handles. **Separate Inputs** restores
+retained components. Those two UI/native commands are not new `spline_edit`
+operation kinds; do not imitate them by deleting protected children.
 
 Boolean Apply retains original inputs in a normal owned group and produces a
 generated spline child. Never replace/delete/reparent/copy a lone protected

@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import { emptySplineSelection, pruneSplineSelection, selectSplineIds, type SplineEditMode, type SplinePickMode, type SplineSelection } from '@/lib/spline/selection'
 import { modifierOutputReadOnly } from '@/lib/modifiers/ModifierStackService'
+import type { BooleanOperation } from '@/lib/geometry/boolean'
+
+export type SplineAddOperation = 'attach' | BooleanOperation
 
 export interface SplineEditController {
   readonly layerId: string | null
@@ -13,6 +16,8 @@ export interface SplineEditController {
   /** Pick existing scene splines into this layer; never a drawing tool. */
   readonly attaching: boolean
   setAttaching(value: boolean): void
+  readonly attachOperation: SplineAddOperation
+  setAttachOperation(value: SplineAddOperation): void
   enter(mode: SplineEditMode, ids?: readonly string[]): void
   select(ids: readonly string[], policy?: SplinePickMode): void
   clear(): void
@@ -21,7 +26,7 @@ export interface SplineEditController {
 /** UI focus request after a host changes its primary layer. Drawing results
  * supply IDs; a mode-only request preserves the selected mode's valid ID bank. */
 export interface SplineEditRequest { layerId: string; mode: SplineEditMode; ids?: readonly string[] }
-interface State { layerId: string | null; document?: AbortSignal; active: boolean; mode: SplineEditMode; bank: SplineSelection; attaching: boolean }
+interface State { layerId: string | null; document?: AbortSignal; active: boolean; mode: SplineEditMode; bank: SplineSelection; attaching: boolean; attachOperation: SplineAddOperation }
 /** Transient layer/document-scoped selection owner, shared by Properties and
  * viewport. Switching modes keeps each valid ID bank but never changes source,
  * history or clipboard. Reset/deletion prunes synchronously for consumers and
@@ -30,7 +35,7 @@ interface State { layerId: string | null; document?: AbortSignal; active: boolea
  * while exit, another mode, layer or document releases it. */
 export function useSplineEditSelection(layer: Layer | null | undefined, document?: AbortSignal): SplineEditController {
   const layerId = layer?.type === 'spline' && layer.spline && !layer.booleanResultFor && !modifierOutputReadOnly(layer) ? layer.id : null
-  const fresh = useCallback((): State => ({ layerId, document, active: false, mode: 'point', bank: emptySplineSelection(), attaching: false }), [layerId, document])
+  const fresh = useCallback((): State => ({ layerId, document, active: false, mode: 'point', bank: emptySplineSelection(), attaching: false, attachOperation: 'union' }), [layerId, document])
   const [state, setState] = useState<State>(fresh)
   const clean = useCallback((before: State): State => {
     if (before.layerId !== layerId || before.document !== document) return fresh()
@@ -54,6 +59,8 @@ export function useSplineEditSelection(layer: Layer | null | undefined, document
     return { ...next, attaching: value && next.active && !!layerId, mode: value ? 'object' : next.mode }
   }), [clean, layerId])
   const exit = useCallback(() => setState(fresh()), [fresh])
+  const setAttachOperation = useCallback((value: SplineAddOperation) => setState(before => ({ ...clean(before), attachOperation: value })), [clean])
   return { layerId, active: current.active && !!layerId, mode: current.mode, bank: current.bank,
-    ids: current.bank[current.mode], attaching: current.attaching, setAttaching, enter, select, clear, exit }
+    ids: current.bank[current.mode], attaching: current.attaching, setAttaching,
+    attachOperation: current.attachOperation, setAttachOperation, enter, select, clear, exit }
 }

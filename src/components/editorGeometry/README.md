@@ -87,13 +87,14 @@ preserved on load and imported/derived callers may supply explicit appearance.
 **Add Spline** uses an accessible `+` toggle to pick existing scene splines in
 the viewport or Scene Explorer. The shared selection controller owns this
 transient, layer/document scoped mode; `useSplineAttachPicking` routes both
-surfaces through `useSplineTopologyActions` / `attachSplineLayerCommand`.
+surfaces through shared native Attach or Boolean commands.
 `useSplineViewportEditing` consumes canvas picks before regions/transforms;
 Scene Explorer's optional `onPickLayer` consumes click/Enter/Space before its
 normal single/range/additive selection, so the active target stays selected.
 With picking off, the existing list selection contract is unchanged. Each successful
-pick consumes one source layer, preserves its world geometry/contours and uses
-the target's shared paint, with one Undo/Redo. Static/unreferenced-source guards
+pick is one Undo/Redo. Attach consumes the source into the target's geometry;
+Boolean retains original layers under its recipe group and derives A's paint.
+Both preserve world geometry/contours. Static/unreferenced-source guards
 remain authoritative; rejected or empty picks preserve the target and history.
 Consecutive picks stay armed; `+`, Escape, right-click, mode exit, selection or
 document replacement end picking. New drawing is a separate **Draw new spline
@@ -106,6 +107,15 @@ and keyboard activation, holes, transformed parents, target paint, individual
 history, empty/invalid picks, cancellation and restored normal list selection
 through production UI. Explorer failures use the host's existing warning surface
 (the page uses a toast) and preserve the target rather than falling through.
+The Operation picker defaults to Union and also offers Subtract, Intersect and
+XOR, using the existing persisted Boolean plan/backend rather than a second
+clipping algorithm. `useSplineAttachPicking` routes these to
+`editor/boolean/pickOperation.ts`; the old transfer action remains explicitly
+available as Attach for open/closed contours. The shared operation action hook
+serves both Add Spline and Boolean Preview: Merge Paths materializes just that
+recipe to editable, tolerance-sampled line segments; Separate Inputs restores
+original components. Exact original Bézier controls remain in retained inputs
+until Merge (and in its Undo). Same-parent/stacking/static-source guards remain.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.

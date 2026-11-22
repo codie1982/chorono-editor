@@ -7,6 +7,7 @@ import { BooleanWorkerClient, type BooleanExecutor, type BooleanOperation, type 
 import { booleanTargets, prepareBooleanOperands } from '@/lib/editor/boolean/prepareBooleanOperands'
 import { booleanOwner, prepareBooleanOperation } from '@/lib/editor/boolean/operationPlan'
 import type { SplineEditController } from '../splineEdit/useSplineEditSelection'
+import { useBooleanOperationActions } from './useBooleanOperationActions'
 
 const worker = new BooleanWorkerClient()
 export interface BooleanPreviewOptions {
@@ -70,6 +71,9 @@ export function useBooleanPreview(options: BooleanPreviewOptions) {
     setSession({ scene, selectionKey, objectKey, primary, timeMs, documentSignal, editId: owner?.id })
   }
   const [applyError, setApplyError] = useState<string | undefined>()
+  const operationActions = useBooleanOperationActions({ layerId: primary, getScene: options.getScene ?? (() => scene),
+    dispatch: command => options.dispatch?.(command), disabled: disabled || !options.dispatch,
+    isTransactionActive: options.isTransactionActive, onSelectLayer: options.onApplied, warning: setApplyError })
   const close = () => { setSession(null); setJob(null); setApplyError(undefined) }
   /** Refuse stale sources/active gestures before the single native commit. */
   const apply = () => {
@@ -81,6 +85,9 @@ export function useBooleanPreview(options: BooleanPreviewOptions) {
   return { targets, operation, reverse, tolerancePx, active, disabled, result: current?.result, error: current?.error ?? applyError,
     pending: active && !current, setOperation, setReverse, setTolerance, open: () => openOperation(), openOperation, close, apply,
     canApply: !!(active && preparation?.plan && current?.raw && options.dispatch && !disabled), applyReason: preparation?.reason,
-    selectedOperationId: selectedOperation?.id }
+    selectedOperationId: selectedOperation?.id,
+    canFinishOperation: !!(selectedOperation && operationActions.canFinish && options.dispatch && !disabled),
+    mergeOperation: () => { if (operationActions.merge()) close() },
+    separateOperation: () => { if (operationActions.separate()) close() } }
 }
 export type BooleanPreviewController = ReturnType<typeof useBooleanPreview>

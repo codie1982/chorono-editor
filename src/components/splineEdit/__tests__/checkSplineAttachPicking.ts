@@ -3,7 +3,7 @@ import { newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
 import { createCircleSpline, createDonutSpline } from '@/lib/spline'
 import { assertSplineTopology } from '@/lib/spline/topology'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
-import { fixture, current, frames, layer, tap, click, key, contextAt, assert, equal } from './splineHarness'
+import { fixture, current, frames, layer, tap, click, key, contextAt, choose, assert, equal } from './splineHarness'
 
 /** Native Add Spline acceptance on disposable source. Picks go through the real
  * canvas under a rotated/non-uniform parent, then through guarded Attach/history.
@@ -17,11 +17,11 @@ export async function checkSplineAttachPicking(): Promise<string> {
   const shape = newRectLayer(); shape.id = 'not-a-spline'; shape.transform.x = 500; shape.transform.y = 350
   scene.layers.push(a, b, shape)
   flushSync(() => { current().editor.resetScene(scene); current().select('spline'); current().setTime(0); current().setTool('select') })
-  await frames(); await click('Spline point mode')
+  await frames(); await click('Spline point mode'); await choose('Spline add operation', 'attach')
   const initial = structuredClone(current().editor.getScene())
   await click('Add existing splines')
   assert(current().controller.attaching && current().controller.mode === 'object', '+ did not enable existing-object picking')
-  assert(!document.querySelector('[aria-label="Add to this Spline"] select'), 'Add Spline still presents a drawing primitive picker')
+  assert(!document.querySelector('[aria-label="Add to this Spline"] [aria-label="Add spline object"]'), 'Add Spline still presents a drawing primitive picker')
   equal(current().editor.getScene(), initial, '+ changed the source')
   await tap({ x: -200, y: -100 })
   equal(current().editor.getScene(), initial, 'Empty Add pick changed source')
@@ -69,6 +69,6 @@ export async function checkSplineAttachPicking(): Promise<string> {
   await click('Add existing splines'); await click('Done')
   assert(!current().controller.attaching && !current().controller.active, 'Leaving Edit kept Add active')
   equal(current().editor.getScene(), afterB, 'Finishing Add changed source or history')
-  await click('Spline object mode'); await click('Add existing splines')
+  await click('Spline object mode'); await choose('Spline add operation', 'attach'); await click('Add existing splines')
   return 'Add Spline + picks existing layers consecutively, keeps world geometry/holes/target paint, gives each pick one Undo/Redo, ignores empty/invalid picks and cancels with +/Esc/right-click/mode exit'
 }
