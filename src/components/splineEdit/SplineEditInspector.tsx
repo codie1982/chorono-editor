@@ -44,6 +44,10 @@ interface Props {
   onDraw?(kind: SplinePrimitiveKind, endpointId?: string): void
   fillet?: SplineFilletController
   chamfer?: SplineChamferController
+  /** False when the Edit dock hosts modifier settings beside its picker. */
+  modifierControls?: boolean
+  /** False when a containing dock keeps mode toggles above its modifier list. */
+  modeControls?: boolean
   outline?: SplineOutlineController
 }
 const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs text-gray-100 focus-visible:outline focus-visible:outline-blue-300'
@@ -52,7 +56,7 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
  * commands. Edge lengths describe the displayed local curve (32 subdivisions),
  * never world scaling. Object is a SubShape, including all its contours/holes.
  * Root transforms remain in ordinary Properties after Done; shared paint also stays available during editing. */
-export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet }: Props) {
+export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modifierControls = true, modeControls = true }: Props) {
   const [warning, setWarning] = useState('')
   const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning })
   const object = controller.mode === 'object' && controller.ids.length === 1 ? layer.spline?.subShapes[controller.ids[0]] : undefined
@@ -77,10 +81,12 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
   const points = ids.map(id => data.points[id]).filter(Boolean)
   const pointType = points.length && points.every(point => point.type === points[0].type) ? points[0].type : ''
   const contours = object?.contourIds.map(id => data.contours[id]).filter(Boolean) ?? []
-  return <section aria-label="Spline edit properties" className="border-b border-gray-700 p-3 space-y-3 text-xs text-gray-300">
-    <div className="flex items-center gap-2"><h3 className="font-semibold uppercase tracking-wide">Spline edit</h3><DocumentationHelp topic="editor/canvas/splines" /></div>
-    <SplineModeControls controller={controller} disabled={!!disabled} />
-    {!controller.active ? <p className="text-gray-400">Choose Point, Edge or Object to edit this spline.</p> : <>
+  return <section aria-label="Spline edit properties" className="space-y-3 text-xs text-gray-300">
+    {modeControls && <>
+      <div className="flex items-center gap-2"><h3 className="font-semibold">Edit mode</h3><DocumentationHelp topic="editor/canvas/splines" /></div>
+      <SplineModeControls controller={controller} disabled={readonly} />
+    </>}
+    {!controller.active ? <p className="text-gray-400">Point edits vertices, Edge edits segments, Object selects a complete Spline element.</p> : <>
       <p aria-live="polite">{ids.length} {controller.mode}{ids.length === 1 ? '' : 's'} selected</p>
       {controller.mode === 'point' && (ids.length === 1 ? <SplinePointInspector layer={layer} pointId={ids[0]} dispatchCommand={dispatchCommand}
         readOnlyReason={readonly ? 'Source editing is unavailable in this context.' : drivenSplineEditReason(layer, getScene(), 'points', ids[0])}
@@ -111,15 +117,20 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
             <button type="button" disabled={readonly} className={selectClass + ' !w-auto'} onClick={() => apply({ kind: 'topology' }, source => contours.reduce((next, contour) => reverseContour(next, contour.id), source), 'Reverse spline object')}>Reverse direction</button></div>
         </>}
       </div>}
-      <SplineTopologyControls scene={getScene()} layer={layer} controller={controller} actions={topology} disabled={readonly} />
-      {chamfer && controller.mode === 'point' && <SplineChamferControls controller={{ ...chamfer, disabled: chamfer.disabled || !!fillet?.active }} />}
-      {fillet && controller.mode === 'point' && <SplineFilletControls controller={{ ...fillet, disabled: fillet.disabled || !!chamfer?.active }} />}
-      {outline && controller.mode !== 'point' && <SplineOutlineControls controller={outline} />}
+      {!!ids.length && <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Selection actions</summary>
+        <div className="mt-3"><SplineTopologyControls scene={getScene()} layer={layer} controller={controller} actions={topology} disabled={readonly} /></div>
+      </details>}
+      {modifierControls && chamfer && controller.mode === 'point' && (!!ids.length || chamfer.active) && <SplineChamferControls controller={{ ...chamfer, disabled: chamfer.disabled || !!fillet?.active }} />}
+      {modifierControls && fillet && controller.mode === 'point' && (!!ids.length || fillet.active) && <SplineFilletControls controller={{ ...fillet, disabled: fillet.disabled || !!chamfer?.active }} />}
+      {modifierControls && outline && controller.mode !== 'point' && (!!ids.length || outline.active) && <SplineOutlineControls controller={outline} />}
       {!!ids.length && <SplineTransformControls key={`${layer.id}:${controller.mode}:${ids.join(',')}`} disabled={readonly} onApply={transform => {
         const points = splineSelectionPoints(data, controller.mode, ids)
         apply({ kind: 'geometry', ids: Array.from(points) }, source => transformSplineSelection(source, points, transform), 'Transform spline selection')
       }} />}
-      {onDraw && onAutoClose && <SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={onDraw} disabled={readonly} />}
+      {onDraw && onAutoClose && <details open={drawingLine || undefined} className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Add to this Spline</summary>
+        <div className="mt-3"><SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={onDraw} disabled={readonly} /></div>
+      </details>}
+      <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Appearance</summary><div className="mt-3">
       <SplinePaintControls style={layer.style ?? {}} assets={getScene().assets ?? []} disabled={readonly} onChange={style => {
         try {
           const source = getScene(), current = source.layers.find(item => item.id === layer.id)
@@ -128,8 +139,8 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
           if (reason) throw new Error(reason)
           dispatchCommand(makeUpdateLayerCmd(layer.id, { style }, current)); setWarning('')
         } catch (error) { setWarning(error instanceof Error ? error.message : String(error)) }
-      }} />
-      <p className="text-gray-400">Shift / Ctrl / Cmd toggles items. Empty drag selects a region. Done returns to layer transforms and shared fill/stroke.</p>
+      }} /></div></details>
+      {!!ids.length && <p className="text-gray-400">Shift / Ctrl / Cmd adds or removes items. Drag an empty area for a selection region.</p>}
     </>}
     {warning && <p role="alert" className="text-amber-300">{warning}</p>}
   </section>

@@ -5,6 +5,7 @@ import { splineToPathDefinition } from '../../spline/splineToPath'
 import { assertSplineTopology } from '../../spline/topology'
 import { subShapeData } from '../../spline/selection'
 import { BOOLEAN_LIMITS } from './types'
+import { ShapeToSplineConverter } from '../conversion/ShapeToSplineConverter'
 
 /** Geometry-only local adapter shared by transient preview and saved recipes.
  * Closed Shape/Spline/SubShape only; preserves all source IDs/data and fill
@@ -17,12 +18,8 @@ export function layerBooleanOperand(layer: Layer, subShapeId?: string): { path: 
     const kind = layer.shapeKind ?? layer.shape ?? 'rect'
     const count = ShapeToPathConverter.estimateCommandCount(kind, layer.size, layer.shapeParams, layer.style?.cornerRadius)
     if (!Number.isSafeInteger(count) || count <= 0 || count > BOOLEAN_LIMITS.commands) throw new Error('Boolean path-command budget exceeded.')
-    path = ShapeToPathConverter.convert(kind, layer.size, layer.shapeParams, layer.style?.cornerRadius)
-    if (kind === 'ring' && Math.abs((layer.shapeParams?.endAngle ?? 360) - (layer.shapeParams?.startAngle ?? 0)) === 360) {
-      const split = (path.commands.length - 1) / 2, inner = path.commands[split]
-      if (inner.type !== 'L') throw new Error('Unexpected full-ring primitive path.')
-      path = { closed: true, commands: [...path.commands.slice(0, split - 1), { type: 'Z' }, { type: 'M', x: inner.x, y: inner.y }, ...path.commands.slice(split + 1, -2), { type: 'Z' }] }
-    }
+    const boundary = new ShapeToSplineConverter().convert({ kind, size: layer.size, params: layer.shapeParams, cornerRadius: layer.style?.cornerRadius })
+    path = splineToPathDefinition(boundary); fillRule = boundary.fillRule
   } else if (layer.type === 'spline' && layer.spline && !layer.booleanResultFor) {
     const data = layer.spline
     if (Object.keys(data.points).length + Object.keys(data.handles).length > BOOLEAN_LIMITS.commands * 3) throw new Error('Spline source exceeds the preview record budget.')

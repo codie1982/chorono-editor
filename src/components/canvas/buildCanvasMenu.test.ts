@@ -10,6 +10,18 @@ function labels(items: MenuItem[]): string[] {
 }
 
 describe('canvas context selection scope', () => {
+  it('exposes both native conversion targets for compatible multi-selection', () => {
+    const layer = newRectLayer(), convert = vi.fn(), mesh = vi.fn()
+    const menu = buildCanvasMenu({ layer, multiCount: 2, selectedLayers: [layer, newRectLayer()],
+      canUngroup: false, canPaste: false, handlers: { convertToPath: convert, convertToMesh2D: mesh } })
+    const submenu = menu.find(item => item.kind === 'submenu' && item.label === 'Convert')!
+    expect(submenu.kind).toBe('submenu')
+    if (submenu.kind !== 'submenu') return
+    expect(labels(submenu.items)).toEqual(['Convert Spline', 'Convert 2D Mesh'])
+    const action = submenu.items[1]
+    if (action.kind === 'action') action.onSelect()
+    expect(mesh).toHaveBeenCalledOnce()
+  })
   it('exposes a dedicated bulk lock handler with a label matching all selected flags', () => {
     const layer = newRectLayer(), other = { ...newRectLayer(), locked: true }, lock = vi.fn()
     const build = (locked: boolean) => buildCanvasMenu({ layer, multiCount: 2,

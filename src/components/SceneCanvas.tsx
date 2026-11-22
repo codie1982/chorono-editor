@@ -254,6 +254,7 @@ interface Props {
     distributeVertically?:   () => void
     /** BL-17 Faz 1 — Bake the selected primitive into an editable spline. */
     convertToSpline?: () => void
+    convertToMesh2D?: () => void
     /** BL-73 Sprint 6 — Convert a text layer into editable spline glyph outlines. */
     convertTextToSpline?: () => void
     /** BL-59 Clone & Array — quick clone (one new layer, default offset). */
@@ -581,7 +582,7 @@ export default function SceneCanvas({
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onAfterCloneDrag, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
     timeMs, overrides, ...meshFrameQuery,
-    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
+    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}:${panMode}:${toolMode}:${splineEditController.layerId}:${splineEditController.active}:${splineEditController.mode}`,
     onWarning: setTransformWarning,
   })
 
@@ -1082,7 +1083,7 @@ export default function SceneCanvas({
   // BL-66 — during playback / preview ALL gizmos are suppressed (editor chrome).
   // Gating the whole object here means showFrame (depends on gizmo.frame) and
   // every axis/ring/anchor handle below collapse to false in one place.
-  const gizmo = hideEditorUI || !!editingTextId || motionEditing || arrayEditing || placingShape || modelCamera.active ? {
+  const gizmo = hideEditorUI || !!editingTextId || motionEditing || arrayEditing || placingShape || modelCamera.active || splineViewport.active ? {
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
@@ -1187,6 +1188,10 @@ export default function SceneCanvas({
       }}
     >
       <SoloModeOverlay active={displayScene.layers.some(layer => layer.type !== 'audio' && !!layer.solo)} />
+      {splineViewport.active && <div role="status" aria-label="Viewport spline edit mode"
+        className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded border border-orange-400/70 bg-orange-950/95 px-3 py-1.5 text-xs font-semibold text-orange-100">
+        SPLINE EDIT · {splineEditController.mode === 'point' ? 'Point' : splineEditController.mode === 'edge' ? 'Edge' : 'Object'}
+      </div>}
       <div
         className="relative"
         style={{
@@ -1381,7 +1386,7 @@ export default function SceneCanvas({
               onCancel={() => { setEditingTextId(null); onTextEditRequestDone?.() }} />
           })()}
 
-          {!hideEditorUI && !editingTextId && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && toolMode !== 'texture' && containerRef.current && <OffArtboardOverlay
+          {!hideEditorUI && !splineViewport.active && !editingTextId && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && toolMode !== 'texture' && containerRef.current && <OffArtboardOverlay
             scene={displayScene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
             cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
@@ -1392,7 +1397,7 @@ export default function SceneCanvas({
               drag is in flight. Matches the layer's rotation so the rect lines
               up with the actual rendered geometry. */}
           {(() => {
-            if (placingShape || !hoveredLayerId || hoveredLayerId === selectedLayerId) return null
+            if (splineViewport.active || placingShape || !hoveredLayerId || hoveredLayerId === selectedLayerId) return null
             const hl = scene.layers.find((l) => l.id === hoveredLayerId)
             if (!hl || hl.hidden) return null
             const bounds = boundsForFrame(hl)
@@ -1478,7 +1483,7 @@ export default function SceneCanvas({
           )}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
-          {selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
+          {splineViewport.active && selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
             && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
             <SplineEditOverlay layer={selectedFrameLayer ?? selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
               hover={splineViewport.hover} selection={splineEditController} />
@@ -1562,7 +1567,7 @@ export default function SceneCanvas({
               style={{ left: bounds.x * zoom, top: bounds.y * zoom, width: bounds.width * zoom, height: bounds.height * zoom }} />
           })}
 
-          <SelectionMeasurementsOverlay measurements={measurements} zoom={zoom} names={measurementNames} />
+          {!splineViewport.active && <SelectionMeasurementsOverlay measurements={measurements} zoom={zoom} names={measurementNames} />}
 
           {showFrame && !usesWorldFrame && selectedFrameLayer?.size && selectedWorldMatrix && (
             <AffineSelectionFrame
@@ -1638,7 +1643,7 @@ export default function SceneCanvas({
           {!hideEditorUI && !motionEditing && !arrayEditing && !placingShape && !panMode && selectedLayerIds && selectedLayerIds.size > 1 && (
             <SelectionOriginsOverlay scene={scene} selectedIds={selectedLayerIds} timeMs={timeMs} overrides={displayOverrides} zoom={zoom} />
           )}
-          {!hideEditorUI && !motionEditing && !arrayEditing && !placingShape && !panMode && selectedLayer && !selectedLayer.hidden && (
+          {!hideEditorUI && !splineViewport.active && !motionEditing && !arrayEditing && !placingShape && !panMode && selectedLayer && !selectedLayer.hidden && (
             <AnchorHandle
               kind={multiSelectionBounds && !gizmo.anchor ? 'pivot' : 'origin'}
               x={selectedWorldPivot.x * zoom}
@@ -1723,7 +1728,7 @@ export default function SceneCanvas({
           enabled={!contentInspection && !hideEditorUI && !arrayEditing && !motionEditing && !placingShape}
           onWarning={setTransformWarning}
           selectedRect={
-            selectedLayer && !selectedLayer.hidden
+            !splineViewport.active && selectedLayer && !selectedLayer.hidden
               ? selectedWorldBounds ?? undefined
               : undefined
           }
@@ -1851,9 +1856,10 @@ export default function SceneCanvas({
           convertToPath:
             target.type === 'text' && menuHandlers?.convertTextToSpline
               ? menuHandlers.convertTextToSpline
-              : menuHandlers?.convertToSpline && target.type === 'shape' && target.size
+              : menuHandlers?.convertToSpline && ['shape', 'spline'].includes(target.type)
                 ? menuHandlers.convertToSpline
                 : undefined,
+          convertToMesh2D: ['shape', 'spline'].includes(target.type) ? menuHandlers?.convertToMesh2D : undefined,
 
           // BL-59 — Clone & Array entries
           cloneQuick:    menuHandlers?.cloneQuick,

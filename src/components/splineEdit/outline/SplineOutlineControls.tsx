@@ -7,10 +7,10 @@ const input = 'rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs te
 /** Progressive controls inside the existing Spline & Boolean dock. Source is
  * always retained; invalid numeric text disables Apply through domain validation.
  * Controls own no scene, worker, cache or persistence. */
-export function SplineOutlineControls({ controller: c }: { controller: SplineOutlineController }) {
+export function SplineOutlineControls({ controller: c, expanded = false, title = 'Offset / Outline' }: { expanded?: boolean; title?: string; controller: SplineOutlineController }) {
   const change = <K extends keyof OutlineSettings>(key: K, value: OutlineSettings[K]) => c.setSettings(previous => ({ ...previous, [key]: value }))
-  return <details open={c.active || undefined} className="rounded border border-gray-700 p-2" aria-label="Spline Offset and Outline">
-    <summary className="cursor-pointer select-none font-semibold">Offset / Outline</summary>
+  return <details open={expanded || c.active || undefined} className="rounded border border-gray-700 p-2" aria-label="Spline Offset and Outline">
+    <summary className="cursor-pointer select-none font-semibold">{title}</summary>
     <div className="space-y-2 pt-2">
       <p className="text-gray-400">{c.eligible ? `${c.contourCount} complete contour(s). Edge selection includes the whole owning contour.` : c.selectionReason}</p>
       {!c.active ? <button type="button" className={input} disabled={c.disabled || !c.eligible} onClick={c.open}>Preview Offset</button> : <>

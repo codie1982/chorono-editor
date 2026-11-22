@@ -1,12 +1,41 @@
 # S2D-0/1/2 — Spline alt obje düzenleme ve compound edit
 
+## 22 Kasım 2026 — Edit paneli ve viewport görünümü
+
+Point / Edge / Object düğmeleri toggle'dır: aynı düğmeye yeniden basmak layer
+moduna döndürür; başka bir düğme seçili alt-geometri seviyesini değiştirir.
+Edit modunda bounding frame, köşe resize/rotate ve root pivot gizmo'ları gizlenir.
+Spline'in gerçek konturları/hole sınırları hafif turuncudur; seçili point/edge
+kırmızıdır. Viewport **SPLINE EDIT · Point / Edge / Object** etiketi ve turuncu
+pressed düğme aktif seviyeyi belirtir. Çıkışta normal layer frame geri gelir.
+Mod, araç veya pan değişimi yarım gesture'ı iptal eder; source preview commit olmaz.
+
+Edit dock sırası: mode düğmeleri → **Spline modifiers / + Add modifiers** →
+seçili işlemin ayarları → seçim özellikleri. Liste Offset, Outline, Chamfer,
+Fillet içerir. Mesh'te ayrı **Mesh modifiers** listesi mevcut Deformation Clip'i
+sunar; Texture/Pins/Geometry modifier diye yeniden adlandırılmaz. Add seçimi
+Preview/Apply ayarlarını açar, tek başına source/history yazmaz. Genel canlı
+procedural modifier stack'i uygulanmış gibi gösterilmez. Native Chamfer/Fillet
+ve Offset mevcut worker controller'larını kullanır; ikinci owner oluşturulmaz.
+
+Edit dock'unda Convert, yinelenen Source sekmesi ve ayrı Create Mesh2D düğmesi
+yoktur. Dönüşüm sağ tıktadır; kaydedilen conversion stage'leri **Conversion history**
+altında ayrı tutulur. Mesh ayarı onay ikonu ve son stage kaldırma çöp kutusu ilgili
+satırdadır. Önce downstream Mesh kalkmadan Spline stage'i kaldırılamaz.
+
+Selection actions, Add to this Spline ve Appearance ileri bölümleri gerektiğinde
+açılır. Klavye Delete tüm seviyelerde aynı `splineTopologyCommand` sahibini kullanır;
+root layer veya yanlış seviyenin elemanları silinmez. Mode bank, Undo ve export
+sözleşmeleri aşağıdaki kaynak uygulamayla aynıdır.
+
+
 15 Kasım 2026. Tek bir mevcut spline katmanında üç alt seçim seviyesi ve bunlara
 bağlı Spline & Boolean paneli/viewport/sağ tık davranışı uygulanmıştır. Source formatı
 `SplinePathData` değişmez; yeni layer, Timeline veya modifier sistemi eklenmez.
 
 ## Kullanım ve kapsam
 
-Bir spline seçin. Ayrı **Spline & Boolean** dock panelindeki Spline edit bölümünden **Point**, **Edge**
+Bir spline seçin. **Edit** dock panelindeki Edit mode bölümünden **Point**, **Edge**
 veya **Object** seçin; seçili spline'a çift tıklamak ve Pen aracı Point seviyesine
 giriş yapar. Viewport, Layers ve Scene Explorer sağ tık menülerinde
 **Edit Mode → Point / Edge / Object** bulunur. Menü seçimi aynı paneli öne

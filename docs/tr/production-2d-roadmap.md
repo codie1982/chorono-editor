@@ -207,12 +207,16 @@ ayrıca planlanacaktır.
 
 ### 22 Kasım 2026 — Basic Shape dönüşüm planı
 
-Edit panelindeki **Convert → Spline / 2D Mesh** hedefleri için ortak son-geometri
+Sağ tık **Convert → Spline / 2D Mesh** hedefleri için ortak son-geometri
 değerlendirme, içbükey/dışbükey kontur ve delik analizi, mevcut Earcut hattının
 yeniden kullanımı ve kalıcı conversion stack sözleşmesi
 [Basic Shape dönüşüm planında](plans/basic-shape-conversion-plan.md) tanımlandı.
-Bu kayıt öneridir; yeni dönüşüm stack'i uygulanmış sayılmaz. Sahnede ayrı bir
-Spline ara nesnesi zorunlu tutulmaz.
+Statik geometri conversion v1 uygulandı: sağ tık menüsünde iki hedef,
+kalıcı modifier kayıtları, ortak Boolean Union ile içbükey dış sınır/delik ve
+ayrık element çözümü, kaynak Rebuild, Mesh toleransı ve son stage kaldırma.
+Sahnede ayrı bir Spline ara nesnesi zorunlu tutulmaz. Canlı geometri driver'ları
+sessizce bake edilmez; bu sürümde açık tanıyla reddedilir. Gerçek uygulama
+sözleşmesi ve sınırlar [Edit geometri dönüşümlerinde](geometry-conversion.md).
 Her ok zorunlu kod bağımlılığı sayılmaz. 3D teslimleri ve iki plan
 arasındaki öncelik [3D ana planında](production-3d-roadmap.md) izlenir.
 Tam export compiler bileşen source

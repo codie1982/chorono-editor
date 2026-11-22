@@ -6,6 +6,9 @@ import {
   type Mesh2DTexturePlacement,
 } from '@/lib/mesh2d/Mesh2DTextureMapping'
 import type { Layer } from '@/lib/types'
+import type { AssetElementMap } from '@/lib/asset/visual/AssetElementMap'
+import type { ParamValueMap } from '@/lib/runtime/paramResolver'
+import { drawPathFill } from './paint/drawPathFill'
 import type { Mesh2DGeometry, Mesh2DTextureTransform } from '@/lib/types/mesh2d'
 import { buildGradient } from './buildGradient'
 import { resolveRenderColor } from './materializeOverrides'
@@ -24,6 +27,8 @@ export function drawMesh2DLayer(
   overrides: OverrideMap,
   texture?: CanvasImageSource,
   positions: ArrayLike<number> = layer.mesh2d?.geometry.positions ?? [],
+  assets?: AssetElementMap,
+  paramValues?: ParamValueMap,
 ): void {
   const geometry = layer.mesh2d?.geometry
   if (!geometry) return
@@ -43,8 +48,13 @@ export function drawMesh2DLayer(
     if (textured) return
   }
 
-  if (fill) {
+  if (fill && fill.type !== 'none') {
     const bounds = computeMesh2DLocalBounds(geometry)
+    if (fill.type === 'image' && bounds) {
+      buildMesh2DPath(ctx, triangles)
+      drawPathFill(ctx, layer, overrides, bounds, assets, paramValues)
+      return
+    }
     ctx.save()
     ctx.globalAlpha *= Math.max(0, Math.min(100, opacity)) / 100
     ctx.fillStyle = (fill.type === 'gradient' && bounds

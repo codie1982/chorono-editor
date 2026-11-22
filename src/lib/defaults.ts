@@ -700,6 +700,9 @@ export function cloneLayerForDuplicate<L extends Layer>(layer: L): L {
   const cloned: L = JSON.parse(JSON.stringify(layer))
   cloned.id   = `${layer.type}_${layerCounter}`
   cloned.name = `${layer.name} Copy`
+  if (cloned.geometryConversion && cloned.mesh2d && cloned.mesh2d.source.kind === 'splineBoundary') {
+    cloned.mesh2d = { ...cloned.mesh2d, source: { ...cloned.mesh2d.source, sourceLayerId: cloned.id } }
+  }
   return cloned
 }
 

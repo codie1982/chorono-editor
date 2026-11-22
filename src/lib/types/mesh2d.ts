@@ -203,6 +203,10 @@ export interface Mesh2DDeformationBinding {
 
 /** Versioned source payload stored by a future `mesh2d` layer. */
 export interface Mesh2DData {
+  /** Optional exterior/hole loops addressing topology vertices. Conversion
+   * uses these to paint stroke/trim against current (including deformed)
+   * positions without stroking internal triangle edges. */
+  readonly boundaryRings?: readonly (readonly number[])[]
   readonly schemaVersion: 1
   readonly source: Mesh2DSource
   readonly geometry: Mesh2DGeometry

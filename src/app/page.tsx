@@ -87,6 +87,7 @@ import { makeBatchCmd } from '@/lib/editor/commands-batch'
 import { makeUpdateCompositionCmd } from '@/lib/editor/commands-composition'
 import { nextKfId } from '@/lib/defaults'
 import { makeConvertToSplineCmd } from '@/lib/editor/commands-convert'
+import { prepareGeometryConversion, type ConversionTarget } from '@/lib/editor/commands-geometry-conversion'
 import type { SplinePrimitiveKind } from '@/lib/types/spline'
 
 /** Maps Add-Layer menu kinds → spline primitive kinds for draw mode (BL-73). */
@@ -106,6 +107,10 @@ import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import SceneCanvas     from '@/components/SceneCanvas'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
+import { SplineChamferControls } from '@/components/splineEdit/chamfer/SplineChamferControls'
+import { SplineFilletControls } from '@/components/splineEdit/fillet/SplineFilletControls'
+import { SplineOutlineControls } from '@/components/splineEdit/outline/SplineOutlineControls'
+import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
 import { useSplineDrawingPreferences } from '@/components/splineEdit/useSplineDrawingPreferences'
 import { SplineEditInspector } from '@/components/splineEdit/SplineEditInspector'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
@@ -756,6 +761,17 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       toast.error('Text → Spline failed: ' + (err as Error).message)
     }
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer,editor.getDocumentSignal])
+
+  /** Native static geometry conversion, shared by the multi-selection context
+   * menu and Edit dock. Admission preserves existing drivers/references. */
+  const convertSelectedGeometry = useCallback((target: ConversionTarget) => {
+    try {
+      if (isPlaying || manualPreview || detail.session || editor.isTransactionActive()) throw new Error('Finish playback or the current edit before converting.')
+      const ids = Array.from(isolatedSelectedIds.size ? isolatedSelectedIds : selectedLayerId ? [selectedLayerId] : [])
+      const plan = prepareGeometryConversion(editor.getScene(), ids, target)
+      dispatchCommand(plan.command); selectLayer(plan.layerId); splineEdit.clear(); openSplineTools()
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Geometry conversion failed') }
+  }, [editor, isolatedSelectedIds, selectedLayerId, dispatchCommand, selectLayer, splineEdit.clear, openSplineTools, isPlaying, manualPreview, detail.session])
 
   /** Create a separate, source-linked Mesh2D from the selected closed spline. */
   const createMesh2DFromSpline = useCallback(() => {
@@ -1943,7 +1959,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       // BL-24 fix: Convert to Spline shape nesnelerinde gösterilmez.
                       // Shape'ler parametrik kalmalı; spline dönüşümü gerekirse ileride
                       // sadece bezierPath layer'ı için ayrı bir akış olur.
-                      convertToSpline: undefined,
+                      convertToSpline: () => convertSelectedGeometry('spline'),
+                      convertToMesh2D: () => convertSelectedGeometry('mesh2d'),
                       // BL-73 Sprint 6 — Text → editable spline glyph outlines.
                       convertTextToSpline: selectedLayer?.type === 'text' ? convertTextToSpline : undefined,
                       // BL-59 — Clone & Array context-menu entries
@@ -2066,12 +2083,25 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 <NumericPropertyProvider scene={scene} layerId={selectedLayerId ?? undefined} dispatch={dispatchCommand} getScene={editor.getScene}
                   isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                 <GeometryEditPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
+                  selectedIds={Array.from(isolatedSelectedIds)} conversionDisabled={isPlaying || manualPreview || !!detail.session}
+                  splineModeControls={<SplineModeControls controller={splineEdit}
+                    disabled={isPlaying || manualPreview || !!detail.session || !!selectedLayer?.locked || !!selectedLayer?.hidden || !!selectedLayer?.frozen || !!selectedLayer?.instanceOf} />}
+                  activeSplineModifier={splineChamfer.active ? 'chamfer' : splineFillet.active ? 'fillet' : splineOutline.active ? 'offset' : undefined}
+                  onSplineModifierSelect={operation => {
+                    splineChamfer.close(); splineFillet.close(); splineOutline.close()
+                    if (operation) splineEdit.enter(operation === 'chamfer' || operation === 'fillet' ? 'point' : 'object')
+                  }}
+                  splineModifierSettings={{
+                    offset: <SplineOutlineControls expanded title="Offset" controller={splineOutline} />,
+                    chamfer: <SplineChamferControls expanded controller={splineChamfer} />,
+                    fillet: <SplineFilletControls expanded controller={splineFillet} />,
+                  }}
                   getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
                   isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
                   onSelectLayer={id => selectLayer(id)} onClearPoint={splineEdit.clear} onLayerChange={updateLayer}
                   onCreateMeshFromSpline={createMesh2DFromSpline}
                   splineSourceSettings={selectedLayer?.spline && !selectedLayer.booleanResultFor && splineEdit.layerId === selectedLayer.id ? (
-                    <SplineEditInspector layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
+                    <SplineEditInspector modeControls={false} modifierControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
                           outline={splineOutline}
                           chamfer={splineChamfer}
                           fillet={splineFillet}

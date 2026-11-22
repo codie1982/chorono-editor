@@ -9,7 +9,7 @@ import type { SelectionRegion } from '@/lib/selection/selectionGesture'
 import { splineSelectionPoints, splineSelectionPivot, transformSplineSelection } from '@/lib/spline/selection'
 import { drivenSplineTransformReason } from '@/lib/spline/edit/authoringGuard'
 import { drivenSplineEditReason } from '@/lib/spline/edit/authoringGuard'
-import { deleteSplinePoint } from '@/lib/spline'
+import { splineTopologyCommand } from '@/lib/editor/spline/topologyCommand'
 import { resolveSplineEditGeometry } from '../canvas/splineEditGeometry'
 import type { UseCanvasDragReturn } from '../canvas/hooks/useCanvasDrag'
 import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
@@ -114,7 +114,7 @@ export function useSplineViewportEditing(options: Options) {
       if (!['Escape', 'Delete', 'Backspace'].includes(event.key) && !navigation && !sourceAction) return
       event.preventDefault(); event.stopImmediatePropagation()
       if (event.key === 'Escape') { if (edit.ids.length) edit.clear(); else edit.exit(); return }
-      if (current.panMode || current.toolMode === 'pan' || sourceAction || !navigation && edit.mode !== 'point') { current.warning('This sub-object action is unavailable. Choose Done to use layer commands.'); return }
+      if (current.panMode || current.toolMode === 'pan' || sourceAction) { current.warning('This sub-object action is unavailable. Choose Done to use layer commands.'); return }
       if (!edit.ids.length || !current.layer) return
       const delta = event.shiftKey ? 10 : 1
       const dx = event.key === 'ArrowLeft' ? -delta : event.key === 'ArrowRight' ? delta : 0
@@ -122,8 +122,11 @@ export function useSplineViewportEditing(options: Options) {
       try {
         const source = current.editor.getScene()
         const points = splineSelectionPoints(current.layer.spline!, edit.mode, edit.ids)
-        const command = splineEditCommand(source, current.layer.id, navigation ? { kind: 'geometry', ids: Array.from(points) } : { kind: 'topology' },
-          data => navigation ? transformSplineSelection(data, points, { x: dx, y: dy }) : edit.ids.reduce((next, id) => deleteSplinePoint(next, id), data), navigation ? 'Nudge spline points' : 'Delete spline points')
+        // Keyboard deletion uses the same mode-aware owner as Selection actions;
+        // an Object/Edge Delete must never fall through to deleting the root.
+        const command = navigation ? splineEditCommand(source, current.layer.id, { kind: 'geometry', ids: Array.from(points) },
+          data => transformSplineSelection(data, points, { x: dx, y: dy }), 'Nudge spline selection')
+          : splineTopologyCommand(source, current.layer.id, edit.mode, edit.ids, { kind: 'delete' }, current.timeMs, current.overrides).command
         if (command) current.editor.dispatchCommand(command)
       } catch (error) { current.warning(error instanceof Error ? error.message : String(error)) }
     }

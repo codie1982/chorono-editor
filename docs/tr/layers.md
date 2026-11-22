@@ -25,6 +25,12 @@ Chorono zengin bir katman türü setini destekler. Oluşturmak istediğinize gö
 
 Şekil katmanları, doğrudan canvas üzerinde geometrik ilkeller çizer. Varlık içe aktarmadan illüstrasyonlar ve UI öğeleri oluşturmanın en hızlı yoludur.
 
+Noktaları veya yüzeyi düzenlemek için sağ tık **Convert → Convert Spline / Convert
+2D Mesh** kullanın. Çoklu kapalı seçim Boolean Union ile tek nesneye dönüşür;
+delikler ve ayrık elementler korunur. Kaynak ve dönüşümler Edit'in **Conversion history**
+geçmişine kaydedilir. [Geometri dönüşümleri](geometry-conversion.md), kaynak
+Rebuild, Undo/Redo ve statik geometri sınırlarını açıklar.
+
 Kullanılabilir şekiller:
 
 | Şekil | Açıklama |

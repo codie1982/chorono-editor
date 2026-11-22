@@ -35,6 +35,7 @@ export const INSTANCE_SOURCE_FIELDS: readonly (keyof Layer)[] = [
   'path',
   'spline',
   'mesh2d',
+  'geometryConversion',
   'particleEmitter',
   'style',
   'size',

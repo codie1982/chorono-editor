@@ -59,6 +59,7 @@ function stripLayerEditorMetadata(layer: Layer): Layer {
     frozen: _frozen,
     internalGrid: _internalGrid,
     inputExpressions: _inputExpressions,
+    geometryConversion: _geometryConversion,
     ...runtimeLayer
   } = layer
   return runtimeLayer

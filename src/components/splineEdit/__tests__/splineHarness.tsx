@@ -6,6 +6,8 @@ import type { SplinePrimitiveKind } from '@/lib/types/spline'
 import type { SplineDrawResult } from '../drawing/drawingCommand'
 import SceneCanvas from '@/components/SceneCanvas'
 import { SplineLineDrawingControls } from '../SplineAutoCloseControl'
+import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
+import { SplineModeControls } from '../SplineModeControls'
 import { SplineEditInspector } from '../SplineEditInspector'
 import { useSplineOutline } from '../outline/useSplineOutline'
 import { useSplineEditSelection, type SplineEditController } from '../useSplineEditSelection'
@@ -63,7 +65,14 @@ function Subject() {
       splineDrawKind={drawKind} splineAppendTargetId={selected} splineContinuationPointId={endpoint} splineAutoClose={preferences.autoClose}
       onDrawSplineLine={(_, point) => arm('line', point)} onSplineDrawCommit={next => { setDrawKind(null); setEndpoint(null); setTool('select'); if (next) setResult(next) }}
       selectedTimeline={editor.scene.timelines[0]} getShortcutContext={() => 'canvas'} />
-      <aside className="w-80 shrink-0 overflow-auto">{tool === 'spline-draw' && drawKind === 'line' && <SplineLineDrawingControls autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} />}{layer?.spline && <SplineEditInspector layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} outline={outline} />}</aside>
+      <aside className="w-[360px] shrink-0 overflow-auto">{tool === 'spline-draw' && drawKind === 'line' && <SplineLineDrawingControls autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} />}
+        <GeometryEditPanel layer={layer} selectedIds={selected ? [selected] : []} selectedPointId={controller.mode === 'point' ? controller.ids[0] ?? null : null}
+          getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal} isTransactionActive={editor.isTransactionActive}
+          dispatchCommand={editor.dispatchCommand} onSelectLayer={setSelected} onClearPoint={controller.clear}
+          onLayerChange={next => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, layer)) }}
+          splineModeControls={<SplineModeControls controller={controller} />}
+          splineSourceSettings={layer?.spline ? (<SplineEditInspector modeControls={false} modifierControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} outline={outline} />) : undefined} />
+      </aside>
     </div><output id="selection-state">{JSON.stringify({ active: controller.active, mode: controller.mode, ids: controller.ids, layer: selected })}</output></>
 }
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message) }

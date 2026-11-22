@@ -61,6 +61,7 @@ export interface CanvasMenuHandlers {
    * caller selects the target and supplies the active Timeline context. */
   editMotionKeys?: () => void
   convertToPath?:   () => void
+  convertToMesh2D?: () => void
   saveToLibrary?:   () => void
   createClippingPath?: () => void
   createMask?:      () => void
@@ -182,7 +183,7 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
     // BL-67 — Pick a path layer on the canvas to drive this layer's position.
     action('Assign motion path…', undefined,
       args.layer.type === 'path' || multi ? undefined : h.assignMotionPath),
-    action('Convert to Spline', undefined, h.convertToPath, multi),
+    ...buildConversionMenu(args),
     action('Save to library',  undefined, h.saveToLibrary, multi),
 
     sep(),
@@ -243,12 +244,24 @@ function buildMultipleSelectionMenu(args: BuildMenuArgs): MenuItem[] {
       action('Clone with settings…', undefined, h.cloneSettings),
       action('Array…', '⇧⌘A', h.arraySettings),
     ] },
+    ...buildConversionMenu(args),
     action('Group', '⌘G', h.group), action('Delete', '⌫', h.deleteLayer),
     ...(animation.length ? [sep(), { kind: 'submenu' as const, label: 'Animate', items: animation }] : []),
     sep(), buildAlignMenu(args),
     ...(h.toggleSelectionLock ? [sep(), action(layers?.every(layer => layer.locked) ? 'Unlock selection' : 'Lock selection',
       '⌘L', h.toggleSelectionLock)] : []),
   ]
+}
+
+/** Both conversion commands own the complete compatible selection. Other
+ * mixed multi-selection types omit this source-specific surface entirely. */
+function buildConversionMenu(args: BuildMenuArgs): MenuItem[] {
+  const h = args.handlers
+  if (!h.convertToPath && !h.convertToMesh2D) return []
+  if (args.multiCount > 1 && (args.selectedLayers?.length !== args.multiCount || !args.selectedLayers.every(layer => ['shape', 'spline'].includes(layer.type)))) return []
+  return [{ kind: 'submenu', label: 'Convert', items: [
+    action('Convert Spline', undefined, h.convertToPath), action('Convert 2D Mesh', undefined, h.convertToMesh2D),
+  ] }]
 }
 
 /** Shared selection alignment surface. Distribution needs at least three members. */

@@ -1,6 +1,14 @@
 # Basic Shape → Spline / 2D Mesh dönüşüm planı
 
-22 Kasım 2026 · **Öneri; dönüşüm stack'i henüz uygulanmadı.**
+22 Kasım 2026 · **Statik geometri dönüşümü v1 uygulandı.**
+
+Uygulanan menüler, kalıcı stage kaydı, çoklu kaynak Union/delik/ada davranışı,
+public kod yolları ve gerçek sürüm sınırları için
+[Edit geometri dönüşümleri](../geometry-conversion.md) belgesine bakın.
+Aşağıdaki metin özgün geniş hedefi korur: zamana bağlı canlı source recipe,
+genel modifier yeniden sıralaması ve animasyonlu geometri conversion evaluator'ı
+henüz uygulanmış özellikler değildir. V1 bu durumları sessizce bake etmek yerine
+reddeder; source parametre değişiklikleri açık Rebuild komutuyla uygulanır.
 
 ## Kullanıcı sözleşmesi
 

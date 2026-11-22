@@ -8,6 +8,7 @@ import { assertAuthoringData } from '../../editor/authoring/AuthoringValidation'
 import { assertSceneGuides } from '../../geometry/guides/sceneGuideData'
 import { assertPhysicsSceneData } from '../../physics/PhysicsSceneValidation'
 import { assertSceneBooleanOperations } from '../../booleanOperations/validation'
+import { assertConversionRecipe } from '../../geometry/conversion/GeometryConversionService'
 
 /** Shared recognition for an editable scene source. Merge keeps the historical
  * 1.x/layers/composition minimum; complete document opening additionally requires
@@ -39,6 +40,7 @@ export function parseSceneJson(text: string, complete = false): ChronoScene {
   if (Array.isArray(scene.assets)) assertScenePaint(scene)
   assertSceneGuides(scene.editorGuides)
   assertSceneBooleanOperations(scene)
+  scene.layers.forEach(layer => { if (layer.geometryConversion) assertConversionRecipe(layer.geometryConversion) })
   assertAuthoringData(scene.authoring)
   assertPhysicsSceneData(scene.physics)
   return scene

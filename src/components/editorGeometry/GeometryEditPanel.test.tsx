@@ -18,29 +18,34 @@ function panelProps(layer: Layer | null): GeometryEditPanelProps {
 }
 
 describe('Geometry Edit dock', () => {
-  it('excludes basic shapes and empty selection', () => {
-    for (const layer of [null, newRectLayer()]) {
+  it('keeps an empty selection out of point editing', () => {
+    for (const layer of [null]) {
       const props = panelProps(layer)
       const html = renderToStaticMarkup(<GeometryEditPanel {...props} splineSourceSettings={<p>Point inspector</p>} />)
-      expect(html).toContain('Select a spline or Mesh2D')
+      expect(html).toContain('Select a Spline or 2D Mesh')
       expect(html).not.toMatch(/Point inspector|Modeling operations|Mesh settings/)
     }
   })
 
-  it('shows the spline operation list above the supplied source inspector', () => {
+  it('keeps Convert out of the Edit dock and guides Basic Shapes to Properties', () => {
+    const html = renderToStaticMarkup(<GeometryEditPanel {...panelProps(newRectLayer())} />)
+    expect(html).toContain('parameters are in Properties')
+    expect(html).not.toMatch(/Convert Spline|Convert 2D Mesh|Add Spline modifiers/)
+  })
+
+  it('puts mode settings before the Spline-only Add modifiers chooser', () => {
     const layer = newSplineLayerFromData(createRectangleSpline({ width: 80, height: 50 }))
     const props = panelProps(layer)
     const html = renderToStaticMarkup(<GeometryEditPanel {...props} splineSourceSettings={<p>Point inspector</p>} />)
-    expect(html).toMatch(/aria-pressed="true"[^>]*>Source/)
-    expect(html).toMatch(/Modeling operations.*Offset.*Outline.*Chamfer.*Fillet.*Point inspector/)
-    expect(html).not.toContain('Spline modeling amount')
+    expect(html).toMatch(/Point inspector[\s\S]*Spline modifiers[\s\S]*Add Spline modifiers/)
+    expect(html).not.toMatch(/Create Mesh2D from closed spline|Mesh modifiers|>Source<|Spline modeling amount/)
     expect(props.dispatchCommand).not.toHaveBeenCalled()
   })
 
   it('puts structured-grid geometry in Source and keeps other mesh settings selectable', () => {
     const props = panelProps(newStructuredGridMesh2DLayer())
     const html = renderToStaticMarkup(<GeometryEditPanel {...props} />)
-    expect(html).toMatch(/Mesh settings[\s\S]*Texture[\s\S]*Deformation Clip[\s\S]*Pins[\s\S]*Quad Diagonal/)
+    expect(html).toMatch(/Mesh modifiers[\s\S]*Add Mesh modifiers[\s\S]*Texture[\s\S]*Pins[\s\S]*Quad Diagonal/)
     expect(html).not.toMatch(/Deformation clip asset|Pin selection presets|Modeling operations/)
     expect(props.onLayerChange).not.toHaveBeenCalled()
   })
