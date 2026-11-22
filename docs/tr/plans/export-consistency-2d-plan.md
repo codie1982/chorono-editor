@@ -1,6 +1,6 @@
 # 2D Export Tutarlılığı — öncelik 1
 
-Tarih: 4 Kasım 2026. Güncelleme: 21 Kasım 2026; viewport'tan bağımsız yüksek kaliteli final render ve Render Preview planı §9'dadır. Durum: E0/E1 canonical runtime alan-sınırı ilk dilimi uygulandı; tam E1 loader/giriş birliği ile E2/E3 açıktır. Kapsam yalnız `2danimation`. Üst yol haritası: [2D üretim planı](../production-2d-roadmap.md).
+Tarih: 4 Kasım 2026. Güncelleme: 22 Kasım 2026; viewport'tan bağımsız yüksek kaliteli final render ve Render Preview planı §9'dadır. Durum: E0/E1 canonical runtime alan-sınırı ilk dilimi uygulandı; tam E1 loader/giriş birliği ile E2/E3 açıktır. Kapsam yalnız `2danimation`. Üst yol haritası: [2D üretim planı](../production-2d-roadmap.md). v0.5.0 Faz 1'de uygulanacak dar E/FQ kapsamı ve 10 → 11 → 12 sırası [hızlı tamamlama planında](v0.5.0-phase1-completion-plan.md) bağlayıcıdır; ileri renk, CanvasKit ve FP16 release'i bekletmez.
 
 ## 1. Teslim hedefi
 

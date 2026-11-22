@@ -4,11 +4,14 @@ Tarih: 4 Kasım 2026. Kapsam ayrımı: 17 Kasım 2026. Destruction kapsamı: 18
 Kasım 2026. **Bu belgenin güncel
 uygulama kapsamı yalnız 2D editörünün üretim özellikleridir.** Tamamlanan
 E−1 ortak düzenleme, input expression ve dar entegrasyon kapılarından sonra
-2D işlerinin kendi sırası: Mesh2D ve spline-to-mesh → ortak typed BakeService
-→ fizik/kırılma → kumaş →
-Blob/sıvı/akış → tamamlayıcı 2D araçlar → canonical import/export ve mevcut
-Chorono 2D renderer üzerinde final kalite → çoklu format/otomasyon → ikinci genel
-optimizasyon ve birleşik kabul. Character Motion; klip, State Machine ve runtime
+Mesh2D, ortak typed BakeService ve fizik/kırılmanın FRACTURE3'e kadarki dikey
+dilimleri tamamlandı. **22 Kasım 2026 güncel Faz 1 sırası: 10 → 11 → 12;**
+yani [canonical import/export ve final render](plans/export-consistency-2d-plan.md)
+→ mevcut çıktılar için çoklu iş/otomasyon MVP'si → hedefli optimizasyon ve
+birleşik v0.5.0 kabulü. Bağlayıcı dar kapsam
+[Faz 1 hızlı tamamlama planındadır](plans/v0.5.0-phase1-completion-plan.md).
+Yeni fizik, kumaş, sıvı veya effect solver'ı Faz 1'e eklenmez. Character Motion;
+klip, State Machine ve runtime
 davranış sözleşmesi yeniden kararlaştırılana kadar aktif sıradan çıkarılmış,
 sonraki faz backlog'udur ve bu teslimleri bloke etmez. 2D içinde kullanılan 3D katman, 3D kamera ve
 3D compositing teslimleri [ayrı 3D ana planındadır](production-3d-roadmap.md).
@@ -16,6 +19,11 @@ Bu ayrım daha önce onaylanan **planlar arası** uygulama önceliğini tek baş
 değiştirmez; [eski birleşik sıra](plans/geometry-material-boxed3d-sequence.md)
 o kararın tarihsel kaydıdır. §12'deki eski sıra ifadeleri de teslim gününün
 kaydıdır; güncel kapsam ve durum için bu giriş ile §1 esas alınır.
+
+FRACTURE4'e yeniden başlanacaksa yarım prototipin gerçek durumu, temizlenen
+dosyalar, korunacak hash/snapshot/collider sözleşmeleri ve F4-0–F4-6 sırası
+[FRACTURE4 devralma kaydından](plans/fracture4-damage-deformation-handoff.md)
+izlenir.
 
 3D modelleme, 3D karakter ve 3D render teslimleri bu belgede sıralanmaz;
 [3D ana planında](production-3d-roadmap.md) izlenir. İki hattın aynı işi ikinci
@@ -57,7 +65,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
 | Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
 | FRACTURE2 Canvas bond authoring, fixed-tick break/reset, MCP tamamlama ve temiz canlı kabul | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5`, `3336a1db` | Aşama 6 ve temiz UI/MCP kabulü tamamlandı |
-| FRACTURE3 recursive generation, lineage/bütçe, portable forest, ürün UI/MCP ve temiz canlı kabul | `codex/mesh2d-mesh0` | `fe0c4f45`–`72711c78`, `206853a3`, `5eaf8ca9` | İlk secondary destruction dilimi ve canlı UI/MCP kabulü tamamlandı |
+| FRACTURE3 recursive generation, lineage/bütçe, portable forest, ürün UI/MCP ve temiz canlı kabul | `codex/mesh2d-mesh0` | `fe0c4f45`–`72711c78`, `206853a3`, `5eaf8ca9`, `acc68a08` | İlk secondary destruction dilimi ve canlı UI/MCP kabulü tamamlandı |
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -71,9 +79,12 @@ v0.5.0 entegrasyonuna alınmamalıdır.
 
 Bu branch'teki gerçekleşmiş dilimlerin kullanıcı tarafından uygulanacak test
 sırası ve kanıt şablonu
-[`v0.5.0 elle kabul testi kılavuzunda`](releases/v0.5.0-manual-acceptance-tests.md)
-tanımlıdır. Fixture playback sonucu, henüz bulunmayan Physics/Fracture ürün
-UI'ını tamamlanmış saymaz.
+[`v0.5.0 manuel test yürütme planında`](releases/v0.5.0-phase1-manual-test-plan.md),
+tek tek ekran adımları
+[`elle kabul testi kılavuzunda`](releases/v0.5.0-manual-acceptance-tests.md)
+tanımlıdır. Gerçekleşen işlerin ayrıntılı teslim envanteri
+[`v0.5.0 tamamlanan 2D geliştirmeler`](releases/v0.5.0-2d-completed-work.md)
+belgesindedir.
 
 **Sonraki 2D faz:** [CFX1–CFX9 ileri katman/kompozisyon/efekt, video kurgu ve
 yerel tracking](plans/advanced-compositing-tracking-plan.md), daha önce
@@ -134,18 +145,18 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
-| Sürmekte — sıradaki iş | Simulation Core, rigid, Voronoi ve particle fiziği | Matter.js sabit adım, transform bake, kompleks shape/spline/`Mesh2D` fracture kaynakları, portable provenance, dedicated Worker, Rigid/Fracture ürün UI'ı, güvenli Re-bake / Clear Bake, editor-only Canvas tanıları, render/export parity, FRACTURE2 bonded cluster/action authoring ve FRACTURE3 precomputed recursive generation temiz canlı kabulle tamamlandı. Sıradaki destruction dilimi FRACTURE4 damage deformation/ileri bake'tir; particle body ile ortak `Emit From / Collide With / Follow Surface` onu izler. |
-| Sonra 4 | Fabric/kumaş | Structured grid veya spline'dan türetilmiş Mesh2D; gravity/wind/pin/collision, deformasyon klibi ve bake. |
-| Sonra 5 | Blob Surface, sıvı, akış/duman/ateş | Particle liquid + değişken topolojili Blob Surface; damla birleşme/ayrılması, text/shape/spline/`Mesh2D` kaynak-collider-yüzey hedefleri. Duman/ateş ayrı grid/partikül tarifidir; alanlar, obstacle ve typed simulation bake kullanır. |
-| Sonra 6 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
+| Faz 1 feature freeze | Simulation Core, rigid ve Voronoi | FRACTURE3'e kadar mevcut kapsam tamamlandı; yalnız release/export parity hataları düzeltilir. FRACTURE4/5 ileri destruction ve particle fiziği Faz 2 TODO'sudur. |
+| Aktif — Öncelik 10 | Import/export tutarlılığı, Render Preview ve yüksek kaliteli final render | Tek canonical frame/compiler; hedef çözünürlükte redraw, Final Native/High, açık capability ve Chorono Render/dahili fallback. |
+| Sonra — Öncelik 11 | Mevcut çıktılar için çoklu iş ve otomasyon MVP'si | Frozen source'lu bounded queue, progress/cancel/retry, output manifest; mevcut raster/sequence/Chorono Render MP4. Responsive variant/data/audio/caption Faz 2'dir. |
+| Faz 1 kapanışı — Öncelik 12 | Hedefli optimizasyon ve birleşik v0.5.0 kabulü | Yalnız ölçülmüş release blocker'ları; Four Seasons, UI/MCP, portable, görsel parity, test/MCP/build ve release notu. |
+| Faz 2 | Emitter/particle, Fabric/kumaş, Blob/liquid ve grid duman/ateş | Ayrı solver ve geometri planları korunur; v0.5.0 Faz 1'i bloke etmez. |
+| Faz 2 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
 | Ertelendi — aktif sırayı bloke etmez | Character Motion | Sprite Character, adlandırılmış klip, rig/FK, iki kemikli IK ve Char Detail korunur; uygulama başlamadan önce manuel `Active Clip`, minimum State Machine clip action, runtime saat/geçiş kapsamı ve MVP sınırı birlikte yeniden kararlaştırılır. |
-| Sona taşındı 1 | Import/export tutarlılığı, Render Preview ve yüksek kaliteli final render | Tek canonical frame/compiler; mevcut Chorono 2D evaluator/renderer/compositor; hedef çözünürlükte redraw, sampling/preview ve açık capability/fallback; ardından ileri renk/backend/FP16. |
-| Sona taşındı 2 | Çoklu format ve üretim otomasyonu | Ekran oranları/codec desteği, queue, data-driven üretim, audio-driven hareket ve kelime zamanlı altyazı. |
-| En son | İkinci genel optimizasyon, ileri profiler ve birleşik kabul | Four Seasons + yeni Mesh2D/rig/cloth/Blob/fluid/export alanlarında CPU/bellek/GPU/job ve görüntü eşliği. |
 | Mevcut seriden sonraki ayrı 2D faz — CFX1–CFX9 | İleri katman/kompozisyon/efekt, maske, video kurgu ve yerel tracking | [CFX ayrıntıları](plans/advanced-compositing-tracking-plan.md); 3D compositing/kamera çözümü [3D planında](production-3d-roadmap.md). |
 
-Tam export/refactor ve kapsamlı son optimizasyon ertelenir; her yeni feature'ın
-kaynak bütçesi, acquire/release/dispose, cache invalidation, kaydet/aç/undo/clone,
+Canonical import/export ve final render kapanışı artık Öncelik 10'dur; kapsamlı
+genel refactor ile ölçülmemiş optimizasyon ertelenir. Her yeni feature'ın kaynak
+bütçesi, acquire/release/dispose, cache invalidation, kaydet/aç/undo/clone,
 doğru zamanda değerlendirme ve asgari raster çıktı/bake kontrolleri ertelenmez.
 Desteksiz exporter yeni layer'ı sessizce atlayamaz; capability/fallback açık olur.
 Son optimizasyon turu kritik bellek sızıntısı veya doğruluk hatasını bekletme izni değildir.
@@ -166,17 +177,15 @@ flowchart TD
     H --> I[Dar source / time / resource sözleşmeleri]
     I --> G[Mesh2D / spline-to-mesh]
     G --> BS[Ortak typed BakeService]
-    BS --> S[Simulation core / rigid / Voronoi / particle]
+    BS --> S[Simulation core / rigid / FRACTURE0–3 tamamlandı]
     G --> S
-    S --> CL[Kumaş]
-    G --> CL
-    CL --> L[Blob / sıvı / akış]
-    L --> T[Tamamlayıcı 2D araçlar]
-    T -. Yeniden ürün kararı; aktif sırayı bloke etmez .-> C[Character Motion backlog]
-    T --> E[Export parity ve final kalite]
-    E --> M[Çoklu format / otomasyon]
-    M --> O[Bütün alanlarda ikinci optimizasyon / birleşik kabul]
-    O -. Mevcut seri kabulünden sonraki ayrı faz .-> F[CFX1–CFX9: katman / maske / efekt / video / tracking]
+    S --> E[Öncelik 10 / import-export ve final render]
+    E --> M[Öncelik 11 / mevcut çıktı otomasyon MVP]
+    M --> O[Öncelik 12 / hedefli optimizasyon ve release kabulü]
+    S -. Faz 2 .-> F[FRACTURE4–5 / emitter-particle / kumaş / Blob-sıvı / smoke-fire]
+    G -. Faz 2 .-> F
+    F -. Yeniden ürün kararı; aktif sırayı bloke etmez .-> C[Character Motion backlog]
+    O -. Mevcut seri kabulünden sonraki ayrı faz .-> CFX[CFX1–CFX9: katman / maske / efekt / video / tracking]
 ```
 
 Bu diyagram 2D teslimlerinin kendi sırasını ve önemli geometri bağımlılıklarını
@@ -761,19 +770,20 @@ büyütmek final native geometri çizimi sayılmaz.
 | FRACTURE1 — fragment mesh ve kompleks kaynak | Concave/delikli clipping; fragment triangle/UV/topology hash, adjacency, compound collider ve portable generation manifest. |
 | FRACTURE2 — bonded cluster | Auto/manual cluster, ortak sınır bond'ları, dayanım/damage, connected-component split ve kütle/momentum koruyan body rebuild. |
 | FRACTURE3 — secondary destruction — ilk dilim tamamlandı | Precomputed recursive child generation, kararlı lineage/kimlik, generation ve toplam fragment/triangle/byte bütçesi; portable forest, ürün UI/MCP ve canlı kabul. On-demand runtime üretim FRACTURE4+ kararıdır. |
-| FRACTURE4 — damage deformation ve ileri bake | Mesh2D dent/bend/shear, rest/deformed fracture snapshot, `fractureEventSequence`, checkpoint/seek, MCP ve canonical render/export parity. |
+| FRACTURE4/5 — Faz 2 TODO | FRACTURE4 Mesh2D dent/bend/shear ve rest/deformed snapshot; FRACTURE5 `fractureEventSequence`, checkpoint/seek ve ileri native replay. İki dilim de v0.5.0 Faz 1 release kapısı değildir. |
 | BLOB0 — nokta alanı ve çizim | “+” noktalar, radius/weight/threshold, alan→contour→fill; iki küme yaklaşınca birleşir ve uzaklaşınca ayrılır, boş yüzey/delik desteklenir. |
 | BLOB1 — native grup ve düzeltme | Açık merge owner, nokta/grup animasyonu, sayısal kontrol, tek undo, seçili kareyi Mesh2D snapshot'a dönüştürme; kaynak ve layer sırası korunur. |
 | BLOB2 — fluid adapter ve bake | PBF particle clip'inden normalize yüzey; fizik yeniden çalışmadan görünüm değişimi; değişken topology surface/raster/native playback ve final render parity. |
 | Ortak teslim kapısı | Portable round-trip, canonical export/runtime capability, MCP şema/skill güncellemesi, cancel/stale, kaynak bütçesi ve gerçek render QA. Desteklenmeyen export açık tanı/raster fallback verir. |
 
-Güncel 2D sırada Mesh2D temeli kumaş geometri entegrasyonundan önce;
-Blob temel dilimi sıvının bitmiş görünümünden önce gelir. İlk convex Voronoi
-kırılma Mesh2D'yi beklemez. FRACTURE1–4 temel FRACTURE0 kabulünden sonra
-bağımsız ileri destruction dilimleridir; kumaş veya fluid başlangıcını topluca
-bekletmez. Export/bileşen/çoklu formatın güncel yeri §1'deki sıradır.
-PBF'nin ham particle doğruluk prototipi Blob araçlarından bağımsız
-çalışabilir. Bu bölüm yalnız planlama yapar; algoritma, nesne veya API
+Güncel 2D sırada Mesh2D ve FRACTURE1–3 tamamlanmıştır. FRACTURE4/5, kumaş,
+Blob/fluid, emitter/particle ve smoke/fire Faz 2 TODO olarak tutulur. v0.5.0
+Faz 1 sırası §1'de bağlanan **10 → 11 → 12**'dir: import/export ve final
+render; mevcut çıktılar için iş kuyruğu/otomasyon MVP'si; hedefli optimizasyon
+ve release kabulü. Blob temel dilimi ileride sıvının bitmiş görünümünden önce
+gelir. PBF'nin ham particle doğruluk prototipi Blob araçlarından bağımsız
+çalışabilir.
+Bu bölüm yalnız planlama yapar; algoritma, nesne veya API
 uygulanmış sayılmaz.
 
 Teknik referanslar: [Earcut ve conforming çıktı sınırı](https://github.com/mapbox/earcut), [Delaunay / constrained triangulation](https://doc.cgal.org/latest/Triangulation_2/index.html), [Voronoi hücreleri](https://d3js.org/d3-delaunay/voronoi), [Marching Squares](https://d3js.org/d3-contour), [MultiPolygon contour çıktısı](https://d3js.org/d3-contour/contour).
@@ -3411,5 +3421,7 @@ geçti ve browser console warning/error listesi boştu. Portable kanıt
 `projects/recursive-fracture-acceptance-2026-11-22.chorono.json`
 (`1.348.566` byte,
 `sha256 9e9225bffae2a402a4694d22e08e84f6eebb266f8af1f0888c2cb42bff7be77d`)
-olarak kaydedildi. FRACTURE3 ilk dilimi kapanmıştır; sıradaki destruction işi
-FRACTURE4 damage deformation ve ileri event/checkpoint bake'tir.
+olarak kaydedildi. FRACTURE3 ilk dilimi kapanmıştır. 22 Kasım kapsam kararıyla
+FRACTURE4 damage deformation ve FRACTURE5 event/checkpoint bake Faz 2 TODO'ya
+alındı; v0.5.0 Faz 1'in sıradaki işi Öncelik 10 import/export ve final render
+tutarlılığıdır.

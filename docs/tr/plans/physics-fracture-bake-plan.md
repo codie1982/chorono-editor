@@ -443,7 +443,12 @@ yüksek hızlı küçük cisim geniş görsel matrisi de gerçek Worker/render/p
 kabulünden geçti. Temel scrub/player/MCP/render/export parity kapısı, 32
 fragment sahnesi ve 720°/s tam-tur fixture'ında scrub/player/final-render exact
 pixel karşılaştırması, canonical runtime export ve portable kayıtla kapandı.
-Aktif sıra aşama 7 secondary destruction ve child generation derleyicisidir.
+Aşama 7'nin precomputed secondary destruction, lineage, bütçe, portable forest
+ve UI/MCP dikey dilimi de tamamlandı. 22 Kasım v0.5.0 Faz 1 kapsam kararıyla
+aşama 8 ve 9 **Faz 2 TODO**'ya alındı; mevcut aşama 0–7 davranışının
+import/export, final render ve release parity kontrolleri Öncelik 10 ve 12'de
+sürer. Bağlayıcı kısa sıra için
+[v0.5.0 Faz 1 tamamlama planına](v0.5.0-phase1-completion-plan.md) bakın.
 
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |
@@ -455,11 +460,20 @@ Aktif sıra aşama 7 secondary destruction ve child generation derleyicisidir.
 | 5 — Kompleks kaynak ve fragment mesh | Concave/delikli shape/spline veya `Mesh2D` clipping; render triangle/UV, adjacency, compound collider ve generation manifest | Kaynak alanı/delik/UV korunur; triangle sayısı fiziksel parça sayısı olmaz; topology yalnız olay tick'inde atomik değişir; save/load aynı manifest'i getirir. |
 | 6 — Bonded clusters | Auto/manual cluster, adjacency bond graph, dayanım/damage, connected-component split ve momentum devri | Bağlı panel tek cluster gibi hareket eder; seçili bond kopunca yalnız ayrılan bileşenler body olur; kütle/momentum toleransı ve tek body değişimi geçer. |
 | 7 — Secondary destruction | Precomputed/on-demand child generation, recursive tetikler, parent–child lineage ve generation/fragment bütçesi | Ayrılmış bir parça darbeyle ikinci kez kırılır; aynı seed aynı child manifest'i üretir; depth/bütçe sınırı yarım topology bırakmadan durur. |
-| 8 — Hasar deformasyonu | Mesh2D dent/bend/shear, visual-only ve event-sampled collider politikası, rest/deformed fracture snapshot seçimi | Deformasyon topology hash'i ve fracture manifest'i ayrı stale olur; foldover/self-intersection reddedilir; fracture öncesi/sonrası görünüm atlamaz. |
-| 9 — İleri destruction teslimi | `fractureEventSequence`, checkpoint/seek, cluster/secondary MCP araçları, portable asset ve canonical render/export parity | Rastgele seek etkin cluster/bond/topology durumunu geri getirir; native playback ile bake/render aynı generation olaylarını gösterir; kullanıcı düzenlemeleri ve kaynak korunur. |
+| 8 — Hasar deformasyonu — Faz 2 TODO | Mesh2D dent/bend/shear, visual-only ve event-sampled collider politikası, rest/deformed fracture snapshot seçimi | Deformasyon topology hash'i ve fracture manifest'i ayrı stale olur; foldover/self-intersection reddedilir; fracture öncesi/sonrası görünüm atlamaz. v0.5.0 Faz 1 bloklanmaz. |
+| 9 — İleri destruction teslimi — Faz 2 TODO | `fractureEventSequence`, checkpoint/seek, cluster/secondary MCP araçları ve ileri native replay | Rastgele seek etkin cluster/bond/topology durumunu geri getirir; native playback ile bake/render aynı generation olaylarını gösterir; kullanıcı düzenlemeleri ve kaynak korunur. Mevcut FRACTURE0–3 export parity hataları yine Öncelik 10/12 kapsamındadır. |
 | Sahne geometrisi entegrasyonu | Shape/spline/text/`Mesh2D` emitter ve compound collider; rigid circle/body üretimi | `A8` text üstünde toplar kararlı yığılır; glyph/shape boşlukları hull ile doldurulmaz. Kaynak silüet/alan korunur. |
 
 **İlk dikey dilim:** bir kutu ve statik zemin → 3 saniye simülasyon → x/y/dönme bake → fizik motoru çalıştırmadan playback → undo. Sonraki dilim aynı kutuyu 16–32 Voronoi parçasına ayırır. Böylece önce genel fizik+bake temeli doğrulanır; kırılma bunun üzerinde ilerler.
+
+22 Kasım'da aşama 8 için kısa bir tasarım prototipi; dent/bend/shear,
+collider politikası, rest/deformed snapshot, ayrı topology/manifest hash'leri ve
+doğrulama sınırlarını araştırdı. Uygulama tamamlanmadı, test edilmedi ve commit
+edilmedi; yarım kaynak Faz 1 ağacından kaldırıldı. Bu tasarım kaydı gelecekte
+mevcut MeshDeformation asset/bake yolu üzerinden yeniden uygulanacak TODO'dur;
+v0.5.0'da teslim edilmiş özellik olarak değerlendirilmez. Yeniden başlama için
+[FRACTURE4 devralma ve TODO kaydı](fracture4-damage-deformation-handoff.md)
+bağlayıcı teknik handoff'tur.
 
 ## 14. Uygulama haritası ve testler
 
