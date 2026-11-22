@@ -14,6 +14,13 @@ export function remapSplineData(data: SplinePathData, reserved?: SplinePathData,
     if (!all && !reserved?.[family][id]) return [id, id]
     return [id, allocate(family)]
   }))])) as SplineIdMaps
+  return { data: remapSplineRecords(data, maps), maps }
+}
+
+/** Apply caller-supplied identity maps using the canonical connectivity walker.
+ * Missing map entries retain IDs. Inputs are borrowed; output records detached.
+ * Stable modifier namespaces and ordinary copy/collision policies share this owner. */
+export function remapSplineRecords(data: SplinePathData, maps: SplineIdMaps): SplinePathData {
   const ref = (family: typeof families[number], id: string) => maps[family][id] ?? id
   const result: SplinePathData = { fillRule: data.fillRule,
     points: Object.fromEntries(Object.values(data.points).map(point => { const id = ref('points', point.id); return [id, { ...point, id }] })),
@@ -22,5 +29,5 @@ export function remapSplineData(data: SplinePathData, reserved?: SplinePathData,
     contours: Object.fromEntries(Object.values(data.contours).map(contour => { const id = ref('contours', contour.id); return [id, { ...contour, id, pointIds: contour.pointIds.map(id => ref('points', id)), segmentIds: contour.segmentIds.map(id => ref('segments', id)) }] })),
     subShapes: Object.fromEntries(Object.values(data.subShapes).map(object => { const id = ref('subShapes', object.id); return [id, { ...object, id, contourIds: object.contourIds.map(id => ref('contours', id)) }] })),
   }
-  return { data: result, maps }
+  return result
 }

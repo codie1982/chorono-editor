@@ -1,6 +1,7 @@
 import type { ChronoScene, Layer, StateMachineDefinition, Timeline } from '../../types'
 import type { RuntimeAnimation } from '../../types/runtime'
 import { compositionForOutput } from '../../paint/paintSource'
+import { flattenModifierStacksForOutput } from '../../modifiers'
 
 export interface RuntimeSceneCompilerOptions {
   /** Audio is delivered by the separate mixer/export path unless explicitly retained. */
@@ -23,6 +24,7 @@ export interface RuntimeSceneCompilerOptions {
  */
 export class RuntimeSceneCompiler {
   compile(scene: ChronoScene, options: RuntimeSceneCompilerOptions = {}): RuntimeAnimation {
+    scene = flattenModifierStacksForOutput(scene)
     const excludedLayerIds = options.includeAudio
       ? new Set<string>()
       : new Set(scene.layers.filter(layer => layer.type === 'audio').map(layer => layer.id))
@@ -60,6 +62,7 @@ function stripLayerEditorMetadata(layer: Layer): Layer {
     internalGrid: _internalGrid,
     inputExpressions: _inputExpressions,
     geometryConversion: _geometryConversion,
+    modifierStack: _modifierStack,
     ...runtimeLayer
   } = layer
   return runtimeLayer

@@ -1,6 +1,6 @@
 import type { SplinePathData, SplineSegment } from '../../types/spline'
 import type { Vec2 } from '../../geometry/CoordinateSystem'
-import { splineEdgePath } from '../selection'
+import { splineEdgePath } from '../geometry/elementPaths'
 import { uid } from '../util/uid'
 
 /** Read the renderer's canonical control convention through its existing edge

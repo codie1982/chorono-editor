@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { emptyScene, newRectLayer, cloneLayerForDuplicate, newTimeline } from '../defaults'
 import type { ChronoScene, Layer } from '../types'
 import { prepareGeometryConversion, makeGeometryConversionStackCmd } from './commands-geometry-conversion'
+import { makeRemoveModifierCmd, makeSetModifierSourceCmd } from './modifiers/commands'
+import { makeUpdateLayerCmd } from './commands-layer'
+import { GeometryConversionService } from '../geometry/conversion/GeometryConversionService'
+import type { GeometryConversionData } from '../types/geometryConversion'
+import { modifierStackService } from '../modifiers'
 import { containsMesh2DPoint } from '../geometry/mesh2d/Mesh2DGeometryQueries'
 import { splineToPathDefinition } from '../spline/splineToPath'
 import { resolveLayerWorldMatrix } from '../geometry/resolveLayerWorldMatrix'
@@ -32,7 +37,7 @@ describe('geometry conversion command', () => {
     expect(Object.values(layer.spline!.segments).filter(segment => segment.type === 'cubic')).toHaveLength(4)
     expect(layer.transform).toEqual(source.transform)
     expect(layer.style?.cornerRadius).toBeUndefined()
-    expect(layer.geometryConversion?.sources[0].cornerRadius).toBe(12)
+    expect(layer.modifierStack?.source).toMatchObject({ kind: 'shape', sources: [{ cornerRadius: 12 }] })
     expect(Object.values(layer.spline!.subShapes).every(sub => sub.editable)).toBe(true)
     expect(plan.command.undo(result)).toBe(scene)
     expect(plan.command.execute(scene)).toBe(result)
@@ -44,7 +49,7 @@ describe('geometry conversion command', () => {
     expect(containsMesh2DPoint(layer.mesh2d!.geometry, 20, 90)).toBe(true)
     expect(containsMesh2DPoint(layer.mesh2d!.geometry, 90, 90)).toBe(false)
     expect(layer.mesh2d!.boundaryRings).toHaveLength(1)
-    expect(layer.geometryConversion!.stages.map(stage => stage.kind)).toEqual(['convertSpline', 'convertMesh2d'])
+    expect(layer.modifierStack!.modifiers.map(stage => stage.type)).toEqual(['convertSpline', 'convertMesh2d'])
   })
 
   it.each(['spline', 'mesh2d'] as const)('keeps enclosed holes and separate islands for %s', target => {
@@ -103,25 +108,25 @@ describe('geometry conversion command', () => {
   it('preserves edited spline points through Mesh conversion and modifier removal', () => {
     const first = convert([rect('a')])
     const spline = first.layer.spline!, point = Object.keys(spline.points)[0]
-    const edited = { ...first.layer, spline: { ...spline, points: { ...spline.points, [point]: { ...spline.points[point], x: 10 } } } }
-    const scene = { ...first.result, layers: [edited] }
+    const scene = makeUpdateLayerCmd('a', { spline: { ...spline, points: { ...spline.points, [point]: { ...spline.points[point], x: 10 } } } }, first.layer).execute(first.result)
     const next = prepareGeometryConversion(scene, ['a'], 'mesh2d').command.execute(scene)
-    const recipe = next.layers[0].geometryConversion!
-    const restored = makeGeometryConversionStackCmd(next, 'a', { ...recipe, stages: recipe.stages.slice(0, -1) }).execute(next)
+    const recipe = next.layers[0].modifierStack!
+    const restored = makeRemoveModifierCmd(next, 'a', recipe.modifiers.at(-1)!.id).execute(next)
     expect(restored.layers[0].spline!.points[point].x).toBe(10)
-    const basic = makeGeometryConversionStackCmd(restored, 'a', { ...recipe, stages: [] }).execute(restored)
+    const basic = makeRemoveModifierCmd(restored, 'a', recipe.modifiers[0].id).execute(restored)
     expect(basic.layers[0].type).toBe('shape')
     expect(basic.layers[0].geometryConversion).toBeUndefined()
   })
 
   it('supports explicit source rebuilding and invalidates pinned/deformed topology', () => {
     const { result, layer } = convert([rect('a')], 'mesh2d')
-    const recipe = layer.geometryConversion!
-    const modified = { ...recipe, sources: [{ ...recipe.sources[0], size: { width: 200, height: 100 } }] }
-    const rebuilt = makeGeometryConversionStackCmd(result, 'a', modified).execute(result)
+    const source = layer.modifierStack!.source
+    if (source.kind !== 'shape') throw new Error('Expected captured Basic Shape.')
+    const modified = { ...source, sources: [{ ...source.sources[0], size: { width: 200, height: 100 } }] }
+    const rebuilt = makeSetModifierSourceCmd(result, 'a', modified).execute(result)
     expect(containsMesh2DPoint(rebuilt.layers[0].mesh2d!.geometry, 180, 50)).toBe(true)
-    const pinned = { ...result, layers: [{ ...layer, mesh2d: { ...layer.mesh2d!, pins: { schemaVersion: 1 as const, topologyHash: layer.mesh2d!.geometry.topology.topologyHash, vertexIds: ['a'] } } }] }
-    expect(() => makeGeometryConversionStackCmd(pinned, 'a', modified)).toThrow(/pins/)
+    const pinned = { ...result, layers: [{ ...layer, mesh2d: { ...layer.mesh2d!, pins: { schemaVersion: 1 as const, topologyHash: layer.mesh2d!.geometry.topology.topologyHash, vertexIds: [layer.mesh2d!.geometry.topology.vertexIds[0]] } } }] }
+    expect(() => makeSetModifierSourceCmd(pinned, 'a', modified)).toThrow(/pins/)
   })
 
   it('round-trips recipes portably, copies independently and emits ordinary runtime geometry', () => {
@@ -129,14 +134,15 @@ describe('geometry conversion command', () => {
     const loaded = parseSceneJson(JSON.stringify(result), true)
     expect(loaded.layers[0]).toEqual(layer)
     const cloned = cloneLayerForDuplicate(layer)
-    expect(cloned.geometryConversion).toEqual(layer.geometryConversion)
-    expect(cloned.geometryConversion).not.toBe(layer.geometryConversion)
+    expect(cloned.modifierStack).toEqual(layer.modifierStack)
+    expect(cloned.modifierStack).not.toBe(layer.modifierStack)
     expect(cloned.mesh2d!.source).toMatchObject({ sourceLayerId: cloned.id })
     const instance = resolveInstanceLayer({ ...rect('instance'), instanceOf: layer.id }, result.layers)!
     expect(instance.type).toBe('mesh2d')
-    expect(instance.geometryConversion).toEqual(layer.geometryConversion)
+    expect(instance.modifierStack).toEqual(layer.modifierStack)
     const runtime = defaultRuntimeSceneCompiler.compile(loaded)
     expect(runtime.layers[0].geometryConversion).toBeUndefined()
+    expect(runtime.layers[0].modifierStack).toBeUndefined()
     expect(runtime.layers[0].mesh2d!.boundaryRings).toEqual(layer.mesh2d!.boundaryRings)
   })
 
@@ -160,10 +166,25 @@ describe('geometry conversion command', () => {
     expect(() => prepareGeometryConversion(order, ['a', 'b'], 'spline')).toThrow(/contiguous/)
   })
 
+  it('preserves legacy conversion-v1 source/edits on migration and old command access', () => {
+    const original = rect('a'), recipe: GeometryConversionData = { version: 1, sources: [{ type: 'shape', name: 'a', shape: 'rect', size: { width: 100, height: 100 }, cornerRadius: 0, matrix: [1, 0, 0, 1, 0, 0] }], unionTolerancePx: .25,
+      stages: [{ id: 'old-convert', kind: 'convertSpline' }] }
+    const legacy = new GeometryConversionService().apply(original, recipe), scene = { ...emptyScene(), layers: [legacy] }
+    expect(parseSceneJson(JSON.stringify(scene), true).layers[0].geometryConversion).toEqual(recipe)
+    const stack = modifierStackService.stackFor(legacy)
+    expect(stack.modifiers[0]).toMatchObject({ id: 'old-convert', type: 'convertSpline', settings: { edited: legacy.spline } })
+    const restored = makeGeometryConversionStackCmd(scene, 'a', { ...recipe, stages: [] }).execute(scene)
+    expect(restored.layers[0].type).toBe('shape')
+    const migrated = prepareGeometryConversion(scene, ['a'], 'mesh2d').command.execute(scene)
+    expect(migrated.layers[0].geometryConversion).toBeUndefined()
+    expect(migrated.layers[0].modifierStack!.modifiers.map(item => item.type)).toEqual(['convertSpline', 'convertMesh2d'])
+    expect(migrated.layers[0].modifierStack!.source).toEqual(stack.source)
+  })
+
   it('rejects malformed saved stage order rather than accepting a misleading list', () => {
     const { result } = convert([rect('a')])
     const invalid = structuredClone(result)
-    invalid.layers[0].geometryConversion = { ...invalid.layers[0].geometryConversion!, stages: [{ id: 'mesh', kind: 'convertMesh2d', tolerancePx: .25 }] }
-    expect(() => parseSceneJson(JSON.stringify(invalid), true)).toThrow(/Spline → 2D Mesh/)
+    invalid.layers[0].modifierStack = { ...invalid.layers[0].modifierStack!, modifiers: [{ id: 'mesh', type: 'convertMesh2d', version: 1, enabled: true, settings: { tolerancePx: .25 } }] }
+    expect(() => parseSceneJson(JSON.stringify(invalid), true)).toThrow(/requires spline/i)
   })
 })

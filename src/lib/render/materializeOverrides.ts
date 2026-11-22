@@ -5,6 +5,7 @@ import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import type { PropertySchema } from '@/lib/registry/PropertySchema'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import { projectBooleanOperations, isBooleanProjection, markBooleanProjection } from '../booleanOperations/projectOperations'
+import { projectModifierStacks, projectModifierLayer } from '../modifiers'
 
 type PropertyOverride = { path: string[]; value: AnimatableValue }
 type LayerOverrideIndex = Map<string, PropertyOverride[]>
@@ -145,7 +146,7 @@ export function materializeLayerOverrides(layer: Layer, overrides: OverrideMap, 
  * snapshot, index, scratch or output is retained internally between calls.
  */
 export function materializeRenderScene(scene: ChronoScene, overrides: OverrideMap, schemasForLayer?: RenderSchemaProvider): ChronoScene {
-  scene = projectBooleanOperations(scene)
+  scene = projectBooleanOperations(projectModifierStacks(scene))
   const index = indexOverrides(overrides)
   const copies: Array<object | undefined> = []
   // Source lookups stay separate from the projected frame so an instance
@@ -160,7 +161,7 @@ export function materializeRenderScene(scene: ChronoScene, overrides: OverrideMa
       layers ??= scene.layers.slice(0, position)
       continue
     }
-    let projected = applyLayerOverrides(resolved, index.get(layer.id), copies, schemasForLayer)
+    let projected = applyLayerOverrides(projectModifierLayer(resolved), index.get(layer.id), copies, schemasForLayer)
     // This is a render-only snapshot. Downstream bounds/path helpers must
     // not resolve it again against an already animated source snapshot.
     if (projected.instanceOf) projected = { ...projected, instanceOf: undefined }

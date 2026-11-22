@@ -280,6 +280,8 @@ export interface Transform {
 //   UI: right-click layer → "Add Modifier ▶" submenu in LayerPanel.
 
 export interface Layer {
+  /** Canonical, ordered non-destructive geometry source and modifier instances. */
+  modifierStack?: import('../modifiers/geometryTypes').GeometryModifierStackData
   /** Persistent, source-preserving geometry representation stages. */
   geometryConversion?: import('./geometryConversion').GeometryConversionData
   /** Non-destructive Boolean group recipe; original child geometry stays source. */

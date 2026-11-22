@@ -9,8 +9,7 @@ import { transformPathDefinition } from '../transformPathDefinition'
 import { PolygonClippingBackend } from '../boolean/PolygonClippingBackend'
 import { flattenPathContours } from '../flattenPathContours'
 import { classifyPlanarBoundaries } from '../planar/boundaries'
-import { SplineBoundaryMesh2DGenerator } from '../mesh2d/SplineBoundaryMesh2DGenerator'
-import { Mesh2DBoundaryRingExtractor } from '../mesh2d/Mesh2DBoundaryRingExtractor'
+import { SplineToMeshConverter } from './SplineToMeshConverter'
 
 /** Stateless representation conversion. Reuses primitive curves, the Boolean
  * union backend, robust planar classification and validated Earcut topology.
@@ -52,7 +51,7 @@ export class GeometryConversionService {
       assertSplineTopology(splineStage.edited); spline = splineStage.edited
     }
     const mesh = recipe.stages.find(stage => stage.kind === 'convertMesh2d')
-    const { shape: _shape, shapeKind: _kind, shapeParams: _params, path: _path, mesh2d: _mesh, ...rest } = layer
+    const { shape: _shape, shapeKind: _kind, shapeParams: _params, path: _path, mesh2d: _mesh, modifierStack: _stack, ...rest } = layer
     const style = layer.style ? { ...layer.style, cornerRadius: undefined } : undefined
     if (!recipe.stages.length && recipe.sources.length === 1 && recipe.sources[0].type === 'shape') {
       const source = recipe.sources[0]
@@ -61,25 +60,10 @@ export class GeometryConversionService {
         size: source.size, style: { ...style, cornerRadius: source.cornerRadius } }
     }
     if (mesh?.kind === 'convertMesh2d') {
-      const mesh2d = new SplineBoundaryMesh2DGenerator().generate(layer.id, stabilizeMeshBoundary(spline), { flattenTolerance: mesh.tolerancePx })
-      const boundaryRings = new Mesh2DBoundaryRingExtractor().extract(mesh2d.geometry).map(ring => ring.vertexIndices)
-      return { ...rest, type: 'mesh2d', spline: undefined, style, mesh2d: { ...mesh2d, boundaryRings }, geometryConversion: recipe }
+      const mesh2d = new SplineToMeshConverter().convert(layer.id, spline, mesh.tolerancePx)
+      return { ...rest, type: 'mesh2d', spline: undefined, style, mesh2d, geometryConversion: recipe }
     }
     return { ...rest, type: 'spline', spline, style, geometryConversion: recipe }
-  }
-}
-
-/** Normalize floating trig roundoff before Earcut's exact comparisons. Symmetric
- * ring vertices such as 25 and 25.000000000000007 must share one coordinate or
- * hole bridging can emit zero-area triangles. Fourteen significant digits lose
- * at most 0.0000005 px inside the admitted ±10M px domain, far below the 0.01 px
- * minimum mesh tolerance. Original editable Bézier controls remain unchanged;
- * collapsed/tiny boundaries still fail the canonical topology validator. */
-function stabilizeMeshBoundary(spline: SplinePathData): SplinePathData {
-  const round = (n: number) => Number(n.toPrecision(14))
-  return { ...spline,
-    points: Object.fromEntries(Object.entries(spline.points).map(([id, point]) => [id, { ...point, x: round(point.x), y: round(point.y) }])),
-    handles: Object.fromEntries(Object.entries(spline.handles).map(([id, handle]) => [id, { ...handle, x: round(handle.x), y: round(handle.y) }])),
   }
 }
 

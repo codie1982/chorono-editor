@@ -1,4 +1,5 @@
 import type { ChronoScene, Layer, Track } from '../../types'
+import { isModifierControlledPath } from '../../modifiers/sourcePolicy'
 import { LayerIndex, type LayerLookup } from '../../scene/LayerIndex'
 import { layerRegistry } from '../../registry'
 import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
@@ -12,6 +13,7 @@ import { assertTimelineContext, SCENE_TIMELINE_CONTEXT, type TimelineAuthoringCo
  * query does not validate Timeline identity or mutate source/runtime state.
  */
 export function isLayerTimelineProperty(layer: Layer, path: string, context: TimelineAuthoringContext = SCENE_TIMELINE_CONTEXT): boolean {
+  if (propertyPathsOverlap('modifierStack', path) || propertyPathsOverlap('geometryConversion', path) || layer.modifierStack && isModifierControlledPath(path)) return false
   const definition = layerRegistry.findForLayer(layer), excluded = definition?.timelineExcludedPaths
   if (context.kind === 'content') return layer.id === context.ownerLayerId
     && !!(definition?.getContentTimelinePaths?.(layer) ?? definition?.contentTimelinePaths)?.includes(path)
@@ -63,7 +65,7 @@ export function assertTimelineEditTarget(scene: ChronoScene, timelineId: string,
  * the original array identity is returned to preserve old memoization behavior. */
 export function layerTimelineTracks(layer: Layer, tracks: readonly Track[],
   context: TimelineAuthoringContext = SCENE_TIMELINE_CONTEXT): readonly Track[] {
-  if (context.kind === 'scene' && !layerRegistry.findForLayer(layer)?.timelineExcludedPaths?.length) return tracks
+  if (context.kind === 'scene' && !layer.modifierStack && !layerRegistry.findForLayer(layer)?.timelineExcludedPaths?.length) return tracks
   const prefix = `layers.${layer.id}.`
   const visible = tracks.filter(track => track.target.startsWith(prefix) && isLayerTimelineProperty(layer, track.target.slice(prefix.length), context))
   return visible.length === tracks.length ? tracks : visible

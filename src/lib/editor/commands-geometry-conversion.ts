@@ -6,6 +6,8 @@ import { resolveLayerWorldMatrix } from '../geometry/resolveLayerWorldMatrix'
 import { Matrix2D } from '../geometry/Matrix2D'
 import { assertStaticBooleanInput } from '../booleanOperations/validation'
 import { assertLayerUnreferenced } from '../scene/references/assertLayerUnreferenced'
+import { prepareConvertModifierStack } from './modifiers/commands'
+import { modifierStackService } from '../modifiers'
 
 export type ConversionTarget = 'spline' | 'mesh2d'
 const geometryField = /^(?:size|shapeParams|shapeKind|shape|spline|style\.cornerRadius)(?:\.|$)/
@@ -45,6 +47,12 @@ export function prepareGeometryConversion(scene: ChronoScene, layerIds: readonly
   if (!ids.size || ids.size > 8) throw new Error('Select 1–8 Basic Shapes or Splines to convert.')
   const sources = scene.layers.filter(layer => ids.has(layer.id))
   if (sources.length !== ids.size) throw new Error('A conversion source no longer exists.')
+  if (sources.length === 1) {
+    const primary = sources[0]
+    if (scene.layers.some(item => item.parentId === primary.id)) throw new Error('Convert the geometry inside the group, not its container.')
+    if (Math.abs(resolveLayerWorldMatrix(primary, scene, 0, new Map()).determinant()) < 1e-9) throw new Error('Conversion cannot use a singular layer transform.')
+    return prepareConvertModifierStack(scene, primary.id, target)
+  }
   sources.forEach(layer => assertConversionInput(scene, layer, sources.length > 1))
   const primary = sources[0]
   if (sources.length > 1) {
@@ -67,13 +75,16 @@ export function prepareGeometryConversion(scene: ChronoScene, layerIds: readonly
     unionTolerancePx: .25, stages: [{ id: 'convert-spline', kind: 'convertSpline' }] }
   const finalRecipe: GeometryConversionData = target === 'mesh2d'
     ? { ...recipe, stages: [...recipe.stages, { id: 'convert-mesh2d', kind: 'convertMesh2d', tolerancePx: .25 }] } : recipe
-  const result = new GeometryConversionService().apply(primary, finalRecipe)
+  const legacyResult = new GeometryConversionService().apply(primary, finalRecipe)
+  const result = modifierStackService.execute(legacyResult, modifierStackService.stackFor(legacyResult))
   const candidate = { ...scene, layers: scene.layers.flatMap(layer => layer.id === primary.id ? [result] : ids.has(layer.id) ? [] : [layer]),
     timelines: scene.timelines.map(timeline => ({ ...timeline, layerIds: timeline.layerIds?.filter(id => !ids.has(id) || id === primary.id) })) }
   return { layerId: primary.id, command: replacementCommand(scene, candidate, `Convert ${sources.length > 1 ? 'union' : primary.name} to ${target === 'spline' ? 'Spline' : '2D Mesh'}`) }
 }
 
-/** Update/rebuild a saved modifier prefix in one undo step. Edited spline
+/** Legacy conversion-v1 command, retained for old callers. New editor controls
+ * use the generic stack commands and migrate only on an explicit edit.
+ * Update/rebuild a saved modifier prefix in one undo step. Edited spline
  * controls are captured before appending/removing Mesh; rebuilding the source
  * explicitly clears edits. Pin/deformation attachments refuse topology changes. */
 export function makeGeometryConversionStackCmd(scene: ChronoScene, id: string, recipe: GeometryConversionData): EditorCommand {

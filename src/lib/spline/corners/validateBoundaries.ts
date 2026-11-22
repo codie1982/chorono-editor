@@ -1,5 +1,5 @@
 import type { SplinePathData } from '../../types/spline'
-import { subShapeData } from '../selection'
+import { subShapeData } from '../geometry/elementPaths'
 import { splineToPathDefinition } from '../splineToPath'
 import { transformPathDefinition } from '../../geometry/transformPathDefinition'
 import { flattenPathContours } from '../../geometry/flattenPathContours'

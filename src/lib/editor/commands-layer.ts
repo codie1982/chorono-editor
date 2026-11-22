@@ -6,6 +6,7 @@ import { makeAddAudioClipCmd } from './commands-audio'
 import { nextKfId } from '../defaults'
 import { assertModelContentPatch } from '../model3d/animation/modelClipOwnership'
 import { LayerIndex } from '../scene/LayerIndex'
+import { reconcileModifierLayerPatch } from '../modifiers/authoring'
 
 // ── Add layer ─────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ export function makeUpdateLayerCmd(
   prevLayer: Layer,
   options: { contentOwnerId?: string } = {},
 ): EditorCommand {
-  const next: Layer = { ...prevLayer, ...patch }
+  const next: Layer = reconcileModifierLayerPatch(prevLayer, patch)
   return {
     label: 'Update Layer',
     execute: (scene) => { assertModelContentPatch(prevLayer, next, options.contentOwnerId); return ({

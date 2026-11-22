@@ -36,6 +36,7 @@ export const INSTANCE_SOURCE_FIELDS: readonly (keyof Layer)[] = [
   'spline',
   'mesh2d',
   'geometryConversion',
+  'modifierStack',
   'particleEmitter',
   'style',
   'size',
@@ -89,7 +90,7 @@ export function resolveInstanceLayer(
   }
   for (const key of INSTANCE_SOURCE_FIELDS) {
     const value = resolvedSource[key]
-    if (value !== undefined) {
+    if (value !== undefined || key === 'modifierStack') {
       // The cast is safe: SOURCE_VISUAL_KEYS lists Layer-typed keys.
       ;(composed as unknown as Record<string, unknown>)[key as string] = value
     }

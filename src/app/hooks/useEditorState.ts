@@ -1,4 +1,5 @@
 'use client'
+import { assertSceneModifierStacks } from '@/lib/modifiers'
 import { assertSceneBooleanOperations } from '@/lib/booleanOperations/validation'
 import { useState, useRef, useCallback, useLayoutEffect } from 'react'
 import type { ChronoScene } from '@/lib/types'
@@ -208,6 +209,7 @@ export function useEditorState(initialScene: ChronoScene, restoredHistory?: Hist
   // ── Hard reset (used by "Clear" — bypasses undo on purpose) ──────────────
   const resetScene = useCallback((next: ChronoScene) => {
     assertSceneBooleanOperations(next)
+    assertSceneModifierStacks(next)
     assertAuthoringData(next.authoring)
     documentRef.current!.replace()
     txRef.current = null
@@ -218,7 +220,7 @@ export function useEditorState(initialScene: ChronoScene, restoredHistory?: Hist
   /** Adopt data-only history, never execute saved commands. The owning project
    * converter validates source/graph structure before invoking this boundary. */
   const resetHistory = useCallback((next: HistoryState) => {
-    for (const value of [next.present, ...next.past, ...next.future]) { assertSceneBooleanOperations(value); assertAuthoringData(value.authoring) }
+    for (const value of [next.present, ...next.past, ...next.future]) { assertSceneBooleanOperations(value); assertSceneModifierStacks(value); assertAuthoringData(value.authoring) }
     documentRef.current!.replace(); txRef.current = null
     updateHistory(() => next); setLayerMetaById({})
   }, [updateHistory])

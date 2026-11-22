@@ -7,6 +7,7 @@
 //   - "Which layers reference this asset?"
 //   - "Is this asset an orphan?"
 
+import { modifierAssetIds } from '../modifiers/assetReferences'
 import { modelAssetIds } from '../model3d/content/modelContent'
 import type { Composition, Layer }  from '../types/core'
 import type { Asset }  from './types'
@@ -126,7 +127,7 @@ export class AssetIndex {
 
   private extractAssetIds(layer: Layer): string[] {
     const ids: string[] = []
-    ids.push(...modelAssetIds(layer.model3d))
+    ids.push(...modelAssetIds(layer.model3d), ...modifierAssetIds(layer))
     if (layer.style?.fill?.image?.assetId) ids.push(layer.style.fill.image.assetId)
     if (layer.image?.assetId)  ids.push(layer.image.assetId)
     if (layer.video?.assetId)  ids.push(layer.video.assetId)
