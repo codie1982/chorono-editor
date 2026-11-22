@@ -13,6 +13,7 @@ import { MAX_MODEL_BOX_SIDE } from '@/lib/model3d/source/modelDefaults'
 import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
 import { makeTransformMeshGeometryCmd } from '@/lib/editor/modifiers/commands'
+import { applyAxisLock } from '@/lib/canvas/math/moveMath'
 
 type GeometryDrag = Exclude<ActiveDrag, { kind: 'move' | 'rotate' | 'scaleAxis' }>
 interface GeometryPreviewInput {
@@ -42,7 +43,8 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
     return previewLayer(base, original, { ...original, path }, changedRecord(original.path, path) ? ['path'] : [])
   }
   if (drag.kind === 'splineGeometry' || drag.kind === 'meshGeometry') {
-    const local = drag.worldToLocal.applyToVector(delta), { pivot, startLocal } = drag
+    const constrained = drag.operation === 'move' ? applyAxisLock(delta.x, delta.y, drag.axisLock, event.shiftKey) : { dx: delta.x, dy: delta.y }
+    const local = drag.worldToLocal.applyToVector({ x: constrained.dx, y: constrained.dy }), { pivot, startLocal } = drag
     const end = { x: startLocal.x + local.x, y: startLocal.y + local.y }
     const angle = wrapAngle180(angleDegFromPivot(pivot.x, pivot.y, end.x, end.y) - angleDegFromPivot(pivot.x, pivot.y, startLocal.x, startLocal.y))
     const initialRadius = Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y)
@@ -66,7 +68,8 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
   }
   if (drag.kind === 'splinePoint' || drag.kind === 'splineHandle') {
     if (!original.spline) return previewLayer(base, original, original, [])
-    const local = drag.worldToLocal.applyToVector(delta)
+    const constrained = applyAxisLock(delta.x, delta.y, null, event.shiftKey)
+    const local = drag.worldToLocal.applyToVector({ x: constrained.dx, y: constrained.dy })
     const spline = drag.kind === 'splinePoint'
       ? drag.pointIds ? moveSplinePoints(original.spline, drag.pointIds, local.x, local.y) : moveSplinePoint(original.spline, drag.pointId, drag.startX + local.x, drag.startY + local.y)
       : moveSplineHandle(original.spline, drag.pointId, drag.handleKind, drag.startX + local.x, drag.startY + local.y)

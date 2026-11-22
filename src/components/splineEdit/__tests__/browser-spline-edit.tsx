@@ -20,6 +20,8 @@ import { acquireRasterImage } from '@/lib/export/raster/RasterExportEngine'
 import type { ChronoScene } from '@/lib/types'
 
 import { Subject, current, frames, layer, canvas, world, client, pointer, tap, drag, click, key, choose, reset, raster, assert, equal, contextAt } from './splineHarness'
+import { checkSplineEditAxes } from './checkSplineEditAxes'
+import { checkModifierListScroll } from './checkModifierListScroll'
 async function run() {
   const status = document.getElementById('status')!, report = document.getElementById('report')!, checks: string[] = []
   status.textContent = 'Running'; const runButton = document.getElementById('run') as HTMLButtonElement; runButton.disabled = true
@@ -236,6 +238,8 @@ async function run() {
     assert(!current().editor.isTransactionActive(), 'Drawing left a transaction active')
     checks.push('Native box cancellation leaves no source; revision change rejects stale release and preserves the human edit')
     await reset(); await click('Spline object mode'); await click('Select spline object Donut B')
+    checks.push(await checkSplineEditAxes()); checks.push(await checkModifierListScroll())
+    await click('Spline point mode'); await tap(Object.values(layer().spline!.points)[0])
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
   finally { runButton.disabled = false }

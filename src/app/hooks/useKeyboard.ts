@@ -162,7 +162,7 @@ export function useKeyboard(handlers: Handlers) {
       // Native form controls, IME and inner widgets own their keyboard input.
       if (e.defaultPrevented || e.isComposing || !target
           || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
-          || target.closest?.('[role="menu"], [role="dialog"], [aria-modal="true"], dialog')) {
+          || target.closest?.('[role="menu"], [role="dialog"], [aria-modal="true"], dialog, [data-editor-input-scope]')) {
         return
       }
 

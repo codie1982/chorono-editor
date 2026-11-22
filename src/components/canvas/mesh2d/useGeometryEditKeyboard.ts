@@ -22,7 +22,7 @@ export function useGeometryEditKeyboard(options: {
     const keydown = (event: KeyboardEvent) => {
       const { editor, layer } = options, target = event.target instanceof Element ? event.target : null
       if (!layer || editor.isTransactionActive() || hasVisibleKeyboardScope() || options.canvasRef.current?.closest('[inert]')
-        || target?.closest('input,textarea,select,[contenteditable=true]') || options.getContext && options.getContext() !== 'canvas') return
+        || target?.closest('input,textarea,select,[contenteditable=true],[data-editor-input-scope]') || options.getContext && options.getContext() !== 'canvas') return
       const navigation = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
       const sourceAction = (event.ctrlKey || event.metaKey) && ['d', 'c', 'v', 'x', 'g'].includes(event.key.toLowerCase())
       if (!navigation && !sourceAction && !['Escape', 'Delete', 'Backspace'].includes(event.key)) return

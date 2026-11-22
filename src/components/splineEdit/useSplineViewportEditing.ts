@@ -8,7 +8,7 @@ import { pickSplineElement, splineIdsInRegion, type SplinePick } from '@/lib/spl
 import type { SelectionRegion } from '@/lib/selection/selectionGesture'
 import { splineSelectionPoints, splineSelectionPivot, transformSplineSelection } from '@/lib/spline/selection'
 import { drivenSplineTransformReason } from '@/lib/spline/edit/authoringGuard'
-import { drivenSplineEditReason } from '@/lib/spline/edit/authoringGuard'
+import { drivenSplineEditReason, editableSplineLayer } from '@/lib/spline/edit/authoringGuard'
 import { splineTopologyCommand } from '@/lib/editor/spline/topologyCommand'
 import { resolveSplineEditGeometry } from '../canvas/splineEditGeometry'
 import type { UseCanvasDragReturn } from '../canvas/hooks/useCanvasDrag'
@@ -59,6 +59,23 @@ export function useSplineViewportEditing(options: Options) {
     if (toggle || !controller.ids.includes(id)) controller.select([id], toggle ? 'toggle' : 'replace')
     return id
   }
+  /** Body and axis controls share the same validated native geometry gesture;
+   * constraints are world axes, converted through the complete parent inverse. */
+  const beginGeometry = (pointIds: ReadonlySet<string>, operation: 'move' | 'rotate' | 'scale',
+    start: { x: number; y: number }, event: React.PointerEvent, axisLock: 'x' | 'y' | null = null) => {
+    if (!canPick || !writable || !geometry || !layer?.spline || options.drag.dragRef.current || options.editor.isTransactionActive()) return
+    try {
+      editableSplineLayer(scene, layer.id)
+      const reason = drivenSplineTransformReason(layer, scene, pointIds)
+      if (reason) throw new Error(reason)
+      const pivot = splineSelectionPivot(layer.spline, pointIds), startLocal = geometry.worldToLocal.applyToPoint(start)
+      if (!pivot || operation !== 'move' && Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y) < 1e-6) return
+      options.editor.beginTransaction()
+      options.drag.dragRef.current = { kind: 'splineGeometry', layerId: layer.id, originalLayer: layer, pointIds: Array.from(pointIds),
+        operation, axisLock, startClientX: event.clientX, startClientY: event.clientY, startLocal, pivot, worldToLocal: geometry.worldToLocal }
+      options.drag.startDrag(event)
+    } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
+  }
   const pointerDown = (x: number, y: number, event: React.PointerEvent): boolean => {
     if (!canPick) return false
     if (controller.attaching) {
@@ -81,17 +98,8 @@ export function useSplineViewportEditing(options: Options) {
     if (target.kind === 'edge' || target.kind === 'object' || ['rotate', 'scale'].includes(options.toolMode ?? '')) {
       const selectedIds = controller.ids.includes(id) ? controller.ids : [id]
       const pointIds = splineSelectionPoints(layer.spline, controller.mode, selectedIds)
-      const reason = drivenSplineTransformReason(layer, scene, pointIds)
-      if (reason) { options.warning(reason); return true }
-      const pivot = splineSelectionPivot(layer.spline, pointIds)
-      if (!pivot) return true
-      const startLocal = geometry.worldToLocal.applyToPoint({ x, y })
-      if (['rotate', 'scale'].includes(options.toolMode ?? '') && Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y) < 1e-6) return true
-      options.editor.beginTransaction()
-      options.drag.dragRef.current = { kind: 'splineGeometry', layerId: layer.id, originalLayer: layer, pointIds: Array.from(pointIds),
-        operation: options.toolMode === 'rotate' ? 'rotate' : options.toolMode === 'scale' ? 'scale' : 'move',
-        startClientX: event.clientX, startClientY: event.clientY, startLocal, pivot, worldToLocal: geometry.worldToLocal }
-      options.drag.startDrag(event); return true
+      beginGeometry(pointIds, options.toolMode === 'rotate' ? 'rotate' : options.toolMode === 'scale' ? 'scale' : 'move', { x, y }, event)
+      return true
     }
     const ids = target.kind === 'point' && controller.ids.includes(id) ? controller.ids : [id]
     const reason = target.kind === 'handle' ? drivenSplineEditReason(layer, scene, 'handles', target.id)
@@ -127,7 +135,7 @@ export function useSplineViewportEditing(options: Options) {
       const current = latest.current, edit = current.controller
       const target = event.target instanceof Element ? event.target : null
       if (!edit.active || !current.enabled || current.isSelecting?.() || current.editor.isTransactionActive() || hasVisibleKeyboardScope()
-        || current.canvasRef.current?.closest('[inert]') || target?.closest('input,textarea,select,[contenteditable=true]')
+        || current.canvasRef.current?.closest('[inert]') || target?.closest('input,textarea,select,[contenteditable=true],[data-editor-input-scope]')
         || current.getContext && current.getContext() !== 'canvas') return
       const navigation = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
       const sourceAction = (event.ctrlKey || event.metaKey) && ['d', 'c', 'v', 'x', 'g'].includes(event.key.toLowerCase())
@@ -154,6 +162,18 @@ export function useSplineViewportEditing(options: Options) {
     window.addEventListener('keydown', keydown, true)
     return () => window.removeEventListener('keydown', keydown, true)
   }, [])
-  return { active, selected, canPick, hover: canPick ? hover : null, menu, closeMenu: () => setMenu(null), pointerDown, contextMenu, query,
+  const movePoints = layer?.spline ? splineSelectionPoints(layer.spline, controller.mode, controller.ids) : new Set<string>()
+  const movePivot = canPick && writable && !controller.attaching && ['select', 'move', undefined].includes(options.toolMode)
+    && geometry ? splineSelectionPivot(geometry.worldSpline, movePoints) : null
+  const moveGizmo = movePivot ? { point: movePivot, start: (axis: 'x' | 'y' | null) => (event: React.PointerEvent) => {
+    if (event.button !== 0) return
+    event.preventDefault(); event.stopPropagation()
+    const canvas = options.canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    beginGeometry(movePoints, 'move', { x: (event.clientX - rect.left) * scene.composition.width / rect.width,
+      y: (event.clientY - rect.top) * scene.composition.height / rect.height }, event, axis)
+  } } : null
+  return { active, selected, canPick, moveGizmo, hover: canPick ? hover : null, menu, closeMenu: () => setMenu(null), pointerDown, contextMenu, query,
     hoverAt: (x: number, y: number) => setHover(pick(x, y)), clearHover: () => setHover(null) }
 }

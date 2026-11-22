@@ -1660,6 +1660,10 @@ export default function SceneCanvas({
           {/* Move-mode axis arrows — X (red) / Y (blue) / center square.
               Anchored at the layer's pivot in world space, screen-aligned so
               they don't rotate with the layer (matches 3DS Max behaviour). */}
+          {splineViewport.moveGizmo && <div role="group" aria-label="Spline edit move axes">
+            <MoveAxisGizmo x={splineViewport.moveGizmo.point.x * zoom} y={splineViewport.moveGizmo.point.y * zoom}
+              onAxisPointerDown={splineViewport.moveGizmo.start} />
+          </div>}
           {gizmo.axisMove && selectedLayer && !selectedLayer.locked && !selectedLayer.hidden && (
             <MoveAxisGizmo
               x={selectedWorldPivot.x * zoom}

@@ -26,6 +26,18 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [error, setError] = useState(''), [status, setStatus] = useState('')
   const alert = useRef<HTMLParagraphElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  // Scroll only the bounded list, keeping Execute/pickers/settings in place.
+  useEffect(() => {
+    const region = list.current
+    if (!region) return
+    if (selected === 'source') { region.scrollTop = 0; return }
+    const row = Array.from(region.querySelectorAll<HTMLElement>('[data-modifier-id]')).find(item => item.dataset.modifierId === selected)
+    if (!row) return
+    const view = region.getBoundingClientRect(), bounds = row.getBoundingClientRect()
+    if (bounds.top < view.top) region.scrollTop += bounds.top - view.top
+    else if (bounds.bottom > view.bottom) region.scrollTop += bounds.bottom - view.bottom
+  }, [selected, stack.modifiers])
   useEffect(() => { if (error) alert.current?.focus() }, [error])
   useEffect(() => {
     setSelected(value => value === 'source' || stack.modifiers.some(item => item.id === value) ? value : stack.modifiers.at(-1)?.id ?? 'source')
@@ -59,7 +71,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
       id = plan.modifierId; warning = plan.warning ?? ''; return plan.command
     }, 'Modifier added.')) { setSelected(id); if (warning) setError(warning) }
   }
-  return <section aria-label="Modifier stack" className="space-y-3 border-t border-gray-700 pt-3">
+  return <section aria-label="Modifier stack" data-editor-input-scope className="min-w-0 space-y-3 rounded-lg border border-gray-700 bg-gray-950/20 p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-semibold">Modifier stack</h3>
       <button type="button" disabled={disabled || !stack.modifiers.length} onClick={() => execute()} className="min-h-8 rounded border border-orange-400/50 bg-orange-500/10 px-3 py-1.5 text-orange-100 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-30">Execute stack</button>
@@ -67,7 +79,8 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
     <p className="text-gray-400">Source → modifiers, top to bottom → result. Edit settings, then Execute.</p>
     {error && <p ref={alert} tabIndex={-1} role="alert" className="rounded border border-amber-600/60 bg-amber-950/30 p-2 text-amber-200 focus:outline-none">{error}</p>}
     {status && <p role="status" className="text-gray-300">{status}</p>}
-    <div className="space-y-1" aria-label="Ordered modifiers">
+    <div ref={list} role="region" tabIndex={0} className="space-y-1 overflow-y-auto overscroll-contain rounded border border-gray-700 bg-gray-950/40 p-2 focus-visible:outline focus-visible:outline-orange-300"
+      style={{ maxHeight: 'min(18rem, 35vh)' }} aria-label="Ordered modifiers">
       <button type="button" onClick={() => setSelected('source')} aria-pressed={selected === 'source'} className={`min-h-9 w-full rounded border px-2.5 py-1.5 text-left ${selected === 'source' ? 'border-orange-400/60 bg-orange-500/10' : 'border-gray-700 bg-gray-800'}`}>
         Source · {stack.source.kind === 'shape' ? stack.source.sources.length > 1 ? `Union (${stack.source.sources.length})` : 'Basic Shape' : stack.source.kind === 'spline' ? 'Spline' : '2D Mesh'}
       </button>

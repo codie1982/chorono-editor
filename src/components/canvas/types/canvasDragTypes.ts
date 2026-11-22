@@ -205,6 +205,8 @@ export interface SplineGeometryDrag {
   originalLayer: Layer
   pointIds: readonly string[]
   operation: 'move' | 'rotate' | 'scale'
+  /** Hard composition/world-axis constraint from the screen-aligned Edit gizmo. */
+  axisLock?: 'x' | 'y' | null
   startClientX: number
   startClientY: number
   startLocal: { x: number; y: number }
