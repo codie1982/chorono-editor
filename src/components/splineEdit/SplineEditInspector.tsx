@@ -17,11 +17,7 @@ import { useSplineTopologyActions } from './useSplineTopologyActions'
 import { SplineTopologyControls } from './SplineTopologyControls'
 import { SplineTransformControls } from './SplineTransformControls'
 import { SplineDrawingControls } from './SplineDrawingControls'
-import { SplinePaintControls } from '../paint/SplinePaintControls'
 import { splineSelectionPoints, transformSplineSelection } from '@/lib/spline/selection'
-import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
-import { hasNativeExpressionOwner } from '@/lib/editor/inputExpressions/ExpressionAuthoringGuard'
-import { drivenChannelReason } from '@/lib/timeline/authoring/keyableChannels'
 import { DocumentationHelp } from '../help/DocumentationHelp'
 import type { SplineFilletController } from './fillet/useSplineFillet'
 import { SplineFilletControls } from './fillet/SplineFilletControls'
@@ -55,7 +51,8 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
  * mode are UI-only; source mutations reuse granular helpers and guarded native
  * commands. Edge lengths describe the displayed local curve (32 subdivisions),
  * never world scaling. Object is a SubShape, including all its contours/holes.
- * Root transforms remain in ordinary Properties after Done; shared paint also stays available during editing. */
+ * Root transforms and shared paint belong to Properties; this panel owns only
+ * source geometry, topology and the active sub-object selection. */
 export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modifierControls = true, modeControls = true }: Props) {
   const [warning, setWarning] = useState('')
   const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning })
@@ -130,16 +127,6 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
       {onDraw && onAutoClose && <details open={drawingLine || undefined} className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Add to this Spline</summary>
         <div className="mt-3"><SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={onDraw} disabled={readonly} /></div>
       </details>}
-      <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Appearance</summary><div className="mt-3">
-      <SplinePaintControls style={layer.style ?? {}} assets={getScene().assets ?? []} disabled={readonly} onChange={style => {
-        try {
-          const source = getScene(), current = source.layers.find(item => item.id === layer.id)
-          if (!current || readonly || current.style !== layer.style) throw new Error('Layer changed. Choose paint again from current source.')
-          const reason = hasNativeExpressionOwner(source, layer.id, 'style') ? 'Edit driven paint on its timeline or expression.' : drivenChannelReason(source, current, 'style')
-          if (reason) throw new Error(reason)
-          dispatchCommand(makeUpdateLayerCmd(layer.id, { style }, current)); setWarning('')
-        } catch (error) { setWarning(error instanceof Error ? error.message : String(error)) }
-      }} /></div></details>
       {!!ids.length && <p className="text-gray-400">Shift / Ctrl / Cmd adds or removes items. Drag an empty area for a selection region.</p>}
     </>}
     {warning && <p role="alert" className="text-amber-300">{warning}</p>}

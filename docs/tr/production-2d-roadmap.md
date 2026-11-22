@@ -224,6 +224,9 @@ Shape → Spline kontur görünümüne, Spline → Mesh delikleri koruyan dolgul
 üçgen yüzeye geçer; kapatılan paint türü saklanır. Edit Mesh yerel geometri
 dönüşümünü ayrı bir stack adımı olarak uygular, nesnenin transform/origin'ini
 korur. Edit viewport ghost'u girişteki geometriyi gösterir ve export'a taşınmaz.
+Aynı Edit Mesh üzerinde hareketler birikir; her hareket ayrı Undo/Redo olur.
+Yeni spline'lar stroke-only oluşur; isteğe bağlı Fill ve diğer paint alanları
+yalnız Properties'te bulunur, Edit içinde tekrarlanmaz.
 Yeni topolojiyi kabul eden altyapı
 [modifier sözleşmesinde](../../src/lib/modifiers/README.md) belgelenmiştir.
 Sahnede ayrı bir Spline ara nesnesi zorunlu tutulmaz. Canlı geometri driver'ları

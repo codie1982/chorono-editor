@@ -76,6 +76,14 @@ vertekslere bağlanmaz; önce pinleri kaldırın veya clip'i açıkça yeniden b
   değişmez; UV/topoloji korunur. Düzenleme başlangıcındaki geometri viewport'ta
   yarı saydam kesikli ghost olarak kalır, export'a girmez. Spline alt-nesne
   düzenlemeleri mevcut source-point komutlarını kullanır ve aynı ghost'u gösterir.
+  Aynı Edit oturumundaki hareketler tek Edit Mesh'te sırayla birikir; her hareket
+  ayrı Undo/Redo adımıdır. Ghost, geometri/ayar/Undo/Redo/playhead değişiminde
+  yeniden yakalanmaz; oturumdan çıkıp girince yeni başlangıç alınır. Araçların
+  arasına başka modifier eklenirse mevcut Edit Mesh'i listenin sonuna taşımak
+  veya oturumu yeniden açmak gerekir; sırayı sessizce değiştirmez.
+- Yeni açık/kapalı spline oluşturma da stroke-only varsayılanını kullanır.
+  Fill tamamen kaldırılmaz; Properties'ten açıkça etkinleştirilebilir. Renk,
+  fill ve stroke alanları Edit içinde tekrarlanmaz; tek sahibi Properties'tir.
 
 ## Sınırlar ve sayısal davranış
 

@@ -23,7 +23,7 @@ yoktur. Dönüşüm sağ tıktadır; kaydedilen conversion stage'leri **Conversi
 altında ayrı tutulur. Mesh ayarı onay ikonu ve son stage kaldırma çöp kutusu ilgili
 satırdadır. Önce downstream Mesh kalkmadan Spline stage'i kaldırılamaz.
 
-Selection actions, Add to this Spline ve Appearance ileri bölümleri gerektiğinde
+Selection actions ve Add to this Spline ileri bölümleri gerektiğinde
 açılır. Klavye Delete tüm seviyelerde aynı `splineTopologyCommand` sahibini kullanır;
 root layer veya yanlış seviyenin elemanları silinmez. Mode bank, Undo ve export
 sözleşmeleri aşağıdaki kaynak uygulamayla aynıdır.
@@ -213,7 +213,9 @@ kanıtlar ilgili ignored artifacts dizininde tutulur.
   Shift+oklar 10 px taşır. Dış layer transform ve keyler değişmez. Katılımcı
   koordinatlarda key/wire/expression/kilit varsa source edit açıklamayla reddedilir;
   başka alt objenin koordinat animasyonu korunur.
-- **Shared Fill / Stroke** edit sırasında da erişilebilir. Fill None/Color/Gradient/Image;
+- **Fill / Stroke**, yalnızca **Properties** panelinde düzenlenir; Edit içinde
+  Appearance bölümü tekrarlanmaz. Yeni açık/kapalı spline'lar Fill None ve
+  görünür stroke ile oluşur; dolgu isteğe bağlıdır. Fill None/Color/Gradient/Image;
   Stroke None/Color/Gradient ve width birbirinden bağımsızdır. Paylaşılan katman
   stilidir; alt obje başına material değildir. Fill yalnız kapalı konturları,
   stroke açık/kapalı konturları çizer. None, pasif payload ve keyleri silmez.

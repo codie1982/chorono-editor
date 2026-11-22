@@ -233,6 +233,7 @@ describe('MCP rigid/fracture bake workflows', () => {
         name: 'Convex spline source', x: 200, y: 80,
       }),
       id: 'convex-spline-source',
+      style: { fill: { type: 'solid' as const, color: '#3B82F6' } },
     }
     const baked = await prepareMCPVoronoiBake({ ...scene, layers: [spline, scene.layers[1]] }, {
       sourceLayerId: spline.id, staticLayerIds: ['floor'], timelineId: 'main',

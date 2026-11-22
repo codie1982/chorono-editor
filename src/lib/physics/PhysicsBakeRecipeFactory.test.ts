@@ -118,6 +118,7 @@ describe('PhysicsBakeRecipeFactory', () => {
     ['circle shape', () => ({ ...newCircleLayer(), id: 'convex-circle', name: 'Convex Circle' })],
     ['closed spline', () => ({
       ...newSplineLayerFromData(createRectangleSpline({ width: 120, height: 80 }), { name: 'Convex Spline' }),
+      style: { fill: { type: 'solid' as const, color: '#3B82F6' } },
       id: 'convex-spline',
     })],
   ])('compiles a %s through convex source, solver and editable path fragments', (_label, createSource) => {

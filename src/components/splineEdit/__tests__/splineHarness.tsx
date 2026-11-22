@@ -7,6 +7,7 @@ import type { SplineDrawResult } from '../drawing/drawingCommand'
 import SceneCanvas from '@/components/SceneCanvas'
 import { SplineLineDrawingControls } from '../SplineAutoCloseControl'
 import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
+import { SplinePaintControls } from '@/components/paint/SplinePaintControls'
 import { SplineModeControls } from '../SplineModeControls'
 import { SplineEditInspector } from '../SplineEditInspector'
 import { useSplineOutline } from '../outline/useSplineOutline'
@@ -72,6 +73,8 @@ function Subject() {
           onLayerChange={next => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, layer)) }}
           splineModeControls={<SplineModeControls controller={controller} />}
           splineSourceSettings={layer?.spline ? (<SplineEditInspector modeControls={false} modifierControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} outline={outline} />) : undefined} />
+        {layer?.spline && <section aria-label="Properties appearance"><SplinePaintControls style={layer.style ?? {}}
+          assets={editor.scene.assets} onChange={style => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { style }, layer))} /></section>}
       </aside>
     </div><output id="selection-state">{JSON.stringify({ active: controller.active, mode: controller.mode, ids: controller.ids, layer: selected })}</output></>
 }

@@ -66,13 +66,21 @@ During frame resize, the origin/selection-center marker follows the live preview
 transform. The opposite-handle pivot used by resize math does not replace that
 marker; fixed rotation/axis-scale tool pivots retain their existing behavior.
 Inside Edit mode, whole-mesh drags use the native pointer transaction with a
-`meshGeometry` adapter and one persisted **Edit Mesh** stage. Spline sub-object
-gestures keep their existing source-point commands. Both preserve object TRS and
+`meshGeometry` adapter and one persisted **Edit Mesh** stage.
+`useMeshEditSession` retains the same instance across tools, gestures and Undo;
+each movement composes its local affine into that stage in a separate Undo step.
+The entry ghost does not reset after Execute, Undo/Redo or a playhead change;
+temporary preview/playback hiding keeps its snapshot until the session exits.
+Spline sub-object gestures keep their existing source-point commands. Both preserve object TRS and
 anchor; mesh arrow nudges use local geometry commands as well. Generated Spline
 results never fall through to root transforms. `GeometryEditGhost` retains one
 boundary string, world matrix and origin from entry, releases on exit, and draws
 only viewport chrome. Mesh live boundaries are orange, the initial silhouette is
 dashed/translucent, and the original origin remains visible.
+Spline Fill/Stroke controls belong only to Properties; the Edit inspector has
+no Appearance section. New open/closed spline defaults are stroke-only, while
+Properties can explicitly enable Color/Gradient/Image Fill. Existing paint is
+preserved on load and imported/derived callers may supply explicit appearance.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.

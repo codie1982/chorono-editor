@@ -35,7 +35,10 @@ function recordingContext() {
   return { ctx: ctx as unknown as CanvasRenderingContext2D, fills, strokes, gradients }
 }
 
-const circle = () => newSplineLayerFromPrimitive('circle', { radius: 80 })!
+/** These rendering cases explicitly opt into filled artwork; creation defaults
+ * are verified independently by the stroke-only Spline factory tests. */
+const circle = (): Layer => ({ ...newSplineLayerFromPrimitive('circle', { radius: 80 })!,
+  style: { fill: { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } } })
 const gradient = { type: 'linear' as const, angle: 0,
   stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] }
 
@@ -86,6 +89,7 @@ describe('spline canvas rendering', () => {
 
   it('honours even-odd holes and leaves a fill-only open arc unfilled', () => {
     const donut = newSplineLayerFromPrimitive('donut', { outerRadius: 80, innerRadius: 40 })!
+    donut.style = { fill: { type: 'solid', color: '#3B82F6' } }
     const first = recordingContext()
     drawSplineLayer(first.ctx, donut, new Map())
     expect(first.fills[0].rule).toBe('evenodd')

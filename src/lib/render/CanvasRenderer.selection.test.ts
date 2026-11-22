@@ -57,9 +57,10 @@ function recordingCanvas() {
 }
 
 function triangle(): Layer {
-  return newSplineLayerFromData(createPolylineSpline([
+  const layer = newSplineLayerFromData(createPolylineSpline([
     { x: -60, y: 40 }, { x: 0, y: -80 }, { x: 90, y: 20 },
   ], true), { x: 200, y: 180, name: 'Editable triangle' })
+  return { ...layer, style: { fill: { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } } }
 }
 
 function expectRectangle(actual: number[][], expected: number[]) {
