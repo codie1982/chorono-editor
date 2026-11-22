@@ -2108,6 +2108,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                           overrides={frame.overrides} disabled={isPlaying || manualPreview || !!detail.session}
                           timeMs={currentTimeMs} onSelectLayer={selectLayer} isTransactionActive={editor.isTransactionActive}
                           drawingLine={toolMode === 'spline-draw' && splineDrawKind === 'line'} autoClose={splineDrawingPreferences.autoClose} onAutoClose={splineDrawingPreferences.setAutoClose}
+                          onBeginAttach={() => { setSplineDrawKind(null); setSplineDrawTargetId(null); setSplineContinuationPointId(null); setToolMode('select'); setPanMode(false) }}
                           onDraw={(kind, endpointId) => armSplineDrawing(kind, selectedLayer.id, endpointId)} />
                   ) : undefined} />
                 </NumericPropertyProvider></SplineToolsPanel>,

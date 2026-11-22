@@ -17,6 +17,7 @@ import { useSplineTopologyActions } from './useSplineTopologyActions'
 import { SplineTopologyControls } from './SplineTopologyControls'
 import { SplineTransformControls } from './SplineTransformControls'
 import { SplineDrawingControls } from './SplineDrawingControls'
+import { SplineAttachControls } from './SplineAttachControls'
 import { splineSelectionPoints, transformSplineSelection } from '@/lib/spline/selection'
 import { DocumentationHelp } from '../help/DocumentationHelp'
 import type { SplineFilletController } from './fillet/useSplineFillet'
@@ -38,6 +39,8 @@ interface Props {
   autoClose?: boolean
   onAutoClose?(value: boolean): void
   onDraw?(kind: SplinePrimitiveKind, endpointId?: string): void
+  /** Host cancels any drawing tool before enabling existing-object picking. */
+  onBeginAttach?(): void
   fillet?: SplineFilletController
   chamfer?: SplineChamferController
   /** False when the Edit dock hosts modifier settings beside its picker. */
@@ -53,7 +56,7 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
  * never world scaling. Object is a SubShape, including all its contours/holes.
  * Root transforms and shared paint belong to Properties; this panel owns only
  * source geometry, topology and the active sub-object selection. */
-export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modifierControls = true, modeControls = true }: Props) {
+export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modifierControls = true, modeControls = true }: Props) {
   const [warning, setWarning] = useState('')
   const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning })
   const object = controller.mode === 'object' && controller.ids.length === 1 ? layer.spline?.subShapes[controller.ids[0]] : undefined
@@ -124,8 +127,9 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
         const points = splineSelectionPoints(data, controller.mode, ids)
         apply({ kind: 'geometry', ids: Array.from(points) }, source => transformSplineSelection(source, points, transform), 'Transform spline selection')
       }} />}
-      {onDraw && onAutoClose && <details open={drawingLine || undefined} className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Add to this Spline</summary>
-        <div className="mt-3"><SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={onDraw} disabled={readonly} /></div>
+      <SplineAttachControls controller={controller} disabled={readonly} onBegin={onBeginAttach} />
+      {onDraw && onAutoClose && <details open={drawingLine || undefined} className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Draw new spline elements</summary>
+        <div className="mt-3"><SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={(kind, endpoint) => { controller.setAttaching(false); onDraw(kind, endpoint) }} disabled={readonly} /></div>
       </details>}
       {!!ids.length && <p className="text-gray-400">Shift / Ctrl / Cmd adds or removes items. Drag an empty area for a selection region.</p>}
     </>}

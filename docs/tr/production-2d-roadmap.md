@@ -225,6 +225,9 @@ Shape → Spline kontur görünümüne, Spline → Mesh delikleri koruyan dolgul
 dönüşümünü ayrı bir stack adımı olarak uygular, nesnenin transform/origin'ini
 korur. Edit viewport ghost'u girişteki geometriyi gösterir ve export'a taşınmaz.
 Aynı Edit Mesh üzerinde hareketler birikir; her hareket ayrı Undo/Redo olur.
+Edit'e yeniden giriş aynı etkin son Edit Mesh'i kullanır; ghost o anki geometriyi
+yeni başlangıç alır. Add Spline `+` seçme modu mevcut spline katmanlarını aktif
+spline'a dahil eder; konum/konturlar korunur ve her ekleme tek Undo/Redo olur.
 Yeni spline'lar stroke-only oluşur; isteğe bağlı Fill ve diğer paint alanları
 yalnız Properties'te bulunur, Edit içinde tekrarlanmaz.
 Yeni topolojiyi kabul eden altyapı

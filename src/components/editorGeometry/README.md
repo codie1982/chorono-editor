@@ -84,6 +84,21 @@ Spline Fill/Stroke controls belong only to Properties; the Edit inspector has
 no Appearance section. New open/closed spline defaults are stroke-only, while
 Properties can explicitly enable Color/Gradient/Image Fill. Existing paint is
 preserved on load and imported/derived callers may supply explicit appearance.
+**Add Spline** uses an accessible `+` toggle to pick existing scene splines in
+the viewport. The shared selection controller owns this transient, layer/document
+scoped mode; `useSplineViewportEditing` consumes picks before regions/transforms
+and reuses `useSplineTopologyActions` / `attachSplineLayerCommand`. Each successful
+pick consumes one source layer, preserves its world geometry/contours and uses
+the target's shared paint, with one Undo/Redo. Static/unreferenced-source guards
+remain authoritative; rejected or empty picks preserve the target and history.
+Consecutive picks stay armed; `+`, Escape, right-click, mode exit, selection or
+document replacement end picking. New drawing is a separate **Draw new spline
+elements** section; the host leaves its drawing tool before enabling Attach.
+For the isolated native acceptance, stop Next and run
+`node scripts/perf/spline-topology.mjs /tmp/spline-attach-qa attach`, serve that
+directory with `scripts/perf/serve.mjs`, open `spline-attach.html` and run its
+checks. It verifies consecutive picks, holes, transformed parents, target paint,
+individual history, empty/invalid picks and cancellation through production UI.
 Changing mode/tool/pan cancels in-flight gestures. Native Delete uses the shared
 mode-aware topology owner. A generated modifier result is never overwritten by
 those direct source tools.

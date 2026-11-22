@@ -15,7 +15,7 @@ export function SplineDrawingControls({ data, controller, autoClose, onAutoClose
 }) {
   const endpoint = controller.mode === 'point' && controller.ids.length === 1 ? splineContinuation(data, controller.ids[0]) : null
   return <fieldset disabled={disabled} className="space-y-2 border-t border-gray-700 pt-2">
-    <legend className="pt-2">Add to this spline</legend>
+    <legend className="pt-2">Draw geometry</legend>
     <select aria-label="Add spline object" value="" className="w-full rounded border border-gray-600 bg-gray-800 p-1.5" onChange={event => { if (event.target.value) onDraw(event.target.value as SplinePrimitiveKind) }}>
       <option value="">Choose a new object…</option>{(['line', 'rectangle', 'circle', 'ellipse', 'arc', 'star', 'ngon', 'donut'] as const).map(kind => <option key={kind} value={kind}>{kind}</option>)}
     </select>

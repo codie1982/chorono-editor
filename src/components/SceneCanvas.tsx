@@ -1217,10 +1217,12 @@ export default function SceneCanvas({
         if (e.button === 0 && !hideEditorUI && !motionEditing && !arrayEditing && !pathPickMode
             && !dragRef.current && !editor.isTransactionActive()) {
           const canvas = canvasRef.current
+          if (canvas && splineViewport.active) {
+            const rect = canvas.getBoundingClientRect()
+            if (splineViewport.pointerDown((e.clientX - rect.left) * width / rect.width, (e.clientY - rect.top) * height / rect.height, e)) return
+          }
           if (regionSelectionEnabled && regionStyle && regionSelect && canvas) {
             const rect = canvas.getBoundingClientRect()
-            const x = (e.clientX - rect.left) * width / rect.width, y = (e.clientY - rect.top) * height / rect.height
-            if (splineViewport.active && splineViewport.pointerDown(x, y, e)) return
             e.preventDefault()
             beginSelectionDrag(regionStyle, selectionModeForModifiers(e), (e.clientX - rect.left) * width / rect.width,
               (e.clientY - rect.top) * height / rect.height, e.pointerId, { pointerId: e.pointerId, currentTarget: canvas })
@@ -1231,7 +1233,7 @@ export default function SceneCanvas({
       <SoloModeOverlay active={displayScene.layers.some(layer => layer.type !== 'audio' && !!layer.solo)} />
       {splineViewport.active && <div role="status" aria-label="Viewport spline edit mode"
         className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded border border-orange-400/70 bg-orange-950/95 px-3 py-1.5 text-xs font-semibold text-orange-100">
-        SPLINE EDIT · {splineEditController.mode === 'point' ? 'Point' : splineEditController.mode === 'edge' ? 'Edge' : 'Object'}
+        SPLINE EDIT · {splineEditController.attaching ? 'Add Spline · Pick objects · Esc to finish' : splineEditController.mode === 'point' ? 'Point' : splineEditController.mode === 'edge' ? 'Edge' : 'Object'}
       </div>}
       {geometryEditing && !splineViewport.active && <div role="status" aria-label="Viewport geometry edit mode"
         className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded border border-orange-400/70 bg-orange-950/95 px-3 py-1.5 text-xs font-semibold text-orange-100">
@@ -1382,6 +1384,7 @@ export default function SceneCanvas({
             className={`absolute inset-0 block ${
               previewMode ? 'cursor-pointer'
               : pathPickMode ? 'cursor-crosshair'
+              : splineViewport.active && splineEditController.attaching ? 'cursor-copy'
               : toolMode === 'spline-draw' ? 'cursor-crosshair'
               : placingShape ? 'cursor-crosshair'
               : splineViewport.hover ? 'cursor-crosshair'

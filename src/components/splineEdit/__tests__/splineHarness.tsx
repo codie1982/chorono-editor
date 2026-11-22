@@ -72,7 +72,7 @@ function Subject() {
           dispatchCommand={editor.dispatchCommand} onSelectLayer={setSelected} onClearPoint={controller.clear}
           onLayerChange={next => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, layer)) }}
           splineModeControls={<SplineModeControls controller={controller} />}
-          splineSourceSettings={layer?.spline ? (<SplineEditInspector modeControls={false} modifierControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} outline={outline} />) : undefined} />
+          splineSourceSettings={layer?.spline ? (<SplineEditInspector modeControls={false} modifierControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} onBeginAttach={() => { setDrawKind(null); setEndpoint(null); setTool('select') }} outline={outline} />) : undefined} />
         {layer?.spline && <section aria-label="Properties appearance"><SplinePaintControls style={layer.style ?? {}}
           assets={editor.scene.assets} onChange={style => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { style }, layer))} /></section>}
       </aside>

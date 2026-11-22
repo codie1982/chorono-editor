@@ -15,6 +15,8 @@ import type { UseCanvasDragReturn } from '../canvas/hooks/useCanvasDrag'
 import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 import type { SplineEditController } from './useSplineEditSelection'
 import { splineEditCommand } from './commands'
+import { hitTestLayersAt } from '@/lib/renderer'
+import { useSplineTopologyActions } from './useSplineTopologyActions'
 
 interface Options {
   controller: SplineEditController; layer: Layer | null | undefined; scene: ChronoScene; editor: EditorStateReturn
@@ -30,7 +32,9 @@ export interface SplineMenuState { x: number; y: number; target: SplinePick | nu
  * reuse CanvasDragSession and its source/document/terminal-event protection.
  * Edge/Object picking never falls through to root movement. The existing region
  * session is supplied this adapter's query; no second pointer listener owner is
- * introduced. Pan/hidden/detail/timeline scopes cannot edit source geometry. */
+ * introduced. Add Spline consumes existing-layer picks through the shared
+ * topology action owner, one guarded Attach/Undo per source; it never draws or
+ * starts a transform/region. Pan/hidden/detail/timeline scopes cannot edit source. */
 export function useSplineViewportEditing(options: Options) {
   const latest = useRef(options); latest.current = options
   const { controller, layer, scene, timeMs, overrides } = options
@@ -41,11 +45,15 @@ export function useSplineViewportEditing(options: Options) {
   const geometry = useMemo(() => layer ? resolveSplineEditGeometry(layer, scene, timeMs, overrides) : null, [layer, scene, timeMs, overrides])
   const canPick = active && !options.panMode && options.toolMode !== 'pan' && !!geometry
   const writable = !!layer && !layer.hidden && !layer.locked && !layer.frozen && !layer.instanceOf
-  useEffect(() => { setHover(null); setMenu(null) }, [controller.layerId, controller.active, controller.mode, options.enabled, options.panMode, timeMs, options.editor.getDocumentSignal()])
+  const topology = useSplineTopologyActions({ layer, controller, getScene: options.editor.getScene,
+    dispatch: options.editor.dispatchCommand, timeMs, overrides, disabled: !canPick || !writable,
+    isTransactionActive: options.editor.isTransactionActive, warning: options.warning })
+  useEffect(() => { if (controller.attaching && (!canPick || !writable)) controller.setAttaching(false) }, [controller.attaching, controller.setAttaching, canPick, writable])
+  useEffect(() => { setHover(null); setMenu(null) }, [controller.layerId, controller.active, controller.mode, controller.attaching, options.enabled, options.panMode, timeMs, options.editor.getDocumentSignal()])
   // Returning from drawing re-enables picking. Keep its rejection visible;
   // only a new edit context/frame clears it, never an enabled-state handover.
   useEffect(() => { options.warning('') }, [controller.layerId, controller.active, controller.mode, options.panMode, timeMs, options.editor.getDocumentSignal()])
-  const pick = (x: number, y: number) => canPick && geometry ? pickSplineElement(geometry.worldSpline, controller.mode, x, y, 8 / options.zoom) : null
+  const pick = (x: number, y: number) => canPick && !controller.attaching && geometry ? pickSplineElement(geometry.worldSpline, controller.mode, x, y, 8 / options.zoom) : null
   const selectTarget = (target: SplinePick, toggle: boolean) => {
     const id = target.kind === 'handle' ? target.pointId : target.id
     if (toggle || !controller.ids.includes(id)) controller.select([id], toggle ? 'toggle' : 'replace')
@@ -53,6 +61,17 @@ export function useSplineViewportEditing(options: Options) {
   }
   const pointerDown = (x: number, y: number, event: React.PointerEvent): boolean => {
     if (!canPick) return false
+    if (controller.attaching) {
+      event.preventDefault(); event.stopPropagation()
+      // Skip the target in ordered body hits so overlapping source splines
+      // remain pickable without changing hierarchy, visibility or overrides.
+      const source = options.editor.getScene()
+      const hit = hitTestLayersAt(source, timeMs, x, y, overrides).find(id => id !== layer!.id)
+      if (!hit) return true // Empty clicks keep target and add mode intact.
+      if (source.layers.find(item => item.id === hit)?.type !== 'spline') options.warning('Choose an existing spline object to add.')
+      else topology.perform({ kind: 'attach', sourceId: hit })
+      return true
+    }
     const target = pick(x, y)
     if (!target) return false // Host starts a sub-object region, never root drag.
     event.preventDefault(); event.stopPropagation()
@@ -93,6 +112,9 @@ export function useSplineViewportEditing(options: Options) {
   }
   const contextMenu = (x: number, y: number, event: React.MouseEvent): boolean => {
     if (!canPick) return false
+    if (controller.attaching) {
+      event.preventDefault(); event.stopPropagation(); controller.setAttaching(false); return true
+    }
     const target = pick(x, y)
     event.preventDefault(); event.stopPropagation()
     if (target) selectTarget(target, false)
@@ -113,7 +135,8 @@ export function useSplineViewportEditing(options: Options) {
       const sourceAction = (event.ctrlKey || event.metaKey) && ['d', 'c', 'v', 'x', 'g'].includes(event.key.toLowerCase())
       if (!['Escape', 'Delete', 'Backspace'].includes(event.key) && !navigation && !sourceAction) return
       event.preventDefault(); event.stopImmediatePropagation()
-      if (event.key === 'Escape') { if (edit.ids.length) edit.clear(); else edit.exit(); return }
+      if (event.key === 'Escape') { if (edit.attaching) edit.setAttaching(false); else if (edit.ids.length) edit.clear(); else edit.exit(); return }
+      if (edit.attaching) { current.warning('Finish Add Spline before editing the selection.'); return }
       if (current.panMode || current.toolMode === 'pan' || sourceAction) { current.warning('This sub-object action is unavailable. Choose Done to use layer commands.'); return }
       if (!edit.ids.length || !current.layer) return
       const delta = event.shiftKey ? 10 : 1
