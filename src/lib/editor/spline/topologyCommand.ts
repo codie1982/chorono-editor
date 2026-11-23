@@ -7,8 +7,12 @@ import { resolveLayerWorldMatrix } from '../../geometry/resolveLayerWorldMatrix'
 import { splineEditCommand } from './editCommand'
 import { breakSplinePoints, splitSplineEdges } from '../../spline/topology'
 import { fuseSplinePoints, resetSplineTangents, pasteSplineTangents, type SplineTangents } from '../../spline/edit/tangents'
+import { trimSplineAt } from '../../spline/topology/trim'
+import { extendSplineToBoundary } from '../../spline/topology/extend'
+import { readSplineEdgeBoundaries } from './edgeBoundaries'
+import type { SplineEdgeBoundary } from '../../spline/topology/edgeBoundaries'
 
-export interface SplineTopologyResult { layerId: string; mode: SplineEditMode; ids: string[] }
+export interface SplineTopologyResult { layerId: string; mode: SplineEditMode; ids: string[]; reason?: string }
 export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: number; y?: number }
   | { kind: 'connect' | 'weld'; tolerancePx?: number }
   | { kind: 'refine'; t?: number; edgeId?: string } | { kind: 'divide'; parts?: number }
@@ -16,6 +20,7 @@ export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: numb
   | { kind: 'break' } | { kind: 'fuse' } | { kind: 'resetTangents' }
   | { kind: 'pasteTangents'; tangents: SplineTangents }
   | { kind: 'split'; t?: number; edgeId?: string }
+  | { kind: 'trim' | 'extend'; edgeId: string; t: number }
 /** One source command for mode-owned topology. All selection IDs are scoped to
  * one layer and validated before allocation. Geometry ownership, ancestor locks,
  * source CAS and live references are rechecked by the native command. Effects,
@@ -28,7 +33,15 @@ export function splineTopologyCommand(scene: ChronoScene, layerId: string, mode:
   const family = mode === 'point' ? before.points : mode === 'edge' ? before.segments : before.subShapes
   if (ids.some(id => !Object.hasOwn(family, id))) throw new Error('Spline selection changed. Select current elements again.')
   let result: SplineTopologyResult = { layerId, mode, ids: [...ids] }
+  let boundaries: SplineEdgeBoundary[] | undefined
   const command = splineEditCommand(scene, layerId, { kind: 'topology' }, data => {
+    if (action.kind === 'trim' || action.kind === 'extend') {
+      if (mode !== 'edge') throw new Error('Use Trim/Extend in Edge mode.')
+      if (!ids.includes(action.edgeId)) throw new Error('Trim/Extend target is outside the selected edges.')
+      boundaries = readSplineEdgeBoundaries(scene, layer!, timeMs, overrides)
+      const output = action.kind === 'trim' ? trimSplineAt(data, action.edgeId, action.t, boundaries) : extendSplineToBoundary(data, action.edgeId, action.t, boundaries)
+      result.ids = output.edgeIds; result.reason = output.reason; return output.data
+    }
     if (action.kind === 'break' || action.kind === 'fuse' || action.kind === 'resetTangents' || action.kind === 'pasteTangents') {
       if (mode !== 'point') throw new Error('Use this point tool in Point mode.')
       if (action.kind === 'break') { const cut = breakSplinePoints(data, ids); result.ids = cut.pointIds; return cut.data }
@@ -64,5 +77,12 @@ export function splineTopologyCommand(scene: ChronoScene, layerId: string, mode:
     return contours.reduce((next, id) => action.kind === 'reverse' ? reverseContour(next, id) : setContourClosed(next, id, action.kind === 'close'), data)
   }, `Spline: ${action.kind}`)
   if (action.kind === 'delete') result.ids = []
-  return { command, result }
+  if (!command || !boundaries) return { command, result }
+  const signature = JSON.stringify(boundaries), timelineSignature = JSON.stringify(scene.timelines)
+  return { result, command: { ...command, execute: (current: ChronoScene) => {
+    const target = current.layers.find(item => item.id === layerId)
+    if (!target?.spline || JSON.stringify(current.timelines) !== timelineSignature || JSON.stringify(readSplineEdgeBoundaries(current, target, timeMs, overrides)) !== signature)
+      throw new Error('Spline intersection boundaries changed. Pick the current edge again.')
+    return command.execute(current)
+  } } }
 }

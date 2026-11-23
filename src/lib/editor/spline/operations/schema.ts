@@ -14,6 +14,7 @@ const topology = { oneOf: [
   ...['delete', 'close', 'open', 'reverse', 'break', 'fuse', 'resetTangents'].map(kind => variant(kind, {})),
   variant('pasteTangents', { tangents: { type: 'object', additionalProperties: false, properties: { type: { enum: ['corner', 'smooth', 'bezier', 'bezierCorner'] }, in: localPoint, out: localPoint }, required: ['type'], description: 'Point type and optional in/out handle offsets relative to each target anchor, in layer-local px. Anchors remain fixed.' } }, ['tangents']),
   variant('split', { t: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 }, edgeId: id }),
+  ...['trim', 'extend'].map(kind => variant(kind, { edgeId: id, t: { type: 'number', minimum: 0, maximum: 1, description: 'Clicked edge parameter. Trim removes the containing intersection interval; Extend picks the nearer open end on a single-edge contour.' } }, ['edgeId', 't'])),
   variant('copy', { x: number, y: number }), ...['connect', 'weld'].map(kind => variant(kind, { tolerancePx: { type: 'number', minimum: 0, description: 'Composition-pixel tolerance for Weld; Connect adds a straight bridge.' } })),
   variant('refine', { t: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 }, edgeId: id }), variant('divide', { parts: { type: 'integer', minimum: 2, maximum: 64 } }),
 ] }

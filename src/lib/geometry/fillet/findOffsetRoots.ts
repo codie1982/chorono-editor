@@ -1,6 +1,7 @@
 import type { Vec2 } from '../CoordinateSystem'
 import { splitBezier } from '../bezier/curves'
 import { offsetBounds, offsetJet, uniqueOffsetRoot, type Box } from './offsetCurve'
+import { intersectBezierCurves } from '../bezier/intersections'
 
 export interface OffsetRoot { incoming: number; outgoing: number; center: Vec2 }
 interface Interval { controls: Vec2[]; lo: number; hi: number }
@@ -35,6 +36,8 @@ function refine(a: Vec2[], b: Vec2[], radius: number, ia: Interval, ib: Interval
  * returned for the caller to reject, never resolved by nearest-seed heuristics.
  * Max 24,000 cells / depth 44; pure world-space computation in a CPU worker. */
 export function findOffsetRoots(a: Vec2[], b: Vec2[], signedRadius: number): OffsetRoot[] {
+  // Zero offset is the ordinary polynomial query, shared with native Trim.
+  if (signedRadius === 0) return intersectBezierCurves(a, b).map(hit => ({ incoming: hit.t, outgoing: hit.u, center: hit.point }))
   const roots: OffsetRoot[] = [], stack = [{ a: { controls: a, lo: 0, hi: 1 }, b: { controls: b, lo: 0, hi: 1 }, depth: 0 }]
   let cells = 0
   while (stack.length) {

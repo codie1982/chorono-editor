@@ -1,20 +1,12 @@
 import type { Vec2 } from '../CoordinateSystem'
 import { bezierDerivative, bezierJet } from '../bezier/derivatives'
+import { add, neg, scale, multiply, absMax, type Range, type IntervalBox2D as Box } from '../math/intervals'
+import { parametricRootIsUnique } from '../math/parametricRootUniqueness'
 
-export type Range = readonly [number, number]
-export interface Box { x: Range; y: Range }
-/** Interval addition; no mutation. */
-export const add = (a: Range, b: Range): Range => [a[0] + b[0], a[1] + b[1]]
-/** Reverse signed interval endpoints. */
-export const neg = (a: Range): Range => [-a[1], -a[0]]
-/** Signed scalar multiplication retains interval ordering. */
-export const scale = (a: Range, k: number): Range => k >= 0 ? [a[0] * k, a[1] * k] : [a[1] * k, a[0] * k]
-/** Product hull over both intervals. */
-export const multiply = (a: Range, b: Range): Range => { const v = [a[0] * b[0], a[0] * b[1], a[1] * b[0], a[1] * b[1]]; return [Math.min(...v), Math.max(...v)] }
+export type { Range, IntervalBox2D as Box } from '../math/intervals'
+export { add, neg, scale, multiply } from '../math/intervals'
 /** Division requires a strictly positive denominator interval. */
 const divide = (a: Range, positive: Range): Range => multiply(a, [1 / positive[1], 1 / positive[0]])
-/** Largest absolute endpoint bounds interval magnitude. */
-const absMax = (a: Range) => Math.max(Math.abs(a[0]), Math.abs(a[1]))
 /** Distance from an interval to zero, including a contained zero. */
 const absMin = (a: Range) => a[0] <= 0 && a[1] >= 0 ? 0 : Math.min(Math.abs(a[0]), Math.abs(a[1]))
 /** Control hull bounds contain every polynomial point; derivatives share this
@@ -55,10 +47,5 @@ export function offsetBounds(controls: readonly Vec2[], signedRadius: number): {
 export function uniqueOffsetRoot(a: readonly Vec2[], b: readonly Vec2[], radius: number): boolean {
   const da = offsetBounds(a, radius).derivative, db = offsetBounds(b, radius).derivative
   if (!da || !db) return false
-  const u = offsetJet(a, .5, radius).first, v = offsetJet(b, .5, radius).first, det = u.y * v.x - u.x * v.y
-  if (Math.abs(det) < 1e-18) return false
-  const i00 = -v.y / det, i01 = v.x / det, i10 = -u.y / det, i11 = u.x / det
-  const e11 = add([1, 1], neg(add(scale(da.x, i00), scale(da.y, i01)))), e12 = add(scale(db.x, i00), scale(db.y, i01))
-  const e21 = neg(add(scale(da.x, i10), scale(da.y, i11))), e22 = add([1, 1], add(scale(db.x, i10), scale(db.y, i11)))
-  return Math.max(absMax(e11) + absMax(e12), absMax(e21) + absMax(e22)) < .9
+  return parametricRootIsUnique(da, db, offsetJet(a, .5, radius).first, offsetJet(b, .5, radius).first)
 }

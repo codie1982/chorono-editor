@@ -29,6 +29,21 @@ async function prepare(editor: ReturnType<typeof fakeEditor>, layerId: string | 
 const access = (plan: any) => ({ planId: plan.planId, expectedRevision: plan.revision, readToken: plan.readToken })
 
 describe('native spline MCP plans and source ownership', () => {
+  it.each(['trim', 'extend'] as const)('applies %s through explicit Edge picks, preserving other layer boundaries and one Undo', async kind => {
+    const { editor, scene } = setup()
+    try {
+      const line = newSplineLayerFromPrimitive('line', { x1: 0, y1: 0, x2: kind === 'trim' ? 100 : 10, y2: 0 })!
+      const cutters = [20, 80].map(x => newSplineLayerFromPrimitive('line', { x1: x, y1: -25, x2: x, y2: 25 })!)
+      scene.layers = [line, ...cutters]; scene.timelines[0].tracks[0].target = `layers.${line.id}.opacity`; editor.replaceDocument(scene)
+      const edgeId = Object.keys(line.spline!.segments)[0], plan = await prepare(editor, line.id, { kind: 'topology', selection: { mode: 'edge', ids: [edgeId] }, action: { kind, edgeId, t: kind === 'trim' ? .5 : 1 } })
+      expect(editor.historyLength()).toBe(0)
+      await editor.rawCall('apply_spline_edit', access(plan)); const after = editor.host.editor.getScene()
+      expect(editor.historyLength()).toBe(1); expect(after.layers.slice(1)).toEqual(cutters); expect(after.timelines).toEqual(scene.timelines)
+      expect(Object.keys(after.layers[0].spline!.contours)).toHaveLength(kind === 'trim' ? 2 : 1)
+      await editor.call('undo'); expect(editor.host.editor.getScene()).toEqual(scene)
+      await editor.call('redo'); expect(editor.host.editor.getScene()).toEqual(after)
+    } finally { await editor.close() }
+  })
   it.each(['break', 'fuse', 'resetTangents', 'pasteTangents', 'split'] as const)('keeps %s on the shared native source command, plan IDs and one Undo', async kind => {
     const { editor, scene } = setup()
     try {
