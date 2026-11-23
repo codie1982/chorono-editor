@@ -11,8 +11,11 @@ import { trimSplineAt } from '../../spline/topology/trim'
 import { extendSplineToBoundary } from '../../spline/topology/extend'
 import { readSplineEdgeBoundaries } from './edgeBoundaries'
 import type { SplineEdgeBoundary } from '../../spline/topology/edgeBoundaries'
+import { addSplineVertex, type SplineVertexType } from '../../spline/edit/addVertex'
+import { simplifySplineObjects } from '../../spline/edit/simplifyObjects'
+import { smoothSplineObjects } from '../../spline/edit/smoothObjects'
 
-export interface SplineTopologyResult { layerId: string; mode: SplineEditMode; ids: string[]; reason?: string }
+export interface SplineTopologyResult { layerId: string; mode: SplineEditMode; ids: string[]; reason?: string; pointId?: string }
 export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: number; y?: number }
   | { kind: 'connect' | 'weld'; tolerancePx?: number }
   | { kind: 'refine'; t?: number; edgeId?: string } | { kind: 'divide'; parts?: number }
@@ -21,6 +24,8 @@ export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: numb
   | { kind: 'pasteTangents'; tangents: SplineTangents }
   | { kind: 'split'; t?: number; edgeId?: string }
   | { kind: 'trim' | 'extend'; edgeId: string; t: number }
+  | { kind: 'addVertex'; edgeId: string; t: number; pointType?: SplineVertexType }
+  | { kind: 'simplify'; tolerancePx?: number } | { kind: 'smooth' }
 /** One source command for mode-owned topology. All selection IDs are scoped to
  * one layer and validated before allocation. Geometry ownership, ancestor locks,
  * source CAS and live references are rechecked by the native command. Effects,
@@ -35,6 +40,15 @@ export function splineTopologyCommand(scene: ChronoScene, layerId: string, mode:
   let result: SplineTopologyResult = { layerId, mode, ids: [...ids] }
   let boundaries: SplineEdgeBoundary[] | undefined
   const command = splineEditCommand(scene, layerId, { kind: 'topology' }, data => {
+    if (action.kind === 'simplify' || action.kind === 'smooth') {
+      if (mode !== 'object') throw new Error('Use Simplify/Smooth on selected spline Objects in Object mode.')
+      return action.kind === 'simplify' ? simplifySplineObjects(data, ids, action.tolerancePx) : smoothSplineObjects(data, ids)
+    }
+    if (action.kind === 'addVertex') {
+      if (mode !== 'edge' || !ids.includes(action.edgeId)) throw new Error('Add Vertex needs an explicitly selected Edge target.')
+      const added = addSplineVertex(data, action.edgeId, action.t, action.pointType)
+      result.ids = added.edgeIds; result.pointId = added.pointId; return added.data
+    }
     if (action.kind === 'trim' || action.kind === 'extend') {
       if (mode !== 'edge') throw new Error('Use Trim/Extend in Edge mode.')
       if (!ids.includes(action.edgeId)) throw new Error('Trim/Extend target is outside the selected edges.')

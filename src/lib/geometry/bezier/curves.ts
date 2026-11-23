@@ -32,3 +32,16 @@ export function trimBezier(points: readonly Vec2[], from: number, to: number): V
   const left = to === 1 ? [...points] : splitBezier(points, to)[0]
   return from === 0 ? left : splitBezier(left, from / to)[1]
 }
+
+/** Exact degree elevation of a finite line/quadratic/cubic control polygon to
+ * cubic controls in the same coordinate space. Preserves P(t), including its
+ * parameterization; returns private point records. Unsupported degrees refuse. */
+export function elevateBezierToCubic(points: readonly Vec2[]): Vec2[] {
+  if (points.length < 2 || points.length > 4 || points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) throw new Error('Degree elevation needs finite line/quadratic/cubic controls.')
+  const first = points[0], last = points.at(-1)!
+  if (points.length === 4) return points.map(point => ({ ...point }))
+  if (points.length === 2) return [{ ...first }, evaluateBezier(points, 1 / 3), evaluateBezier(points, 2 / 3), { ...last }]
+  const control = points[1]
+  return [{ ...first }, { x: first.x + (control.x - first.x) * 2 / 3, y: first.y + (control.y - first.y) * 2 / 3 },
+    { x: last.x + (control.x - last.x) * 2 / 3, y: last.y + (control.y - last.y) * 2 / 3 }, { ...last }]
+}

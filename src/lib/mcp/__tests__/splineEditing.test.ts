@@ -7,6 +7,7 @@ import { PolygonClippingBackend } from '../../geometry/boolean'
 import { getCapabilities, validateToolCall } from '../catalog'
 import { fakeEditor } from './support/fakeEditor'
 import type { SplineOperation } from '../../editor/spline/operations/types'
+import { divideSplineEdges } from '../../spline/topology'
 
 /** Platform injection for Node tests only; browser acceptance uses real workers.
  * Real domain solvers and native commands still run through broker/editor pump. */
@@ -29,6 +30,33 @@ async function prepare(editor: ReturnType<typeof fakeEditor>, layerId: string | 
 const access = (plan: any) => ({ planId: plan.planId, expectedRevision: plan.revision, readToken: plan.readToken })
 
 describe('native spline MCP plans and source ownership', () => {
+  it.each(['preserve', 'corner', 'smooth', 'bezier', 'bezierCorner'] as const)('adds a %s vertex with stable plan result IDs and one Undo', async pointType => {
+    const { editor, scene, layer } = setup()
+    try {
+      const edgeId = Object.keys(layer.spline!.segments)[0]
+      const plan = await prepare(editor, layer.id, { kind: 'topology', selection: { mode: 'edge', ids: [edgeId] }, action: { kind: 'addVertex', edgeId, t: .35, ...(pointType === 'preserve' ? {} : { pointType }) } })
+      expect(editor.historyLength()).toBe(0)
+      const applied = await editor.rawCall('apply_spline_edit', access(plan)), after = editor.host.editor.getScene()
+      expect(applied.result).toEqual(plan.result); expect(after.layers[0].spline!.points[plan.result.pointId]).toBeDefined()
+      expect(Object.keys(after.layers[0].spline!.points)).toHaveLength(Object.keys(layer.spline!.points).length + 1)
+      expect(editor.historyLength()).toBe(1); expect(after.timelines).toEqual(scene.timelines)
+      await editor.call('undo'); expect(editor.host.editor.getScene()).toEqual(scene)
+      await editor.call('redo'); expect(editor.host.editor.getScene()).toEqual(after)
+    } finally { await editor.close() }
+  })
+  it.each(['simplify', 'smooth'] as const)('applies Object %s without new modifiers, preserving outer keys and one Undo', async kind => {
+    const { editor, scene, layer } = setup()
+    try {
+      layer.spline = divideSplineEdges(layer.spline!, Object.keys(layer.spline!.segments), 3); editor.replaceDocument(scene)
+      const plan = await prepare(editor, layer.id, { kind: 'topology', selection: { mode: 'object', ids: Object.keys(layer.spline!.subShapes) }, action: kind === 'simplify' ? { kind, tolerancePx: .2 } : { kind } })
+      expect(editor.host.editor.getScene()).toEqual(scene); expect(editor.historyLength()).toBe(0)
+      const applied = await editor.rawCall('apply_spline_edit', access(plan)), after = editor.host.editor.getScene()
+      expect(applied.result).toEqual(plan.result); expect(editor.historyLength()).toBe(1)
+      expect(after.layers[0].modifierStack).toEqual(layer.modifierStack); expect(after.layers[0].transform).toEqual(layer.transform); expect(after.timelines).toEqual(scene.timelines)
+      await editor.call('undo'); expect(editor.host.editor.getScene()).toEqual(scene)
+      await editor.call('redo'); expect(editor.host.editor.getScene()).toEqual(after)
+    } finally { await editor.close() }
+  })
   it.each(['trim', 'extend'] as const)('applies %s through explicit Edge picks, preserving other layer boundaries and one Undo', async kind => {
     const { editor, scene } = setup()
     try {

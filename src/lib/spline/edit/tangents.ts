@@ -3,6 +3,7 @@ import type { Vec2 } from '../../geometry/CoordinateSystem'
 import { segmentControls } from '../corners/segmentGeometry'
 import { moveSplinePoint, setSegmentType } from './mutations'
 import { uid } from '../util/uid'
+import { elevateBezierToCubic } from '../../geometry/bezier/curves'
 
 /** Portable tangent value: offsets in layer-local px, never anchor coordinates,
  * source IDs or layer transforms. Optional handles support open endpoints. */
@@ -39,10 +40,10 @@ function cubicNeighbors(data: SplinePathData, pointIds: ReadonlySet<string>, pro
     if (!pointIds.has(edge.fromPointId) && !pointIds.has(edge.toPointId)) continue
     if (edge.type === 'line' && promoteLines) next = setSegmentType(next, edge.id, 'cubic')
     else if (edge.type === 'quadratic') {
-      const [a, q, b] = segmentControls(next, edge.id), handles = { ...next.handles }
-      for (const [pointId, kind, anchor] of [[edge.fromPointId, 'out', a], [edge.toPointId, 'in', b]] as const) {
+      const controls = elevateBezierToCubic(segmentControls(next, edge.id)), handles = { ...next.handles }
+      for (const [pointId, kind, position] of [[edge.fromPointId, 'out', controls[1]], [edge.toPointId, 'in', controls[2]]] as const) {
         const old = Object.values(handles).find(handle => handle.pointId === pointId && handle.kind === kind), id = old?.id ?? uid('h')
-        handles[id] = { ...old, id, pointId, kind, x: anchor.x + (q.x - anchor.x) * 2 / 3, y: anchor.y + (q.y - anchor.y) * 2 / 3, locked: old?.locked ?? false }
+        handles[id] = { ...old, id, pointId, kind, ...position, locked: old?.locked ?? false }
       }
       const { control1: _one, control2: _two, ...record } = edge
       next = { ...next, handles, segments: { ...next.segments, [edge.id]: { ...record, type: 'cubic' } } }
