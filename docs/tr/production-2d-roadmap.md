@@ -3848,3 +3848,12 @@ Split eklendi. Panel ve sağ tık aynı seçim ve güvenlik kurallarını kullan
 Her geometri işlemi ayrı Undo/Redo'dur; tangent panosu belgeye özel ve geçicidir.
 Exact Bézier bölmesi, contour/delik sahipliği, layer TRS/origin ve portable
 kayıt korunur. Sözleşmeler ve kalan aşamalar [native Edit planındadır](plans/spline-edit-native-tools-plan.md).
+
+### Native Spline Edit — Trim/Extend, 23 Kasım 2026
+
+Edge paneli ve sağ tıkta Trim/Extend tamamlandı: kesişimler arasındaki contour
+aralığı silinir; açık uç en yakın ileri kesişime teğet olarak uzatılır. Her edit
+ayrı Undo/Redo'dur. Aynı spline ve diğer görünür spline layer'ları tam parent/frame
+transformlarıyla sınır olabilir; no-hit/Cancel Undo oluşturmaz. Üst üste/belirsiz
+eğri teması güvenli biçimde reddedilir. Kapsam ve kalan kontur araçları
+[native Edit planında](plans/spline-edit-native-tools-plan.md) ayrı tutulur.

@@ -46,6 +46,18 @@ explicitly. Edge `split` accepts optional `t` (default .5, strictly between 0 an
 and `edgeId` within the selection; otherwise it cuts every selected edge. Exact
 curve pieces retain shape and have independent endpoints. Each Apply is one Undo.
 
+Edge `trim` and `extend` both require `{kind,edgeId,t}` with `0<=t<=1`; edgeId
+must be in the explicit selection. Trim removes the contour interval containing
+the pick between consecutive intersections, including multi-edge/seam intervals.
+Open endpoints bound terminal intervals after at least one intersection. Extend
+uses a terminal edge of an open contour; on a single-edge contour `t<.5` picks
+the start, otherwise the end. It adds a straight terminal-tangent continuation
+to the nearest strictly forward hit, preserving the existing curve. Targets
+include the same spline and other visible spline layers at the requested frame,
+respecting parent transforms, hidden ancestors and Solo. Shape/Mesh targets are
+not included. No hit changes no source/Undo; overlaps and unresolved curved
+tangencies refuse explicitly. Panel arming is UI-only and is never script state.
+
 Boolean `operation` values are `union`, `subtract`, `intersect`, `xor`. These
 retain original inputs in a recipe group. The editor's Add Spline picker shares
 this solver/recipe with preview; Attach is a separate contour transfer mode.

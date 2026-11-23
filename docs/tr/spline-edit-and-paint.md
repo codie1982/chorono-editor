@@ -98,6 +98,56 @@ referans ve driver kontrolleri aynen uygulanır. Save/load yalnız sonuç geomet
 taşır. Özel tarayıcı kabulü: `scripts/perf/spline-point-tools.mjs`; eski topoloji
 regresyonları `spline-topology.mjs` ile kontrol edilir, hazırlamada Next durdurulur.
 
+## Trim ve Extend
+
+Edge → Selection actions → Topology içindeki Trim/Extend bir sonraki viewport
+tıklamasını bekler; aktif düğme, panel açıklaması ve viewport rozeti bunu gösterir.
+Trim tıklanan kesişim aralığını siler; Extend terminal edge'in açık ucunu kullanır.
+Tek edge'li açık contour'da yakın uç seçilir (`t<.5` başlangıç, diğer durumda son).
+Sağ tık menüsü tıklanan edge/parametreyi aynı komuta gönderir. Çoklu seçimde yalnız
+tıklanan contour/aralık veya açık uç etkilenir; diğer seçili parçalar değişmez.
+Esc/Cancel, seçim/mod/layer/belge değişimi veya kaynak değişikliği bekleyen pick'i
+iptal eder. Pick niyeti ve açıklamalar source, modifier stack veya Undo'ya yazılmaz.
+
+`spline/topology/trim.ts`, aynı contour üzerindeki sıralı kesişimleri bulur;
+silinen aralık birden fazla edge ve kapalı dikiş üzerinden geçebilir. Açık uçlar
+ilk/son aralığın sınırıdır; gerçek kesişim yokken bütün path silinmez. Kesişimin
+üzerine tıklamak belirsizdir ve reddedilir. `insertPointOnSegment` tam Bézier
+parçalarını üretir; `deleteSplineEdges` bağımsız, sahipsiz vertex içermeyen
+contour'ları aynı Object altında saklar. Tek kübikteki izole self-crossing de
+iki ayrı parametre sınırı olarak hesaplanır. Seçilmemiş geometry ID'leri korunur.
+
+`spline/topology/extend.ts`, açık ucun ilk sıfır olmayan kontrol yönünden terminal
+teğetini bulur. `extendSplineContour` yalnız en yakın ileri kesişime bir düz edge
+ekler. Orijinal eğri/anchor'lar, layer TRS/origin/paint ve hedef kenar değişmez;
+hedefe weld veya Bézier polinomunu kontrolsüz extrapolate etme yoktur. Kesişim
+yoksa aynı kaynak kimliği döner, görünür neden verilir ve Undo oluşmaz.
+
+`editor/spline/edgeBoundaries.ts` aynı spline'ın kaynak edge'lerini ve diğer
+görünür spline layer'larının değerlendirilmiş edge'lerini hedef layer'ın yerel px
+alanında toplar. Tam parent affine, current frame, hidden ancestor ve görsel Solo
+hesaba katılır. Kilitli hedefler salt okunur sınır olabilir; düzenlenen layer'ın
+kilit/driver/instance/stack kısıtları mevcut native guard ile korunur. Basic Shape
+ve Mesh hedefleri bu sözleşmeye dahil değildir. Başlangıç ve execute arasında
+boundary snapshot veya timeline değişirse komut eski kesişimi uygulamaz.
+
+`geometry/bezier/intersections.ts` çizgi/Q/C için Bernstein kök izolasyonu ve
+tam De Casteljau hull bölmesini kullanır; korunan source eğriler düzleştirilmez.
+Fillet ile interval matematiği ve Jacobian uniqueness hesabı ortaktır; sıfır
+offset sorgusu da aynı polynomial intersection yoluna gider. Line/curve teğet
+kökleri desteklenir. İki eğrinin tekil teğet teması, çakışık/retrace sınırlar ve
+çözülemeyen yakın kökler tahmin edilmez; bütün edit kaynakta iz bırakmadan reddedilir.
+Residual toleransı yerel `1e-7 px`, parameter dedup `1e-7`; formal directed-rounding
+sertifikası değildir. Trim en fazla 256 contour edge / 2.048 boundary / 65.536
+broad-phase çift / 2.048 örtüşen çift / 60.000 subdivision cell kabul eder; tek
+pair en fazla 12.000 cell, derinlik 48. Büyük iş sessizce eksiltilmeden reddedilir.
+
+Headless örnek: `operation:{kind:'topology',selection:{mode:'edge',ids:[edgeId]},
+action:{kind:'trim',edgeId,t:.35}}`; Extend için `kind:'extend'` ve uç yakınındaki
+`t` verilir. Her uygulama native tek komuttur. Domain, scene/transform/stale input,
+MCP plan/apply/Undo ve panel/menu/picker adapter testleri vardır. DOM sunum testleri
+gerçek tarayıcı piksel kontrolü olarak raporlanmaz.
+
 ## Spline Boolean & Paths
 
 Edit içindeki Union/Subtract/Intersect/XOR düğmeleri mevcut ortak Boolean
