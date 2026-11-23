@@ -213,6 +213,7 @@ interface Props {
   onExitGeometryEdit?: () => void
   onOpenSplineTools?: () => void
   booleanPreview?: import('@/lib/geometry/boolean').BooleanResult | null
+  splineTangentClipboard?: import('./splineEdit/useSplineTangentClipboard').SplineTangentClipboard
   splineToolActions?: readonly import('./splineEdit/tools/splineEditTools').SplineToolAction[]
   outlinePreview?: import('@/lib/spline/outline').OutlineResult | null
   chamferPreview?: import('@/lib/spline/chamfer').ChamferResult | null
@@ -344,7 +345,7 @@ export default function SceneCanvas({
   arrayAuthoring, shapePlacementLayer = null, shapePlacementHint, onShapePlacementComplete,
   physicsOverlay, onPhysicsBondSelect,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
-  splineDrawKind = null, splineAppendTargetId = null, splineContinuationPointId = null, splineAutoClose = false, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected, splineEdit: suppliedSplineEdit, geometryEditActive = false, geometryEditMode = 'object', onExitGeometryEdit, onOpenSplineTools, splineToolActions, booleanPreview, outlinePreview, chamferPreview, filletPreview, onEditOperation, onBooleanPreview,
+  splineDrawKind = null, splineAppendTargetId = null, splineContinuationPointId = null, splineAutoClose = false, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected, splineEdit: suppliedSplineEdit, geometryEditActive = false, geometryEditMode = 'object', onExitGeometryEdit, onOpenSplineTools, splineToolActions, splineTangentClipboard, booleanPreview, outlinePreview, chamferPreview, filletPreview, onEditOperation, onBooleanPreview,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -2063,7 +2064,8 @@ export default function SceneCanvas({
 
       {splineViewport.menu && splineSource?.spline && <SplineEditMenu x={splineViewport.menu.x} y={splineViewport.menu.y}
         target={splineViewport.menu.target} layer={splineSource} controller={splineEditController} getScene={editor.getScene}
-        dispatch={editor.dispatchCommand} warning={setTransformWarning} close={splineViewport.closeMenu} prefix={splineDrawItems(splineSource)} tools={splineToolActions} />}
+        dispatch={editor.dispatchCommand} warning={setTransformWarning} close={splineViewport.closeMenu} prefix={splineDrawItems(splineSource)} tools={splineToolActions}
+        tangentClipboard={splineTangentClipboard} timeMs={timeMs} overrides={runtimeOverrides} disabled={hideEditorUI || motionEditing || arrayEditing} isTransactionActive={editor.isTransactionActive} />}
     </div>
     <ViewportStatusBar selectedName={selectedLayer?.name} count={measurementSelection.size} toolMode={toolMode}
       placementName={placingShape ? shapePlacementLayer.name : undefined} placementSize={shapePlacement.draft?.size}

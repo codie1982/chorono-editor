@@ -27,6 +27,7 @@ import { SplineEditToolbox } from './tools/SplineEditToolbox'
 import { splineEditTools, splinePointTypes } from './tools/splineEditTools'
 import type { SplineChamferController } from './chamfer/useSplineChamfer'
 import type { SplineOutlineController } from './outline/useSplineOutline'
+import type { SplineTangentClipboard } from './useSplineTangentClipboard'
 
 interface Props {
   layer: Layer; controller: SplineEditController; getScene(): ChronoScene
@@ -47,6 +48,7 @@ interface Props {
   /** False when a containing dock keeps mode toggles above its modifier list. */
   modeControls?: boolean
   outline?: SplineOutlineController
+  tangentClipboard?: SplineTangentClipboard
 }
 const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs text-gray-100 focus-visible:outline focus-visible:outline-blue-300'
 /** Contextual native inspector over one existing spline layer. Selection and
@@ -55,13 +57,13 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
  * never world scaling. Object is a SubShape, including all its contours/holes.
  * Root transforms and shared paint belong to Properties; this panel owns only
  * source geometry, topology and the active sub-object selection. */
-export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modeControls = true }: Props) {
+export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, chamfer, fillet, modeControls = true, tangentClipboard }: Props) {
   const [warning, setWarning] = useState('')
   const booleanActions = useBooleanOperationActions({ layerId: layer.id, getScene, dispatch: dispatchCommand,
     disabled, isTransactionActive, timeMs, overrides, nonDestructive: controller.nonDestructive, onMaterialized: controller.focusResult, selectedObjectIds: () => controller.bank.object,
     onSelectLayer: onSelectLayer ? id => onSelectLayer(id) : undefined, warning: setWarning })
   const tools = splineEditTools({ layer, scene: getScene(), mode: controller.mode, active: controller.active, disabled, busy: isTransactionActive?.(), controllers: { chamfer, fillet, offset: outline } })
-  const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning })
+  const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch: dispatchCommand, timeMs, overrides, disabled, onSelectLayer, isTransactionActive, warning: setWarning, clipboard: tangentClipboard })
   const structurePaths = (kind: 'compound' | 'separate') => {
     try {
       if (disabled || isTransactionActive?.()) return
@@ -133,9 +135,9 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
             <button type="button" disabled={readonly} className={selectClass + ' !w-auto'} onClick={() => apply({ kind: 'topology' }, source => contours.reduce((next, contour) => reverseContour(next, contour.id), source), 'Reverse spline object')}>Reverse direction</button></div>
         </>}
       </div>}
-      {!!ids.length && <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Selection actions</summary>
+      <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Selection actions</summary>
         <div className="mt-3"><SplineTopologyControls scene={getScene()} layer={layer} controller={controller} actions={topology} disabled={readonly} /></div>
-      </details>}
+      </details>
       <SplineEditToolbox mode={controller.mode} actions={tools} chamfer={chamfer} fillet={fillet} outline={outline} />
       {controller.mode === 'object' && <SplineAttachControls controller={controller} disabled={readonly} onBegin={onBeginAttach} booleanActions={booleanActions} onStructure={structurePaths} />}
       {!!ids.length && <SplineTransformControls key={`${layer.id}:${controller.mode}:${ids.join(',')}`} disabled={readonly} onApply={transform => {

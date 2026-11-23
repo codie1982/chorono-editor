@@ -7,14 +7,19 @@ import { splinePointTypes, type SplineToolAction } from './tools/splineEditTools
 import ContextMenu, { type MenuItem } from '../ui/ContextMenu'
 import { splineEditCommand } from './commands'
 import type { SplineEditController } from './useSplineEditSelection'
+import { useSplineTopologyActions } from './useSplineTopologyActions'
+import type { SplineTangentClipboard } from './useSplineTangentClipboard'
+import type { OverrideMap } from '@/lib/evaluator'
 
 /** Mode-local actions over current source. The native topology guard refuses
  * competing key/wire writers; menus never substitute root layer deletion. */
-export function SplineEditMenu({ x, y, target, layer, controller, getScene, dispatch, warning, close, prefix = [], tools = [] }: {
+export function SplineEditMenu({ x, y, target, layer, controller, getScene, dispatch, warning, close, prefix = [], tools = [], tangentClipboard, timeMs, overrides, disabled, isTransactionActive }: {
   x: number; y: number; target: SplinePick | null; layer: Layer; controller: SplineEditController
   getScene(): ChronoScene; dispatch(command: EditorCommand): void; warning(message: string): void; close(): void; prefix?: MenuItem[]; tools?: readonly SplineToolAction[]
+  tangentClipboard?: SplineTangentClipboard; timeMs?: number; overrides?: OverrideMap; disabled?: boolean; isTransactionActive?(): boolean
 }) {
   const ids = controller.ids
+  const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch, warning, clipboard: tangentClipboard, timeMs, overrides, disabled, isTransactionActive })
   const mutate = (fn: Parameters<typeof splineEditCommand>[3]) => {
     try { const command = splineEditCommand(getScene(), layer.id, { kind: 'topology' }, fn); if (command) dispatch(command) }
     catch (error) { warning(error instanceof Error ? error.message : String(error)) }
@@ -35,6 +40,8 @@ export function SplineEditMenu({ x, y, target, layer, controller, getScene, disp
     items.push({ kind: 'action', label: closed ? 'Open contours' : 'Close contours', onSelect: () => mutate(source => contours.reduce((next, id) => setContourClosed(next, id, !closed), source)) },
       { kind: 'action', label: 'Reverse direction', onSelect: () => mutate(source => contours.reduce((next, id) => reverseContour(next, id), source)) })
   }
+  items.push(...topology.componentTools.map(tool => ({ kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason,
+    onSelect: () => { tool.run(target?.kind === 'edge' ? { edgeId: target.id, t: target.t ?? .5 } : undefined); close() } })))
   items.push(...tools.map(tool => ({ kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason, onSelect: () => { tool.run(); close() } })))
   if (items.length) items.push({ kind: 'separator' })
   items.push(...(['point', 'edge', 'object'] as const).map(mode => ({ kind: 'action' as const, label: `Edit spline ${mode}`, onSelect: () => { controller.enter(mode); close() } })),

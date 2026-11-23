@@ -13,13 +13,19 @@ const button = 'rounded border border-gray-600 px-2 py-1.5 hover:bg-gray-800 dis
 export function SplineTopologyControls({ scene, layer, controller, actions, disabled }: {
   scene: ChronoScene; layer: Layer; controller: SplineEditController; actions: SplineTopologyActions; disabled?: boolean
 }) {
-  const [tolerance, setTolerance] = useState(5), [parts, setParts] = useState(2), [refine, setRefine] = useState(50)
+  const [tolerance, setTolerance] = useState(5), [parts, setParts] = useState(2), [refine, setRefine] = useState(50), [split, setSplit] = useState(50)
   const [copyX, setCopyX] = useState(20), [copyY, setCopyY] = useState(20), [sourceId, setSourceId] = useState('')
   const sourceExists = scene.layers.some(item => item.id === sourceId && item.id !== layer.id && item.type === 'spline' && item.spline)
   useEffect(() => { if (!sourceExists && sourceId) setSourceId('') }, [sourceExists, sourceId, layer.id])
   const ids = controller.ids, pointPair = ids.length === 2 && ids.every(id => splineContinuation(layer.spline!, id))
   return <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer select-none">Topology · {controller.mode}</summary>
     <fieldset disabled={disabled} className="space-y-2 pt-2">
+    {controller.mode === 'edge' && <TopologyNumber label="Split position (%)" value={split} min={.01} max={99.99} onChange={setSplit} />}
+    <div className="flex flex-wrap gap-2">{actions.componentTools.map(tool => <span key={tool.id} title={tool.reason ?? tool.description}>
+      <button type="button" className={button} disabled={tool.disabled} aria-describedby={`spline-tool-${tool.id}`} onClick={() => tool.run({ t: split / 100 })}>{tool.label}</button>
+      <span id={`spline-tool-${tool.id}`} className="sr-only">{tool.reason ?? tool.description}</span>
+    </span>)}</div>
+    {Array.from(new Set(actions.componentTools.flatMap(tool => tool.reason ? [tool.reason] : []))).map(reason => <p key={reason} className="text-gray-400">{reason}</p>)}
     {controller.mode === 'point' && <>
       <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={!pointPair} onClick={() => actions.perform({ kind: 'connect' })}>Join / Connect endpoints</button>
         <button type="button" className={button} disabled={!pointPair} onClick={() => actions.perform({ kind: 'weld', tolerancePx: tolerance })}>Weld endpoints</button></div>

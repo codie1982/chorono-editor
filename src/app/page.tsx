@@ -121,6 +121,7 @@ import { useSplineChamfer } from '@/components/splineEdit/chamfer/useSplineChamf
 import { useSplineOutline } from '@/components/splineEdit/outline/useSplineOutline'
 import { SplineToolsPanel } from '@/components/splineEdit/SplineToolsPanel'
 import type { SplineEditMode } from '@/lib/spline/selection'
+import { useSplineTangentClipboard } from '@/components/splineEdit/useSplineTangentClipboard'
 import { useSplineEditSelection, type SplineEditRequest } from '@/components/splineEdit/useSplineEditSelection'
 import { NumericPropertyProvider } from '@/components/inputs/expressions/NumericPropertyContext'
 import { textToSplineData } from '@/lib/text/GlyphOutlineExtractor'
@@ -369,6 +370,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
    *  auto-pause (false). Wraps only if some timeline plays forever. */
   const wrapAtEnd = useMemo(() => hasInfinitePlayback(scene.timelines), [scene.timelines])
   const selectedLayer = scene.layers.find((l) => l.id === selectedLayerId) ?? null
+  const splineTangentClipboard = useSplineTangentClipboard(editor.getDocumentSignal())
   const splineEdit = useSplineEditSelection(selectedLayerIds.size <= 1 ? selectedLayer : null, editor.getDocumentSignal())
   const geometryEdit = useGeometryEditMode(selectedLayerIds.size === 1 ? selectedLayer : null, splineEdit, editor.getDocumentSignal())
   useEffect(() => {
@@ -1917,6 +1919,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineOutline.result}
+                    splineTangentClipboard={splineTangentClipboard}
                     splineToolActions={splineEditTools({ layer: selectedLayer, scene, mode: splineEdit.mode, active: splineEdit.active, disabled: isPlaying || manualPreview || !!detail.session, busy: editor.isTransactionActive(), controllers: { offset: splineOutline, chamfer: splineChamfer, fillet: splineFillet }, onOpen: openSplineTools })}
                     chamferPreview={splineChamfer.result}
                     filletPreview={splineFillet.result}
@@ -2116,7 +2119,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
                   onSelectLayer={id => selectLayer(id)} onClearPoint={splineEdit.clear} onLayerChange={updateLayer}
                   splineSourceSettings={selectedLayer?.spline && !selectedLayer.booleanResultFor && splineEdit.layerId === selectedLayer.id ? (
-                    <SplineEditInspector modeControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
+                    <SplineEditInspector tangentClipboard={splineTangentClipboard} modeControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
                           outline={splineOutline}
                           chamfer={splineChamfer}
                           fillet={splineFillet}
