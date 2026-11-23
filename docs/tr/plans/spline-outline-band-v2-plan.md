@@ -7,6 +7,14 @@ Bu belgenin aşağıdaki tam hedef sözleşmesi, uygulanmamış fit/preset kapsa
 uygulanmış API gibi tanımlamaz. Boya ayarları son kullanıcı kararıyla yalnız
 Properties'tedir; Edit içinde Geometry ayarları kalır.
 
+## 23 Kasım kaynak takibi düzeltmesi
+
+Yeni kullanıcı kararı: Outline kaynak çizgiyi korumalı, kaynak vertex değişince
+canlı güncellenmeli ve Edit'te açılıp kapanabilen bir kaynak kılavuzu göstermeli.
+Aşağıdaki önceki Replace/Keep source hedefi bu davranışı karşılamıyor; yeni
+uygulama yönü [Canlı Outline planında](spline-live-outline-plan.md) incelendi.
+Bu düzeltme henüz uygulanmadı; mevcut bant hesabı yeniden kullanılacak.
+
 ## Amaç ve yorum
 
 Outline, kaynak çizgiyi sınırları, iç/dış konturları ve vertex'leri olan gerçek
