@@ -62,6 +62,10 @@ export function moveSplineHandle(
 
 // ── Insert a point on a segment (De Casteljau split preserves the curve) ──────
 
+/** Insert an anchor at a strictly interior parameter using exact De Casteljau
+ * subdivision in layer-local px. Pure; unknown edges/invalid t return input.
+ * Retained endpoint handles shrink on only the split side, so mirror points
+ * become Smooth (independent lengths) without moving the opposite curve. */
 export function insertPointOnSegment(data: SplinePathData, segmentId: string, t: number): SplinePathData {
   if (!Number.isFinite(t) || t <= 0 || t >= 1) return data
   const seg = data.segments[segmentId]
@@ -89,6 +93,8 @@ export function insertPointOnSegment(data: SplinePathData, segmentId: string, t:
     const [p01, p012, p0123, p123, p23] = [left[1], left[2], left[3], right[1], right[2]]
 
     // shrink the existing handles to the split tangents
+    if (from.type === 'bezier') points[from.id] = { ...from, type: 'smooth' }
+    if (to.type === 'bezier') points[to.id] = { ...to, type: 'smooth' }
     if (outH) handles[outH.id] = { ...outH, x: p01.x, y: p01.y }
     else { const id = uid('h'); handles[id] = { id, pointId: from.id, kind: 'out', x: p01.x, y: p01.y, locked: false } }
     if (inH)  handles[inH.id]  = { ...inH,  x: p23.x, y: p23.y }

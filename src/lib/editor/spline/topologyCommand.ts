@@ -5,12 +5,17 @@ import { connectSplineEndpoints, copySplineObjects, deleteSplineObjects, deleteS
 import { insertPointOnSegment, reverseContour, setContourClosed } from '../../spline'
 import { resolveLayerWorldMatrix } from '../../geometry/resolveLayerWorldMatrix'
 import { splineEditCommand } from './editCommand'
+import { breakSplinePoints, splitSplineEdges } from '../../spline/topology'
+import { fuseSplinePoints, resetSplineTangents, pasteSplineTangents, type SplineTangents } from '../../spline/edit/tangents'
 
 export interface SplineTopologyResult { layerId: string; mode: SplineEditMode; ids: string[] }
 export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: number; y?: number }
   | { kind: 'connect' | 'weld'; tolerancePx?: number }
   | { kind: 'refine'; t?: number; edgeId?: string } | { kind: 'divide'; parts?: number }
   | { kind: 'close' | 'open' | 'reverse' }
+  | { kind: 'break' } | { kind: 'fuse' } | { kind: 'resetTangents' }
+  | { kind: 'pasteTangents'; tangents: SplineTangents }
+  | { kind: 'split'; t?: number; edgeId?: string }
 /** One source command for mode-owned topology. All selection IDs are scoped to
  * one layer and validated before allocation. Geometry ownership, ancestor locks,
  * source CAS and live references are rechecked by the native command. Effects,
@@ -24,6 +29,16 @@ export function splineTopologyCommand(scene: ChronoScene, layerId: string, mode:
   if (ids.some(id => !Object.hasOwn(family, id))) throw new Error('Spline selection changed. Select current elements again.')
   let result: SplineTopologyResult = { layerId, mode, ids: [...ids] }
   const command = splineEditCommand(scene, layerId, { kind: 'topology' }, data => {
+    if (action.kind === 'break' || action.kind === 'fuse' || action.kind === 'resetTangents' || action.kind === 'pasteTangents') {
+      if (mode !== 'point') throw new Error('Use this point tool in Point mode.')
+      if (action.kind === 'break') { const cut = breakSplinePoints(data, ids); result.ids = cut.pointIds; return cut.data }
+      return action.kind === 'fuse' ? fuseSplinePoints(data, ids) : action.kind === 'resetTangents' ? resetSplineTangents(data, ids) : pasteSplineTangents(data, ids, action.tangents)
+    }
+    if (action.kind === 'split') {
+      if (mode !== 'edge') throw new Error('Use Split in Edge mode.')
+      if (action.edgeId && !ids.includes(action.edgeId)) throw new Error('Split target is outside the selected edges.')
+      const cut = splitSplineEdges(data, action.edgeId ? [action.edgeId] : ids, action.t); result.ids = cut.edgeIds; return cut.data
+    }
     if (action.kind === 'delete') return mode === 'object' ? deleteSplineObjects(data, ids) : mode === 'edge' ? deleteSplineEdges(data, ids) : deleteSplinePoints(data, ids)
     if (action.kind === 'copy') {
       if (mode !== 'object') throw new Error('Copy objects in Object mode.')

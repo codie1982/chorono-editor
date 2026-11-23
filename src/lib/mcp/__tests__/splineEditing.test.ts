@@ -29,6 +29,23 @@ async function prepare(editor: ReturnType<typeof fakeEditor>, layerId: string | 
 const access = (plan: any) => ({ planId: plan.planId, expectedRevision: plan.revision, readToken: plan.readToken })
 
 describe('native spline MCP plans and source ownership', () => {
+  it.each(['break', 'fuse', 'resetTangents', 'pasteTangents', 'split'] as const)('keeps %s on the shared native source command, plan IDs and one Undo', async kind => {
+    const { editor, scene } = setup()
+    try {
+      // Explicit curve source ensures resetting/pasting changes actual handles.
+      const curve = newSplineLayerFromPrimitive('circle', { radius: 45 })!
+      scene.layers = [curve]; scene.timelines[0].tracks[0].target = `layers.${curve.id}.opacity`; editor.replaceDocument(scene)
+      const ids = Object.keys(kind === 'split' ? curve.spline!.segments : curve.spline!.points).slice(0, kind === 'fuse' ? 2 : 1)
+      const action = kind === 'pasteTangents' ? { kind, tangents: { type: 'bezierCorner' as const, in: { x: -8, y: 3 }, out: { x: 20, y: 12 } } } : kind === 'split' ? { kind, t: .35 } : { kind }
+      const plan = await prepare(editor, curve.id, { kind: 'topology', selection: { mode: kind === 'split' ? 'edge' : 'point', ids }, action })
+      expect(editor.historyLength()).toBe(0); expect(editor.host.editor.getScene()).toEqual(scene)
+      const applied = await editor.rawCall('apply_spline_edit', access(plan)), after = editor.host.editor.getScene()
+      expect(editor.historyLength()).toBe(1); expect(applied.result.ids).toEqual(plan.result.ids)
+      expect(after.layers[0].transform).toEqual(curve.transform); expect(after.timelines).toEqual(scene.timelines)
+      await editor.call('undo'); expect(editor.host.editor.getScene()).toEqual(scene)
+      await editor.call('redo'); expect(editor.host.editor.getScene()).toEqual(after)
+    } finally { await editor.close() }
+  })
   it.each(['chamfer', 'fillet', 'offset', 'offsetReplace'] as const)('prepares/applies %s once, keeps manual keys and exact IDs, restores through one Undo/Redo', async kind => {
     const { editor, scene, layer } = setup()
     try {

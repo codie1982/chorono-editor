@@ -11,7 +11,9 @@ function variant(kind: string, properties: Schema, required: string[] = []): Sch
 }
 const selection = { type: 'object', additionalProperties: false, properties: { mode: { enum: ['point', 'edge', 'object'] }, ids }, required: ['mode', 'ids'], description: 'Explicit source selection; does not change ephemeral editor selection or edit mode.' }
 const topology = { oneOf: [
-  ...['delete', 'close', 'open', 'reverse'].map(kind => variant(kind, {})),
+  ...['delete', 'close', 'open', 'reverse', 'break', 'fuse', 'resetTangents'].map(kind => variant(kind, {})),
+  variant('pasteTangents', { tangents: { type: 'object', additionalProperties: false, properties: { type: { enum: ['corner', 'smooth', 'bezier', 'bezierCorner'] }, in: localPoint, out: localPoint }, required: ['type'], description: 'Point type and optional in/out handle offsets relative to each target anchor, in layer-local px. Anchors remain fixed.' } }, ['tangents']),
+  variant('split', { t: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 }, edgeId: id }),
   variant('copy', { x: number, y: number }), ...['connect', 'weld'].map(kind => variant(kind, { tolerancePx: { type: 'number', minimum: 0, description: 'Composition-pixel tolerance for Weld; Connect adds a straight bridge.' } })),
   variant('refine', { t: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 }, edgeId: id }), variant('divide', { parts: { type: 'integer', minimum: 2, maximum: 64 } }),
 ] }
@@ -55,7 +57,7 @@ function documentSplineSchema(schema: Schema): Schema {
     width: 'Local geometry/stroke width in px.', height: 'Local geometry height in px.', radius: 'Primitive radius in local px.', radiusX: 'Horizontal local radius px.', radiusY: 'Vertical local radius px.', outerRadius: 'Outer primitive radius px.', innerRadius: 'Inner primitive radius px.',
     primitive: 'Implemented spline primitive kind; params must match this exact kind.', params: 'Kind-specific native generator parameters, in local px/degrees.', name: 'Optional source Object name.',
     cornerRadius: 'Rectangle local corner radius px.', cornerMode: 'Native rectangle corner style.', roundness: 'Normalized native corner roundness 0–1.', sides: 'Integer polygon side count.',
-    t: 'Strictly interior edge parameter fraction, not arc length.', edgeId: 'Optional Refine edge ID within the explicit selected edges.', parts: 'Equal-parameter subdivision count per edge (2–64).',
+    t: 'Strictly interior edge parameter fraction, not arc length.', edgeId: 'Optional Refine/Split edge ID within the explicit selected edges.', parts: 'Equal-parameter subdivision count per edge (2–64).',
     transform: 'Local affine delta around selected anchor-bounds center.', rotation: 'Clockwise rotation delta in degrees.', scaleX: 'Positive horizontal scale factor.', scaleY: 'Positive vertical scale factor.',
     pointType: 'Native point tangent/handle mode.', edgeType: 'Native line or cubic segment type.', settings: 'Exact solver settings; quality and topology limits refuse rather than silently clamp.',
     distancePx: 'Positive world/composition-pixel offset or cut amount, according to operation kind.', side: 'Left/Right for open contours; Inside/Outside for closed boundaries; Both emits both open offsets.',
