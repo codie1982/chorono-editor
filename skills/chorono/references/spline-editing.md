@@ -23,7 +23,7 @@ After conflict, read current source and prepare again rather than force Apply.
 
 | Operation kind | Address / meaning |
 | --- | --- |
-| `topology` | `selection:{mode,ids}`, `action:{kind,...}`. Delete/Copy/Connect/Weld/Refine/Divide/Close/Open/Reverse obey native mode constraints. Divide uses 2–64 equal-parameter pieces. |
+| `topology` | `selection:{mode,ids}`, `action:{kind,...}`. Delete/Copy/Connect/Weld/Refine/Divide/Close/Open/Reverse obey native mode constraints. Point also supports `break`, `fuse`, `resetTangents`, `pasteTangents`; Edge supports `split`. Divide uses 2–64 equal-parameter pieces. |
 | `append` | Native primitive plus matching params; adds a SubShape to the same spline. |
 | `draw` | NEW local `points`, optional existing `startPointId` and `endPointId`; Continue/Join references the actual open endpoints. Auto Close closes ≥3 anchors. |
 | `transform` | Explicit selection and local x/y, clockwise rotation delta, positive scale factors around anchor-bounds center. |
@@ -34,6 +34,17 @@ After conflict, read current source and prepare again rather than force Apply.
 | `chamfer` | Selected point IDs, distancePx along adjacent edges; ≤128 points. |
 | `fillet` | Selected point IDs, radiusPx; ≤64 points. Ambiguous/intersecting solutions refuse. |
 | `boolean` | Ordered 2–8 closed Shape/Spline targets, or existing recipe `ownerId` to re-edit. Union/Subtract/Intersect/XOR, reverse and tolerance. `layerId` may be omitted. |
+
+Point `break` opens a closed contour or cuts an interior anchor into independent
+same-position endpoints; existing open endpoints refuse. `fuse` moves at least
+two points/attached handles to their centroid without merging connectivity.
+`resetTangents` rebuilds handles from neighboring anchors according to point type.
+`pasteTangents` requires `tangents:{type,in?:{x,y},out?:{x,y}}`: vectors are local
+offsets from each target anchor, not absolute positions. It never moves anchors.
+UI Copy Tangents has no source or Undo effect; headless calls provide the payload
+explicitly. Edge `split` accepts optional `t` (default .5, strictly between 0 and 1)
+and `edgeId` within the selection; otherwise it cuts every selected edge. Exact
+curve pieces retain shape and have independent endpoints. Each Apply is one Undo.
 
 Boolean `operation` values are `union`, `subtract`, `intersect`, `xor`. These
 retain original inputs in a recipe group. The editor's Add Spline picker shares

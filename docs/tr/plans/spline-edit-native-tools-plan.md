@@ -17,13 +17,23 @@
 - MCP `offset.resultMode` opsiyoneldir; omitted mevcut append/promotion davranışını
   korur, replace strict contour seçimi ister. Point enum değerleri değişmez.
 
-## Sonraki teslim A — nokta/topoloji
+## Teslim A — nokta/topoloji (23 Kasım 2026)
 
 Break nokta konumunu koruyarak bağımsız uçlar oluşturur. Weld iki uygun açık
 ucu tolerans içinde birleştirir; Fuse kimlikleri birleştirmeden merkezlerine taşır.
-Reset Tangents komşu eğrilere göre kolları üretir; tangent clipboard yerel kol
-vektörlerini ve bağlantı tipini taşır. Split kenarı tıklanan parametrede keser.
+Reset Tangents komşu anchor'lara göre nokta tipine uygun kolları üretir; tangent
+clipboard yerel kol vektörlerini ve bağlantı tipini taşır. Break/Fuse/Reset ve
+Copy/Paste Tangents Point; Split Edge paneli ve sağ tık menüsündedir. Split panelde
+yüzde parametresinde, menüde tıklanan kenar konumunda keser; çizgiyi düzleştirmez.
+Her geometri uygulaması bir Undo'dur; Copy kaynak veya geçmiş değiştirmez.
+Clipboard aynı belgede mod/nesne/seçim değişiminde korunur, yeni belgede sıfırlanır.
+Uygun seçim yoksa araçlar nedeni ile devre dışıdır; açık uç Break yapılamaz.
 Mevcut Refine/Divide, exact Bézier bölmesini kullanmaya devam eder.
+
+Doğrulama: 563 dosyada 4.016 test; Point/Edge paneli ve sağ tıkta yedi özel
+tarayıcı kabul grubu. Kilit/driver/CAS, Undo/Redo, save/load, Bézier kontrol
+korunumu ve layer TRS/origin kontrolleri bu kapsama dahildir. Özel kabul sayfası
+`scripts/perf/spline-point-tools.mjs` ile, Next durdurulmuşken hazırlanır.
 
 ## Sonraki teslim B — kesişim/kontur
 

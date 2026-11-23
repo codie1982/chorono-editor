@@ -60,6 +60,44 @@ eski stack ve sonucu geri getirir. Dosya açılışında veya drawer açarken ot
 Bake yoktur. Sonraki araç teslimleri [native Edit planında](plans/spline-edit-native-tools-plan.md)
 açıkça ayrı tutulur; tamamlanmamış komutlar UI'da çalışıyormuş gibi gösterilmez.
 
+## Point ve Edge kesme/tangent araçları
+
+Point modunda Break, Fuse, Reset Tangents ve Copy/Paste Tangents; Edge modunda
+Split vardır. Panel ve sağ tık `splineComponentTools.ts` tanımlarından aynı
+seçim/kilit/driver kurallarını üretir. Tümü `splineTopologyCommand` üzerinden tek
+native komuta bağlanır; yeni modifier veya ayrı solver yoktur. Seçimsiz işlem
+bütün spline'a genişlemez. Geometri değiştiren her uygulama ayrı Undo/Redo'dur.
+
+- `spline/topology/cut.ts`: Break kapalı contour'u açar; açık contour'u aynı
+  Object altında iki contour'a ayırır. Uçlar aynı konumda ama farklı ID'dedir.
+  Eski ID gelen kenarda, yeni ID giden kenarda kalır. Giden kol kendi yeni ucuna
+  aktarılır. Mevcut açık uçlarda Break reddedilir. Split exact De Casteljau
+  insertion + aynı Break sahipliğini kullanır; doğru/kuadratik/kübik korunur.
+- Split panelde varsayılan %50, değiştirilebilir `0<t<1` parametresidir; sağ tıkta
+  tıklanan kenarın pick parametresidir. Çoklu panel seçimi bütün seçili kenarları
+  aynı parametrede keser. Menü sadece tıklanan seçili kenarı keser. Arc length
+  yüzdesi değildir; sonuçtaki iki kenar Edge modunda seçili kalır.
+- `spline/edit/tangents.ts`: Fuse seçili anchor ve kollarını yerel aritmetik
+  merkeze taşır, hiçbir kimliği/bağlantıyı birleştirmez. Reset komşu anchor
+  chord'larının üçte birini kullanır: Smooth aynı eksende bağımsız uzunluk;
+  Bézier kısa uzunlukla aynalı; Bézier Corner iki bağımsız yön; Corner kolsuz.
+  Uçta eksik komşu karşı vektörden türetilir; çakışan noktalar sonlu kalır.
+- Copy tek noktadan bağlantı tipi ve yerel px kol offset'lerini okur; Paste bir
+  veya çok hedefte anchor konumunu korur. Quadratic komşular kol düzenlemesinden
+  önce tam kübiğe yükseltilir. Kimlikler mümkün olduğunda korunur, seçilmemiş
+  uçtaki eğri kontrolü değiştirilmez. Layer TRS/origin/paint bu işlemlere dahil olmaz.
+- `useSplineTangentClipboard` belge sahibi geçici panodur. Panel/menu paylaşır;
+  mod, layer ve seçim değişiminde yaşar, document AbortSignal değişince geçersizdir.
+  Scene JSON/Undo/OS clipboard'a yazılmaz. Copy bu nedenle Undo eklemez.
+
+Headless örnek: `operation: {kind:'topology', selection:{mode:'edge',ids:[edgeId]},
+action:{kind:'split',t:0.35}}`. Point eylemleri `break`, `fuse`, `resetTangents`,
+`pasteTangents` değerleridir. Paste açık `tangents:{type,in?:{x,y},out?:{x,y}}`
+payload'ı alır; UI panosuna bağımlı değildir. Mevcut source CAS, kilit, canlı
+referans ve driver kontrolleri aynen uygulanır. Save/load yalnız sonuç geometrisini
+taşır. Özel tarayıcı kabulü: `scripts/perf/spline-point-tools.mjs`; eski topoloji
+regresyonları `spline-topology.mjs` ile kontrol edilir, hazırlamada Next durdurulur.
+
 ## Spline Boolean & Paths
 
 Edit içindeki Union/Subtract/Intersect/XOR düğmeleri mevcut ortak Boolean

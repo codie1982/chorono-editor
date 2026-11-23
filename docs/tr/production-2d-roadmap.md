@@ -3840,3 +3840,11 @@ Object/delik sahipliği ve seçilmemiş geometri korunur. Eski stack kapalı
 Source / History bölümündedir ve açık Bake/Undo ile edit edilebilir.
 [Native Edit teslim planı](plans/spline-edit-native-tools-plan.md) ilk teslim ile
 sonraki nokta/topoloji, kesişim ve Outline v2 aşamalarını ayrı tutar.
+
+### Native Spline Edit — Point/Edge teslimi, 23 Kasım 2026
+
+Point moduna Break, Fuse, Reset Tangents ve Copy/Paste Tangents; Edge moduna
+Split eklendi. Panel ve sağ tık aynı seçim ve güvenlik kurallarını kullanır.
+Her geometri işlemi ayrı Undo/Redo'dur; tangent panosu belgeye özel ve geçicidir.
+Exact Bézier bölmesi, contour/delik sahipliği, layer TRS/origin ve portable
+kayıt korunur. Sözleşmeler ve kalan aşamalar [native Edit planındadır](plans/spline-edit-native-tools-plan.md).
