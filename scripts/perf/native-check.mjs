@@ -32,15 +32,17 @@ export async function prepareFullEditorCheck({ entry, output, name, title }) {
   // esbuild fixture needs the same production worker at a flat static URL.
   // Only its packaging URL changes; source/worker logic and digests are retained.
   const worker = await prepareNativeCheck({ entry: 'src/lib/geometry/boolean/boolean.worker.ts', output, name: 'boolean-worker', title: 'Boolean worker', format: 'esm' })
+  const bandWorker = await prepareNativeCheck({ entry: 'src/lib/spline/band/band.worker.ts', output, name: 'band-worker', title: 'Band worker', format: 'esm' })
   const outlineWorker = await prepareNativeCheck({ entry: 'src/lib/spline/outline/outline.worker.ts', output, name: 'outline-worker', title: 'Outline worker', format: 'esm' })
   const chamferWorker = await prepareNativeCheck({ entry: 'src/lib/spline/chamfer/chamfer.worker.ts', output, name: 'chamfer-worker', title: 'Chamfer worker', format: 'esm' })
   const filletWorker = await prepareNativeCheck({ entry: 'src/lib/spline/fillet/fillet.worker.ts', output, name: 'fillet-worker', title: 'Fillet worker', format: 'esm' })
-  const metadata = await prepareNativeCheck({ entry, output, name, title, format: 'esm', metadata: { worker, outlineWorker, chamferWorker, filletWorker },
+  const metadata = await prepareNativeCheck({ entry, output, name, title, format: 'esm', metadata: { worker, bandWorker, outlineWorker, chamferWorker, filletWorker },
     plugins: [{ name: 'local-welcome-font', setup(api) {
       api.onResolve({ filter: /^\/fonts\/GeistVF\.woff$/ }, () => ({ path: './GeistVF.woff', external: true }))
     } }, { name: 'boolean-worker-fixture-url', setup(api) {
-      api.onLoad({ filter: /(BooleanWorkerClient|OutlineWorkerClient|ChamferWorkerClient|FilletWorkerClient)\.ts$/ }, async args => ({ loader: 'ts',
+      api.onLoad({ filter: /(SplineBandWorkerClient|BooleanWorkerClient|OutlineWorkerClient|ChamferWorkerClient|FilletWorkerClient)\.ts$/ }, async args => ({ loader: 'ts',
         contents: (await readFile(args.path, 'utf8')).replace("new URL('./boolean.worker.ts', import.meta.url)", "new URL('./boolean-worker.js', import.meta.url)")
+          .replace("new URL('./band.worker.ts', import.meta.url)", "new URL('./band-worker.js', import.meta.url)")
           .replace("new URL('./outline.worker.ts', import.meta.url)", "new URL('./outline-worker.js', import.meta.url)")
           .replace("new URL('./chamfer.worker.ts', import.meta.url)", "new URL('./chamfer-worker.js', import.meta.url)")
           .replace("new URL('./fillet.worker.ts', import.meta.url)", "new URL('./fillet-worker.js', import.meta.url)") }))

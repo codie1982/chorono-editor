@@ -38,6 +38,7 @@ export function ModifierSettingsForm({ descriptor, settings, disabled, assets, p
         <span>{field.label}{field.unit ? ` (${field.unit})` : ''}</span>
         {field.kind === 'number' && <input aria-label={label} type="number" className={inputClass} min={field.min} max={field.max} step={field.step ?? 'any'}
           value={typeof value === 'number' && Number.isFinite(value) ? value : ''} onChange={e => onChange({ [field.key]: e.currentTarget.valueAsNumber })} />}
+        {field.kind === 'text' && <input aria-label={label} type="text" className={inputClass} value={String(value ?? '')} onChange={e => onChange({ [field.key]: e.currentTarget.value })} />}
         {field.kind === 'select' && <select aria-label={label} className={inputClass} value={String(value ?? '')} onChange={e => onChange({ [field.key]: e.currentTarget.value })}>
           {field.options?.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>}

@@ -9,12 +9,13 @@ import SceneExplorerPanel from '@/components/sceneExplorer/SceneExplorerPanel'
 import { useSplineAttachPicking } from '../useSplineAttachPicking'
 import { SplineLineDrawingControls } from '../SplineAutoCloseControl'
 import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
-import { SplinePaintControls } from '@/components/paint/SplinePaintControls'
+import { SplineAppearanceControls } from '@/components/paint/SplineAppearanceControls'
 import { SplineModeControls } from '../SplineModeControls'
 import { SplineEditInspector } from '../SplineEditInspector'
 import { splineEditTools } from '../tools/splineEditTools'
 import { useSplineChamfer } from '../chamfer/useSplineChamfer'
 import { useSplineFillet } from '../fillet/useSplineFillet'
+import { useSplineBand } from '../band/useSplineBand'
 import { useSplineOutline } from '../outline/useSplineOutline'
 import { useSplineTangentClipboard } from '../useSplineTangentClipboard'
 import { useSplineEditSelection, type SplineEditController } from '../useSplineEditSelection'
@@ -68,9 +69,9 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
     isTransactionActive: editor.isTransactionActive, warning: setAttachWarning })
   const previewContext = { scene: editor.scene, controller, timeMs: time, overrides: frame.overrides, documentSignal: editor.getDocumentSignal(),
     disabled: tool === 'spline-draw', getScene: editor.getScene, dispatch: editor.dispatchCommand, isTransactionActive: editor.isTransactionActive }
-  const outline = useSplineOutline(previewContext), chamfer = useSplineChamfer(previewContext), fillet = useSplineFillet(previewContext)
+  const band = useSplineBand(previewContext), outline = useSplineOutline(previewContext), chamfer = useSplineChamfer(previewContext), fillet = useSplineFillet(previewContext)
   const toolActions = splineEditTools({ layer, scene: editor.scene, mode: controller.mode, active: controller.active,
-    busy: editor.isTransactionActive(), controllers: { offset: outline, chamfer, fillet } })
+    busy: editor.isTransactionActive(), controllers: { band, offset: outline, chamfer, fillet } })
   useEffect(() => { if (result) { controller.enter(result.mode, result.ids); setResult(null) } }, [result, controller.enter])
   const arm = (kind: SplinePrimitiveKind, endpointId?: string) => { setDrawKind(kind); setEndpoint(endpointId ?? null); setTool('spline-draw') }
   const reset = (keyed = false) => { editor.resetScene(fixture(keyed)); setSelected('spline'); setTime(0); setTool('select'); tools.setTransformSpace('scene'); setDrawKind(null); setEndpoint(null) }
@@ -88,7 +89,7 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
           onSelect={setSelected} onSelectLayers={(ids, primary) => setSelected(primary ?? ids[0] ?? null)} onPickLayer={attachPick}
           onRename={() => {}} onToggleFlag={() => {}} onMoveInTree={() => {}} />
       </section>}
-      <SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={outline.result} chamferPreview={chamfer.result} filletPreview={fillet.result} splineToolActions={toolActions} splineTangentClipboard={tangentClipboard}
+      <SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={band.worldResult ?? outline.result} chamferPreview={chamfer.result} filletPreview={fillet.result} splineToolActions={toolActions} splineTangentClipboard={tangentClipboard}
       selectedLayerIds={new Set(selected ? [selected] : [])} onSelectLayer={setSelected} onSelectByGeometry={ids => setSelected(Array.from(ids)[0] ?? null)}
       timeMs={time} overrides={frame.overrides} isPlaying={false} previewMode={false} geometryEditActive={geometryEdit.active} geometryEditMode={geometryEdit.mode} onExitGeometryEdit={geometryEdit.exit} toolMode={tool} transformSpace={tools.transformSpace} panMode={tool === 'pan'} splineEdit={controller}
       splineDrawKind={drawKind} splineAppendTargetId={selected} splineContinuationPointId={endpoint} splineAutoClose={preferences.autoClose}
@@ -102,9 +103,9 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
           dispatchCommand={editor.dispatchCommand} onSelectLayer={setSelected} onClearPoint={controller.clear}
           onLayerChange={next => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, layer)) }}
           splineModeControls={<SplineModeControls controller={controller} />}
-          splineSourceSettings={layer?.spline ? (<SplineEditInspector tangentClipboard={tangentClipboard} modeControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} onBeginAttach={() => { setDrawKind(null); setEndpoint(null); setTool('select') }} outline={outline} chamfer={chamfer} fillet={fillet} />) : undefined} />
-        {layer?.spline && <section aria-label="Properties appearance"><SplinePaintControls closed={Object.values(layer.spline!.contours).every(contour => contour.closed)} style={layer.style ?? {}}
-          assets={editor.scene.assets} onChange={style => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { style }, layer))} /></section>}
+          splineSourceSettings={layer?.spline ? (<SplineEditInspector tangentClipboard={tangentClipboard} modeControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} onBeginAttach={() => { setDrawKind(null); setEndpoint(null); setTool('select') }} outline={outline} band={band} chamfer={chamfer} fillet={fillet} />) : undefined} />
+        {layer?.spline && <section aria-label="Properties appearance"><SplineAppearanceControls layer={layer} assets={editor.scene.assets}
+          onChange={next => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, next, layer))} /></section>}
       </aside>
     </div><output id="selection-state">{JSON.stringify({ active: controller.active, mode: controller.mode, ids: controller.ids, layer: selected })}</output></>
 }

@@ -105,7 +105,7 @@ describe('parametric spline panel session', () => {
   it('keeps the settings session reachable after source becomes generated, stages numeric drafts and commits only on Execute', () => {
     const host = mount(); act(() => { host.get().mode.enter('object') }); act(() => host.get().controller.select(Object.keys(host.noise.subShapes)))
     host.add('Path Simplify')
-    expect(items.filter(item => item.kind === 'action').map(item => item.label)).toEqual(['Offset Path', 'Round Corners', 'Path Simplify', 'Path Smoothing', 'Path Resample', 'Zig Zag', 'Pucker & Bloat', 'Repeater'])
+    expect(items.filter(item => item.kind === 'action').map(item => item.label)).toEqual(['Offset Path', 'Round Corners', 'Path Simplify', 'Path Smoothing', 'Path Resample', 'Zig Zag', 'Pucker & Bloat', 'Repeater', 'Stroke to Path'])
     expect(host.get().mode.active).toBe(true); expect(host.get().controller.active).toBe(false)
     const first = host.get().editor.getScene(), id = first.layers[0].modifierStack!.modifiers[0].id
     expect(Object.keys(first.layers[0].spline!.points).length).toBeLessThan(Object.keys(host.scene.layers[0].spline!.points).length)

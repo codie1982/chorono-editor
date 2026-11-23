@@ -10,13 +10,13 @@ import { splineFillChoice, withSplineFillChoice, type SplineFillChoice } from '@
  * contours, stroke also covers open ones. Modes retain inactive channels and
  * their keys. This UI owns no resources; existing Assets supplies image data.
  * The host guards writers and makes one native style command per change. */
-export function SplinePaintControls({ style, assets, onChange, disabled, closed = true }: {
-  style: ShapeStyle; assets: readonly Asset[]; onChange(style: ShapeStyle): void; disabled?: boolean; closed?: boolean
+export function SplinePaintControls({ style, assets, onChange, disabled, closed = true, independent = false }: {
+  style: ShapeStyle; assets: readonly Asset[]; onChange(style: ShapeStyle): void; disabled?: boolean; closed?: boolean; independent?: boolean
 }) {
   const fill = style.fill
   return <fieldset disabled={disabled} className="space-y-2 border-t border-gray-700 pt-2">
-    <legend className="pt-2">Shared Fill / Stroke</legend>
-    <p className="text-gray-400">Applies to every object in this layer. Only closed contours show a fill.</p>
+    <legend className="pt-2">{independent ? 'Object Fill / Stroke' : 'Shared Fill / Stroke'}</legend>
+    <p className="text-gray-400">{independent ? 'Applies to this Outline Object only.' : 'Applies to Objects using shared paint. Only closed contours show a fill.'}</p>
     <label className="block space-y-1">Fill<select aria-label="Spline Fill Type" className={paintSelectClass} value={splineFillChoice(fill)} onChange={event => onChange({ ...style, fill: withSplineFillChoice(fill, event.target.value as SplineFillChoice) })}>
       <option value="none">No Fill</option><option value="solid">Solid Color</option><option value="gradient">Linear Gradient</option>
       <option value="radial">Radial Gradient</option><option value="angle">Angle Gradient</option><option value="reflected">Reflected Gradient</option>

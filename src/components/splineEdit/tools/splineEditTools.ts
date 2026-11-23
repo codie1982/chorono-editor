@@ -2,7 +2,7 @@ import type { ChronoScene, Layer } from '@/lib/types'
 import type { SplineEditMode } from '@/lib/spline/selection'
 import { editableSplineLayer, drivenSplineTopologyReason } from '@/lib/spline/edit/authoringGuard'
 
-export type SplineToolId = 'chamfer' | 'fillet' | 'offset'
+export type SplineToolId = 'chamfer' | 'fillet' | 'offset' | 'band'
 interface PreviewTool {
   readonly active: boolean; readonly eligible: boolean; readonly disabled: boolean
   readonly selectionReason?: string; open(): void
@@ -14,6 +14,7 @@ export interface SplineToolAction {
 const tools: readonly { id: SplineToolId; label: string; description: string; modes: readonly SplineEditMode[] }[] = [
   { id: 'chamfer', label: 'Chamfer', description: 'Cut selected corners along their adjacent curves.', modes: ['point'] },
   { id: 'fillet', label: 'Fillet', description: 'Round selected corners with tangent circular arcs.', modes: ['point'] },
+  { id: 'band', label: 'Outline · Stroke to Path', description: 'Create real closed bands with caps, joins, dashes and holes.', modes: ['edge', 'object'] },
   { id: 'offset', label: 'Offset Path', description: 'Inset/outset closed contours or offset open contours.', modes: ['edge', 'object'] },
 ]
 

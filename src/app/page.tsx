@@ -118,6 +118,7 @@ import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
 import { useBooleanPreview } from '@/components/booleanPreview/useBooleanPreview'
 import { useSplineFillet } from '@/components/splineEdit/fillet/useSplineFillet'
 import { useSplineChamfer } from '@/components/splineEdit/chamfer/useSplineChamfer'
+import { useSplineBand } from '@/components/splineEdit/band/useSplineBand'
 import { useSplineOutline } from '@/components/splineEdit/outline/useSplineOutline'
 import { SplineToolsPanel } from '@/components/splineEdit/SplineToolsPanel'
 import type { SplineEditMode } from '@/lib/spline/selection'
@@ -531,6 +532,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     documentSignal: editor.getDocumentSignal(), getScene: editor.getScene, dispatch: dispatchCommand, isTransactionActive: editor.isTransactionActive,
     disabled: isPlaying || manualPreview || !!runtime.segmentState || !!detail.session || booleanPreview.active || toolMode === 'shape-draw' || toolMode === 'spline-draw' })
   const splineFillet = useSplineFillet({ scene, controller: splineEdit, timeMs: currentTimeMs, overrides: frame.overrides,
+    documentSignal: editor.getDocumentSignal(), getScene: editor.getScene, dispatch: dispatchCommand, isTransactionActive: editor.isTransactionActive,
+    disabled: isPlaying || manualPreview || !!runtime.segmentState || !!detail.session || booleanPreview.active || toolMode === 'shape-draw' || toolMode === 'spline-draw' })
+  const splineBand = useSplineBand({ scene, controller: splineEdit, timeMs: currentTimeMs, overrides: frame.overrides,
     documentSignal: editor.getDocumentSignal(), getScene: editor.getScene, dispatch: dispatchCommand, isTransactionActive: editor.isTransactionActive,
     disabled: isPlaying || manualPreview || !!runtime.segmentState || !!detail.session || booleanPreview.active || toolMode === 'shape-draw' || toolMode === 'spline-draw' })
   useEffect(() => {
@@ -1918,9 +1922,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     geometryEditMode={geometryEdit.mode}
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
-                    outlinePreview={splineOutline.result}
+                    outlinePreview={splineBand.worldResult ?? splineOutline.result}
                     splineTangentClipboard={splineTangentClipboard}
-                    splineToolActions={splineEditTools({ layer: selectedLayer, scene, mode: splineEdit.mode, active: splineEdit.active, disabled: isPlaying || manualPreview || !!detail.session, busy: editor.isTransactionActive(), controllers: { offset: splineOutline, chamfer: splineChamfer, fillet: splineFillet }, onOpen: openSplineTools })}
+                    splineToolActions={splineEditTools({ layer: selectedLayer, scene, mode: splineEdit.mode, active: splineEdit.active, disabled: isPlaying || manualPreview || !!detail.session, busy: editor.isTransactionActive(), controllers: { band: splineBand, offset: splineOutline, chamfer: splineChamfer, fillet: splineFillet }, onOpen: openSplineTools })}
                     chamferPreview={splineChamfer.result}
                     filletPreview={splineFillet.result}
                     onEditOperation={editBooleanOperation}
@@ -2121,7 +2125,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   onSelectLayer={id => selectLayer(id)} onClearPoint={splineEdit.clear} onLayerChange={updateLayer}
                   splineSourceSettings={selectedLayer?.spline && !selectedLayer.booleanResultFor && splineEdit.layerId === selectedLayer.id ? (
                     <SplineEditInspector tangentClipboard={splineTangentClipboard} modeControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
-                          outline={splineOutline}
+                          outline={splineOutline} band={splineBand}
                           chamfer={splineChamfer}
                           fillet={splineFillet}
                           overrides={frame.overrides} disabled={isPlaying || manualPreview || !!detail.session}

@@ -1,5 +1,5 @@
 'use client'
-import { SplinePaintControls } from './paint/SplinePaintControls'
+import { SplineAppearanceControls } from './paint/SplineAppearanceControls'
 import { ImagePaintControls } from './paint/ImagePaintControls'
 import { CompositionBackgroundControls } from './paint/CompositionBackgroundControls'
 import { withFillType, strokeType, withStrokeType } from '@/lib/paint/paintSource'
@@ -560,9 +560,7 @@ export default function PropertiesPanel({
 
             {/* Appearance belongs to Properties; Edit owns only geometry. */}
             {layer.type === 'spline' && <>
-              <SplinePaintControls style={layer.style ?? {}} assets={scene?.assets ?? []}
-                closed={!!layer.spline && Object.values(layer.spline.contours).every(contour => contour.closed)}
-                onChange={style => onLayerChange({ ...layer, style })} />
+              <SplineAppearanceControls key={layer.id} layer={layer} assets={scene?.assets ?? []} onChange={onLayerChange} />
               <SchemaPanel layer={layer} scene={scene} onLayerChange={onLayerChange}
                 filterGroup={g => !['Transform', 'Appearance', 'Fill', 'Stroke'].includes(g.title)} />
             </>}
