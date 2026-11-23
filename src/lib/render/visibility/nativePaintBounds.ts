@@ -1,3 +1,4 @@
+import { splineObjectStyles } from '../../spline/paint/objectPaint'
 import { strokeType } from '../../paint/paintSource'
 import type { Layer } from '@/lib/types'
 import type { PathBounds } from '@/lib/geometry/computePathBounds'
@@ -28,8 +29,8 @@ export function nativePaintBounds(layer: Layer, context: CanvasRenderingContext2
   // Outside-aligned strokes double the native width. Miter joins and square
   // caps can extend beyond half-width. Zero/invalid Canvas lineWidth preserves
   // the inherited width; include it rather than treating zero as no paint.
-  const padding = stroke && strokeType(stroke) !== 'none' ? Math.max(Math.abs(stroke.width), context.lineWidth)
-    * Math.max(2, context.miterLimit) : 0
+  const strokes = [stroke, ...splineObjectStyles(layer).map(style => style.stroke)]
+  const padding = Math.max(0, ...strokes.map(item => item && strokeType(item) !== 'none' ? Math.max(Math.abs(item.width), context.lineWidth) * Math.max(2, context.miterLimit) : 0))
   if (!Number.isFinite(padding)) return null
   return { x: bounds.x - padding, y: bounds.y - padding,
     width: bounds.width + padding * 2, height: bounds.height + padding * 2 }

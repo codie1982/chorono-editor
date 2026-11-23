@@ -1,6 +1,7 @@
 import type { Vec2 } from '../../geometry/CoordinateSystem'
 import type { FlattenedContour } from '../../geometry/flattenPathContours'
 import { assertSimplePolyline, assertSimpleRing } from '../../geometry/planar'
+import { offsetJoin } from './offsetJoin'
 import { OUTLINE_LIMITS, type OutlineSettings } from './types'
 
 /** Offset a simple polyline without capping or closing its open ends. Positive
@@ -31,21 +32,9 @@ export function parallelPolyline(contour: FlattenedContour, distance: number, se
   const joins = points.map((p, i) => {
     if (!closed && (i === 0 || i === size - 1)) return checked([shifted(p, units[i === 0 ? 0 : edgeCount - 1])])
     const u = units[(i + edgeCount - 1) % edgeCount], v = units[i % edgeCount]
-    const a = shifted(p, u), b = shifted(p, v), cross = u.x * v.y - u.y * v.x, dot = u.x * v.x + u.y * v.y
-    if (Math.abs(cross) < 1e-12) {
-      if (dot <= 0) throw new Error('Offset cannot resolve a cusp or reversed tangent.')
-      return checked([a])
-    }
-    const t = ((b.x - a.x) * v.y - (b.y - a.y) * v.x) / cross
-    const intersection = { x: a.x + u.x * t, y: a.y + u.y * t }
-    if (cross * distance < 0) return checked([intersection])
-    if (settings.join === 'miter' && Math.hypot(intersection.x - p.x, intersection.y - p.y) <= Math.abs(distance) * settings.miterLimit) return checked([intersection])
-    if (settings.join !== 'round') { if (settings.join === 'miter') bevelFallbacks++; return checked([a, b]) }
-    const sweep = Math.atan2(cross, dot), angle = Math.atan2(a.y - p.y, a.x - p.x), radius = Math.abs(distance)
-    const step = 2 * Math.acos(Math.max(-1, 1 - Math.min(settings.tolerancePx / 4, radius) / radius))
-    const parts = Math.max(1, Math.ceil(Math.abs(sweep) / step))
-    if (parts + count > OUTLINE_LIMITS.outputVertices) throw new Error('Round join exceeds the Offset vertex budget.')
-    return checked(Array.from({ length: parts + 1 }, (_, j) => ({ x: p.x + radius * Math.cos(angle + sweep * j / parts), y: p.y + radius * Math.sin(angle + sweep * j / parts) })))
+    const join = offsetJoin(p, u, v, distance, settings)
+    bevelFallbacks += join.bevelFallbacks
+    return checked(join.points)
   })
   // Inner offsets beyond a narrow feature can produce another plausible ring.
   // Require every shifted edge to still advance in its source direction.

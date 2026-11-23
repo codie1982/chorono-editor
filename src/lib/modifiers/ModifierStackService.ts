@@ -55,7 +55,17 @@ export class ModifierStackService {
     }
     const paint = geometryConversionPaint(layer.style, layer.type, geometry.kind)
     const style = paint ? { ...paint, cornerRadius: undefined } : undefined
-    if (geometry.kind === 'spline') return { ...rest, type: 'spline', spline: geometry.spline, style, modifierStack: stack }
+    if (geometry.kind === 'spline') {
+      // Appearance is outside the geometry recipe. Stable generated Object IDs
+      // retain explicit Properties paint when Execute rebuilds the geometry.
+      const subShapes = Object.fromEntries(Object.entries(geometry.spline.subShapes).map(([id, object]) => {
+        const override = layer.splinePaintOverrides?.objects[id]
+        const paint = override === null ? { version: 1 as const, source: 'stroke' as const } : override ? { version: 1 as const, source: 'custom' as const, style: override }
+          : layer.spline?.subShapes[id]?.paint?.source === 'custom' ? layer.spline.subShapes[id].paint : object.paint
+        return [id, object.paint && paint ? { ...object, paint } : object]
+      }))
+      return { ...rest, type: 'spline', spline: { ...geometry.spline, subShapes }, style, modifierStack: stack }
+    }
     const previous = layer.mesh2d, current = geometry.mesh
     if (previous?.pins?.vertexIds.length && meshModifierRestIdentity(previous.geometry) !== meshModifierRestIdentity(current.geometry)) throw new Error('Remove Mesh pins before changing modifier topology.')
     const selfSource = stack.modifiers.some(item => item.enabled && item.type === 'convertMesh2d') && current.source.kind === 'splineBoundary'

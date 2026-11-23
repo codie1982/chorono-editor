@@ -11,6 +11,7 @@
 // No other file changes — open/closed principle satisfied.
 
 import { imagePaint, imagePaintAssetIds, stylePaintAssetIds } from '../../paint/paintSource'
+import { layerPaintAssetIds } from '../../paint/paintSource'
 import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry'
@@ -161,9 +162,9 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
 
 export const splineRendererPlugin: LayerRendererPlugin = {
   id: 'spline',
-  nativeMediaFree: layer => !layer.style?.fill?.image,
-  mediaDependencies: layer => ({ assetIds: stylePaintAssetIds(layer.style) }),
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
+  nativeMediaFree: layer => !layerPaintAssetIds(layer).length,
+  mediaDependencies: layer => ({ assetIds: layerPaintAssetIds(layer) }),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !layerPaintAssetIds(layer).length, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'spline' && !!layer.spline,
   render(ctx: RenderContext, layer: Layer): void {
     drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)

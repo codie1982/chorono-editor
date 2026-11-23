@@ -1,3 +1,4 @@
+import { splinePaintGroups } from './spline/paint/objectPaint'
 import { evaluateSceneFrame } from './runtime/evaluateSceneFrame'
 import { CanvasSelectionEligibility } from './selection/CanvasSelectionEligibility'
 import type { ChronoScene, Layer, ShapeStyle, ShapeFill, ObjectFit, ShapeKind, ShapeParams, BezierPath, PathAnchor, Asset } from './types'
@@ -294,6 +295,15 @@ export function drawSplineLayer(
   paramValues?: ParamValueMap,
   assets?: AssetElementMap,
 ) {
+  for (const group of splinePaintGroups(layer)) {
+    const ownOverrides = group.independent ? new Map(Array.from(overrides).filter(([key]) => !key.startsWith(`layers.${layer.id}.style.`))) : overrides
+    drawSplinePaintGroup(ctx, group.layer, ownOverrides, group.independent ? undefined : paramValues, assets)
+  }
+}
+
+/** Draw one canonical compound paint group; band appearance never rewrites the
+ * source layer style or uses unrelated shared-fill animation channels. */
+function drawSplinePaintGroup(ctx: CanvasRenderingContext2D, layer: Layer, overrides: OverrideMap, paramValues?: ParamValueMap, assets?: AssetElementMap) {
   if (!layer.spline) return
   const style: ShapeStyle = layer.style ?? {}
   const pathDef  = splineToPathDefinition(layer.spline)

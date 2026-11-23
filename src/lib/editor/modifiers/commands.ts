@@ -25,7 +25,7 @@ function editable(scene: ChronoScene, id: string): Layer {
 /** CAS command over a complete recomputed result. Undo restores the exact base,
  * stack order/settings, result and unrelated source. No preview mutates history. */
 function replace(scene: ChronoScene, layer: Layer, stack: GeometryModifierStackData | null, label: string): EditorCommand {
-  const result = stack ? modifierStackService.execute(layer, stack) : { ...modifierStackService.execute(layer, modifierStackService.stackFor(layer)), modifierStack: undefined, geometryConversion: undefined }
+  const result = stack ? modifierStackService.execute(layer, stack) : { ...modifierStackService.execute(layer, modifierStackService.stackFor(layer)), modifierStack: undefined, geometryConversion: undefined, splinePaintOverrides: undefined }
   const candidate = { ...scene, layers: scene.layers.map(item => item.id === layer.id ? result : item) }
   return { label, execute(current) {
     if (current !== scene) throw new Error('Scene changed while editing modifiers. Apply again from the current source.')

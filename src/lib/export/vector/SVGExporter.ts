@@ -1,3 +1,4 @@
+import { splinePaintGroups } from '../../spline/paint/objectPaint'
 import { splineToPathDefinition } from '../../spline/splineToPath'
 import { compositionFill, compositionForOutput } from '../../paint/paintSource'
 import { computePathBounds } from '../../geometry/computePathBounds'
@@ -232,6 +233,11 @@ function buildPath(layer: Layer, ctx: BuildCtx, xform: string, opacity: string):
  * contours are stroke-only, matching Canvas2D. Uses shared path conversion and
  * preflight admission; generated Boolean splines require no SVG-only geometry. */
 function buildSpline(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
+  return splinePaintGroups(layer).map(group => buildSplinePaintGroup(group.layer, ctx, xform, opacity)).join('')
+}
+
+/** One independently painted compound path, shared by ordinary and band Objects. */
+function buildSplinePaintGroup(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
   if (!layer.spline) return ''
   const data = layer.spline, all = splineToPathDefinition(data), closed = splineToPathDefinition(data, { closedOnly: true })
   if (!all.commands.length) return ''

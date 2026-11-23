@@ -7,7 +7,7 @@
 //   - Excessive layer counts (host runtime may struggle)
 //   - Empty / invalid composition
 
-import { imagePaintAssetIds, compositionFill, compositionForOutput } from '../paint/paintSource'
+import { layerPaintAssetIds, imagePaintAssetIds, compositionFill, compositionForOutput } from '../paint/paintSource'
 import { assertScenePaint } from '../paint/validatePaint'
 import type { ChronoScene, Layer } from '../types'
 import type { RuntimeValidationResult, RuntimeError, RuntimeWarning } from '../types/runtime'
@@ -55,8 +55,7 @@ export class RuntimeValidator {
       const refs: { kind: string; id?: string }[] = [
         { kind: 'model3d', id: layer.model3d?.assetId },
         { kind: 'image', id: layer.image?.assetId },
-        { kind: 'image paint', id: imagePaintAssetIds(layer.style?.fill)[0] },
-        { kind: 'stroke pattern', id: layer.style?.stroke?.type === 'pattern' ? layer.style.stroke.image?.assetId : undefined },
+        ...layerPaintAssetIds(layer).map(id => ({ kind: 'image paint', id })),
         { kind: 'video', id: layer.video?.assetId },
         { kind: 'audio', id: layer.audio?.assetId },
       ]

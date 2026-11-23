@@ -310,6 +310,10 @@ export interface Layer {
   path?: BezierPath
   /** Spline object data — used when type === 'spline'. Holds SubShapes + contours. */
   spline?: SplinePathData
+  /** Independent appearance for deterministic generated spline Object IDs.
+   * Kept outside geometry so toggle/reorder/Execute do not erase Properties
+   * edits. Runtime projection materializes it onto ordinary Object paint. */
+  splinePaintOverrides?: { version: 1; objects: Record<string, ShapeStyle | null> }
   /**
    * Visual vs motion guide path. Defaults to 'visual' when type === 'path'.
    * Motion paths are not rendered as visible strokes during playback — they

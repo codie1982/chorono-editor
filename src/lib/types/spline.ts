@@ -21,6 +21,8 @@
 // Option B: existing `type: 'shape'` layers are UNCHANGED. Splines are a
 // separate family bridged by the "Convert to Spline" command.
 
+import type { ShapeStyle } from './style'
+
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
 export type SplinePointType =
@@ -135,6 +137,10 @@ export interface SplineSubShape {
   editable: boolean
   /** Optional Object sampling policy; never stores sampled/generated vertices. */
   interpolation?: SplineInterpolation
+  /** Versioned independent band appearance. Stroke binding follows the owning
+   * layer stroke as a fill; custom paint stays editable only in Properties.
+   * Omission preserves legacy compound shared-fill rendering. */
+  paint?: { version: 1; source: 'stroke' | 'custom'; style?: ShapeStyle }
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────

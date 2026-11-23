@@ -1,3 +1,4 @@
+import { layerPaintStyles } from './paintSource'
 import type { ChronoScene, ShapeFill } from '../types'
 
 /** Validate the new serializable paint payload, including inactive values.
@@ -25,12 +26,20 @@ export function assertScenePaint(scene: ChronoScene): void {
   check(scene.composition.backgroundFill)
   if (scene.composition.backgroundInExport !== undefined && typeof scene.composition.backgroundInExport !== 'boolean') throw new Error('Invalid background export visibility.')
   for (const layer of scene.layers) {
-    check(layer.style?.fill)
-    const stroke = layer.style?.stroke
-    if (stroke?.image) check({ type: 'image', image: stroke.image })
-    if (stroke?.type === 'pattern' && !stroke.image) throw new Error('Pattern stroke requires image placement.')
-    if (stroke?.gradient) check({ type: 'gradient', gradient: stroke.gradient })
-    if (stroke?.dashEnabled !== undefined && typeof stroke.dashEnabled !== 'boolean') throw new Error('Invalid dash enabled value.')
-    if (layer.style?.stroke?.type !== undefined && !['solid', 'gradient', 'pattern', 'none'].includes(layer.style.stroke.type)) throw new Error('Invalid stroke paint type.')
+    const overrides = layer.splinePaintOverrides
+    if (overrides && (overrides.version !== 1 || !overrides.objects || Array.isArray(overrides.objects) || Object.keys(overrides.objects).length > 8192
+      || Object.entries(overrides.objects).some(([id, style]) => !/^[\w-]{1,128}$/.test(id) || style !== null && (!style || typeof style !== 'object' || Array.isArray(style))))) throw new Error('Invalid spline paint overrides.')
+    const data = [layer.spline, ...(layer.modifierStack?.source.kind === 'spline' ? [layer.modifierStack.source.spline] : [])].filter(Boolean)
+    for (const object of data.flatMap(spline => Object.values(spline!.subShapes))) if (object.paint && (object.paint.version !== 1 || !['stroke', 'custom'].includes(object.paint.source) || object.paint.source === 'custom' && (!object.paint.style || typeof object.paint.style !== 'object'))) throw new Error('Invalid spline Object paint.')
+    const styles = [...layerPaintStyles(layer), ...data.flatMap(spline => Object.values(spline!.subShapes).flatMap(o => o.paint?.style ? [o.paint.style] : []))]
+    for (const style of styles) {
+      check(style.fill)
+      const stroke = style.stroke
+      if (stroke?.image) check({ type: 'image', image: stroke.image })
+      if (stroke?.type === 'pattern' && !stroke.image) throw new Error('Pattern stroke requires image placement.')
+      if (stroke?.gradient) check({ type: 'gradient', gradient: stroke.gradient })
+      if (stroke?.dashEnabled !== undefined && typeof stroke.dashEnabled !== 'boolean') throw new Error('Invalid dash enabled value.')
+      if (style.stroke?.type !== undefined && !['solid', 'gradient', 'pattern', 'none'].includes(style.stroke.type)) throw new Error('Invalid stroke paint type.')
+    }
   }
 }

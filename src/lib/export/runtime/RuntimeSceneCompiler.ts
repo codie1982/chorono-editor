@@ -63,6 +63,7 @@ function stripLayerEditorMetadata(layer: Layer): Layer {
     inputExpressions: _inputExpressions,
     geometryConversion: _geometryConversion,
     modifierStack: _modifierStack,
+    splinePaintOverrides: _splinePaintOverrides,
     ...runtimeLayer
   } = layer
   return runtimeLayer

@@ -1,3 +1,4 @@
+import { layerPaintStyles } from '../paint/paintSource'
 // ── AssetIndex ────────────────────────────────────────────────────────────────
 //
 // Maintains a reverse index: assetId → layerIds
@@ -128,8 +129,11 @@ export class AssetIndex {
   private extractAssetIds(layer: Layer): string[] {
     const ids: string[] = []
     ids.push(...modelAssetIds(layer.model3d), ...modifierAssetIds(layer))
-    if (layer.style?.fill?.image?.assetId) ids.push(layer.style.fill.image.assetId)
-    if (layer.style?.stroke?.image?.assetId) ids.push(layer.style.stroke.image.assetId)
+    const styles = [...layerPaintStyles(layer), ...Object.values(layer.modifierStack?.source.kind === 'spline' ? layer.modifierStack.source.spline.subShapes : {}).flatMap(o => o.paint?.style ? [o.paint.style] : [])]
+    for (const style of styles) {
+      if (style.fill?.image?.assetId) ids.push(style.fill.image.assetId)
+      if (style.stroke?.image?.assetId) ids.push(style.stroke.image.assetId)
+    }
     if (layer.image?.assetId)  ids.push(layer.image.assetId)
     if (layer.video?.assetId)  ids.push(layer.video.assetId)
     if (layer.audio?.assetId)  ids.push(layer.audio.assetId)

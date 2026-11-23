@@ -16,7 +16,7 @@ export interface ModifierStackData<TSource> {
 export interface ModifierField {
   readonly key: string
   readonly label: string
-  readonly kind: 'number' | 'select' | 'boolean' | 'asset' | 'points' | 'contours' | 'objects'
+  readonly kind: 'number' | 'text' | 'select' | 'boolean' | 'asset' | 'points' | 'contours' | 'objects'
   readonly min?: number
   readonly max?: number
   readonly step?: number

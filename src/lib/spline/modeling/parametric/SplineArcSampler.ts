@@ -4,6 +4,7 @@ import { bezierLengthTable, parameterAtArcLength, type BezierLengthTable } from 
 import { evaluateBezier, trimBezier } from '../../../geometry/bezier/curves'
 import { bezierJet } from '../../../geometry/bezier/derivatives'
 import { distToSegmentSq } from '../../../geometry/segmentDistance'
+import { normalConeFits } from '../../../geometry/bezier/normalConeFits'
 import { segmentControls } from '../../corners'
 
 export interface SplineSamplingBudget { vertices: number; lengthSamples: number }
@@ -54,6 +55,17 @@ export class SplineArcSampler {
     const length = Math.hypot(v.x, v.y)
     if (length <= 1e-8) throw new Error('Zig Zag needs a regular path tangent.')
     return { x: -v.y / length, y: v.x / length }
+  }
+  /** Bound normal-displacement error over one source-edge interval. The band
+   * sampler pins every original anchor, then subdivides until both this cone
+   * and chordError pass. Same derivative-cone contract as path flattening. */
+  normalFits(from: number, to: number, distance: number, tolerance: number): boolean {
+    const start = this.locate(from), end = this.locate(to)
+    for (let i = start.index; i <= end.index; i++) {
+      const edge = this.edges[i], lo = i === start.index ? start.t : 0, hi = i === end.index ? end.t : 1
+      if (hi > lo && !normalConeFits(trimBezier(edge.controls, lo, hi), distance, tolerance)) return false
+    }
+    return true
   }
   /** Convex-hull bound for EVERY source point between two arc positions against
    * their finite output chord. Covers multiple source edges and collinear

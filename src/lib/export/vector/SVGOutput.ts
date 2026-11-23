@@ -1,5 +1,5 @@
 import { portableSceneInScope } from '../portable'
-import { compositionFill, imagePaintAssetIds, stylePaintAssetIds } from '../../paint/paintSource'
+import { compositionFill, imagePaintAssetIds, layerPaintAssetIds } from '../../paint/paintSource'
 import type {ChronoScene} from '../../types'
 import {measureJson} from '../../format/json'
 import type {OutputScope} from '../resources'
@@ -17,7 +17,7 @@ export async function svgInScope(scene:ChronoScene,scope:OutputScope,signal?:Abo
   scope.check(signal)
   const source=measureJson(scene,{maxBytes:96*1024**2}),limits=resolveSvgOutputLimits(options.limits),temporary=scope.child()
   try{
-    const ids = new Set(scene.layers.flatMap(layer => stylePaintAssetIds(layer.style)))
+    const ids = new Set(scene.layers.flatMap(layer => layerPaintAssetIds(layer)))
     if ((options.background ?? 'scene') === 'scene' && scene.composition.backgroundInExport !== false) imagePaintAssetIds(compositionFill(scene.composition)).forEach(id => ids.add(id))
     if (scene.assets.some(asset => ids.has(asset.id) && asset.url.startsWith('blob:'))) {
       const paintAssets = await portableSceneInScope({ ...scene, layers: [], timelines: [], parameters: [], bindings: [], triggers: [], assets: scene.assets.filter(asset => ids.has(asset.id)) }, temporary, signal)
