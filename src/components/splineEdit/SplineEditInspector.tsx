@@ -79,7 +79,7 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
   const object = controller.mode === 'object' && controller.ids.length === 1 ? layer.spline?.subShapes[controller.ids[0]] : undefined
   const [name, setName] = useState(object?.name ?? '')
   useEffect(() => { setName(object?.name ?? '') }, [object?.id, object?.name])
-  useEffect(() => { setWarning('') }, [layer.id, controller.mode, controller.active])
+  useEffect(() => { setWarning('') }, [layer.id, controller.mode, controller.active, controller.edgeTool])
   if (!layer.spline || controller.layerId !== layer.id) return null
   const data = layer.spline, ids = controller.ids, readonly = !!disabled || !!layer.locked || !!layer.frozen || !!layer.hidden || !!layer.instanceOf
   const apply = (operation: SplineEditOperation, edit: (source: SplinePathData) => SplinePathData, label?: string) => {

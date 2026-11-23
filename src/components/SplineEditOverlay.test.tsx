@@ -11,7 +11,7 @@ import SplineEditOverlay from './SplineEditOverlay'
 const layer = newSplineLayerFromData(createRectangleSpline({ width: 80, height: 50 }))
 /** UI-only controller fixture: source/history are never needed by overlays. */
 function controller(mode: 'point' | 'edge' | 'object', active = true): SplineEditController {
-  return { nonDestructive: false, setNonDestructive: vi.fn(), sourceGhosts: [], focusResult: vi.fn(), layerId: layer.id, mode, active, bank: emptySplineSelection(), ids: [], attaching: false, setAttaching: vi.fn(), attachOperation: 'union', setAttachOperation: vi.fn(), enter: vi.fn(), select: vi.fn(), clear: vi.fn(), exit: vi.fn() }
+  return { edgeTool: null, setEdgeTool: vi.fn(), nonDestructive: false, setNonDestructive: vi.fn(), sourceGhosts: [], focusResult: vi.fn(), layerId: layer.id, mode, active, bank: emptySplineSelection(), ids: [], attaching: false, setAttaching: vi.fn(), attachOperation: 'union', setAttachOperation: vi.fn(), enter: vi.fn(), select: vi.fn(), clear: vi.fn(), exit: vi.fn() }
 }
 
 describe('Spline edit presentation', () => {

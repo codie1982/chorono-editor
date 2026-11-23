@@ -18,6 +18,7 @@ import { splineEditCommand } from './commands'
 import { hitTestLayersAt } from '@/lib/renderer'
 import { useSplineAttachPicking } from './useSplineAttachPicking'
 import { transformAxisFrame, type TransformSpace } from '@/lib/canvas/math/transformAxes'
+import { useSplineTopologyActions } from './useSplineTopologyActions'
 
 interface Options {
   controller: SplineEditController; layer: Layer | null | undefined; scene: ChronoScene; editor: EditorStateReturn
@@ -52,11 +53,14 @@ export function useSplineViewportEditing(options: Options) {
   const attachPick = useSplineAttachPicking({ layer, controller, getScene: options.editor.getScene,
     dispatch: options.editor.dispatchCommand, timeMs, overrides, disabled: !canPick || !writable, onSelectLayer: options.onSelectLayer,
     isTransactionActive: options.editor.isTransactionActive, warning: options.warning })
+  const topology = useSplineTopologyActions({ layer, controller, getScene: options.editor.getScene, dispatch: options.editor.dispatchCommand,
+    timeMs, overrides, disabled: !canPick || !writable, isTransactionActive: options.editor.isTransactionActive, warning: options.warning })
+  useEffect(() => { if (controller.edgeTool && (!canPick || !writable)) controller.setEdgeTool(null) }, [controller.edgeTool, controller.setEdgeTool, canPick, writable])
   useEffect(() => { if (controller.attaching && (!canPick || !writable)) controller.setAttaching(false) }, [controller.attaching, controller.setAttaching, canPick, writable])
-  useEffect(() => { setHover(null); setMenu(null) }, [controller.layerId, controller.active, controller.mode, controller.attaching, options.enabled, options.panMode, timeMs, options.editor.getDocumentSignal()])
+  useEffect(() => { setHover(null); setMenu(null) }, [controller.layerId, controller.active, controller.mode, controller.attaching, controller.edgeTool, options.enabled, options.panMode, timeMs, options.editor.getDocumentSignal()])
   // Returning from drawing re-enables picking. Keep its rejection visible;
   // only a new edit context/frame clears it, never an enabled-state handover.
-  useEffect(() => { options.warning('') }, [controller.layerId, controller.active, controller.mode, options.panMode, timeMs, options.editor.getDocumentSignal()])
+  useEffect(() => { options.warning('') }, [controller.layerId, controller.active, controller.mode, controller.edgeTool, options.panMode, timeMs, options.editor.getDocumentSignal()])
   const pick = (x: number, y: number) => canPick && !controller.attaching && geometry ? pickSplineElement(geometry.worldSpline, controller.mode, x, y, 8 / options.zoom) : null
   const selectTarget = (target: SplinePick, toggle: boolean) => {
     const id = target.kind === 'handle' ? target.pointId : target.id
@@ -100,6 +104,12 @@ export function useSplineViewportEditing(options: Options) {
       return true
     }
     const target = pick(x, y)
+    if (controller.edgeTool) {
+      event.preventDefault(); event.stopPropagation()
+      if (target?.kind === 'edge') topology.perform({ kind: controller.edgeTool, edgeId: target.id, t: target.t ?? .5 })
+      else options.warning('Click an edge in this spline to use the active edge tool.')
+      return true
+    }
     if (!target) return false // Host starts a sub-object region, never root drag.
     event.preventDefault(); event.stopPropagation()
     const toggle = event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
@@ -153,7 +163,8 @@ export function useSplineViewportEditing(options: Options) {
       const sourceAction = (event.ctrlKey || event.metaKey) && ['d', 'c', 'v', 'x', 'g'].includes(event.key.toLowerCase())
       if (!['Escape', 'Delete', 'Backspace'].includes(event.key) && !navigation && !sourceAction) return
       event.preventDefault(); event.stopImmediatePropagation()
-      if (event.key === 'Escape') { if (edit.attaching) edit.setAttaching(false); else if (edit.ids.length) edit.clear(); else edit.exit(); return }
+      if (event.key === 'Escape') { if (edit.edgeTool) edit.setEdgeTool(null); else if (edit.attaching) edit.setAttaching(false); else if (edit.ids.length) edit.clear(); else edit.exit(); return }
+      if (edit.edgeTool) { current.warning('Finish or cancel the active edge tool before changing the selection.'); return }
       if (edit.attaching) { current.warning('Finish Add Spline before editing the selection.'); return }
       if (current.panMode || current.toolMode === 'pan' || sourceAction) { current.warning('This sub-object action is unavailable. Choose Done to use layer commands.'); return }
       if (!edit.ids.length || !current.layer) return
@@ -175,7 +186,7 @@ export function useSplineViewportEditing(options: Options) {
     return () => window.removeEventListener('keydown', keydown, true)
   }, [])
   const movePoints = layer?.spline ? splineSelectionPoints(layer.spline, controller.mode, controller.ids) : new Set<string>()
-  const movePivot = canPick && writable && !controller.attaching && ['select', 'move', undefined].includes(options.toolMode)
+  const movePivot = canPick && writable && !controller.attaching && !controller.edgeTool && ['select', 'move', undefined].includes(options.toolMode)
     && geometry ? splineSelectionPivot(geometry.worldSpline, movePoints) : null
   const moveGizmo = movePivot ? { point: movePivot, axisFrame, start: (axis: 'x' | 'y' | null) => (event: React.PointerEvent) => {
     if (event.button !== 0) return

@@ -20,6 +20,7 @@ export function useSplineTopologyActions(options: {
   timeMs?: number; overrides?: OverrideMap; disabled?: boolean; isTransactionActive?(): boolean
   onSelectLayer?(id: string | null): void; warning(message: string): void
   clipboard?: SplineTangentClipboard
+  pickedEdgeId?: string
 }): SplineTopologyActions {
   const perform = (action: NativeSplineAction) => {
     const layer = options.layer
@@ -29,7 +30,7 @@ export function useSplineTopologyActions(options: {
       if (source.layers.find(item => item.id === layer.id)?.spline !== layer.spline) throw new Error('Spline changed. Select current elements again.')
       const prepared = action.kind === 'attach' ? attachSplineLayerCommand(source, layer.id, action.sourceId, options.timeMs, options.overrides)
         : action.kind === 'detach' ? detachSplineObjectsCommand(source, layer.id, options.controller.ids)
-        : splineTopologyCommand(source, layer.id, options.controller.mode, options.controller.ids, action, options.timeMs, options.overrides)
+        : splineTopologyCommand(source, layer.id, options.controller.mode, action.kind === 'trim' || action.kind === 'extend' ? [action.edgeId] : options.controller.ids, action, options.timeMs, options.overrides)
       if (action.kind === 'detach' && !options.onSelectLayer) throw new Error('This host cannot select a detached layer.')
       if (prepared.command) {
         options.dispatch(prepared.command)
@@ -38,7 +39,7 @@ export function useSplineTopologyActions(options: {
         options.controller.focusResult({ ...prepared.result, ghosts: options.controller.sourceGhosts,
           attaching: options.controller.attaching, operation: options.controller.attachOperation })
       }
-      options.warning('')
+      options.warning('reason' in prepared.result ? prepared.result.reason ?? '' : '')
     } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
   }
   const copy = () => {
@@ -52,5 +53,7 @@ export function useSplineTopologyActions(options: {
   return { canDetach: !!options.onSelectLayer, perform, componentTools: options.layer?.spline ? splineComponentTools({
     scene: options.getScene(), layer: options.layer, mode: options.controller.mode, ids: options.controller.ids,
     active: options.controller.active, disabled: options.disabled, busy: options.isTransactionActive?.(), clipboard: options.clipboard, perform, copy,
+    edgeTool: options.controller.edgeTool, pickEdgeTool: tool => options.controller.setEdgeTool(options.controller.edgeTool === tool ? null : tool),
+    pickedEdgeId: options.pickedEdgeId,
   }) : [] }
 }

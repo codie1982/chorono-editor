@@ -22,9 +22,13 @@ export function SplineTopologyControls({ scene, layer, controller, actions, disa
     <fieldset disabled={disabled} className="space-y-2 pt-2">
     {controller.mode === 'edge' && <TopologyNumber label="Split position (%)" value={split} min={.01} max={99.99} onChange={setSplit} />}
     <div className="flex flex-wrap gap-2">{actions.componentTools.map(tool => <span key={tool.id} title={tool.reason ?? tool.description}>
-      <button type="button" className={button} disabled={tool.disabled} aria-describedby={`spline-tool-${tool.id}`} onClick={() => tool.run({ t: split / 100 })}>{tool.label}</button>
+      <button type="button" className={button + (tool.active ? ' border-orange-400 bg-orange-950' : '')} disabled={tool.disabled} aria-pressed={tool.id === 'trim' || tool.id === 'extend' ? !!tool.active : undefined} aria-describedby={`spline-tool-${tool.id}`} onClick={() => tool.run({ t: split / 100 })}>{tool.label}</button>
       <span id={`spline-tool-${tool.id}`} className="sr-only">{tool.reason ?? tool.description}</span>
     </span>)}</div>
+    {controller.edgeTool && <div role="status" className="rounded border border-orange-700 p-2 text-orange-200">
+      {controller.edgeTool === 'trim' ? 'Trim: click the part between intersections to remove it.' : 'Extend: click a terminal edge near the open end to extend.'} Esc cancels.
+      <button type="button" className={button + ' ml-2'} onClick={() => controller.setEdgeTool(null)}>Cancel edge tool</button>
+    </div>}
     {Array.from(new Set(actions.componentTools.flatMap(tool => tool.reason ? [tool.reason] : []))).map(reason => <p key={reason} className="text-gray-400">{reason}</p>)}
     {controller.mode === 'point' && <>
       <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={!pointPair} onClick={() => actions.perform({ kind: 'connect' })}>Join / Connect endpoints</button>

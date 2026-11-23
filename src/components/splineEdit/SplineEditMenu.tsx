@@ -19,7 +19,7 @@ export function SplineEditMenu({ x, y, target, layer, controller, getScene, disp
   tangentClipboard?: SplineTangentClipboard; timeMs?: number; overrides?: OverrideMap; disabled?: boolean; isTransactionActive?(): boolean
 }) {
   const ids = controller.ids
-  const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch, warning, clipboard: tangentClipboard, timeMs, overrides, disabled, isTransactionActive })
+  const topology = useSplineTopologyActions({ layer, controller, getScene, dispatch, warning, clipboard: tangentClipboard, timeMs, overrides, disabled, isTransactionActive, pickedEdgeId: target?.kind === 'edge' ? target.id : undefined })
   const mutate = (fn: Parameters<typeof splineEditCommand>[3]) => {
     try { const command = splineEditCommand(getScene(), layer.id, { kind: 'topology' }, fn); if (command) dispatch(command) }
     catch (error) { warning(error instanceof Error ? error.message : String(error)) }
