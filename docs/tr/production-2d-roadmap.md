@@ -3923,3 +3923,18 @@ Mevcut stack/Execute/Undo/Redo/portable/renderer akışı korunur; ikinci runner
 portable reload, PNG ve SVG kontrolü geçti. Animasyonlu parametreler ve ileri
 Outline/Boolean/Width/Dynamics işleri Faz 2'de kalır.
 [Teslim sözleşmesi](spline-phase1-modifiers.md).
+
+## 23 Kasım 2026 — Outline / Stroke to Path ilk geometri teslimi
+
+- Native Edge/Object Outline; gerçek kapalı bant, Inside/Center/Outside veya
+  açıkta Center/Left/Right; cap/join/miter-limit, arc-length dash ve delikler.
+  Kısmi zincir, Keep source, worker preview/Cancel, tek Undo/Redo; modifier satırı
+  eklemez. Layer TRS/origin ve seçilmemiş geometri korunur.
+- Ayrı `strokeToPath` statik modifier aynı band hesabıyla mevcut ordered Execute
+  akışına bağlandı; Edit moduna girmek gerekmez. Eski `outline` kayıtları korundu.
+- Properties'te bağımsız band paint, kaynak stroke → fill bağı ve generated ID
+  paint override'ları; toggle/Execute/Bake, clone/portable/runtime, asset demand,
+  viewport/PNG/SVG birlikte ele alındı. 579 dosyada 4.167 test ve gerçek tarayıcıda
+  7 kabul grubu geçti; dışa aktarılan PNG/SVG görsel kontrol edildi.
+- Tam v2 fit/provenance, ayarlanabilir density ağırlıkları ve ortak preset/
+  clipboard kapsamı açık kalır. [Teslim sözleşmesi](spline-outline-band.md).

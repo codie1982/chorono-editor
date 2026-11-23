@@ -1,6 +1,6 @@
 # 2D Spline Modifier — Faz 1 / Faz 2
 
-Durum: **Faz 1'in sekiz temel statik modifier'ı uygulandı; Faz 2 planlıdır**. 23 Kasım 2026.
+Durum: **Faz 1'in sekiz temel statik modifier'ı uygulandı; Faz 2 Outline/Stroke to Path temel teslimi başladı**. 23 Kasım 2026.
 Kullanıcı kararı: ilk faz mevcut statik Execute akışıyla ilerler. Animasyonlu
 modifier parametreleri ilk fazın ön koşulu değildir; ileri işlemler Faz 2'dedir.
 Native Edit araçlarının teslim durumu
@@ -67,8 +67,8 @@ yerlerinde kalır; modifier sürümleri aynı matematiği kaynak korunarak çal�
 | İş | Neden sonraki faz? |
 | --- | --- |
 | Variable Width | Path boyunca profil, bant üretimi, renderer ve taşınabilir çıktı entegrasyonu. |
-| Stroke to Path | Cap/join/alignment/dash ve gerçek delikli bant. Outline v2 ile tek geometri hesabı. |
-| Outline v2'nin tam kapsamı | Eğri-fit, adaptif vertex yoğunluğu, ayrı band paint'i, preset ve clipboard. [Ayrıntılı plan](spline-outline-band-v2-plan.md). |
+| Stroke to Path | **İlk geometri teslimi uygulandı:** cap/join/alignment/dash ve gerçek delikli bant; native Outline ile tek hesap. [Sözleşme ve kalanlar](../spline-outline-band.md). |
+| Outline v2'nin tam kapsamı | Adaptif polyline ve bağımsız band paint'i uygulandı; eğri-fit, ayarlanabilir yoğunluk ağırlıkları, preset ve clipboard kalır. [Ayrıntılı plan](spline-outline-band-v2-plan.md). |
 | Boolean Paths modifier | Kaynak operandları ve sıralamayı stack içinde koruma, upstream hedef kimlikleri; layer referansları eklenirse bağımlılık ve döngü denetimi. Mevcut native Boolean işlemleri kullanılmaya devam eder. |
 | Wiggle Paths | Deterministik seed/zaman, zamansal süreklilik, seek ve çıktı eşliği. |
 | Path Dynamics | Physics sahibi, sabit zaman adımı, rest state, seek/cache ve bake yaşam döngüsü. |

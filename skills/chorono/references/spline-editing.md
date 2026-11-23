@@ -153,7 +153,7 @@ The dock has no Enter/Exit edit button; context menus and 1/2/3 enter Edit.
 New UI modifier rows target all eligible stage input independently of the Edit
 selection. Use selection/target lists explicitly stage a narrower scope; Execute
 commits it. Explicit selection arguments in native command APIs keep their meaning.
-Eight **static parametric spline modifiers** use
+The eight **Phase 1 static parametric spline modifiers** use
 distinct recipe types: `offsetPath`, `roundCorners`, `pathSimplify`,
 `pathSmoothing`, `pathResample`, `zigZag`, `puckerBloat`, `splineRepeater`.
 They retain source and execute in stack order; numeric/scope
@@ -177,4 +177,17 @@ Undo restores its exact recipe. Existing `offset`/`outline`/`chamfer`/`fillet`
 records retain compatibility behavior. These are native registry choices, not
 new `spline.edit(operation)` discriminators or new MCP tool names. Headless
 source-edit operations above keep their existing contracts. Animated modifier
-parameters, geometric Outline v2 and advanced path effects remain future work.
+parameters and advanced path effects remain future work.
+
+Native Edge/Object **Outline · Stroke to Path** provides preview/Cancel/Apply
+without creating a modifier. It emits closed polygon bands with local-pixel
+width, inside/center/outside (closed), center/left/right (open chains),
+Butt/Round/Square caps, Miter/Round/Bevel joins, dashes and holes. Keep source
+appends an Object in the same spline. **Stroke to Path** (`strokeToPath`) is its
+source-retaining static modifier counterpart, accessible outside Edit and
+committed by Execute. Paint stays in Properties: bands initially bind root
+stroke to fill; Paint target allows custom independent Object paint, retained
+through deterministic Execute/portable save/clone/runtime output. These are
+native editor choices, not new MCP tool names or `spline.edit` operation kinds.
+Output is tolerance-bounded polyline; full v2 Bézier fitting, weighting controls
+and preset/clipboard extensions remain planned.

@@ -1,6 +1,11 @@
 # Spline Outline v2 — geometrik bant ve paylaşılan çizgi stili
 
-Durum: **tasarım önerisi; v2 uygulaması başlamadı**. 22 Kasım 2026.
+Durum: **ilk geometri/görünüm teslimi uygulandı; tam v2 genişletmeleri sürüyor**.
+23 Kasım 2026. Uygulanan sözleşme ve kalan sınırlar
+[Outline / Stroke to Path tesliminde](../spline-outline-band.md) yazılıdır.
+Bu belgenin aşağıdaki tam hedef sözleşmesi, uygulanmamış fit/preset kapsamını
+uygulanmış API gibi tanımlamaz. Boya ayarları son kullanıcı kararıyla yalnız
+Properties'tedir; Edit içinde Geometry ayarları kalır.
 
 ## Amaç ve yorum
 

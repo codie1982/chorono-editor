@@ -185,3 +185,14 @@ source migration, source editing/bake, persistence, clone, render/runtime and
 asset lifetime. The isolated native Canvas/Edit host is prepared with
 `node scripts/perf/geometry-conversion.mjs /tmp/chorono-conversion-qa` and served
 with `node scripts/perf/serve.mjs /tmp/chorono-conversion-qa 2012`.
+
+## Stroke to Path / native Outline
+
+`strokeToPath` is a modern spline strategy sharing the pure band engine in
+`lib/spline/band` with the native Edge/Object Outline preview/Apply tool.
+Legacy `outline` is unchanged. Local width/alignment/caps/joins/dashes/spacing
+are static settings; all/explicit Object targets use the existing source-first
+stack. Independent Object paint belongs to Properties and survives Execute
+through stable output IDs. Native Outline adds no modifier row. See
+[the band contract](../../../docs/tr/spline-outline-band.md) for module entry
+points, budgets, serialization, lifecycle, output and remaining v2 scope.
