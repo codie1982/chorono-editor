@@ -46,7 +46,7 @@ describe('Geometry Edit dock', () => {
   it('puts structured-grid geometry in Source and keeps other mesh settings selectable', () => {
     const props = panelProps(newStructuredGridMesh2DLayer())
     const html = renderToStaticMarkup(<GeometryEditPanel {...props} />)
-    expect(html).toMatch(/Mesh modifiers[\s\S]*Add Mesh modifiers[\s\S]*Texture[\s\S]*Pins[\s\S]*Quad Diagonal/)
+    expect(html).toMatch(/Add Mesh modifiers[\s\S]*>Mesh modifiers<[\s\S]*Texture[\s\S]*Pins[\s\S]*Quad Diagonal/)
     expect(html).not.toMatch(/Deformation clip asset|Pin selection presets|Modeling operations/)
     expect(props.onLayerChange).not.toHaveBeenCalled()
   })

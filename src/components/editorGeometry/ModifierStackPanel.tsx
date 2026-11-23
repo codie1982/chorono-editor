@@ -49,6 +49,8 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
   const disabled = !!(props.conversionDisabled || layer.locked || layer.frozen || layer.hidden || layer.instanceOf)
   const input = useMemo(() => modifierStackService.evaluator.execute(stack, { layerId: layer.id }), [stack, layer.id])
   const available = geometryModifierRegistry.list().filter(item => !item.legacySplineTool && item.addable && item.inputs.includes(input.kind))
+  const choices = (['spline', 'mesh'] as const).map(category => ({ kind: category === 'spline' ? 'Spline' as const : 'Mesh' as const,
+    items: available.filter(item => item.category === category).map(item => ({ id: item.type, label: item.label })) })).filter(group => group.items.length)
   const patches = Object.fromEntries(stack.modifiers.flatMap(record => drafts[record.id]?.base === record ? [[record.id, drafts[record.id].patch]] : []))
   const selectedRecord = stack.modifiers.find(item => item.id === selected)
   const selectedIndex = stack.modifiers.findIndex(item => item.id === selected)
@@ -76,7 +78,10 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
   return <section aria-label="Modifier stack" data-editor-input-scope className="min-w-0 space-y-3 rounded-lg border border-gray-700 bg-gray-950/20 p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-semibold">Modifier stack</h3>
-      <button type="button" disabled={disabled || !stack.modifiers.length} onClick={() => execute()} className="min-h-8 rounded border border-orange-400/50 bg-orange-500/10 px-3 py-1.5 text-orange-100 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-30">Execute stack</button>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {choices.map(group => <ModifierPicker key={group.kind} kind={group.kind} items={group.items} showHeading={false}
+          selected="" disabled={disabled} onSelect={type => { if (type) add(type) }} />)}
+      </div>
     </div>
     <p className="text-gray-400">Source → modifiers, top to bottom → result. Edit settings, then Execute.</p>
     {error && <p ref={alert} tabIndex={-1} role="alert" className="rounded border border-amber-600/60 bg-amber-950/30 p-2 text-amber-200 focus:outline-none">{error}</p>}
@@ -105,10 +110,10 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
         </div>
       })}
     </div>
-    {(['spline', 'mesh'] as const).map(category => {
-      const items = available.filter(item => item.category === category).map(item => ({ id: item.type, label: item.label }))
-      return items.length ? <ModifierPicker key={category} kind={category === 'spline' ? 'Spline' : 'Mesh'} items={items} selected="" disabled={disabled} onSelect={type => { if (type) add(type) }} /> : null
-    })}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      {!!choices.length && <h3 className="font-semibold">{choices.map(group => group.kind).join(' / ')} modifiers</h3>}
+      <button type="button" disabled={disabled || !stack.modifiers.length} onClick={() => execute()} className="ml-auto min-h-8 rounded border border-orange-400/50 bg-orange-500/10 px-3 py-1.5 text-orange-100 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-30">Execute stack</button>
+    </div>
     {selectedRecord && selectedDescriptor && activeDraft && <div className="space-y-3 rounded border border-gray-700 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{selectedDescriptor.label}</h4><span className="text-gray-400">{selectedDescriptor.category === 'spline' ? 'Spline' : 'Mesh'} modifier</span></div>
       {selectedDescriptor.description && <p className="text-gray-400">{selectedDescriptor.description}</p>}

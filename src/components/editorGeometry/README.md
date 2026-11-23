@@ -169,7 +169,9 @@ world-to-local inverse; Shift uses the same frame and shared applyAxisLock math.
 Geometry changes use the same native pointer transaction and keep Layer TRS/origin,
 keys and the session ghost fixed. No transform frame is restored in Edit mode.
 The modifier stack has a full frame and a bounded scroll region; selection reveal
-scrolls only that region. Header, picker and settings stay outside it. Its focus
+scrolls only that region. Add modifiers sits beside the stack title; Execute
+sits below the ordered list, above the selected settings. Both remain outside
+the list's scroll region. Its focus
 scope owns native keyboard input so scrolling/buttons cannot nudge scene geometry.
 New spline paint is Fill None and solid black Stroke 3 px, with opt-in fill only
 in Properties. Conversion supplies the same fallback when no visible authored
