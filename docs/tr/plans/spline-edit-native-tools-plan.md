@@ -91,13 +91,37 @@ art arda pick/Esc/Undo, Object Simplify/Smooth panel/menü ve PNG çıktısını
 Kabul sayfası `scripts/perf/spline-component-tools.mjs` ile hazırlanır; üretim
 canvas, inspector ve native geçmiş kullanır, bağlı kullanıcı sahnesini değiştirmez.
 
+## Teslim — Object Subdivide ve Interpolation (23 Kasım 2026)
+
+Subdivide, seçili Object'lerin tüm edge'lerini (delikler dahil) mevcut De Casteljau
+hesabıyla eşit parametreli 2–64 parçaya böler. Varsayılan 2; panel ve sağ tık aynı
+geçici bölme sayısını kullanır. Eski anchor konumları, contour/Object sahipliği ve
+eğri şekli korunur. Her uygulama bir Undo/Redo'dur; yeni modifier oluşmaz.
+
+Interpolation Object seçim özelliğidir. Yerel px toleransı 0.01–10 aralığında
+saklanır; Apply ve Default ayrı Undo'dur. Kaynak vertex/kollar ve exact Canvas/SVG
+geometrisi değişmez; gerçek adaptif örnekleme ve Mesh dönüşümü ayarı kullanır.
+Mesh'te Object ve dönüştürme toleranslarından daha hassası geçerlidir. Omitted
+ayar eski tüketici varsayılanını korur; varsayılanı geri getir alanı kaldırır.
+Çoklu seçim, preset sağ tık menüsü, örnek sayısı, save/load/copy ve native/MCP
+kimlik/Undo sözleşmeleri tamamlandı. Kapsam ve sınırlar
+[Spline Edit belgesindedir](../spline-edit-and-paint.md#object-subdivide-ve-interpolation).
+
+Doğrulama: 572 dosyada 4.092 test ve gerçek Chrome'da yedi kabul grubu geçti.
+Interpolation değişiminde kaynak path ve gerçek PNG pikselleri aynıdır; Mesh
+örnekleme yoğunluğu, delikler ve explicit dönüşüm toleransı ayrıca doğrulanır.
+Typecheck, MCP, CLI ve production build başarıyla tamamlandı; Next build
+kontrolleri sırasında kapalı tutuldu.
+
 ## Sonraki teslim — diğer kontur araçları
 
-Subdivide geometriye nokta ekler. Interpolation
-örnekleme hassasiyetidir ve kendi başına vertex eklemez. Kısmi Edge Offset/Outline
-bağlantılı seçili zincirle sınırlı olacaktır.
+Kısmi Edge Offset/Outline bağlantılı seçili zincirle sınırlı olacaktır.
 
-## Sonraki teslim C — Outline ve gelişmiş transform
+## Faz 2 — Outline ve gelişmiş transform
+
+23 Kasım kapsam kararı: temel statik spline modifier'ları ve sonraya bırakılan
+ileri işlemler [modifier faz planında](spline-modifier-phases-plan.md) tanımlıdır.
+Animasyonlu modifier parametreleri ilk fazın ön koşulu değildir.
 
 [Outline v2](spline-outline-band-v2-plan.md) gerçek kapalı bant üretir. Varsayılan
 kaynak yerine bant; Keep source yeni Object ekler. Kalınlık sabit, köşe/eğride

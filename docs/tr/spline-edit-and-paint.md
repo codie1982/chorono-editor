@@ -294,6 +294,66 @@ tekrarlı viewport pick ve Esc/Undo; menüden tipli ekleme; panel/menü Simplify
 anchor/delikleri koruyan panel/menü Smooth; gerçek PNG renderer/export. Ekran
 çıktısında active Edge aracı ve yeni anchor işaretleri ayrıca incelenmiştir.
 
+## Object Subdivide ve Interpolation
+
+**Subdivide:** Object → Selection actions → Topology içinde 2–64 parça/edge
+seçilir (varsayılan 2), Subdivide uygulanır. Sağ tık aynı controller tercihine
+bağlıdır; sayı yazmak kaynak/geçmiş değiştirmez. Seçili Object'lerin dış ve delik
+konturlarının bütün edge'leri `divideSplineEdges` ile eşit **parametre** aralığında
+bölünür; bu, eşit yay uzunluğu dağılımı değildir. Line/Q/C Bézier şekli, orijinal
+anchor konumları ve Object/contour kimlikleri korunur. Bölünmüş segmentler yeni
+ID alır; kaldırılan canlı reader veya kilitli kol için native guard tüm işi
+reddeder. Seçim yoksa tüm spline'a genişleme olmaz. `objectDetail.ts` mevcut
+Object seçim ve 10.000-point/edge allocation guard'larını kullanır; sonuç UI
+Object seçimini korur, kaynak primitive düzenleme metadata'sı mevcut komutla işlenir.
+
+**Interpolation:** Object seçim özelliklerinde 0.01–10 layer-local px toleransı,
+Apply ve Use default interpolation bulunur. Sağ tık → Interpolation'da aynı
+native komuta bağlı preset'ler vardır. Çoklu/mixed seçim desteklenir; her Apply
+ve Default ayrı Undo'dur, aynı ayarı tekrarlamak boş Undo oluşturmaz.
+
+Kaynak `SplineSubShape.interpolation?:{version:1,tolerancePx:number}` kaydıdır.
+Omission, mevcut tüketicinin eski toleransını korur; Default alanı kaldırır.
+Kaynak point/handle/segment/contour kayıtları, TRS/origin, paint, generator bilgisi
+ve seçilmemiş Object'ler değişmez. Bu bir modifier veya yeni kaynak vertex listesi
+değildir. Canvas/SVG exact Bézier çizmeye devam eder; viewport'ta köşeleşme vaadi
+yoktur. Paneldeki örnek sayısı türetilmiştir ve scene/Undo'ya yazılmaz.
+
+Giriş noktaları:
+
+- `spline/edit/objectDetail.ts`: saf Subdivide ve interpolation metadata edit'i;
+  ön kontrol toplam 8.192 örnek / mevcut Object seçim bütçeleriyle sınırlıdır.
+- `spline/sampling/interpolation.ts`: sürüm/aralık doğrulama, contour sahibinden
+  yerel tolerans çözümleme. Mesh dönüştürücünün toleransı bir üst hata sınırıdır;
+  efektif tolerans `min(Object preference, conversion tolerance)` olur. Omitted
+  preference conversion değerini aynen korur.
+- `sampleContourEdges`: explicit flatness olmadan Object ayarını, sonra .25 yerel
+  px varsayılanını kullanır. Mevcut sayısal solver'ın explicit flatness değeri
+  kendi sözleşmesini korur. Yeni authored sampling'de finite chord/control hull
+  testi collinear overshoot'u da yakalar; depth 12'de istenen tolerans sağlanamazsa
+  tanıyla reddedilir. Eski kayıtlarda legacy depth davranışı değişmez.
+- `SplineBoundaryRingBuilder`: authored ayar varsa daha hassas toleransla strict
+  örnekleme; mevcut Earcut/alan/delik doğrulaması, UV ve fingerprint akışı sürer.
+- `SplineTopologyCommand` / strict operasyon şeması: mevcut komut, source CAS,
+  key/driver/lock/instance/read-only ve reader korumaları; her değişiklik tek Undo.
+  ParseSceneJson ve topology validation supplied interpolation v1'i doğrular.
+
+Örnek native/MCP operasyonları:
+
+```ts
+{ kind: 'topology', selection: { mode: 'object', ids: [objectId] },
+  action: { kind: 'subdivide', parts: 4 } }
+{ kind: 'topology', selection: { mode: 'object', ids: [objectId] },
+  action: { kind: 'interpolation', tolerancePx: .1 } }
+// Eski tüketici varsayılanına dön:
+{ kind: 'topology', selection: { mode: 'object', ids: [objectId] },
+  action: { kind: 'interpolation', tolerancePx: null } }
+```
+
+572 dosyada 4.092 test; gerçek Chrome'da yedi kabul grubu. Native/MCP Undo/Redo,
+portable kayıt, clone/copy, Q/C exact bölme, Mesh delikleri/tolerans önceliği,
+gerçek panel/menü ve Interpolation öncesi/sonrası PNG piksel eşliği doğrulanır.
+
 ## Doğrulama ve giriş noktaları
 
 Saf testler materialization/Undo/reader guards, path islands/holes, Mesh

@@ -3867,3 +3867,24 @@ taşımadan tangent'leri düzenler. Panel ve sağ tık ortak komut/uygunluk kura
 kullanır. Araç/tolerans geçicidir, modifier üretmez; delikler, layer TRS/origin ve
 seçilmemiş geometri korunur. Sınırlar ve kalan aşamalar
 [native Edit planında](plans/spline-edit-native-tools-plan.md) belgelenir.
+
+### 2D Spline modifier kapsamı — 23 Kasım 2026
+
+Planlı Faz 1 mevcut statik Execute akışını kullanır: temel Offset Path, Round
+Corners, Simplify, Smoothing, Resample, Zig Zag, Pucker & Bloat ve Repeater.
+Animasyonlu parametreler ön koşul değildir. Variable Width, Stroke to Path,
+Outline v2'nin tam kapsamı, Boolean modifier, Wiggle ve Dynamics Faz 2'dedir.
+Mevcut native Edit, Stroke Trim ve Follow Path davranışları korunur; bu plan
+yeni modifier'ların uygulanmış olduğu anlamına gelmez.
+[Fazlar ve yürütme sözleşmesi](plans/spline-modifier-phases-plan.md).
+
+### Native Spline Edit — Object Subdivide / Interpolation, 23 Kasım 2026
+
+Object Subdivide, seçili kontur/delikleri exact Bézier bölmesiyle 2–64 eşit
+parametre parçasına ayırır; panel/sağ tık aynı bölme sayısını kullanır.
+Interpolation, Object'e yerel tolerans metadata'sı yazar; kaynak vertex'leri ve
+exact render eğrileri korunur. Adaptif örnekleme ve Mesh dönüşümü ayarı tüketir;
+conversion tolerance daha hassassa önceliklidir. Default metadata'yı kaldırır.
+Her değişiklik ayrı Undo/Redo'dur; modifier satırı oluşmaz. 572 dosyada 4.092 test
+ve gerçek Chrome'da yedi kabul grubu geçti. Ayrıntılar
+[Spline Edit sözleşmesinde](spline-edit-and-paint.md#object-subdivide-ve-interpolation).

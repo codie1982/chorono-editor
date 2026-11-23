@@ -23,7 +23,7 @@ After conflict, read current source and prepare again rather than force Apply.
 
 | Operation kind | Address / meaning |
 | --- | --- |
-| `topology` | `selection:{mode,ids}`, `action:{kind,...}`. Delete/Copy/Connect/Weld/Refine/Divide/Close/Open/Reverse obey native mode constraints. Point also supports `break`, `fuse`, `resetTangents`, `pasteTangents`; Edge supports `split`, `addVertex`, `trim`, `extend`; Object supports `simplify`, `smooth`. Divide uses 2–64 equal-parameter pieces. |
+| `topology` | `selection:{mode,ids}`, `action:{kind,...}`. Delete/Copy/Connect/Weld/Refine/Divide/Close/Open/Reverse obey native mode constraints. Point also supports `break`, `fuse`, `resetTangents`, `pasteTangents`; Edge supports `split`, `addVertex`, `trim`, `extend`; Object supports `simplify`, `smooth`, `subdivide`, `interpolation`. Divide uses 2–64 equal-parameter pieces. |
 | `append` | Native primitive plus matching params; adds a SubShape to the same spline. |
 | `draw` | NEW local `points`, optional existing `startPointId` and `endPointId`; Continue/Join references the actual open endpoints. Auto Close closes ≥3 anchors. |
 | `transform` | Explicit selection and local x/y, clockwise rotation delta, positive scale factors around anchor-bounds center. |
@@ -82,6 +82,21 @@ no Undo. Interactive budgets are 2,048 selected anchors / 64 contours / 4,096
 before+after boundary samples; Simplify allows 500,000 control comparisons.
 Ambiguous/crossing/changed-hole results refuse atomically. Sampling is only the
 .01 local-px topology diagnostic, not Simplify's source-deviation guarantee.
+
+Object `subdivide` accepts optional `parts` (integer 2–64, default 2), splitting
+every owned edge, including hole contours, into equal-parameter pieces with the
+existing exact Bézier splitter. Retained anchors and Object/contour IDs stay;
+new segment IDs are prepared once. This is not arc-length resampling.
+
+Object `interpolation` requires `tolerancePx` (.01–10 layer-local px or null).
+It writes only `subShapes[id].interpolation:{version:1,tolerancePx}`; null removes
+that preference and restores each consumer's old default. No source vertices,
+handles or exact render curves change. Adaptive sampling uses this preference;
+Mesh conversion uses the finer of Object/operation tolerance. Supplied Object
+precision refuses unmet depth/sample budgets instead of silently clamping.
+Explicit numerical solver tolerances keep their existing contracts. Source
+selection/budgets/locks/geometry writers still use native guards. Each changed
+Apply or reset is one Undo; identical settings add no Undo.
 
 Boolean `operation` values are `union`, `subtract`, `intersect`, `xor`. These
 retain original inputs in a recipe group. The editor's Add Spline picker shares
