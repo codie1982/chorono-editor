@@ -3888,3 +3888,15 @@ conversion tolerance daha hassassa önceliklidir. Default metadata'yı kaldırı
 Her değişiklik ayrı Undo/Redo'dur; modifier satırı oluşmaz. 572 dosyada 4.092 test
 ve gerçek Chrome'da yedi kabul grubu geçti. Ayrıntılar
 [Spline Edit sözleşmesinde](spline-edit-and-paint.md#object-subdivide-ve-interpolation).
+
+### Statik Spline modifier — Faz 1 ilk paket, 23 Kasım 2026
+
+Offset Path, Round Corners, Path Simplify ve Path Smoothing ayrı kayıt türleriyle
+uygulandı. Native Edit hesaplarını paylaşırlar; kaynak korunur, ayar taslakları
+Execute ile sırayla ve tek Undo'da uygulanır. Object hedefleri modifier'ın kendi
+girdisinden seçilir. Sıralama, toggle, silme, Bake, portable kayıt, clone,
+runtime/renderer ve Mesh dönüşümü doğrulandı; son modifier kapanınca panel açık
+kalıp Object edit'e döner. Eski dört modeling kaydı ve kapalı legacy history
+akışı korunur. 574 dosyada 4.109 test ve gerçek Chrome'da sekiz kabul grubu geçti.
+[Teslim sözleşmesi](spline-static-modifiers.md). Resample, Zig Zag, Pucker & Bloat
+ve Repeater sonraki temel paketlerdir; ileri işler Faz 2'de kalır.

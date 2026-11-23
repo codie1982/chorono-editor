@@ -9,6 +9,7 @@ contains edit-mode controls and a single persistent ordered modifier stack.
   selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
   selectedPointIds={splineEdit.bank.point}
   selectedContourIds={selectedContourIds}
+  selectedObjectIds={splineEdit.mode === 'object' ? splineEdit.bank.object : []}
   getScene={editor.getScene} getRevision={editor.getRevision}
   getDocumentSignal={editor.getDocumentSignal}
   isTransactionActive={editor.isTransactionActive}
@@ -22,8 +23,9 @@ contains edit-mode controls and a single persistent ordered modifier stack.
 ```
 
 `ModifierStackPanel` owns only local selection/drafts/errors. Registry descriptors
-provide category, supported input types and setting fields. Spline offers Offset,
-Outline, Chamfer and Fillet; Mesh offers Smooth, Subdivision and Deformation Clip. Subdivision owns a
+provide category, supported input types and setting fields. Spline offers Offset
+Path, Round Corners, Path Simplify and Path Smoothing; compatibility Offset,
+Outline, Chamfer and Fillet retain old records. Mesh offers Smooth, Subdivision and Deformation Clip. Subdivision owns a
 Delaunay-first algorithm selector, Grid/Karelaj, levels and base cell size. Smooth
 owns amount, iterations and Keep boundary. Optional descriptor descriptions
 explain each operation without panel-specific algorithm branches. New registered
@@ -43,6 +45,13 @@ Rebuild clears converted point overrides; **Bake stack** makes the validated
 result ordinary editable geometry. Generated points are read-only while geometry
 modifiers are enabled. Mode buttons are disabled accordingly; conversion-only
 Splines remain directly editable. Mesh texture and pins retain existing owners.
+
+Object target fields list the selected modifier's actual prefix input, even
+while final generated geometry is read-only. Object IDs join point/contour
+selection in the native command policy and topology signature. Modern stacks
+are visible; legacy-only Spline stacks retain the closed Source / History
+drawer. Disabling/removing the last geometry operation or Bake re-enters Object
+mode and keeps the Edit panel available. [Static Spline contracts](../../../docs/tr/spline-static-modifiers.md).
 
 `ModifierSettingsForm` renders class-owned schemas without geometry algorithms.
 `ModifierSourceSettings` owns source-parameter drafts. `ModifierActionIcon` supplies

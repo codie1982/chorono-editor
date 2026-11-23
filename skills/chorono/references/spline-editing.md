@@ -144,3 +144,15 @@ unselected geometry, layer TRS and paint. Removed live geometry readers refuse.
 Partial-chain Edit Offset and geometric Outline v2 are not available yet.
 Existing serialized modifier records remain supported; no automatic load-time
 bake occurs. Fill/Stroke stay in Properties.
+
+The native Edit dock also offers four **static parametric modifiers** using
+distinct recipe types: `offsetPath`, `roundCorners`, `pathSimplify`,
+`pathSmoothing`. They retain source and execute in stack order; numeric/scope
+drafts apply only on Execute. Offset Path preserves Object identity; Simplify/
+Smoothing accept stage-input `objectIds` and share the native edit algorithms.
+Disabling/removing the last active operation or Bake returns to Object edit;
+Undo restores its exact recipe. Existing `offset`/`outline`/`chamfer`/`fillet`
+records retain compatibility behavior. These are native registry choices, not
+new `spline.edit(operation)` discriminators or new MCP tool names. Headless
+source-edit operations above keep their existing contracts. Animated modifier
+parameters, geometric Outline v2 and advanced path effects remain future work.

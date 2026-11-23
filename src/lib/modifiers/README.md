@@ -91,7 +91,8 @@ const result = pending.execute() // 20; commit only after successful execution
 ```
 
 Production classes currently registered: Convert Spline, Convert 2D Mesh,
-Offset, Outline, Chamfer, Fillet, Smooth, Subdivision and Deformation Clip.
+Offset, Outline, Chamfer, Fillet, Smooth, Subdivision, Deformation Clip, Offset
+Path, Round Corners, Path Simplify and Path Smoothing.
 Subdivision defaults to constrained Delaunay and separately offers Grid/Karelaj;
 it does not use midpoint 1→4 triangle splitting.
 [Mesh modeling algorithms and limits](../../geometry/mesh2d/modeling/README.md). `MeshExtension.test.ts`
@@ -100,10 +101,24 @@ verifying that new connectivity works without changing runner or panel.
 
 The four Spline modeling classes (Offset, Outline, Chamfer, Fillet) are now
 compatibility-only UI entries (`descriptor.legacySplineTool`). Old records and
-programmatic callers retain their contracts and evaluator; new interactive work
-uses native spline Edit tools and commits geometry with Apply. The Spline panel
-keeps existing stacks in a closed Source / History drawer, with explicit undoable
-Bake-to-editable admission. Mesh modifier creation/execution is unchanged.
+programmatic callers retain their contracts and evaluator. Native spline Edit
+tools still commit source geometry with Apply. Modern static Spline choices use
+distinct `offsetPath`, `roundCorners`, `pathSimplify`, `pathSmoothing` type IDs.
+Offset Path shares the offset adapter but preserves Object identity; Round
+Corners shares Fillet targeting/validation; Simplify/Smoothing share native pure
+Object algorithms. [Contracts, defaults and limits](../../../docs/tr/spline-static-modifiers.md).
+
+Modern `SplineModifier` operations apply the native locked-point/handle record
+guard before publishing output. Compatibility descriptors retain their previous
+lock behavior; no old recipe is silently changed by the new adapters.
+
+Modern/plain Spline stacks are visible in the normal framed panel. Legacy-only
+modeling stacks remain in closed Source / History. The generic field kind
+`objects` and `selection.objectIds` select normalized stage-input Objects;
+settings capture the same topology signature as point/contour targets. Native
+selection never silently binds to final generated IDs. Disabling/removing the
+last active geometry operation or Bake returns to editable Object mode while
+retaining the panel session. Mesh creation/execution is unchanged.
 
 ## Data, units and compatibility
 
@@ -122,7 +137,7 @@ saved local tolerance. Mesh sampling reuses `SplineToMeshConverter` and Earcut.
 Existing numerical limits and degeneracy refusals remain in those owners.
 
 Generated Spline IDs are deterministic per modifier and retained source IDs stay
-stable. Explicit point/contour targets capture connectivity identity; changed
+stable. Explicit point/contour/Object targets capture connectivity identity; changed
 upstream topology refuses instead of silently rebinding those IDs. Mesh pins
 protect connectivity/rest positions. Deformation clips capture both topology
 and rest identity: upstream changes require explicitly rebinding the clip.

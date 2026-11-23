@@ -1,6 +1,6 @@
 # 2D Spline Modifier — Faz 1 / Faz 2
 
-Durum: **uygulama önerisi; yeni modifier teslimi değildir**. 23 Kasım 2026.
+Durum: **Faz 1 ilk paket uygulandı; diğer paketler planlıdır**. 23 Kasım 2026.
 Kullanıcı kararı: ilk faz mevcut statik Execute akışıyla ilerler. Animasyonlu
 modifier parametreleri ilk fazın ön koşulu değildir; ileri işlemler Faz 2'dedir.
 Native Edit araçlarının teslim durumu
@@ -21,8 +21,10 @@ Native Edit araçlarının teslim durumu
 
 Faz 1 uygulama sırası:
 
-1. Offset Path, Round Corners, Path Simplify ve Path Smoothing: mevcut
-   hesaplara yeni statik parametrik adapter'lar.
+1. **Tamamlandı:** Offset Path, Round Corners, Path Simplify ve Path Smoothing;
+   mevcut hesaplara yeni statik parametrik adapter'lar. Ayarlar, Execute, hedef
+   seçimi, sıra/toggle/remove/Bake, Undo/Redo ve çıktı doğrulaması
+   [teslim sözleşmesindedir](../spline-static-modifiers.md).
 2. Path Resample: sonraki deformasyonlar için ortak uzunluk/örnekleme hazırlığı.
 3. Zig Zag ve Pucker & Bloat.
 4. Temel Repeater.

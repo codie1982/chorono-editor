@@ -132,6 +132,12 @@ kullanır. Appearance/preset/clipboard genişletmeleri Outline v2'de kalır.
 
 ## Kabul
 
+23 Kasım statik parametrik paketi native Edit araçlarına ek bir akıştır:
+Offset Path, Round Corners, Path Simplify ve Path Smoothing ayrı modifier type
+kimlikleriyle [uygulandı](../spline-static-modifiers.md). Kaynak değiştiren Edit
+araçları ve eski kayıtların değerlendirmesi korunur. Yeni chooser bu modern
+tipleri sunar; native araçları modifier'a çevirmeden hesapları paylaşır.
+
 İlk teslim için native panel/menu, legacy bake+Undo, Offset replace/append ve
 Chamfer/Fillet gerçek worker testleri vardır. Ayrıca açık/kapalı/delikli contour,
 Bézier, animasyonlu/nonuniform parent, kilit/key/ref/stale-source, TRS/paint ve
