@@ -21,6 +21,10 @@ export interface GeometryModifierDescriptor extends ModifierDescriptor {
   readonly output: GeometryKind
   /** True only when source-point editing remains unambiguous after this step. */
   readonly preservesSourceEditing?: boolean
+  /** Authoring edits this step's INPUT spline, while rendering uses its output.
+   * Distinct from result-point identity preservation. Admitted only for a single
+   * terminal owner with a source-preserving conversion prefix. */
+  readonly sourceEditing?: 'inputSpline'
   /** Existing records/programmatic callers remain supported; hidden from new UI instances. */
   readonly legacySplineTool?: boolean
 }

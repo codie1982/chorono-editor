@@ -1,7 +1,8 @@
 import type { ChronoScene, Layer } from '../types'
 import type { ModifierGeometry, GeometryModifierStackData } from './geometryTypes'
 import { geometryModifierRegistry } from './builtins'
-import { ModifierStackService } from './ModifierStackService'
+import { canonicalJson } from '../hash/CanonicalRecordHash'
+import { modifierEditsInputSpline, ModifierStackService } from './ModifierStackService'
 import { modifierGeometryDriverReason } from './sourcePolicy'
 
 export const modifierStackService = new ModifierStackService(geometryModifierRegistry)
@@ -58,7 +59,10 @@ export function assertSceneModifierStacks(scene: ChronoScene): void {
     const reason = modifierGeometryDriverReason(scene, layer)
     if (reason) throw new Error(reason)
     modifierStackService.evaluator.validate(layer.modifierStack)
-    if (!layer.instanceOf) modifierStackService.execute(layer, layer.modifierStack)
+    if (!layer.instanceOf) {
+      const canonical = modifierStackService.execute(layer, layer.modifierStack)
+      if (modifierEditsInputSpline(layer) && canonicalJson(layer.spline) !== canonicalJson(canonical.spline)) throw new Error('Live Outline authoring geometry differs from its editable input source.')
+    }
   }
 }
 /** Strict portable runtime geometry. Source recipes belong only in editable

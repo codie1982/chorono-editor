@@ -1,4 +1,5 @@
 import type { Layer } from '../types'
+import { sourceEditingIndex, withEditedInputSpline } from './sourceEditing'
 import { modifierOutputReadOnly } from './ModifierStackService'
 import { modifierStackService } from './scene'
 import { canonicalJson } from '../hash/CanonicalRecordHash'
@@ -19,6 +20,7 @@ export function reconcileModifierLayerPatch(previous: Layer, patch: Partial<Laye
   if (!geometryChanged) return next
   if (modifierOutputReadOnly(previous)) throw new Error('Disable geometry modifiers or Bake stack before editing source points.')
   if (next.type === 'spline' && next.spline) {
+    if (sourceEditingIndex(stack, modifierStackService.registry) !== undefined) return modifierStackService.execute(next, withEditedInputSpline(stack, next.spline, modifierStackService.registry))
     if (stack.source.kind === 'spline') return modifierStackService.execute(next, { ...stack, source: { kind: 'spline', spline: next.spline } })
     const index = stack.modifiers.findIndex(item => item.enabled && item.type === 'convertSpline')
     if (index >= 0) return modifierStackService.execute(next, { ...stack, modifiers: stack.modifiers.map((item, i) => i === index ? { ...item, settings: { ...item.settings, edited: next.spline } } : item) })

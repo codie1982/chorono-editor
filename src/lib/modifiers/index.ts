@@ -2,7 +2,7 @@ export { Modifier } from './Modifier'
 export { ModifierRegistry } from './ModifierRegistry'
 export type { ModifierRegistration } from './ModifierRegistry'
 export { ModifierStack } from './ModifierStack'
-export { ModifierStackService, modifierOutputReadOnly } from './ModifierStackService'
+export { ModifierStackService, modifierOutputReadOnly, modifierEditsInputSpline } from './ModifierStackService'
 export { geometryModifierRegistry, createGeometryModifierRegistry } from './builtins'
 export { modifierStackService, projectModifierLayer, projectModifierStacks, assertSceneModifierStacks, flattenModifierStacksForOutput,
   clearModifierGeometryCache, modifierGeometryCacheStatistics } from './scene'

@@ -1,3 +1,4 @@
+import { sourceEditingIndex } from './sourceEditing'
 import { meshModifierRestIdentity } from './mesh/restIdentity'
 import type { Layer } from '../types'
 import type { ModifierGeometry, GeometryModifierStackData } from './geometryTypes'
@@ -37,10 +38,26 @@ export class ModifierStackService {
     return structuredClone({ version: 1, source, modifiers })
   }
 
-  /** Recompute the complete result, retaining identity/placement and independent
-   * paint except representation-entry defaults. Pins cannot silently migrate. */
+  /** Validate the complete result while retaining identity/placement/paint.
+   * For an admitted input-editing owner, the authored Layer keeps the input
+   * spline, not the generated boundary snapshot. Frame/output consumers use
+   * withGeometry/projectModifierLayer. Legacy result storage is unchanged. */
   execute(layer: Layer, stack: GeometryModifierStackData): Layer {
-    return this.withGeometry(layer, stack, this.evaluator.execute(stack, { layerId: layer.id }))
+    const result = this.withGeometry(layer, stack, this.evaluator.execute(stack, { layerId: layer.id }))
+    const index = sourceEditingIndex(stack, this.registry)
+    if (index !== undefined) {
+      const input = index === 0 ? stack.source : this.evaluator.execute(stack, { layerId: layer.id }, index)
+      if (input.kind !== 'spline') throw new Error('The editable Outline input must be a Spline.')
+      return { ...result, spline: input.spline }
+    }
+    return result
+  }
+  /** Explicitly materialize evaluated boundaries and drop the recipe. Unlike
+   * execute (authoring), Bake never substitutes an editable upstream source. */
+  bake(layer: Layer): Layer {
+    const stack = this.stackFor(layer)
+    const result = this.withGeometry(layer, stack, this.evaluator.execute(stack, { layerId: layer.id }))
+    return { ...result, modifierStack: undefined, geometryConversion: undefined, splinePaintOverrides: undefined }
   }
   /** Materialize an already evaluated result. This is the single Layer adapter
    * used by commands, viewport projection, clone and output flattening. */
@@ -78,8 +95,15 @@ export class ModifierStackService {
   }
 }
 
-/** Editing generated points would overwrite only the result, not its source.
- * Conversion-only splines remain editable through their authored override. */
+/** Generated result points remain readonly. An explicit input-editing owner
+ * is admitted separately: its authored Layer carries original input points.
+ * Conversion-only splines keep their existing authored-override contract. */
 export function modifierOutputReadOnly(layer: Layer | null | undefined): boolean {
+  if (layer?.modifierStack && sourceEditingIndex(layer.modifierStack, geometryModifierRegistry) !== undefined) return false
   return !!layer?.modifierStack?.modifiers.some(item => item.enabled && !geometryModifierRegistry.get(item.type).descriptor.preservesSourceEditing)
+}
+
+/** Source-vs-evaluated geometry boundary for native Edit consumers. */
+export function modifierEditsInputSpline(layer?: Layer | null): boolean {
+  return !!layer?.modifierStack && sourceEditingIndex(layer.modifierStack, geometryModifierRegistry) !== undefined
 }

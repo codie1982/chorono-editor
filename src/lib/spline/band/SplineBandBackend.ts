@@ -58,7 +58,7 @@ export class SplineBandBackend {
       const clipped = solver.combineBand(pieces, directional ? { contours: boundaries.filter(c => c.closed).map(c => c.points), fillRule: data.fillRule, side: s.alignment as 'inside' | 'outside' } : undefined, s.tolerancePx / 4096)
       if (!clipped.path.commands.length) continue
       const contours = densifyBandBoundary(flattenPathContours(clipped.path, s.tolerancePx, 8192, 256, { requireClosed: true }), s.spacingPx, outputBudget)
-      result.objects.push({ name: `${object.name || 'Spline'} Outline`, contours }); result.outputVertices = outputBudget.vertices
+      result.objects.push({ sourceObjectId: objectId, name: `${object.name || 'Spline'} Outline`, contours }); result.outputVertices = outputBudget.vertices
       if (result.outputVertices > 8192) throw new Error('Outline output vertex budget exceeded.')
     }
     result.inputVertices = budget.vertices

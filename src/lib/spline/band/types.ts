@@ -13,7 +13,7 @@ export interface SplineBandSettings {
 export interface BandChain { objectId: string; contourId: string; edgeIds: string[]; closed: boolean }
 export interface SplineBandRequest { data: SplinePathData; chains: BandChain[]; settings: SplineBandSettings }
 export interface SplineBandResult {
-  objects: { name: string; contours: FlattenedContour[] }[]; inputVertices: number; outputVertices: number; bevelFallbacks: number; tolerancePx: number
+  objects: { sourceObjectId?: string; name: string; contours: FlattenedContour[] }[]; inputVertices: number; outputVertices: number; bevelFallbacks: number; tolerancePx: number
 }
 export const defaultBandSettings: SplineBandSettings = { widthPx: 10, alignment: 'center', cap: 'butt', join: 'miter', miterLimit: 4,
   dashEnabled: false, dashArray: [10, 5], dashOffset: 0, spacingPx: 20, tolerancePx: .25 }

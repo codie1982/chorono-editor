@@ -25,7 +25,7 @@ function editable(scene: ChronoScene, id: string): Layer {
 /** CAS command over a complete recomputed result. Undo restores the exact base,
  * stack order/settings, result and unrelated source. No preview mutates history. */
 function replace(scene: ChronoScene, layer: Layer, stack: GeometryModifierStackData | null, label: string): EditorCommand {
-  const result = stack ? modifierStackService.execute(layer, stack) : { ...modifierStackService.execute(layer, modifierStackService.stackFor(layer)), modifierStack: undefined, geometryConversion: undefined, splinePaintOverrides: undefined }
+  const result = stack ? modifierStackService.execute(layer, stack) : modifierStackService.bake(layer)
   const candidate = { ...scene, layers: scene.layers.map(item => item.id === layer.id ? result : item) }
   return { label, execute(current) {
     if (current !== scene) throw new Error('Scene changed while editing modifiers. Apply again from the current source.')
@@ -36,20 +36,24 @@ function replace(scene: ChronoScene, layer: Layer, stack: GeometryModifierStackD
 
 /** Add a real, persisted instance. Valid defaults enable immediately. When the
  * solver rejects a default (e.g. no sharp corners), add it explicitly disabled
- * so its settings can be configured without admitting an invalid result. */
+ * so its settings can be configured without admitting an invalid result.
+ * Optional initialSettings validates/applies the first recipe atomically; old
+ * callers retain defaults. Only one input-editing owner is admitted per stack. */
 export function prepareAddModifier(scene: ChronoScene, layerId: string, type: string,
-  selection?: { pointIds?: readonly string[]; contourIds?: readonly string[]; objectIds?: readonly string[] }) {
+  selection?: { pointIds?: readonly string[]; contourIds?: readonly string[]; objectIds?: readonly string[] }, initialSettings?: Readonly<Record<string, unknown>>) {
   const layer = editable(scene, layerId), stack = modifierStackService.stackFor(layer)
   const input = modifierStackService.evaluator.execute(stack, { layerId })
   const definition = geometryModifierRegistry.get(type).descriptor
   if (!definition.addable || !definition.inputs.includes(input.kind)) throw new Error(`${definition.label} is not available for ${input.kind}.`)
   let id: string
   do { id = uid('modifier') } while (stack.modifiers.some(item => item.id === id))
+  if (definition.sourceEditing && stack.modifiers.some(item => geometryModifierRegistry.get(item.type).descriptor.sourceEditing)) throw new Error('This stack already has a live source owner. Edit its Outline settings instead.')
   let record = geometryModifierRegistry.newRecord(type, id, input)
+  if (initialSettings) record = geometryModifierRegistry.create({ ...record, settings: { ...record.settings, ...initialSettings } }).toRecord()
   if (input.kind === 'spline' && selection) {
     const field = definition.fields.find(item => item.kind === 'points' || item.kind === 'contours' || item.kind === 'objects')
     const ids = field?.kind === 'points' ? selection.pointIds : field?.kind === 'objects' ? selection.objectIds : selection.contourIds
-    if (field && ids?.length) record = { ...record, settings: { ...record.settings, [field.key]: [...ids], selectionTopology: splineTopologySignature(input.spline) } }
+    if (field && ids?.length) record = { ...record, settings: { ...record.settings, [field.key]: [...ids], ...(!definition.sourceEditing ? { selectionTopology: splineTopologySignature(input.spline) } : {}) } }
   }
   let candidate = { ...stack, modifiers: [...stack.modifiers, record] }, warning: string | undefined
   try { modifierStackService.execute(layer, candidate) } catch (error) {
@@ -69,12 +73,15 @@ export function makeSetModifierSettingsCmd(scene: ChronoScene, layerId: string, 
 /** Stage all supplied settings, execute the complete ordered pipeline and
  * commit only its final validated output in one undo command. Pending UI edits
  * never alter object geometry. A failing stage leaves both scene and history
- * untouched. Prefix execution supplies each instance's actual input contract. */
+ * untouched. Prefix execution supplies each instance's actual input contract.
+ * Optional enableIds activates existing owners in the SAME Undo as settings;
+ * omission preserves the old enabled-state contract. */
 export function makeExecuteModifierStackCmd(scene: ChronoScene, layerId: string,
-  patches: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {}): EditorCommand {
+  patches: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {}, options: { enableIds?: readonly string[] } = {}): EditorCommand {
   const layer = editable(scene, layerId), stack = modifierStackService.stackFor(layer)
   for (const id of Object.keys(patches)) if (!stack.modifiers.some(item => item.id === id)) throw new Error('Modifier no longer exists.')
-  const modifiers = [...stack.modifiers]
+  for (const id of options.enableIds ?? []) if (!stack.modifiers.some(item => item.id === id)) throw new Error('Modifier no longer exists.')
+  const modifiers = stack.modifiers.map(item => options.enableIds?.includes(item.id) ? { ...item, enabled: true } : item)
   for (let index = 0; index < modifiers.length; index++) {
     const before = modifiers[index], patch = patches[before.id]
     if (!patch) continue
@@ -94,7 +101,7 @@ function stageSettings(scene: ChronoScene, before: ModifierRecord, input: Modifi
       if (!(key in patch)) continue
       const ids = patch[key], records = key === 'pointIds' ? input.spline.points : key === 'objectIds' ? input.spline.subShapes : input.spline.contours
       if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !Object.hasOwn(records, id))) throw new Error('Select existing elements in this modifier’s input.')
-      settings.selectionTopology = ids.length ? splineTopologySignature(input.spline) : undefined
+      if (!geometryModifierRegistry.get(before.type).descriptor.sourceEditing) settings.selectionTopology = ids.length ? splineTopologySignature(input.spline) : undefined
     }
   }
   if (typeof patch.assetId === 'string' && patch.assetId) {

@@ -1,3 +1,4 @@
+import { liveOutlineObjectIds } from '../liveOutline/data'
 import type { Layer, ShapeStyle } from '../../types'
 import type { SplineSubShape } from '../../types/spline'
 import { retainSplineContours } from '../topology/records'
@@ -45,7 +46,7 @@ export function splineObjectStyles(layer: Layer): ShapeStyle[] {
  * discard it. Native/baked Objects keep ordinary versioned Object paint. */
 export function withSplineObjectPaint(layer: Layer, objectId: string, style: ShapeStyle | null): Layer {
   const object = layer.spline?.subShapes[objectId]
-  if (!object?.paint) throw new Error('Select an Outline Object paint target.')
+  if (!object || !object.paint && !liveOutlineObjectIds(layer).includes(objectId)) throw new Error('Select an Outline Object paint target.')
   if (layer.modifierStack) {
     const objects = { ...layer.splinePaintOverrides?.objects }
     objects[objectId] = style
@@ -53,4 +54,12 @@ export function withSplineObjectPaint(layer: Layer, objectId: string, style: Sha
   }
   return { ...layer, spline: { ...layer.spline!, subShapes: { ...layer.spline!.subShapes,
     [objectId]: { ...object, paint: style ? { version: 1, source: 'custom', style } : { version: 1, source: 'stroke' } } } } }
+}
+
+/** Paint targets for authored source Objects and their live evaluated bands.
+ * A virtual paint marker is UI-only; source geometry/metadata is untouched. */
+export function splinePaintTargets(layer: Layer): SplineSubShape[] {
+  const live = new Set(liveOutlineObjectIds(layer))
+  return Object.values(layer.spline?.subShapes ?? {}).flatMap(object => object.paint ? [object]
+    : live.has(object.id) ? [{ ...object, paint: { version: 1 as const, source: 'stroke' as const } }] : [])
 }

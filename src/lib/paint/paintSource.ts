@@ -1,3 +1,4 @@
+import { liveOutlineObjectIds, liveOutlineRecord } from '../spline/liveOutline/data'
 import type { Composition, ImagePaint, ShapeFill, ShapeStroke, ShapeStyle, Layer } from '../types'
 
 /** Retain inactive paint payloads and remember the last active mode on None.
@@ -48,7 +49,8 @@ export function layerPaintStyles(layer: Layer): readonly ShapeStyle[] {
   return [layer.style ?? {}, ...Object.values(layer.splinePaintOverrides?.objects ?? {}).filter((style): style is ShapeStyle => !!style), ...Object.values(layer.spline?.subShapes ?? {}).flatMap(o => o.paint?.source === 'custom' && o.paint.style ? [o.paint.style] : [])]
 }
 /** Active image demand for both shared and independent spline paint. */
-export function layerPaintAssetIds(layer: Layer): readonly string[] { return Array.from(new Set([layer.style ?? {}, ...Object.values(layer.spline?.subShapes ?? {}).flatMap(o => {
+export function layerPaintAssetIds(layer: Layer): readonly string[] { const live = new Set(liveOutlineRecord(layer)?.enabled ? liveOutlineObjectIds(layer) : []); return Array.from(new Set([layer.style ?? {}, ...Object.values(layer.spline?.subShapes ?? {}).flatMap(o => {
+  if (!o.paint && !live.has(o.id)) return []
   const override = layer.splinePaintOverrides?.objects[o.id]
   const custom = override !== undefined ? override : o.paint?.source === 'custom' ? o.paint.style : undefined
   return custom ? [custom] : []

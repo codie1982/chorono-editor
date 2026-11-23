@@ -1,3 +1,4 @@
+import { LIVE_OUTLINE_TYPE } from '../../spline/liveOutline/data'
 import type { ChronoScene } from '../../types'
 import type { SplinePathData } from '../../types/spline'
 
@@ -12,7 +13,19 @@ export function assertSplineGeometryReferences(scene: ChronoScene, layerId: stri
   for (const family of ['points', 'handles', 'segments', 'contours', 'subShapes'] as const)
     for (const id of Object.keys(before[family])) if (!after[family][id]) { prefixes.push(`spline.${family}.${id}`); removedIds.add(id) }
   if (!prefixes.length) return
-  const payload = { ...scene, authoring: undefined, layers: scene.layers.map(({ spline: _spline, ...layer }) => layer) }
+  const payload = { ...scene, authoring: undefined, layers: scene.layers.map(({ spline: _spline, splinePaintOverrides: _paint, ...layer }) => {
+    if (!layer.modifierStack) return layer
+    // Stack source/conversion overrides are owned geometry, not semantic ID
+    // readers. Live Object scope follows surviving IDs and tolerates deletion.
+    // Other modifier targets and all external wires/expressions remain checked.
+    return { ...layer, modifierStack: { ...layer.modifierStack, source: undefined,
+      modifiers: layer.modifierStack.modifiers.map(record => ({ ...record, settings: {
+        ...record.settings,
+        ...(record.type === 'convertSpline' ? { edited: undefined } : {}),
+        ...(layer.id === layerId && record.type === LIVE_OUTLINE_TYPE ? { objectIds: undefined } : {}),
+      } })),
+    } }
+  }) }
   const visit = (value: unknown): boolean => {
     if (typeof value === 'string') return removedIds.has(value) || prefixes.some(prefix => value === prefix || value.startsWith(prefix + '.') || value.includes(`layers.${layerId}.${prefix}`))
     if (!value || typeof value !== 'object') return false

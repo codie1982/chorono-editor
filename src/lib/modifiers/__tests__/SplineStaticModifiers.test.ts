@@ -24,7 +24,7 @@ function add(scene: ChronoScene, type: string, selection?: Parameters<typeof pre
 
 describe('static spline modifier package', () => {
   it('registers the Phase 1 choices while preserving every legacy type/flag and default contract', () => {
-    expect(geometryModifierRegistry.list().filter(d => d.category === 'spline' && d.addable && !d.legacySplineTool).map(d => d.type)).toEqual(['offsetPath', 'roundCorners', 'pathSimplify', 'pathSmoothing', 'pathResample', 'zigZag', 'puckerBloat', 'splineRepeater', 'strokeToPath'])
+    expect(geometryModifierRegistry.list().filter(d => d.category === 'spline' && d.addable && !d.legacySplineTool).map(d => d.type)).toEqual(['offsetPath', 'roundCorners', 'pathSimplify', 'pathSmoothing', 'pathResample', 'zigZag', 'puckerBloat', 'splineRepeater', 'strokeToPath', 'liveOutline'])
     for (const type of ['offset', 'outline', 'chamfer', 'fillet']) expect(geometryModifierRegistry.get(type).descriptor.legacySplineTool).toBe(true)
     const { scene, layer } = fixture(), old = add(scene, 'offset'), modern = add(scene, 'offsetPath'), objectId = Object.keys(layer.spline!.subShapes)[0]
     expect(old.scene.layers[0].spline!.subShapes[objectId]).toBeUndefined()
