@@ -49,6 +49,8 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
   const available = geometryModifierRegistry.list().filter(item => !item.legacySplineTool && item.addable && item.inputs.includes(input.kind))
   const patches = Object.fromEntries(stack.modifiers.flatMap(record => drafts[record.id]?.base === record ? [[record.id, drafts[record.id].patch]] : []))
   const selectedRecord = stack.modifiers.find(item => item.id === selected)
+  const selectedIndex = stack.modifiers.findIndex(item => item.id === selected)
+  const selectedInput = useMemo(() => selectedIndex < 0 ? input : modifierStackService.evaluator.execute(stack, { layerId: layer.id }, selectedIndex), [stack, layer.id, selectedIndex, input])
   const selectedDescriptor = selectedRecord ? geometryModifierRegistry.get(selectedRecord.type).descriptor : undefined
   const activeDraft = selectedRecord && drafts[selectedRecord.id]?.base === selectedRecord ? { ...selectedRecord.settings, ...drafts[selectedRecord.id].patch } : selectedRecord?.settings
   const run = (create: () => EditorCommand, message: string) => {
@@ -66,7 +68,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
     let id = '', warning = ''
     if (run(() => {
       const plan = prepareAddModifier(props.getScene(), layer.id, type, {
-        pointIds: props.selectedPointIds ?? (props.selectedPointId ? [props.selectedPointId] : []), contourIds: props.selectedContourIds,
+        pointIds: props.selectedPointIds ?? (props.selectedPointId ? [props.selectedPointId] : []), contourIds: props.selectedContourIds, objectIds: props.selectedObjectIds,
       })
       id = plan.modifierId; warning = plan.warning ?? ''; return plan.command
     }, 'Modifier added.')) { setSelected(id); if (warning) setError(warning) }
@@ -112,6 +114,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
       {selectedDescriptor.description && <p className="text-gray-400">{selectedDescriptor.description}</p>}
       <ModifierSettingsForm descriptor={selectedDescriptor} settings={activeDraft} disabled={disabled} assets={scene.assets}
         pointIds={props.selectedPointIds ?? (props.selectedPointId ? [props.selectedPointId] : [])} contourIds={props.selectedContourIds}
+        objectIds={props.selectedObjectIds} inputObjects={selectedInput.kind === 'spline' ? Object.values(selectedInput.spline.subShapes) : []}
         onChange={patch => setDrafts(before => ({ ...before, [selectedRecord.id]: { base: selectedRecord, patch: { ...(before[selectedRecord.id]?.base === selectedRecord ? before[selectedRecord.id].patch : {}), ...patch } } }))} />
       {selectedRecord.id in patches && <p className="text-orange-200">Pending settings · Execute to update the object.</p>}
     </div>}
@@ -119,6 +122,6 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
       onExecute={source => run(() => makeSetModifierSourceCmd(props.getScene(), layer.id, source, true), 'Source rebuilt and stack executed.')} />}
     {modifierOutputReadOnly(layer) && <p className="text-gray-400">Geometry comes from the stack. Disable geometry modifiers or Bake stack to edit points directly.</p>}
     {!!layer.modifierStack && <button type="button" disabled={disabled} className="min-h-8 rounded border border-gray-700 px-3 py-1.5 text-gray-300 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-40"
-      onClick={() => run(() => makeBakeModifierStackCmd(props.getScene(), layer.id), 'Stack baked to editable geometry.')}>Bake stack</button>}
+      onClick={() => { if (run(() => makeBakeModifierStackCmd(props.getScene(), layer.id), 'Stack baked to editable geometry.') && layer.type === 'spline') props.onSplineSourceBaked?.(layer.id) }}>Bake stack</button>}
   </section>
 }

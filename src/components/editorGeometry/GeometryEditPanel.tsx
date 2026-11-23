@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react'
 import Mesh2DSourcePanel, { type Mesh2DSettingsSection } from '@/components/PropertiesPanel/Mesh2DSourcePanel'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import type { SplineModelingPanelProps } from '@/components/panels/SplineModelingPanel'
-import { modifierOutputReadOnly } from '@/lib/modifiers'
+import { geometryModifierRegistry, modifierOutputReadOnly } from '@/lib/modifiers'
 import type { Layer } from '@/lib/types'
 import { SplineSourceHistory } from './SplineSourceHistory'
 import ModifierStackPanel from './ModifierStackPanel'
@@ -13,6 +13,7 @@ import type { GeometryEditMode } from './useGeometryEditMode'
 export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, 'operation'> {
   readonly selectedPointIds?: readonly string[]
   readonly selectedContourIds?: readonly string[]
+  readonly selectedObjectIds?: readonly string[]
   readonly selectedIds?: readonly string[]
   readonly conversionDisabled?: boolean
   readonly onLayerChange: (layer: Layer) => void
@@ -57,11 +58,14 @@ export default function GeometryEditPanel(props: GeometryEditPanelProps) {
 
 /** Native Spline tools precede the closed compatibility/source drawer. */
 function SplineSettings({ layer, splineModeControls, splineSourceSettings, splineToolPreview, ...props }: GeometryEditPanelProps & { layer: Layer }) {
+  const legacyOnly = !!layer.modifierStack?.modifiers.some(record => geometryModifierRegistry.get(record.type).descriptor.legacySplineTool)
+    && !layer.modifierStack.modifiers.some(record => { const descriptor = geometryModifierRegistry.get(record.type).descriptor; return descriptor.category === 'spline' && descriptor.addable && !descriptor.legacySplineTool })
   return <>
     {splineModeControls ? <section className="space-y-2" aria-label="Spline editing mode"><h3 className="font-semibold">Edit mode</h3>{splineModeControls}</section> : splineSourceSettings}
     {splineModeControls && splineSourceSettings}
     {!splineSourceSettings && splineToolPreview}
-    <SplineSourceHistory {...props} layer={layer} />
+    {!legacyOnly && <ModifierStackPanel {...props} layer={layer} />}
+    <SplineSourceHistory {...props} layer={layer} showStack={legacyOnly} />
     {!splineSourceSettings && !modifierOutputReadOnly(layer) && <p className="text-gray-400">Choose Point, Edge or Object to edit this Spline in the viewport.</p>}
   </>
 }

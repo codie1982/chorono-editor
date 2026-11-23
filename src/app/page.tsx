@@ -2114,6 +2114,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   splineModeControls={<SplineModeControls controller={splineEdit}
                     disabled={modifierOutputReadOnly(selectedLayer) || isPlaying || manualPreview || !!detail.session || !!selectedLayer?.locked || !!selectedLayer?.hidden || !!selectedLayer?.frozen || !!selectedLayer?.instanceOf} />}
                   selectedPointIds={splineEdit.mode === 'point' ? splineEdit.bank.point : []}
+                  selectedObjectIds={splineEdit.mode === 'object' ? splineEdit.bank.object : []}
                   selectedContourIds={splineEdit.mode === 'object' ? Array.from(new Set(splineEdit.bank.object.flatMap(id => selectedLayer?.spline?.subShapes[id]?.contourIds ?? []))) : []}
                   getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
                   isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}

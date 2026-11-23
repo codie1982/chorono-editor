@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import type { SplineEditController } from '@/components/splineEdit/useSplineEditSelection'
 
@@ -21,14 +21,25 @@ export function useGeometryEditMode(layer: Layer | null, spline: SplineEditContr
   const supported = layer?.type === 'spline' || layer?.type === 'mesh2d'
   useEffect(() => { setSession(null) }, [layer?.id, layer?.type, document])
   const subObjects = !!layer && spline.layerId === layer.id
+  const previousSubObjects = useRef(subObjects)
+  const sameSession = session?.layer === layer?.id && session?.kind === layer?.type && session?.document === document
+  const returningToSource = subObjects && !previousSubObjects.current && sameSession
   // Adding a geometry modifier can make direct point editing read-only. Retain
   // the active panel session so its settings remain reachable after Execute.
   useEffect(() => {
-    if (subObjects && layer) setSession(spline.active ? { layer: layer.id, kind: layer.type, document, mode: spline.mode } : null)
-  }, [subObjects, spline.active, spline.mode, layer?.id, layer?.type, document])
-  const active = !!supported && (subObjects ? spline.active
-    : session?.layer === layer?.id && session?.kind === layer?.type && session?.document === document)
-  return { active, mode: subObjects ? spline.mode : session?.mode ?? 'object',
+    const returning = subObjects && !previousSubObjects.current
+    previousSubObjects.current = subObjects
+    if (!subObjects || !layer) return
+    if (spline.active) setSession({ layer: layer.id, kind: layer.type, document, mode: spline.mode })
+    // Disabling/removing the final operation or Bake restores an editable
+    // source. Its old sub-selection was pruned; enter Object mode while keeping
+    // the settings session reachable. Explicit Escape/exit still closes it.
+    else if (returning && sameSession) {
+      spline.enter('object'); setSession({ layer: layer.id, kind: layer.type, document, mode: 'object' })
+    } else setSession(null)
+  }, [subObjects, spline.active, spline.mode, layer?.id, layer?.type, document, sameSession, spline.enter])
+  const active = !!supported && (subObjects ? spline.active || returningToSource : sameSession)
+  return { active, mode: returningToSource ? 'object' : subObjects ? spline.mode : session?.mode ?? 'object',
     enter(mode = 'object') {
       if (!supported || !layer || layer.locked || layer.hidden || layer.frozen || layer.instanceOf) return false
       setSession({ layer: layer.id, kind: layer.type, document, mode })

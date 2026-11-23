@@ -96,6 +96,8 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
       selectedTimeline={editor.scene.timelines[0]} getShortcutContext={() => 'canvas'} />
       <aside className="w-[360px] shrink-0 overflow-auto">{tool === 'spline-draw' && drawKind === 'line' && <SplineLineDrawingControls autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} />}
         <GeometryEditPanel editMode={strictPanel || layer?.type === 'mesh2d' ? geometryEdit : undefined} layer={layer} selectedIds={selected ? [selected] : []} selectedPointId={controller.mode === 'point' ? controller.ids[0] ?? null : null}
+          selectedPointIds={controller.mode === 'point' ? controller.bank.point : []} selectedObjectIds={controller.mode === 'object' ? controller.bank.object : []}
+          selectedContourIds={controller.mode === 'object' ? Array.from(new Set(controller.bank.object.flatMap(id => layer?.spline?.subShapes[id]?.contourIds ?? []))) : []}
           onSplineSourceBaked={id => controller.focusResult({ layerId: id, mode: 'object' })} getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal} isTransactionActive={editor.isTransactionActive}
           dispatchCommand={editor.dispatchCommand} onSelectLayer={setSelected} onClearPoint={controller.clear}
           onLayerChange={next => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, layer)) }}
