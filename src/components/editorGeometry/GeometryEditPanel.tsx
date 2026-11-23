@@ -43,12 +43,6 @@ export default function GeometryEditPanel(props: GeometryEditPanelProps) {
       <h2 className="truncate font-semibold" title={layer.name}>{multiple ? `${props.selectedIds!.length} objects selected` : layer.name}</h2>
       {!multiple && <span className="shrink-0 text-gray-400">{layer.type === 'shape' ? 'Basic Shape' : layer.type === 'spline' ? 'Spline' : '2D Mesh'}</span>}
     </header>}
-    {!multiple && supported && layer.type !== 'shape' && props.editMode && <button type="button"
-      disabled={!editing && (props.conversionDisabled || layer.locked || layer.hidden || layer.frozen || !!layer.instanceOf)}
-      onClick={() => editing ? props.editMode!.exit() : props.editMode!.enter()}
-      className="min-h-9 rounded border border-orange-400/60 bg-orange-500/10 px-3 py-1.5 text-orange-100 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-50">
-      {editing ? 'Exit edit mode' : 'Enter edit mode'}
-    </button>}
     {!multiple && layer?.type === 'spline' && layer.spline && <SplineSettings key={layer.id} {...props} layer={layer}
       onSplineSourceBaked={editing ? props.onSplineSourceBaked : undefined} />}
     {!multiple && layer?.type === 'mesh2d' && layer.mesh2d && <MeshSettings key={layer.id} {...props} layer={layer} />}

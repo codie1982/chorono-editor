@@ -7,6 +7,7 @@ import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
 import { prepareAddModifier } from '@/lib/editor/modifiers/commands'
 import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { Subject, fixture, current, frames, layer, click, key, assert, equal, raster } from './splineHarness'
+import { checkGeometryEditShortcuts } from './checkGeometryEditShortcuts'
 import type { SplinePathData } from '@/lib/types/spline'
 
 /** Disposable production scene; no connected editor or user document is read. */
@@ -41,10 +42,13 @@ function path() { return splineToPathDefinition(layer().spline!) }
 async function run() {
   const status = document.getElementById('status')!, report = document.getElementById('report')!, checks: string[] = []
   try {
+    checks.push(await checkGeometryEditShortcuts())
     await reset(rectangle(), false)
     assert(!current().geometryEdit.active && !document.querySelector('[aria-label="Spline editing mode"]'), 'Native Spline tools leaked outside Edit')
     await add('Offset Path'); await number('Offset Path Distance', 5)
-    await click('Enter edit mode'); await click('Exit edit mode')
+    assert(!Array.from(document.querySelectorAll('button')).some(button => /^(Enter|Exit) edit mode$/.test(button.textContent?.trim() ?? '')), 'Removed edit mode button is still shown')
+    key('3'); await frames(); assert(current().geometryEdit.active, 'Shortcut did not enter generated Spline Edit')
+    key('Escape'); await frames(); assert(!current().geometryEdit.active, 'Escape did not exit generated Spline Edit')
     equal(document.querySelector<HTMLInputElement>('[aria-label="Offset Path Distance"]')!.value, '5', 'Mode toggle lost modifier draft')
     await click('Execute stack'); assert(Math.abs(computeSplineBounds(layer().spline!).width - 110) < 1e-8, 'Execute outside Edit failed')
     await check('Enable Offset Path 1', false); await check('Enable Offset Path 1', true)
@@ -104,12 +108,14 @@ async function run() {
     const donut = translateSplineData(createDonutSpline({ outerRadius: 60, innerRadius: 25 }), 90, 0)
     Object.values(donut.subShapes)[0].name = 'Ring'
     await reset(mergeSplineData(noise, donut)); await click('Select spline object Noise'); await add('Path Simplify')
+    equal(record('pathSimplify').settings.objectIds, [], 'Add implicitly captured the transient Object selection')
+    await check('Path Simplify target Ring', false); await click('Execute stack')
     const coarse = snapshot(); assert(Object.keys(layer().spline!.points).length < Object.keys(noise.points).length + Object.keys(donut.points).length, 'Simplify did not reduce anchors')
-    equal(record('pathSimplify').settings.objectIds, Object.keys(noise.subShapes), 'Initial Object selection was not captured')
+    equal(record('pathSimplify').settings.objectIds, Object.keys(noise.subShapes), 'Explicit Object target was not captured')
     await number('Path Simplify Tolerance', .001); equal(current().editor.getScene(), coarse, 'Tolerance draft wrote source')
     await click('Execute stack'); assert(Object.keys(layer().spline!.points).length > Object.keys(coarse.layers[1].spline!.points).length, 'Fine tolerance did not recover original anchors')
     for (const point of Object.values(donut.points)) equal(layer().spline!.points[point.id], point, 'Simplify changed unselected hole geometry')
-    checks.push('Path Simplify captures Object scope, retains unrelated holes and can recover more source anchors with finer tolerance')
+    checks.push('Add ignores transient Edit selection; explicit Path Simplify Object scope retains unrelated holes and recovers source anchors at finer tolerance')
 
     await reset(); await click('Select spline object Donut B'); const smoothSource = snapshot(); await add('Path Smoothing'); await add('Offset Path'); await row('pathSmoothing')
     const beforeScope = snapshot(); await check('Path Smoothing target Rectangle A', true); await check('Path Smoothing target Donut B', false)
@@ -136,7 +142,7 @@ async function run() {
     equal(layer().modifierStack!.modifiers.map(item => item.type), ['offset', 'offsetPath'], 'New operation rewrote legacy record')
     const pixels = await raster(); assert(pixels.some(channel => channel > 0), 'Actual output is empty')
     checks.push('Legacy-only records keep closed compatibility history; adding a modern operation preserves old type/order and valid raster output')
-    await click('Exit edit mode')
+    key('Escape'); await frames(); assert(!current().geometryEdit.active, 'Escape did not leave generated Spline Edit')
     const stack = document.querySelector('[aria-label="Modifier stack"]')!; stack.scrollIntoView({ block: 'center' })
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }

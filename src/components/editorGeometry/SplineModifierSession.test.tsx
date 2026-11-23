@@ -26,7 +26,9 @@ function mount(kind: 'spline' | 'mesh2d' = 'spline') {
   function Host() {
     const editor = useEditorState(scene), current = editor.scene.layers[0], controller = useSplineEditSelection(current, editor.getDocumentSignal()), mode = useGeometryEditMode(current, controller, editor.getDocumentSignal())
     live = { editor, controller, mode }
-    return <GeometryEditPanel layer={current} editMode={mode} selectedPointId={null} selectedIds={[layer.id]}
+    return <GeometryEditPanel layer={current} editMode={mode} selectedPointId={controller.mode === 'point' ? controller.ids[0] ?? null : null} selectedIds={[layer.id]}
+      selectedPointIds={controller.mode === 'point' ? controller.bank.point : []}
+      selectedContourIds={controller.mode === 'object' ? controller.bank.object.flatMap(id => current.spline?.subShapes[id]?.contourIds ?? []) : []}
       selectedObjectIds={controller.mode === 'object' ? controller.bank.object : []} onSplineSourceBaked={id => controller.focusResult({ layerId: id, mode: 'object' })}
       splineModeControls={<SplineModeControls controller={controller} disabled={modifierOutputReadOnly(current)} />}
       splineSourceSettings={controller.layerId === current.id ? <p>Native source controls</p> : undefined}
@@ -78,13 +80,26 @@ describe('parametric spline panel session', () => {
     const host = mount(); host.add('Path Simplify')
     const added = host.get().editor.getScene()
     act(() => root!.root.findByProps({ 'aria-label': 'Path Simplify Tolerance' }).props.onChange({ currentTarget: { valueAsNumber: .001 } }))
-    host.click('Enter edit mode'); expect(host.get().mode.active).toBe(true)
-    host.click('Exit edit mode'); expect(host.get().mode.active).toBe(false)
+    act(() => { host.get().mode.enter('object') }); expect(host.get().mode.active).toBe(true)
+    act(() => host.get().mode.exit()); expect(host.get().mode.active).toBe(false)
     expect(root!.root.findByProps({ 'aria-label': 'Path Simplify Tolerance' }).props.value).toBe(.001)
     expect(host.get().editor.getScene()).toBe(added)
     host.click('Execute stack')
     expect(host.get().editor.getScene().layers[0].modifierStack!.modifiers[0].settings.tolerancePx).toBe(.001)
     expect(host.get().mode.active).toBe(false)
+  })
+
+  it.each([
+    ['Offset Path', 'contourIds'], ['Round Corners', 'pointIds'],
+    ['Path Simplify', 'objectIds'], ['Path Smoothing', 'objectIds'],
+  ] as const)('starts %s with its full input regardless of Point/Object selection', (label, targetKey) => {
+    const host = mount()
+    act(() => host.get().controller.enter(targetKey === 'pointIds' ? 'point' : 'object'))
+    act(() => host.get().controller.select(targetKey === 'pointIds' ? Object.keys(host.rectangle.points).slice(0, 1) : Object.keys(host.rectangle.subShapes)))
+    host.add(label)
+    const record = host.get().editor.getScene().layers[0].modifierStack!.modifiers[0]
+    expect(record.settings[targetKey]).toEqual([])
+    expect(record.settings.selectionTopology).toBeUndefined()
   })
 
   it('keeps the settings session reachable after source becomes generated, stages numeric drafts and commits only on Execute', () => {

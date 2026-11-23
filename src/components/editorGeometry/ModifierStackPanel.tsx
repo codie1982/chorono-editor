@@ -18,7 +18,9 @@ type Draft = { base: ModifierRecord; patch: Readonly<Record<string, unknown>> }
  * choices/forms; execution commands alone own scene writes and history. A row's
  * check executes its pending settings through the complete pipeline. The main
  * Execute applies every current draft atomically. Undo invalidates stale drafts
- * by record identity, without discarding unrelated unsaved row settings. */
+ * by record identity, without discarding unrelated unsaved row settings. New
+ * rows use their full eligible input; Edit selection is adopted only through
+ * an explicit Use selection settings draft, never implicitly when adding. */
 export default function ModifierStackPanel(props: GeometryEditPanelProps & { layer: Layer }) {
   const { layer } = props
   const stack = useMemo(() => modifierStackService.stackFor(layer), [layer])
@@ -67,9 +69,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
   const add = (type: string) => {
     let id = '', warning = ''
     if (run(() => {
-      const plan = prepareAddModifier(props.getScene(), layer.id, type, {
-        pointIds: props.selectedPointIds ?? (props.selectedPointId ? [props.selectedPointId] : []), contourIds: props.selectedContourIds, objectIds: props.selectedObjectIds,
-      })
+      const plan = prepareAddModifier(props.getScene(), layer.id, type)
       id = plan.modifierId; warning = plan.warning ?? ''; return plan.command
     }, 'Modifier added.')) { setSelected(id); if (warning) setError(warning) }
   }

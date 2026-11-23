@@ -46,6 +46,10 @@ result ordinary editable geometry. Generated points are read-only while geometry
 modifiers are enabled. Mode buttons are disabled accordingly; conversion-only
 Splines remain directly editable. Mesh texture and pins retain existing owners.
 
+New modifier rows default to their complete eligible prefix input. The transient
+Point/Edge/Object selection is never adopted implicitly; **Use selection** is
+an explicit target draft and still requires Execute. Native command callers may
+continue to pass explicit selection IDs to `prepareAddModifier`.
 Object target fields list the selected modifier's actual prefix input, even
 while final generated geometry is read-only. Object IDs join point/contour
 selection in the native command policy and topology signature. Modern stacks
@@ -65,8 +69,10 @@ worker previews; those are separate one-shot geometry tools. The optional
 stay above the stack; the inspector appears below. Active mode replaces the layer
 bbox with an orange boundary, red selected elements and a named viewport badge.
 The page's `useGeometryEditMode` scopes native source tools to one selection and
-document. Outside Edit mode the panel keeps the selected name/type, an **Enter
-edit mode** action and the modifier stack, picker and settings for Spline/Mesh.
+document. Outside Edit mode the panel keeps the selected name/type and the
+modifier stack, picker and settings for Spline/Mesh. There is no Enter/Exit edit
+mode button in the dock; viewport/list context menus and 1/2/3 enter the session,
+and Escape or the active Spline mode toggle/Done leaves it.
 Point/Edge/Object controls, native inspectors and mesh source/texture/pin tools
 mount only inside the session. Enter/exit retains modifier selection and drafts;
 Add, Execute, toggle, remove and Bake outside Edit never start it. Bake restores

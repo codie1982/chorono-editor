@@ -149,6 +149,10 @@ The native Edit dock offers Spline/Mesh modifiers without entering Edit mode;
 Point/Edge/Object tools require the separate source-edit session. Modifier
 selection and pending drafts survive entering/leaving Edit. Add, Execute,
 toggle, remove and Bake outside Edit do not start that session.
+The dock has no Enter/Exit edit button; context menus and 1/2/3 enter Edit.
+New UI modifier rows target all eligible stage input independently of the Edit
+selection. Use selection/target lists explicitly stage a narrower scope; Execute
+commits it. Explicit selection arguments in native command APIs keep their meaning.
 Four **static parametric spline modifiers** use
 distinct recipe types: `offsetPath`, `roundCorners`, `pathSimplify`,
 `pathSmoothing`. They retain source and execute in stack order; numeric/scope

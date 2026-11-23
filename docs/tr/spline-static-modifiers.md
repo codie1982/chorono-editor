@@ -11,6 +11,10 @@ ileri işlemler bu teslimde bulunmaz.
 Spline seç → Edit paneli → Spline modifiers → + Add modifiers. Edit moduna
 girmek gerekmez; Mesh modifier'ları da aynı şekilde kullanılabilir. Seçilen
 işlem bağımsız bir stack satırı olarak eklenir; geçerli varsayılan hemen uygulanır.
+Yeni satır bütün uygun girdiyi hedefler; Point/Edge/Object seçimini otomatik
+devralmaz. Kısıtlı hedef ancak açık **Use selection** veya hedef listesi ile
+seçilir ve Execute ile kaydedilir. Panelde ayrı Enter/Exit edit mode butonu
+yoktur; sağ tık menüsü veya 1/2/3 düzenleme modunu açar.
 Geçersiz varsayılan, örneğin Circle üzerinde Round Corners, açıklamayla devre dışı
 eklenir. Kaynağın yerini geçersiz/boş bir sonuç almaz.
 
@@ -39,6 +43,13 @@ Modern SplineModifier değerlendirmesi native `assertSplineLocks` kuralını da
 uygular: kilitli point/handle kaydı değişecek veya silinecekse sonuç reddedilir.
 Seçilmemiş kilitli kayıtlar korunur. Uyumluluk descriptor'ları eski kilit
 davranışını sürdürür; kayıt açılırken yeni kurala sessizce dönüştürülmez.
+
+Round Corners, tangent yönünün keskin değiştiği birleşimleri işler; genel bir
+eğri yeniden biçimlendirme aracı değildir. Küçük yarıçapla yuvarlatılıp kaynak
+haline getirilmiş bir dikdörtgen ekranda hâlâ keskin görünebilir. Kaynakta
+birleşimler zaten teğetse yeni Round Corners köşe bulamaz. Daha büyük yarıçap
+için yuvarlatma öncesi kaynak üzerindeki mevcut Round Corners ayarı değiştirilir;
+eski generator parametreleri kaynak vertex/handle kayıtlarının yerine geçmez.
 
 ## Object seçimi ve edit oturumu
 
@@ -106,12 +117,14 @@ bağımsız clone, render/runtime flattening ve Mesh dönüşümünü kapsar.
 
 `scripts/perf/spline-modifiers.mjs /tmp/chorono-static-spline-modifiers-qa` gerçek
 Edit dock + SceneCanvas + renderer kullanan ayrı kabul sayfasını hazırlar.
-`spline-modifiers.html?autorun` on grupta chooser, dört form, PNG farkı,
+`spline-modifiers.html?autorun` on bir grupta chooser, dört form, PNG farkı,
 Undo/Redo, kaynak dönüşü, scoped stage-input hedefler ve legacy drawer'ı doğrular.
 Spline/Mesh için edit modu dışında Add/Execute/Bake ve kapalı edit oturumunun
 korunması da gerçek panelde kontrol edilir.
+Butonsuz 1/2/3 ile giriş/Escape ile çıkış ve modifier eklemede geçici seçimin
+otomatik hedef olmaması da doğrulanır.
 Bağlı kullanıcı sahnesi kullanılmaz. Hazırlama/test/build sırasında Next durdurulur.
 
-Teslim kontrolü: 574 dosyada 4.114 test, TypeScript kontrolü ve MCP/CLI/production
-build geçti. Gerçek tarayıcıda on kabul grubu başarılıdır. Kilitli kaydı
+Teslim kontrolü: 574 dosyada 4.118 test, TypeScript kontrolü ve MCP/CLI/production
+build geçti. Gerçek tarayıcıda on bir kabul grubu başarılıdır. Kilitli kaydı
 değiştiren modern işlemler ayrıca reddetme/disabled varsayılan testleriyle doğrulanır.

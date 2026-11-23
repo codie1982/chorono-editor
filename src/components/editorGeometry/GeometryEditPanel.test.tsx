@@ -60,7 +60,7 @@ describe('Geometry Edit dock', () => {
       editMode={{ active: false, mode: 'object', enter: vi.fn(), exit: vi.fn() }}
       splineModeControls={<p>Native mode controls</p>} splineSourceSettings={<p>Native source inspector</p>} splineToolPreview={<p>Native preview</p>} />)
     expect(html).toContain(`Add ${kind} modifiers`)
-    expect(html).toContain('Enter edit mode')
+    expect(html).not.toMatch(/Enter edit mode|Exit edit mode/)
     expect(html).not.toMatch(/Native mode controls|Native source inspector|Native preview|Mesh selection mode|Mesh settings|Quad Diagonal/)
     expect(props.dispatchCommand).not.toHaveBeenCalled()
   })

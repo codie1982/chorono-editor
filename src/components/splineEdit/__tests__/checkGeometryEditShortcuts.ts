@@ -43,7 +43,10 @@ export async function checkGeometryEditShortcuts(): Promise<string> {
   assert(layer().modifierStack!.modifiers.filter(record => record.type === 'meshTransform').length === 1, 'Mesh Edge made another Edit Mesh')
   assert(document.querySelector('[data-edit-ghost]')?.getAttribute('d') === ghost, 'Changing selection levels reset the initial ghost')
   key('3'); await frames(); assert(current().geometryEdit.mode === 'object', '3 did not enter Mesh Object')
-  await click('Exit edit mode'); key('1'); await frames()
+  key('Escape'); await frames()
+  if (current().geometryEdit.active) { key('Escape'); await frames() }
+  assert(!current().geometryEdit.active, 'Escape did not leave Mesh Edit')
+  key('1'); await frames()
   assert(document.querySelector('[data-edit-ghost]')?.getAttribute('d') !== ghost, 'Re-entry did not take a fresh geometry ghost')
   const input = document.createElement('input'); document.body.append(input); input.focus()
   flushSync(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))); await frames()
