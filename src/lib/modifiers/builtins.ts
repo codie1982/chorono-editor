@@ -16,6 +16,10 @@ import { OffsetPathModifier } from './spline/OffsetPathModifier'
 import { RoundCornersModifier } from './spline/RoundCornersModifier'
 import { PathSimplifyModifier } from './spline/PathSimplifyModifier'
 import { PathSmoothingModifier } from './spline/PathSmoothingModifier'
+import { PathResampleModifier } from './spline/PathResampleModifier'
+import { ZigZagModifier } from './spline/ZigZagModifier'
+import { PuckerBloatModifier } from './spline/PuckerBloatModifier'
+import { SplineRepeaterModifier } from './spline/SplineRepeaterModifier'
 
 /** Composition root for the built-in strategies. Algorithms are not selected
  * by evaluator/UI switch statements; class registrations own defaults/schema. */
@@ -23,7 +27,8 @@ export function createGeometryModifierRegistry(): GeometryModifierRegistry {
   const registry = new ModifierRegistry<ModifierGeometry, ModifierContext, GeometryModifierDescriptor>()
   for (const implementation of [ConvertSplineModifier, ConvertMeshModifier, OffsetModifier, OutlineModifier,
     ChamferModifier, FilletModifier, SmoothModifier, SubdivisionModifier, MeshTransformModifier, MeshDeformationModifier,
-    OffsetPathModifier, RoundCornersModifier, PathSimplifyModifier, PathSmoothingModifier]) {
+    OffsetPathModifier, RoundCornersModifier, PathSimplifyModifier, PathSmoothingModifier,
+    PathResampleModifier, ZigZagModifier, PuckerBloatModifier, SplineRepeaterModifier]) {
     registry.register({ descriptor: implementation.descriptor, create: record => new implementation(record), defaults: implementation.defaults })
   }
   return registry

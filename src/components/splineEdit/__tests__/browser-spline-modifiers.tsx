@@ -6,8 +6,9 @@ import { modifierStackService } from '@/lib/modifiers'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
 import { prepareAddModifier } from '@/lib/editor/modifiers/commands'
 import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
-import { Subject, fixture, current, frames, layer, click, key, assert, equal, raster } from './splineHarness'
+import { Subject, fixture, current, frames, layer, click, key, choose, assert, equal, raster } from './splineHarness'
 import { checkGeometryEditShortcuts } from './checkGeometryEditShortcuts'
+import { exportSVG } from '@/lib/export/vector/SVGExporter'
 import type { SplinePathData } from '@/lib/types/spline'
 
 /** Disposable production scene; no connected editor or user document is read. */
@@ -68,8 +69,8 @@ async function run() {
 
     await reset(rectangle()); await click('Add Spline modifiers')
     const labels = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"] span.truncate')).map(item => item.textContent)
-    equal(labels, ['Offset Path', 'Round Corners', 'Path Simplify', 'Path Smoothing'], 'Chooser mixed legacy/Mesh entries into the new spline package')
-    key('Escape'); await frames(); checks.push('Actual Edit chooser exposes four distinct modern spline operations and keeps compatibility/Mesh entries separate')
+    equal(labels, ['Offset Path', 'Round Corners', 'Path Simplify', 'Path Smoothing', 'Path Resample', 'Zig Zag', 'Pucker & Bloat', 'Repeater'], 'Chooser mixed legacy/Mesh entries into Phase 1')
+    key('Escape'); await frames(); checks.push('Actual Edit chooser exposes eight Phase 1 spline operations and keeps compatibility/Mesh entries separate')
 
     const original = snapshot(), originalPixels = await raster(); await add('Offset Path')
     assert(current().geometryEdit.active && !current().controller.active, 'Generated source made the modifier panel unreachable')
@@ -116,6 +117,59 @@ async function run() {
     await click('Redo'); assert(!current().geometryEdit.active, 'Radius Redo entered Edit')
     checks.push('Baked Bézier Corner arcs accept larger/smaller absolute radii outside Edit, re-enable saved disabled rows, retain source/TRS and change PNG with individual Undo/Redo')
 
+    await reset(createCircleSpline({ radius: 40 }), false); const resampleSource = snapshot(); await add('Path Resample')
+    assert(record('pathResample').enabled && Object.values(layer().spline!.segments).every(edge => edge.type === 'line'), 'Resample did not produce an explicit polyline')
+    const coarseCount = Object.keys(layer().spline!.points).length, coarseSampling = snapshot()
+    await number('Path Resample Max spacing', 3); equal(current().editor.getScene(), coarseSampling, 'Resample draft wrote source')
+    await click('Execute stack'); assert(Object.keys(layer().spline!.points).length > coarseCount, 'Resample spacing did not add arc samples')
+    equal(layer().modifierStack!.source, { kind: 'spline', spline: resampleSource.layers[1].spline }, 'Resample discarded source curves')
+    await click('Undo'); equal(current().editor.getScene(), coarseSampling, 'Resample Execute was not one Undo'); await click('Redo')
+    checks.push('Path Resample has its own settings, emits bounded polyline detail, retains source curves and executes with independent Undo/Redo outside Edit')
+
+    await reset(createPolylineSpline([{ x: -100, y: 0 }, { x: 100, y: 0 }], false), false); const zigSource = snapshot(); await add('Zig Zag')
+    const oldZigPixels = await raster(); await number('Zig Zag Amplitude', 12); await click('Execute stack')
+    assert(Object.values(layer().spline!.points).some(point => Math.abs(point.y) === 12), 'Zig Zag amplitude settings were ignored')
+    const newZigPixels = await raster(); assert(newZigPixels.some((value, index) => value !== oldZigPixels[index]), 'Zig Zag did not change actual PNG')
+    const endpoints = Object.values(zigSource.layers[1].spline!.points)
+    for (const point of endpoints) equal(layer().spline!.points[point.id], point, 'Zig Zag moved an endpoint')
+    checks.push('Zig Zag has sharp alternating peaks, its own amplitude field, pinned open endpoints and a verified PNG change')
+
+    await reset(createDonutSpline({ outerRadius: 50, innerRadius: 20 }), false); const puckerSource = snapshot(); await add('Pucker & Bloat')
+    assert(computeSplineBounds(layer().spline!).width > 100, 'Positive Bloat did not grow source geometry')
+    await number('Pucker & Bloat Amount', -25); await click('Execute stack')
+    assert(computeSplineBounds(layer().spline!).width < 100, 'Negative Pucker did not shrink source geometry')
+    equal(Object.keys(layer().spline!.contours), Object.keys(puckerSource.layers[1].spline!.contours), 'Pucker lost hole contours')
+    equal(layer().transform, puckerSource.layers[1].transform, 'Pucker changed real layer transform')
+    checks.push('Pucker & Bloat uses signed radial amount with retained holes, control connectivity and fixed layer TRS')
+
+    await reset(createDonutSpline({ outerRadius: 25, innerRadius: 10 }), false); await add('Repeater')
+    assert(Object.keys(layer().spline!.subShapes).length === 3 && Object.keys(layer().spline!.contours).length === 6, 'Linear Repeater lost independent Object/hole copies')
+    await choose('Repeater Layout', 'polar'); await number('Repeater Count', 4); await click('Execute stack')
+    assert(Object.keys(layer().spline!.subShapes).length === 4 && Object.keys(layer().spline!.contours).length === 8, 'Polar Repeater ignored its own settings')
+    assert(current().editor.getScene().layers.length === 2, 'Spline Repeater created scene layers')
+    checks.push('Repeater exposes linear/polar controls and independent same-spline copies/holes without extra scene layers')
+
+    await reset(rectangle(), false); const phase1Source = snapshot(), phase1BasePixels = await raster()
+    for (const label of ['Path Resample', 'Zig Zag', 'Pucker & Bloat', 'Repeater']) await add(label)
+    await number('Repeater Count', 2); await click('Execute stack')
+    assert(Object.keys(layer().spline!.subShapes).length === 2, 'Combined Phase 1 pipeline did not execute in order')
+    await check('Enable Repeater 4', false); assert(Object.keys(layer().spline!.subShapes).length === 1, 'Combined toggle did not restore prefix result')
+    await check('Enable Repeater 4', true); await click('Move Repeater up 4')
+    equal(layer().modifierStack!.modifiers.map(row => row.type), ['pathResample', 'zigZag', 'splineRepeater', 'puckerBloat'], 'Combined stage reorder failed')
+    const portable = snapshot(), parsed = parseSceneJson(JSON.stringify(portable), true)
+    equal(parsed.layers[1].modifierStack, layer().modifierStack, 'Combined portable recipe changed on load')
+    const svg = exportSVG(parsed, { timeMs: 0, precision: 5 }); assert(svg.warnings.length === 0 && svg.svg.includes('<path'), 'Phase 1 SVG output failed')
+    const svgDocument = new DOMParser().parseFromString(svg.svg, 'image/svg+xml'); assert(!svgDocument.querySelector('parsererror'), 'Invalid SVG output')
+    document.getElementById('portable-output')!.textContent = JSON.stringify(portable)
+    document.getElementById('svg-output')!.textContent = svg.svg
+    await click('Bake stack'); assert(!layer().modifierStack, 'Combined Bake did not release generated source')
+    await click('Undo'); equal(current().editor.getScene(), portable, 'Combined Bake was not one Undo')
+    flushSync(() => current().editor.resetScene(parsed)); await frames()
+    equal(layer().modifierStack, parsed.layers[1].modifierStack, 'Actual source reload did not restore modifier stack')
+    equal(layer().transform, phase1Source.layers[1].transform, 'Combined stack changed layer TRS')
+    const phase1Pixels = await raster(); assert(phase1Pixels.some((value, index) => value !== phase1BasePixels[index]), 'Combined modifiers did not change actual raster output')
+    checks.push('All four compose and support reorder/toggle/Bake/Undo, actual portable reload, static SVG and raster while preserving layer identity/TRS')
+
     await reset(createCircleSpline({ radius: 40 })); await add('Round Corners'); assert(!record('roundCorners').enabled, 'Unsupported default was published as active geometry')
     const disabled = snapshot(); await check('Enable Round Corners 1', true); equal(current().editor.getScene(), disabled, 'Invalid activation wrote geometry/history')
     assert(document.querySelector('[role="alert"]')?.textContent?.includes('No sharp'), 'No-corner diagnostic missing')
@@ -160,14 +214,13 @@ async function run() {
     equal(layer().modifierStack!.modifiers.map(item => item.type), ['offset', 'offsetPath'], 'New operation rewrote legacy record')
     const pixels = await raster(); assert(pixels.some(channel => channel > 0), 'Actual output is empty')
     checks.push('Legacy-only records keep closed compatibility history; adding a modern operation preserves old type/order and valid raster output')
-    flushSync(() => current().editor.resetScene(bakedCorners)); await frames()
-    await add('Round Corners'); await number('Round Corners Radius', 20); await click('Execute stack')
-    assert(!current().geometryEdit.active, 'Final baked-radius display entered Edit')
+    flushSync(() => current().editor.resetScene(parsed)); await frames(); await row('splineRepeater')
+    assert(!current().geometryEdit.active, 'Final Phase 1 display entered Edit')
     const stack = document.querySelector('[aria-label="Modifier stack"]')!; stack.scrollIntoView({ block: 'center' })
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
 }
-document.body.innerHTML = '<style>body{margin:16px;background:#101827;color:#e5e7eb;font:14px system-ui}nav button,#run{padding:8px;border:1px solid #475569;border-radius:5px;margin:4px}#host{max-width:1350px}pre{white-space:pre-wrap}</style><h1>Static spline modifier acceptance</h1><p>Disposable production Edit dock, viewport, native commands and raster output.</p><button id="run">Run checks</button><p id="status">Ready</p><section id="host"></section><pre id="report">No checks run</pre>'
+document.body.innerHTML = '<style>body{margin:16px;background:#101827;color:#e5e7eb;font:14px system-ui}nav button,#run{padding:8px;border:1px solid #475569;border-radius:5px;margin:4px}#host{max-width:1350px}pre{white-space:pre-wrap}</style><h1>Static spline modifier acceptance</h1><p>Disposable production Edit dock, viewport, native commands and raster output.</p><button id="run">Run checks</button><p id="status">Ready</p><section id="host"></section><pre id="report">No checks run</pre><script id="portable-output" type="application/json"></script><script id="svg-output" type="text/plain"></script>'
 createRoot(document.getElementById('host')!).render(<Subject strictPanel />)
 document.getElementById('run')!.onclick = () => void run()
 if (new URL(location.href).searchParams.has('autorun')) void frames().then(run)
