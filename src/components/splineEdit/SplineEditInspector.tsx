@@ -1,4 +1,5 @@
 'use client'
+import { SplineObjectInterpolationControls } from './SplineObjectInterpolationControls'
 import { useEffect, useState } from 'react'
 import type { ChronoScene, Layer } from '@/lib/types'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
@@ -134,6 +135,7 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
           <div className="flex flex-wrap gap-2"><button type="button" disabled={readonly} className={selectClass + ' !w-auto'} onClick={() => apply({ kind: 'topology' }, source => contours.reduce((next, contour) => setContourClosed(next, contour.id, !contours.every(c => c.closed)), source), 'Set spline closure')}>{contours.every(c => c.closed) ? 'Open contours' : 'Close contours'}</button>
             <button type="button" disabled={readonly} className={selectClass + ' !w-auto'} onClick={() => apply({ kind: 'topology' }, source => contours.reduce((next, contour) => reverseContour(next, contour.id), source), 'Reverse spline object')}>Reverse direction</button></div>
         </>}
+        <SplineObjectInterpolationControls data={data} ids={ids} tool={topology.componentTools.find(tool => tool.id === 'interpolation')} />
       </div>}
       <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Selection actions</summary>
         <div className="mt-3"><SplineTopologyControls scene={getScene()} layer={layer} controller={controller} actions={topology} disabled={readonly} /></div>

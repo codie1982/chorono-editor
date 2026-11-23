@@ -24,13 +24,14 @@ export function SplineTopologyControls({ scene, layer, controller, actions, disa
   return <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer select-none">Topology · {controller.mode}</summary>
     <fieldset disabled={disabled} className="space-y-2 pt-2">
     {controller.mode === 'object' && <><TopologyNumber label="Simplify tolerance (local px)" value={controller.simplifyTolerancePx} min={.001} max={1000} onChange={controller.setSimplifyTolerancePx} />
+      <TopologyNumber label="Subdivide parts per edge" value={controller.subdivideParts} min={2} max={64} onChange={controller.setSubdivideParts} />
       <p className="text-gray-400">Simplify preserves sharp turns (≥30°) and hole ownership. Smooth changes handles while keeping anchors fixed.</p></>}
     {controller.mode === 'edge' && <label className="block space-y-1">New vertex type<select aria-label="New vertex type" className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5" value={controller.vertexType}
       onChange={event => controller.setVertexType(event.target.value as SplineVertexType)}>{splineVertexTypes.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select>
       <span className="block text-gray-400">Preserve keeps the exact curve. Corner / mirrored Bézier may reshape the edge.</span>
     </label>}
     {controller.mode === 'edge' && <TopologyNumber label="Split position (%)" value={split} min={.01} max={99.99} onChange={setSplit} />}
-    <div className="flex flex-wrap gap-2">{actions.componentTools.map(tool => <span key={tool.id} title={tool.reason ?? tool.description}>
+    <div className="flex flex-wrap gap-2">{actions.componentTools.filter(tool => tool.id !== 'interpolation').map(tool => <span key={tool.id} title={tool.reason ?? tool.description}>
       <button type="button" className={button + (tool.active ? ' border-orange-400 bg-orange-950' : '')} disabled={tool.disabled} aria-pressed={tool.id === 'trim' || tool.id === 'extend' || tool.id === 'addVertex' ? !!tool.active : undefined} aria-describedby={`spline-tool-${tool.id}`} onClick={() => tool.run({ t: split / 100 })}>{tool.label}</button>
       <span id={`spline-tool-${tool.id}`} className="sr-only">{tool.reason ?? tool.description}</span>
     </span>)}</div>

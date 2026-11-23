@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import { evaluateBezier } from '@/lib/geometry/bezier/curves'
 import { segmentControls } from '@/lib/spline/corners/segmentGeometry'
+import { splineToPathDefinition } from '@/lib/spline/splineToPath'
 import { Subject, current, frames, layer, tap, click, key, choose, reset, assert, equal, contextAt, raster } from './splineHarness'
 
 /** Open the production disclosures; hidden controls are not counted as usable. */
@@ -19,6 +20,12 @@ async function menu(label: string) {
   flushSync(() => item.click()); await frames()
 }
 async function select(mode: 'edge' | 'object', ids: string[]) { flushSync(() => current().controller.enter(mode, ids)); await frames(); await openTools() }
+/** Native input setter bypasses React's value tracker, then dispatches the real
+ * bubbling input event. Editing the draft must never create an Undo itself. */
+async function number(label: string, value: number) {
+  const input = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`); assert(input, `Missing ${label}`)
+  flushSync(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, String(value)); input.dispatchEvent(new Event('input', { bubbles: true })) }); await frames()
+}
 async function run() {
   const status = document.getElementById('status')!, report = document.getElementById('report')!, checks: string[] = []
   try {
@@ -68,13 +75,44 @@ async function run() {
       await click('Undo'); equal(current().editor.getScene(), before, 'Smooth was not one Undo')
     }
     checks.push('Smooth panel/menu change tangents while keeping all anchor coordinates and hole ownership; each activation is one Undo')
+
+    for (const viaMenu of [false, true]) {
+      await select('object', [object.id]); const before = structuredClone(current().editor.getScene()), contour = before.layers[1].spline!.contours[object.contourIds[0]]
+      await number('Subdivide parts per edge', 4)
+      equal(current().editor.getScene(), before, 'Subdivide draft wrote source')
+      if (viaMenu) { await contextAt({ x: -110, y: 0 }); await menu('Subdivide') } else await click('Subdivide')
+      assert(layer().spline!.contours[contour.id].segmentIds.length === contour.segmentIds.length * 4, 'Subdivide ignored shared part count')
+      equal(layer().transform, before.layers[1].transform, 'Subdivide moved layer origin/TRS')
+      await click('Undo'); equal(current().editor.getScene(), before, 'Subdivide was not one Undo')
+      await click('Redo'); await click('Undo'); equal(current().editor.getScene(), before, 'Subdivide Redo/Undo changed source')
+    }
+    checks.push('Object Subdivide uses shared 4-part settings from panel/right-click, preserves outer placement and has one Undo/Redo')
+
+    await select('object', [ring.id]); const beforeInterpolation = structuredClone(current().editor.getScene()), beforePixels = await raster()
+    const countBefore = document.querySelector('[aria-label="Object interpolation"] [aria-live]')!.textContent
+    await number('Object interpolation tolerance', .01)
+    equal(current().editor.getScene(), beforeInterpolation, 'Interpolation draft wrote source')
+    await click('Apply interpolation')
+    const precise = structuredClone(current().editor.getScene())
+    assert(layer().spline!.subShapes[ring.id].interpolation?.tolerancePx === .01, 'Interpolation panel did not store precision')
+    assert(document.querySelector('[aria-label="Object interpolation"] [aria-live]')!.textContent !== countBefore, 'Precision did not change derived sample count')
+    equal(splineToPathDefinition(layer().spline!), splineToPathDefinition(beforeInterpolation.layers[1].spline!), 'Interpolation changed exact path/source vertices')
+    const afterPixels = await raster(); assert(afterPixels.length === beforePixels.length && afterPixels.every((channel, i) => channel === beforePixels[i]), 'Sampling metadata changed exact PNG rendering')
+    await click('Use default interpolation'); assert(!layer().spline!.subShapes[ring.id].interpolation, 'Default did not remove precision')
+    await click('Undo'); equal(current().editor.getScene(), precise, 'Reset was not a separate Undo')
+    await click('Undo'); equal(current().editor.getScene(), beforeInterpolation, 'Interpolation was not one Undo')
+    await contextAt(layer().spline!.points[layer().spline!.contours[ring.contourIds[0]].pointIds[0]]); await menu('Interpolation'); await menu('0.1 local px')
+    assert(layer().spline!.subShapes[ring.id].interpolation?.tolerancePx === .1, 'Interpolation menu did not store precision')
+    await click('Undo'); equal(current().editor.getScene(), beforeInterpolation, 'Menu interpolation was not one Undo')
+    checks.push('Object Interpolation panel/presets/default use separate Undo, change real sample count and preserve exact path and actual PNG pixels')
     const pixels = await raster(); assert(pixels.some(channel => channel > 0), 'Actual PNG is empty')
-    await select('edge', [Object.keys(layer().spline!.segments)[0]]); await click('Add Vertex')
-    checks.push('Actual PNG renderer/export remains valid; final viewport displays Add Vertex anchors and active tool state')
+    await select('object', [ring.id])
+    document.querySelector('[aria-label="Object interpolation"]')!.scrollIntoView({ block: 'center' })
+    checks.push('Actual PNG renderer/export remains valid; final Object inspector displays the new interpolation controls')
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
 }
-document.body.innerHTML = '<style>body{margin:16px;background:#101827;color:#e5e7eb;font:14px system-ui}nav button,#run{padding:8px;border:1px solid #475569;border-radius:5px;margin:4px}#host{max-width:1350px}pre{white-space:pre-wrap}</style><h1>Spline Add Vertex / Simplify / Smooth</h1><p>Disposable production viewport, panel, context menu, native history and PNG acceptance.</p><button id="run">Run checks</button><p id="status">Ready</p><section id="host"></section><pre id="report">No checks run</pre>'
+document.body.innerHTML = '<style>body{margin:16px;background:#101827;color:#e5e7eb;font:14px system-ui}nav button,#run{padding:8px;border:1px solid #475569;border-radius:5px;margin:4px}#host{max-width:1350px}pre{white-space:pre-wrap}</style><h1>Spline component tools · Subdivide / Interpolation</h1><p>Disposable production viewport, panel, context menu, native history and PNG acceptance.</p><button id="run">Run checks</button><p id="status">Ready</p><section id="host"></section><pre id="report">No checks run</pre>'
 createRoot(document.getElementById('host')!).render(<Subject />)
 document.getElementById('run')!.onclick = () => void run()
 if (new URL(location.href).searchParams.has('autorun')) void frames().then(run)

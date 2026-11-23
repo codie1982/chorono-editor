@@ -37,7 +37,7 @@ export function useSplineTopologyActions(options: {
         if (prepared.result.layerId !== layer.id) options.onSelectLayer?.(prepared.result.layerId)
         // The document selection owner outlives closing viewport menus.
         options.controller.focusResult({ ...prepared.result, ghosts: options.controller.sourceGhosts,
-          attaching: options.controller.attaching, operation: options.controller.attachOperation, vertexType: options.controller.vertexType, simplifyTolerancePx: options.controller.simplifyTolerancePx,
+          attaching: options.controller.attaching, operation: options.controller.attachOperation, vertexType: options.controller.vertexType, simplifyTolerancePx: options.controller.simplifyTolerancePx, subdivideParts: options.controller.subdivideParts,
           ...(action.kind === 'addVertex' && options.controller.edgeTool === 'addVertex' ? { edgeTool: 'addVertex' as const } : {}) })
       }
       options.warning('reason' in prepared.result ? prepared.result.reason ?? '' : '')
@@ -57,5 +57,6 @@ export function useSplineTopologyActions(options: {
     edgeTool: options.controller.edgeTool, pickEdgeTool: tool => options.controller.setEdgeTool(options.controller.edgeTool === tool ? null : tool),
     pickedEdgeId: options.pickedEdgeId,
     simplifyTolerancePx: options.controller.simplifyTolerancePx,
+    subdivideParts: options.controller.subdivideParts,
   }) : [] }
 }

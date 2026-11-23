@@ -8,10 +8,10 @@ import { splineExtendEndpoint } from '@/lib/spline/topology/edgeBoundaries'
 import type { SplineEdgePickTool } from '../useSplineEditSelection'
 
 export interface SplineComponentTool {
-  id: 'break' | 'fuse' | 'resetTangents' | 'copyTangents' | 'pasteTangents' | 'split' | 'simplify' | 'smooth' | SplineEdgePickTool
+  id: 'break' | 'fuse' | 'resetTangents' | 'copyTangents' | 'pasteTangents' | 'split' | 'simplify' | 'smooth' | 'subdivide' | 'interpolation' | SplineEdgePickTool
   label: string; description: string; reason?: string; disabled: boolean
   active?: boolean
-  run(options?: { t?: number; edgeId?: string }): void
+  run(options?: { t?: number; edgeId?: string; parts?: number; tolerancePx?: number | null }): void
 }
 const definitions: (Omit<SplineComponentTool, 'run' | 'reason' | 'disabled'> & { mode: SplineEditMode })[] = [
   { id: 'break', mode: 'point', label: 'Break', description: 'Separate at selected points without moving the curves.' },
@@ -25,6 +25,8 @@ const definitions: (Omit<SplineComponentTool, 'run' | 'reason' | 'disabled'> & {
   { id: 'extend', mode: 'edge', label: 'Extend', description: 'Click a terminal edge near its open end to extend its tangent to the nearest forward boundary.' },
   { id: 'simplify', mode: 'object', label: 'Simplify', description: 'Reduce redundant anchors within the chosen local-pixel tolerance, preserving sharp corners and holes.' },
   { id: 'smooth', mode: 'object', label: 'Smooth', description: 'Rebuild smooth tangents without moving any anchor points.' },
+  { id: 'subdivide', mode: 'object', label: 'Subdivide', description: 'Split every edge of selected Objects into equal parameter pieces, preserving the exact curve and holes.' },
+  { id: 'interpolation', mode: 'object', label: 'Interpolation', description: 'Set adaptive sampling precision in local px; source anchors and exact render curves stay unchanged.' },
 ]
 /** One mode/availability catalog for panel and menu. Copy is read-only; all
  * mutations share native topology ownership guards. Missing selection never
@@ -35,6 +37,7 @@ export function splineComponentTools(options: {
   edgeTool?: SplineEdgePickTool | null; pickEdgeTool?(tool: SplineEdgePickTool): void
   pickedEdgeId?: string
   simplifyTolerancePx?: number
+  subdivideParts?: number
 }): SplineComponentTool[] {
   const { layer, ids, clipboard } = options
   let guard: string | undefined
@@ -63,6 +66,8 @@ export function splineComponentTools(options: {
       else if (tool.id === 'split') options.perform({ kind: 'split', ...settings })
       else if (tool.id === 'addVertex') options.pickEdgeTool?.('addVertex')
       else if (tool.id === 'simplify') options.perform({ kind: 'simplify', tolerancePx: options.simplifyTolerancePx ?? .5 })
+      else if (tool.id === 'subdivide') options.perform({ kind: 'subdivide', parts: settings?.parts ?? options.subdivideParts ?? 2 })
+      else if (tool.id === 'interpolation') options.perform({ kind: 'interpolation', tolerancePx: settings?.tolerancePx === null ? null : settings?.tolerancePx ?? .25 })
       else if (tool.id === 'trim' || tool.id === 'extend') {
         if (settings?.edgeId && settings.t !== undefined) options.perform({ kind: tool.id, edgeId: settings.edgeId, t: settings.t })
         else options.pickEdgeTool?.(tool.id)

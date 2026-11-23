@@ -11,6 +11,7 @@ import { useSplineTopologyActions } from './useSplineTopologyActions'
 import type { SplineTangentClipboard } from './useSplineTangentClipboard'
 import type { OverrideMap } from '@/lib/evaluator'
 import { splineVertexTypes } from './tools/splineVertexTypes'
+import { splineInterpolationPresets } from './tools/splineInterpolationPresets'
 
 /** Mode-local actions over current source. The native topology guard refuses
  * competing key/wire writers; menus never substitute root layer deletion. */
@@ -43,7 +44,9 @@ export function SplineEditMenu({ x, y, target, layer, controller, getScene, disp
   items.push(...topology.componentTools.map(tool => tool.id === 'addVertex' ? { kind: 'submenu' as const, label: tool.label, disabled: tool.disabled,
     items: splineVertexTypes.map(choice => ({ kind: 'action' as const, label: choice.label, disabled: tool.disabled, disabledReason: tool.reason, onSelect: () => {
       controller.setVertexType(choice.value); controller.setEdgeTool('addVertex'); close()
-    } })) } : { kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason,
+    } })) } : tool.id === 'interpolation' ? { kind: 'submenu' as const, label: tool.label, disabled: tool.disabled,
+      items: splineInterpolationPresets.map(choice => ({ kind: 'action' as const, label: choice.label, disabled: tool.disabled, disabledReason: tool.reason,
+        onSelect: () => { tool.run({ tolerancePx: choice.value }); close() } })) } : { kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason,
     onSelect: () => { tool.run(target?.kind === 'edge' ? { edgeId: target.id, t: target.t ?? .5 } : undefined); close() } }))
   items.push(...tools.map(tool => ({ kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason, onSelect: () => { tool.run(); close() } })))
   if (items.length) items.push({ kind: 'separator' })

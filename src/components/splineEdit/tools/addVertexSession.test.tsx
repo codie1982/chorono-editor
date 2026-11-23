@@ -63,6 +63,23 @@ describe('persistent Add Vertex session', () => {
 })
 
 describe('Object tool session history', () => {
+  it('keeps Subdivide parts transient/shared and records Subdivide, interpolation and its reset as separate Undo steps', () => {
+    const host = mount(true), ids = Object.keys(host.scene.layers[0].spline!.subShapes)
+    act(() => host.get().controller.enter('object', ids)); act(() => host.get().controller.setSubdivideParts(3))
+    expect(host.get().editor.canUndo).toBe(false)
+    act(() => host.get().actions.componentTools.find(tool => tool.id === 'subdivide')!.run())
+    const divided = host.get().editor.getScene(); expect(Object.keys(divided.layers[0].spline!.points)).toHaveLength(13)
+    expect(host.get().controller.subdivideParts).toBe(3); expect(host.get().controller.ids).toEqual(ids)
+    act(() => host.get().actions.componentTools.find(tool => tool.id === 'interpolation')!.run({ tolerancePx: .1 }))
+    const sampled = host.get().editor.getScene(); expect(sampled.layers[0].spline!.points).toBe(divided.layers[0].spline!.points)
+    act(() => host.get().actions.componentTools.find(tool => tool.id === 'interpolation')!.run({ tolerancePx: null }))
+    expect(host.get().editor.getScene().layers[0].spline).toEqual(divided.layers[0].spline) // Reset is a new authored command, with its own attribution.
+    act(() => host.get().editor.undo()); expect(host.get().editor.getScene()).toEqual(sampled)
+    act(() => host.get().editor.undo()); expect(host.get().editor.getScene()).toEqual(divided)
+    act(() => host.get().editor.undo()); expect(host.get().editor.getScene()).toEqual(host.scene)
+    act(() => host.get().editor.redo()); expect(host.get().editor.getScene()).toEqual(divided)
+    act(() => host.get().editor.resetScene(structuredClone(host.scene))); expect(host.get().controller.subdivideParts).toBe(2)
+  })
   it('keeps tolerance UI-only and each Simplify/Smooth activation as an independent Undo without moving the layer', () => {
     const host = mount(true), ids = Object.keys(host.scene.layers[0].spline!.subShapes)
     act(() => host.get().controller.enter('object', ids))

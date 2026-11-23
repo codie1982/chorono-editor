@@ -25,6 +25,8 @@ export interface SplineEditController {
   setVertexType(value: SplineVertexType): void
   readonly simplifyTolerancePx: number
   setSimplifyTolerancePx(value: number): void
+  readonly subdivideParts: number
+  setSubdivideParts(value: number): void
   /** Pick existing scene splines into this layer; never a drawing tool. */
   readonly attaching: boolean
   setAttaching(value: boolean): void
@@ -39,8 +41,8 @@ export interface SplineEditController {
 }
 /** UI focus request after a host changes its primary layer. Drawing results
  * supply IDs; a mode-only request preserves the selected mode's valid ID bank. */
-export interface SplineEditRequest { layerId: string; mode: SplineEditMode; ids?: readonly string[]; ghosts?: readonly SplineSourceGhost[]; attaching?: boolean; operation?: SplineAddOperation; edgeTool?: 'addVertex'; vertexType?: SplineVertexType; pointId?: string; simplifyTolerancePx?: number }
-interface State { layerId: string | null; document?: AbortSignal; active: boolean; mode: SplineEditMode; bank: SplineSelection; attaching: boolean; attachOperation: SplineAddOperation; ghosts: readonly SplineSourceGhost[]; nonDestructive: boolean; edgeTool: SplineEdgePickTool | null; pickSource?: Layer['spline']; vertexType: SplineVertexType; simplifyTolerancePx: number }
+export interface SplineEditRequest { layerId: string; mode: SplineEditMode; ids?: readonly string[]; ghosts?: readonly SplineSourceGhost[]; attaching?: boolean; operation?: SplineAddOperation; edgeTool?: 'addVertex'; vertexType?: SplineVertexType; pointId?: string; simplifyTolerancePx?: number; subdivideParts?: number }
+interface State { layerId: string | null; document?: AbortSignal; active: boolean; mode: SplineEditMode; bank: SplineSelection; attaching: boolean; attachOperation: SplineAddOperation; ghosts: readonly SplineSourceGhost[]; nonDestructive: boolean; edgeTool: SplineEdgePickTool | null; pickSource?: Layer['spline']; vertexType: SplineVertexType; simplifyTolerancePx: number; subdivideParts: number }
 /** Transient layer/document-scoped selection owner, shared by Properties and
  * viewport. Switching modes keeps each valid ID bank but never changes source,
  * history or clipboard. Reset/deletion prunes synchronously for consumers and
@@ -51,7 +53,7 @@ interface State { layerId: string | null; document?: AbortSignal; active: boolea
  * replacement releases preferences; mode/selection changes cancel picking. */
 export function useSplineEditSelection(layer: Layer | null | undefined, document?: AbortSignal): SplineEditController {
   const layerId = layer?.type === 'spline' && layer.spline && !layer.booleanResultFor && !modifierOutputReadOnly(layer) ? layer.id : null
-  const fresh = useCallback((): State => ({ layerId, document, active: false, mode: 'point', bank: emptySplineSelection(), attaching: false, attachOperation: 'union', ghosts: [], nonDestructive: false, edgeTool: null, vertexType: 'preserve', simplifyTolerancePx: .5 }), [layerId, document])
+  const fresh = useCallback((): State => ({ layerId, document, active: false, mode: 'point', bank: emptySplineSelection(), attaching: false, attachOperation: 'union', ghosts: [], nonDestructive: false, edgeTool: null, vertexType: 'preserve', simplifyTolerancePx: .5, subdivideParts: 2 }), [layerId, document])
   const [state, setState] = useState<State>(fresh)
   const [pending, setPending] = useState<{ request: SplineEditRequest; document?: AbortSignal } | null>(null)
   useEffect(() => {
@@ -63,7 +65,7 @@ export function useSplineEditSelection(layer: Layer | null | undefined, document
     if (request.pointId) bank = selectSplineIds(bank, 'point', [request.pointId], 'replace')
     setState({ layerId, document, active: true, mode: request.mode, bank,
       attaching: request.attaching ?? false, attachOperation: request.operation ?? 'union', ghosts: request.ghosts ?? [], nonDestructive: false,
-      edgeTool: request.mode === 'edge' && request.edgeTool === 'addVertex' ? 'addVertex' : null, vertexType: request.vertexType ?? 'preserve', simplifyTolerancePx: request.simplifyTolerancePx ?? .5 })
+      edgeTool: request.mode === 'edge' && request.edgeTool === 'addVertex' ? 'addVertex' : null, vertexType: request.vertexType ?? 'preserve', simplifyTolerancePx: request.simplifyTolerancePx ?? .5, subdivideParts: request.subdivideParts ?? 2 })
     setPending(null)
   }, [pending, layerId, document])
   const clean = useCallback((before: State): State => {
@@ -103,8 +105,11 @@ export function useSplineEditSelection(layer: Layer | null | undefined, document
   const setSimplifyTolerancePx = useCallback((value: number) => {
     if (Number.isFinite(value) && value >= .001 && value <= 1000) setState(before => ({ ...clean(before), simplifyTolerancePx: value }))
   }, [clean])
+  const setSubdivideParts = useCallback((value: number) => {
+    if (Number.isInteger(value) && value >= 2 && value <= 64) setState(before => ({ ...clean(before), subdivideParts: value }))
+  }, [clean])
   return { sourceGhosts: current.ghosts, focusResult: request => setPending({ request, document }), layerId, active: current.active && !!layerId, mode: current.mode, bank: current.bank,
-    ids: current.bank[current.mode], edgeTool: current.edgeTool, setEdgeTool, vertexType: current.vertexType, setVertexType, simplifyTolerancePx: current.simplifyTolerancePx, setSimplifyTolerancePx, attaching: current.attaching, setAttaching,
+    ids: current.bank[current.mode], edgeTool: current.edgeTool, setEdgeTool, vertexType: current.vertexType, setVertexType, simplifyTolerancePx: current.simplifyTolerancePx, setSimplifyTolerancePx, subdivideParts: current.subdivideParts, setSubdivideParts, attaching: current.attaching, setAttaching,
     nonDestructive: current.nonDestructive, setNonDestructive: value => setState(before => ({ ...clean(before), nonDestructive: value })),
     attachOperation: current.attachOperation, setAttachOperation, enter, select, clear, exit }
 }

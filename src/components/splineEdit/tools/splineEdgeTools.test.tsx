@@ -10,6 +10,7 @@ import type { MenuItem } from '@/components/ui/ContextMenu'
 import { useSplineViewportEditing } from '../useSplineViewportEditing'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
+import { SplineObjectInterpolationControls } from '../SplineObjectInterpolationControls'
 
 let captured: MenuItem[] = []
 vi.mock('@/components/ui/ContextMenu', () => ({ default: ({ items }: { items: MenuItem[] }) => { captured = items; return <div role="menu">{items.map((item, i) => item.kind === 'action' ? <button key={i} disabled={item.disabled}>{item.label}</button> : null)}</div> } }))
@@ -20,7 +21,7 @@ function fixture() {
   const line = createPolylineSpline([{ x: 0, y: 0 }, { x: 100, y: 0 }], false), cutter = createPolylineSpline([{ x: 50, y: -20 }, { x: 50, y: 20 }], false)
   const layer = newSplineLayerFromData(mergeSplineData(line, cutter)), scene = emptyScene(); scene.layers = [layer]
   const edge = Object.keys(line.segments)[0], controller: SplineEditController = {
-    active: true, layerId: layer.id, mode: 'edge', ids: [edge], bank: { point: [], edge: [edge], object: [] }, edgeTool: null, setEdgeTool: vi.fn(), vertexType: 'preserve', setVertexType: vi.fn(), simplifyTolerancePx: .5, setSimplifyTolerancePx: vi.fn(),
+    active: true, layerId: layer.id, mode: 'edge', ids: [edge], bank: { point: [], edge: [edge], object: [] }, edgeTool: null, setEdgeTool: vi.fn(), vertexType: 'preserve', setVertexType: vi.fn(), simplifyTolerancePx: .5, setSimplifyTolerancePx: vi.fn(), subdivideParts: 2, setSubdivideParts: vi.fn(),
     attaching: false, setAttaching: vi.fn(), attachOperation: 'union', setAttachOperation: vi.fn(), nonDestructive: false, setNonDestructive: vi.fn(),
     sourceGhosts: [], focusResult: vi.fn(), enter: vi.fn(), select: vi.fn(), clear: vi.fn(), exit: vi.fn(),
   }
@@ -111,7 +112,7 @@ describe('shared Edge tool UI contracts', () => {
     const { scene, layer, controller } = fixture(), ids = Object.keys(layer.spline!.subShapes)
     const objectController = { ...controller, mode: 'object' as const, ids, simplifyTolerancePx: .125 }
     const perform = vi.fn(), tools = splineComponentTools({ scene, layer, ids, mode: 'object', active: true, simplifyTolerancePx: .125, perform, copy: vi.fn() })
-    expect(tools.map(tool => tool.label)).toEqual(['Simplify', 'Smooth'])
+    expect(tools.map(tool => tool.label)).toEqual(['Simplify', 'Smooth', 'Subdivide', 'Interpolation'])
     tools[0].run(); expect(perform).toHaveBeenCalledWith({ kind: 'simplify', tolerancePx: .125 })
     tools[1].run(); expect(perform).toHaveBeenCalledWith({ kind: 'smooth' })
     const html = renderToStaticMarkup(<SplineTopologyControls scene={scene} layer={layer} controller={objectController} actions={{ componentTools: tools, canDetach: false, perform }} />)
@@ -126,5 +127,28 @@ describe('shared Edge tool UI contracts', () => {
     expect(command.undo(next)).toEqual(scene)
     layer.locked = true
     expect(splineComponentTools({ scene, layer, ids, mode: 'object', active: true, perform, copy: vi.fn() }).every(tool => tool.disabled)).toBe(true)
+  })
+  it('Object Subdivide uses shared parts and Interpolation menu writes only metadata with one exact Undo', () => {
+    const { scene, layer, controller } = fixture(), ids = Object.keys(layer.spline!.subShapes), perform = vi.fn()
+    const tools = splineComponentTools({ scene, layer, ids, mode: 'object', active: true, subdivideParts: 4, perform, copy: vi.fn() })
+    tools.find(tool => tool.id === 'subdivide')!.run(); expect(perform).toHaveBeenCalledWith({ kind: 'subdivide', parts: 4 })
+    const dispatch = vi.fn(), objectController = { ...controller, mode: 'object' as const, ids, subdivideParts: 4 }
+    renderToStaticMarkup(<SplineEditMenu x={0} y={0} target={{ kind: 'object', id: ids[0] }} layer={layer} controller={objectController} getScene={() => scene} dispatch={dispatch} warning={vi.fn()} close={vi.fn()} />)
+    const subdivide = captured.find(item => item.kind === 'action' && item.label === 'Subdivide')!
+    if (subdivide.kind === 'action') subdivide.onSelect()
+    const division = dispatch.mock.calls[0][0], divided = division.execute(scene)
+    expect(Object.keys(divided.layers[0].spline!.points)).toHaveLength(10); expect(division.undo(divided)).toEqual(scene)
+    dispatch.mockClear()
+    const menu = captured.find(item => item.kind === 'submenu' && item.label === 'Interpolation')!
+    expect(menu.kind).toBe('submenu')
+    if (menu.kind !== 'submenu') throw new Error('Missing interpolation presets')
+    const preset = menu.items.find(item => item.kind === 'action' && item.label === '0.1 local px')!
+    if (preset.kind === 'action') preset.onSelect()
+    const apply = dispatch.mock.calls[0][0], next = apply.execute(scene), data = next.layers[0].spline!
+    expect(data.points).toBe(layer.spline!.points); expect(data.contours).toBe(layer.spline!.contours)
+    for (const id of ids) expect(data.subShapes[id].interpolation).toEqual({ version: 1, tolerancePx: .1 })
+    expect(apply.undo(next)).toEqual(scene)
+    const html = renderToStaticMarkup(<SplineObjectInterpolationControls data={data} ids={ids} tool={tools.find(tool => tool.id === 'interpolation')} />)
+    expect(html).toContain('Apply interpolation'); expect(html).toContain('Use default interpolation'); expect(html).toContain('Current: 0.1 local px')
   })
 })
