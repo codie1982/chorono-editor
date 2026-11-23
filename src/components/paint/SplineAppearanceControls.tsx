@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import type { Asset, Layer } from '@/lib/types'
-import { splineObjectStyle, withSplineObjectPaint } from '@/lib/spline/paint/objectPaint'
+import { splineObjectStyle, withSplineObjectPaint, splinePaintTargets } from '@/lib/spline/paint/objectPaint'
 import { SplinePaintControls } from './SplinePaintControls'
 import { NumericPropertyProvider } from '../inputs/expressions/NumericPropertyContext'
 
@@ -10,7 +10,7 @@ import { NumericPropertyProvider } from '../inputs/expressions/NumericPropertyCo
  * Independent paint is static source data; root animation/fx paths must not
  * accidentally bind to it. The host owns one native Undo per style change. */
 export function SplineAppearanceControls({ layer, assets, onChange }: { layer: Layer; assets: readonly Asset[]; onChange(layer: Layer): void }) {
-  const [target, setTarget] = useState(''), objects = Object.values(layer.spline?.subShapes ?? {}).filter(o => o.paint)
+  const [target, setTarget] = useState(''), objects = splinePaintTargets(layer)
   const object = objects.find(o => o.id === target), style = object ? splineObjectStyle(object, layer.style, layer.splinePaintOverrides?.objects[object.id]) ?? {} : layer.style ?? {}
   const controls = <SplinePaintControls independent={!!object} style={style} assets={assets}
     closed={!!layer.spline && (object ? object.contourIds : Object.keys(layer.spline.contours)).every(id => layer.spline!.contours[id].closed)}

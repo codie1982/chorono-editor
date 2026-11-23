@@ -14,7 +14,7 @@ export interface SplineToolAction {
 const tools: readonly { id: SplineToolId; label: string; description: string; modes: readonly SplineEditMode[] }[] = [
   { id: 'chamfer', label: 'Chamfer', description: 'Cut selected corners along their adjacent curves.', modes: ['point'] },
   { id: 'fillet', label: 'Fillet', description: 'Round selected corners with tangent circular arcs.', modes: ['point'] },
-  { id: 'band', label: 'Outline · Stroke to Path', description: 'Create real closed bands with caps, joins, dashes and holes.', modes: ['edge', 'object'] },
+  { id: 'band', label: 'Outline · Live', description: 'Keep source points editable and generate a band that follows the line.', modes: ['edge', 'object'] },
   { id: 'offset', label: 'Offset Path', description: 'Inset/outset closed contours or offset open contours.', modes: ['edge', 'object'] },
 ]
 

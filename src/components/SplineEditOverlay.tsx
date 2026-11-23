@@ -16,13 +16,15 @@ interface Props {
   selection?: SplineEditController
   /** Boolean inputs are source ghosts; the host draws the solved result separately. */
   sourceGhost?: boolean
+  /** Live source guide can be hidden without hiding editable anchors. */
+  liveSource?: boolean; guideVisible?: boolean
 }
 /** Read-only sub-object overlay. World affine + zoom are applied once to paths;
  * node/handle radii and stroke widths stay in CSS pixels. Only the active mode's
  * affordances are drawn. Object paths include every contour/hole of that
  * SubShape. Pointer events remain off; the shared canvas interaction owner
  * performs mode-specific picking and gestures. Nothing is serialized/exported. */
-export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = null, selectedPointId = null, selection, sourceGhost = false }: Props) {
+export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = null, selectedPointId = null, selection, sourceGhost = false, liveSource = false, guideVisible = true }: Props) {
   if (layer.type !== 'spline' || !layer.spline || selection && (!selection.active || selection.layerId !== layer.id)) return null
   const data = layer.spline, mode = selection?.mode ?? 'point'
   const ids = selection?.ids ?? (selectedPointId ? [selectedPointId] : [])
@@ -31,9 +33,9 @@ export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = nu
   const matrix = `matrix(${x.x * zoom} ${x.y * zoom} ${y.x * zoom} ${y.y * zoom} ${a.x * zoom} ${a.y * zoom})`
   const handles = new Map(Object.values(data.handles).map(handle => [`${handle.pointId}:${handle.kind}`, handle]))
   return <svg aria-label={`Spline ${mode} selection`} className="absolute inset-0 z-30 overflow-visible pointer-events-none" style={{ width: '100%', height: '100%' }}>
-    {!sourceGhost && <path data-spline-edit-boundary="true" d={pathToSvgString(splineToPathDefinition(data))} transform={matrix}
-      fill="none" stroke="#FDBA74" strokeOpacity={.9} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
-    {mode === 'object' && <g transform={matrix}>{Object.values(data.subShapes).map(object => {
+    {!sourceGhost && guideVisible && <path data-spline-edit-boundary="true" data-spline-source-guide={liveSource || undefined} d={pathToSvgString(splineToPathDefinition(data))} transform={matrix}
+      fill="none" stroke={liveSource ? '#38BDF8' : '#FDBA74'} strokeOpacity={.9} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+    {guideVisible && mode === 'object' && <g transform={matrix}>{Object.values(data.subShapes).map(object => {
       const selected = ids.includes(object.id), hovered = hover?.kind === 'object' && hover.id === object.id
       const d = pathToSvgString(splineToPathDefinition(subShapeData(data, object.id)))
       if (sourceGhost && !selected && !hovered) return null
@@ -42,7 +44,7 @@ export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = nu
         fill="none" stroke={sourceGhost ? '#94a3b8' : selected ? '#EF4444' : '#FDBA74'} strokeWidth={sourceGhost ? 1.25 : selected || hovered ? 2.5 : 1.5}
         vectorEffect="non-scaling-stroke" /></g>
     })}</g>}
-    {mode === 'edge' && <g transform={matrix}>{Object.keys(data.segments).map(id => {
+    {guideVisible && mode === 'edge' && <g transform={matrix}>{Object.keys(data.segments).map(id => {
       const selected = ids.includes(id), hovered = (hover?.kind === 'edge' || hover?.kind === 'segment') && hover.id === id
       const d = pathToSvgString(splineEdgePath(data, id))
       if (sourceGhost && !selected && !hovered) return null

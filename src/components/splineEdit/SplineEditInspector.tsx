@@ -1,4 +1,5 @@
 'use client'
+import { SplineLiveOutlineControls } from './band/SplineLiveOutlineControls'
 import type { SplineBandController } from './band/useSplineBand'
 import { SplineObjectInterpolationControls } from './SplineObjectInterpolationControls'
 import { useEffect, useState } from 'react'
@@ -142,6 +143,7 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
       <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Selection actions</summary>
         <div className="mt-3"><SplineTopologyControls scene={getScene()} layer={layer} controller={controller} actions={topology} disabled={readonly} /></div>
       </details>
+      {band && <SplineLiveOutlineControls controller={band} disabled={disabled} />}
       <SplineEditToolbox mode={controller.mode} actions={tools} chamfer={chamfer} fillet={fillet} outline={outline} band={band} />
       {controller.mode === 'object' && <SplineAttachControls controller={controller} disabled={readonly} onBegin={onBeginAttach} booleanActions={booleanActions} onStructure={structurePaths} />}
       {!!ids.length && <SplineTransformControls key={`${layer.id}:${controller.mode}:${ids.join(',')}`} disabled={readonly} onApply={transform => {

@@ -1,4 +1,5 @@
 'use client'
+import { modifierEditsInputSpline } from '@/lib/modifiers/ModifierStackService'
 import { transformAxisFrame, type TransformSpace } from '@/lib/canvas/math/transformAxes'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
 import { projectBooleanOperations } from '@/lib/booleanOperations/projectOperations'
@@ -1559,12 +1560,13 @@ export default function SceneCanvas({
 
           {geometrySessionActive && selectedFrameLayer && selectedWorldMatrix && <GeometryEditGhost
             key={selectedFrameLayer.id} layer={selectedFrameLayer} worldMatrix={selectedWorldMatrix}
-            zoom={zoom} document={editor.getDocumentSignal()} visible={geometryEditing} outlineVisible={!booleanSourceEditing} sourceGhosts={splineEditController.sourceGhosts} />}
+            zoom={zoom} document={editor.getDocumentSignal()} visible={geometryEditing} outlineVisible={!booleanSourceEditing} liveSplineBoundary={modifierEditsInputSpline(selectedLayer)} sourceGhosts={splineEditController.sourceGhosts} />}
 
           {/* BL-73 — Control points + bezier handles for the selected spline. */}
           {splineViewport.active && selectedLayer && selectedWorldMatrix && selectedLayer.spline && !hideEditorUI && !motionEditing && !arrayEditing && !placingShape
             && !selectedLayer.hidden && !selectedLayer.locked && !selectedLayer.frozen && (
-            <SplineEditOverlay layer={booleanSourceEditing ? selectedLayer : selectedFrameLayer ?? selectedLayer} zoom={zoom} worldMatrix={selectedWorldMatrix}
+            <SplineEditOverlay layer={booleanSourceEditing || modifierEditsInputSpline(selectedLayer) ? selectedLayer : selectedFrameLayer ?? selectedLayer}
+              liveSource={modifierEditsInputSpline(selectedLayer)} guideVisible={!modifierEditsInputSpline(selectedLayer) || splineEditController.sourceGuideVisible !== false} zoom={zoom} worldMatrix={selectedWorldMatrix}
               hover={splineViewport.hover} selection={splineEditController} sourceGhost={booleanSourceEditing} />
           )}
 

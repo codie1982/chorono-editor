@@ -22,8 +22,8 @@ function outline(layer: Layer): string {
  * boundary string, matrix and pivot are retained, never a source scene or GPU
  * resource. Zoom is applied at display time; this overlay never enters exports.
  * Mesh live outlines remain orange while the original is dashed/translucent. */
-export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible = true, outlineVisible = true, sourceGhosts = [] }: {
-  layer: Layer; worldMatrix: Matrix2D; zoom: number; document: AbortSignal; visible?: boolean; outlineVisible?: boolean; sourceGhosts?: readonly SplineSourceGhost[]
+export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible = true, outlineVisible = true, sourceGhosts = [], liveSplineBoundary = false }: {
+  layer: Layer; worldMatrix: Matrix2D; zoom: number; document: AbortSignal; visible?: boolean; outlineVisible?: boolean; sourceGhosts?: readonly SplineSourceGhost[]; liveSplineBoundary?: boolean
 }) {
   const current = useMemo(() => outline(layer), [layer.spline, layer.mesh2d?.geometry, layer.mesh2d?.boundaryRings])
   const snapshot = useRef<{ id: string; type: string; document: AbortSignal;
@@ -45,7 +45,7 @@ export function GeometryEditGhost({ layer, worldMatrix, zoom, document, visible 
       {sourceGhosts.map((ghost, index) => <path key={index} data-boolean-source-ghost d={ghost.path}
         transform={`matrix(${ghost.matrix.map(value => value * zoom).join(' ')})`} fill="none"
         stroke="#94a3b8" strokeOpacity={.28} strokeWidth={1.25} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />)}
-      {layer.mesh2d && <path data-mesh-edit-boundary d={current} transform={screenMatrix(worldMatrix)} fill="none"
+      {(layer.mesh2d || liveSplineBoundary) && <path data-live-outline-boundary={liveSplineBoundary || undefined} data-mesh-edit-boundary={layer.mesh2d ? true : undefined} d={current} transform={screenMatrix(worldMatrix)} fill="none"
         stroke="#FDBA74" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
     </svg>
     <AnchorHandle x={original.origin.x * zoom} y={original.origin.y * zoom} label="Fixed Edit origin" />

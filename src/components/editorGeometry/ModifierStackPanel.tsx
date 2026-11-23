@@ -48,7 +48,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
   const scene = props.getScene()
   const disabled = !!(props.conversionDisabled || layer.locked || layer.frozen || layer.hidden || layer.instanceOf)
   const input = useMemo(() => modifierStackService.evaluator.execute(stack, { layerId: layer.id }), [stack, layer.id])
-  const available = geometryModifierRegistry.list().filter(item => !item.legacySplineTool && item.addable && item.inputs.includes(input.kind))
+  const available = geometryModifierRegistry.list().filter(item => !item.legacySplineTool && item.addable && item.inputs.includes(input.kind) && (!item.sourceEditing || !stack.modifiers.some(record => geometryModifierRegistry.get(record.type).descriptor.sourceEditing)))
   const choices = (['spline', 'mesh'] as const).map(category => ({ kind: category === 'spline' ? 'Spline' as const : 'Mesh' as const,
     items: available.filter(item => item.category === category).map(item => ({ id: item.type, label: item.label })) })).filter(group => group.items.length)
   const patches = Object.fromEntries(stack.modifiers.flatMap(record => drafts[record.id]?.base === record ? [[record.id, drafts[record.id].patch]] : []))

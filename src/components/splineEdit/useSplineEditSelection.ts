@@ -11,6 +11,9 @@ export type SplineAddOperation = 'attach' | BooleanOperation
 export type SplineEdgePickTool = 'trim' | 'extend' | 'addVertex'
 
 export interface SplineEditController {
+  /** Per-layer/document viewport preference, never source paint or Undo. */
+  readonly sourceGuideVisible?: boolean
+  setSourceGuideVisible?(value: boolean): void
   readonly sourceGhosts: readonly SplineSourceGhost[]
   focusResult(request: SplineEditRequest): void
   readonly layerId: string | null
@@ -53,6 +56,8 @@ interface State { layerId: string | null; document?: AbortSignal; active: boolea
  * replacement releases preferences; mode/selection changes cancel picking. */
 export function useSplineEditSelection(layer: Layer | null | undefined, document?: AbortSignal): SplineEditController {
   const layerId = layer?.type === 'spline' && layer.spline && !layer.booleanResultFor && !modifierOutputReadOnly(layer) ? layer.id : null
+  const [sourceGuideVisible, setSourceGuideVisible] = useState(true)
+  useEffect(() => { setSourceGuideVisible(true) }, [layerId, document])
   const fresh = useCallback((): State => ({ layerId, document, active: false, mode: 'point', bank: emptySplineSelection(), attaching: false, attachOperation: 'union', ghosts: [], nonDestructive: false, edgeTool: null, vertexType: 'preserve', simplifyTolerancePx: .5, subdivideParts: 2 }), [layerId, document])
   const [state, setState] = useState<State>(fresh)
   const [pending, setPending] = useState<{ request: SplineEditRequest; document?: AbortSignal } | null>(null)
@@ -108,7 +113,7 @@ export function useSplineEditSelection(layer: Layer | null | undefined, document
   const setSubdivideParts = useCallback((value: number) => {
     if (Number.isInteger(value) && value >= 2 && value <= 64) setState(before => ({ ...clean(before), subdivideParts: value }))
   }, [clean])
-  return { sourceGhosts: current.ghosts, focusResult: request => setPending({ request, document }), layerId, active: current.active && !!layerId, mode: current.mode, bank: current.bank,
+  return { sourceGuideVisible, setSourceGuideVisible, sourceGhosts: current.ghosts, focusResult: request => setPending({ request, document }), layerId, active: current.active && !!layerId, mode: current.mode, bank: current.bank,
     ids: current.bank[current.mode], edgeTool: current.edgeTool, setEdgeTool, vertexType: current.vertexType, setVertexType, simplifyTolerancePx: current.simplifyTolerancePx, setSimplifyTolerancePx, subdivideParts: current.subdivideParts, setSubdivideParts, attaching: current.attaching, setAttaching,
     nonDestructive: current.nonDestructive, setNonDestructive: value => setState(before => ({ ...clean(before), nonDestructive: value })),
     attachOperation: current.attachOperation, setAttachOperation, enter, select, clear, exit }
