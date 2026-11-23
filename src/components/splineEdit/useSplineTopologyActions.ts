@@ -30,14 +30,15 @@ export function useSplineTopologyActions(options: {
       if (source.layers.find(item => item.id === layer.id)?.spline !== layer.spline) throw new Error('Spline changed. Select current elements again.')
       const prepared = action.kind === 'attach' ? attachSplineLayerCommand(source, layer.id, action.sourceId, options.timeMs, options.overrides)
         : action.kind === 'detach' ? detachSplineObjectsCommand(source, layer.id, options.controller.ids)
-        : splineTopologyCommand(source, layer.id, options.controller.mode, action.kind === 'trim' || action.kind === 'extend' ? [action.edgeId] : options.controller.ids, action, options.timeMs, options.overrides)
+        : splineTopologyCommand(source, layer.id, options.controller.mode, action.kind === 'trim' || action.kind === 'extend' || action.kind === 'addVertex' ? [action.edgeId] : options.controller.ids, action, options.timeMs, options.overrides)
       if (action.kind === 'detach' && !options.onSelectLayer) throw new Error('This host cannot select a detached layer.')
       if (prepared.command) {
         options.dispatch(prepared.command)
         if (prepared.result.layerId !== layer.id) options.onSelectLayer?.(prepared.result.layerId)
         // The document selection owner outlives closing viewport menus.
         options.controller.focusResult({ ...prepared.result, ghosts: options.controller.sourceGhosts,
-          attaching: options.controller.attaching, operation: options.controller.attachOperation })
+          attaching: options.controller.attaching, operation: options.controller.attachOperation, vertexType: options.controller.vertexType, simplifyTolerancePx: options.controller.simplifyTolerancePx,
+          ...(action.kind === 'addVertex' && options.controller.edgeTool === 'addVertex' ? { edgeTool: 'addVertex' as const } : {}) })
       }
       options.warning('reason' in prepared.result ? prepared.result.reason ?? '' : '')
     } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
@@ -55,5 +56,6 @@ export function useSplineTopologyActions(options: {
     active: options.controller.active, disabled: options.disabled, busy: options.isTransactionActive?.(), clipboard: options.clipboard, perform, copy,
     edgeTool: options.controller.edgeTool, pickEdgeTool: tool => options.controller.setEdgeTool(options.controller.edgeTool === tool ? null : tool),
     pickedEdgeId: options.pickedEdgeId,
+    simplifyTolerancePx: options.controller.simplifyTolerancePx,
   }) : [] }
 }

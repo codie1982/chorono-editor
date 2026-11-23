@@ -2,7 +2,7 @@
 import type { Layer, ChronoScene } from '@/lib/types'
 import type { SplinePick } from '@/lib/spline/selection'
 import type { EditorCommand } from '@/lib/editor/commands-keyframe'
-import { setSplinePointType, deleteSplinePoint, setSegmentType, insertPointOnSegment, setContourClosed, reverseContour } from '@/lib/spline'
+import { setSplinePointType, deleteSplinePoint, setSegmentType, setContourClosed, reverseContour } from '@/lib/spline'
 import { splinePointTypes, type SplineToolAction } from './tools/splineEditTools'
 import ContextMenu, { type MenuItem } from '../ui/ContextMenu'
 import { splineEditCommand } from './commands'
@@ -10,6 +10,7 @@ import type { SplineEditController } from './useSplineEditSelection'
 import { useSplineTopologyActions } from './useSplineTopologyActions'
 import type { SplineTangentClipboard } from './useSplineTangentClipboard'
 import type { OverrideMap } from '@/lib/evaluator'
+import { splineVertexTypes } from './tools/splineVertexTypes'
 
 /** Mode-local actions over current source. The native topology guard refuses
  * competing key/wire writers; menus never substitute root layer deletion. */
@@ -32,16 +33,18 @@ export function SplineEditMenu({ x, y, target, layer, controller, getScene, disp
     items.push({ kind: 'action', label: 'Delete selected points', onSelect: () => mutate(source => ids.reduce((next, id) => deleteSplinePoint(next, id), source)) })
   } else if (target?.kind === 'edge' && controller.mode === 'edge') {
     items.push({ kind: 'action', label: 'Convert to Line', onSelect: () => mutate(source => ids.reduce((next, id) => setSegmentType(next, id, 'line'), source)) },
-      { kind: 'action', label: 'Convert to Bezier', onSelect: () => mutate(source => ids.reduce((next, id) => setSegmentType(next, id, 'cubic'), source)) },
-      { kind: 'action', label: 'Insert Point', onSelect: () => mutate(source => insertPointOnSegment(source, target.id, target.t ?? .5)) })
+      { kind: 'action', label: 'Convert to Bezier', onSelect: () => mutate(source => ids.reduce((next, id) => setSegmentType(next, id, 'cubic'), source)) })
   } else if (target?.kind === 'object' && controller.mode === 'object') {
     const contours = ids.flatMap(id => layer.spline?.subShapes[id]?.contourIds ?? [])
     const closed = contours.every(id => layer.spline?.contours[id]?.closed)
     items.push({ kind: 'action', label: closed ? 'Open contours' : 'Close contours', onSelect: () => mutate(source => contours.reduce((next, id) => setContourClosed(next, id, !closed), source)) },
       { kind: 'action', label: 'Reverse direction', onSelect: () => mutate(source => contours.reduce((next, id) => reverseContour(next, id), source)) })
   }
-  items.push(...topology.componentTools.map(tool => ({ kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason,
-    onSelect: () => { tool.run(target?.kind === 'edge' ? { edgeId: target.id, t: target.t ?? .5 } : undefined); close() } })))
+  items.push(...topology.componentTools.map(tool => tool.id === 'addVertex' ? { kind: 'submenu' as const, label: tool.label, disabled: tool.disabled,
+    items: splineVertexTypes.map(choice => ({ kind: 'action' as const, label: choice.label, disabled: tool.disabled, disabledReason: tool.reason, onSelect: () => {
+      controller.setVertexType(choice.value); controller.setEdgeTool('addVertex'); close()
+    } })) } : { kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason,
+    onSelect: () => { tool.run(target?.kind === 'edge' ? { edgeId: target.id, t: target.t ?? .5 } : undefined); close() } }))
   items.push(...tools.map(tool => ({ kind: 'action' as const, label: tool.label, disabled: tool.disabled, disabledReason: tool.reason, onSelect: () => { tool.run(); close() } })))
   if (items.length) items.push({ kind: 'separator' })
   items.push(...(['point', 'edge', 'object'] as const).map(mode => ({ kind: 'action' as const, label: `Edit spline ${mode}`, onSelect: () => { controller.enter(mode); close() } })),

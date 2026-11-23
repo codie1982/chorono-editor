@@ -5,11 +5,14 @@ import { splineContinuation } from '@/lib/spline'
 import { CalculationNumberInput } from '../inputs/CalculationNumberInput'
 import type { SplineEditController } from './useSplineEditSelection'
 import type { SplineTopologyActions } from './useSplineTopologyActions'
+import { splineVertexTypes } from './tools/splineVertexTypes'
+import type { SplineVertexType } from '@/lib/spline/edit/addVertex'
 
 const button = 'rounded border border-gray-600 px-2 py-1.5 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed'
 /** Compact mode-owned topology controls. Settings are transient UI values;
- * coordinate tolerance is composition px, Refine is normalized parameter and
- * Divide is equal-parameter parts. Runtime safety stays in native commands. */
+ * Weld tolerance is composition px, Simplify tolerance is layer-local px,
+ * Refine is normalized parameter and Divide is equal-parameter parts. Runtime
+ * safety stays in native commands; panel/menu share controller preferences. */
 export function SplineTopologyControls({ scene, layer, controller, actions, disabled }: {
   scene: ChronoScene; layer: Layer; controller: SplineEditController; actions: SplineTopologyActions; disabled?: boolean
 }) {
@@ -20,13 +23,19 @@ export function SplineTopologyControls({ scene, layer, controller, actions, disa
   const ids = controller.ids, pointPair = ids.length === 2 && ids.every(id => splineContinuation(layer.spline!, id))
   return <details className="rounded border border-gray-700 p-2"><summary className="cursor-pointer select-none">Topology · {controller.mode}</summary>
     <fieldset disabled={disabled} className="space-y-2 pt-2">
+    {controller.mode === 'object' && <><TopologyNumber label="Simplify tolerance (local px)" value={controller.simplifyTolerancePx} min={.001} max={1000} onChange={controller.setSimplifyTolerancePx} />
+      <p className="text-gray-400">Simplify preserves sharp turns (≥30°) and hole ownership. Smooth changes handles while keeping anchors fixed.</p></>}
+    {controller.mode === 'edge' && <label className="block space-y-1">New vertex type<select aria-label="New vertex type" className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5" value={controller.vertexType}
+      onChange={event => controller.setVertexType(event.target.value as SplineVertexType)}>{splineVertexTypes.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select>
+      <span className="block text-gray-400">Preserve keeps the exact curve. Corner / mirrored Bézier may reshape the edge.</span>
+    </label>}
     {controller.mode === 'edge' && <TopologyNumber label="Split position (%)" value={split} min={.01} max={99.99} onChange={setSplit} />}
     <div className="flex flex-wrap gap-2">{actions.componentTools.map(tool => <span key={tool.id} title={tool.reason ?? tool.description}>
-      <button type="button" className={button + (tool.active ? ' border-orange-400 bg-orange-950' : '')} disabled={tool.disabled} aria-pressed={tool.id === 'trim' || tool.id === 'extend' ? !!tool.active : undefined} aria-describedby={`spline-tool-${tool.id}`} onClick={() => tool.run({ t: split / 100 })}>{tool.label}</button>
+      <button type="button" className={button + (tool.active ? ' border-orange-400 bg-orange-950' : '')} disabled={tool.disabled} aria-pressed={tool.id === 'trim' || tool.id === 'extend' || tool.id === 'addVertex' ? !!tool.active : undefined} aria-describedby={`spline-tool-${tool.id}`} onClick={() => tool.run({ t: split / 100 })}>{tool.label}</button>
       <span id={`spline-tool-${tool.id}`} className="sr-only">{tool.reason ?? tool.description}</span>
     </span>)}</div>
     {controller.edgeTool && <div role="status" className="rounded border border-orange-700 p-2 text-orange-200">
-      {controller.edgeTool === 'trim' ? 'Trim: click the part between intersections to remove it.' : 'Extend: click a terminal edge near the open end to extend.'} Esc cancels.
+      {controller.edgeTool === 'addVertex' ? 'Add Vertex: keep clicking edges to insert points. Each click has its own Undo.' : controller.edgeTool === 'trim' ? 'Trim: click the part between intersections to remove it.' : 'Extend: click a terminal edge near the open end to extend.'} Esc cancels.
       <button type="button" className={button + ' ml-2'} onClick={() => controller.setEdgeTool(null)}>Cancel edge tool</button>
     </div>}
     {Array.from(new Set(actions.componentTools.flatMap(tool => tool.reason ? [tool.reason] : []))).map(reason => <p key={reason} className="text-gray-400">{reason}</p>)}

@@ -106,7 +106,9 @@ export function useSplineViewportEditing(options: Options) {
     const target = pick(x, y)
     if (controller.edgeTool) {
       event.preventDefault(); event.stopPropagation()
-      if (target?.kind === 'edge') topology.perform({ kind: controller.edgeTool, edgeId: target.id, t: target.t ?? .5 })
+      if (target?.kind === 'edge') topology.perform(controller.edgeTool === 'addVertex'
+        ? { kind: 'addVertex', edgeId: target.id, t: target.t ?? .5, pointType: controller.vertexType }
+        : { kind: controller.edgeTool, edgeId: target.id, t: target.t ?? .5 })
       else options.warning('Click an edge in this spline to use the active edge tool.')
       return true
     }

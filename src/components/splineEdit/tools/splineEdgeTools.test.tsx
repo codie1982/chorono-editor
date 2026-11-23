@@ -20,7 +20,7 @@ function fixture() {
   const line = createPolylineSpline([{ x: 0, y: 0 }, { x: 100, y: 0 }], false), cutter = createPolylineSpline([{ x: 50, y: -20 }, { x: 50, y: 20 }], false)
   const layer = newSplineLayerFromData(mergeSplineData(line, cutter)), scene = emptyScene(); scene.layers = [layer]
   const edge = Object.keys(line.segments)[0], controller: SplineEditController = {
-    active: true, layerId: layer.id, mode: 'edge', ids: [edge], bank: { point: [], edge: [edge], object: [] }, edgeTool: null, setEdgeTool: vi.fn(),
+    active: true, layerId: layer.id, mode: 'edge', ids: [edge], bank: { point: [], edge: [edge], object: [] }, edgeTool: null, setEdgeTool: vi.fn(), vertexType: 'preserve', setVertexType: vi.fn(), simplifyTolerancePx: .5, setSimplifyTolerancePx: vi.fn(),
     attaching: false, setAttaching: vi.fn(), attachOperation: 'union', setAttachOperation: vi.fn(), nonDestructive: false, setNonDestructive: vi.fn(),
     sourceGhosts: [], focusResult: vi.fn(), enter: vi.fn(), select: vi.fn(), clear: vi.fn(), exit: vi.fn(),
   }
@@ -71,5 +71,60 @@ describe('shared Edge tool UI contracts', () => {
     const extend = captured.find(item => item.kind === 'action' && item.label === 'Extend')!
     if (extend.kind === 'action') extend.onSelect()
     expect(dispatch).not.toHaveBeenCalled(); expect(warning).toHaveBeenCalledWith(expect.stringContaining('No forward'))
+  })
+  it('arms repeated Add Vertex from all menu type choices without writing source before the next pick', () => {
+    const { scene, layer, edge, controller } = fixture(), dispatch = vi.fn(), close = vi.fn()
+    renderToStaticMarkup(<SplineEditMenu x={0} y={0} target={{ kind: 'edge', id: edge, t: .25 }} layer={layer} controller={controller} getScene={() => scene} dispatch={dispatch} warning={vi.fn()} close={close} />)
+    const menu = captured.find(item => item.kind === 'submenu' && item.label === 'Add Vertex')!
+    expect(menu.kind).toBe('submenu')
+    if (menu.kind !== 'submenu') throw new Error('Missing insertion choices')
+    expect(menu.items).toHaveLength(5)
+    for (const [index, type] of Array.from(['preserve', 'corner', 'smooth', 'bezier', 'bezierCorner'].entries())) {
+      const item = menu.items[index]; if (item.kind === 'action') item.onSelect()
+      expect(controller.setVertexType).toHaveBeenLastCalledWith(type)
+      expect(controller.setEdgeTool).toHaveBeenLastCalledWith('addVertex')
+    }
+    expect(dispatch).not.toHaveBeenCalled(); expect(close).toHaveBeenCalledTimes(5)
+    const perform = vi.fn(), tools = splineComponentTools({ scene, layer, mode: 'edge', ids: [], active: true, perform, copy: vi.fn(), pickEdgeTool: controller.setEdgeTool })
+    tools.find(tool => tool.id === 'addVertex')!.run(); expect(perform).not.toHaveBeenCalled()
+    const html = renderToStaticMarkup(<SplineTopologyControls scene={scene} layer={layer} controller={{ ...controller, edgeTool: 'addVertex' }} actions={{ componentTools: tools, canDetach: false, perform }} />)
+    expect(html).toContain('Preserve curve'); expect(html).toContain('Each click has its own Undo')
+  })
+  it('Add Vertex viewport pick inserts exactly once at the clicked interior parameter', () => {
+    const { scene, layer, controller } = fixture(), dispatch = vi.fn(), warning = vi.fn(), startDrag = vi.fn()
+    const editor = { getScene: () => scene, dispatchCommand: dispatch, isTransactionActive: () => false, getDocumentSignal: () => new AbortController().signal } as unknown as EditorStateReturn
+    let viewport: ReturnType<typeof useSplineViewportEditing> | undefined
+    function Viewport() {
+      viewport = useSplineViewportEditing({ scene, layer, controller: { ...controller, edgeTool: 'addVertex' }, editor, canvasRef: { current: null }, enabled: true,
+        timeMs: 0, zoom: 1, panMode: false, toolMode: 'select', containment: 'touching', drag: { dragRef: { current: null }, startDrag }, warning })
+      return null
+    }
+    renderToStaticMarkup(<Viewport />)
+    const world = resolveLayerWorldMatrix(layer, scene, 0).applyToPoint({ x: 25, y: 0 })
+    viewport!.pointerDown(world.x, world.y, { preventDefault: vi.fn(), stopPropagation: vi.fn() } as any)
+    expect(dispatch).toHaveBeenCalledOnce(); expect(startDrag).not.toHaveBeenCalled(); expect(controller.select).not.toHaveBeenCalled()
+    const command = dispatch.mock.calls[0][0], next = command.execute(scene)
+    expect(Object.values(next.layers[0].spline!.points).some((p: any) => p.x === 25 && p.y === 0)).toBe(true)
+    expect(command.undo(next)).toEqual(scene)
+  })
+  it('Object panel/menu share selection guards and Simplify tolerance; both native actions have one Undo', () => {
+    const { scene, layer, controller } = fixture(), ids = Object.keys(layer.spline!.subShapes)
+    const objectController = { ...controller, mode: 'object' as const, ids, simplifyTolerancePx: .125 }
+    const perform = vi.fn(), tools = splineComponentTools({ scene, layer, ids, mode: 'object', active: true, simplifyTolerancePx: .125, perform, copy: vi.fn() })
+    expect(tools.map(tool => tool.label)).toEqual(['Simplify', 'Smooth'])
+    tools[0].run(); expect(perform).toHaveBeenCalledWith({ kind: 'simplify', tolerancePx: .125 })
+    tools[1].run(); expect(perform).toHaveBeenCalledWith({ kind: 'smooth' })
+    const html = renderToStaticMarkup(<SplineTopologyControls scene={scene} layer={layer} controller={objectController} actions={{ componentTools: tools, canDetach: false, perform }} />)
+    expect(html).toContain('Simplify tolerance (local px)'); expect(html).toContain('Smooth')
+    const empty = splineComponentTools({ scene, layer, ids: [], mode: 'object', active: true, perform, copy: vi.fn() })
+    expect(empty.every(tool => tool.disabled && tool.reason === 'Select Objects first.')).toBe(true)
+    const dispatch = vi.fn()
+    renderToStaticMarkup(<SplineEditMenu x={0} y={0} target={{ kind: 'object', id: ids[0] }} layer={layer} controller={objectController} getScene={() => scene} dispatch={dispatch} warning={vi.fn()} close={vi.fn()} />)
+    const smooth = captured.find(item => item.kind === 'action' && item.label === 'Smooth')!
+    if (smooth.kind === 'action') smooth.onSelect()
+    expect(dispatch).toHaveBeenCalledOnce(); const command = dispatch.mock.calls[0][0], next = command.execute(scene)
+    expect(command.undo(next)).toEqual(scene)
+    layer.locked = true
+    expect(splineComponentTools({ scene, layer, ids, mode: 'object', active: true, perform, copy: vi.fn() }).every(tool => tool.disabled)).toBe(true)
   })
 })

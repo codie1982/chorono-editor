@@ -50,10 +50,10 @@ export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = nu
       <path data-spline-edge-id={id} data-selected={selected} d={d} fill="none"
         stroke={sourceGhost ? '#94a3b8' : selected ? '#EF4444' : '#FDBA74'} strokeWidth={sourceGhost ? 1.25 : selected || hovered ? 3 : 1.5} vectorEffect="non-scaling-stroke" /></g>
     })}</g>}
-    {mode === 'point' && Object.values(data.points).map(point => {
-      const screen = toScreen(point), selected = ids.includes(point.id), hovered = hover?.kind === 'point' && hover.id === point.id
+    {(mode === 'point' || selection?.edgeTool === 'addVertex') && Object.values(data.points).map(point => {
+      const screen = toScreen(point), selected = mode === 'point' ? ids.includes(point.id) : !!selection?.bank.point.includes(point.id), hovered = hover?.kind === 'point' && hover.id === point.id
       return <g key={point.id} data-spline-point-id={point.id} data-selected={selected}>
-        {(['in', 'out'] as const).map(kind => {
+        {(mode === 'point' || selected) && (['in', 'out'] as const).map(kind => {
           const handle = handles.get(`${point.id}:${kind}`)
           if (!handle) return null
           const end = toScreen(handle), active = hover?.kind === 'handle' && hover.pointId === point.id && hover.handleKind === kind

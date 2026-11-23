@@ -1259,7 +1259,7 @@ export default function SceneCanvas({
       <SoloModeOverlay active={displayScene.layers.some(layer => layer.type !== 'audio' && !!layer.solo)} />
       {splineViewport.active && <div role="status" aria-label="Viewport spline edit mode"
         className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded border border-orange-400/70 bg-orange-950/95 px-3 py-1.5 text-xs font-semibold text-orange-100">
-        SPLINE EDIT · {splineEditController.edgeTool ? `${splineEditController.edgeTool === 'trim' ? 'Trim · Pick interval' : 'Extend · Pick open end'} · Esc to cancel` : splineEditController.attaching ? 'Add Spline · Pick objects · Esc to finish' : splineEditController.mode === 'point' ? 'Point' : splineEditController.mode === 'edge' ? 'Edge' : 'Object'}
+        SPLINE EDIT · {splineEditController.edgeTool ? `${splineEditController.edgeTool === 'addVertex' ? 'Add Vertex · Keep clicking edges' : splineEditController.edgeTool === 'trim' ? 'Trim · Pick interval' : 'Extend · Pick open end'} · Esc to cancel` : splineEditController.attaching ? 'Add Spline · Pick objects · Esc to finish' : splineEditController.mode === 'point' ? 'Point' : splineEditController.mode === 'edge' ? 'Edge' : 'Object'}
       </div>}
       {geometryEditing && !splineViewport.active && <div role="status" aria-label="Viewport geometry edit mode"
         className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded border border-orange-400/70 bg-orange-950/95 px-3 py-1.5 text-xs font-semibold text-orange-100">

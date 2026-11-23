@@ -11,7 +11,7 @@ import SplineEditOverlay from './SplineEditOverlay'
 const layer = newSplineLayerFromData(createRectangleSpline({ width: 80, height: 50 }))
 /** UI-only controller fixture: source/history are never needed by overlays. */
 function controller(mode: 'point' | 'edge' | 'object', active = true): SplineEditController {
-  return { edgeTool: null, setEdgeTool: vi.fn(), nonDestructive: false, setNonDestructive: vi.fn(), sourceGhosts: [], focusResult: vi.fn(), layerId: layer.id, mode, active, bank: emptySplineSelection(), ids: [], attaching: false, setAttaching: vi.fn(), attachOperation: 'union', setAttachOperation: vi.fn(), enter: vi.fn(), select: vi.fn(), clear: vi.fn(), exit: vi.fn() }
+  return { edgeTool: null, setEdgeTool: vi.fn(), vertexType: 'preserve', setVertexType: vi.fn(), simplifyTolerancePx: .5, setSimplifyTolerancePx: vi.fn(), nonDestructive: false, setNonDestructive: vi.fn(), sourceGhosts: [], focusResult: vi.fn(), layerId: layer.id, mode, active, bank: emptySplineSelection(), ids: [], attaching: false, setAttaching: vi.fn(), attachOperation: 'union', setAttachOperation: vi.fn(), enter: vi.fn(), select: vi.fn(), clear: vi.fn(), exit: vi.fn() }
 }
 
 describe('Spline edit presentation', () => {
@@ -34,5 +34,13 @@ describe('Spline edit presentation', () => {
     expect(html).toContain('Editing · Edge')
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
     expect(html).toContain('Click the active mode again')
+  })
+  it('shows all anchors only while Add Vertex is armed in Edge, highlighting the last inserted point', () => {
+    const point = Object.keys(layer.spline!.points)[0], before = controller('edge'), selection = { ...before, bank: { ...before.bank, point: [point] } }
+    const html = renderToStaticMarkup(<SplineEditOverlay layer={layer} zoom={1} worldMatrix={Matrix2D.identity()} selection={{ ...selection, edgeTool: 'addVertex' }} />)
+    expect(html.match(/data-spline-point-id=/g)).toHaveLength(Object.keys(layer.spline!.points).length)
+    expect(html).toContain(`data-spline-point-id="${point}" data-selected="true"`)
+    expect(html).toContain('fill="#EF4444"')
+    expect(renderToStaticMarkup(<SplineEditOverlay layer={layer} zoom={1} worldMatrix={Matrix2D.identity()} selection={selection} />)).not.toContain('data-spline-point-id')
   })
 })
