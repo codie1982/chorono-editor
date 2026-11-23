@@ -153,9 +153,10 @@ The dock has no Enter/Exit edit button; context menus and 1/2/3 enter Edit.
 New UI modifier rows target all eligible stage input independently of the Edit
 selection. Use selection/target lists explicitly stage a narrower scope; Execute
 commits it. Explicit selection arguments in native command APIs keep their meaning.
-Four **static parametric spline modifiers** use
+Eight **static parametric spline modifiers** use
 distinct recipe types: `offsetPath`, `roundCorners`, `pathSimplify`,
-`pathSmoothing`. They retain source and execute in stack order; numeric/scope
+`pathSmoothing`, `pathResample`, `zigZag`, `puckerBloat`, `splineRepeater`.
+They retain source and execute in stack order; numeric/scope
 drafts apply only on Execute. Offset Path preserves Object identity; Simplify/
 Smoothing accept stage-input `objectIds` and share the native edit algorithms.
 Round Corners targets Corner/Bézier Corner types (not Smooth/linked Bézier) and
@@ -163,6 +164,14 @@ sets an absolute local-px radius, including already rounded circular runs betwee
 straight sides. It does not use a 1px eligibility threshold or generator params.
 Existing disabled rows stay Off until enabled. Curved-flank/elliptic/full-circle
 rounding cannot be inferred; legacy Fillet keeps its existing behavior.
+Path Resample emits a polyline with pinned corners/endpoints, max local spacing
+and chord-error tolerance. Zig Zag is a static sharp polyline with alternating
+normal amplitude and pinned span endpoints. Pucker & Bloat maps anchors/controls
+radially with a signed amount about each Object or a Custom local center.
+Repeater count is total instances, 1..32; linear/polar copies remain independent
+Objects in the SAME spline and share layer paint. A full polar sweep has no
+duplicated final instance. These are native registry choices; no new MCP
+`spline.edit` discriminants or tool names are added.
 Within an active Edit session, disabling/removing the last operation or Bake returns to Object edit;
 Undo restores its exact recipe. Existing `offset`/`outline`/`chamfer`/`fillet`
 records retain compatibility behavior. These are native registry choices, not

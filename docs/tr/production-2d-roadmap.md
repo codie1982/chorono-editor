@@ -3911,3 +3911,15 @@ otomatik hedef olmaz. Kaynak, layer TRS, delikler ve sıra korunur; her Execute
 ayrı Undo/Redo'dur. Eski Fillet/Chamfer değişmez. Eğri yan kenarlar/elipsler güvenle
 çıkarılamaz. 575 dosyada 4.129 test ve gerçek Chrome'da 12 kabul grubu geçti.
 [Ayrıntılar ve sınırlar](spline-static-modifiers.md).
+
+### Spline modifier Faz 1 — temel paket tamamlandı, 23 Kasım 2026
+
+Path Resample, Zig Zag, Pucker & Bloat ve aynı-spline Repeater eklendi; menüde
+sekiz temel statik modifier vardır. Ortak bounded Bézier arc sampler, açık polyline
+çıktısı, köşe/uç sabitleme, radyal kontrol kafesi ve mevcut RepeaterResolver
+matrisleri kullanılır. Bağımsız kopyalar deliklerini korur ve layer boyasını paylaşır.
+Mevcut stack/Execute/Undo/Redo/portable/renderer akışı korunur; ikinci runner yoktur.
+577 dosyada 4.147 test; gerçek Chrome'da 17 kabul grubu, birlikte sıra/toggle/Bake,
+portable reload, PNG ve SVG kontrolü geçti. Animasyonlu parametreler ve ileri
+Outline/Boolean/Width/Dynamics işleri Faz 2'de kalır.
+[Teslim sözleşmesi](spline-phase1-modifiers.md).

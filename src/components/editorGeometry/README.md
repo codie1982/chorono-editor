@@ -24,7 +24,8 @@ contains edit-mode controls and a single persistent ordered modifier stack.
 
 `ModifierStackPanel` owns only local selection/drafts/errors. Registry descriptors
 provide category, supported input types and setting fields. Spline offers Offset
-Path, Round Corners, Path Simplify and Path Smoothing; compatibility Offset,
+Path, Round Corners, Path Simplify, Path Smoothing, Path Resample, Zig Zag,
+Pucker & Bloat and Repeater; compatibility Offset,
 Outline, Chamfer and Fillet retain old records. Mesh offers Smooth, Subdivision and Deformation Clip. Subdivision owns a
 Delaunay-first algorithm selector, Grid/Karelaj, levels and base cell size. Smooth
 owns amount, iterations and Keep boundary. Optional descriptor descriptions
@@ -36,6 +37,12 @@ Round Corners targets Corner/Bézier Corner points and sets an absolute local-px
 radius. It can resize baked circular corner runs between straight sides; Smooth
 points are not implicit targets. Existing disabled records remain Off until the
 user enables them. Unsupported curved-flank/elliptic runs are not guessed.
+Resample explicitly emits a polyline with pinned endpoints/corners and bounded
+curve error. Zig Zag exposes amplitude/peak spacing. Pucker & Bloat uses a signed
+radial control-cage map with Object/custom center. Repeater exposes linear/polar
+placement and copies Objects inside this spline with shared layer paint.
+All target fields list the actual prefix input and all settings remain Execute
+drafts. [Phase 1 contracts](../../../docs/tr/spline-phase1-modifiers.md).
 
 Typing settings never writes geometry. **Execute stack** stages all row drafts
 and dispatches one complete native command. The row's accessible checkmark

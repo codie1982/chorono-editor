@@ -3,6 +3,9 @@
 23 Kasım 2026. **Uygulandı:** Offset Path, Round Corners, Path Simplify ve Path
 Smoothing. Native Edit araçları kaynak değiştiren Apply akışını sürdürür;
 parametrik modifier'lar orijinal kaynağı koruyarak sırayla sonuç hesaplar.
+Path Resample, Zig Zag, Pucker & Bloat ve Repeater da
+[ikinci teslimde](spline-phase1-modifiers.md) tamamlandı; Faz 1 menüsü sekiz
+temel statik modifier içerir. Bu sayfa ilk dört işlemin ayrıntılarını korur.
 Animasyonlu modifier parametreleri ve [faz planındaki](plans/spline-modifier-phases-plan.md)
 ileri işlemler bu teslimde bulunmaz.
 
@@ -138,7 +141,7 @@ bağımsız clone, render/runtime flattening ve Mesh dönüşümünü kapsar.
 
 `scripts/perf/spline-modifiers.mjs /tmp/chorono-static-spline-modifiers-qa` gerçek
 Edit dock + SceneCanvas + renderer kullanan ayrı kabul sayfasını hazırlar.
-`spline-modifiers.html?autorun` on iki grupta chooser, dört form, PNG farkı,
+`spline-modifiers.html?autorun` on yedi grupta sekiz işlemli chooser/formlar, PNG farkı,
 Undo/Redo, kaynak dönüşü, scoped stage-input hedefler ve legacy drawer'ı doğrular.
 Spline/Mesh için edit modu dışında Add/Execute/Bake ve kapalı edit oturumunun
 korunması da gerçek panelde kontrol edilir.
@@ -148,6 +151,6 @@ Kaynağa işlenmiş Bézier Corner yarıçapının panelden büyütülmesi/küç
 kapalı satırın yeniden açılması, PNG farkı ve her Execute için Undo da dahildir.
 Bağlı kullanıcı sahnesi kullanılmaz. Hazırlama/test/build sırasında Next durdurulur.
 
-Teslim kontrolü: 575 dosyada 4.129 test, TypeScript kontrolü ve MCP/CLI/production
-build geçti. Gerçek tarayıcıda on iki kabul grubu başarılıdır. Kilitli kaydı
+Teslim kontrolü: 577 dosyada 4.147 test, TypeScript kontrolü ve MCP/CLI/production
+build geçti. Gerçek tarayıcıda on yedi kabul grubu başarılıdır. Kilitli kaydı
 değiştiren modern işlemler ayrıca reddetme/disabled varsayılan testleriyle doğrulanır.

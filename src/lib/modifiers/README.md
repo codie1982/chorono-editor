@@ -92,7 +92,8 @@ const result = pending.execute() // 20; commit only after successful execution
 
 Production classes currently registered: Convert Spline, Convert 2D Mesh,
 Offset, Outline, Chamfer, Fillet, Smooth, Subdivision, Deformation Clip, Offset
-Path, Round Corners, Path Simplify and Path Smoothing.
+Path, Round Corners, Path Simplify, Path Smoothing, Path Resample, Zig Zag,
+Pucker & Bloat and the same-spline Repeater.
 Subdivision defaults to constrained Delaunay and separately offers Grid/Karelaj;
 it does not use midpoint 1→4 triangle splitting.
 [Mesh modeling algorithms and limits](../../geometry/mesh2d/modeling/README.md). `MeshExtension.test.ts`
@@ -104,6 +105,12 @@ compatibility-only UI entries (`descriptor.legacySplineTool`). Old records and
 programmatic callers retain their contracts and evaluator. Native spline Edit
 tools still commit source geometry with Apply. Modern static Spline choices use
 distinct `offsetPath`, `roundCorners`, `pathSimplify`, `pathSmoothing` type IDs.
+The Phase 1 continuation adds `pathResample`, `zigZag`, `puckerBloat` and
+`splineRepeater` through the same registry/command pipeline. Arc-length tables,
+polyline construction, radial coordinate mapping and RepeaterResolver placement
+are owned by `spline/modeling/parametric`; no time/cache runner is introduced.
+See [Phase 1 delivery](../../../docs/tr/spline-phase1-modifiers.md) for precise
+units, algorithms, defaults and limits.
 Offset Path shares the offset adapter but preserves Object identity; Round
 Corners shares Fillet validation/solver/splice. Its modern domain adapter targets
 Corner/Bézier Corner points and replaces existing straight-flanked circular

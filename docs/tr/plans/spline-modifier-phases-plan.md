@@ -1,6 +1,6 @@
 # 2D Spline Modifier — Faz 1 / Faz 2
 
-Durum: **Faz 1 ilk paket uygulandı; diğer paketler planlıdır**. 23 Kasım 2026.
+Durum: **Faz 1'in sekiz temel statik modifier'ı uygulandı; Faz 2 planlıdır**. 23 Kasım 2026.
 Kullanıcı kararı: ilk faz mevcut statik Execute akışıyla ilerler. Animasyonlu
 modifier parametreleri ilk fazın ön koşulu değildir; ileri işlemler Faz 2'dedir.
 Native Edit araçlarının teslim durumu
@@ -25,9 +25,17 @@ Faz 1 uygulama sırası:
    mevcut hesaplara yeni statik parametrik adapter'lar. Ayarlar, Execute, hedef
    seçimi, sıra/toggle/remove/Bake, Undo/Redo ve çıktı doğrulaması
    [teslim sözleşmesindedir](../spline-static-modifiers.md).
-2. Path Resample: sonraki deformasyonlar için ortak uzunluk/örnekleme hazırlığı.
-3. Zig Zag ve Pucker & Bloat.
-4. Temel Repeater.
+2. **Tamamlandı:** Path Resample; ortak bounded Bézier uzunluk/örnekleme hazırlığı.
+3. **Tamamlandı:** Keskin Zig Zag ve Object/custom merkezli radyal Pucker & Bloat.
+4. **Tamamlandı:** Aynı spline içinde doğrusal/dairesel temel Repeater.
+
+İkinci teslimde dört yeni type (`pathResample`, `zigZag`, `puckerBloat`,
+`splineRepeater`) mevcut registry/stack'e eklendi. Kaynak-layer yerel birimleri,
+çıktı/iş bütçeleri ve ileri kapsam sınırları
+[Faz 1 teslim sözleşmesinde](../spline-phase1-modifiers.md) yazılıdır. 577 dosyada
+4.147 test ve gerçek tarayıcıda 17 kabul grubu; birlikte sıra/toggle/Bake,
+Undo/Redo, portable reload, PNG/SVG ve runtime/Mesh adapter'ları doğrulandı.
+Bu durum tüm ileri spline/native Edit planının tamamlandığı anlamına gelmez.
 
 Bu liste mevcut sınıfların doğrudan yeniden görünür yapılması anlamına gelmez.
 Offset/Outline/Chamfer/Fillet'in kayıtlı eski type/default/değerlendirme anlamı
