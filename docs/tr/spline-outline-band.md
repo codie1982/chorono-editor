@@ -5,7 +5,15 @@ kullanır. Bu teslim [Outline v2 planının](plans/spline-outline-band-v2-plan.m
 geometri/görünüm temelidir; tam eğri-fit/preset kapsamının tamamlandığı anlamına
 gelmez.
 
-## Kullanım
+## Canlı kaynak takip düzeltmesi
+
+23 Kasım'da native Outline'ın Replace/Keep source akışı **Outline · Live** ile
+değiştirildi. Kaynak çizgiyi korur ve vertex/kol değişiminde bandı günceller;
+[canlı Outline sözleşmesi](spline-live-outline.md) güncel kullanım ve sınırları
+belirler. Aşağıdaki ilk teslim native açıklamaları tarihsel kalıcı dönüşüm
+sözleşmesidir; `prepareSplineBand`/`strokeToPath` eski anlamıyla korunur.
+
+## İlk teslim kullanımı
 
 - Spline seçip `2` (Edge) veya `3` (Object) ile Edit'e girin. Bir veya daha fazla
   edge zinciri ya da Object seçin. Panelde veya sağ tıkta **Outline · Stroke to

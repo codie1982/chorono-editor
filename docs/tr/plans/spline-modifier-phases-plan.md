@@ -79,6 +79,12 @@ kesişimden parça silme anlamı değişmez. Path Follow mevcut Motion/Follow Pa
 akışında kalır. Bu iki mevcut özellik Faz 1 için yeniden yazılacak modifier
 eksikleri olarak sayılmaz; ileri genişletmeleri ayrıca değerlendirilir.
 
+23 Kasım source-following düzeltmesi: yeni `liveOutline` girdisi asıl çizgiyi
+korur ve kaynak Edit sırasında bandı otomatik hesaplar. Bu ayrı source-edit
+capability, eski `strokeToPath` veya `outline` davranışını değiştirmez.
+[Canlı Outline teslimi](../spline-live-outline.md) desteklenen prefix/scope,
+kılavuz, Bake ve çıktı sözleşmesini tanımlar.
+
 ## Native Edit ile iş sırası
 
 Object Subdivide ve Interpolation native Edit teslimi 23 Kasım 2026'da tamamlandı;

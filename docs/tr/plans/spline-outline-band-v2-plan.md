@@ -13,7 +13,8 @@ Yeni kullanıcı kararı: Outline kaynak çizgiyi korumalı, kaynak vertex deği
 canlı güncellenmeli ve Edit'te açılıp kapanabilen bir kaynak kılavuzu göstermeli.
 Aşağıdaki önceki Replace/Keep source hedefi bu davranışı karşılamıyor; yeni
 uygulama yönü [Canlı Outline planında](spline-live-outline-plan.md) incelendi.
-Bu düzeltme henüz uygulanmadı; mevcut bant hesabı yeniden kullanılacak.
+Bu düzeltme uygulandı: `liveOutline`, mevcut bant hesabını yeniden kullanır.
+[Uygulanan sözleşme](../spline-live-outline.md) source-editing sınırlarını açıklar.
 
 ## Amaç ve yorum
 

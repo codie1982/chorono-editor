@@ -193,6 +193,18 @@ with `node scripts/perf/serve.mjs /tmp/chorono-conversion-qa 2012`.
 Legacy `outline` is unchanged. Local width/alignment/caps/joins/dashes/spacing
 are static settings; all/explicit Object targets use the existing source-first
 stack. Independent Object paint belongs to Properties and survives Execute
-through stable output IDs. Native Outline adds no modifier row. See
+through stable output IDs. Native Outline now creates/updates a `liveOutline` recipe; the old band plan API remains destructive. See
 [the band contract](../../../docs/tr/spline-outline-band.md) for module entry
 points, budgets, serialization, lifecycle, output and remaining v2 scope.
+
+## Live input source editing
+
+`sourceEditing: 'inputSpline'` is separate from result identity preservation.
+`sourceEditingIndex` admits one terminal owner with only a source-preserving
+conversion prefix. `ModifierStackService.execute` validates the output but
+stores that owner's INPUT spline in the authored Layer; frame projection uses
+`withGeometry` for the generated band. `bake` explicitly materializes output.
+Reconciliation updates base/Convert Spline control ownership, never boundary
+points. Other generated stacks remain readonly. Portable load validates this
+authoring snapshot. The source guide is controller UI state, never paint or
+export geometry. See [live contract](../../../docs/tr/spline-live-outline.md).

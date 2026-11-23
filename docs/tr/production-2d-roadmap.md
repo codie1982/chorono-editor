@@ -3938,3 +3938,20 @@ Outline/Boolean/Width/Dynamics işleri Faz 2'de kalır.
   7 kabul grubu geçti; dışa aktarılan PNG/SVG görsel kontrol edildi.
 - Tam v2 fit/provenance, ayarlanabilir density ağırlıkları ve ortak preset/
   clipboard kapsamı açık kalır. [Teslim sözleşmesi](spline-outline-band.md).
+
+## 23 Kasım 2026 — canlı Outline ve kaynak çizgi düzenleme
+
+- `liveOutline` native Outline ayarını kaynak çizgiye bağlı tutar; point/Bezier
+  handle hareketi ve Refine bandı otomatik günceller. Layer ve logical Object
+  sayısı/source kimlikleri korunur. `sourceEditing: inputSpline` admission'ı
+  result-preserving edit yetkisinden ayrıdır; genel generated kilitleri sürer.
+- Edit'te kaynak kılavuzu toggle'ı, kalıcı Outline enabled ve açık Bake ayrı
+  akışlardır; kılavuz/ghost PNG/SVG'ye girmez. Sadece Bake sınır vertex'lerini
+  kalıcı yapar; Undo source+recipe'yi geri getirir. Properties band boyasını
+  source Object ID'siyle bağımsız taşır.
+- 580 dosyada 4.178 test; gerçek Chrome'da 10 kabul grubu geçti. Gerçek point ve
+  handle drag, guide toggle, Off/On, Bake/Undo, Add Vertex, scope admission,
+  portable source/paint ve PNG/SVG görsel kontrol edildi. Kısmi Edge zinciri
+  remap'i, animated source/parametreler ve Bezier-fit ileri kapsamda kalır.
+- [Uygulama ve sınırlar](spline-live-outline.md); legacy `outline`/`strokeToPath`
+  ve eski kalıcı band API'si otomatik dönüştürülmez.

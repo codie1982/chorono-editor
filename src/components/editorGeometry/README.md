@@ -202,10 +202,10 @@ contracts. `scripts/perf/spline-edit.mjs` verifies both spaces under an animated
 nonuniform parent; `scripts/perf/spline-attach.mjs` verifies the Boolean buttons,
 interior-edge removal, same-layer + picks, Explorer picks, Undo and raster output.
 
-Native Edge/Object **Outline · Stroke to Path** now uses the shared band solver
-with source-only worker preview, Cancel and single-Undo Apply. Keep source adds
-an Object in the same spline. The separate **Stroke to Path** modifier is
-available outside Edit, with draft/Execute semantics. Geometry controls stay in
-Edit; **Properties → Paint target** owns independent band Fill/Stroke. Existing
-Offset Path is still a parallel contour, not a band. See
-[Outline contract](../../../docs/tr/spline-outline-band.md).
+Native **Outline · Live** creates/updates a `liveOutline` recipe while retaining
+source points. The all-mode Edit controls expose Outline enabled, Show source
+line (UI-only) and explicit Bake Outline / Stroke to Path. Native Edge scope
+requires all contours of each touched Object. The Outline modifier is available
+outside Edit; other generated strategies keep readonly admission. Paint targets
+use stable source Object IDs without tagging source geometry. See
+[live contract](../../../docs/tr/spline-live-outline.md).

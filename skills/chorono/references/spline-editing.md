@@ -179,15 +179,20 @@ new `spline.edit(operation)` discriminators or new MCP tool names. Headless
 source-edit operations above keep their existing contracts. Animated modifier
 parameters and advanced path effects remain future work.
 
-Native Edge/Object **Outline · Stroke to Path** provides preview/Cancel/Apply
-without creating a modifier. It emits closed polygon bands with local-pixel
-width, inside/center/outside (closed), center/left/right (open chains),
-Butt/Round/Square caps, Miter/Round/Bevel joins, dashes and holes. Keep source
-appends an Object in the same spline. **Stroke to Path** (`strokeToPath`) is its
-source-retaining static modifier counterpart, accessible outside Edit and
-committed by Execute. Paint stays in Properties: bands initially bind root
-stroke to fill; Paint target allows custom independent Object paint, retained
-through deterministic Execute/portable save/clone/runtime output. These are
-native editor choices, not new MCP tool names or `spline.edit` operation kinds.
-Output is tolerance-bounded polyline; full v2 Bézier fitting, weighting controls
-and preset/clipboard extensions remain planned.
+Native **Outline · Live** now retains the original source line and updates its
+band automatically as source points/Bezier handles change. Apply creates or
+updates a `liveOutline` recipe; it never replaces source vertices. Editable
+source admission is limited to one terminal owner after a conversion-only
+prefix; other generated stacks remain readonly. Object targets follow stable
+Object IDs across Refine. Native Edge scope requires every contour of each
+touched Object; partial-chain remapping is unavailable and explicitly disabled.
+
+In Edit, **Show source line** is a UI-only guide toggle; **Outline enabled** is
+a separate persisted recipe state. Only **Bake Outline / Stroke to Path** (or
+Bake stack) materializes boundary vertices. Both source edits and Bake keep
+native Undo/Redo. Appearance stays in Properties; band paint uses the source
+Object ID and persists independently. Runtime/PNG/SVG consume the evaluated
+band and never export the guide. Source/band width uses local px. Legacy
+`strokeToPath`, `outline` and headless `prepareSplineBand` retain their meaning;
+no auto-migration or centerline inference is performed. These are native
+registry choices, not new MCP tool names or `spline.edit` kinds.

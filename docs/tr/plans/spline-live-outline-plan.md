@@ -1,10 +1,11 @@
 # Canlı Spline Outline — kaynak çizgiye bağlı bant
 
-Durum: **incelendi / uygulama planı**. 23 Kasım 2026.
+Durum: **uygulandı — ilk source-following teslim**. 23 Kasım 2026.
 Bu belge son kullanıcı düzeltmesini tanımlar: Outline, ana çizgiyi düzenlenebilir
 kaynak olarak korur; kaynak vertex veya tangent değişince bant güncellenir.
 Önceki [bant tesliminin](../spline-outline-band.md) Replace/Keep source davranışı
-bu canlı düzenleme ihtiyacını karşılamaz. Bu plan uygulanmış API değildir.
+bu canlı düzenleme ihtiyacını karşılamaz. Uygulanan API, source admission sınırları ve doğrulama
+[canlı Outline sözleşmesindedir](../spline-live-outline.md).
 
 ## Kullanıcı davranışı
 
