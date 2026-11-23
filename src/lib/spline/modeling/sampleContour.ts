@@ -1,4 +1,6 @@
 import type { SplineContour, SplinePathData, SplineSegment } from '@/lib/types/spline'
+import { splineContourInterpolation, splineInterpolationTolerance } from '../sampling/interpolation'
+import { distToSegmentSq } from '../../geometry/segmentDistance'
 
 export interface Vec2 { x: number; y: number }
 export interface SampledEdge { points: Vec2[]; length: number }
@@ -8,10 +10,12 @@ export interface SampleContourOptions {
   readonly flatness?: number
   /** Hard output guard shared by all edges in this contour. */
   readonly maxSamples?: number
+  /** Refuse an unmet tolerance at the recursion guard. Authored Object sampling
+   * enables this by default; omitted legacy solver calls keep their contract. */
+  readonly requireTolerance?: boolean
 }
 
 const MAX_SAMPLES = 8192
-const FLATNESS = 0.25
 const EPS = 1e-7
 
 const distance = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -19,8 +23,9 @@ const midpoint = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.
 
 /**
  * Approximate one normalized spline contour with layer-local polylines. The
- * maximum chord deviation defaults to 0.25 local pixels until the depth limit
- * (12). Callers may provide a fixed local-space tolerance; viewport zoom must
+ * maximum chord deviation uses authored Object interpolation or defaults to
+ * 0.25 local px until the depth limit (12). An explicit flatness overrides the
+ * Object preference for numerical solvers; viewport zoom must
  * never be used as that value.
  * Reject missing/non-finite topology and unbounded output. The returned arrays
  * are detached; callers may slice them without changing source records.
@@ -30,7 +35,8 @@ export function sampleContourEdges(
   contourId: string,
   options: SampleContourOptions = {},
 ): { contour: SplineContour; edges: SampledEdge[] } {
-  const flatnessTolerance = options.flatness ?? FLATNESS
+  const flatnessTolerance = options.flatness ?? splineInterpolationTolerance(data, contourId)
+  const strict = options.requireTolerance ?? (options.flatness === undefined && !!splineContourInterpolation(data, contourId))
   const maxSamples = options.maxSamples ?? MAX_SAMPLES
   if (!Number.isFinite(flatnessTolerance) || flatnessTolerance <= 0) {
     throw new Error('Spline flatten tolerance must be a finite positive number.')
@@ -52,9 +58,9 @@ export function sampleContourEdges(
     const controls = controlPoints(segment, from, to, handles)
     const points: Vec2[] = [{ x: from.x, y: from.y }]
     if (controls.length === 2) {
-      subdivideQuadratic(points, from, controls[0], to, 0, flatnessTolerance)
+      subdivideQuadratic(points, from, controls[0], to, 0, flatnessTolerance, strict)
     } else if (controls.length === 3) {
-      subdivideCubic(points, from, controls[0], controls[1], to, 0, flatnessTolerance)
+      subdivideCubic(points, from, controls[0], controls[1], to, 0, flatnessTolerance, strict)
     } else points.push({ x: to.x, y: to.y })
     sampleCount += points.length
     if (sampleCount > maxSamples || points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) throw new Error('Spline contour is too complex or contains non-finite geometry.')
@@ -72,24 +78,32 @@ function controlPoints(segment: SplineSegment, from: Vec2 & { id: string }, to: 
   return []
 }
 
-function flatness(point: Vec2, start: Vec2, end: Vec2): number {
+/** Authored precision bounds controls against the finite chord (including
+ * collinear overshoot), using convexity of distance and the Bézier hull. Legacy
+ * calls retain their previous infinite-line/depth-limit approximation. */
+function flatness(point: Vec2, start: Vec2, end: Vec2, strict: boolean): number {
+  if (strict) return Math.sqrt(distToSegmentSq(point.x, point.y, start.x, start.y, end.x, end.y).dSq)
   const length = distance(start, end)
   return length < EPS ? distance(point, start) : Math.abs((end.x - start.x) * (start.y - point.y) - (start.x - point.x) * (end.y - start.y)) / length
 }
 
-function subdivideQuadratic(out: Vec2[], a: Vec2, b: Vec2, c: Vec2, depth: number, tolerance: number): void {
-  if (depth >= 12 || flatness(b, a, c) <= tolerance) { out.push({ x: c.x, y: c.y }); return }
+function subdivideQuadratic(out: Vec2[], a: Vec2, b: Vec2, c: Vec2, depth: number, tolerance: number, strict: boolean): void {
+  const error = flatness(b, a, c, strict)
+  if (strict && depth >= 12 && error > tolerance) throw new Error('Interpolation tolerance exceeds the sampling depth budget. Increase tolerance.')
+  if (depth >= 12 || error <= tolerance) { out.push({ x: c.x, y: c.y }); return }
   const ab = midpoint(a, b), bc = midpoint(b, c), mid = midpoint(ab, bc)
-  subdivideQuadratic(out, a, ab, mid, depth + 1, tolerance)
-  subdivideQuadratic(out, mid, bc, c, depth + 1, tolerance)
+  subdivideQuadratic(out, a, ab, mid, depth + 1, tolerance, strict)
+  subdivideQuadratic(out, mid, bc, c, depth + 1, tolerance, strict)
 }
 
-function subdivideCubic(out: Vec2[], a: Vec2, b: Vec2, c: Vec2, d: Vec2, depth: number, tolerance: number): void {
-  if (depth >= 12 || Math.max(flatness(b, a, d), flatness(c, a, d)) <= tolerance) { out.push({ x: d.x, y: d.y }); return }
+function subdivideCubic(out: Vec2[], a: Vec2, b: Vec2, c: Vec2, d: Vec2, depth: number, tolerance: number, strict: boolean): void {
+  const error = Math.max(flatness(b, a, d, strict), flatness(c, a, d, strict))
+  if (strict && depth >= 12 && error > tolerance) throw new Error('Interpolation tolerance exceeds the sampling depth budget. Increase tolerance.')
+  if (depth >= 12 || error <= tolerance) { out.push({ x: d.x, y: d.y }); return }
   const ab = midpoint(a, b), bc = midpoint(b, c), cd = midpoint(c, d)
   const abc = midpoint(ab, bc), bcd = midpoint(bc, cd), mid = midpoint(abc, bcd)
-  subdivideCubic(out, a, ab, abc, mid, depth + 1, tolerance)
-  subdivideCubic(out, mid, bcd, cd, d, depth + 1, tolerance)
+  subdivideCubic(out, a, ab, abc, mid, depth + 1, tolerance, strict)
+  subdivideCubic(out, mid, bcd, cd, d, depth + 1, tolerance, strict)
 }
 
 /** Slice an edge by arc distance, preserving sampled intermediate points. */

@@ -1,4 +1,5 @@
 import type { SplinePathData } from '../../types/spline'
+import { assertSplineInterpolation } from '../sampling/interpolation'
 
 /** Finite layer-local coordinates; no coercion of untrusted numeric input. */
 function assertCoordinates(...values: unknown[]): void { if (!values.every(value => typeof value === 'number' && Number.isFinite(value))) throw new Error('Spline coordinates must be finite numbers.') }
@@ -52,6 +53,7 @@ export function assertSplineTopology(data: SplinePathData): void {
   }
   const ownedContours = new Set<string>()
   for (const subShape of Object.values(data.subShapes)) {
+    if (subShape.interpolation !== undefined) assertSplineInterpolation(subShape.interpolation)
     if (!Array.isArray(subShape.contourIds) || !subShape.contourIds.length) throw new Error('A spline sub-shape needs at least one contour.')
     for (const id of subShape.contourIds) {
       if (typeof id !== 'string' || !Object.hasOwn(data.contours, id) || ownedContours.has(id)) throw new Error('Missing or shared spline sub-shape contour.')

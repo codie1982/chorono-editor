@@ -115,6 +115,13 @@ export type SplineGeneratorParams =
 
 // ── SubShape ──────────────────────────────────────────────────────────────────
 
+/** Authored adaptive-sampling precision in layer-local px. Omission preserves
+ * each existing consumer's default; exact Bézier source/rendering is unchanged. */
+export interface SplineInterpolation {
+  readonly version: 1
+  readonly tolerancePx: number
+}
+
 export interface SplineSubShape {
   id:   string
   name: string
@@ -126,6 +133,8 @@ export interface SplineSubShape {
   generatorParams?: SplineGeneratorParams
   /** false = parametric (params drive geometry). true = points are canonical. */
   editable: boolean
+  /** Optional Object sampling policy; never stores sampled/generated vertices. */
+  interpolation?: SplineInterpolation
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────

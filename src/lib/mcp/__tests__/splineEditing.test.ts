@@ -44,11 +44,11 @@ describe('native spline MCP plans and source ownership', () => {
       await editor.call('redo'); expect(editor.host.editor.getScene()).toEqual(after)
     } finally { await editor.close() }
   })
-  it.each(['simplify', 'smooth'] as const)('applies Object %s without new modifiers, preserving outer keys and one Undo', async kind => {
+  it.each(['simplify', 'smooth', 'subdivide', 'interpolation'] as const)('applies Object %s without new modifiers, preserving outer keys and one Undo', async kind => {
     const { editor, scene, layer } = setup()
     try {
       layer.spline = divideSplineEdges(layer.spline!, Object.keys(layer.spline!.segments), 3); editor.replaceDocument(scene)
-      const plan = await prepare(editor, layer.id, { kind: 'topology', selection: { mode: 'object', ids: Object.keys(layer.spline!.subShapes) }, action: kind === 'simplify' ? { kind, tolerancePx: .2 } : { kind } })
+      const plan = await prepare(editor, layer.id, { kind: 'topology', selection: { mode: 'object', ids: Object.keys(layer.spline!.subShapes) }, action: kind === 'simplify' ? { kind, tolerancePx: .2 } : kind === 'interpolation' ? { kind, tolerancePx: .1 } : { kind } })
       expect(editor.host.editor.getScene()).toEqual(scene); expect(editor.historyLength()).toBe(0)
       const applied = await editor.rawCall('apply_spline_edit', access(plan)), after = editor.host.editor.getScene()
       expect(applied.result).toEqual(plan.result); expect(editor.historyLength()).toBe(1)

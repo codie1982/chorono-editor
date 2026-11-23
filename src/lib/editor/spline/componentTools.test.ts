@@ -7,16 +7,16 @@ import { splineTopologyCommand, type SplineTopologyAction } from './topologyComm
 
 /** One portable source with outer transform/paint/key ownership unrelated to
  * native component tools. The near-collinear middle anchor is simplifiable. */
-function fixture(kind: 'addVertex' | 'simplify' | 'smooth') {
+function fixture(kind: 'addVertex' | 'simplify' | 'smooth' | 'subdivide' | 'interpolation') {
   const scene = emptyScene(), layer = newSplineLayerFromData(createPolylineSpline([{ x: 0, y: 0 }, { x: 20, y: .05 }, { x: 40, y: 0 }, { x: 60, y: 15 }], false))
   layer.transform = { ...layer.transform, x: 150, y: 90, rotationDeg: 30, scaleX: 2, scaleY: .75, anchorX: 9, anchorY: -3 }; scene.layers = [layer]
   scene.timelines = [{ id: 'outer', durationMs: 1000, autoplay: false, loop: false, tracks: [{ target: `layers.${layer.id}.transform.x`, keyframes: [{ id: 'human', timeMs: 0, value: 150, easing: { type: 'linear' } }] }] }]
   const mode = kind === 'addVertex' ? 'edge' as const : 'object' as const, ids = Object.keys(kind === 'addVertex' ? layer.spline!.segments : layer.spline!.subShapes).slice(0, 1)
-  const action: SplineTopologyAction = kind === 'addVertex' ? { kind, edgeId: ids[0], t: .35 } : kind === 'simplify' ? { kind, tolerancePx: .2 } : { kind }
+  const action: SplineTopologyAction = kind === 'addVertex' ? { kind, edgeId: ids[0], t: .35 } : kind === 'simplify' ? { kind, tolerancePx: .2 } : kind === 'interpolation' ? { kind, tolerancePx: .1 } : { kind }
   return { scene, layer, mode, ids, action }
 }
 describe('native Add Vertex / Simplify / Smooth commands', () => {
-  it.each(['addVertex', 'simplify', 'smooth'] as const)('%s changes only owned source and survives exact Undo/Redo and portable save/load', kind => {
+  it.each(['addVertex', 'simplify', 'smooth', 'subdivide', 'interpolation'] as const)('%s changes only owned source and survives exact Undo/Redo and portable save/load', kind => {
     const { scene, layer, mode, ids, action } = fixture(kind), before = structuredClone(scene)
     const { command, result } = splineTopologyCommand(scene, layer.id, mode, ids, action)
     expect(command).not.toBeNull(); const next = command!.execute(scene); assertSplineTopology(next.layers[0].spline!)
@@ -26,7 +26,7 @@ describe('native Add Vertex / Simplify / Smooth commands', () => {
     if (kind === 'addVertex') { expect(result.pointId).toBeDefined(); expect(next.layers[0].spline!.points[result.pointId!]).toBeDefined(); expect(result.ids).toHaveLength(2) }
     const undone = command!.undo(next); expect(undone).toEqual(before); expect(command!.execute(undone)).toEqual(next); expect(scene).toEqual(before)
   })
-  it.each(['addVertex', 'simplify', 'smooth'] as const)('%s refuses locked/keyed/instance sources and late source replacement atomically', kind => {
+  it.each(['addVertex', 'simplify', 'smooth', 'subdivide', 'interpolation'] as const)('%s refuses locked/keyed/instance sources and late source replacement atomically', kind => {
     const { scene, layer, mode, ids, action } = fixture(kind), call = () => splineTopologyCommand(scene, layer.id, mode, ids, action)
     layer.locked = true; expect(call).toThrow(); layer.locked = false
     layer.instanceOf = 'other'; expect(call).toThrow(); delete layer.instanceOf

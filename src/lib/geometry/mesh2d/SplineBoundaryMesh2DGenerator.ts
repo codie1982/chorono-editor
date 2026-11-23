@@ -6,7 +6,8 @@ import { Mesh2DTopologyValidator } from './Mesh2DTopologyValidator'
 import { SplineBoundaryRingBuilder, type SplineBoundaryRing } from './SplineBoundaryRings'
 
 export interface SplineBoundaryMesh2DOptions {
-  /** Fixed chord-deviation tolerance in source-layer local pixels. */
+  /** Maximum chord-deviation tolerance in source-layer local pixels. Authored
+   * Object interpolation can request finer sampling, never a weaker bound. */
   readonly flattenTolerance?: number
 }
 

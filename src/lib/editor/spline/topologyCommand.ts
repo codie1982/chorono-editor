@@ -14,6 +14,7 @@ import type { SplineEdgeBoundary } from '../../spline/topology/edgeBoundaries'
 import { addSplineVertex, type SplineVertexType } from '../../spline/edit/addVertex'
 import { simplifySplineObjects } from '../../spline/edit/simplifyObjects'
 import { smoothSplineObjects } from '../../spline/edit/smoothObjects'
+import { subdivideSplineObjects, setSplineObjectInterpolation } from '../../spline/edit/objectDetail'
 
 export interface SplineTopologyResult { layerId: string; mode: SplineEditMode; ids: string[]; reason?: string; pointId?: string }
 export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: number; y?: number }
@@ -26,6 +27,7 @@ export type SplineTopologyAction = { kind: 'delete' } | { kind: 'copy'; x?: numb
   | { kind: 'trim' | 'extend'; edgeId: string; t: number }
   | { kind: 'addVertex'; edgeId: string; t: number; pointType?: SplineVertexType }
   | { kind: 'simplify'; tolerancePx?: number } | { kind: 'smooth' }
+  | { kind: 'subdivide'; parts?: number } | { kind: 'interpolation'; tolerancePx: number | null }
 /** One source command for mode-owned topology. All selection IDs are scoped to
  * one layer and validated before allocation. Geometry ownership, ancestor locks,
  * source CAS and live references are rechecked by the native command. Effects,
@@ -40,6 +42,10 @@ export function splineTopologyCommand(scene: ChronoScene, layerId: string, mode:
   let result: SplineTopologyResult = { layerId, mode, ids: [...ids] }
   let boundaries: SplineEdgeBoundary[] | undefined
   const command = splineEditCommand(scene, layerId, { kind: 'topology' }, data => {
+    if (action.kind === 'subdivide' || action.kind === 'interpolation') {
+      if (mode !== 'object') throw new Error('Use Subdivide/Interpolation on selected spline Objects in Object mode.')
+      return action.kind === 'subdivide' ? subdivideSplineObjects(data, ids, action.parts) : setSplineObjectInterpolation(data, ids, action.tolerancePx)
+    }
     if (action.kind === 'simplify' || action.kind === 'smooth') {
       if (mode !== 'object') throw new Error('Use Simplify/Smooth on selected spline Objects in Object mode.')
       return action.kind === 'simplify' ? simplifySplineObjects(data, ids, action.tolerancePx) : smoothSplineObjects(data, ids)

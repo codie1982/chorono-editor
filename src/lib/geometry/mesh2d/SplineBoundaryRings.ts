@@ -1,5 +1,6 @@
 import { sampleContourEdges } from '@/lib/spline/modeling/sampleContour'
 import type { SplinePathData } from '@/lib/types/spline'
+import { splineContourInterpolation, splineInterpolationTolerance } from '@/lib/spline/sampling/interpolation'
 
 const GEOMETRY_EPSILON = 1e-8
 
@@ -34,7 +35,10 @@ interface WorkingRing {
  * Flattens and validates the closed contours used by spline-boundary Mesh2D.
  *
  * Instances are stateless. Output coordinates remain in spline-local pixels;
- * the caller supplies a fixed local-space flatten tolerance. The builder
+ * the caller supplies a local-space maximum flatten deviation. An authored
+ * Object interpolation preference may request finer sampling; omitted settings
+ * preserve legacy defaults. Authored requests use strict bounded subdivision.
+ * The builder
  * rejects open, degenerate, self-intersecting, touching and crossing rings
  * before triangulation. Even-odd nesting alternates outer/hole roles. Nonzero
  * nesting must change fill state at every boundary; redundant same-winding
@@ -88,7 +92,7 @@ export class SplineBoundaryRingBuilder {
   }
 
   private flattenRing(data: SplinePathData, contourId: string, flattenTolerance: number): WorkingRing {
-    const sampled = sampleContourEdges(data, contourId, { flatness: flattenTolerance })
+    const sampled = sampleContourEdges(data, contourId, { flatness: splineInterpolationTolerance(data, contourId, flattenTolerance), requireTolerance: !!splineContourInterpolation(data, contourId) })
     if (!sampled.contour.closed) throw new Error(`Spline contour "${contourId}" must be closed before triangulation`)
     const raw = sampled.edges.flatMap(edge => edge.points.slice(0, -1))
       .map((point, sampleIndex) => ({ ...point, sampleIndex }))

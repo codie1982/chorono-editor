@@ -10,6 +10,7 @@ import { assertPhysicsSceneData } from '../../physics/PhysicsSceneValidation'
 import { assertSceneBooleanOperations } from '../../booleanOperations/validation'
 import { assertConversionRecipe } from '../../geometry/conversion/GeometryConversionService'
 import { assertSceneModifierStacks } from '../../modifiers'
+import { assertSplineInterpolation } from '../../spline/sampling/interpolation'
 
 /** Shared recognition for an editable scene source. Merge keeps the historical
  * 1.x/layers/composition minimum; complete document opening additionally requires
@@ -35,6 +36,7 @@ export function parseSceneJson(text: string, complete = false): ChronoScene {
     ? 'Not a complete Chorono scene: expected version 1.x, composition, layers, assets, timelines, parameters, bindings and triggers.'
     : 'Not a valid Chorono scene: expected version 1.x, a composition object and a layers array.')
   scene.layers.forEach(layer => assertModelLayer(layer, scene.layers))
+  scene.layers.forEach(layer => { for (const object of Object.values(layer.spline?.subShapes ?? {})) if (object.interpolation !== undefined) assertSplineInterpolation(object.interpolation) })
   scene.layers.forEach(layer => assertModelClipOwnership(scene, layer))
   scene.layers.forEach(assertNumericInputExpressions)
   assertScenePropertyExpressions(scene)
