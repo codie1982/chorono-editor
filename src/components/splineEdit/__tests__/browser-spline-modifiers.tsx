@@ -5,14 +5,15 @@ import { computeSplineBounds } from '@/lib/spline/geometry/computeSplineBounds'
 import { modifierStackService } from '@/lib/modifiers'
 import { parseSceneJson } from '@/lib/format/scene/SceneJsonConverter'
 import { prepareAddModifier } from '@/lib/editor/modifiers/commands'
+import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { Subject, fixture, current, frames, layer, click, key, assert, equal, raster } from './splineHarness'
 import type { SplinePathData } from '@/lib/types/spline'
 
 /** Disposable production scene; no connected editor or user document is read. */
-async function reset(data?: SplinePathData) {
+async function reset(data?: SplinePathData, editing = true) {
   const scene = fixture(); if (data) scene.layers[1] = { ...scene.layers[1], spline: data }
   flushSync(() => { current().editor.resetScene(scene); current().select('spline') }); await frames()
-  key('3'); await frames(); assert(current().geometryEdit.active, 'Edit panel did not enter Object session')
+  if (editing) { key('3'); await frames(); assert(current().geometryEdit.active, 'Edit panel did not enter Object session') }
 }
 async function menu(label: string) {
   const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(item => item.querySelector('span.truncate')?.textContent?.trim() === label)
@@ -40,6 +41,27 @@ function path() { return splineToPathDefinition(layer().spline!) }
 async function run() {
   const status = document.getElementById('status')!, report = document.getElementById('report')!, checks: string[] = []
   try {
+    await reset(rectangle(), false)
+    assert(!current().geometryEdit.active && !document.querySelector('[aria-label="Spline editing mode"]'), 'Native Spline tools leaked outside Edit')
+    await add('Offset Path'); await number('Offset Path Distance', 5)
+    await click('Enter edit mode'); await click('Exit edit mode')
+    equal(document.querySelector<HTMLInputElement>('[aria-label="Offset Path Distance"]')!.value, '5', 'Mode toggle lost modifier draft')
+    await click('Execute stack'); assert(Math.abs(computeSplineBounds(layer().spline!).width - 110) < 1e-8, 'Execute outside Edit failed')
+    await check('Enable Offset Path 1', false); await check('Enable Offset Path 1', true)
+    const outside = snapshot(); await click('Bake stack')
+    assert(!current().geometryEdit.active && !current().controller.active && !layer().modifierStack, 'Bake outside Edit started a source session')
+    await click('Undo'); equal(current().editor.getScene(), outside, 'Outside Bake Undo lost stack')
+    assert(!current().geometryEdit.active, 'Outside Undo entered Edit')
+    checks.push('Spline modifiers work outside Edit; mode toggles retain drafts, Execute/toggle/Bake/Undo never start a source session')
+
+    const meshScene = fixture(); meshScene.layers[1] = { ...newStructuredGridMesh2DLayer(), id: 'spline', parentId: meshScene.layers[0].id }
+    flushSync(() => { current().editor.resetScene(meshScene); current().select('spline') }); await frames()
+    assert(!current().geometryEdit.active && !document.querySelector('[aria-label="Mesh selection mode"]') && !document.querySelector('[aria-label="Mesh settings"]'), 'Mesh source tools leaked outside Edit')
+    await click('Add Mesh modifiers'); await menu('Smooth'); await number('Smooth Amount', .5); await click('Execute stack')
+    equal(record('meshSmooth').settings.strength, .5, 'Mesh modifier outside Edit did not Execute')
+    await click('Bake stack'); assert(!current().geometryEdit.active && !layer().modifierStack, 'Mesh Bake outside Edit entered source session')
+    checks.push('Actual Mesh picker/settings/Execute/Bake work without entering Edit; source mode and texture/pin tools stay hidden')
+
     await reset(rectangle()); await click('Add Spline modifiers')
     const labels = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"] span.truncate')).map(item => item.textContent)
     equal(labels, ['Offset Path', 'Round Corners', 'Path Simplify', 'Path Smoothing'], 'Chooser mixed legacy/Mesh entries into the new spline package')
@@ -114,6 +136,7 @@ async function run() {
     equal(layer().modifierStack!.modifiers.map(item => item.type), ['offset', 'offsetPath'], 'New operation rewrote legacy record')
     const pixels = await raster(); assert(pixels.some(channel => channel > 0), 'Actual output is empty')
     checks.push('Legacy-only records keep closed compatibility history; adding a modern operation preserves old type/order and valid raster output')
+    await click('Exit edit mode')
     const stack = document.querySelector('[aria-label="Modifier stack"]')!; stack.scrollIntoView({ block: 'center' })
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }

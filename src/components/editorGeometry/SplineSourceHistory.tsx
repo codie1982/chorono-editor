@@ -8,8 +8,9 @@ import type { GeometryEditPanelProps } from './GeometryEditPanel'
 
 /** Closed source/compatibility drawer. Existing source,
  * conversion and legacy modifier records keep their evaluator and editing UI.
- * Baking is explicit, atomic and undoable; after adoption the same layer enters
- * Object Edit. Loading/opening this drawer never changes the source/history. */
+ * Baking is explicit, atomic and undoable; an active Edit session may restore
+ * Object focus after adoption. Outside Edit, the host omits that callback.
+ * Loading/opening this drawer never changes the source/history. */
 export function SplineSourceHistory(props: GeometryEditPanelProps & { layer: Layer; showStack?: boolean }) {
   const { layer } = props, generated = modifierOutputReadOnly(layer)
   const [error, setError] = useState('')

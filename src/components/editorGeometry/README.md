@@ -50,8 +50,9 @@ Object target fields list the selected modifier's actual prefix input, even
 while final generated geometry is read-only. Object IDs join point/contour
 selection in the native command policy and topology signature. Modern stacks
 are visible; legacy-only Spline stacks retain the closed Source / History
-drawer. Disabling/removing the last geometry operation or Bake re-enters Object
-mode and keeps the Edit panel available. [Static Spline contracts](../../../docs/tr/spline-static-modifiers.md).
+drawer. Within an active Edit session, disabling/removing the last geometry
+operation or Bake restores Object mode. The panel remains available outside
+Edit as well. [Static Spline contracts](../../../docs/tr/spline-static-modifiers.md).
 
 `ModifierSettingsForm` renders class-owned schemas without geometry algorithms.
 `ModifierSourceSettings` owns source-parameter drafts. `ModifierActionIcon` supplies
@@ -63,10 +64,13 @@ worker previews; those are separate one-shot geometry tools. The optional
 `splineToolPreview` slot shows their active Apply/Cancel controls above the stack. Edit-mode toggles
 stay above the stack; the inspector appears below. Active mode replaces the layer
 bbox with an orange boundary, red selected elements and a named viewport badge.
-The page's `useGeometryEditMode` scopes Edit-panel visibility to one selection and
-document. Outside Edit mode the panel keeps the selected name/type and an **Enter
-edit mode** action; source controls, modifier settings and mesh tools mount only
-inside the session. Mesh/generated-spline settings sessions have a viewport badge
+The page's `useGeometryEditMode` scopes native source tools to one selection and
+document. Outside Edit mode the panel keeps the selected name/type, an **Enter
+edit mode** action and the modifier stack, picker and settings for Spline/Mesh.
+Point/Edge/Object controls, native inspectors and mesh source/texture/pin tools
+mount only inside the session. Enter/exit retains modifier selection and drafts;
+Add, Execute, toggle, remove and Bake outside Edit never start it. Bake restores
+Object focus only if Edit was already active. Mesh/generated-spline sessions have a viewport badge
 and suppress layer gizmos; writable splines reuse the Point/Edge/Object controller.
 Exit, mode-toggle exit, selection change and document replacement restore layer
 tools without writing source/history. Normal geometry-driven frames use the shared

@@ -52,6 +52,20 @@ describe('Geometry Edit dock', () => {
   })
 
   it.each([
+    [newSplineLayerFromData(createRectangleSpline({ width: 80, height: 50 })), 'Spline'],
+    [newStructuredGridMesh2DLayer(), 'Mesh'],
+  ] as const)('exposes modifiers outside Edit while hiding native source tools (%s)', (layer, kind) => {
+    const props = panelProps(layer)
+    const html = renderToStaticMarkup(<GeometryEditPanel {...props}
+      editMode={{ active: false, mode: 'object', enter: vi.fn(), exit: vi.fn() }}
+      splineModeControls={<p>Native mode controls</p>} splineSourceSettings={<p>Native source inspector</p>} splineToolPreview={<p>Native preview</p>} />)
+    expect(html).toContain(`Add ${kind} modifiers`)
+    expect(html).toContain('Enter edit mode')
+    expect(html).not.toMatch(/Native mode controls|Native source inspector|Native preview|Mesh selection mode|Mesh settings|Quad Diagonal/)
+    expect(props.dispatchCommand).not.toHaveBeenCalled()
+  })
+
+  it.each([
     ['offset', 'Apply creates a separate spline layer.', 'Distance'],
     ['fillet', 'Apply updates the source contour.', 'Radius'],
   ] as const)('shows only the selected %s operation and describes its Apply behavior', (operation, consequence, amountLabel) => {

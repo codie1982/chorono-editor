@@ -2,6 +2,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useEditorState, type EditorStateReturn } from '@/app/hooks/useEditorState'
 import { emptyScene, newSplineLayerFromData } from '@/lib/defaults'
+import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { createPolylineSpline, createRectangleSpline, mergeSplineData } from '@/lib/spline'
 import { modifierOutputReadOnly } from '@/lib/modifiers'
 import { useSplineEditSelection, type SplineEditController } from '@/components/splineEdit/useSplineEditSelection'
@@ -16,11 +17,11 @@ afterEach(() => { if (root) act(() => root!.unmount()); root = undefined; items 
 
 /** Production editor/selection/session/panel with renderer refs left null. The
  * menu transport is captured; every source write uses actual native commands. */
-function mount() {
+function mount(kind: 'spline' | 'mesh2d' = 'spline') {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const noise = createPolylineSpline(Array.from({ length: 21 }, (_, i) => ({ x: i * 5, y: Math.sin(i) * .1 })), false), rectangle = createRectangleSpline({ width: 20, height: 10 })
   Object.values(noise.subShapes)[0].name = 'Noise'; Object.values(rectangle.subShapes)[0].name = 'Rectangle'
-  const layer = newSplineLayerFromData(mergeSplineData(noise, rectangle)), scene = emptyScene(); scene.layers = [layer]
+  const layer = kind === 'mesh2d' ? newStructuredGridMesh2DLayer() : newSplineLayerFromData(mergeSplineData(noise, rectangle)), scene = emptyScene(); scene.layers = [layer]
   let live: { editor: EditorStateReturn; controller: SplineEditController; mode: GeometryEditMode }
   function Host() {
     const editor = useEditorState(scene), current = editor.scene.layers[0], controller = useSplineEditSelection(current, editor.getDocumentSignal()), mode = useGeometryEditMode(current, controller, editor.getDocumentSignal())
@@ -35,11 +36,57 @@ function mount() {
   act(() => { root = create(<Host />) })
   const button = (label: string) => root!.root.findAllByType('button').find(node => node.props['aria-label'] === label || node.children.join('') === label)!
   const click = (label: string) => act(() => { const node = button(label); expect(node).toBeDefined(); node.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ left: 0, bottom: 20 }) } }) })
-  const add = (label: string) => { click('Add Spline modifiers'); act(() => { const item = items.find(item => item.kind === 'action' && item.label === label)!; expect(item).toBeDefined(); if (item.kind === 'action') item.onSelect() }) }
+  const add = (label: string) => { click(`Add ${kind === 'mesh2d' ? 'Mesh' : 'Spline'} modifiers`); act(() => { const item = items.find(item => item.kind === 'action' && item.label === label)!; expect(item).toBeDefined(); if (item.kind === 'action') item.onSelect() }) }
   return { get: () => live!, scene, noise, rectangle, click, add, button }
 }
 
 describe('parametric spline panel session', () => {
+  it.each([
+    ['spline', 'Path Simplify', 'Path Simplify Tolerance', .01, 'tolerancePx'],
+    ['mesh2d', 'Smooth', 'Smooth Amount', .5, 'strength'],
+  ] as const)('adds/executes/toggles/bakes %s modifiers with Undo outside Edit, without entering it', (kind, label, field, value, setting) => {
+    const host = mount(kind)
+    expect(host.get().mode.active).toBe(false)
+    host.add(label)
+    const added = host.get().editor.getScene()
+    expect(added.layers[0].modifierStack!.modifiers).toHaveLength(1)
+    expect(host.get().mode.active).toBe(false)
+    act(() => root!.root.findByProps({ 'aria-label': field }).props.onChange({ currentTarget: { valueAsNumber: value } }))
+    expect(host.get().editor.getScene()).toBe(added)
+    host.click('Execute stack'); const executed = host.get().editor.getScene()
+    expect(executed.layers[0].modifierStack!.modifiers[0].settings[setting]).toBe(value)
+    expect(host.get().mode.active).toBe(false)
+    act(() => host.get().editor.undo()); expect(host.get().editor.getScene()).toEqual(added)
+    act(() => host.get().editor.redo()); expect(host.get().editor.getScene()).toEqual(executed)
+    for (const enabled of [false, true]) {
+      act(() => root!.root.findByProps({ 'aria-label': `Enable ${label} 1` }).props.onChange({ currentTarget: { checked: enabled } }))
+      expect(host.get().mode.active).toBe(false)
+    }
+    const beforeBake = host.get().editor.getScene()
+    host.click('Bake stack')
+    expect(host.get().editor.getScene().layers[0].modifierStack).toBeUndefined()
+    expect(host.get().mode.active).toBe(false); expect(host.get().controller.active).toBe(false)
+    act(() => host.get().editor.undo()); expect(host.get().editor.getScene()).toEqual(beforeBake)
+    expect(host.get().mode.active).toBe(false)
+    host.click(`Remove ${label} modifier 1`)
+    expect(host.get().editor.getScene().layers[0].modifierStack!.modifiers).toHaveLength(0)
+    expect(host.get().mode.active).toBe(false)
+    act(() => host.get().editor.undo()); expect(host.get().editor.getScene()).toEqual(beforeBake)
+  })
+
+  it('retains modifier selection and pending settings through entering and leaving Edit', () => {
+    const host = mount(); host.add('Path Simplify')
+    const added = host.get().editor.getScene()
+    act(() => root!.root.findByProps({ 'aria-label': 'Path Simplify Tolerance' }).props.onChange({ currentTarget: { valueAsNumber: .001 } }))
+    host.click('Enter edit mode'); expect(host.get().mode.active).toBe(true)
+    host.click('Exit edit mode'); expect(host.get().mode.active).toBe(false)
+    expect(root!.root.findByProps({ 'aria-label': 'Path Simplify Tolerance' }).props.value).toBe(.001)
+    expect(host.get().editor.getScene()).toBe(added)
+    host.click('Execute stack')
+    expect(host.get().editor.getScene().layers[0].modifierStack!.modifiers[0].settings.tolerancePx).toBe(.001)
+    expect(host.get().mode.active).toBe(false)
+  })
+
   it('keeps the settings session reachable after source becomes generated, stages numeric drafts and commits only on Execute', () => {
     const host = mount(); act(() => { host.get().mode.enter('object') }); act(() => host.get().controller.select(Object.keys(host.noise.subShapes)))
     host.add('Path Simplify')
