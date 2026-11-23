@@ -211,6 +211,89 @@ paint schema üzerinden izlenir. Dense bitmap/cache/runtime sınıfları JSON'a 
 Preset/custom preset/copy-paste ve Outline'ın bağımsız band paint'i bu sürümde
 uygulanmış değildir; Outline v2 planında açıkça sıralanmıştır.
 
+## Add Vertex, Simplify ve Smooth
+
+Bu üç araç native `SplineOperation.topology` ve `splineTopologyCommand` üzerinden
+gerçek spline kaynağını değiştirir. Yeni modifier kaydı oluşturmaz; her değişiklik
+ayrı Undo/Redo'dur. Panel/menü kullanılabilirliği `splineComponentTools` içinde
+ortaktır; native komut canlı lock/driver/instance/reference ve source CAS
+kontrollerini tekrarlar. Değişmeyen sonuç geçmişe boş komut eklemez.
+
+**Edge → Add Vertex:** Panelde New vertex type, ardından Add Vertex seçilir;
+edge üzerinde art arda tıklanır. Sağ tık → Add Vertex alt menüsü aynı aracı seçilen
+tipte açar; menü açmak veya tip seçmek kaynak değiştirmez. Varsayılan Preserve
+curve, mevcut `insertPointOnSegment` De Casteljau hesabını kullanır. Yeni anchor
+ve iki edge ID döner; yeni anchor ve kolları viewport'ta görünür. Corner kolları
+kaldırır; Bézier (Mirror) eşit/karşılıklı kollar için kısa bölünmüş kolu kullanır;
+bu açık tercihler eğriyi değiştirebilir. Smooth ve Bézier Corner bölünmüş kontrol
+konumlarını korur. Gereken line/quadratic komşular tam eşdeğer cubic'e yükselir;
+mevcut mirror uçlar, diğer taraftaki eğriyi korumak için Smooth'a indirgenebilir.
+Yeni nokta tipi eski dört serileştirme değerinden biridir; `preserve` sadece araç
+tercihidir. Endpoint tıklaması yerine yalnız `0<t<1` kabul edilir.
+
+Araç, kendi Apply ve Undo/Redo kaynak değişimlerinden sonra açık kalır; her
+tıklama güncel kaynağı okur. Esc sadece eklemeyi bitirir, Edit modunu ve geçerli
+seçimi bırakmaz. Mod/seçim/layer/belge değişimi veya Cancel aracı kapatır.
+`useSplineEditSelection` araç, nokta tipi ve Simplify toleransının belge/layer
+kapsamlı geçici sahibidir; bu ayarlar scene JSON, modifier ve Undo'ya yazılmaz.
+
+**Object → Simplify:** Varsayılan tolerans 0.5 **layer-local px**; izin verilen
+aralık 0.001–1000'dir. Panel ve sağ tık aynı toleransı kullanır. Sadece açıkça
+seçili Object'lerin bütün contour/delikleri ele alınır. Korunan anchor'lar yer
+değiştirmez; açık uçlar, kapalı contour'un ilk dikiş noktası, en az üç kapalı
+anchor, ≥30° geometrik köşeler ve açıkça Bézier Corner noktaları korunur.
+
+`spline/edit/simplifyObjects.ts` komşu polinom parçalarını deterministik kaynak
+sırasıyla birleştirmeyi dener. Ortak uç türev büyüklükleri bölme parametresini
+önerir; uç kontrollerinden aday cubic yeniden kurulur. Her aday alt aralığı,
+**ilk kaynak eğrilerinin** cubic'e yükseltilmiş kontrolleriyle karşılaştırılır.
+Kontrol farklarının convex-hull sınırı bütün eğri parçası için toleransı sağlar;
+önceki kabulün yaklaşım hatası bir sonraki karşılaştırmanın kaynağı olmaz.
+Yayımlanmış mevcut animation RDP yardımcısı zaman/değer eksenlerini normalize
+ettiği ve sürekli geometriye aynı hata sözleşmesini veremediği için kullanılmaz.
+Bu korumacı yöntem tolerans izin verse bile bazı noktaları tutabilir; minimum
+nokta sayısını bulma garantisi yoktur. `bezier/curves.elevateBezierToCubic`,
+`segmentControls`, `writeSegmentControls` ve `retainSplineContours` tek kaynak
+hesaplarıdır; tangent düzenleme de ortak degree elevation yardımcısını kullanır.
+
+**Object → Smooth:** `spline/edit/smoothObjects.ts`, mevcut `resetSplineTangents`
+ile komşu anchor chord'larından Smooth tipi, aynı eksende bağımsız uzunluklu kollar
+üretir. Anchor ID/koordinatları, contour bağlantıları ve delikler sabit kalır;
+Corner/Mirror noktalar Smooth olur. Yeni anchor eklemez veya subdivision yapmaz.
+
+Her iki Object işlemi en fazla 2.048 seçili anchor / 64 contour kabul eder.
+Simplify en fazla 500.000 kontrol farkı karşılaştırması yapar. Ortak
+`spline/geometry/validateBoundaryChange` önce/sonra Object sınırlarını .01 yerel px
+ile örnekleyip contour sırasını, winding ve delik/parent/material ilişkilerini
+karşılaştırır; toplam 8.192 path komutu / 128 önce+sonra contour / 4.096 örnek
+sınırını aşmak veya belirsiz/kesişen/çöken sınır açık tanıyla tüm işlemi reddeder.
+Bu örnekleme topoloji tanısıdır, exact topolojik sertifika değildir; Simplify'ın
+sürekli kaynak hata sınırından ayrıdır. Fillet/Chamfer aynı doğrulayıcıyı kendi
+mevcut composition-px matrisi ve bütçeleriyle kullanır. Gerçek layer TRS/origin,
+paint, dış animasyon, modifier stack ve seçilmemiş Object'ler korunur.
+
+Başsız örnekler (stable ID'ler `get_scene` kaynağından):
+
+```ts
+{ kind: 'topology', selection: { mode: 'edge', ids: [edgeId] },
+  action: { kind: 'addVertex', edgeId, t: .35, pointType: 'preserve' } }
+{ kind: 'topology', selection: { mode: 'object', ids: [objectId] },
+  action: { kind: 'simplify', tolerancePx: .5 } }
+{ kind: 'topology', selection: { mode: 'object', ids: [objectId] },
+  action: { kind: 'smooth' } }
+```
+
+MCP Prepare kaynak değiştirmez; Apply hazırlanan sonuç ID'lerini aynen kullanır.
+Senkron `layer.spline.edit(operation)` aynı sözleşmeyi kullanır. Eski Refine,
+Split ve Divide çağrılarının anlamı değiştirilmez. Object işlemleri muhafazakâr
+driver politikasını sürdürür; keyed/solver kaynakları izinsiz bake etmez.
+
+23 Kasım kabulü: 571 dosyada 4.076 test, typecheck, MCP/CLI/production build geçti.
+Gerçek Chrome'da `spline-component-tools.html?autorun` beş kabul grubunu çalıştırır:
+tekrarlı viewport pick ve Esc/Undo; menüden tipli ekleme; panel/menü Simplify;
+anchor/delikleri koruyan panel/menü Smooth; gerçek PNG renderer/export. Ekran
+çıktısında active Edge aracı ve yeni anchor işaretleri ayrıca incelenmiştir.
+
 ## Doğrulama ve giriş noktaları
 
 Saf testler materialization/Undo/reader guards, path islands/holes, Mesh
@@ -222,6 +305,7 @@ sahnesini değiştirmez:
 node scripts/perf/spline-tools.mjs /tmp/chorono-tools-qa
 node scripts/perf/spline-edit.mjs /tmp/chorono-edit-qa
 node scripts/perf/spline-attach.mjs /tmp/chorono-boolean-qa
+node scripts/perf/spline-component-tools.mjs /tmp/chorono-component-tools-qa
 node scripts/perf/image-paint.mjs /tmp/chorono-paint-qa
 node scripts/perf/serve.mjs /tmp/chorono-paint-qa 2021
 ```

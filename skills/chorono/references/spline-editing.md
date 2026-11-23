@@ -23,7 +23,7 @@ After conflict, read current source and prepare again rather than force Apply.
 
 | Operation kind | Address / meaning |
 | --- | --- |
-| `topology` | `selection:{mode,ids}`, `action:{kind,...}`. Delete/Copy/Connect/Weld/Refine/Divide/Close/Open/Reverse obey native mode constraints. Point also supports `break`, `fuse`, `resetTangents`, `pasteTangents`; Edge supports `split`. Divide uses 2–64 equal-parameter pieces. |
+| `topology` | `selection:{mode,ids}`, `action:{kind,...}`. Delete/Copy/Connect/Weld/Refine/Divide/Close/Open/Reverse obey native mode constraints. Point also supports `break`, `fuse`, `resetTangents`, `pasteTangents`; Edge supports `split`, `addVertex`, `trim`, `extend`; Object supports `simplify`, `smooth`. Divide uses 2–64 equal-parameter pieces. |
 | `append` | Native primitive plus matching params; adds a SubShape to the same spline. |
 | `draw` | NEW local `points`, optional existing `startPointId` and `endPointId`; Continue/Join references the actual open endpoints. Auto Close closes ≥3 anchors. |
 | `transform` | Explicit selection and local x/y, clockwise rotation delta, positive scale factors around anchor-bounds center. |
@@ -58,6 +58,31 @@ respecting parent transforms, hidden ancestors and Solo. Shape/Mesh targets are
 not included. No hit changes no source/Undo; overlaps and unresolved curved
 tangencies refuse explicitly. Panel arming is UI-only and is never script state.
 
+Edge `addVertex` requires `{kind:'addVertex',edgeId,t,pointType?}` with strictly
+interior `0<t<1` and edgeId in the explicit selection. Omitted pointType or
+`preserve` splits the exact curve, including quadratic/cubic handles. Other
+values are `corner`, `smooth`, `bezier`, `bezierCorner`. Corner removes the new
+handles; mirrored Bézier uses equal opposite handles (the shorter split length),
+so those explicit choices can reshape the edge. Smooth/independent Bézier retain
+the split geometry, promoting line/quadratic neighbors to cubic where needed.
+Result includes `pointId` and two new Edge `ids`. The UI stays armed for repeated
+clicks with separate Undo per insertion; Esc exits only the tool. Headless calls
+insert once and never arm the mouse tool or write its transient preference.
+
+Object `simplify` accepts optional `tolerancePx` (default .5, .001–1000), measured
+in **layer-local px**, independently of composition scale. Bounded polynomial
+coalescing compares each merge against original curve pieces, with a continuous
+control-hull deviation bound. Surviving anchors, open endpoints, closed seam,
+sharp turns ≥30°, independent-handle corners and contour/hole ownership remain.
+It is conservative and can retain more points than a sampled polyline fit.
+Object `smooth` needs no settings: recompute Smooth handles from neighbor anchors
+without moving anchors or adding/subdividing them. Both require explicit Object
+IDs, produce no modifier, and each changed Apply is one Undo. No-op results add
+no Undo. Interactive budgets are 2,048 selected anchors / 64 contours / 4,096
+before+after boundary samples; Simplify allows 500,000 control comparisons.
+Ambiguous/crossing/changed-hole results refuse atomically. Sampling is only the
+.01 local-px topology diagnostic, not Simplify's source-deviation guarantee.
+
 Boolean `operation` values are `union`, `subtract`, `intersect`, `xor`. These
 retain original inputs in a recipe group. The editor's Add Spline picker shares
 this solver/recipe with preview; Attach is a separate contour transfer mode.
@@ -79,8 +104,9 @@ removals refuse instead of silently dropping animation tracks.
 
 Headless drawing is explicit: supply endpoint IDs to represent vertex snapping;
 there is no mouse cursor, snapping tolerance gesture or global preference write.
-Coordinates are layer-local logical px; solver amounts/tolerance are composition
-px. `timeMs` evaluates parent placement; `timelineIds` is required for deterministic
+Coordinates are layer-local logical px; Offset/Chamfer/Fillet/Weld solver amounts
+use composition px, while Object Simplify tolerance is local px. `timeMs`
+evaluates parent placement; `timelineIds` is required for deterministic
 edits in state-machine scenes. Inspect source drivers before modifying geometry.
 
 The editor's Spline Boolean & Paths section integrates Union/Subtract/Intersect/

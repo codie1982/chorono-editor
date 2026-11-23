@@ -60,10 +60,40 @@ self-crossing, sahne/parent/frame, source CAS, native Undo/Redo, MCP planları v
 panel/menü/viewport picker adaptörü kapsanır. Bu teslimin DOM testleri gerçek
 tarayıcı piksel kabulü olarak sayılmaz.
 
-## Sonraki teslim B2 — diğer kontur araçları
+## Teslim — sürekli Add Vertex (23 Kasım 2026)
 
-Simplify tolerans/köşe/uç/delik korumalı nokta azaltır. Smooth anchor'ları
-koruyarak tangent düzenler; Subdivide geometriye nokta ekler. Interpolation
+Edge panelindeki Add Vertex ve sağ tık alt menüsü sürekli eklemeyi açar.
+Her edge tıklaması ayrı native komut/Undo'dur; araç Undo/Redo'da açık kalır,
+Esc yalnız aracı kapatır. Varsayılan Preserve curve exact De Casteljau bölmesidir.
+Corner, Smooth, Bézier (Mirror), Bézier Corner seçilebilir; Corner ve eşit kollu
+Mirror seçimi kaynak parçanın şeklini değiştirebilir. Son eklenen anchor görünür
+ve vurguludur. Tip/araç seçimi sahne, modifier veya geçmiş kaydı değildir.
+
+## Teslim B2 — Simplify ve Smooth (23 Kasım 2026)
+
+Object paneli ve sağ tık menüsü aynı native Simplify/Smooth komutlarını kullanır;
+her değişiklik ayrı Undo/Redo'dur. Seçim yoksa çalışmaz, tüm nesneye genişlemez.
+Simplify 0.001–1000 yerel px toleransında gereksiz anchor'ları azaltır (varsayılan
+0.5); korunmuş anchor'lar, açık uçlar, kapalı dikiş, ≥30° köşeler, bağımsız-kollu
+köşeler ve contour/delik sahipliği değişmez. Tolerans örneklenmiş bir polyline'a
+değil, orijinal Bézier parçalarına karşı sürekli kontrol edilir. Smooth anchor
+konumlarını korur, komşu anchor'lara göre Smooth tangent'ler oluşturur.
+
+Hesaplar mevcut segment/handle/topoloji yardımcılarını ve ortak sınır doğrulamasını
+genişletir; ikinci worker/solver veya modifier sistemi eklenmez. Değişmeyen sonuç
+Undo üretmez. Kaynak/lock/driver/CAS ve portable kayıt politikaları korunur.
+Algoritma, maliyet sınırları ve giriş noktaları
+[Spline Edit sözleşmesindedir](../spline-edit-and-paint.md#add-vertex-simplify-ve-smooth).
+
+Doğrulama: 571 dosyada 4.076 test; typecheck, MCP, CLI ve production build geçti.
+Gerçek Chrome viewport'unda beş kabul grubu Add Vertex panel/alt menü/tip seçimi,
+art arda pick/Esc/Undo, Object Simplify/Smooth panel/menü ve PNG çıktısını doğrular.
+Kabul sayfası `scripts/perf/spline-component-tools.mjs` ile hazırlanır; üretim
+canvas, inspector ve native geçmiş kullanır, bağlı kullanıcı sahnesini değiştirmez.
+
+## Sonraki teslim — diğer kontur araçları
+
+Subdivide geometriye nokta ekler. Interpolation
 örnekleme hassasiyetidir ve kendi başına vertex eklemez. Kısmi Edge Offset/Outline
 bağlantılı seçili zincirle sınırlı olacaktır.
 

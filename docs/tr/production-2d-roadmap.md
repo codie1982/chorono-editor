@@ -3857,3 +3857,13 @@ ayrı Undo/Redo'dur. Aynı spline ve diğer görünür spline layer'ları tam pa
 transformlarıyla sınır olabilir; no-hit/Cancel Undo oluşturmaz. Üst üste/belirsiz
 eğri teması güvenli biçimde reddedilir. Kapsam ve kalan kontur araçları
 [native Edit planında](plans/spline-edit-native-tools-plan.md) ayrı tutulur.
+
+### Native Spline Edit — Add Vertex / Simplify / Smooth, 23 Kasım 2026
+
+Edge Add Vertex sürekli çalışır: Preserve curve varsayılanı, dört nokta tipi,
+her tıklamada ayrı Undo ve Esc ile araçtan çıkış. Object Simplify yerel px
+toleransıyla orijinal Bézier'e karşı kontrollü nokta azaltır; Smooth anchor'ları
+taşımadan tangent'leri düzenler. Panel ve sağ tık ortak komut/uygunluk kurallarını
+kullanır. Araç/tolerans geçicidir, modifier üretmez; delikler, layer TRS/origin ve
+seçilmemiş geometri korunur. Sınırlar ve kalan aşamalar
+[native Edit planında](plans/spline-edit-native-tools-plan.md) belgelenir.
