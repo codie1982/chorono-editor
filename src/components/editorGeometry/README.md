@@ -32,6 +32,10 @@ explain each operation without panel-specific algorithm branches. New registered
 strategies appear without panel switches. Repeated types are distinct instances.
 Conversion steps occupy their actual positions in the same stack, not a separate
 history. A non-addable conversion remains in the viewport menu.
+Round Corners targets Corner/Bézier Corner points and sets an absolute local-px
+radius. It can resize baked circular corner runs between straight sides; Smooth
+points are not implicit targets. Existing disabled records remain Off until the
+user enables them. Unsupported curved-flank/elliptic runs are not guessed.
 
 Typing settings never writes geometry. **Execute stack** stages all row drafts
 and dispatches one complete native command. The row's accessible checkmark

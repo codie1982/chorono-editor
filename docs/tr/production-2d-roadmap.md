@@ -3900,3 +3900,14 @@ kalıp Object edit'e döner. Eski dört modeling kaydı ve kapalı legacy histor
 akışı korunur. 574 dosyada 4.109 test ve gerçek Chrome'da sekiz kabul grubu geçti.
 [Teslim sözleşmesi](spline-static-modifiers.md). Resample, Zig Zag, Pucker & Bloat
 ve Repeater sonraki temel paketlerdir; ileri işler Faz 2'de kalır.
+
+### Round Corners — mevcut yarıçapı değiştirme, 23 Kasım 2026
+
+Modern Round Corners, Corner / Bézier Corner nokta tiplerini hedefler; 1 px
+uygunluk eşiği yoktur. Düz yan kenarlar arasındaki mevcut dairesel Bézier köşe
+zinciri aynı native Fillet solver ile yeni mutlak yerel yarıçapta yeniden kurulur.
+Kaynağa işlenmiş yuvarlatma büyütülüp küçültülebilir; Smooth/bağlı Bézier noktalar
+otomatik hedef olmaz. Kaynak, layer TRS, delikler ve sıra korunur; her Execute
+ayrı Undo/Redo'dur. Eski Fillet/Chamfer değişmez. Eğri yan kenarlar/elipsler güvenle
+çıkarılamaz. 575 dosyada 4.129 test ve gerçek Chrome'da 12 kabul grubu geçti.
+[Ayrıntılar ve sınırlar](spline-static-modifiers.md).

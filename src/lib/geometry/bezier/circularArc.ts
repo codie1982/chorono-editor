@@ -14,14 +14,24 @@ function arcPiece(center: Vec2, radius: number, start: number, sweep: number): V
  * just samples. No exact-circle claim: polynomial cubics approximate circles.
  * Source convex-hull reference: https://pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/bezier-construct.html */
 export function circularCubicError(sweep: number): number {
-  const points = arcPiece({ x: 0, y: 0 }, 1, 0, sweep), choose3 = [1, 3, 3, 1], choose6 = [1, 6, 15, 20, 15, 6, 1]
+  return circularBezierRadialError(arcPiece({ x: 0, y: 0 }, 1, 0, sweep), { x: 0, y: 0 }, 1)
+}
+
+/** Conservative whole-curve radial error around a supplied circle, in the
+ * caller's coordinate units. Normalized degree-six Bernstein coefficients
+ * bound every parameter, including between samples. Subdivide with the shared
+ * De Casteljau helper to tighten this bound. Accepts four finite cubic controls
+ * and a finite positive radius; throws for invalid input, never mutates it. */
+export function circularBezierRadialError(controls: readonly Vec2[], center: Vec2, radius: number): number {
+  if (controls.length !== 4 || !Number.isFinite(radius) || radius <= 0 || [...controls, center].some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Circular error requires finite cubic controls and a positive radius.')
+  const points = controls.map(p => ({ x: (p.x - center.x) / radius, y: (p.y - center.y) / radius })), choose3 = [1, 3, 3, 1], choose6 = [1, 6, 15, 20, 15, 6, 1]
   let bound = 0
   for (let k = 0; k <= 6; k++) {
     let coefficient = -1
     for (let i = Math.max(0, k - 3); i <= Math.min(3, k); i++) { const j = k - i; coefficient += choose3[i] * choose3[j] / choose6[k] * (points[i].x * points[j].x + points[i].y * points[j].y) }
     bound = Math.max(bound, Math.abs(coefficient))
   }
-  return bound < 1 ? bound / (Math.sqrt(1 - bound) + 1) : Infinity
+  return bound < 1 ? radius * bound / (Math.sqrt(1 - bound) + 1) : Infinity
 }
 
 /** Portable same-degree arc approximation. Legacy callers omit tolerance and

@@ -101,6 +101,25 @@ describe('static spline modifier package', () => {
     expect(converted.layers[0].modifierStack!.modifiers.map(record => record.type)).toEqual(['roundCorners', 'convertMesh2d'])
     expect(converted.layers[0].mesh2d!.geometry.topology.triangleIndices.length).toBeGreaterThan(0)
   })
+  it('replaces baked corner radii through Execute with stable recipes, exact history and preserved source/paint/TRS', () => {
+    const original = fixture(), rounded = add(original.scene, 'roundCorners')
+    const baked = makeBakeModifierStackCmd(rounded.scene, original.layer.id).execute(rounded.scene), before = structuredClone(baked)
+    const added = add(baked, 'roundCorners')
+    expect(added.warning).toBeUndefined()
+    expect(added.scene.layers[0].modifierStack!.modifiers[0].enabled).toBe(true)
+    for (const radiusPx of [20, .5, 12]) {
+      const command = makeExecuteModifierStackCmd(added.scene, original.layer.id, { [added.modifierId]: { radiusPx } }), result = command.execute(added.scene)
+      expect(result.layers[0].modifierStack!.source).toEqual({ kind: 'spline', spline: baked.layers[0].spline })
+      expect(result.layers[0].transform).toEqual(original.layer.transform); expect(result.layers[0].style).toEqual(original.layer.style)
+      expect(command.undo(result)).toBe(added.scene)
+      expect(command.execute(added.scene)).toEqual(result)
+      const reloaded = parseSceneJson(JSON.stringify(result), true)
+      expect(projectModifierStacks(reloaded).layers[0].spline).toEqual(result.layers[0].spline)
+    }
+    expect(baked).toEqual(before)
+    const legacy = add(baked, 'fillet')
+    expect(legacy.warning).toContain('No sharp'); expect(legacy.scene.layers[0].spline).toEqual(baked.layers[0].spline)
+  })
   it.each(['offsetPath', 'pathSimplify', 'pathSmoothing'])('%s keeps native point locks when its result would change/remove a locked record', type => {
     const data = createPolylineSpline([{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }], false)
     data.points[Object.values(data.contours)[0].pointIds[1]].locked = true

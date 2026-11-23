@@ -27,7 +27,7 @@ iz bırakmaz; Source satırı her seferinde başlangıçtır, eski sonuç tekrar
 | Etiket / kayıt türü | Ayarlar ve hedef | Sonuç |
 | --- | --- | --- |
 | Offset Path / `offsetPath` | Mesafe (varsayılan 1), yön, join, miter limit, tolerans (.25), tam contour ID'leri. Açıkta Left/Right/Both; kapalıda Inside/Outside. | Paralel, toleransla örneklenmiş konturlar. Eski Object kimliği/adı/interpolation ve seçilmemiş sibling/delikler korunur. |
-| Round Corners / `roundCorners` | Yarıçap (varsayılan 1), uygun interior point hedefleri. | Mevcut Fillet çözücüsüyle tangent dairesel köşe bağlantıları. Açık uç veya köşe olmayan Circle için sonuç uydurulmaz. |
+| Round Corners / `roundCorners` | Mutlak yarıçap (varsayılan 1), Corner / Bézier Corner point hedefleri. | Keskin köşeleri yuvarlatır; düz kenarlar arasındaki mevcut dairesel köşe yayını aynı Fillet çözücüsüyle yeni yarıçapta yeniden kurar. Smooth / bağlı Bézier noktaları otomatik hedef değildir. |
 | Path Simplify / `pathSimplify` | Tolerans (varsayılan .5), Object hedefleri. | Native Simplify ile orijinal eğriye karşı kontrollü nokta azaltma; endpoint, keskin köşe ve delik sahipliği korunur. |
 | Path Smoothing / `pathSmoothing` | Object hedefleri. | Native Smooth ile anchor koordinatlarını koruyup komşu anchor'lara göre Smooth tangent'ler üretme. |
 
@@ -44,12 +44,29 @@ uygular: kilitli point/handle kaydı değişecek veya silinecekse sonuç reddedi
 Seçilmemiş kilitli kayıtlar korunur. Uyumluluk descriptor'ları eski kilit
 davranışını sürdürür; kayıt açılırken yeni kurala sessizce dönüştürülmez.
 
-Round Corners, tangent yönünün keskin değiştiği birleşimleri işler; genel bir
-eğri yeniden biçimlendirme aracı değildir. Küçük yarıçapla yuvarlatılıp kaynak
-haline getirilmiş bir dikdörtgen ekranda hâlâ keskin görünebilir. Kaynakta
-birleşimler zaten teğetse yeni Round Corners köşe bulamaz. Daha büyük yarıçap
-için yuvarlatma öncesi kaynak üzerindeki mevcut Round Corners ayarı değiştirilir;
-eski generator parametreleri kaynak vertex/handle kayıtlarının yerine geçmez.
+Round Corners önce nokta tipine bakar: Corner / Bézier Corner uygundur; Smooth
+ve bağlı Bézier otomatik hedef değildir. Yarıçapın 1 px olması gibi bir uygunluk
+eşiği yoktur. Uygun noktalarda keskin birleşim veya düz kenarlar arasındaki
+mevcut dairesel Bézier köşe zinciri işlenir. **Radius mevcut değere eklenmez;
+yeni mutlak yarıçaptır.** Kaynağa işlenmiş köşe de büyütülebilir/küçültülebilir.
+Seçili bir zincirin herhangi bir Corner noktası bütün o köşeyi hedefler.
+
+Çözücü gerçek vertex/handle kayıtlarını kullanır; eski generator parametreleri
+geometrinin yerine geçmez. Desteklenen dairesel zincir 32 cubic parçaya kadar,
+180°'den küçük ve iki düz kenarla teğettir; contour dikişinden geçen zincirler,
+konkav köşeler ve delikler dahildir. Standart çeyrek daire cubic'i ve onun tam
+subdivision'ları, bağıl radyal hata 0.0003 + mutlak taban 1e-7 yerel px ile
+tanınır; Bernstein kontrol zarfı bütün eğriyi doğrular (en fazla 8.192 kontrol).
+Sanal keskin köşe yalnız özel hesap verisinde kurulur; mevcut Fillet solver/splice
+yeni yayı üretir. Sonuç yeniden kaynakla karşılaştırılır; kaynak, layer TRS ve
+origin değişmez. Sığmayan yarıçap/örtüşme/delik değişimi atomik reddedilir.
+Eğri yan kenarlar arasında kaynak geçmişi olmayan yuvarlatma, elips/deforme yay,
+yarım/tam daire güvenle çıkarılamaz; genel bir eğri yeniden biçimlendirme işlemi
+olarak sunulmaz. Keskin köşelerde mevcut line/Q/C Fillet desteği sürer.
+
+Eski sürümde kapalı eklenmiş bir Round Corners satırı dosya açılırken otomatik
+etkinleşmez. Satırı açıp Radius/Execute kullanılabilir. Eski `fillet` ve
+`chamfer` kayıtlarının seçim/değerlendirme davranışı korunur.
 
 ## Object seçimi ve edit oturumu
 
@@ -80,8 +97,12 @@ drawer'ında erişilebilir kalır.
   paylaşır; `spline/outline/offsetSplineContours.ts` hazırlanma ve materyalizasyon
   hesabının tek sahibidir. `replaceOffsetContours.ts` native Edit ve modern stack
   için ortak Object-ownership dönüştürücüsüdür. Eski editor import'u uyum re-export'udur.
-- `RoundCornersModifier.ts`, FilletModifier'ın settings/target/solver akışını
-  paylaşan ayrı descriptor'lı immutable adapter'dır.
+- `RoundCornersModifier.ts`, FilletModifier'ın settings/validation akışını
+  paylaşır; `spline/fillet/roundSplineCorners.ts` modern hedef ve yarıçap değiştirme
+  adapter'ıdır. `roundedCorners.ts` kaynak dairesel zinciri tanır; ortak
+  `corners/sharpCorners.ts` eski keskin köşe sorgusunun aynı hesabını korur.
+  `circularBezierRadialError` mevcut circular-cubic Bernstein sınırını geneller;
+  Fillet üretimi ve tanıma aynı matematik altyapısını kullanır.
 - `PathSimplifyModifier.ts` ve `PathSmoothingModifier.ts`, mevcut saf
   `simplifySplineObjects` / `smoothSplineObjects` fonksiyonlarını çağırır.
   `objectTargets.ts` açık Object ID / all-stage-input politikasını paylaşır.
@@ -117,14 +138,16 @@ bağımsız clone, render/runtime flattening ve Mesh dönüşümünü kapsar.
 
 `scripts/perf/spline-modifiers.mjs /tmp/chorono-static-spline-modifiers-qa` gerçek
 Edit dock + SceneCanvas + renderer kullanan ayrı kabul sayfasını hazırlar.
-`spline-modifiers.html?autorun` on bir grupta chooser, dört form, PNG farkı,
+`spline-modifiers.html?autorun` on iki grupta chooser, dört form, PNG farkı,
 Undo/Redo, kaynak dönüşü, scoped stage-input hedefler ve legacy drawer'ı doğrular.
 Spline/Mesh için edit modu dışında Add/Execute/Bake ve kapalı edit oturumunun
 korunması da gerçek panelde kontrol edilir.
 Butonsuz 1/2/3 ile giriş/Escape ile çıkış ve modifier eklemede geçici seçimin
 otomatik hedef olmaması da doğrulanır.
+Kaynağa işlenmiş Bézier Corner yarıçapının panelden büyütülmesi/küçültülmesi,
+kapalı satırın yeniden açılması, PNG farkı ve her Execute için Undo da dahildir.
 Bağlı kullanıcı sahnesi kullanılmaz. Hazırlama/test/build sırasında Next durdurulur.
 
-Teslim kontrolü: 574 dosyada 4.118 test, TypeScript kontrolü ve MCP/CLI/production
-build geçti. Gerçek tarayıcıda on bir kabul grubu başarılıdır. Kilitli kaydı
+Teslim kontrolü: 575 dosyada 4.129 test, TypeScript kontrolü ve MCP/CLI/production
+build geçti. Gerçek tarayıcıda on iki kabul grubu başarılıdır. Kilitli kaydı
 değiştiren modern işlemler ayrıca reddetme/disabled varsayılan testleriyle doğrulanır.

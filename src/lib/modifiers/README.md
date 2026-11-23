@@ -105,7 +105,10 @@ programmatic callers retain their contracts and evaluator. Native spline Edit
 tools still commit source geometry with Apply. Modern static Spline choices use
 distinct `offsetPath`, `roundCorners`, `pathSimplify`, `pathSmoothing` type IDs.
 Offset Path shares the offset adapter but preserves Object identity; Round
-Corners shares Fillet targeting/validation; Simplify/Smoothing share native pure
+Corners shares Fillet validation/solver/splice. Its modern domain adapter targets
+Corner/Bézier Corner points and replaces existing straight-flanked circular
+corner radii absolutely; Smooth/Bézier points are not implicit targets.
+Legacy Fillet/Chamfer retain their old target policy. Simplify/Smoothing share native pure
 Object algorithms. [Contracts, defaults and limits](../../../docs/tr/spline-static-modifiers.md).
 
 Modern `SplineModifier` operations apply the native locked-point/handle record

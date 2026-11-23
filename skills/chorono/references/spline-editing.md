@@ -158,6 +158,11 @@ distinct recipe types: `offsetPath`, `roundCorners`, `pathSimplify`,
 `pathSmoothing`. They retain source and execute in stack order; numeric/scope
 drafts apply only on Execute. Offset Path preserves Object identity; Simplify/
 Smoothing accept stage-input `objectIds` and share the native edit algorithms.
+Round Corners targets Corner/Bézier Corner types (not Smooth/linked Bézier) and
+sets an absolute local-px radius, including already rounded circular runs between
+straight sides. It does not use a 1px eligibility threshold or generator params.
+Existing disabled rows stay Off until enabled. Curved-flank/elliptic/full-circle
+rounding cannot be inferred; legacy Fillet keeps its existing behavior.
 Within an active Edit session, disabling/removing the last operation or Bake returns to Object edit;
 Undo restores its exact recipe. Existing `offset`/`outline`/`chamfer`/`fillet`
 records retain compatibility behavior. These are native registry choices, not
