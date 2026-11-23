@@ -12,13 +12,18 @@ import { SmoothModifier } from './mesh/SmoothModifier'
 import { SubdivisionModifier } from './mesh/SubdivisionModifier'
 import { MeshTransformModifier } from './mesh/MeshTransformModifier'
 import { MeshDeformationModifier } from './mesh/MeshDeformationModifier'
+import { OffsetPathModifier } from './spline/OffsetPathModifier'
+import { RoundCornersModifier } from './spline/RoundCornersModifier'
+import { PathSimplifyModifier } from './spline/PathSimplifyModifier'
+import { PathSmoothingModifier } from './spline/PathSmoothingModifier'
 
 /** Composition root for the built-in strategies. Algorithms are not selected
  * by evaluator/UI switch statements; class registrations own defaults/schema. */
 export function createGeometryModifierRegistry(): GeometryModifierRegistry {
   const registry = new ModifierRegistry<ModifierGeometry, ModifierContext, GeometryModifierDescriptor>()
   for (const implementation of [ConvertSplineModifier, ConvertMeshModifier, OffsetModifier, OutlineModifier,
-    ChamferModifier, FilletModifier, SmoothModifier, SubdivisionModifier, MeshTransformModifier, MeshDeformationModifier]) {
+    ChamferModifier, FilletModifier, SmoothModifier, SubdivisionModifier, MeshTransformModifier, MeshDeformationModifier,
+    OffsetPathModifier, RoundCornersModifier, PathSimplifyModifier, PathSmoothingModifier]) {
     registry.register({ descriptor: implementation.descriptor, create: record => new implementation(record), defaults: implementation.defaults })
   }
   return registry

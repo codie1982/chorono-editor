@@ -8,8 +8,7 @@ import { editableSplineLayer, drivenSplineTopologyReason } from '../../../spline
 import { assertSplineTopology } from '../../../spline/topology'
 import { resolveLayerWorldMatrix } from '../../../geometry/resolveLayerWorldMatrix'
 import { transformPathDefinition } from '../../../geometry/transformPathDefinition'
-import { outlineToSpline, OUTLINE_LIMITS, assertOutlineSettings, type OutlineSettings, type OutlineRequest, type OutlineResult } from '../../../spline/outline'
-import { replaceOffsetContours } from './offsetResult'
+import { outlineToSpline, replaceOffsetContours, OUTLINE_LIMITS, assertOutlineSettings, type OutlineSettings, type OutlineRequest, type OutlineResult } from '../../../spline/outline'
 import { splineEditCommand } from '../editCommand'
 
 /** Whole-contour selection in stable source order; Objects include holes.

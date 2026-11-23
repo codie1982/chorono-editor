@@ -1,5 +1,7 @@
 export { PlanarOutlineBackend } from './PlanarOutlineBackend'
 export { OutlineWorkerClient } from './OutlineWorkerClient'
 export { outlineToSpline } from './outlineToSpline'
+export { replaceOffsetContours } from './replaceOffsetContours'
+export { offsetSplineContours } from './offsetSplineContours'
 export { assertOutlineSettings, OUTLINE_LIMITS } from './types'
 export type { OutlineSide, OutlineSettings, OutlineInput, OutlineRequest, OutlineResult, OutlineExecutor } from './types'

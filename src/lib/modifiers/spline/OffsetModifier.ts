@@ -2,13 +2,7 @@ import { SplineModifier } from './SplineModifier'
 import type { GeometryModifierDescriptor, ModifierGeometry } from '../geometryTypes'
 import type { SplinePathData } from '../../types/spline'
 import { numberSetting, enumSetting, targetSetting } from '../settings'
-import { PlanarOutlineBackend } from '../../spline/outline/PlanarOutlineBackend'
-import { outlineToSpline } from '../../spline/outline/outlineToSpline'
-import { subShapeData } from '../../spline/geometry/elementPaths'
-import { splineToPathDefinition } from '../../spline/splineToPath'
-import { removeSplineContours } from '../../spline/topology'
-import { mergeSplineData } from '../../spline/factory/mergeSplineData'
-import { Matrix2D } from '../../geometry/Matrix2D'
+import { offsetSplineContours } from '../../spline/outline'
 
 /** Parallel-boundary modifier over the shared planar solver. Distances are local
  * pixels. Holes and unselected contours constrain offset admission; open ends
@@ -34,17 +28,17 @@ export class OffsetModifier extends SplineModifier {
     enumSetting(this.settings, 'join', ['miter', 'bevel', 'round']); targetSetting(this.settings, 'contourIds')
   }
   protected evaluateSpline(data: SplinePathData): SplinePathData {
+    return this.offset(data)
+  }
+  /** Shared settings/solver adapter. Modern offsets preserve Object ownership;
+   * legacy records keep their historical replacement-Object behavior. */
+  protected offset(data: SplinePathData, preserveObjects = false): SplinePathData {
     const requested = targetSetting(this.settings, 'contourIds'), ids = requested.length ? requested : Object.keys(data.contours)
     if (ids.some(id => !data.contours[id])) throw new Error('Offset contour no longer exists.')
-    const result = new PlanarOutlineBackend().compute({ distancePx: numberSetting(this.settings, 'distancePx', .01, 10000),
+    return offsetSplineContours(data, ids, { distancePx: numberSetting(this.settings, 'distancePx', .01, 10000),
       side: enumSetting(this.settings, 'side', ['inside', 'outside', 'left', 'right', 'both']),
       join: enumSetting(this.settings, 'join', ['miter', 'bevel', 'round']), miterLimit: numberSetting(this.settings, 'miterLimit', 1, 100),
       tolerancePx: numberSetting(this.settings, 'tolerancePx', .05, 5),
-      inputs: Object.values(data.subShapes).filter(sub => sub.contourIds.some(id => ids.includes(id))).map(sub => ({
-        name: sub.name, path: splineToPathDefinition(subShapeData(data, sub.id)), fillRule: data.fillRule,
-        indices: sub.contourIds.flatMap((id, i) => ids.includes(id) ? [i] : []),
-      })),
-    })
-    return mergeSplineData(removeSplineContours(data, new Set(ids)), outlineToSpline(result, Matrix2D.identity(), data.fillRule))
+    }, preserveObjects)
   }
 }

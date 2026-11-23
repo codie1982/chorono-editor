@@ -38,7 +38,7 @@ function replace(scene: ChronoScene, layer: Layer, stack: GeometryModifierStackD
  * solver rejects a default (e.g. no sharp corners), add it explicitly disabled
  * so its settings can be configured without admitting an invalid result. */
 export function prepareAddModifier(scene: ChronoScene, layerId: string, type: string,
-  selection?: { pointIds?: readonly string[]; contourIds?: readonly string[] }) {
+  selection?: { pointIds?: readonly string[]; contourIds?: readonly string[]; objectIds?: readonly string[] }) {
   const layer = editable(scene, layerId), stack = modifierStackService.stackFor(layer)
   const input = modifierStackService.evaluator.execute(stack, { layerId })
   const definition = geometryModifierRegistry.get(type).descriptor
@@ -47,8 +47,8 @@ export function prepareAddModifier(scene: ChronoScene, layerId: string, type: st
   do { id = uid('modifier') } while (stack.modifiers.some(item => item.id === id))
   let record = geometryModifierRegistry.newRecord(type, id, input)
   if (input.kind === 'spline' && selection) {
-    const field = definition.fields.find(item => item.kind === 'points' || item.kind === 'contours')
-    const ids = field?.kind === 'points' ? selection.pointIds : selection.contourIds
+    const field = definition.fields.find(item => item.kind === 'points' || item.kind === 'contours' || item.kind === 'objects')
+    const ids = field?.kind === 'points' ? selection.pointIds : field?.kind === 'objects' ? selection.objectIds : selection.contourIds
     if (field && ids?.length) record = { ...record, settings: { ...record.settings, [field.key]: [...ids], selectionTopology: splineTopologySignature(input.spline) } }
   }
   let candidate = { ...stack, modifiers: [...stack.modifiers, record] }, warning: string | undefined
@@ -89,11 +89,13 @@ export function makeExecuteModifierStackCmd(scene: ChronoScene, layerId: string,
 function stageSettings(scene: ChronoScene, before: ModifierRecord, input: ModifierGeometry,
   patch: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
   const settings: Record<string, unknown> = { ...before.settings, ...structuredClone(patch) }
-  if (input.kind === 'spline' && ('pointIds' in patch || 'contourIds' in patch)) {
-    const ids = patch.pointIds ?? patch.contourIds
-    const records = 'pointIds' in patch ? input.spline.points : input.spline.contours
-    if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !(id in records))) throw new Error('Select existing elements in this modifier’s input.')
-    settings.selectionTopology = ids.length ? splineTopologySignature(input.spline) : undefined
+  if (input.kind === 'spline') {
+    for (const key of ['pointIds', 'contourIds', 'objectIds'] as const) {
+      if (!(key in patch)) continue
+      const ids = patch[key], records = key === 'pointIds' ? input.spline.points : key === 'objectIds' ? input.spline.subShapes : input.spline.contours
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !Object.hasOwn(records, id))) throw new Error('Select existing elements in this modifier’s input.')
+      settings.selectionTopology = ids.length ? splineTopologySignature(input.spline) : undefined
+    }
   }
   if (typeof patch.assetId === 'string' && patch.assetId) {
     const field = geometryModifierRegistry.get(before.type).descriptor.fields.find(item => item.kind === 'asset')
