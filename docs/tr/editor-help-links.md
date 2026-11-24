@@ -45,6 +45,13 @@ Web içerikleri mevcut 21 rehbere eklenir; URL, title, description, eski başlı
 
 ## 17 Kasım 2026: spline yardımı ve trafik kaynağı
 
-Spline Modeling panelindeki Help düğmesi `/docs/editor/canvas/spline-modeling` rehberine gider. Spline çizimi ve nokta düzenleyicisi compound spline rehberine, Script Console ise spline scripting rehberine bağlanır. Bu üç yeni rota web sitesindeki spline dokümantasyon dalı yayımlandığında canlı olur.
+Spline Modeling, çizim araçları, nokta düzenleyicisi ve Script Console aynı yardım altyapısını kullanır. Web rehberleri v0.4 panel adımlarını ve geliştirme sürümündeki Edit araçlarını kendi başlıklarında açıklar.
+
+| v0.4 kontrolü | Rehber |
+| --- | --- |
+| Spline Modeling, katman seçili veya boşken | [Offset, Outline, Chamfer ve Fillet](https://www.chorono.com/docs/editor/canvas/spline-modeling#use-the-spline-modeling-panel-in-v04) |
+| Araç çubuğu, spline çizimi etkin | [Kontur çizme ve devam ettirme](https://www.chorono.com/docs/editor/canvas/compound-splines#draw-and-append-spline-contours) |
+| Spline Point | [Noktalar ve Bézier kolları](https://www.chorono.com/docs/editor/canvas/splines#adjust-a-point) |
+| Script Console | [JavaScript ile spline oluşturma](https://www.chorono.com/docs/scripting/splines#create-and-split-a-spline-segment) |
 
 Ortak `documentationUrl` üreticisi editörden açılan bütün Help bağlantılarına `utm_source=chorono_editor`, `utm_medium=referral` ve `utm_campaign=editor_help` ekler. Başlık fragmenti varsa parametreler `#` işaretinden önce yerleştirilir. Böylece Google Analytics'te editör yardımı ayrı kaynak olarak görülebilir; URL'nin kanonik doküman yolu değişmez.
