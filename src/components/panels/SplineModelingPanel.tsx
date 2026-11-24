@@ -44,7 +44,13 @@ export default function SplineModelingPanel(props: Props) {
   const [pointIds, setPointIds] = useState<string[]>([])
   const [preview, setPreview] = useState<Preview | null>(null)
   const [error, setError] = useState('')
-  if (!layer || layer.type !== 'spline' || !layer.spline) return <div className="p-3 text-xs text-gray-400">Select a spline layer to model its contours.</div>
+  const help = <DocumentationHelp topic="editor/canvas/spline-modeling#use-the-spline-modeling-panel-in-v04" compact />
+  if (!layer || layer.type !== 'spline' || !layer.spline) return (
+    <div className="flex items-center justify-between gap-2 p-3 text-xs text-gray-400">
+      <p>Select a spline layer to model its contours.</p>
+      {help}
+    </div>
+  )
   const spline = layer.spline
   const contours = Object.values(spline.contours)
   const activeId = spline.contours[contourId] ? contourId : contours[0]?.id
@@ -109,7 +115,7 @@ export default function SplineModelingPanel(props: Props) {
   const pad = Math.max(4, (Math.max(x1 - x0, y1 - y0)) * 0.08)
 
   return <div className="h-full overflow-auto bg-gray-900 p-3 text-xs text-gray-200 space-y-3" data-panel="spline-modeling">
-    <div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">Spline Modeling</div><DocumentationHelp topic="editor/canvas/spline-modeling" compact /></div>
+    <div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">Spline Modeling</div>{help}</div>
     <label className="block space-y-1">Contour
       <select aria-label="Spline contour" value={activeId ?? ''} onChange={event => change(() => { setContourId(event.target.value); setPointIds([]) })}
         className="block w-full rounded border border-gray-700 bg-gray-800 p-1.5">
