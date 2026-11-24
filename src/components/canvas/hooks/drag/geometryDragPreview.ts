@@ -13,6 +13,8 @@ import { MAX_MODEL_BOX_SIDE } from '@/lib/model3d/source/modelDefaults'
 import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
 import { makeTransformMeshGeometryCmd } from '@/lib/editor/modifiers/commands'
+import { nearestSplineVertex } from '@/lib/snap/splineVertexSnap'
+import type { SplineVertexTarget } from '@/lib/snap/SnapCandidate'
 import { constrainAxisDelta } from '@/lib/canvas/math/transformAxes'
 
 type GeometryDrag = Exclude<ActiveDrag, { kind: 'move' | 'rotate' | 'scaleAxis' }>
@@ -23,14 +25,34 @@ interface GeometryPreviewInput {
   delta: { x: number; y: number }
   snap: { grid: boolean; pixel: boolean; size: number }
   resolveSnap?: (point: Vec2) => SnapResult
+  componentVertices?: readonly SplineVertexTarget[]
+  componentSpace?: 'local' | 'scene'
   snapRadiusWorld?: number
 }
 
 /** Pure path/spline/anchor/size preview from the gesture's immutable baseline.
  * Geometry deltas use the complete displayed inverse; path points keep their
  * existing topology and custom pivot. No per-frame geometry is accumulated. */
-export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSnap, snapRadiusWorld = 0 }: GeometryPreviewInput): CanvasDragPreview {
+export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSnap, componentVertices, componentSpace,snapRadiusWorld = 0 }: GeometryPreviewInput): CanvasDragPreview {
   const original = drag.originalLayer
+  if (
+    (delta.x || delta.y) &&
+    (drag.kind === 'splinePoint' ||
+      ((drag.kind === 'meshGeometry' || drag.kind === 'splineGeometry') && drag.operation === 'move'))
+  ) {
+    const world = drag.worldToLocal.invert(),
+      start = world.applyToPoint(drag.kind === 'splinePoint' ? { x: drag.startX, y: drag.startY } : drag.startLocal)
+    const pointer = { x: start.x + delta.x, y: start.y + delta.y }
+    let target: Vec2 | undefined = nearestSplineVertex(componentVertices ?? [], pointer, snapRadiusWorld)
+    if (!target && snap.grid && snap.size > 0) {
+      const local = componentSpace === 'local',
+        p = local ? drag.worldToLocal.applyToPoint(pointer) : pointer
+      const rounded = { x: Math.round(p.x / snap.size) * snap.size, y: Math.round(p.y / snap.size) * snap.size }
+      const candidate = local ? world.applyToPoint(rounded) : rounded
+      if (Math.hypot(candidate.x - pointer.x, candidate.y - pointer.y) <= snapRadiusWorld) target = candidate
+    }
+    if (target) delta = { x: target.x - start.x, y: target.y - start.y }
+  }
   if (drag.kind === 'pathPoint') {
     const anchor = original.path?.anchors[drag.anchorIndex]
     if (!anchor || !original.path) return previewLayer(base, original, original, [])
@@ -62,7 +84,7 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
       return { ...previewLayer(base, original, next, ['modifierStack'], `Edit Mesh · ${drag.operation}`), scene, geometryCommand: command }
     }
     if (!original.spline) return previewLayer(base, original, original, [])
-    const spline = transformSplineSelection(original.spline, new Set(drag.pointIds), transform)
+    const spline = transformSplineSelection(original.spline, new Set(drag.pointIds), transform, pivot)
     return previewLayer(base, original, { ...original, spline }, changedRecord(original.spline, spline) ? ['spline'] : [],
       drag.operation === 'rotate' ? `${(transform.rotation ?? angle).toFixed(1)}°` : drag.operation === 'scale' ? `${(scale * 100).toFixed(1)}%` : `${local.x.toFixed(1)}, ${local.y.toFixed(1)} px`)
   }

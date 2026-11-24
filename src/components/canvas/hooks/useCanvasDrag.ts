@@ -23,11 +23,13 @@ import { readSceneGuides } from '@/lib/geometry/guides/sceneGuideData'
 import type { MeshDeformationBindings } from '@/lib/asset/meshDeformation'
 
 interface SnapState {
+  vertex?: boolean
   master: boolean; grid: boolean; objects: boolean
   points: boolean; guides: boolean; pixel: boolean; size: number
 }
 
 export interface UseCanvasDragOptions {
+  transformSpace?: 'local' | 'scene'
   /** Optional editor display scope for snap candidates only. Source baselines
    * and transform calculations use the complete committed scene. */
   snapLayerIds?: ReadonlySet<string>
@@ -96,6 +98,15 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
         drag.targets = prepared.targets
       }
       const bounds = prepareBounds(base, drag, start.timeMs ?? 0, start.overrides, start.snapLayerIds, start.meshDeformations)
+      const movingVertices = drag.kind === 'meshGeometry' ? drag.vertexIds ?? drag.originalLayer.mesh2d?.geometry.topology.vertexIds
+        : drag.kind === 'splinePoint' ? drag.pointIds ?? [drag.pointId]
+        : drag.kind === 'splineGeometry' ? drag.pointIds : undefined
+      let snapVertices: ReturnType<typeof prepareSceneSnapContext>['splineVertices']
+      if (movingVertices && start.snapRef.current.master && start.snapRef.current.vertex) {
+        const excluded = new Set(movingVertices)
+        const targets = prepareSceneSnapContext(base, start.timeMs ?? 0, start.overrides, [], start.snapLayerIds, true, true)
+        snapVertices = targets.splineVertices?.filter(v => v.layerId !== drag.layerId || !excluded.has(v.pointId))
+      }
       const clonePlan = drag.kind === 'move' && drag.cloneMode ? prepareCloneDrag(base, drag) : null
       const initialRect = start.canvasRef.current?.getBoundingClientRect(), initialScale = start.readScale()
       const initialWorld = initialRect ? { x: (drag.startClientX - initialRect.left) * initialScale.sx,
@@ -137,7 +148,8 @@ export function useCanvasDrag(opts: UseCanvasDragOptions): UseCanvasDragReturn {
           return previewGeometryDrag({ base: snapshot, drag, event, delta,
             snap: { grid: snap.master && snap.grid, pixel: snap.master && snap.pixel, size: snap.size },
             resolveSnap: drag.kind === 'resize' && engine ? point => engine.resolvePoint(point, context) : undefined,
-            snapRadiusWorld: engine?.radiusWorld(zoom) })
+            componentVertices: snap.master && snap.vertex ? snapVertices : undefined,
+            componentSpace: start.transformSpace, snapRadiusWorld: engine?.radiusWorld(zoom) })
         },
         show: (preview, event) => {
           const live = latest.current

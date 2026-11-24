@@ -24,6 +24,7 @@ import { useGeometryEditMode, type GeometryEditMode } from '@/components/editorG
 import { useToolMode } from '@/app/hooks/useToolMode'
 import ToolGroup, { type ToolMode } from '@/components/TopToolbar/ToolGroup'
 import { useKeyboard } from '@/app/hooks/useKeyboard'
+import { useAssetCache } from '@/app/hooks/useAssetCache'
 import { useSnapSettings } from '@/app/hooks/useSnapSettings'
 import { emptyScene, newRectLayer, newSplineLayerFromData } from '@/lib/defaults'
 import { createRectangleSpline, createDonutSpline, mergeSplineData, translateSplineData } from '@/lib/spline'
@@ -55,6 +56,8 @@ interface Live { geometryEdit: GeometryEditMode; editor: EditorStateReturn; cont
 let live: Live | undefined
 function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean; strictPanel?: boolean } = {}) {
   const [initial] = useState(fixture), editor = useEditorState(initial), snap = useSnapSettings({ persist: false })
+  const assets = useAssetCache(editor.scene.assets, { managed: true })
+  const [pivot, setPivot] = useState<{ x: number; y: number } | null>(null)
   const [drawKind, setDrawKind] = useState<SplinePrimitiveKind | null>(null), [endpoint, setEndpoint] = useState<string | null>(null), [result, setResult] = useState<SplineDrawResult | null>(null)
   const preferences = useSplineDrawingPreferences()
   const [selected, setSelected] = useState<string | null>('spline'), [time, setTime] = useState(0)
@@ -90,7 +93,7 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
           onSelect={setSelected} onSelectLayers={(ids, primary) => setSelected(primary ?? ids[0] ?? null)} onPickLayer={attachPick}
           onRename={() => {}} onToggleFlag={() => {}} onMoveInTree={() => {}} />
       </section>}
-      <SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={band.worldResult ?? outline.result} chamferPreview={chamfer.result} filletPreview={fillet.result} splineToolActions={toolActions} splineTangentClipboard={tangentClipboard}
+      <SceneCanvas scene={editor.scene} editor={editor} assets={assets} editPivot={pivot} snap={snap} selectedLayerId={selected} outlinePreview={band.worldResult ?? outline.result} chamferPreview={chamfer.result} filletPreview={fillet.result} splineToolActions={toolActions} splineTangentClipboard={tangentClipboard}
       selectedLayerIds={new Set(selected ? [selected] : [])} onSelectLayer={setSelected} onSelectByGeometry={ids => setSelected(Array.from(ids)[0] ?? null)}
       timeMs={time} overrides={frame.overrides} isPlaying={false} previewMode={false} geometryEditActive={geometryEdit.active} geometryEditMode={geometryEdit.mode} onExitGeometryEdit={geometryEdit.exit} toolMode={tool} transformSpace={tools.transformSpace} panMode={tool === 'pan'} splineEdit={controller}
       onEnterGeometryEdit={mode => geometryEdit.enter(mode)} onMeshSelectionChange={setMeshSelection}
@@ -99,14 +102,14 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
       selectedTimeline={editor.scene.timelines[0]} getShortcutContext={() => 'canvas'} />
       <aside className="w-[360px] shrink-0 overflow-auto">{tool === 'spline-draw' && drawKind === 'line' && <SplineLineDrawingControls autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} />}
         <GeometryEditPanel editMode={strictPanel || layer?.type === 'mesh2d' ? geometryEdit : undefined} layer={layer} selectedIds={selected ? [selected] : []} selectedPointId={controller.mode === 'point' ? controller.ids[0] ?? null : null}
-          meshSelection={meshSelection}
+          meshSelection={meshSelection} pivot={pivot} setPivot={setPivot} componentFrame={tools.transformSpace} editTime={time} editOverrides={frame.overrides}
           selectedPointIds={controller.mode === 'point' ? controller.bank.point : []} selectedObjectIds={controller.mode === 'object' ? controller.bank.object : []}
           selectedContourIds={controller.mode === 'object' ? Array.from(new Set(controller.bank.object.flatMap(id => layer?.spline?.subShapes[id]?.contourIds ?? []))) : []}
           onSplineSourceBaked={id => controller.focusResult({ layerId: id, mode: 'object' })} getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal} isTransactionActive={editor.isTransactionActive}
           dispatchCommand={editor.dispatchCommand} onSelectLayer={setSelected} onClearPoint={controller.clear}
           onLayerChange={next => { if (layer) editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, layer)) }}
           splineModeControls={<SplineModeControls controller={controller} />}
-          splineSourceSettings={layer?.spline ? (<SplineEditInspector tangentClipboard={tangentClipboard} modeControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} onBeginAttach={() => { setDrawKind(null); setEndpoint(null); setTool('select') }} outline={outline} band={band} chamfer={chamfer} fillet={fillet} />) : undefined} />
+          splineSourceSettings={layer?.spline ? (<SplineEditInspector pivot={pivot} setPivot={setPivot} componentFrame={tools.transformSpace} tangentClipboard={tangentClipboard} modeControls={false} layer={layer} controller={controller} getScene={editor.getScene} dispatchCommand={editor.dispatchCommand} overrides={frame.overrides} timeMs={time} onSelectLayer={setSelected} isTransactionActive={editor.isTransactionActive} drawingLine={tool === 'spline-draw' && drawKind === 'line'} autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} onDraw={arm} onBeginAttach={() => { setDrawKind(null); setEndpoint(null); setTool('select') }} outline={outline} band={band} chamfer={chamfer} fillet={fillet} />) : undefined} />
         {layer?.spline && <section aria-label="Properties appearance"><SplineAppearanceControls layer={layer} assets={editor.scene.assets}
           onChange={next => editor.dispatchCommand(makeUpdateLayerCmd(layer.id, next, layer))} /></section>}
       </aside>
@@ -140,7 +143,7 @@ async function pickExplorerRow(id: string, modifiers: MouseEventInit = {}, keybo
 async function setSplineVertexSnapping(checked: boolean) {
   const trigger = document.querySelector<HTMLButtonElement>('button[title="Snap settings"]')!
   flushSync(() => trigger.click()); await frames()
-  const checkbox = document.querySelector<HTMLInputElement>('[aria-label="Snap to Spline Vertices"]')
+  const checkbox = document.querySelector<HTMLInputElement>('[aria-label="Snap to Vertices"]')
   assert(checkbox, 'Vertex snap control is missing')
   if (checkbox.checked !== checked) { flushSync(() => checkbox.click()); await frames() }
   await click('Close Snap settings')

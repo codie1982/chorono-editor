@@ -18,6 +18,14 @@ import { splineEditCommand, type SplineEditOperation } from './commands'
 import type { SplineEditController } from './useSplineEditSelection'
 import { useSplineTopologyActions } from './useSplineTopologyActions'
 import { SplineTopologyControls } from './SplineTopologyControls'
+import { ComponentLayoutControls,type EditPivotProps } from '../editorGeometry/ComponentLayoutControls'
+import { componentLayout } from '@/lib/geometry/componentLayout'
+import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
+import { transformSplineData } from '@/lib/spline/geometry/transformSplineData'
+import { splineSelectionPivot } from '@/lib/spline/selection'
+import { copySplineEdges,copySplineObjects } from '@/lib/spline/topology/objects'
+import { moveSplinePoints } from '@/lib/spline/edit/moveSplinePoints'
 import { SplineTransformControls } from './SplineTransformControls'
 import { SplineDrawingControls } from './SplineDrawingControls'
 import { SplineAttachControls } from './SplineAttachControls'
@@ -32,7 +40,8 @@ import type { SplineChamferController } from './chamfer/useSplineChamfer'
 import type { SplineOutlineController } from './outline/useSplineOutline'
 import type { SplineTangentClipboard } from './useSplineTangentClipboard'
 
-interface Props {
+interface Props extends EditPivotProps {
+  componentFrame?: "scene"|"local"
   layer: Layer; controller: SplineEditController; getScene(): ChronoScene
   dispatchCommand(command: EditorCommand): void
   overrides?: OverrideMap
@@ -61,7 +70,7 @@ const selectClass = 'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1
  * never world scaling. Object is a SubShape, including all its contours/holes.
  * Root transforms and shared paint belong to Properties; this panel owns only
  * source geometry, topology and the active sub-object selection. */
-export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, band, chamfer, fillet, modeControls = true, tangentClipboard }: Props) {
+export function SplineEditInspector({ layer, controller, getScene, dispatchCommand, overrides, disabled, pivot,setPivot,componentFrame, drawingLine = false, autoClose = false, onAutoClose, onDraw, onBeginAttach, timeMs = 0, onSelectLayer, isTransactionActive, outline, band, chamfer, fillet, modeControls = true, tangentClipboard }: Props) {
   const [warning, setWarning] = useState('')
   const booleanActions = useBooleanOperationActions({ layerId: layer.id, getScene, dispatch: dispatchCommand,
     disabled, isTransactionActive, timeMs, overrides, nonDestructive: controller.nonDestructive, onMaterialized: controller.focusResult, selectedObjectIds: () => controller.bank.object,
@@ -96,6 +105,8 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
       setWarning('')
     } catch (error) { setWarning(error instanceof Error ? error.message : String(error)) }
   }
+  const frame = componentFrame === 'scene' ? resolveLayerWorldMatrix(layer,getScene(),timeMs,overrides) : Matrix2D.identity()
+  const selectedPoints=splineSelectionPoints(data,controller.mode,ids), center=splineSelectionPivot(data,selectedPoints)
   const displayed = materializeLayerOverrides(layer, overrides ?? new Map()).spline ?? data
   const edges = ids.map(id => data.segments[id]).filter(Boolean)
   const edgeType = edges.length && edges.every(edge => edge.type === edges[0].type) ? edges[0].type : ''
@@ -146,9 +157,34 @@ export function SplineEditInspector({ layer, controller, getScene, dispatchComma
       {band && <SplineLiveOutlineControls controller={band} disabled={disabled} />}
       <SplineEditToolbox mode={controller.mode} actions={tools} chamfer={chamfer} fillet={fillet} outline={outline} band={band} />
       {controller.mode === 'object' && <SplineAttachControls controller={controller} disabled={readonly} onBegin={onBeginAttach} booleanActions={booleanActions} onStructure={structurePaths} />}
+      {center && <ComponentLayoutControls count={ids.length} frame={frame} center={center} pivot={pivot} setPivot={setPivot} disabled={readonly}
+        apply={action=>apply({kind:'geometry',ids:Array.from(selectedPoints)},source=>{
+          const groups=ids.map(id=>Array.from(splineSelectionPoints(source,controller.mode,[id])))
+          const shifts=componentLayout(groups,new Map(Object.entries(source.points)),frame,action)
+          const byDelta=new Map<string,{x:number;y:number;ids:string[]}>()
+          shifts.forEach((d,id)=>{const k=JSON.stringify(d),g=byDelta.get(k)??{...d,ids:[]};g.ids.push(id);byDelta.set(k,g)})
+          return Array.from(byDelta.values()).reduce((next,g)=>moveSplinePoints(next,g.ids,g.x,g.y),source)
+        },action)} />}
+      {center && controller.mode!=='point' && <div className="flex gap-2">
+        {(['X','Y'] as const).map(axis=><button key={axis} disabled={readonly} onClick={()=>apply({kind:'geometry',ids:Array.from(selectedPoints)},source=>{
+          const p=frame.applyToPoint(pivot??center)
+          const matrix=frame.invert().translate(p.x,p.y).scale(axis==='X'?-1:1,axis==='Y'?-1:1).translate(-p.x,-p.y).multiply(frame)
+          return transformSplineData(source,matrix,selectedPoints)
+        },'Mirror spline selection')}>Mirror {axis}</button>)}
+        <button disabled={readonly} onClick={()=>{
+          try {
+            if (isTransactionActive?.()) return
+            const scene = getScene()
+            if (scene.layers.find(item => item.id === layer.id)?.spline !== data) throw new Error('Spline changed. Select again.')
+            const result = controller.mode === 'object' ? copySplineObjects(data, ids) : copySplineEdges(data, ids)
+            const cmd=splineEditCommand(scene,layer.id,{kind:'topology'},()=>result.data,'Duplicate spline selection')
+            if(cmd){dispatchCommand(cmd);controller.enter('object',result.objectIds)}
+          } catch(error){setWarning(error instanceof Error?error.message:String(error))}
+        }}>Duplicate selection</button>
+      </div>}
       {!!ids.length && <SplineTransformControls key={`${layer.id}:${controller.mode}:${ids.join(',')}`} disabled={readonly} onApply={transform => {
         const points = splineSelectionPoints(data, controller.mode, ids)
-        apply({ kind: 'geometry', ids: Array.from(points) }, source => transformSplineSelection(source, points, transform), 'Transform spline selection')
+        apply({ kind: 'geometry', ids: Array.from(points) }, source => transformSplineSelection(source, points, transform,pivot), 'Transform spline selection')
       }} />}
       {onDraw && onAutoClose && <details open={drawingLine || undefined} className="rounded border border-gray-700 p-2"><summary className="cursor-pointer font-medium">Draw new spline elements</summary>
         <div className="mt-3"><SplineDrawingControls drawingLine={drawingLine} data={data} controller={controller} autoClose={autoClose} onAutoClose={onAutoClose} onDraw={(kind, endpoint) => { controller.setAttaching(false); onDraw(kind, endpoint) }} disabled={readonly} /></div>

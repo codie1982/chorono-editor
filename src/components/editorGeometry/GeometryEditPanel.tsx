@@ -9,10 +9,21 @@ import type { Layer } from '@/lib/types'
 import { SplineSourceHistory } from './SplineSourceHistory'
 import ModifierStackPanel from './ModifierStackPanel'
 import type { GeometryEditMode } from './useGeometryEditMode'
+import { meshTopologyActions } from '../canvas/mesh2d/topologyActions'
+import { ComponentLayoutControls,type EditPivotProps } from './ComponentLayoutControls'
+import { MeshComponentSelection } from '@/lib/geometry/mesh2d/selection/MeshComponentSelection'
+import { componentLayout } from '@/lib/geometry/componentLayout'
+import { makeMeshLayoutCmd } from '@/lib/editor/modifiers/commands'
+import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
+import type { OverrideMap } from '@/lib/evaluator'
 import { MeshFaceTopology } from '@/lib/geometry/mesh2d/selection/MeshFaceTopology'
 import { MESH_EDIT_LEVELS, meshFaceSourceHint, type MeshSelectionSummary } from '../canvas/mesh2d/meshEditSelection'
 
-export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, 'operation'> {
+export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, 'operation'>, EditPivotProps {
+  componentFrame?: 'local'|'scene'
+  editTime?:number
+  editOverrides?:OverrideMap
   readonly selectedPointIds?: readonly string[]
   readonly selectedContourIds?: readonly string[]
   readonly selectedObjectIds?: readonly string[]
@@ -83,6 +94,34 @@ function MeshSettings({ layer, ...props }: GeometryEditPanelProps & { layer: Lay
   const faces = useMemo(() => new MeshFaceTopology(mesh.geometry, hint).faces, [mesh.geometry.topology, hint])
   const quads = faces.filter(face => face.kind === 'quad').length
   const selection = props.meshSelection?.layerId === layer.id ? props.meshSelection : null
+  const [warning, setWarning] = useState('')
+  const [percent, setPercent] = useState(50)
+  const actions = useMemo(
+    () =>
+      editing && selection
+        ? meshTopologyActions(layer, selection, props.getScene, props.dispatchCommand, setWarning, percent / 100)
+        : [],
+    [editing, scene, layer, selection, props.getScene, props.dispatchCommand, percent],
+  )
+  const localModel = useMemo(
+    () => (selection?.ids?.length ? new MeshComponentSelection(mesh.geometry, Matrix2D.identity(), hint) : null),
+    [mesh.geometry, hint, selection],
+  )
+  const groups = useMemo(() => {
+    if (!localModel || !selection?.ids) return []
+    const wanted = new Set(selection.ids)
+    if (selection.mode === 'point') return localModel.points.filter((p) => wanted.has(p.id)).map((p) => [p.id])
+    const vertices =
+      selection.mode === 'edge'
+        ? localModel.edges.filter((e) => wanted.has(e.id)).map((e) => [e.a, e.b])
+        : localModel.faces.filter((f) => wanted.has(f.id)).map((f) => f.vertices)
+    return vertices.map((group) => group.map((i) => localModel.points[i].id))
+  }, [selection, localModel])
+  const center = localModel?.pivot(groups.flat())
+  const frame =
+    props.componentFrame === 'scene'
+      ? resolveLayerWorldMatrix(layer, scene, props.editTime ?? 0, props.editOverrides)
+      : Matrix2D.identity()
   const disabled = !!(props.conversionDisabled || layer.locked || layer.hidden || layer.frozen || layer.instanceOf)
   return <section aria-label="Mesh editing" className="space-y-3">
     {props.editMode && <div role="group" aria-label="Mesh selection mode" className="grid grid-cols-3 gap-1.5">
@@ -97,6 +136,23 @@ function MeshSettings({ layer, ...props }: GeometryEditPanelProps & { layer: Lay
       <p>{editing ? `${props.editMode?.mode === 'point' ? 'Vertices' : props.editMode?.mode === 'edge' ? 'Edges' : 'Faces'} selected: ${selection?.selected ?? 0} · Move / Rotate / Scale · Ctrl/Cmd+A selects all` : 'Choose Vertex, Edge or Face to edit geometry. Modifiers are available below.'}</p>
       <p className="text-gray-400">Component transforms accumulate in Edit Mesh. Smooth and Subdivision process the whole mesh.</p>
     </div>
+    {editing && center && localModel && selection?.modifierId && <ComponentLayoutControls count={groups.length}
+      frame={frame} center={center} pivot={props.pivot} setPivot={props.setPivot} disabled={disabled} apply={action=>{
+        try {
+          const deltas=componentLayout(groups,new Map(localModel.points.map(p=>[p.id,p])),frame,action)
+          const cmd=makeMeshLayoutCmd(props.getScene(),layer.id,selection.modifierId!,deltas)
+          if(cmd)props.dispatchCommand(cmd)
+          setWarning('')
+        } catch(error){setWarning(error instanceof Error?error.message:String(error))}
+      }}/>}
+    {warning && <p role="alert">{warning}</p>}
+    {actions.length > 0 && <section aria-label="Mesh topology tools" className="space-y-2">
+      {selection?.mode === 'edge' && <label>Split position (%) <input type="number" min="0.01" max="99.99" step="any" value={percent}
+        className="w-16 rounded bg-gray-800 p-1" onChange={event=>setPercent(event.target.valueAsNumber || 0)} /></label>}
+      <div className="flex flex-wrap gap-1">{actions.map(action => <button key={action.label} type="button"
+        disabled={action.disabled} title={action.disabledReason} onClick={action.onSelect}
+        className="rounded border border-gray-600 px-2 py-1 disabled:opacity-45">{action.label}</button>)}</div>
+    </section>}
     <ModifierStackPanel {...props} layer={layer} />
     {editing && <>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mesh settings">

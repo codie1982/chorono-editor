@@ -68,6 +68,8 @@ import { GeometryEditGhost } from './canvas/overlays/GeometryEditGhost'
 import { useGeometryEditKeyboard } from './canvas/mesh2d/useGeometryEditKeyboard'
 import { useMeshViewportEditing } from './canvas/mesh2d/useMeshViewportEditing'
 import { MeshComponentOverlay } from './canvas/mesh2d/MeshComponentOverlay'
+import { meshTopologyActions } from './canvas/mesh2d/topologyActions'
+import { distToSegmentSq as meshEdgeDistance } from '@/lib/geometry/segmentDistance'
 import { MESH_EDIT_LEVELS, type MeshSelectionSummary } from './canvas/mesh2d/meshEditSelection'
 import { useMeshEditSession } from './canvas/mesh2d/useMeshEditSession'
 import { OffArtboardOverlay } from './canvas/overlays/OffArtboardOverlay'
@@ -211,6 +213,7 @@ interface Props {
   splineEdit?: SplineEditController
   /** Panel-owned mesh/generated-geometry settings session; hides layer gizmos. */
   geometryEditMode?: 'point' | 'edge' | 'object' | 'face'
+  editPivot?: {x:number;y:number}|null
   geometryEditActive?: boolean
   onExitGeometryEdit?: () => void
   onEnterGeometryEdit?: (mode: 'point' | 'edge' | 'face') => void
@@ -349,7 +352,7 @@ export default function SceneCanvas({
   arrayAuthoring, shapePlacementLayer = null, shapePlacementHint, onShapePlacementComplete,
   physicsOverlay, onPhysicsBondSelect,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
-  splineDrawKind = null, splineAppendTargetId = null, splineContinuationPointId = null, splineAutoClose = false, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected, splineEdit: suppliedSplineEdit, geometryEditActive = false, geometryEditMode = 'object', onExitGeometryEdit, onEnterGeometryEdit, onMeshSelectionChange, onOpenSplineTools, splineToolActions, splineTangentClipboard, booleanPreview, outlinePreview, chamferPreview, filletPreview, onEditOperation, onBooleanPreview,
+  splineDrawKind = null, splineAppendTargetId = null, splineContinuationPointId = null, splineAutoClose = false, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected, splineEdit: suppliedSplineEdit, editPivot, geometryEditActive = false, geometryEditMode = 'object', onExitGeometryEdit, onEnterGeometryEdit, onMeshSelectionChange, onOpenSplineTools, splineToolActions, splineTangentClipboard, booleanPreview, outlinePreview, chamferPreview, filletPreview, onEditOperation, onBooleanPreview,
 }: Props) {
   const [hoveredPickPathId, setHoveredPickPathId] = useState<string | null>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -454,7 +457,7 @@ export default function SceneCanvas({
   const snapRef = useRef({
     master: snapEnabled, grid: snapToGridOn, objects: snapToObjects,
     points: snapToPoints, guides: snapToGuides, pixel: snapToPixel,
-    size:   gridSize,
+    vertex:snapSettings.targets.vertex, size:   gridSize,
   })
   useEffect(() => {
     snapRef.current = {
@@ -464,9 +467,9 @@ export default function SceneCanvas({
       points:  snapToPoints,
       guides:  snapToGuides,
       pixel:   snapToPixel,
-      size:    gridSize,
+      vertex:snapSettings.targets.vertex, size:    gridSize,
     }
-  }, [snapEnabled, snapToGridOn, snapToObjects, snapToPoints, snapToGuides, snapToPixel, gridSize])
+  }, [snapEnabled, snapToGridOn, snapToObjects, snapToPoints, snapToGuides, snapToPixel, gridSize,snapSettings.targets.vertex])
 
   // ── View options (rulers + grid front/back) ──────────────────────────────
   const [showRulers,  setShowRulers]  = useState(true)
@@ -479,6 +482,7 @@ export default function SceneCanvas({
   // Targets the right-clicked layer (not necessarily the selected one) so
   // users can act on any object without changing selection first. Selection
   // does, however, get updated so e.g. Animate can keyframe the right layer.
+  const meshContextSplitT = useRef(.5)
   const ctxMenu = useContextMenu()
   const [ctxTargetLayerId, setCtxTargetLayerId] = useState<string | null>(null)
   const ctxPointRef = useRef<{ x: number; y: number } | null>(null)
@@ -598,7 +602,7 @@ export default function SceneCanvas({
     : new Set(displayScene.layers.filter(layer => !layer.hidden).map(layer => layer.id)), [displayScene, scene])
   const { dragRef, startDrag, snapPoint: dragSnapPoint } = useCanvasDrag({
     snapLayerIds,
-    canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
+    canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,transformSpace,
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onAfterCloneDrag, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
     timeMs, overrides, ...meshFrameQuery,
@@ -625,7 +629,7 @@ export default function SceneCanvas({
     resolveSnap: resolveSplineDrawSnap,
   })
 
-  const splineViewport = useSplineViewportEditing({ controller: splineEditController, layer: splineSource, scene, editor, canvasRef,
+  const splineViewport = useSplineViewportEditing({ editPivot, controller: splineEditController, layer: splineSource, scene, editor, canvasRef,
     overrides, timeMs, zoom, panMode, toolMode, transformSpace, onSelectLayer, containment: selectionContainMode, drag: { dragRef, startDrag }, getContext: getShortcutContext,
     enabled: !hideEditorUI && !contentInspection && !motionEditing && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && !pathPickMode,
     isSelecting: () => isSelectionActive(), warning: setTransformWarning })
@@ -633,7 +637,7 @@ export default function SceneCanvas({
   const geometryEditing = splineViewport.active || (geometryEditActive && !hideEditorUI && !contentInspection && !motionEditing && !arrayEditing && !placingShape)
   const geometrySessionActive = geometryEditActive || splineEditController.active
   const meshEditModifierId = useMeshEditSession(geometryEditActive, splineSource, editor.getDocumentSignal())
-  const meshComponents = useMeshViewportEditing({ active: geometryEditing && !splineViewport.active && !panMode && toolMode !== 'pan',
+  const meshComponents = useMeshViewportEditing({ editPivot, active: geometryEditing && !splineViewport.active && !panMode && toolMode !== 'pan',
     mode: geometryEditMode, layer: splineSource, scene, editor, timeMs, overrides, zoom, transformSpace, toolMode, canvasRef,
     drag: { dragRef, startDrag }, modifierId: meshEditModifierId, warning: setTransformWarning, onSelectionChange: onMeshSelectionChange })
   useGeometryEditKeyboard({ active: geometryEditing && !splineViewport.active && !panMode && toolMode !== 'pan',
@@ -1357,6 +1361,15 @@ export default function SceneCanvas({
               if (splineViewport.contextMenu(cx, cy, e)) return
               if (meshComponents.active && selectedLayerId) {
                 e.preventDefault(); e.stopPropagation()
+                const {model,mode,ids} = meshComponents
+                const hit = model?.pick(mode,{x:cx,y:cy},8/zoom)
+                if (hit && !ids.includes(hit)) meshComponents.select(new Set([hit]),'replace')
+                const edge = mode === 'edge' && model?.edges.find(item=>item.id===hit)
+                meshContextSplitT.current = .5
+                if (model && edge) {
+                  const a = model.points[edge.a], b = model.points[edge.b]
+                  meshContextSplitT.current = meshEdgeDistance(cx,cy,a.x,a.y,b.x,b.y).t
+                }
                 ctxSelectionAtOpenRef.current = selectionKey
                 setCtxTargetLayerId(selectedLayerId); ctxMenu.open(e); return
               }
@@ -1582,7 +1595,7 @@ export default function SceneCanvas({
             scene={scene} owner={selectedBooleanOwner} result={booleanEditResult} timeMs={timeMs} overrides={displayOverrides} zoom={zoom} />}
 
           {meshComponents.active && meshComponents.model && <MeshComponentOverlay model={meshComponents.model}
-            mode={meshComponents.mode} ids={meshComponents.ids} zoom={zoom} />}
+            mode={meshComponents.mode} ids={meshComponents.ids} zoom={zoom} pivot={meshComponents.pivotWorld} />}
 
           {/* BL-60 Faz 3 — Live selection shape overlay (Box / Lasso /
               Circle / Paint). zoom multiplier maps composition pixels to
@@ -1933,6 +1946,8 @@ export default function SceneCanvas({
           x={ctxMenu.state!.x} y={ctxMenu.state!.y} onClose={ctxMenu.close}
           items={[...MESH_EDIT_LEVELS.map(({ mode, label, key }) => ({ kind: 'action' as const, label: `Edit Mesh ${label}`, shortcut: key,
             onSelect: () => onEnterGeometryEdit(mode) })),
+            ...meshTopologyActions(target,{mode:meshComponents.mode,ids:meshComponents.ids,modifierId:meshEditModifierId,topologyHash:target.mesh2d?.geometry.topology.topologyHash},
+              editor.getScene,editor.dispatchCommand,setTransformWarning,meshContextSplitT.current),
             { kind: 'action', label: 'Select all components', shortcut: '⌘A', onSelect: meshComponents.selectAll },
             { kind: 'action', label: 'Clear component selection', onSelect: meshComponents.clear },
             { kind: 'separator' }, { kind: 'action', label: 'Layer mode', onSelect: () => onExitGeometryEdit?.() }]} />

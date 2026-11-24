@@ -33,10 +33,10 @@ export function splineSelectionPivot(data: SplinePathData, ids: ReadonlySet<stri
  * topology, outer transforms and animation data are preserved. Zero/negative
  * scales are rejected rather than collapsing/flipping authored contours. */
 export function transformSplineSelection(data: SplinePathData, ids: ReadonlySet<string>,
-  transform: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number }): SplinePathData {
+  transform: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number }, editPivot?: {x:number;y:number}|null): SplinePathData {
   const { x = 0, y = 0, rotation = 0, scaleX = 1, scaleY = 1 } = transform
   if (![x, y, rotation, scaleX, scaleY].every(Number.isFinite) || scaleX <= 0 || scaleY <= 0) throw new Error('Use finite transforms and positive scale factors.')
-  const pivot = splineSelectionPivot(data, ids)
+  const pivot = editPivot ?? splineSelectionPivot(data, ids)
   if (!pivot) return data
   const matrix = Matrix2D.translation(x + pivot.x, y + pivot.y).rotate(rotation).scale(scaleX, scaleY).translate(-pivot.x, -pivot.y)
   return transformSplineData(data, matrix, ids)

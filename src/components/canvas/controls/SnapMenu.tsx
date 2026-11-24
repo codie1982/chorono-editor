@@ -62,8 +62,8 @@ export function SnapMenu(p: SnapMenuProps) {
     { label: 'Snap to Grid', value: p.toGrid, onToggle: p.onToggleGrid, disabled: !p.enabled || p.gridVisible === false,
       hint: p.gridVisible === false ? 'Show the viewport grid to enable grid snapping.' : undefined },
     { label: 'Snap to Pixel',   value: p.toPixel,   onToggle: p.onTogglePixel,   disabled: !p.enabled },
-    ...(p.onToggleVertex ? [{ label: 'Snap to Spline Vertices', value: !!p.toVertex, onToggle: p.onToggleVertex, disabled: !p.enabled,
-      hint: 'Exact spline anchors while drawing. Open endpoints in the edited spline can be joined.' }] : []),
+    ...(p.onToggleVertex ? [{ label: 'Snap to Vertices', value: !!p.toVertex, onToggle: p.onToggleVertex, disabled: !p.enabled,
+      hint: 'Snap to spline or mesh vertices during component moves. While drawing, snap to spline anchors and join open endpoints.' }] : []),
   ]
 
   return (

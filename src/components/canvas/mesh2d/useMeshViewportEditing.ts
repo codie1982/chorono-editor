@@ -15,6 +15,7 @@ import { meshFaceSourceHint, type MeshSelectionSummary } from './meshEditSelecti
  * existing tail Edit Mesh, one Undo per gesture. The old private-host Object
  * level remains admitted; normal Mesh UI now uses Vertex/Edge/Face. */
 export function useMeshViewportEditing(options: {
+  editPivot?: {x:number;y:number}|null
   active: boolean; mode: MeshComponentMode | 'object'; layer: Layer | null; scene: ChronoScene; editor: EditorStateReturn
   timeMs: number; overrides?: OverrideMap; zoom: number; transformSpace: TransformSpace; toolMode?: string
   canvasRef: RefObject<HTMLCanvasElement>; drag: Pick<UseCanvasDragReturn, 'dragRef' | 'startDrag'>; modifierId: string | null
@@ -36,9 +37,9 @@ export function useMeshViewportEditing(options: {
     return { ...before, [level]: Array.from(next) }
   })
   const clear = () => setBank(before => ({ ...before, [level]: [] }))
-  const selectionKey = JSON.stringify([active, layer?.id, level, ids, model?.points.length, model?.edges.length, model?.faces.length])
+  const selectionKey = JSON.stringify([active, layer?.id, level, ids, mesh?.geometry.topology.topologyHash, options.modifierId, model?.points.length, model?.edges.length, model?.faces.length])
   useEffect(() => {
-    options.onSelectionChange?.(active && layer && model ? { layerId: layer.id, mode: level, selected: ids.length,
+    options.onSelectionChange?.(active && layer && model ? { layerId: layer.id, mode: level, ids, topologyHash: mesh?.geometry.topology.topologyHash, modifierId: options.modifierId, selected: ids.length,
       vertices: model.points.length, edges: model.edges.length, faces: model.faces.length, quads: model.faces.filter(face => face.kind === 'quad').length } : null)
     // Stable value key avoids publishing a new report during position-only drag
     // frames or parent rerenders. Connectivity/mode/selection changes publish.
@@ -56,7 +57,7 @@ export function useMeshViewportEditing(options: {
     if (!ids.includes(hit)) select(new Set(chosen), 'replace')
     if (!['select', 'move', 'rotate', 'scale', undefined].includes(options.toolMode) || editor.isTransactionActive() || options.drag.dragRef.current) return true
     try {
-      const vertexIds = model.vertices(level, chosen), pivot = model.pivot(vertexIds)
+      const vertexIds = model.vertices(level, chosen), pivot = options.editPivot ?? model.pivot(vertexIds)
       if (!pivot || Math.abs(matrix.determinant()) < 1e-9) return true
       const operation = options.toolMode === 'rotate' ? 'rotate' : options.toolMode === 'scale' ? 'scale' : 'move'
       const inverse = matrix.invert(), startLocal = inverse.applyToPoint({ x, y })
@@ -71,6 +72,7 @@ export function useMeshViewportEditing(options: {
     } catch (error) { options.warning(error instanceof Error ? error.message : String(error)) }
     return true
   }
-  return { active, model, mode: level, ids, vertices, clear, select, selectAll, pointerDown,
+  const pivotWorld = options.editPivot && matrix ? matrix.applyToPoint(options.editPivot) : null
+  return { active, model, pivotWorld, mode: level, ids, vertices, clear, select, selectAll, pointerDown,
     query: (region: SelectionRegion, containment: 'inside' | 'touching') => model?.query(level, region, containment) ?? new Set<string>() }
 }

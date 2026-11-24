@@ -4,7 +4,7 @@ import { SnapMenu } from './SnapMenu'
 
 /** Single settings adapter for viewport and documentation hosts. All controls
  * borrow the same hook; opening/closing the menu changes no scene or history.
- * Spline vertices are acquired by drawing; segment/subdivision stay reserved. */
+ * Spline drawing and Mesh/Spline component moves share the vertex target setting. */
 export function SnapSettingsMenu({ snap }: { snap: SnapSettingsHook }) {
   const s = snap.settings
   return <SnapMenu enabled={s.enabled} onToggleEnabled={() => snap.setEnabled(!s.enabled)}

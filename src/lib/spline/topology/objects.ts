@@ -1,3 +1,4 @@
+import { deleteSplineEdges } from './edges'
 import type { SplinePathData } from '../../types/spline'
 import { translateSplineData } from '../geometry/translateSplineData'
 import { appendSplineObjects } from '../creation/appendSplineObjects'
@@ -18,4 +19,19 @@ export function copySplineObjects(data: SplinePathData, ids: readonly string[], 
   if (![x, y].every(Number.isFinite)) throw new Error('Copy offset must be finite local pixels.')
   const copy = remapSplineData(extractSplineObjects(data, ids), data, true)
   return appendSplineObjects(data, markEditedSubShapes(copy.data, translateSplineData(copy.data, x, y)))
+}
+
+/** Copy directed edge runs into independent Objects in the same layer.
+ * Unselected edges are cut only in the detached copy. Reuse the canonical
+ * record remap, control translation and unique-name allocation. */
+export function copySplineEdges(data: SplinePathData, ids: readonly string[], x = 20, y = 20) {
+  if (![x, y].every(Number.isFinite)) throw new Error('Copy offset must be finite local pixels.')
+  if (!ids.length || ids.some((id) => !data.segments[id])) throw new Error('Select existing spline edges.')
+  const selected = new Set(ids)
+  const runs = deleteSplineEdges(
+    data,
+    Object.keys(data.segments).filter((id) => !selected.has(id)),
+  )
+  const copy = remapSplineData(runs, data, true)
+  return appendSplineObjects(data, translateSplineData(copy.data, x, y))
 }

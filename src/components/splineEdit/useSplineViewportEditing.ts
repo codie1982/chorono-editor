@@ -21,6 +21,7 @@ import { transformAxisFrame, type TransformSpace } from '@/lib/canvas/math/trans
 import { useSplineTopologyActions } from './useSplineTopologyActions'
 
 interface Options {
+  editPivot?: {x:number;y:number}|null
   controller: SplineEditController; layer: Layer | null | undefined; scene: ChronoScene; editor: EditorStateReturn
   canvasRef: RefObject<HTMLCanvasElement>; overrides?: OverrideMap; timeMs: number; zoom: number
   onSelectLayer?(id: string | null): void
@@ -76,7 +77,7 @@ export function useSplineViewportEditing(options: Options) {
       editableSplineLayer(scene, layer.id)
       const reason = drivenSplineTransformReason(layer, scene, pointIds)
       if (reason) throw new Error(reason)
-      const pivot = splineSelectionPivot(layer.spline, pointIds), startLocal = geometry.worldToLocal.applyToPoint(start)
+      const pivot = options.editPivot ?? splineSelectionPivot(layer.spline, pointIds), startLocal = geometry.worldToLocal.applyToPoint(start)
       if (!pivot || operation !== 'move' && Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y) < 1e-6) return
       options.editor.beginTransaction()
       options.drag.dragRef.current = { kind: 'splineGeometry', layerId: layer.id, originalLayer: layer, pointIds: Array.from(pointIds),
@@ -189,7 +190,7 @@ export function useSplineViewportEditing(options: Options) {
   }, [])
   const movePoints = layer?.spline ? splineSelectionPoints(layer.spline, controller.mode, controller.ids) : new Set<string>()
   const movePivot = canPick && writable && !controller.attaching && !controller.edgeTool && ['select', 'move', undefined].includes(options.toolMode)
-    && geometry ? splineSelectionPivot(geometry.worldSpline, movePoints) : null
+    && geometry ? options.editPivot && movePoints.size ? geometry.worldMatrix.applyToPoint(options.editPivot) : splineSelectionPivot(geometry.worldSpline, movePoints) : null
   const moveGizmo = movePivot ? { point: movePivot, axisFrame, start: (axis: 'x' | 'y' | null) => (event: React.PointerEvent) => {
     if (event.button !== 0) return
     event.preventDefault(); event.stopPropagation()

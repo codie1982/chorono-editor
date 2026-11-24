@@ -12,6 +12,9 @@ export const MESH_EDIT_LEVELS = [
 export interface MeshSelectionSummary {
   readonly layerId: string
   readonly mode: MeshComponentMode
+  readonly ids?: readonly string[]
+  readonly topologyHash?: string
+  readonly modifierId?: string | null
   readonly selected: number
   readonly vertices: number
   readonly edges: number

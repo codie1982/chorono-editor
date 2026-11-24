@@ -375,7 +375,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const splineTangentClipboard = useSplineTangentClipboard(editor.getDocumentSignal())
   const splineEdit = useSplineEditSelection(selectedLayerIds.size <= 1 ? selectedLayer : null, editor.getDocumentSignal())
   const geometryEdit = useGeometryEditMode(selectedLayerIds.size === 1 ? selectedLayer : null, splineEdit, editor.getDocumentSignal())
+  const [editPivot,setEditPivot]=useState<{x:number;y:number}|null>(null)
   const [meshSelection, setMeshSelection] = useState<MeshSelectionSummary | null>(null)
+  const componentSelectionKey = JSON.stringify([selectedLayerId,geometryEdit.active,geometryEdit.mode,selectedLayer?.mesh2d ? meshSelection?.ids : splineEdit.ids])
+  useEffect(()=>setEditPivot(null),[componentSelectionKey,editor.getDocumentSignal()])
   useEffect(() => {
     if (!pendingSplineResult) return
     if (pendingSplineResult.layerId === selectedLayerId && selectedLayer?.spline) splineEdit.enter(pendingSplineResult.mode, pendingSplineResult.ids)
@@ -1923,7 +1926,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     onExitGeometryEdit={geometryEdit.exit}
                     geometryEditMode={geometryEdit.mode}
                     onEnterGeometryEdit={enterGeometryEditLevel}
-                    onMeshSelectionChange={setMeshSelection}
+                    editPivot={editPivot} onMeshSelectionChange={setMeshSelection}
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineBand.worldResult ?? splineOutline.result}
@@ -2117,7 +2120,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                 <GeometryEditPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
                   editMode={geometryEdit}
-                  meshSelection={meshSelection}
+                  meshSelection={meshSelection} pivot={editPivot} setPivot={setEditPivot} componentFrame={transformSpace} editTime={currentTimeMs} editOverrides={frame.overrides}
                   onSplineSourceBaked={id => splineEdit.focusResult({ layerId: id, mode: 'object' })}
                   selectedIds={Array.from(isolatedSelectedIds)} conversionDisabled={isPlaying || manualPreview || !!detail.session}
                   splineModeControls={<SplineModeControls controller={splineEdit}
@@ -2129,7 +2132,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   isTransactionActive={editor.isTransactionActive} dispatchCommand={dispatchCommand}
                   onSelectLayer={id => selectLayer(id)} onClearPoint={splineEdit.clear} onLayerChange={updateLayer}
                   splineSourceSettings={selectedLayer?.spline && !selectedLayer.booleanResultFor && splineEdit.layerId === selectedLayer.id ? (
-                    <SplineEditInspector tangentClipboard={splineTangentClipboard} modeControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
+                    <SplineEditInspector pivot={editPivot} setPivot={setEditPivot} componentFrame={transformSpace} tangentClipboard={splineTangentClipboard} modeControls={false} layer={selectedLayer} controller={splineEdit} getScene={editor.getScene} dispatchCommand={dispatchCommand}
                           outline={splineOutline} band={splineBand}
                           chamfer={splineChamfer}
                           fillet={splineFillet}

@@ -21,7 +21,7 @@ import type { SplineVertexTarget } from './SnapCandidate'
  * and memoize by source/frame; [] selection includes the active spline itself.
  * No DOM, mutable cache, source change or retained scene handle is created. */
 export function prepareSceneSnapContext(scene: ChronoScene, timeMs: number, overrides?: OverrideMap,
-  selection: readonly string[] = [], scope?: ReadonlySet<string>, includeSplineVertices = false): CanvasSnapContext {
+  selection: readonly string[] = [], scope?: ReadonlySet<string>, includeSplineVertices = false, includeMeshVertices = false): CanvasSnapContext {
   const index = new LayerIndex(scene.layers), moving = index.subtreeIds(selection), excluded = new Set(moving)
   const parents = new Set<string>(), bounds = createLayerWorldBoundsResolver(scene, timeMs, overrides)
   let rootParent = selection.length === 0
@@ -44,10 +44,15 @@ export function prepareSceneSnapContext(scene: ChronoScene, timeMs: number, over
     return true
   }
   const splineVertices: SplineVertexTarget[] = []
-  if (includeSplineVertices) {
+  if (includeSplineVertices || includeMeshVertices) {
     const evaluated = overrides ?? evaluateSceneFrame(scene, timeMs).overrides
     for (const layer of scene.layers) {
-      if (excluded.has(layer.id) || scope && !scope.has(layer.id) || !visible(layer.id) || layer.type !== 'spline') continue
+      if (excluded.has(layer.id) || scope && !scope.has(layer.id) || !visible(layer.id)) continue
+      if (includeMeshVertices && layer.mesh2d && !layer.mesh2d.deformation) {
+        const g=layer.mesh2d.geometry,matrix=resolveLayerWorldMatrix(layer,scene,timeMs,evaluated)
+        g.topology.vertexIds.forEach((id,i)=>splineVertices.push({...matrix.applyToPoint({x:g.positions[i*2],y:g.positions[i*2+1]}),layerId:layer.id,pointId:id,openEndpoint:false}))
+      }
+      if (!includeSplineVertices || layer.type !== 'spline')continue
       const data = materializeLayerOverrides(layer, evaluated).spline
       if (!data) continue
       const matrix = resolveLayerWorldMatrix(layer, scene, timeMs, evaluated)
@@ -57,7 +62,7 @@ export function prepareSceneSnapContext(scene: ChronoScene, timeMs: number, over
         openEndpoint: endpoints.has(point.id) && !point.locked && !layer.instanceOf && !layer.booleanResultFor })
     }
   }
-  return { canvasWidth: scene.composition.width, canvasHeight: scene.composition.height, ...(includeSplineVertices ? { splineVertices } : {}),
+  return { canvasWidth: scene.composition.width, canvasHeight: scene.composition.height, ...(includeSplineVertices || includeMeshVertices ? { splineVertices } : {}),
     customGuides: readSceneGuides(scene).guides,
     otherLayers: scene.layers.flatMap(layer => {
       if (excluded.has(layer.id) || scope && !scope.has(layer.id) || layer.type === 'audio' || !visible(layer.id)) return []

@@ -17,7 +17,7 @@ export async function checkSplineAttachPicking(): Promise<string> {
   const shape = newRectLayer(); shape.id = 'not-a-spline'; shape.transform.x = 500; shape.transform.y = 350
   scene.layers.push(a, b, shape)
   flushSync(() => { current().editor.resetScene(scene); current().select('spline'); current().setTime(0); current().setTool('select') })
-  await frames(); await click('Spline point mode'); await click('Spline operation Attach')
+  await frames(); await click('Spline object mode'); await click('Spline operation Attach')
   const initial = structuredClone(current().editor.getScene())
   await click('Add existing splines')
   assert(current().controller.attaching && current().controller.mode === 'object', '+ did not enable existing-object picking')
@@ -66,7 +66,7 @@ export async function checkSplineAttachPicking(): Promise<string> {
   assert(!current().controller.attaching && !document.querySelector('[role="menu"]'), 'Right-click did not finish Add cleanly')
   await click('Add existing splines'); await click('Spline edge mode')
   assert(!current().controller.attaching, 'Changing sub-object mode kept Add active')
-  await click('Add existing splines'); await click('Done')
+  await click('Spline object mode'); await click('Add existing splines'); await click('Done')
   assert(!current().controller.attaching && !current().controller.active, 'Leaving Edit kept Add active')
   equal(current().editor.getScene(), afterB, 'Finishing Add changed source or history')
   await click('Spline object mode'); await click('Spline operation Attach'); await click('Add existing splines')

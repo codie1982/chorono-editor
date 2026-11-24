@@ -24,3 +24,38 @@ describe('Edit geometry move axes', () => {
     expect(next.spline!.points[Object.keys(layer.spline!.points)[1]]).toBe(layer.spline!.points[Object.keys(layer.spline!.points)[1]])
   })
 })
+
+it.each(['scene', 'local', 'vertex'] as const)('snaps a dragged point in the %s frame', (space) => {
+  const layer = newSplineLayerFromData(createCircleSpline({ radius: 27 }))
+  layer.transform = { ...layer.transform, x: 19, y: 11, rotationDeg: 38 }
+  const base = { ...emptyScene(), layers: [layer] },
+    world = resolveLayerWorldMatrix(layer, base)
+  const point = Object.values(layer.spline!.points)[0],
+    start = world.applyToPoint(point)
+  const target =
+    space === 'local' ? world.applyToPoint({ x: 30, y: 20 }) : space === 'scene' ? { x: 40, y: 30 } : { x: 37, y: 29 }
+  const preview = previewGeometryDrag({
+    base,
+    drag: {
+      kind: 'splineGeometry',
+      layerId: layer.id,
+      originalLayer: layer,
+      pointIds: [point.id],
+      operation: 'move',
+      pivot: point,
+      startLocal: point,
+      worldToLocal: world.invert(),
+      startClientX: 0,
+      startClientY: 0,
+    },
+    delta: { x: target.x + 1 - start.x, y: target.y - 1 - start.y },
+    event: { pointerId: 1, clientX: 0, clientY: 0, shiftKey: false, ctrlKey: false, metaKey: false },
+    snap: { grid: true, pixel: false, size: 10 },
+    componentSpace: space === 'local' ? 'local' : 'scene',
+    snapRadiusWorld: 4,
+    componentVertices: space === 'vertex' ? [{ ...target, layerId: 'other', pointId: 'v', openEndpoint: false }] : [],
+  })
+  const actual = world.applyToPoint(preview.scene.layers[0].spline!.points[point.id])
+  expect(actual.x).toBeCloseTo(target.x, 8)
+  expect(actual.y).toBeCloseTo(target.y, 8)
+})
