@@ -209,3 +209,17 @@ requires all contours of each touched Object. The Outline modifier is available
 outside Edit; other generated strategies keep readonly admission. Paint targets
 use stable source Object IDs without tagging source geometry. See
 [live contract](../../../docs/tr/spline-live-outline.md).
+
+## Mesh component editing — 24 November 2026
+
+The panel exposes Vertex (1), Edge (2), Face (3) entry and transient selection
+counts alongside the same persisted Mesh modifier stack. Spline 3 stays Object.
+A Grid quad is one logical Face; its renderer diagonal is not an editable Edge.
+Transition/Delaunay triangles remain real faces. Vertices are visible at every
+Mesh component level; selected edges/faces are red. Shared face vertices transform
+once through the same tail Edit Mesh with one Undo per gesture, fixed layer
+TRS/origin and the existing session ghost. Ctrl/Cmd+A selects the active level.
+Smooth/Subdivision still affect the whole mesh; per-component scopes and other
+requested tools are planned separately. Read the
+[Mesh tool plan](../../../docs/tr/plans/mesh2d-edit-modes-plan.md) and
+[technical reference](../../../docs/tr/mesh2d-topology-reference.md).

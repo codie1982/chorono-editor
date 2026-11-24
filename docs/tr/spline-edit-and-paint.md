@@ -5,8 +5,9 @@
 
 ## Edit ve seçim
 
-Seçili Spline veya Mesh üzerinde 1 Point, 2 Edge, 3 Object düzenleme modunu
-başlatır/seviyesini değiştirir; aynı rakam modu kapatmaz. Mod düğmesine yeniden
+Seçili Spline üzerinde 1 Point, 2 Edge, 3 Object; Mesh üzerinde 1 Vertex,
+2 Edge, 3 Face düzenleme modunu başlatır/seviyesini değiştirir; aynı rakam modu
+kapatmaz. Spline mod düğmesine yeniden
 basmak veya Done/Exit edit mode çıkış yapar. Form, modal, timeline ve özel araç
 kapsamları kendi tuşlarını korur. `defaultBindings.ts` ve `useKeyboard.ts` tek
 kısayol yönlendirme yoludur.
@@ -18,7 +19,7 @@ kenarları ve tam parent/world affine üzerinden pick koordinatlarını üretir;
 sahiplerine bağlar. Paylaşılan uç vertex yalnız bir kez değişir. Geometri yerel
 px, pick toleransı composition/world px, overlay genişliği CSS px'tir.
 
-Mesh Point/Edge ve Object hareketleri aynı aktif tail Edit Mesh modifier'ını
+Mesh Vertex/Edge/Face hareketleri aynı aktif tail Edit Mesh modifier'ını
 kullanır. `settings.vertexEdits` isteğe bağlı v1 uzantısı
 `{topologyHash, offsets: [[vertexId, dx, dy], ...]}` taşır; offset'ler affine
 sonrasında yerel px cinsindendir. Seçili vertex hareketi yalnız kendi offset'ini
@@ -26,6 +27,17 @@ artırır; Object hareketi affine'i biriktirir ve var olan offset'leri vektör o
 dönüştürür. Hash/ID uyuşmazlığı, terslenen/çöken üçgen, ownership veya bütçe ihlali
 atomik olarak reddedilir. Layer TRS, origin, UV ve bağlantı kimlikleri değişmez.
 Her hareket ayrı Undo'dur. Exit/entry tail modifier'ı yeniden kullanır.
+
+24 Kasım Mesh yüz teslimi: mantıksal Grid quad'ları bir Face'tir; renderer
+diyagonalleri Edge seçiminden çıkarılır, kalan triangle'lar ayrı Face kalır.
+Noktalar bütün Mesh Edit seviyelerinde görünür; seçili kenar/yüz kırmızıdır.
+Face dönüşümü ortak vertex'leri tekil kümeyle işler. Ctrl/Cmd+A aktif bileşen
+seviyesini seçer; Escape önce alt seçimi temizler, sonra Edit'ten çıkar.
+Panelde Vertex/Edge/Face girişi ve stack Edit dışında da erişilebilir.
+Smooth/Subdivision'ın mevcut kapsamı bütün Mesh'tir; mod seçimi hedefi değiştirmez.
+Araç/modifier listesi [Mesh Edit planında](plans/mesh2d-edit-modes-plan.md),
+matematik ve sonraki half-edge/remap gereksinimi
+[teknik referansta](mesh2d-topology-reference.md) tutulur.
 
 `GeometryEditGhost` entry anındaki sınırı, matrisi ve origin'i saklar; seçim
 seviyesi veya geometri hareketi bu snapshot'ı değiştirmez. Exit/entry güncel

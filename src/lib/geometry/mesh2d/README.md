@@ -142,3 +142,51 @@ Grid/Karelaj cells. Optional quad-cell topology has matching renderer triangles;
 legacy triangle-only hashes remain unchanged. Modified/baked output uses an
 authored geometry source instead of a misleading generator recipe.
 See [algorithms, UV behavior, source contracts and budgets](modeling/README.md).
+
+## Component editing and technical reference — 24 November 2026
+
+Before changing Mesh topology, selection, attributes, modifiers or simulation,
+read the [technical reference and repository adaptations](../../../../docs/tr/mesh2d-topology-reference.md)
+and the relevant section of its archived PDF. The [mode/tool plan](../../../../docs/tr/plans/mesh2d-edit-modes-plan.md)
+separates delivered functionality from requested future operators.
+
+`Mesh2DTopology` owns stable vertex IDs, renderer triangles, optional logical
+quad cells and their topology hash. Positions and UVs belong to
+`Mesh2DGeometry`; scene placement, renderer resources and solver state are
+separate. Existing files use local x-right/y-down coordinates and positive
+signed triangle area. No load-time coordinate conversion is performed.
+
+Entry points:
+
+- `StructuredGridMesh2DGenerator`: new grids include explicit four-sided cells
+  backed by two triangles in either diagonal direction. Existing serialized
+  triangle-only v1 topology remains valid.
+- `Mesh2DAdjacencyBuilder` / `Mesh2DTopologyValidator`: canonical triangle
+  connectivity and geometric validation; do not fork their invariants per tool.
+- `selection/MeshFaceTopology`: logical face view, hides quad diagonals from
+  editing, preserves independent transition triangles. Matching legacy Grid
+  recipes can supply cell structure without mutating source records.
+- `selection/MeshComponentSelection`: world-space Vertex/Edge/Face picking,
+  region membership, stable selected IDs and deduplicated vertex targets.
+- `selection/MeshFaceGeometryConverter`: explicit Bake materialization of old
+  Grid cells. It preserves positions/UV/triangles while hashing cell metadata;
+  its caller must reject incompatible pin/clip ownership.
+- `modeling`: shared Smooth, remeshing, UV transfer and bounded Delaunay/Grid
+  strategies; [numerical contracts](modeling/README.md).
+
+The general modifier runner is `src/lib/modifiers`; native mutations use
+`src/lib/editor/modifiers/commands.ts`. UI sessions and overlays live under
+`src/components/canvas/mesh2d`, panel controls under `editorGeometry`.
+Selection, ghost and current mode are transient; one Edit Mesh stage retains
+source geometry edits with a separate native Undo per gesture.
+
+Example: 4 columns × 3 rows produce 20 vertices, 31 logical edges and 12 quad
+faces, rendered by 24 triangles. Face transforms use the union of selected
+face vertices; shared points move once and outer layer transforms stay fixed.
+The independently prepared browser acceptance is
+`node scripts/perf/mesh-face-edit.mjs /tmp/chorono-mesh-face-qa` (stop Next first).
+
+General half-edge/n-gon authoring, per-corner UV/seams, topology remap, targeted
+modifier scopes, skinning and XPBD are planned extensions. Their appearance in
+the reference PDF is not evidence of a shipped implementation. Preserve source,
+output units, lifetime, rollback and failure contracts when adding them.

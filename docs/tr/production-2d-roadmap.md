@@ -79,6 +79,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Spline Edit, paint/Boolean ve native Point/Edge/Object araçları | `codex/mesh2d-mesh0` | `5f06d860`, `9ae5b052`, `0dd7f11b`–`5b20483b` | 22–23 Kasım ek 2D teslimleri; kapsam §9A |
 | Sekiz temel statik Spline modifier ve bağımsız panel/stack akışı | `codex/mesh2d-mesh0` | `bcb8312d`–`03f7d940` | Faz 1 tamamlandı; release ataması yapılmadı |
 | Outline bant geometrisi, Stroke to Path ve canlı kaynak düzenleme | `codex/mesh2d-mesh0` | `6e4a94bb`–`30a48e8d` | İlk geometri/canlı kaynak teslimi; tam v2 açık |
+| Mesh Vertex/Edge/Face, mantıksal quad seçimi ve Edit Mesh stack entegrasyonu | `codex/mesh2d-mesh0` | `40f0e55a` | 24 Kasım ek 2D teslimi; 4.188 test ve native UI kabulü, release ataması yapılmadı |
 
 Spline satırları 24 Kasım durum eşleştirmesidir; sonraki ek geliştirmeyi
 v0.5.0’a atanmış release kapsamı olarak yorumlamaz.
@@ -1091,8 +1092,9 @@ Sürüm/release ataması bu kayıtla yapılmaz.
 
 ### 9A.1. Edit ve Properties sorumlulukları
 
-Seçili Spline veya Mesh üzerinde **1 Point / 2 Edge / 3 Object** düzenlemeyi
-başlatır veya seviyesini değiştirir. Sağ tık Edit Mode da aynı yolu kullanır.
+Seçili Spline üzerinde **1 Point / 2 Edge / 3 Object**, Mesh üzerinde
+**1 Vertex / 2 Edge / 3 Face** düzenlemeyi başlatır veya seviyesini değiştirir.
+Sağ tık Edit Mode da aynı yolu kullanır.
 Panelde ayrı Enter edit mode düğmesi yoktur. Edit aktifken kaynak sınırı ve alt
 seçimler vurgulanır; normal layer transform çerçevesi Edit dışında görünür.
 
@@ -1206,6 +1208,23 @@ kullanıcı MCP oturumunda Edge araçlarının görünürlüğü doğrulanamadı
 kabulü tamamlandı diye kaydedilmez. Tekrar üretme girişleri
 `scripts/perf/spline-point-tools.mjs`, `spline-component-tools.mjs` ve
 `spline-band.mjs`; kapsam/sınırlar yukarıdaki teslim belgelerindedir.
+
+### 9A.6. Mesh Vertex / Edge / Face — 24 Kasım 2026
+
+Mesh paneli Vertex/Edge/Face girişleri, mantıksal yüz sayıları, aktif seçim ve
+mevcut Mesh modifier stack'ini gösterir. 3, Mesh'te Face'i; Spline'da Object'i
+açar. Grid quad'ları tek yüzdür; sadece renderer'a ait iç diyagonaller seçilmez.
+Kalan Delaunay ve sınır geçiş triangle'ları ayrı yüz olarak kalır. Bütün Mesh
+Edit modlarında vertex işaretleri görünür; seçili kenar ve yüzler kırmızıdır.
+Face hareketleri aynı Edit Mesh üzerinde, her hareket ayrı Undo ile birikir;
+gerçek TRS/origin, UV ve oturum ghost'u korunur. Ctrl/Cmd+A aktif bileşenleri seçer.
+
+Bu temel tam Poly araç takımı değildir. Kullanıcının Vertex/Edge/Face/Object
+araç ve modifier listesi [ayrı teslim planında](plans/mesh2d-edit-modes-plan.md)
+mevcut/planlı olarak tutulur. Sonraki her topoloji işlemi için
+[PDF teknik referansı ve uyarlama kaydı](mesh2d-topology-reference.md) tekrar
+okunur: half-edge/Euler, attribute remap, UV-corner ve source/evaluated sözleşmeleri.
+Y-up örnekleri mevcut Y-down kayda uyarlanır; Delaunay/Grid algoritma seçimi korunur.
 
 ## 10. Kaynak kodla uyumluluk incelemesi — 6 Kasım 2026
 
