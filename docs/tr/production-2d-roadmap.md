@@ -21,6 +21,13 @@ değiştirmez; [eski birleşik sıra](plans/geometry-material-boxed3d-sequence.m
 o kararın tarihsel kaydıdır. §12'deki eski sıra ifadeleri de teslim gününün
 kaydıdır; güncel kapsam ve durum için bu giriş ile §1 esas alınır.
 
+24 Kasım 2026 Spline durum kaydı: Point/Edge/Object native araçları, görünüm,
+akıllı dönüşüm ve Boolean akışı, sekiz temel statik modifier ve kaynak çizgiyi
+koruyan canlı Outline teslimleri [§9A’da](#9a-spline-edit-görünüm-ve-modifier-teslimleri)
+birleştirildi. §12.83–§12.102 tarihsel teslim kayıtlarıdır. Bu ek teslimler
+geliştirme branch’indedir; v0.5.0 kapsam dondurma veya release kararı bu
+doküman güncellemesiyle değiştirilmez.
+
 FRACTURE4'e yeniden başlanacaksa yarım prototipin gerçek durumu, temizlenen
 dosyalar, korunacak hash/snapshot/collider sözleşmeleri ve F4-0–F4-6 sırası
 [FRACTURE4 devralma kaydından](plans/fracture4-damage-deformation-handoff.md)
@@ -68,6 +75,13 @@ commitleri içeren başka bir branch bulunmadı.
 | Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
 | FRACTURE2 Canvas bond authoring, fixed-tick break/reset, MCP tamamlama ve temiz canlı kabul | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5`, `3336a1db` | Aşama 6 ve temiz UI/MCP kabulü tamamlandı |
 | FRACTURE3 recursive generation, lineage/bütçe, portable forest, ürün UI/MCP ve temiz canlı kabul | `codex/mesh2d-mesh0` | `fe0c4f45`–`72711c78`, `206853a3`, `5eaf8ca9`, `acc68a08` | İlk secondary destruction dilimi ve canlı UI/MCP kabulü tamamlandı |
+| Akıllı Shape/Spline/Mesh dönüşümü ve genel Modifier/Registry/Execute altyapısı | `codex/mesh2d-mesh0` | `000d5608`, `51003e08`, `e5fda161`, `05939389` | 22 Kasım ek 2D teslimi; release ataması yapılmadı |
+| Spline Edit, paint/Boolean ve native Point/Edge/Object araçları | `codex/mesh2d-mesh0` | `5f06d860`, `9ae5b052`, `0dd7f11b`–`5b20483b` | 22–23 Kasım ek 2D teslimleri; kapsam §9A |
+| Sekiz temel statik Spline modifier ve bağımsız panel/stack akışı | `codex/mesh2d-mesh0` | `bcb8312d`–`03f7d940` | Faz 1 tamamlandı; release ataması yapılmadı |
+| Outline bant geometrisi, Stroke to Path ve canlı kaynak düzenleme | `codex/mesh2d-mesh0` | `6e4a94bb`–`30a48e8d` | İlk geometri/canlı kaynak teslimi; tam v2 açık |
+
+Spline satırları 24 Kasım durum eşleştirmesidir; sonraki ek geliştirmeyi
+v0.5.0’a atanmış release kapsamı olarak yorumlamaz.
 
 Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
 `release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
@@ -154,6 +168,10 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği; [sözleşme](pre3d-frame-contract.md). |
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
 | Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
+| Tamamlandı — Spline native temel | Point/Edge/Object Edit, görünüm ve akıllı dönüşüm/Boolean | [Güncel kapsam §9A](#9a-spline-edit-görünüm-ve-modifier-teslimleri): native Apply/Undo, sürekli Add Vertex, Trim/Extend, Simplify/Smooth/Subdivide/Interpolation; fill/stroke Properties'te. Edge erişilebilirlik kabulü açık. |
+| Tamamlandı — Spline modifier Faz 1 | Sekiz temel statik modifier ve genel ordered Execute | Edit modundan bağımsız stack; hedef/ayar, sıra/toggle/remove/Bake ve kaynak koruma. [Teslim](spline-phase1-modifiers.md). Animasyonlu parametreler ertelendi. |
+| Tamamlandı — Outline ilk teslimi | Canlı kaynak çizgisi, gerçek bant ve Stroke to Path | [Kaynak düzenleme](spline-live-outline.md), guide/enable/Bake, bağımsız paint ve delikli bant uygulandı; tam Outline v2 tamamlandı sayılmaz. |
+| Açık — yerel Spline kuyruğu | Edge görünürlüğü, kısmi zincir, gelişmiş Edit transformu ve ileri modifier'lar | [Sıra ve kabul §9A.4](#9a4-kalan-işler-ve-teslim-sırası); sürüm ataması yoktur, mevcut v0.6.0/v0.10.0 kapsamı değişmez. |
 | Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
 | v0.5.0 kapsamı donduruldu | Simulation Core, rigid ve Voronoi | FRACTURE3'e kadar mevcut kapsam tamamlandı; yeni çıktı altyapısı eklenmez. Yalnız mevcut teslimlerde release blocker hata bulunursa düzeltilir. |
 | v0.6.0 giriş kapısı | Masaüstü shell ve çıktı adapter kararları | Shell/Next runtime, paket içine gömülecek Chorono Render modül sınırı, codec/container, dosya sahipliği, worker/process, asset/font/audio, kaynak bütçesi, MCP, dağıtım ve güvenlik kararları gerçek fixture ile kapatılır. |
@@ -1062,6 +1080,132 @@ Bu bölüm yalnız planlama yapar; algoritma, nesne veya API
 uygulanmış sayılmaz.
 
 Teknik referanslar: [Earcut ve conforming çıktı sınırı](https://github.com/mapbox/earcut), [Delaunay / constrained triangulation](https://doc.cgal.org/latest/Triangulation_2/index.html), [Voronoi hücreleri](https://d3js.org/d3-delaunay/voronoi), [Marching Squares](https://d3js.org/d3-contour), [MultiPolygon contour çıktısı](https://d3js.org/d3-contour/contour).
+
+## 9A. Spline Edit, görünüm ve modifier teslimleri
+
+**Durum: 24 Kasım 2026 itibarıyla mevcut geliştirme branch'inde uygulanmış
+kapsam.** Native Edit temel araçları, sekiz statik Faz 1 modifier'ı ve canlı
+Outline ilk teslimi tamamlandı. Bütün Spline planı veya tam Outline v2 bitmiş
+sayılmaz. Bu bölüm güncel durumu; §12.83–§12.102 tarihsel teslimleri tutar.
+Sürüm/release ataması bu kayıtla yapılmaz.
+
+### 9A.1. Edit ve Properties sorumlulukları
+
+Seçili Spline veya Mesh üzerinde **1 Point / 2 Edge / 3 Object** düzenlemeyi
+başlatır veya seviyesini değiştirir. Sağ tık Edit Mode da aynı yolu kullanır.
+Panelde ayrı Enter edit mode düğmesi yoktur. Edit aktifken kaynak sınırı ve alt
+seçimler vurgulanır; normal layer transform çerçevesi Edit dışında görünür.
+
+| Alan | Uygulanan kapsam | Davranış / sınır |
+| --- | --- | --- |
+| Point | Corner, Smooth, Bézier, Bézier Corner; koordinat/tangent; Break, Weld, Fuse, Connect, Reset Tangents, Copy/Paste Tangents, Chamfer ve Fillet | Break bağımsız uçlar oluşturur; Fuse yalnız konumu eşitler. Tangent panosu yerel kol vektörlerini taşır; Copy Undo yazmaz, geometri değişiklikleri ayrı Undo'dur. |
+| Edge | Sürekli Add Vertex, Refine/Divide, Split, Trim ve Extend | Add Vertex varsayılanı exact eğriyi korur; dört tip seçilebilir, her ekleme ayrı Undo, Esc araçtan çıkar. Trim tıklanan kesişim aralığını kaldırır; Extend açık ucu en yakın ileri kesişime teğet uzatır. Kesişim yoksa değişiklik/Undo yoktur. |
+| Object | Aç/kapat, Reverse, Attach/Detach, Offset Path / Inset / Outset, Simplify, Smooth, Subdivide, Interpolation ve Boolean/Paths | Simplify toleransla nokta azaltır; Smooth anchor'ları taşımadan kolları düzenler. Subdivide exact Bézier böler; Interpolation örnekleme toleransıdır, kaynak vertex eklemez. |
+| Ortak Edit transformu | Move/Rotate/Scale, toolbox Scene/Local eksenleri ve çoklu alt seçim | Yerel kaynak noktaları/kolları değişir; gerçek layer TRS/origin korunur. Ghost oturum girişindeki geometriyi tutar; yeniden giriş güncel geometriyi başlangıç alır. Mesh hareketleri aynı tail Edit Mesh üzerinde, her hareket ayrı Undo ile birikir. |
+| Properties | Fill/Stroke, renk/alpha, gradient/pattern ve gerçek layer transformu | Görünüm Edit içinde tekrarlanmaz. Yeni Spline varsayılanı No Fill, siyah 3 px stroke'tur; kullanıcı fill'i açabilir. |
+
+Native Chamfer/Fillet/Offset/Simplify/Smooth **Apply ile kaynak değiştirir**;
+yeni modifier satırı oluşturmaz. Önizleme geçicidir; Cancel, stale worker sonucu
+ve seçim/mod değişimi kaynakta iz bırakmaz. Native araçların uygun seçim
+kuralları panel/menüde paylaşılır. Boş seçim genel işlem izni değildir; Compound
+Path'in belgelenmiş seçim-yoksa-tüm-Objects davranışı ayrı sözleşmedir.
+Offset yalnız tam contour seçimini işler; kısmi edge'i bütün contour'a genişletmez.
+
+**Erişimde açık iş:** Edge araçları bugün **Edit → Edge (2) → Selection actions
+→ Topology · edge** altındadır; iki bölüm de kapalı gelir. Add Vertex, Trim,
+Extend ve Split sağ tıkta da vardır. Divide paneldedir, sağ tık eşliği henüz yoktur.
+Bu araçların uygulanmış olması görünürlük/keşfedilebilirlik işinin tamamlandığı
+anlamına gelmez; takip §9A.4'tedir.
+
+Sözleşmeler: [Edit/paint](spline-edit-and-paint.md),
+[native araçlar ve kabul sınırları](plans/spline-edit-native-tools-plan.md),
+[alt seçim/topoloji](spline-subobject-editing.md).
+
+### 9A.2. Dönüşüm, çizim, Boolean ve görünüm
+
+| İş | Uygulanan davranış | Korunan sınır |
+| --- | --- | --- |
+| Basic Shape → Spline / 2D Mesh | Sağ tık Convert iki hedefi sunar; adımlar Edit stack'inde görünür. Tek Shape'in son Bézier sınırı kullanılır; çoklu kapalı kaynak mevcut Boolean Union hesabından geçer. Mesh için Spline hesabı içeridedir, ayrı ara layer gerekmez. | İçbükeylik, delik/ada sahipliği ve yerleşim korunur. Mesh dolgu/üçgen yüzey üretir; açık çizgi sessizce kapatılmaz. Çoklu girdiler mevcut statik kaynak/parent/lifetime kurallarına tabidir. |
+| Spline çizimi ve ekleme | Auto Close varsayılan açık; kapanma algılanınca tamamlanır. Kapalıyken çizim sürer; Esc/sağ tık geçerli çizgiyi koruyarak bitirir. Add Spline + ile viewport veya Scene Explorer'dan mevcut girdiler alınır. | Attach/çizgi ekleme ile kapalı alan Boolean'ı aynı işlem değildir; kaynak/driver/referans korumaları sürer. |
+| Union / Subtract / Intersect / XOR | Toggle seçili Objects'e uygular; + sonraki girdiyi aktif işlemle ekler. Varsayılan native akış çözülen sonucu aynı parent kimliğinde edit edilebilir Spline'a indirger. | Union iç kenarları sonuçtan çıkarır; delikler ve ayrık adalar korunur. Soluk kaynak ghost'u ile belirgin sonuç sınırı ayrıdır. İşlem tek Undo'dur. |
+| Compound / Merge / Separate Paths | Compound exact konturları tek Object'te, evenodd fill kuralıyla toplar; Separate Paths adaları delikleriyle ayırır. İsteğe bağlı Non-Destructive Boolean kaynak recipe'sini saklar; Merge Paths sonucu parent'ın kendisine indirger, Separate Inputs kaynakları geri açar. | Kaynak recipe'sinden ayrılma ile geometri adalarını ayırma farklıdır. Boolean toleransla örneklenir; exact Bézier Boolean iddiası yoktur. |
+| Fill | No Fill, Solid, Linear/Radial/Angle/Reflected/Diamond Gradient, Pattern/Image; çoklu durak ve alpha | Kaynak görünümü yalnız Properties yönetir. Angle SVG çıktısı 720 vektör sektörle yaklaşıktır ve uyarı verir. |
+| Stroke | None/Solid/Gradient/Pattern; width/opacity; Solid/Dashed/Dotted; Inside/Center/Outside; Butt/Round/Square caps, Miter/Round/Bevel corners; dash/gap/sequence | Açık veya karma konturlarda Center kullanılır. Özel preset ve stroke clipboard henüz tamamlanmış değildir. |
+
+[Dönüşüm sözleşmesi](geometry-conversion.md), [Boolean ve paint ayrıntıları](spline-edit-and-paint.md)
+aynı renderer/bounds/portable/runtime sahiplerini kullanır. Mesh Smooth ve
+Delaunay/Grid Subdivision ayrı Mesh kategorisindedir; Spline araç listesine karışmaz.
+
+### 9A.3. Parametrik stack ve canlı Outline
+
+Genel **Modifier → Registry → sıralı Stack → Execute** altyapısı Spline ve Mesh
+kategorilerini ayırır; her satır kendi ayarlarını yönetir. **Modifier eklemek Edit
+moduna girmeyi gerektirmez.** Frame içinde sınırlı yüksekliğe sahip kaydırılabilir
+liste, üstte + Add modifiers, listenin altında Execute vardır. Ayar taslakları
+kaynak → etkin adımlar → sonuç sırasıyla doğrulanır; başarılı Execute tek Undo'dur.
+Add/toggle/reorder/remove/Bake kendi Undo adımlarını korur. Yeni modifier'ın hedefi
+transient alt seçim değil, kendi girdisindeki uygun geometri veya açık hedef listesidir.
+
+| Paket | Uygulanan modifier'lar | Kapsam |
+| --- | --- | --- |
+| Faz 1 — sekiz temel statik modifier | Offset Path, Round Corners, Path Simplify, Path Smoothing, Path Resample, Zig Zag, Pucker & Bloat, Repeater | Kaynak korunur; ayar, hedef, sıra, aç/kapat, silme, Execute ve Bake desteklidir. Round Corners Corner/Bézier Corner tiplerine göre çalışır; uygun mevcut dairesel yuvarlatmanın mutlak yarıçapını değiştirir, 1 px eşiği aramaz. |
+| Faz 2 — ilk bant teslimi | Stroke to Path (`strokeToPath`) | Gerçek kapalı bant/delik; width, alignment, cap/join/miter-limit ve arc-length dash. Üretilmiş sınırlar kaynak yerine doğrudan edit edilmez; açık Bake ile kalıcı geometriye çevrilir. |
+| Faz 2 — kaynak takip eden Outline | Outline (`liveOutline`) | Orijinal line/vertex/handle kayıtları kalır; Edit değişince bant otomatik güncellenir. Yeni Line/Object/layer oluşturmaz. Show source line geçici kılavuzdur; Outline enabled kalıcı ayardır. Bake Outline / Stroke to Path sınır vertex'lerini kalıcı yapar; Undo kaynak+recipe'yi geri getirir. |
+
+Canlı Outline ve Stroke to Path aynı sabit kalınlık/bant motorunu kullanır:
+köşe ve eğrilerde vertex yoğunluğu artar; çıktı toleransla sınırlı polyline'dır.
+Kaynak stroke'u varsayılan bant fill'idir; bağımsız band paint Properties'te
+Object hedefiyle düzenlenir. Kılavuz ve ghost PNG/SVG'ye girmez.
+
+Canlı kaynak düzenleme yalnız doğrudan Spline veya kaynak koruyan Convert Spline
+prefix'inden sonra tek son etkin sahip için açıktır. Native canlı Outline Apply,
+Object ya da o Object'in bütün kenarlarını ister; kısmi zincir henüz desteklenmez.
+Genel generated geometri korumaları sürer. Eski `offset`/`outline`/`chamfer`/`fillet`
+kayıtları korunur; yeni chooser'da native araç diye sunulmaz. Eski band kayıtları
+otomatik canlı kayda çevrilmez, dosya açılırken otomatik Bake yapılmaz.
+
+Hesap ve komut sahipleri: `src/lib/spline` native topoloji/modelleme/bant hesabı;
+`src/lib/modifiers` genel stack ve kategori adapter'ları; `src/lib/editor/spline`
+ve `src/lib/editor/modifiers` native komutlar; `src/components/splineEdit` panel ve
+ortak menü tanımlarıdır. İkinci solver/worker runner kurulmadı. Ayrıntılar:
+[Faz 1](spline-phase1-modifiers.md), [statik ilk paket](spline-static-modifiers.md),
+[bant geometrisi](spline-outline-band.md), [canlı kaynak sözleşmesi](spline-live-outline.md),
+[ortak Modifier mimarisi](../../src/lib/modifiers/README.md).
+
+### 9A.4. Kalan işler ve teslim sırası
+
+| Sıra / durum | İş | Bitiş koşulu / sınır |
+| --- | --- | --- |
+| 1 — açık UI kabulü | Edge araçlarının görünürlüğü ve panel/sağ tık eşliği | Trim, Extend, Divide ve Add Vertex kapalı iki bölüm aranmadan bulunabilir; Divide için sağ tık erişimi eklenir. Uygun olmayan seçim nedeni görünür; gerçek bağlı editörde kullanıcı akışı doğrulanır. |
+| 2 — native geometri genişletmesi | Kısmi Edge Offset ve canlı Outline | Yalnız seçili bağlı zincirler işlenir; stable kaynak hedefleri Split/Delete sonrasında doğru eşlenir. Legacy kalıcı bant API'sinin kısmi zincir desteği canlı kaynak desteği olarak sayılmaz. |
+| 3 — ortak Edit transformu genişletmesi | Skew/Shear, Mirror, geçici edit pivot'u ve alt seçim Align/Distribute | Kaynak noktalar/kollar değişir; gerçek layer TRS/origin sabit kalır. Scene/Local referansı, delikler, seçim dışı geometri ve her işlem Undo ile doğrulanır. Genel nesne hizalama araçları bu kabulün yerine geçmez. |
+| Faz 2 — kalan Outline v2 | Bézier-fit/provenance, ayarlanabilir density ağırlıkları, stroke/outline preset ve clipboard | Mevcut sabit kalınlıklı adaptif polyline ve bağımsız paint korunarak ayrı kabul edilir. Mesh dönüşümünde Object band paint'inin per-face malzemeye aktarımı mevcut teslim değildir. |
+| Faz 2 — ileri modifier'lar | Variable Width, Boolean Paths modifier, eğrisel Zig Zag, Wiggle Paths ve Path Dynamics | Kaynak/operand sahipliği, deterministik seed/zaman ve bütçe gibi ilgili kontratlar ayrı teslimdir. Native Boolean bu eksik modifier'ın yerine tamamlanmış sayılmaz. |
+| Ertelendi — ilk fazı engellemez | Modifier parametre animasyonu ve canlı Outline animated source | Ayrı zaman/keyframe/cache/runtime kabulü gerekir; mevcut statik stack ve native araçlar bunu beklemez. Trim Paths mevcut Stroke Trim, Path Follow mevcut Motion/Follow Path akışında kalır. |
+
+Bu yerel Spline kuyruğu masaüstü/çıktı v0.6.0 veya ileri fizik v0.10.0 kapsamına
+kendiliğinden iş eklemez. Ayrıntılı [native araç planı](plans/spline-edit-native-tools-plan.md),
+[modifier fazları](plans/spline-modifier-phases-plan.md) ve
+[Outline v2](plans/spline-outline-band-v2-plan.md) sözleşmeleri korunur;
+Outline'ın eski Replace/Keep source tasarımı için güncel kaynak takip eden
+[canlı Outline düzeltmesi](plans/spline-live-outline-plan.md) esas alınır.
+
+### 9A.5. Kabul ve devir kaydı
+
+Önceki teslimlerde native geometri, CAS/lock/driver, Undo/Redo, clone ve portable
+kayıt; açık/kapalı/delikli konturlar, Bézier kolları, parent dönüşümleri, layer
+TRS/origin ve seçim dışı kaynak korunumu denetlendi. Faz 1 kapanışında **577 test
+dosyası / 4.147 test ve 17 Chrome kabul grubu**; son canlı Outline tesliminde
+**580 test dosyası / 4.178 test ve 10 Chrome kabul grubu** geçti. Typecheck,
+MCP/CLI/production build ve gerçek PNG/SVG kontrolü ilgili teslim kayıtlarındadır.
+Bunlar önceki teslim kanıtlarıdır; 24 Kasım doküman güncellemesinde yeniden test
+ve build çalıştırıldığı anlamına gelmez.
+
+Chrome kabulleri üretim bileşenlerini kullanan bağımsız fixture'lardır. Son
+kullanıcı MCP oturumunda Edge araçlarının görünürlüğü doğrulanamadı; bağlı sahne
+kabulü tamamlandı diye kaydedilmez. Tekrar üretme girişleri
+`scripts/perf/spline-point-tools.mjs`, `spline-component-tools.mjs` ve
+`spline-band.mjs`; kapsam/sınırlar yukarıdaki teslim belgelerindedir.
 
 ## 10. Kaynak kodla uyumluluk incelemesi — 6 Kasım 2026
 
@@ -3702,7 +3846,10 @@ FRACTURE4 damage deformation ve FRACTURE5 event/checkpoint bake v0.10.0 ileri
 masaüstü editör ve Öncelik 10–12'yi kapsar. Aradaki v0.7.0–v0.9.0 düzenlemeleri
 ayrıca planlanacaktır.
 
-### Spline alt obje edit ve sınırlı 2D combine planı — 15 Kasım 2026
+Aşağıdaki Spline kayıtları teslim gününün kapsamını korur. Güncel native /
+modifier ayrımı, Outline düzeltmesi ve açık işler [§9A’dadır](#9a-spline-edit-görünüm-ve-modifier-teslimleri).
+
+### 12.83. Spline alt obje edit ve sınırlı 2D combine planı — 15 Kasım 2026
 
 [Üç modlu spline edit planı](plans/spline-2d-operations-plan.md): tek spline
 katmanında Point / Edge (Segment) / Object (Sub-spline). Edit içinde Add yeni
@@ -3718,7 +3865,7 @@ key'ler ve stable kimlikler korunur; uyumsuz animasyonda açıklamalı ret uygul
 Bu plan mevcut Image/None teslimini, Poly veya 3D öncelik sırasını değiştirmez.
 
 
-### S2D-0 tamamlandı — 15 Kasım 2026
+### 12.84. S2D-0 tamamlandı — 15 Kasım 2026
 
 [Spline alt obje düzenleme](spline-subobject-editing.md): Point/Edge/Object seçim
 bağlamı, ayrı ID bankaları, moda göre viewport/Properties/sağ tık ve mevcut region
@@ -3743,7 +3890,7 @@ CPU worker önizleme, Apply/Cancel ve tek Undo; eski geometry/key'ler korunur.
 ayrı 5C/5D paketleri olarak planlı kalır; 3D/Poly işi bu teslimle açılmaz.
 
 
-### S2D-1 tamamlandı — 15 Kasım 2026
+### 12.85. S2D-1 tamamlandı — 15 Kasım 2026
 
 [Spline compound edit](spline-subobject-editing.md#s2d-1--aynı-katmanda-üretim-ve-dönüşüm):
 Edit'te Add yeni SubShape, Done sonrasında Add ayrı katmandır. Continue açık seçili
@@ -3754,7 +3901,7 @@ korunur. Çizim target/revision/document/time bağlamı yakalanır ve stale up r
 Sıradaki spline dilimi S2D-2 topoloji/Boolean'dır; bu teslim yeni 3D workspace açmaz.
 
 
-### S2D-2 tamamlandı — 15 Kasım 2026
+### 12.86. S2D-2 tamamlandı — 15 Kasım 2026
 
 [Spline temel topoloji](spline-subobject-editing.md#s2d-2--temel-topoloji): ortak
 validation/ID remap/ownership temizliği, Object Copy/Detach/Attach, Point
@@ -3766,7 +3913,7 @@ ret verir. Yeni source şeması veya 3D çalışma modu açılmaz. Sıradaki spl
 **S2D-3 Boolean preview**, ardından **S2D-4 recipe / Apply / Cancel**'dır.
 
 
-### S2D-3 tamamlandı — 15 Kasım 2026
+### 12.87. S2D-3 tamamlandı — 15 Kasım 2026
 
 Kapalı Shape/Spline ve spline Object girdileri için Union/Subtract/Intersect
 önizlemesi Properties ve viewport sağ tık akışına bağlandı. A−B/B−A, aktif girdi
@@ -3779,7 +3926,7 @@ Mevcut kaynaklar korunacak; clone/reference/bounds/hit/save/load ve export
 eşliği tamamlanmadan Boolean layer tamamlandı sayılmayacak.
 
 
-### Spline edit / Boolean panel düzenlemesi — 15 Kasım 2026
+### 12.88. Spline edit / Boolean panel düzenlemesi — 15 Kasım 2026
 
 Spline alt seçim ve Boolean önizleme kontrolleri **Spline & Boolean** dock
 paneline taşındı. Genel Properties ayrı kaldı. Viewport, Layers ve Scene Explorer
@@ -3787,7 +3934,7 @@ sağ tık **Edit Mode → Point / Edge / Object** ortak seçim sahibini kullanı
 paneli öne getirir. Eski layout ve kaynak/Undo/animasyonlar korunur. Bu UI işi
 S2D-4 recipe / Apply / Cancel sırasını değiştirmez; kalıcı Boolean sonucu eklemez.
 
-### S2D-4 tamamlandı — kaynakları koruyan Boolean recipe
+### 12.89. S2D-4 tamamlandı — kaynakları koruyan Boolean recipe
 
 Apply/Cancel, sağ tık Edit Operation ve tek Undo/Redo; ortak renderer/bounds/SVG
 değerlendirmesi; portable recipe/source ve bağımsız forest Copy uygulanmıştır.
@@ -3809,11 +3956,11 @@ yay, worker preview, Apply/Cancel ve tek Undo/Redo tamamlandı. Chamfer ile orta
 topoloji ve source/driver/reference koruması kullanılır. S2D-5A–5D yerel sırası
 tamamlandı; diğer ana paketlerin önceliği değişmedi.
 
-### Spline MCP ve script eşliği — 16 Kasım 2026
+### 12.90. Spline MCP ve script eşliği — 16 Kasım 2026
 
 Son S2D araçları [ortak MCP plan akışı](mcp-spline-editing.md) ile açılır. Point/Edge/Object, append/Continue/Auto Close, topology/Attach/Detach/paint ve Offset/Chamfer/Fillet/Boolean aynı native koruma ve hesaplamaları kullanır. Basit işlemler `.spline.edit` içinde de kullanılabilir; CPU solverlar async MCP planıdır. [Script uyumluluk incelemesi](script-api-compatibility-audit.md) gerçek kapsamı, düzeltilen animation silme davranışını ve özel 3D API sınırlarını kaydeder. Ana geliştirme sırası değiştirilmez.
 
-#### 22 Kasım 2026 · Transform eksenleri ve doğrudan Boolean seçimi
+#### 12.90.1. 22 Kasım 2026 · Transform eksenleri ve doğrudan Boolean seçimi
 
 Toolbox Axes Scene/Local, nesne Move/Scale ve Spline Edit taşıma/Shift kısıtları
 için ortak değerlendirilen referans kullanır; aktif root/parent dönüşleri korunur.
@@ -3823,7 +3970,7 @@ seçili Object bankını doğrudan uygular; + aynı layer Object'leri ve Explore
 spline/shape girdilerini ortak Boolean recipe'ye ekler. Dış sınır, gerçek delikler,
 seçim dışı Object'ler, kaynak kayıtları ve tek aksiyon Undo/Redo native testlidir.
 
-### Spline Edit ve paint — 22 Kasım 2026
+### 12.91. Spline Edit ve paint — 22 Kasım 2026
 
 1/2/3 Point/Edge/Object, Mesh vertex/edge edit, bütünleşik Spline Boolean/Paths,
 Fill/Stroke seçenekleri ve native doğrulama girişleri
@@ -3832,7 +3979,7 @@ Outline geometrik bant v2 için [uygulama planı](plans/spline-outline-band-v2-p
 hazırdır; sabit kalınlık ve köşelerde artan vertex yoğunluğu kararı kesindir,
 v2 henüz uygulanmış değildir.
 
-### Native Spline Edit araçları — ilk teslim
+### 12.92. Native Spline Edit araçları — ilk teslim
 
 Chamfer/Fillet Point araçları, Offset Path Edge/Object aracıdır; Apply doğrudan
 geometriyi değiştirir. Offset varsayılan Replace, isteğe bağlı Keep source Append;
@@ -3841,7 +3988,7 @@ Source / History bölümündedir ve açık Bake/Undo ile edit edilebilir.
 [Native Edit teslim planı](plans/spline-edit-native-tools-plan.md) ilk teslim ile
 sonraki nokta/topoloji, kesişim ve Outline v2 aşamalarını ayrı tutar.
 
-### Native Spline Edit — Point/Edge teslimi, 23 Kasım 2026
+### 12.93. Native Spline Edit — Point/Edge teslimi, 23 Kasım 2026
 
 Point moduna Break, Fuse, Reset Tangents ve Copy/Paste Tangents; Edge moduna
 Split eklendi. Panel ve sağ tık aynı seçim ve güvenlik kurallarını kullanır.
@@ -3849,7 +3996,7 @@ Her geometri işlemi ayrı Undo/Redo'dur; tangent panosu belgeye özel ve geçic
 Exact Bézier bölmesi, contour/delik sahipliği, layer TRS/origin ve portable
 kayıt korunur. Sözleşmeler ve kalan aşamalar [native Edit planındadır](plans/spline-edit-native-tools-plan.md).
 
-### Native Spline Edit — Trim/Extend, 23 Kasım 2026
+### 12.94. Native Spline Edit — Trim/Extend, 23 Kasım 2026
 
 Edge paneli ve sağ tıkta Trim/Extend tamamlandı: kesişimler arasındaki contour
 aralığı silinir; açık uç en yakın ileri kesişime teğet olarak uzatılır. Her edit
@@ -3858,7 +4005,7 @@ transformlarıyla sınır olabilir; no-hit/Cancel Undo oluşturmaz. Üst üste/b
 eğri teması güvenli biçimde reddedilir. Kapsam ve kalan kontur araçları
 [native Edit planında](plans/spline-edit-native-tools-plan.md) ayrı tutulur.
 
-### Native Spline Edit — Add Vertex / Simplify / Smooth, 23 Kasım 2026
+### 12.95. Native Spline Edit — Add Vertex / Simplify / Smooth, 23 Kasım 2026
 
 Edge Add Vertex sürekli çalışır: Preserve curve varsayılanı, dört nokta tipi,
 her tıklamada ayrı Undo ve Esc ile araçtan çıkış. Object Simplify yerel px
@@ -3868,7 +4015,7 @@ kullanır. Araç/tolerans geçicidir, modifier üretmez; delikler, layer TRS/ori
 seçilmemiş geometri korunur. Sınırlar ve kalan aşamalar
 [native Edit planında](plans/spline-edit-native-tools-plan.md) belgelenir.
 
-### 2D Spline modifier kapsamı — 23 Kasım 2026
+### 12.96. 2D Spline modifier kapsamı — 23 Kasım 2026
 
 Planlı Faz 1 mevcut statik Execute akışını kullanır: temel Offset Path, Round
 Corners, Simplify, Smoothing, Resample, Zig Zag, Pucker & Bloat ve Repeater.
@@ -3878,7 +4025,7 @@ Mevcut native Edit, Stroke Trim ve Follow Path davranışları korunur; bu plan
 yeni modifier'ların uygulanmış olduğu anlamına gelmez.
 [Fazlar ve yürütme sözleşmesi](plans/spline-modifier-phases-plan.md).
 
-### Native Spline Edit — Object Subdivide / Interpolation, 23 Kasım 2026
+### 12.97. Native Spline Edit — Object Subdivide / Interpolation, 23 Kasım 2026
 
 Object Subdivide, seçili kontur/delikleri exact Bézier bölmesiyle 2–64 eşit
 parametre parçasına ayırır; panel/sağ tık aynı bölme sayısını kullanır.
@@ -3889,7 +4036,7 @@ Her değişiklik ayrı Undo/Redo'dur; modifier satırı oluşmaz. 572 dosyada 4.
 ve gerçek Chrome'da yedi kabul grubu geçti. Ayrıntılar
 [Spline Edit sözleşmesinde](spline-edit-and-paint.md#object-subdivide-ve-interpolation).
 
-### Statik Spline modifier — Faz 1 ilk paket, 23 Kasım 2026
+### 12.98. Statik Spline modifier — Faz 1 ilk paket, 23 Kasım 2026
 
 Offset Path, Round Corners, Path Simplify ve Path Smoothing ayrı kayıt türleriyle
 uygulandı. Native Edit hesaplarını paylaşırlar; kaynak korunur, ayar taslakları
@@ -3901,7 +4048,7 @@ akışı korunur. 574 dosyada 4.109 test ve gerçek Chrome'da sekiz kabul grubu 
 [Teslim sözleşmesi](spline-static-modifiers.md). Resample, Zig Zag, Pucker & Bloat
 ve Repeater sonraki temel paketlerdir; ileri işler Faz 2'de kalır.
 
-### Round Corners — mevcut yarıçapı değiştirme, 23 Kasım 2026
+### 12.99. Round Corners — mevcut yarıçapı değiştirme, 23 Kasım 2026
 
 Modern Round Corners, Corner / Bézier Corner nokta tiplerini hedefler; 1 px
 uygunluk eşiği yoktur. Düz yan kenarlar arasındaki mevcut dairesel Bézier köşe
@@ -3912,7 +4059,7 @@ ayrı Undo/Redo'dur. Eski Fillet/Chamfer değişmez. Eğri yan kenarlar/elipsler
 çıkarılamaz. 575 dosyada 4.129 test ve gerçek Chrome'da 12 kabul grubu geçti.
 [Ayrıntılar ve sınırlar](spline-static-modifiers.md).
 
-### Spline modifier Faz 1 — temel paket tamamlandı, 23 Kasım 2026
+### 12.100. Spline modifier Faz 1 — temel paket tamamlandı, 23 Kasım 2026
 
 Path Resample, Zig Zag, Pucker & Bloat ve aynı-spline Repeater eklendi; menüde
 sekiz temel statik modifier vardır. Ortak bounded Bézier arc sampler, açık polyline
@@ -3924,7 +4071,10 @@ portable reload, PNG ve SVG kontrolü geçti. Animasyonlu parametreler ve ileri
 Outline/Boolean/Width/Dynamics işleri Faz 2'de kalır.
 [Teslim sözleşmesi](spline-phase1-modifiers.md).
 
-## 23 Kasım 2026 — Outline / Stroke to Path ilk geometri teslimi
+### 12.101. Outline / Stroke to Path ilk geometri teslimi — 23 Kasım 2026
+
+İlk teslimin native Replace/Keep source davranışı aşağıda tarihsel olarak
+korunur; güncel UI kaynak takip eden canlı Outline’dır (§12.102 ve §9A.3).
 
 - Native Edge/Object Outline; gerçek kapalı bant, Inside/Center/Outside veya
   açıkta Center/Left/Right; cap/join/miter-limit, arc-length dash ve delikler.
@@ -3939,7 +4089,7 @@ Outline/Boolean/Width/Dynamics işleri Faz 2'de kalır.
 - Tam v2 fit/provenance, ayarlanabilir density ağırlıkları ve ortak preset/
   clipboard kapsamı açık kalır. [Teslim sözleşmesi](spline-outline-band.md).
 
-## 23 Kasım 2026 — canlı Outline ve kaynak çizgi düzenleme
+### 12.102. Canlı Outline ve kaynak çizgi düzenleme — 23 Kasım 2026
 
 - `liveOutline` native Outline ayarını kaynak çizgiye bağlı tutar; point/Bezier
   handle hareketi ve Refine bandı otomatik günceller. Layer ve logical Object
