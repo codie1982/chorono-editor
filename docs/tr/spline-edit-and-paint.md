@@ -53,10 +53,11 @@ kullanır. Kaynak/Geçmiş kapalı gelir; eski dönüşüm/stack kayıtları ora
 `legacySplineTool` descriptor işareti dört eski sınıfı yeni UI instance chooser'ından
 çıkarır; evaluator, kayıt ID'leri ve programmatik uyumluluk davranışı değişmez.
 
-Native Offset varsayılanı Replace'tir. Tam seçili contour'ları değiştirir;
-Object kimliği/adı, seçilmemiş contour'lar/delikler, layer TRS ve paint korunur.
-Keep source Append yapar. Kısmi Edge zinciri sessizce bütün contour'a genişletilmez;
-bu teslimde tam contour seçimi gerekir. Inside/Outside aynı aracın Inset/Outset
+Native Offset varsayılanı Replace'tir. Edge modunda yalnız seçili bağlı kenar
+zincirlerini, Object modunda seçili konturları işler. Kısmi zincirde kaynak
+kenarlar kaldırılır, kalan kenarlar ve hesaplanan paralel kontur aynı Object
+içinde tutulur. Keep source paralel sonucu yeni Object olarak ekler.
+Seçim dışı noktalar, delikler, layer TRS ve paint korunur. Inside/Outside aynı aracın Inset/Outset
 seçenekleridir. Paralel kontur gerçek bant değildir; arayüzde Outline diye sunulmaz.
 
 Headless `offset` operasyonu isteğe bağlı `resultMode: 'append'|'replace'` alır.
@@ -388,3 +389,20 @@ Point/Edge gesture, ghost re-entry, Boolean+Explorer+Undo ve gerçek PNG/SVG
 piksel karşılaştırmalarını içerir. Büyük eski host dosyaları bu değişiklikte
 küçük adapter bağlantıları alır; yeni matematik, paint ve UI sahiplikleri ayrı
 cohesive modüllerde kalır; repository genelinde rewrite yapılmaz.
+
+## Spline çizimi ve bileşen yerleşimi
+
+**Add → Spline → Bézier Pen** ile tıklama Corner noktası, basıp sürükleme
+bağlantılı iki Bézier kolu üretir. Auto Close açıkken başlangıca dönmek konturu
+kapatır. Freehand, tek sürüklemede düzenlenebilir noktalar toplar. Spiral,
+boyutlandırma kutusuna göre açık bir spline üretir. Object modundaki
+**Draw new spline elements** aynı araçları seçili katmana ekler. Her bitmiş
+kontur bir Undo adımıdır.
+
+Spline alt seçimlerinde Align X/Y bileşen merkezlerini hizalar. Distribute X/Y
+en dıştaki iki merkezi sabit tutar. Mesh de aynı hesabı kullanır. Pivot alanları
+toolbox'taki Scene veya Local koordinatlarını gösterir. Seçim ya da oturum
+değişince geçici pivot temizlenir. Vertex Snap seçili bileşenlerin dışındaki
+uygun vertex'leri hedefler. Spline Object veya Edge seçiminde Mirror X/Y
+noktalarla birlikte kolları yansıtır. Duplicate selection aynı katmanda yeni
+kimliklere sahip bileşenler oluşturur.

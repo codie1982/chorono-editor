@@ -115,7 +115,7 @@ kontrolleri sırasında kapalı tutuldu.
 
 ## Sonraki teslim — diğer kontur araçları
 
-Kısmi Edge Offset/Outline bağlantılı seçili zincirle sınırlı olacaktır.
+Kısmi Edge Offset seçili bağlı zincirleri işler. Canlı Outline için kısmi zincir sahipliği ileri fazdadır.
 
 ## Faz 2 — Outline ve gelişmiş transform
 

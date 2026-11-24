@@ -38,8 +38,10 @@ hesabını kopyalamadan ilgili domain yardımcıları ve testleri aranır.
    sözleşmesindedir. Midpoint/Loop ancak ayrıca kararlaştırılan yeni strategy olabilir.
 3. **Edit topolojisi ve render:** Yeni mantıksal quad/triangle yüz görünümü
    renderer triangle buffer'ından ayrıdır. Şu an genel n-gon/half-edge source
-   veri modeli uygulanmış değildir. §2 half-edge/Euler operatörleri, Split/Weld/
-   Collapse/Dissolve öncesindeki sürümlü source-model/remap tesliminin hedefidir.
+   veri modeli uygulanmış değildir. Temel Split Edge, Flip Edge, Delete Face ve
+   Fill mevcut triangle/quad komşuluğunu kullanır. Split iki komşuya aynı vertex
+   kimliğini verir. UV ve konum aynı kenar parametresinde enterpole edilir.
+   §2 half-edge/Euler modeli, genel n-gon, Weld, Collapse ve Dissolve fazında ele alınır.
    Triangle adjacency yerine ikinci bağımsız renderer veya solver kurulmaz.
 4. **UV/attribute:** Mevcut Mesh UV'si vertex başınadır. PDF'nin face-corner UV,
    seam, color, material ve weight modeli yeni payload/adapter gerektirir.

@@ -1111,7 +1111,7 @@ yeni modifier satırı oluşturmaz. Önizleme geçicidir; Cancel, stale worker s
 ve seçim/mod değişimi kaynakta iz bırakmaz. Native araçların uygun seçim
 kuralları panel/menüde paylaşılır. Boş seçim genel işlem izni değildir; Compound
 Path'in belgelenmiş seçim-yoksa-tüm-Objects davranışı ayrı sözleşmedir.
-Offset yalnız tam contour seçimini işler; kısmi edge'i bütün contour'a genişletmez.
+Native Offset tam konturları ve seçili bağlı Edge zincirlerini işler.
 
 **Erişimde açık iş:** Edge araçları bugün **Edit → Edge (2) → Selection actions
 → Topology · edge** altındadır; iki bölüm de kapalı gelir. Add Vertex, Trim,
@@ -1179,8 +1179,8 @@ ortak menü tanımlarıdır. İkinci solver/worker runner kurulmadı. Ayrıntıl
 | Sıra / durum | İş | Bitiş koşulu / sınır |
 | --- | --- | --- |
 | 1 — açık UI kabulü | Edge araçlarının görünürlüğü ve panel/sağ tık eşliği | Trim, Extend, Divide ve Add Vertex kapalı iki bölüm aranmadan bulunabilir; Divide için sağ tık erişimi eklenir. Uygun olmayan seçim nedeni görünür; gerçek bağlı editörde kullanıcı akışı doğrulanır. |
-| 2 — native geometri genişletmesi | Kısmi Edge Offset ve canlı Outline | Yalnız seçili bağlı zincirler işlenir; stable kaynak hedefleri Split/Delete sonrasında doğru eşlenir. Legacy kalıcı bant API'sinin kısmi zincir desteği canlı kaynak desteği olarak sayılmaz. |
-| 3 — ortak Edit transformu genişletmesi | Skew/Shear, Mirror, geçici edit pivot'u ve alt seçim Align/Distribute | Kaynak noktalar/kollar değişir; gerçek layer TRS/origin sabit kalır. Scene/Local referansı, delikler, seçim dışı geometri ve her işlem Undo ile doğrulanır. Genel nesne hizalama araçları bu kabulün yerine geçmez. |
+| 2 — Offset teslim edildi, kısmi canlı Outline açık | Kısmi Edge Offset ve canlı Outline | Yalnız seçili bağlı zincirler işlenir; stable kaynak hedefleri Split/Delete sonrasında doğru eşlenir. Legacy kalıcı bant API'sinin kısmi zincir desteği canlı kaynak desteği olarak sayılmaz. |
+| 3 — temel teslim edildi, Skew/Shear ileri fazda | Mirror, geçici edit pivot'u ve alt seçim Align/Distribute | Kaynak noktalar/kollar değişir; gerçek layer TRS/origin sabit kalır. Scene/Local referansı, delikler, seçim dışı geometri ve her işlem Undo ile doğrulanır. Genel nesne hizalama araçları bu kabulün yerine geçmez. |
 | Faz 2 — kalan Outline v2 | Bézier-fit/provenance, ayarlanabilir density ağırlıkları, stroke/outline preset ve clipboard | Mevcut sabit kalınlıklı adaptif polyline ve bağımsız paint korunarak ayrı kabul edilir. Mesh dönüşümünde Object band paint'inin per-face malzemeye aktarımı mevcut teslim değildir. |
 | Faz 2 — ileri modifier'lar | Variable Width, Boolean Paths modifier, eğrisel Zig Zag, Wiggle Paths ve Path Dynamics | Kaynak/operand sahipliği, deterministik seed/zaman ve bütçe gibi ilgili kontratlar ayrı teslimdir. Native Boolean bu eksik modifier'ın yerine tamamlanmış sayılmaz. |
 | Ertelendi — ilk fazı engellemez | Modifier parametre animasyonu ve canlı Outline animated source | Ayrı zaman/keyframe/cache/runtime kabulü gerekir; mevcut statik stack ve native araçlar bunu beklemez. Trim Paths mevcut Stroke Trim, Path Follow mevcut Motion/Follow Path akışında kalır. |
@@ -1218,6 +1218,13 @@ Kalan Delaunay ve sınır geçiş triangle'ları ayrı yüz olarak kalır. Büt�
 Edit modlarında vertex işaretleri görünür; seçili kenar ve yüzler kırmızıdır.
 Face hareketleri aynı Edit Mesh üzerinde, her hareket ayrı Undo ile birikir;
 gerçek TRS/origin, UV ve oturum ghost'u korunur. Ctrl/Cmd+A aktif bileşenleri seçer.
+
+Temel pakette Face modunda Delete Face, Edge modunda Split Edge, Flip Edge ve
+Fill panel ve sağ tıktan kullanılabilir. Pen, Freehand ve Spiral doğrudan Spline
+oluşturur. Spline ve Mesh alt seçimlerinde Scene/Local hizalama, dağıtma,
+Grid/Vertex Snap ve geçici edit pivot’u vardır. Spline Object/Edge seçimleri
+aynalanabilir ve aynı katmana çoğaltılabilir. Yeni kabul senaryoları
+[MESH-18 ve MESH-19](releases/v0.5.0-manual-acceptance-tests.md#mesh-18--yerel-topoloji-ve-undo) altında yer alır.
 
 Bu temel tam Poly araç takımı değildir. Kullanıcının Vertex/Edge/Face/Object
 araç ve modifier listesi [ayrı teslim planında](plans/mesh2d-edit-modes-plan.md)

@@ -57,7 +57,7 @@ eylemlerini gösterir; Mesh alt seçiminden root Delete/Group'a düşmez.
 | Connect Points | P1: yalnız yüz içinde geçerli yeni kenar ve yüz bölme; bağımsız wire mesh modeli varsayılmaz. |
 | Slide Point | P1: bağlı kenar parametresi, uç/branch ve çökme sınırı. |
 | Smooth Points, Relax Points | P1: açık vertex hedefleri; Smooth ve Relax sayısal anlamları ayrı belirtilir. |
-| Align / Distribute, Snap | P1: Scene/Local, Grid/vertex/edge hedefi ve seçim dışı geometri korunumu. |
+| Align / Distribute, Snap | Mevcut Scene/Local hizalama ve dağıtma, Grid/Vertex Snap ve geçici edit pivot’u. Kenara snap ileri geliştirmedir. |
 | Pin / Unpin | Mesh pin preset'leri mevcut; seçili vertex'lerle Pin/Unpin bağlantısı P1. |
 | Point Lock, Vertex Groups | P1: stable ID kümeleri, topoloji değişiminde açık tanı ve geçerli sahiplik. |
 | Soft Selection | P2: falloff, etki bütçesi ve modelleme/solver ağırlık ayrımı. |
@@ -81,8 +81,9 @@ eylemlerini gösterir; Mesh alt seçiminden root Delete/Group'a düşmez.
 | --- | --- |
 | Move / Rotate / Scale | Mevcut Edit Mesh; seçili kenar uçları tekil vertex kümesine dönüşür. |
 | Create Edge, Delete Edge, Dissolve Edge | P1: bağlı yüzleri silme ile yüzleri birleştirme ayrı komutlardır. |
-| Split Edge, Subdivide Edge, Collapse Edge | P1: komşu yüzlerin birlikte yeniden kurulması, UV interpolasyonu ve ID remap. |
-| Edge Flip | P1: uygun iki triangle arasında geçerli diagonal; quad'ın gizli çizim diyagonalini normal edge diye seçmez. |
+| Split Edge | Mevcut. İki komşu yüz aynı yeni vertex’i paylaşır. Panel yüzde, sağ tık kenar üzerindeki konumu kullanır. |
+| Subdivide Edge, Collapse Edge | Çoklu bölüm ve collapse için ayrı topoloji işlemleri planlıdır. |
+| Flip Edge | Mevcut. İki komşu üçgenin oluşturduğu dışbükey alanda ortak diyagonali değiştirir. |
 | Edge Slide, Edge Length | P1: komşuluk kısıtı, yerel/scene mesafesi ve dejenere yüz reddi. |
 | Connect Edges, Bridge Edges, Edge Stitch | P1: açık boundary eşleşmesi, winding, delik ve manifold doğrulaması. |
 | Edge Extrude 2D | P1: aynı düzlemde yeni yüzey; 3D extrusion açmaz. |
@@ -104,7 +105,8 @@ eylemlerini gösterir; Mesh alt seçiminden root Delete/Group'a düşmez.
 | Araç | Durum / gereken ek sözleşme |
 | --- | --- |
 | Face Transform | Mevcut Edit Mesh; seçili yüz vertex'leri dönüşür, komşu yüzler ortak vertex'i paylaşır. Bağımsız taşımak için ileride Detach/Split gerekir. |
-| Create Face, Delete Face, Fill | P1: açık boundary/ada/delik sahipliği ve yüz tekrarını engelleme. |
+| Delete Face ve Fill | Mevcut. Face modunda seçili yüzler silinir. Edge modunda tek deliğin tam sınırı seçilerek doldurulur. |
+| Create Face | Serbest nokta seçimiyle yüz oluşturma ileri fazdadır. |
 | Split Face, Subdivide Face, Poke Face | P1: yerel yüzün komşularıyla uyumlu yeni connectivity ve UV interpolasyonu. |
 | Inset Face, Extrude Face 2D | P1: gerçek planar yeni sınır/yüz; çökme ve delik kontrolü. |
 | Triangulate, Triangles to Quads, Merge Faces | P1: açık kullanıcı eylemi; geçerli komşuluk ve attribute/seam eşliği gerekir. Delaunay'a otomatik quad dayatılmaz. |
@@ -183,3 +185,35 @@ Tekrar üretme: `scripts/perf/mesh-face-edit.mjs` ve
 `scripts/perf/spline-edit.mjs`; Next hazırlama/build sırasında kapalı tutulur.
 Ölçülmüş 1K/10K/50K performans veya PDF'deki ileri half-edge/UV/physics
 araçlarının tamamlandığı iddia edilmez.
+
+## 9. Temel ve ileri geliştirme paketi
+
+| Faz | Kapsam | Doğrulama |
+| --- | --- | --- |
+| Temel Mesh | Delete Face, Split Edge, Flip Edge, Fill. Her işlem aynı Edit Mesh satırında ayrı Undo adımıdır. | 4×3 Grid, üçgen çifti, iç ada ve birden fazla delik, UV, kaydet/aç ve Execute. |
+| Temel Spline | Bézier Pen, Freehand, Spiral, kısmi Edge Offset, Object/Edge Mirror ve Duplicate. Spline ve Mesh için bileşen hizalama/dağıtma, Grid/Vertex Snap ve geçici pivot. | Pen ile dış sınır ve delik çizme, mesh’e dönüştürme, deliğin kenarını bölme, yeni vertex’i taşıma ve iki ayrı Undo. |
+| İleri | Genel n-gon, Weld/Collapse, Bridge, Loop Cut, Knife, UV seam, bileşen hedefli modifier, B-Spline, Skew/Shear, değişken genişlik, deformasyon ve animasyon. | Her özellik kendi topoloji, remap ve zaman sözleşmesiyle teslim edilir. 3D profil/katı üretimi 3D yol haritasındadır. |
+
+`src/lib/geometry/mesh2d/edit/topologyEdit.ts` girdiyi yerel px cinsinden alır.
+Kaynak değişmeden, doğrulanmış geometri döner. `makeMeshTopologyCmd` sahne,
+layer ID, Edit Mesh ID ve `{kind, ids, topologyHash}` alır. Split ek olarak
+`vertexId` ve 0–1 aralığının içinde bir `t` alır. Komutun `changes` alanı
+eklenen/silinen bileşenleri ve eski kimliklerin hangi yeni bileşenlere
+dönüştüğünü verir. Örneğin bölünen iç kenar iki kenara, komşu iki quad'ın
+her biri bir quad ve bir üçgene eşlenir. Değişmeyen kimlikler kendini temsil eder.
+
+`MeshTransformModifier` her topoloji adımından önce o ana kadarki yerel dönüşümü
+uygular. Sonraki vertex hareketleri yeni topolojiye aittir. Eski kayıtlarda
+`topologySteps` bulunmadığında aynı evaluator doğrudan eski dönüşümü uygular.
+Pin veya deformasyon bağlantısı bulunan mesh'te topoloji işlemi gerekçesiyle
+reddedilir. Boş veya eskimiş seçim sahneyi değiştirmez.
+
+Adımlar ve beklenen sonuçlar [MESH-18 ve MESH-19 kabul senaryolarında](../releases/v0.5.0-manual-acceptance-tests.md#mesh-18--yerel-topoloji-ve-undo) yer alır.
+
+
+24 Kasım otomatik kabulünde 584 dosyada 4.203 test geçti. Bağımsız Chrome
+oturumunda dokulu Grid üzerinde Delete Face ve Fill sonucu hem viewport
+hem PNG örneğinde kontrol edildi. Pen ile çizilen delik, dönüşüm, kenar
+bölme ve yeni vertex hareketinden sonra açık kaldı. Spline Edit (26 grup),
+Offset (6 grup), canlı Outline (10 grup) ve Boolean/Attach tarayıcı
+senaryoları geçti. Kullanıcı sahnesinin manuel kabulü ayrı izlenir.
