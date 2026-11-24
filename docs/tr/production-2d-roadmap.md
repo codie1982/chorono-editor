@@ -80,6 +80,7 @@ commitleri içeren başka bir branch bulunmadı.
 | Sekiz temel statik Spline modifier ve bağımsız panel/stack akışı | `codex/mesh2d-mesh0` | `bcb8312d`–`03f7d940` | Faz 1 tamamlandı; release ataması yapılmadı |
 | Outline bant geometrisi, Stroke to Path ve canlı kaynak düzenleme | `codex/mesh2d-mesh0` | `6e4a94bb`–`30a48e8d` | İlk geometri/canlı kaynak teslimi; tam v2 açık |
 | Mesh Vertex/Edge/Face, mantıksal quad seçimi ve Edit Mesh stack entegrasyonu | `codex/mesh2d-mesh0` | `40f0e55a` | 24 Kasım ek 2D teslimi; 4.188 test ve native UI kabulü, release ataması yapılmadı |
+| Mesh yerel topoloji araçları, ortak Edit transformları ve Spline → Mesh kabulü | `codex/mesh2d-mesh0` | `9066079e`, `bb7ad083`, `a7d38a7b`, `18f8934b` | 24 Kasım. Üretim editöründe MESH-18 ve MESH-19 geçti. Ayrıntılar §9.2'de. |
 
 Spline satırları 24 Kasım durum eşleştirmesidir; sonraki ek geliştirmeyi
 v0.5.0’a atanmış release kapsamı olarak yorumlamaz.
@@ -168,7 +169,7 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı | E−1.5A, kalan E−1 ve araç kabulü | A1–A5, V6/E−1.7; [kabul ve sınırlar](pre3d-acceptance.md). |
 | Tamamlandı | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği; [sözleşme](pre3d-frame-contract.md). |
 | Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
-| Tamamlandı — ilk dikey dilim | Mesh2D ve spline-to-mesh | Kapalı spline/shape veya structured grid'den sabit topoloji, UV, bounds/hit-test, textured/deformable renderer ve portable kayıt tamamlandı. Kullanıcıya açık 2D Poly modelleme nesnesi değildir. |
+| Uygulandı — Mesh2D ve temel Edit araçları | Üretim, dönüşüm, görünüm, deformasyon, yerel topoloji ve modifier stack | Structured Grid ve Shape/Spline dönüşümü, Vertex/Edge/Face, dört topoloji aracı, Smooth ve Delaunay/Grid Subdivision. Üretim editöründe MESH-18/19 geçti. MESH-05–17'nin kabulü açık. [Ayrıntılı Mesh bloğu](#92-mesh2d-veri-modeli-ve-spline-dönüşümü) |
 | Tamamlandı — Spline native temel | Point/Edge/Object Edit, görünüm ve akıllı dönüşüm/Boolean | [Güncel kapsam §9A](#9a-spline-edit-görünüm-ve-modifier-teslimleri): native Apply/Undo, sürekli Add Vertex, Trim/Extend, Simplify/Smooth/Subdivide/Interpolation; fill/stroke Properties'te. Edge erişilebilirlik kabulü açık. |
 | Tamamlandı — Spline modifier Faz 1 | Sekiz temel statik modifier ve genel ordered Execute | Edit modundan bağımsız stack; hedef/ayar, sıra/toggle/remove/Bake ve kaynak koruma. [Teslim](spline-phase1-modifiers.md). Animasyonlu parametreler ertelendi. |
 | Tamamlandı — Outline ilk teslimi | Canlı kaynak çizgisi, gerçek bant ve Stroke to Path | [Kaynak düzenleme](spline-live-outline.md), guide/enable/Bake, bağımsız paint ve delikli bant uygulandı; tam Outline v2 tamamlandı sayılmaz. |
@@ -903,13 +904,12 @@ Otomatik CI'da deterministik sayaç, bütçe/lifecycle ve görsel davranış tes
 
 ### 9.1. Ürün kararı ve mevcut sınır
 
-İki ayrı veri ailesi planlanır: **Mesh2D**, spline/shape/grid kaynağından
-türetilen sabit topolojili çizim ve deformasyon yüzeyi; **Blob Surface 2D**,
-etki noktalarından dinamik dış sınır üreten değişken topolojili implicit
-yüzey. 2D planında kullanıcıya açık vertex/edge/face modelleme ürünü veya
-“Editable Poly 2D” nesnesi geliştirilmez. Poly modelleme [3D ana planının](production-3d-roadmap.md)
-sorumluluğudur. Buradaki isimler önerilen veri modelidir; bugün çağrılabilir
-MCP veya scripting API değildir.
+**Mesh2D** çizim, doku ve deformasyon için kullanılan düzlemsel yüzeydir.
+Kullanıcı Edit modunda Vertex, Edge ve Face seçebilir. Yüz bağlantıları
+modelleme komutuyla değişir, deformasyon oynatımı boyunca sabit kalır.
+Planlanan **Blob Surface 2D** ise her örneklemede etki noktalarından bir dış
+sınır çıkarır ve topolojisi zamanla değişebilir. Hacim ve 3D Poly modelleme
+ayrı ürün kapsamındadır. [3D ana planı](production-3d-roadmap.md)
 
 Mevcut spline sistemi kontur noktası, segment ve Bézier tutamacı düzenler;
 iç yüz komşuluğu, UV ve triangle indeksleri taşımaz. Spline kaynak olarak
@@ -925,54 +925,63 @@ Voronoi kırılma parçası ve sıvı particle'ı farklı varlıklardır.
 
 ### 9.2. Mesh2D veri modeli ve spline dönüşümü
 
-Önerilen `Mesh2DSource`; sabit kimlikli yerel vertex'ler, triangle indeksleri,
-UV, topology sürümü/hash'i, kaynak referansı ve üretim ayarlarını taşır.
-Kumaşın solver rest state'i, yerel z konumu, pin/constraint ve cache verisi
-bu geometri kaydından ayrıdır. Runtime GPU nesneleri, dense frame buffer'ları
-ve solver state'i scene JSON veya undo snapshot'a yazılmaz.
+**24 Kasım 2026 · Uygulanan Mesh2D kapsamı.** `Mesh2DSource` üretim tarifini,
+`Mesh2DGeometry` katmanın yerel piksel konumlarını ve UV'lerini,
+`Mesh2DTopology` ise kararlı vertex kimliklerini, üçgen bağlantılarını, varsa
+dörtgen hücreleri ve topoloji hash'ini taşır. Eski yalnız üçgen içeren dosyalar
+açılırken aynı topolojiyi korur. Editör, eski bir Grid'in dörtgenlerini ancak
+üretim tarifi, kimlikler ve üçgen bağlantıları eşleşirse tanır. [Veri modeli](../../src/lib/types/mesh2d.ts)
 
-Dikdörtgen bayrak/perde için ilk yol **Structured Grid** üretimidir. Kaynak
-quad hücreler kararlı diyagonalle solver/render triangle'larına derlenebilir;
-aynı ayar ve kaynak aynı topolojiyi üretir. Keyfi kapalı spline/shape için
-eğri kaynak birimindeki kayıtlı toleransla düzleştirilir; dış sınır ve delikler
-doğrulanır, sonra boundary triangulation veya gerektiğinde CDT adapter'ına
-verilir. Zoom değişimi geometriyi değiştirmez.
+| Uygulanan alan | Editördeki davranış |
+| --- | --- |
+| Üretim ve dönüşüm | Structured Grid satır ve sütunlardan dörtgen üretir. Kaynağa bağlı Create/Regenerate ayrı Mesh katmanı oluşturur. Sağ tık **Convert → 2D Mesh** ise ilk katmanın kimliğini, parent'ını, transformunu ve origin'ini korur. Özgün geometri stack'te saklanır. |
+| Kapalı Shape ve Spline | Tek şeklin son sınırı kullanılır. Uygun çoklu statik girdiler Boolean Union ile birleşir. İçbükey dış sınırlar, delikler ve ayrık adalar korunur. Eğriler kayıtlı yerel toleransla örneklenir. Earcut dolu bölgeyi üçgenler. Açık çizgide dönüşüm kapalı sınır ister. |
+| Edit seviyeleri ve seçim | **1 Vertex**, **2 Edge**, **3 Face**. Tüm modlarda noktalar görünür. Seçili noktalar ve kenarlar kırmızı, seçili yüz yarı saydam kırmızıdır. Grid hücresi tek dörtgen seçilir. İç çizim diyagonali gizlenir, bağımsız üçgenler seçilebilir. Panel yüz ve seçim sayılarını gösterir. Bölge seçimi, çoklu seçim ve Ctrl/Cmd+A aktif bileşen düzeyinde çalışır. |
+| Bileşen transformları | Move/Rotate/Scale ortak vertex'i bir kez dönüştürür. Scene/Local eksenleriyle hizalama ve dağıtma, Grid/Vertex Snap ve geçici edit pivot'u kullanılabilir. Gerçek layer transformu ve origin sabit kalır. Ghost oturuma giriş geometrisini gösterir. Yeniden girişte güncel geometri başlangıç alınır. |
+| Edit Mesh ve işlem geçmişi | Hareketler ve yerel topoloji işlemleri son etkin Edit Mesh kaydında sırasıyla birikir. Her işlem ayrı Undo/Redo adımıdır. Etkilenen bileşen kimlikleri eşlenir. Eskimiş topoloji seçimi veya bağlı pin/deformasyon klibi topoloji değişikliğini engeller. |
+| Modifier stack | Edit moduna girmeden Mesh modifier eklenebilir. Satırların ayarları, sırası ve etkinliği yönetilir. Execute taslakları kaynaktan başlayıp liste sırasıyla tek sonuç olarak uygular. Hatalı hesap önceki geometriyi korur. Rebuild kaynaktan yeniden hesaplar, Bake sonucu düzenlenebilir geometriye sabitler. |
+| Smooth | Bütün mesh'in komşu vertex'lerini Amount ve Iterations ile yumuşatır. Keep boundary dış sınırı ve delik sınırlarını sabitler. UV ve yüz bağlantıları korunur. |
+| Subdivision | Varsayılan **Delaunay** sınır ve delikleri kısıt olarak tutarak üçgen ağ üretir. **Grid / Karelaj** içeride tam kareler, kesilen sınır hücrelerinde geçiş yüzleri üretir. Levels ve yerel piksel cinsinden Base cell size detay yoğunluğunu belirler. Her iki algoritma da bütün mesh'i işler. |
+| Doku, deformasyon ve kayıt | Doku yerleşimi için fit, offset, scale, rotation, pivot ve flip vardır. Pin önayarları ile topolojiye bağlı deformasyon klibi desteklenir. GPU/Canvas çizimi, bounds ve hit-test hesaplanmış geometriyi kullanır. Düzenlenebilir proje kaynağı ve stack'i saklar. Runtime hesaplanmış geometriyi kullanır. |
 
-Kullanıcı kaynak spline/shape'i mevcut nokta ve Bézier araçlarıyla düzenler;
-mesh çözünürlüğü, grid satır/sütunu, triangulation kalite profili, UV fit ve
-kumaş pin vertex/gruplarını ilgili inspector'da ayarlar. İlk 2D teslimde genel
-Vertex/Edge/Face modelleme, weld, edge extrude, diagonal flip, UV island
-modelleme veya quad remeshing arayüzü yoktur. Pin boyama/seçimi yalnız üretilmiş
-mesh vertex kimliklerine adreslenen kumaş authoring aracıdır.
+**Panel ve sağ tık menüsündeki yerel topoloji araçları**
 
-Kaynak spline/shape ve türetilmiş Mesh2D ayrı tutulur. Kaynak veya üretim
-ayarları değişince topology hash değişir; pin/constraint, mesh deformation
-cache ve bake sonucu `stale` olur. Eski vertex indisleri yeni mesh'e sessizce
-eşlenmez. Yeniden üretme tek undo transaction'ıdır ve kaynak animasyonu bozmaz.
+| Mod ve araç | Uygulama sonucu |
+| --- | --- |
+| Edge · Split Edge | Paneldeki yüzde veya sağ tıklanan konum kenarı böler. Komşu yüzler tek yeni vertex'i paylaşır. Yeni UV aynı oranda hesaplanır. |
+| Edge · Flip Edge | Dışbükey alan oluşturan iki komşu üçgenin ortak kenarını karşı köşelere taşır. Konumlar ve UV'ler sabit kalır. |
+| Face · Delete Face | Seçili yüzleri kaldırır. İç bölgede açıklık oluşur. Tüm yüzler seçildiğinde işlem engellenir. |
+| Edge · Fill | Bir deliğin tam sınırı seçilir. Uygun dört köşeli delik tek dörtgen olur. Karmaşık sınırlar üçgenlenir, iç adalar ve seçilmeyen delikler korunur. |
 
-Üretimde ters/sıfır alanlı triangle, kesişen sınır, üst üste yüz, non-manifold
-kenar, kopuk vertex fanı ve T-junction doğrulanır. Hatalı giriş tanıyla
-reddedilir; hull alarak delik doldurulmaz. Hareketli sabit topolojide foldover
-tanısı ve interpolasyon politikası ayrıca gerekir; yalnız rest mesh'in geçerli
-olması her ara karenin geçerli olduğunu kanıtlamaz.
+**Kabul ve kalan işler**
 
-Dokulu/deforme Mesh2D, triangle/UV buffer adapter'ıyla mevcut Chorono 2D
-compositor'una normal katman yüzeyi olarak bağlanır. İç wireframe ve pin'ler
-yalnız editör overlay'idir; her triangle ayrı katman veya bitmap olmaz.
-Sabit topolojide yoğun deformasyon typed `meshDeformation` clip kullanır.
-WebGL capability yoksa doğrulanmış Canvas triangle veya raster sequence
-fallback sunulur; sessiz düz image düşürme başarılı playback sayılmaz.
+- **Otomatik regresyon.** 24 Kasım koşusunda 584 test dosyasında 4.203 test geçti. Bu sayı tüm depoyu kapsar. Mesh tarayıcı testleri mantıksal yüz seçimini ve düzenleme göstergelerinin final PNG'ye girmediğini doğruladı. Eski Grid hücrelerinin tanınması ayrıca birim testinde denetlendi. [Temel teslimlerin doğrulaması](plans/mesh2d-edit-modes-plan.md)
+- **MESH-18 geçti.** Üretim editöründe dokulu 4×3 Grid üzerinde dört topoloji aracı denendi. Ortak kenar bölününce 20 vertex ve 12 dörtgenden 21 vertex, 12 dörtgen ve 2 üçgene geçildi. İki delikten yalnız seçilen doldu. Her araç için ayrı Undo/Redo, kaydet/aç ve Execute sonrası geometri ve UV eşliği doğrulandı. [MESH-18 kabul kaydı](releases/v0.5.0-manual-acceptance-tests.md#mesh-18--yerel-topoloji-ve-undo)
+- **MESH-19 geçti.** Pen ile çizilen dış kontur ve iç delik Mesh'e dönüştürüldü. Delik kenarını bölüp yeni vertex'i taşırken delik açık, origin ve ghost sabit kaldı. Üç Undo sırasıyla taşıma, bölme ve dönüşümü geri aldı. [MESH-19 kabul kaydı](releases/v0.5.0-manual-acceptance-tests.md#mesh-19--çizilmiş-splinedan-delikli-meshe)
+- **Sıradaki kabul MESH-05.** MESH-05–17 açık. Sıra tekli/çoklu Convert, Edit Mesh, Smooth, Delaunay/Grid, stack işlemleri, hata ve bütçe sınırları, portable/PNG ve üç modda yüz seçimidir. [Test yürütme planı](releases/v0.5.0-manual-test-plan.md)
+- **Sonraki geliştirmeler.** Weld/Connect/Slide, seçili noktalarda Smooth/Relax, ardından Inset/Extrude/Bridge planlanıyor. Loop Cut, Knife, UV seam, yüz bazlı materyal ve zamana bağlı modifier'lar ileri kapsamdadır. [Mod bazında araç listesi](plans/mesh2d-edit-modes-plan.md)
+
+Uygulama ayrıntıları için [dönüşüm ve kaynak sahipliği](geometry-conversion.md),
+[Mesh modifier algoritmaları ve bütçeleri](../../src/lib/geometry/mesh2d/modeling/README.md),
+[görünüm ve deformasyon](mesh2d-appearance-deformation-runtime.md) ve
+[topoloji teknik referansı](mesh2d-topology-reference.md) kullanılır.
+
+Topoloji doğrulayıcı ters veya dejenere üçgenleri ve ikiden fazla yüze bağlı
+kenarları reddeder. Grid üreticisi sınır kesişimlerini ortak kenarın iki
+tarafına da ekleyerek T-junction oluşumunu önler. Animasyon sırasında yüzlerin
+katlanması ayrıca denetlenmelidir. Kumaşın başlangıç geometrisi, kısıtları ve
+yoğun kare verileri için ayrı veri sahipliği öngörülür.
 
 ### 9.3. Native algoritmalar ve kullanım ayrımı
 
 “Native”, araçların Chorono içinde yerel çalışması ve aynı command/undo, job/cancel, kayıt, renderer ve MCP sözleşmesine bağlanmasıdır. Kullanıcı dış modelleme uygulamasına gönderilmez. Bu karar bütün algoritmaların sıfırdan yazılmasını veya native binary zorunluluğunu içermez. Uygun küçük kütüphaneler adapter arkasında kullanılabilir; algoritma/sürüm/ayar ve gerçekleşmiş topoloji saklanır.
 
-| İşlem / bilinen ad | Kullanım | Planlanan kapsam |
+| İşlem / bilinen ad | Kullanım | Kapsam ve durum |
 | --- | --- | --- |
-| **Structured Grid / Quad Grid Generation** | Dikdörtgeni satır/sütun veya hücre boyutuyla bölmek | İlk dilim: düzenli quad ağ ve istenirse kararlı diyagonalle triangle ağ. Tam kare hücreler yalnız uyumlu ölçü/spacing ile oluşur. |
-| **Ear Clipping / Earcut Triangulation** | Kapalı bir sınırı ve deliklerini üçgen yüzlerle doldurmak | İlk polygon dönüşümü adayı; giriş ve çıktı topolojisi denetlenir. İç nokta/constraint içeren genel kalite mesh'i yerine kullanılmaz. |
+| **Structured Grid / Quad Grid Generation** | Dikdörtgeni satır ve sütunlara bölmek | Uygulandı. Her hücrede bir mantıksal dörtgen ve çizim için iki üçgen vardır. Kare hücre için yatay ve dikey aralık eşit olmalıdır. |
+| **Ear Clipping / Earcut Triangulation** | Kapalı bir sınırı ve deliklerini üçgen yüzlerle doldurmak | Shape/Spline → Mesh dönüşümünde uygulanır. Giriş sınırları ve çıktı topolojisi doğrulanır. |
 | **Delaunay Triangulation** | Nokta kümesinden üçgen ağı ve Voronoi dual ilişkisini üretmek | Fracture veya mesh üretim adapter'ında değerlendirilebilir; kaynak silüetini/delikleri kendiliğinden koruduğu varsayılmaz. |
-| **Constrained Delaunay Triangulation — CDT** | Sınır/delik/korunan kenarlar ve iç noktalarla ağ üretmek | İleri native triangulate/remesh: constraint'ler korunur, yalnız domain içi yüzler seçilir; hedef kenar boyu/kalite iyileştirmesi ayrı refinement seçeneğidir. |
+| **Constrained Delaunay Triangulation — CDT** | Sınır, delik ve iç noktalarla ağ üretmek | Subdivision'ın varsayılan algoritmasıdır. Sınır kenarları korunur ve malzeme içindeki yüzler alınır. Grid/Karelaj ayrı bir Subdivision seçeneğidir. |
 | **Voronoi Tessellation** | Tohum noktaları çevresinde kırılma hücreleri üretmek | Kaynak sınırla kesilen değişken kenar sayılı parçalar; quad üretme algoritması değildir. |
 | **Marching Squares** | Scalar alandaki eşik seviyesinden 2D contour çıkarmak | Blob/sıvı dış sınırı; grid hücrelerinin kare olması, çıktının quad mesh olduğu anlamına gelmez. |
 
@@ -981,14 +990,11 @@ Structured Grid'in authoring hücreleri quad olabilir; runtime/render/solver
 kusursuz quad veya karelerle doldurma 2D gereksinimi değildir. Subdivision ve
 smoothing ilk Mesh2D/kumaş tesliminin önkoşulu değildir.
 
-Earcut hızlı boundary triangulation adayıdır; keyfi girişte doğruluk ve
-conforming mesh garantisi varsayılmaz. Alan korunumu tek başına yeterli kabul
-değildir. T-junction onarımı/doğrulama olmadan sonuç cloth mesh'i sayılmaz.
-`d3-delaunay` constrained polygon mesher yerine geçirilmez; CDT backend'i
-ayrıca değerlendirilir. Uygun küçük kütüphaneler adapter arkasında
-kullanılabilir; lisans, paket boyutu, worker/WASM uyumu, bakım, algoritma/sürüm
-ve gerçekleşmiş topology kaydedilir. Bütün geometri algoritmaları yeniden
-yazılmaz.
+Earcut çıktısı alan, sınır ve topoloji kontrollerinden geçer. Mesh
+Subdivision'ın Delaunay seçeneğinde `cdt2d` kısıtlı üçgenlemeyi üstlenir.
+Grid seçeneği kare hücreleri kaynak bölgeyle kesiştirir ve ortak kenarları
+eşleştirir. Kullanılan backend, sınırlar ve UV örnekleme davranışı algoritma
+belgesinde kayıtlıdır. [Mesh modelleme algoritmaları](../../src/lib/geometry/mesh2d/modeling/README.md)
 
 ### 9.4. Blob Surface 2D / Metaballs
 
@@ -1060,6 +1066,7 @@ büyütmek final native geometri çizimi sayılmaz.
 | MESH0 — topoloji ve structured grid | Sabit vertex/triangle/UV modeli, rectangle/grid→kararlı triangle, komşuluk, topology hash, portable kayıt, bounds/hit-test ve typed fixture. |
 | MESH1 — spline-to-mesh | Kapalı spline/shape flattening, sınır/delik doğrulama ve boundary triangulation; kaynak korunur, ayar değişimi bağımlı bake'i stale yapar. |
 | MESH2 — görünüm ve deformasyon | Textured/deformable renderer, GPU/offscreen→2D compositor adapter'ı, pin selection, meshDeformation clip playback ve açık fallback. Genel Poly modelleme UI'si yoktur. |
+| 22–24 Kasım Mesh Edit ve modifier ekleri | Aynı katmanda Convert, Vertex/Edge/Face, dört yerel topoloji aracı, Smooth ve Delaunay/Grid Subdivision uygulandı. [Geliştirme ve kabul durumu](#92-mesh2d-veri-modeli-ve-spline-dönüşümü) |
 | FRACTURE0 — rigid ve tek nesil Voronoi | Sabit adım Matter adapter, doğrulanmış convex sınır, seed'li parçalar, momentum devri, olay/transform bake ve tek undo. |
 | FRACTURE1 — fragment mesh ve kompleks kaynak | Concave/delikli clipping; fragment triangle/UV/topology hash, adjacency, compound collider ve portable generation manifest. |
 | FRACTURE2 — bonded cluster | Auto/manual cluster, ortak sınır bond'ları, dayanım/damage, connected-component split ve kütle/momentum koruyan body rebuild. |
@@ -1070,15 +1077,16 @@ büyütmek final native geometri çizimi sayılmaz.
 | BLOB2 — fluid adapter ve bake | PBF particle clip'inden normalize yüzey; fizik yeniden çalışmadan görünüm değişimi; değişken topology surface/raster/native playback ve final render parity. |
 | Ortak teslim kapısı | Portable round-trip, canonical export/runtime capability, MCP şema/skill güncellemesi, cancel/stale, kaynak bütçesi ve gerçek render QA. Desteklenmeyen export açık tanı/raster fallback verir. |
 
-Güncel 2D sırada Mesh2D ve FRACTURE1–3 tamamlanmıştır. v0.6.0 yalnız masaüstü
+Güncel 2D sırada MESH0–2 temel teslimleri ve FRACTURE1–3 tamamlanmıştır.
+Mesh Edit eklerinin açık kabul ve geliştirme işleri §9.2'de izlenir. v0.6.0 yalnız masaüstü
 editör temeli ile **10 → 11 → 12** çıktı hattını içerir. FRACTURE4/5, kumaş,
 Blob/fluid, emitter/particle, smoke/fire ve Character Motion v0.10.0'a
 taşınmıştır; v0.7.0–v0.9.0 kapsamı ayrıca kararlaştırılır. Blob temel dilimi
 sıvının bitmiş görünümünden önce gelir. PBF'nin ham particle doğruluk prototipi
 Blob araçlarından bağımsız
 çalışabilir.
-Bu bölüm yalnız planlama yapar; algoritma, nesne veya API
-uygulanmış sayılmaz.
+Mesh'in uygulanmış kapsamı ve açık kabul senaryoları §9.2'de tutulur. Blob ve
+ileri simülasyon satırları kendi teslim ve kabul kayıtlarıyla kapanır.
 
 Teknik referanslar: [Earcut ve conforming çıktı sınırı](https://github.com/mapbox/earcut), [Delaunay / constrained triangulation](https://doc.cgal.org/latest/Triangulation_2/index.html), [Voronoi hücreleri](https://d3js.org/d3-delaunay/voronoi), [Marching Squares](https://d3js.org/d3-contour), [MultiPolygon contour çıktısı](https://d3js.org/d3-contour/contour).
 
@@ -1223,8 +1231,8 @@ Temel pakette Face modunda Delete Face, Edge modunda Split Edge, Flip Edge ve
 Fill panel ve sağ tıktan kullanılabilir. Pen, Freehand ve Spiral doğrudan Spline
 oluşturur. Spline ve Mesh alt seçimlerinde Scene/Local hizalama, dağıtma,
 Grid/Vertex Snap ve geçici edit pivot’u vardır. Spline Object/Edge seçimleri
-aynalanabilir ve aynı katmana çoğaltılabilir. Yeni kabul senaryoları
-[MESH-18 ve MESH-19](releases/v0.5.0-manual-acceptance-tests.md#mesh-18--yerel-topoloji-ve-undo) altında yer alır.
+aynalanabilir ve aynı katmana çoğaltılabilir. Mesh topoloji ve Pen → Mesh
+kabulü 24 Kasım'da üretim editöründe geçti. [Güncel Mesh teslimleri ve kabul durumu](#92-mesh2d-veri-modeli-ve-spline-dönüşümü)
 
 Bu temel tam Poly araç takımı değildir. Kullanıcının Vertex/Edge/Face/Object
 araç ve modifier listesi [ayrı teslim planında](plans/mesh2d-edit-modes-plan.md)
