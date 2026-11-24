@@ -62,6 +62,7 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
   const layer = editor.scene.layers.find(item => item.id === selected) ?? null, controller = useSplineEditSelection(layer, editor.getDocumentSignal())
   const tangentClipboard = useSplineTangentClipboard(editor.getDocumentSignal())
   const geometryEdit = useGeometryEditMode(layer, controller, editor.getDocumentSignal())
+  const [meshSelection, setMeshSelection] = useState<import('@/components/canvas/mesh2d/meshEditSelection').MeshSelectionSummary | null>(null)
   const frame = useMemo(() => evaluateSceneFrame(editor.scene, time), [editor.scene, time])
   const [attachWarning, setAttachWarning] = useState('')
   const attachPick = useSplineAttachPicking({ layer, controller, getScene: editor.getScene,
@@ -92,11 +93,13 @@ function Subject({ explorer = false, strictPanel = false }: { explorer?: boolean
       <SceneCanvas scene={editor.scene} editor={editor} assets={new Map()} snap={snap} selectedLayerId={selected} outlinePreview={band.worldResult ?? outline.result} chamferPreview={chamfer.result} filletPreview={fillet.result} splineToolActions={toolActions} splineTangentClipboard={tangentClipboard}
       selectedLayerIds={new Set(selected ? [selected] : [])} onSelectLayer={setSelected} onSelectByGeometry={ids => setSelected(Array.from(ids)[0] ?? null)}
       timeMs={time} overrides={frame.overrides} isPlaying={false} previewMode={false} geometryEditActive={geometryEdit.active} geometryEditMode={geometryEdit.mode} onExitGeometryEdit={geometryEdit.exit} toolMode={tool} transformSpace={tools.transformSpace} panMode={tool === 'pan'} splineEdit={controller}
+      onEnterGeometryEdit={mode => geometryEdit.enter(mode)} onMeshSelectionChange={setMeshSelection}
       splineDrawKind={drawKind} splineAppendTargetId={selected} splineContinuationPointId={endpoint} splineAutoClose={preferences.autoClose}
       onDrawSplineLine={(_, point) => arm('line', point)} onSplineDrawCommit={next => { setDrawKind(null); setEndpoint(null); setTool('select'); if (next) setResult(next) }}
       selectedTimeline={editor.scene.timelines[0]} getShortcutContext={() => 'canvas'} />
       <aside className="w-[360px] shrink-0 overflow-auto">{tool === 'spline-draw' && drawKind === 'line' && <SplineLineDrawingControls autoClose={preferences.autoClose} onAutoClose={preferences.setAutoClose} />}
         <GeometryEditPanel editMode={strictPanel || layer?.type === 'mesh2d' ? geometryEdit : undefined} layer={layer} selectedIds={selected ? [selected] : []} selectedPointId={controller.mode === 'point' ? controller.ids[0] ?? null : null}
+          meshSelection={meshSelection}
           selectedPointIds={controller.mode === 'point' ? controller.bank.point : []} selectedObjectIds={controller.mode === 'object' ? controller.bank.object : []}
           selectedContourIds={controller.mode === 'object' ? Array.from(new Set(controller.bank.object.flatMap(id => layer?.spline?.subShapes[id]?.contourIds ?? []))) : []}
           onSplineSourceBaked={id => controller.focusResult({ layerId: id, mode: 'object' })} getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal} isTransactionActive={editor.isTransactionActive}

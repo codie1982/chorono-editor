@@ -5,6 +5,7 @@ import type { ModifierGeometry, GeometryModifierStackData } from './geometryType
 import { geometryModifierRegistry, type GeometryModifierRegistry } from './builtins'
 import { GeometryStackEvaluator } from './GeometryStackEvaluator'
 import { geometryConversionPaint } from '../paint/geometryConversionPaint'
+import { MeshFaceGeometryConverter } from '../geometry/mesh2d/selection/MeshFaceGeometryConverter'
 
 /** Integration adapter between ordinary Layer fields and canonical stack data.
  * Source remains detached/immutable; transforms, appearance and animation live
@@ -56,7 +57,16 @@ export class ModifierStackService {
    * execute (authoring), Bake never substitutes an editable upstream source. */
   bake(layer: Layer): Layer {
     const stack = this.stackFor(layer)
-    const result = this.withGeometry(layer, stack, this.evaluator.execute(stack, { layerId: layer.id }))
+    let geometry = this.evaluator.execute(stack, { layerId: layer.id })
+    if (geometry.kind === 'mesh2d' && stack.source.kind === 'mesh2d'
+      && geometry.mesh.geometry.topology.topologyHash === stack.source.mesh.geometry.topology.topologyHash) {
+      const cells = new MeshFaceGeometryConverter().convert(geometry.mesh.geometry, stack.source.mesh.source)
+      if (cells !== geometry.mesh.geometry) {
+        if (geometry.mesh.deformation || geometry.mesh.pins?.vertexIds.length) throw new Error('Clear pins and unbind deformation before baking legacy Grid face metadata.')
+        geometry = { kind: 'mesh2d', mesh: { ...geometry.mesh, geometry: cells } }
+      }
+    }
+    const result = this.withGeometry(layer, stack, geometry)
     return { ...result, modifierStack: undefined, geometryConversion: undefined, splinePaintOverrides: undefined }
   }
   /** Materialize an already evaluated result. This is the single Layer adapter

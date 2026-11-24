@@ -109,7 +109,8 @@ import PropertiesPanel from '@/components/PropertiesPanel'
 import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
 import { modifierOutputReadOnly } from '@/lib/modifiers'
 import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
-import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
+import { useGeometryEditMode, type GeometryEditLevel } from '@/components/editorGeometry/useGeometryEditMode'
+import type { MeshSelectionSummary } from '@/components/canvas/mesh2d/meshEditSelection'
 import { useSplineDrawingPreferences } from '@/components/splineEdit/useSplineDrawingPreferences'
 import { splineEditTools } from '@/components/splineEdit/tools/splineEditTools'
 import { SplineEditInspector } from '@/components/splineEdit/SplineEditInspector'
@@ -374,6 +375,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const splineTangentClipboard = useSplineTangentClipboard(editor.getDocumentSignal())
   const splineEdit = useSplineEditSelection(selectedLayerIds.size <= 1 ? selectedLayer : null, editor.getDocumentSignal())
   const geometryEdit = useGeometryEditMode(selectedLayerIds.size === 1 ? selectedLayer : null, splineEdit, editor.getDocumentSignal())
+  const [meshSelection, setMeshSelection] = useState<MeshSelectionSummary | null>(null)
   useEffect(() => {
     if (!pendingSplineResult) return
     if (pendingSplineResult.layerId === selectedLayerId && selectedLayer?.spline) splineEdit.enter(pendingSplineResult.mode, pendingSplineResult.ids)
@@ -626,7 +628,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     openSplineTools()
   }, [isPlaying, manualPreview, detail.session, editor.isTransactionActive, editor.getScene, splineEdit.layerId, splineEdit.enter, selectedLayerIds.size, selectLayer, openSplineTools])
   /** Digits enter one shared Edit level without changing source or restarting a session. */
-  const enterGeometryEditLevel = useCallback((mode: 'point' | 'edge' | 'object') => {
+  const enterGeometryEditLevel = useCallback((mode: GeometryEditLevel) => {
     if (isPlaying || manualPreview || detail.session || editor.isTransactionActive() || selectedLayerIds.size !== 1) return
     const layer = editor.getScene().layers.find(item => item.id === selectedLayerId)
     if (!layer || !['spline', 'mesh2d'].includes(layer.type) || layer.locked || layer.hidden || layer.frozen || layer.instanceOf) return
@@ -1920,6 +1922,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     geometryEditActive={geometryEdit.active}
                     onExitGeometryEdit={geometryEdit.exit}
                     geometryEditMode={geometryEdit.mode}
+                    onEnterGeometryEdit={enterGeometryEditLevel}
+                    onMeshSelectionChange={setMeshSelection}
                     onOpenSplineTools={openSplineTools}
                     booleanPreview={booleanPreview.result}
                     outlinePreview={splineBand.worldResult ?? splineOutline.result}
@@ -2113,6 +2117,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                   isTransactionActive={editor.isTransactionActive} timeMs={currentTimeMs} timelineId={selectedTlId ?? undefined} frame={frame} externalTime={expressionAuthoringClock}>
                 <GeometryEditPanel key={selectedLayerId ?? 'none'} layer={selectedLayer} selectedPointId={splineEdit.mode === 'point' ? splineEdit.ids[0] ?? null : null}
                   editMode={geometryEdit}
+                  meshSelection={meshSelection}
                   onSplineSourceBaked={id => splineEdit.focusResult({ layerId: id, mode: 'object' })}
                   selectedIds={Array.from(isolatedSelectedIds)} conversionDisabled={isPlaying || manualPreview || !!detail.session}
                   splineModeControls={<SplineModeControls controller={splineEdit}

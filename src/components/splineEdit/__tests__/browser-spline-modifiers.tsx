@@ -61,7 +61,7 @@ async function run() {
 
     const meshScene = fixture(); meshScene.layers[1] = { ...newStructuredGridMesh2DLayer(), id: 'spline', parentId: meshScene.layers[0].id }
     flushSync(() => { current().editor.resetScene(meshScene); current().select('spline') }); await frames()
-    assert(!current().geometryEdit.active && !document.querySelector('[aria-label="Mesh selection mode"]') && !document.querySelector('[aria-label="Mesh settings"]'), 'Mesh source tools leaked outside Edit')
+    assert(!current().geometryEdit.active && document.querySelector('[aria-label="Mesh face mode"]') && !document.querySelector('[aria-label="Mesh settings"]'), 'Mesh mode entry/stack or session-only tools are wrong outside Edit')
     await click('Add Mesh modifiers'); await menu('Smooth'); await number('Smooth Amount', .5); await click('Execute stack')
     equal(record('meshSmooth').settings.strength, .5, 'Mesh modifier outside Edit did not Execute')
     await click('Bake stack'); assert(!current().geometryEdit.active && !layer().modifierStack, 'Mesh Bake outside Edit entered source session')

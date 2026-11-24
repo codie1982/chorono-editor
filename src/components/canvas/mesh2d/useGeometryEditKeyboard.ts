@@ -16,6 +16,7 @@ export function useGeometryEditKeyboard(options: {
   canvasRef: RefObject<HTMLCanvasElement>; getContext?: () => ShortcutContext
   selectedVertexIds?: readonly string[]
   clearSelection?: () => void
+  selectAll?: () => void
   modifierId: string | null
   exit?: () => void; warning(message: string): void
 }) {
@@ -26,9 +27,10 @@ export function useGeometryEditKeyboard(options: {
       if (!layer || editor.isTransactionActive() || hasVisibleKeyboardScope() || options.canvasRef.current?.closest('[inert]')
         || target?.closest('input,textarea,select,[contenteditable=true],[data-editor-input-scope]') || options.getContext && options.getContext() !== 'canvas') return
       const navigation = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-      const sourceAction = (event.ctrlKey || event.metaKey) && ['d', 'c', 'v', 'x', 'g'].includes(event.key.toLowerCase())
+      const sourceAction = (event.ctrlKey || event.metaKey) && ['a', 'd', 'c', 'v', 'x', 'g'].includes(event.key.toLowerCase())
       if (!navigation && !sourceAction && !['Escape', 'Delete', 'Backspace'].includes(event.key)) return
       event.preventDefault(); event.stopImmediatePropagation()
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { options.selectAll?.(); return }
       if (event.key === 'Escape') { if (options.selectedVertexIds?.length) options.clearSelection?.(); else options.exit?.(); return }
       if (!navigation || layer.type !== 'mesh2d' || !options.modifierId) { options.warning('Exit Edit mode to use layer commands.'); return }
       if (options.selectedVertexIds && !options.selectedVertexIds.length) return
@@ -45,5 +47,5 @@ export function useGeometryEditKeyboard(options: {
     }
     window.addEventListener('keydown', keydown, true)
     return () => window.removeEventListener('keydown', keydown, true)
-  }, [options.active, options.layer, options.editor, options.timeMs, options.overrides, options.getContext, options.exit, options.modifierId, options.selectedVertexIds, options.clearSelection])
+  }, [options.active, options.layer, options.editor, options.timeMs, options.overrides, options.getContext, options.exit, options.modifierId, options.selectedVertexIds, options.clearSelection, options.selectAll])
 }

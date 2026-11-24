@@ -125,7 +125,7 @@ export default function ModifierStackPanel(props: GeometryEditPanelProps & { lay
     </div>}
     {selected === 'source' && <ModifierSourceSettings source={stack.source} disabled={disabled}
       onExecute={source => run(() => makeSetModifierSourceCmd(props.getScene(), layer.id, source, true), 'Source rebuilt and stack executed.')} />}
-    {modifierOutputReadOnly(layer) && <p className="text-gray-400">Geometry comes from the stack. Disable geometry modifiers or Bake stack to edit points directly.</p>}
+    {layer.type === 'spline' && modifierOutputReadOnly(layer) && <p className="text-gray-400">Geometry comes from the stack. Disable geometry modifiers or Bake stack to edit points directly.</p>}
     {!!layer.modifierStack && <button type="button" disabled={disabled} className="min-h-8 rounded border border-gray-700 px-3 py-1.5 text-gray-300 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-40"
       onClick={() => { if (run(() => makeBakeModifierStackCmd(props.getScene(), layer.id), 'Stack baked to editable geometry.') && layer.type === 'spline') props.onSplineSourceBaked?.(layer.id) }}>Bake stack</button>}
   </section>

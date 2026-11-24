@@ -66,7 +66,7 @@ export const defaultBindings: ShortcutDefinition[] = [
   // Shared component-level Edit entry. Timeline/text/detail contexts keep digits.
   { id: 'canvas.edit.point', label: 'Edit Point mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '1' }, description: 'Enter Point editing for the selected Spline or Mesh' },
   { id: 'canvas.edit.edge', label: 'Edit Edge mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '2' }, description: 'Enter Edge editing for the selected Spline or Mesh' },
-  { id: 'canvas.edit.object', label: 'Edit Object mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '3' }, description: 'Enter Object editing for the selected Spline or Mesh' },
+  { id: 'canvas.edit.object', label: 'Edit Object / Face mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '3' }, description: 'Enter Spline Object or Mesh Face editing; the stable shortcut ID is retained' },
 
   // ── Playback ─────────────────────────────────────────────────────────────
   { id: 'global.playback.toggle',        label: 'Play / Pause',           contexts: ['global'],   binding: { type: 'keyboard', key: ' ' } },

@@ -28,6 +28,7 @@ export async function checkModifierListScroll(): Promise<string> {
   const source = region.querySelector<HTMLButtonElement>(':scope > button')!
   flushSync(() => source.click()); await frames()
   assert(region.scrollTop < 5 && panel.scrollTop === outerScroll, 'Selection reveal scrolled the outer panel or hid Source')
-  assert(document.querySelector('[aria-label="Modifier stack"] > div button')?.textContent === 'Execute stack', 'Execute control disappeared into the list')
+  const execute = Array.from(frame.querySelectorAll('button')).find(button => button.textContent === 'Execute stack')
+  assert(execute && !region.contains(execute), 'Execute control disappeared into the list')
   return 'Modifier stack has a full frame and an independently bounded 20-row scroll region; Source/last-row selection remains reachable without scrolling Execute, pickers or the outer panel.'
 }

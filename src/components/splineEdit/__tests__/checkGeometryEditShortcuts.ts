@@ -42,7 +42,8 @@ export async function checkGeometryEditShortcuts(): Promise<string> {
   pointer(canvas(), 'pointerdown', hit); pointer(window, 'pointerup', hit); await frames(); key('ArrowRight'); await frames()
   assert(layer().modifierStack!.modifiers.filter(record => record.type === 'meshTransform').length === 1, 'Mesh Edge made another Edit Mesh')
   assert(document.querySelector('[data-edit-ghost]')?.getAttribute('d') === ghost, 'Changing selection levels reset the initial ghost')
-  key('3'); await frames(); assert(current().geometryEdit.mode === 'object', '3 did not enter Mesh Object')
+  key('3'); await frames(); assert(current().geometryEdit.mode === 'face', '3 did not enter Mesh Face')
+  assert(document.querySelector('[data-mesh-vertices]'), 'Mesh vertices are hidden in Face mode')
   key('Escape'); await frames()
   if (current().geometryEdit.active) { key('Escape'); await frames() }
   assert(!current().geometryEdit.active, 'Escape did not leave Mesh Edit')
@@ -52,5 +53,5 @@ export async function checkGeometryEditShortcuts(): Promise<string> {
   flushSync(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))); await frames()
   assert(current().geometryEdit.mode === 'point', 'Digit in a text input changed Edit mode'); input.remove()
   await reset()
-  return '1/2/3 enter Spline and Mesh Point/Edge/Object via the registry; real Mesh vertices/edges select and transform in one Edit Mesh, fixed TRS/initial ghost and one Undo per movement. Re-entry refreshes the ghost; numeric inputs keep their keys.'
+  return '1/2/3 enter Spline Point/Edge/Object and Mesh Vertex/Edge/Face; Mesh vertices/edges transform in one Edit Mesh, fixed TRS/ghost and separate Undo. Re-entry refreshes ghost; numeric inputs retain keys.'
 }

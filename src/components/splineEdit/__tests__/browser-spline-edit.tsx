@@ -23,6 +23,7 @@ import { Subject, current, frames, layer, canvas, world, client, pointer, tap, d
 import { checkSplineEditAxes } from './checkSplineEditAxes'
 import { checkGeometryEditShortcuts } from './checkGeometryEditShortcuts'
 import { checkModifierListScroll } from './checkModifierListScroll'
+import { checkMeshFaceEditing } from './checkMeshFaceEditing'
 async function run() {
   const status = document.getElementById('status')!, report = document.getElementById('report')!, checks: string[] = []
   status.textContent = 'Running'; const runButton = document.getElementById('run') as HTMLButtonElement; runButton.disabled = true
@@ -43,7 +44,7 @@ async function run() {
     assert(document.querySelector('[data-panel="spline-point"]'), 'Point Properties missing')
     await tap(q, { shiftKey: true }); assert(current().controller.ids.length === 2, 'Shift multi-point selection failed')
     await tap(q, { ctrlKey: true }); equal(current().controller.ids, [p.id], 'Ctrl did not toggle')
-    await contextAt(p); assert(document.querySelector('[role="menu"]')?.textContent?.includes('Bezier Corner'), 'Point context menu missing point actions'); key('Escape'); await frames(); assert(current().controller.active, 'Menu Escape closed edit context')
+    await contextAt(p); assert(document.querySelector('[role="menu"]')?.textContent?.includes('Bézier Corner'), 'Point context menu missing point actions'); key('Escape'); await frames(); assert(current().controller.active, 'Menu Escape closed edit context')
     equal(current().editor.getScene(), initial, 'Point picking modified source'); assert(!current().editor.canUndo, 'Selection wrote history')
     checks.push('Point picks and Shift/Ctrl toggles preserve exact source and create no history')
     await click('Spline edge mode'); await tap({ x: -110, y: -40 })
@@ -228,10 +229,12 @@ async function run() {
     checks.push('Auto Close joins its own start without duplicate anchors; Fill/Stroke None are independent, undoable and renderable')
 
     const beforeAbort = structuredClone(current().editor.getScene())
+    key('3'); await frames() // Drawing new elements is an Object-level tool.
     await choose('Add spline object', 'ellipse'); pointer(canvas(), 'pointerdown', client(world({ x: -60, y: 120 }))); await frames()
     pointer(window, 'pointermove', client(world({ x: -10, y: 145 }))); await frames()
     pointer(window, 'pointercancel', client(world({ x: -10, y: 145 }))); await frames(); key('Escape'); await frames()
     equal(current().editor.getScene(), beforeAbort, 'Cancelled box committed source')
+    key('3'); await frames() // Escape may have exited the empty component selection.
     await choose('Add spline object', 'rectangle'); pointer(canvas(), 'pointerdown', client(world({ x: -50, y: 130 }))); await frames()
     flushSync(() => { const old = layer(); current().editor.dispatchCommand(makeUpdateLayerCmd(old.id, { name: 'Human rename during draw' }, old)) }); await frames()
     pointer(window, 'pointerup', client(world({ x: 0, y: 150 }))); await frames()
@@ -239,7 +242,7 @@ async function run() {
     assert(!current().editor.isTransactionActive(), 'Drawing left a transaction active')
     checks.push('Native box cancellation leaves no source; revision change rejects stale release and preserves the human edit')
     await reset(); await click('Spline object mode'); await click('Select spline object Donut B')
-    checks.push(await checkGeometryEditShortcuts()); checks.push(await checkSplineEditAxes()); checks.push(await checkModifierListScroll())
+    checks.push(await checkGeometryEditShortcuts()); checks.push(await checkMeshFaceEditing()); checks.push(await checkSplineEditAxes()); checks.push(await checkModifierListScroll())
     await click('Spline point mode'); await tap(Object.values(layer().spline!.points)[0])
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }

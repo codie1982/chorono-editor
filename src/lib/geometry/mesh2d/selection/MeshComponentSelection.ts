@@ -1,12 +1,14 @@
-import type { Mesh2DGeometry } from '../../../types/mesh2d'
+import type { Mesh2DGeometry, Mesh2DSource } from '../../../types/mesh2d'
 import { Matrix2D } from '../../Matrix2D'
 import { Mesh2DAdjacencyBuilder } from '../Mesh2DAdjacencyBuilder'
 import { distToSegmentSq } from '../../segmentDistance'
 import type { SelectionRegion } from '../../../selection/selectionGesture'
 import { regionContains, regionPolygon } from '../../../selection/regionGeometry'
 import { segmentsIntersect } from '../../../selection/canvasShapes'
+import { MeshFaceTopology, meshEdgeKey, type MeshEditFace } from './MeshFaceTopology'
+import { meshFaceContains, meshFaceInRegion } from './faceRegion'
 type Point = { x: number; y: number }
-export type MeshComponentMode = 'point' | 'edge'
+export type MeshComponentMode = 'point' | 'edge' | 'face'
 
 /** Immutable evaluated selection view for one validated fixed-topology mesh.
  * Connectivity uses the canonical adjacency builder; coordinates are world
@@ -15,14 +17,20 @@ export type MeshComponentMode = 'point' | 'edge'
 export class MeshComponentSelection {
   readonly points: readonly (Point & { id: string })[]
   readonly edges: readonly { id: string; a: number; b: number }[]
-  constructor(private readonly geometry: Mesh2DGeometry, matrix: Matrix2D) {
+  readonly faces: readonly MeshEditFace[]
+  constructor(private readonly geometry: Mesh2DGeometry, matrix: Matrix2D, legacySource?: Mesh2DSource) {
     this.points = geometry.topology.vertexIds.map((id, i) => ({ id,
       ...matrix.applyToPoint({ x: geometry.positions[i * 2], y: geometry.positions[i * 2 + 1] }) }))
-    this.edges = new Mesh2DAdjacencyBuilder().build(geometry.topology).edges.map(edge => ({
+    const topology = new MeshFaceTopology(geometry, legacySource)
+    this.faces = topology.faces
+    this.edges = new Mesh2DAdjacencyBuilder().build(geometry.topology).edges.filter(edge => !topology.hiddenDiagonals.has(meshEdgeKey(...edge.vertices))).map(edge => ({
       id: JSON.stringify(edge.vertices.map(i => this.points[i].id)), a: edge.vertices[0], b: edge.vertices[1] }))
   }
-  /** Nearest component within world tolerance; deterministic last-item ties. */
+  /** Nearest point/edge within world-pixel tolerance (last-item ties). Faces
+   * use exact containment with first-face boundary ties, never radius expansion
+   * into a hole or outside the material. Source records are not changed. */
   pick(mode: MeshComponentMode, point: Point, radius: number): string | null {
+    if (mode === 'face') return this.faces.find(face => meshFaceContains(face.vertices.map(i => this.points[i]), point))?.id ?? null
     let found: string | null = null, distance = radius * radius
     if (mode === 'point') for (const candidate of this.points) {
       const d = (candidate.x - point.x) ** 2 + (candidate.y - point.y) ** 2
@@ -39,7 +47,8 @@ export class MeshComponentSelection {
   vertices(mode: MeshComponentMode, ids: readonly string[]): string[] {
     const selected = new Set(ids)
     if (mode === 'point') return this.points.filter(point => selected.has(point.id)).map(point => point.id)
-    const indices = new Set(this.edges.filter(edge => selected.has(edge.id)).flatMap(edge => [edge.a, edge.b]))
+    const indices = new Set(mode === 'face' ? this.faces.filter(face => selected.has(face.id)).flatMap(face => face.vertices)
+      : this.edges.filter(edge => selected.has(edge.id)).flatMap(edge => [edge.a, edge.b]))
     return this.points.filter((_, index) => indices.has(index)).map(point => point.id)
   }
   /** Bounds center in source-local pixels, used by native Rotate/Scale sessions. */
@@ -51,9 +60,11 @@ export class MeshComponentSelection {
       { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity })
     return { x: (bounds.x0 + bounds.x1) / 2, y: (bounds.y0 + bounds.y1) / 2 }
   }
-  /** Exact point/straight-edge region membership; Inside requires both ends,
-   * Touching includes crossings. Circle and paint use the shared distance. */
+  /** Exact point/straight-edge/face region membership. Face crossing includes
+   * regions entirely inside its polygon. Inside also checks concave lasso edge
+   * intervals; shared distance predicates serve circle and paint brushes. */
   query(mode: MeshComponentMode, region: SelectionRegion, containment: 'inside' | 'touching'): Set<string> {
+    if (mode === 'face') return new Set(this.faces.filter(face => meshFaceInRegion(face.vertices.map(i => this.points[i]), region, containment)).map(face => face.id))
     if (mode === 'point') return new Set(this.points.filter(point => regionContains(region, point)).map(point => point.id))
     const polygon = regionPolygon(region)
     return new Set(this.edges.filter(edge => {

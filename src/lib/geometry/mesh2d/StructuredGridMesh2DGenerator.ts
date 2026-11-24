@@ -53,7 +53,9 @@ export class StructuredGridMesh2DGenerator {
       }
     }
 
-    const triangleIndices: number[] = []
+    // Optional v1 cell metadata keeps renderer connectivity while exposing one
+    // editable four-sided face. Previously saved triangle-only files stay valid.
+    const triangleIndices: number[] = [], quadIndices: number[] = []
     for (let row = 0; row < options.rows; row++) {
       for (let column = 0; column < options.columns; column++) {
         const topLeft = row * vertexColumns + column
@@ -62,8 +64,10 @@ export class StructuredGridMesh2DGenerator {
         const bottomRight = bottomLeft + 1
         if (diagonal === 'topLeftToBottomRight') {
           triangleIndices.push(topLeft, topRight, bottomRight, topLeft, bottomRight, bottomLeft)
+          quadIndices.push(topLeft, topRight, bottomRight, bottomLeft)
         } else {
           triangleIndices.push(topLeft, topRight, bottomLeft, topRight, bottomRight, bottomLeft)
+          quadIndices.push(topRight, bottomRight, bottomLeft, topLeft)
         }
       }
     }
@@ -72,6 +76,7 @@ export class StructuredGridMesh2DGenerator {
       schemaVersion: 1,
       vertexIds,
       triangleIndices,
+      quadIndices,
     }
     const topology: Mesh2DTopology = {
       ...topologyWithoutHash,

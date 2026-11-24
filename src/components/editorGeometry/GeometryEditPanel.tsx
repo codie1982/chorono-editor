@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import Mesh2DSourcePanel, { type Mesh2DSettingsSection } from '@/components/PropertiesPanel/Mesh2DSourcePanel'
 import SchemaPanel from '@/components/PropertiesPanel/SchemaPanel'
 import type { SplineModelingPanelProps } from '@/components/panels/SplineModelingPanel'
@@ -9,6 +9,8 @@ import type { Layer } from '@/lib/types'
 import { SplineSourceHistory } from './SplineSourceHistory'
 import ModifierStackPanel from './ModifierStackPanel'
 import type { GeometryEditMode } from './useGeometryEditMode'
+import { MeshFaceTopology } from '@/lib/geometry/mesh2d/selection/MeshFaceTopology'
+import { MESH_EDIT_LEVELS, meshFaceSourceHint, type MeshSelectionSummary } from '../canvas/mesh2d/meshEditSelection'
 
 export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, 'operation'> {
   readonly selectedPointIds?: readonly string[]
@@ -25,6 +27,7 @@ export interface GeometryEditPanelProps extends Omit<SplineModelingPanelProps, '
   readonly splineToolPreview?: ReactNode
   /** Host-owned transient source-edit session; modifiers remain available outside it. */
   readonly editMode?: GeometryEditMode
+  readonly meshSelection?: MeshSelectionSummary | null
   /** Restore sub-object focus after Bake within an already active Edit session. */
   readonly onSplineSourceBaked?: (layerId: string) => void
 }
@@ -76,14 +79,24 @@ function MeshSettings({ layer, ...props }: GeometryEditPanelProps & { layer: Lay
   const [selected, setSelected] = useState<Mesh2DSettingsSection>('source')
   const editing = !props.editMode || props.editMode.active
   const scene = props.getScene()
+  const mesh = layer.mesh2d!, hint = meshFaceSourceHint(layer)
+  const faces = useMemo(() => new MeshFaceTopology(mesh.geometry, hint).faces, [mesh.geometry.topology, hint])
+  const quads = faces.filter(face => face.kind === 'quad').length
+  const selection = props.meshSelection?.layerId === layer.id ? props.meshSelection : null
+  const disabled = !!(props.conversionDisabled || layer.locked || layer.hidden || layer.frozen || layer.instanceOf)
   return <section aria-label="Mesh editing" className="space-y-3">
-    {editing && props.editMode && <div role="group" aria-label="Mesh selection mode" className="grid grid-cols-3 gap-1.5">
-      {(['point', 'edge', 'object'] as const).map((mode, index) => <button type="button" key={mode}
-        aria-label={`Mesh ${mode} mode`} aria-pressed={props.editMode!.active && props.editMode!.mode === mode} aria-keyshortcuts={String(index + 1)}
-        onClick={() => props.editMode!.enter(mode)} className={`min-h-9 rounded border px-2 py-1.5 focus-visible:outline focus-visible:outline-orange-300 ${props.editMode!.mode === mode ? 'border-orange-400 bg-orange-500/20 text-orange-100' : 'border-gray-600 bg-gray-800'}`}>
-        {mode[0].toUpperCase() + mode.slice(1)} <kbd className="ml-1 text-xs opacity-60">{index + 1}</kbd>
+    {props.editMode && <div role="group" aria-label="Mesh selection mode" className="grid grid-cols-3 gap-1.5">
+      {MESH_EDIT_LEVELS.map(({ mode, label, key }) => <button type="button" key={mode} disabled={disabled}
+        aria-label={`Mesh ${mode} mode`} aria-pressed={editing && props.editMode!.mode === mode} aria-keyshortcuts={key}
+        onClick={() => props.editMode!.enter(mode)} className={`min-h-11 rounded border px-2 py-1.5 focus-visible:outline focus-visible:outline-orange-300 disabled:opacity-40 ${editing && props.editMode!.mode === mode ? 'border-orange-400 bg-orange-500/20 text-orange-100' : 'border-gray-600 bg-gray-800'}`}>
+        {label} <kbd className="ml-1 text-xs opacity-60">{key}</kbd>
       </button>)}
     </div>}
+    <div className="space-y-1 border-b border-gray-700 pb-3 text-gray-300" role="status" aria-label="Mesh component summary">
+      <p>{mesh.geometry.positions.length / 2} vertices · {faces.length} faces ({quads} quads · {faces.length - quads} triangles)</p>
+      <p>{editing ? `${props.editMode?.mode === 'point' ? 'Vertices' : props.editMode?.mode === 'edge' ? 'Edges' : 'Faces'} selected: ${selection?.selected ?? 0} · Move / Rotate / Scale · Ctrl/Cmd+A selects all` : 'Choose Vertex, Edge or Face to edit geometry. Modifiers are available below.'}</p>
+      <p className="text-gray-400">Component transforms accumulate in Edit Mesh. Smooth and Subdivision process the whole mesh.</p>
+    </div>
     <ModifierStackPanel {...props} layer={layer} />
     {editing && <>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mesh settings">

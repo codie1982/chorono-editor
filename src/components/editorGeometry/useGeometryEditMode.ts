@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import type { SplineEditController } from '@/components/splineEdit/useSplineEditSelection'
 
-export type GeometryEditLevel = 'point' | 'edge' | 'object'
+export type GeometryEditLevel = 'point' | 'edge' | 'object' | 'face'
 
 export interface GeometryEditMode {
   readonly active: boolean
@@ -14,7 +14,7 @@ export interface GeometryEditMode {
 
 /** Owns transient source-edit focus for a single layer/document. Modifier UI is
  * independent of this session. Editable splines
- * reuse their existing sub-object controller; meshes own Point/Edge/Object
+ * reuse their existing sub-object controller; meshes own Vertex/Edge/Face
  * component sessions and generated splines retain their settings admission. Changing selection, kind or document invalidates the
  * session synchronously. No geometry, history or persisted state is changed. */
 export function useGeometryEditMode(layer: Layer | null, spline: SplineEditController, document: AbortSignal): GeometryEditMode {
@@ -41,10 +41,13 @@ export function useGeometryEditMode(layer: Layer | null, spline: SplineEditContr
   }, [subObjects, spline.active, spline.mode, layer?.id, layer?.type, document, sameSession, spline.enter])
   const active = !!supported && (subObjects ? spline.active || returningToSource : sameSession)
   return { active, mode: returningToSource ? 'object' : subObjects ? spline.mode : session?.mode ?? 'object',
+    // Keep the shared digit-3/older caller intent compatible: Spline Object,
+    // Mesh Face. Mesh whole-object placement remains outside source Edit.
     enter(mode = 'object') {
       if (!supported || !layer || layer.locked || layer.hidden || layer.frozen || layer.instanceOf) return false
-      setSession({ layer: layer.id, kind: layer.type, document, mode })
-      if (subObjects) spline.enter(mode)
+      const level = layer.type === 'mesh2d' && mode === 'object' ? 'face' : layer.type === 'spline' && mode === 'face' ? 'object' : mode
+      setSession({ layer: layer.id, kind: layer.type, document, mode: level })
+      if (subObjects && level !== 'face') spline.enter(level)
       return true
     },
     exit() { spline.exit(); setSession(null) },
