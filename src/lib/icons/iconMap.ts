@@ -232,6 +232,9 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
   {
     title: 'Spline Objects',
     items: [
+      { label: 'Bézier Pen', type: 'splinePen', icon:'bezierPath', available:true },
+      { label: 'Freehand', type: 'splineFreehand', icon:'freehandPath', available:true },
+      { label: 'Spiral', type: 'splineSpiral', icon:'spiral', available:true },
       { label: 'Circle',    type: 'splineCircle',    icon: 'circle',    available: true  },
       { label: 'Line',      type: 'splineLine',      icon: 'line',      available: true  },
       { label: 'Rectangle', type: 'splineRect',      icon: 'rectangle', available: true  },

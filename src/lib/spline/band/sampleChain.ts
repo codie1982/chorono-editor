@@ -6,10 +6,16 @@ import type { BandChain, SplineBandSettings } from './types'
 /** Isolated arc lookup over precisely the selected directed edges. This
  * ephemeral contour view borrows source records, never writes persistent IDs. */
 export function chainSampler(data: SplinePathData, chain: BandChain, settings: SplineBandSettings, budget: SplineSamplingBudget) {
+  const view = chainContourView(data, chain)
+  return new SplineArcSampler(view, chain.contourId, settings.tolerancePx, budget)
+}
+
+/** Read-only single-contour view of the selected directed run for sampling
+ * and Offset. Retains the original controls and segment order across seams. */
+export function chainContourView(data: SplinePathData, chain: BandChain): SplinePathData {
   const pointIds = chain.edgeIds.map(id => data.segments[id].fromPointId)
   if (!chain.closed) pointIds.push(data.segments[chain.edgeIds.at(-1)!].toPointId)
-  const view = { ...data, contours: { ...data.contours, [chain.contourId]: { id: chain.contourId, closed: chain.closed, pointIds, segmentIds: chain.edgeIds } } }
-  return new SplineArcSampler(view, chain.contourId, settings.tolerancePx, budget)
+  return { ...data, contours: { ...data.contours, [chain.contourId]: { id: chain.contourId, closed: chain.closed, pointIds, segmentIds: chain.edgeIds } } }
 }
 
 /** Exact source-curve positions at arc-distance dash cuts and pinned anchors.

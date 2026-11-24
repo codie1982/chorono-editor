@@ -1,3 +1,5 @@
+import type {BandChain} from '../band/types'
+import {deleteSplineEdges} from '../topology/edges'
 import type { SplinePathData } from '../../types/spline'
 import { appendSplineObjects } from '../creation'
 import { removeSplineContours } from '../topology'
@@ -24,4 +26,36 @@ export function replaceOffsetContours(source: SplinePathData, incoming: SplinePa
     ids.push(object.id)
   })
   return { data: { ...result.data, subShapes }, objectIds: ids }
+}
+
+/** Replace only selected edge runs. Retain the owning Object, its paint and
+ * sibling contours. Unselected runs keep their original Bézier records. */
+export function replaceOffsetChains(
+  source: SplinePathData,
+  incoming: SplinePathData,
+  chains: readonly BandChain[],
+  both: boolean,
+) {
+  const base = deleteSplineEdges(
+    source,
+    chains.flatMap((chain) => chain.edgeIds),
+  )
+  const result = appendSplineObjects(base, incoming),
+    count = both ? 2 : 1
+  if (result.objectIds.length !== chains.length * count)
+    throw new Error('Offset result does not match the selected edge chains.')
+  const subShapes = { ...result.data.subShapes }
+  chains.forEach((chain, i) => {
+    const owner = subShapes[chain.objectId] ?? { ...source.subShapes[chain.objectId], contourIds: [] }
+    const generated = result.objectIds.slice(i * count, (i + 1) * count)
+    const contourIds = generated.flatMap((id) => subShapes[id].contourIds)
+    for (const id of generated) delete subShapes[id]
+    subShapes[chain.objectId] = {
+      ...owner,
+      source: 'edited',
+      editable: true,
+      contourIds: [...owner.contourIds, ...contourIds],
+    }
+  })
+  return { data: { ...result.data, subShapes }, objectIds: Array.from(new Set(chains.map((c) => c.objectId))) }
 }

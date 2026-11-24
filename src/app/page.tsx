@@ -94,7 +94,7 @@ import type { SplinePrimitiveKind } from '@/lib/types/spline'
 const SPLINE_MENU_TO_KIND: Record<string, SplinePrimitiveKind> = {
   splineCircle: 'circle', splineLine: 'line', splineRect: 'rectangle',
   splineEllipse: 'ellipse', splineArc: 'arc', splineDonut: 'donut',
-  splineNGon: 'ngon', splineStar: 'star',
+  splineNGon: 'ngon', splineStar: 'star', splinePen:'custom', splineFreehand:'freehand', splineSpiral:'spiral',
 }
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
 import LayerPanel      from '@/components/LayerPanel'

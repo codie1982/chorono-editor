@@ -20,7 +20,7 @@ export function useSplineOutline(options: Options) {
     try {
       const layer = scene.layers.find(item => item.id === layerId)
       if (!controller.active || !layer?.spline) throw new Error('Choose Edge or Object edit mode.')
-      return { selection: outlineSelection(layer.spline, controller.mode, JSON.parse(idsKey), true) }
+      return { selection: outlineSelection(layer.spline, controller.mode, JSON.parse(idsKey), true, true) }
     } catch (error) { return { reason: error instanceof Error ? error.message : String(error) } }
   }, [scene, layerId, controller.active, controller.mode, idsKey])
   const [keepSource, setKeepSource] = useState(false)
@@ -29,7 +29,7 @@ export function useSplineOutline(options: Options) {
   const execute = useMemo(() => adapter.execute.bind(adapter), [adapter])
   const previewSettings = useMemo(() => ({ settings, keepSource }), [settings, keepSource])
   const preview = useSplineOperationPreview({ ...options, settings: previewSettings, eligible: !!target.selection, focusMode: 'object', execute,
-    prepare: () => prepareSplineOutline(scene, layerId!, controller.mode, JSON.parse(idsKey), settings, timeMs, overrides, { resultMode: keepSource ? 'append' : 'replace', requireCompleteContours: true }) })
+    prepare: () => prepareSplineOutline(scene, layerId!, controller.mode, JSON.parse(idsKey), settings, timeMs, overrides, { resultMode: keepSource ? 'append' : 'replace', requireCompleteContours: true, allowChains:true }) })
   /** Direction depends on contour kind; settings survive Cancel. */
   const open = () => {
     if (options.disabled || !target.selection) return

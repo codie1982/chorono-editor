@@ -61,3 +61,28 @@ describe('native Offset replacement admission', () => {
     expect(next.layers[0].modifierStack?.modifiers.map(record => record.type)).toEqual(['convertSpline'])
   })
 })
+
+it('offsets only the picked Bézier edge and preserves neighboring curves and object ownership', () => {
+  const base = fixture(),
+    data = base.layer.spline!,
+    c = data.contours[data.subShapes[base.id].contourIds[1]]
+  const plan = prepareSplineOutline(
+    base.scene,
+    base.layer.id,
+    'edge',
+    [c.segmentIds[0]],
+    { ...settings, side: 'left' },
+    0,
+    undefined,
+    { resultMode: 'replace', allowChains: true },
+  )
+  expect(plan.closed).toBe(false)
+  expect(plan.request.inputs[0].path.commands.filter((command) => command.type === 'C')).toHaveLength(1)
+  const result = plan.command(new PlanarOutlineBackend().compute(plan.request))
+  const next = result.command.execute(base.scene).layers[0].spline!
+  expect(result.ids).toEqual([base.id])
+  expect(next.segments[c.segmentIds[0]]).toBeUndefined()
+  for (const id of c.segmentIds.slice(1)) expect(next.segments[id]).toEqual(data.segments[id])
+  expect(next.subShapes[base.otherId]).toEqual(data.subShapes[base.otherId])
+  assertSplineTopology(next)
+})

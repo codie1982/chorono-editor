@@ -14,6 +14,7 @@ import {
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { splineDrawingCommand, type SplineDrawResult } from '@/components/splineEdit/drawing/drawingCommand'
 import { useSplineBoxDrawing } from '@/components/splineEdit/drawing/useSplineBoxDrawing'
+import { useSplineStrokeDrawing } from '@/components/splineEdit/drawing/useSplineStrokeDrawing'
 import { SplineLineDraft } from '@/components/splineEdit/drawing/SplineLineDraft'
 import type { PointerGestureSample } from '../interactions/PointerGestureSession'
 import { pathToSvgString } from '@/lib/geometry'
@@ -141,7 +142,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     const data = createSplinePrimitive({ kind, params })
     if (!data) { onSplineDrawCommitRef.current?.(); return }
     const label = kind.charAt(0).toUpperCase() + kind.slice(1)
-    commitDrawnData(data, centerX, centerY, kind === 'arc' || kind === 'line', `${label} Spline`)
+    commitDrawnData(data, centerX, centerY, kind === 'arc' || kind === 'line' || kind === 'spiral', `${label} Spline`)
   }, [commitDrawnData])
 
   const handleSplineBoxMove = useCallback((e: PointerGestureSample) => {
@@ -156,7 +157,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     if (!gen) return
     const placed = translateSplineData(gen, spec.centerX, spec.centerY)
     const d = pathToSvgString(splineToPathDefinition(placed))
-    setSplinePreview({ d, fill: kind !== 'arc' })
+    setSplinePreview({ d, fill: kind !== 'arc' && kind !== 'spiral' })
     setDragHud({
       x: e.clientX, y: e.clientY,
       label: `${Math.round(Math.abs(p.x - box.startX))} × ${Math.round(Math.abs(p.y - box.startY))}`,
@@ -197,7 +198,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     if (!event) { setSnappedPoint(null); return }
     if (splineLineRef.current || toolMode !== 'spline-draw') return
     const point = clientToComp(event)
-    if (point) acquirePoint(point)
+    if (point) { const snapped=acquirePoint(point); strokesRef.current.hover(snapped.point) }
   }, [toolMode, clientToComp, acquirePoint])
 
   const handleSplineLineMove = useCallback((e: PointerEvent) => {
@@ -236,6 +237,11 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     commitDrawnData(spline, cx, cy, !closed, 'Line Spline', line.endpointId, closed, joinEndpointId)
   }, [handleSplineLineMove, commitDrawnData, setDragHud])
 
+  const strokes = useSplineStrokeDrawing({enabled:toolMode==='spline-draw',element:()=>canvasRef.current,point:clientToComp,
+    zoom:()=>canvasRef.current!.getBoundingClientRect().width/compositionRef.current!.width,autoClose:()=>frameRef.current.autoClose,
+    preview:setSplinePreview,commit:commitDrawnData,warning:message=>warningRef.current?.(message),cancelSession:()=>{sessionRef.current=null;onSplineDrawCommitRef.current?.()}})
+  const strokesRef=useRef(strokes); strokesRef.current=strokes
+
   const boxGesture = useSplineBoxDrawing({ enabled: toolMode === 'spline-draw', element: () => canvasRef.current,
     move: handleSplineBoxMove, up: handleSplineBoxUp,
     cancel: () => { splineBoxRef.current = null; sessionRef.current = null; setSplinePreview(null); setDragHud(null) },
@@ -249,6 +255,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     setSplinePreview(null)
     setSnappedPoint(null)
     setDragHud(null)
+    strokesRef.current.cancel()
     boxGesture.cancel()
     window.removeEventListener('pointermove', handleSplineLineMove)
   }, [handleSplineLineMove, setDragHud])
@@ -266,6 +273,8 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
       const target = e.target as Element | null
       if (target?.closest?.('input,textarea,select,[contenteditable=true],[role=menu],[data-editor-input-scope]') && !target.matches('input[aria-label="Spline Auto Close"]')) return
       if (['Escape', 'Enter', 'Backspace'].includes(e.key)) e.stopPropagation()
+      if (['Enter','Escape'].includes(e.key) && strokesRef.current.finish(false)) { e.preventDefault();return }
+      if (e.key === 'Backspace' && strokesRef.current.backspace()) {e.preventDefault();return}
       if (e.key === 'Escape') {
         e.preventDefault()
         if (splineLineRef.current) finishSplineLine(false)
@@ -294,6 +303,9 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
     const kind = splineDrawKindRef.current
     if (!kind) return
     if (!sessionRef.current) beginSession()
+    if (kind === 'custom' || kind === 'freehand') {
+      strokesRef.current.down(kind,acquirePoint({x:cx,y:cy}).point,pointerId,{x:cx,y:cy});return
+    }
     if (kind === 'line') {
       // Multi-click polyline. First click starts; later clicks add points;
       // Auto Close can join this contour after three anchors.
@@ -358,6 +370,7 @@ export function useSplineDrawing(opts: UseSplineDrawingOptions): UseSplineDrawin
 
   const onSplineDrawContextMenu = () => {
     if (toolMode !== 'spline-draw') return false
+    if(strokesRef.current.finish(frameRef.current.autoClose)) return true
     if (splineLineRef.current) finishSplineLine(frameRef.current.autoClose)
     else { cancelSplineDraw(); onSplineDrawCommitRef.current?.() }
     return true

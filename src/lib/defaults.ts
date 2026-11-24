@@ -398,7 +398,7 @@ export function newMotionPathLayer(): Layer {
  * Creates a new `type: 'spline'` layer containing one SubShape from a primitive.
  * `kind` + `params` select the granular generator.
  * Open and closed kinds start stroke-only; Properties can explicitly enable Fill.
- * Returns null for unimplemented primitive kinds (spiral/helix/egg/text/freehand).
+ * Returns null for kinds without a parametric factory, including gesture-authored freehand.
  */
 export function newSplineLayerFromPrimitive(kind: SplinePrimitiveKind, params: SplineGeneratorParams): Layer | null {
   const splineData = createSplinePrimitive({ kind, params })

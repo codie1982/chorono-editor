@@ -12,7 +12,7 @@ export function SplineOutlineControls({ controller: c, expanded = false, title =
   return <details open={expanded || c.active || undefined} className="rounded border border-gray-700 p-2" aria-label="Spline Offset Path">
     <summary className="cursor-pointer select-none font-semibold">{title}</summary>
     <div className="space-y-2 pt-2">
-      <p className="text-gray-400">{c.eligible ? `${c.contourCount} complete contour(s) selected.` : c.selectionReason}</p>
+      <p className="text-gray-400">{c.eligible ? `${c.contourCount} contour(s) or edge chain(s) selected.` : c.selectionReason}</p>
       {!c.active ? <button type="button" className={input} disabled={c.disabled || !c.eligible} onClick={c.open}>Preview Offset</button> : <>
         <label className="flex items-center justify-between gap-2">Direction<select aria-label="Offset direction" className={input} value={c.settings.side} onChange={e => change('side', e.target.value as OutlineSettings['side'])}>
           {(c.closed ? ['inside', 'outside'] : ['left', 'right', 'both']).map(side => <option key={side} value={side}>{side === 'inside' ? 'Inset · Inside' : side === 'outside' ? 'Outset · Outside' : side[0].toUpperCase() + side.slice(1)}</option>)}
@@ -25,7 +25,7 @@ export function SplineOutlineControls({ controller: c, expanded = false, title =
         <OutlineNumber label="Offset curve tolerance" value={c.settings.tolerancePx} min={.05} max={5} onChange={v => change('tolerancePx', v)} />
         <label className="flex min-h-8 items-center gap-2"><input type="checkbox" aria-label="Keep Offset source" checked={c.keepSource}
           onChange={event => c.setKeepSource(event.target.checked)} />Keep source</label>
-        <p className="text-gray-400">Composition px · {c.keepSource ? 'adds a new Object; source stays' : 'replaces selected contours; other geometry stays'}. Curves are approximated within the stated tolerance.</p>
+        <p className="text-gray-400">Composition px · {c.keepSource ? 'adds a new Object; source stays' : 'replaces selected contours or edge chains'}. Curves are approximated within the stated tolerance.</p>
         <p role="status">{c.pending ? 'Calculating Offset…' : c.result ? `${c.result.outputVertices} vertices · ${c.result.objects.length} result Object(s)` : ''}</p>
         {!!c.result?.bevelFallbacks && <p className="text-amber-200">{c.result.bevelFallbacks} miter join(s) use bevel at the chosen limit.</p>}
         {c.error && <p role="alert" className="text-amber-300">{c.error}</p>}

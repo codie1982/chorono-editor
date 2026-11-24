@@ -100,12 +100,14 @@ async function run() {
     await load(); await click('Spline edge mode'); const edge = Object.keys(layer().spline!.segments)[0]
     flushSync(() => current().controller.enter('edge', [edge])); await frames(); await openControls()
     const preview = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'Preview Offset')!
-    assert(preview.disabled && document.querySelector('[aria-label="Spline Offset Path"]')?.textContent?.includes('every edge'), 'Partial selection silently promoted to the complete contour')
+    assert(!preview.disabled, 'Selected edge chain cannot offset')
+    await click('Preview Offset');await settled();await click('Cancel Offset')
+
     flushSync(() => current().controller.enter('edge', Object.keys(layer().spline!.segments))); await frames()
     await openControls(); await click('Preview Offset'); await number('Offset distance', 20); await settled()
     assert(!applyButton().disabled, 'Complete edge selection cannot offset')
     await click('Cancel Offset'); assert(!current().editor.canUndo, 'Edge preview/cancel created history')
-    checks.push('Time change cancels pending work; partial Edge selection has an explicit disabled reason, while complete contour edges can preview')
+    checks.push('Time change cancels pending work; partial Edge selection can preview independently, while complete contour edges can preview')
     await load(); await openControls(); await click('Preview Offset'); await number('Offset distance', 20); await choose('Offset direction', 'right'); await settled()
     status.textContent = `PASS · ${checks.length} groups`; report.textContent = JSON.stringify({ passed: true, checks }, null, 2)
   } catch (error) { status.textContent = 'FAIL'; report.textContent = JSON.stringify({ passed: false, error: String(error), checks }, null, 2) }
