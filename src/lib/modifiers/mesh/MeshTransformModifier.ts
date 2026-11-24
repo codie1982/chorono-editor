@@ -1,3 +1,4 @@
+import { editMeshTopology, type MeshTopologyEdit } from '../../geometry/mesh2d/edit/topologyEdit'
 import { MeshModifier } from './MeshModifier'
 import type { GeometryModifierDescriptor, ModifierGeometry } from '../geometryTypes'
 import type { Mesh2DGeometry } from '../../types/mesh2d'
@@ -6,14 +7,14 @@ import { meshTransformMatrix, readMeshTransformSettings } from './meshTransformS
 import { readMeshVertexEdits } from './meshVertexEdits'
 import { Mesh2DTopologyValidator } from '../../geometry/mesh2d/Mesh2DTopologyValidator'
 
-/** Editable local-geometry affine stage. Positions move; layer TRS/anchor,
- * topology, IDs and UVs remain unchanged. Positive scale preserves winding and
- * holes. The canonical stack retains upstream source and each edit's order;
- * MeshModifier owns attachment admission and rebuilt boundary rings. Stateless. */
+/** Replays ordered topology steps with their preceding local transforms, then
+ * applies the pending affine and vertex offsets. Layer TRS and anchor belong
+ * to the layer. MeshModifier validates attachment compatibility and rebuilds
+ * boundary rings. Legacy transform-only records start with an empty history. */
 export class MeshTransformModifier extends MeshModifier {
   static readonly descriptor: GeometryModifierDescriptor = { type: 'meshTransform', label: 'Edit Mesh', category: 'mesh',
     inputs: ['mesh2d'], output: 'mesh2d', addable: true,
-    description: 'Moves, rotates or scales local mesh geometry while keeping the object transform and origin fixed.',
+    description: 'Edits local vertices, edges and faces. The layer transform and origin stay fixed.',
     fields: [
       { key: 'x', label: 'X', kind: 'number', min: -1e6, max: 1e6, unit: 'px' },
       { key: 'y', label: 'Y', kind: 'number', min: -1e6, max: 1e6, unit: 'px' },
@@ -35,10 +36,27 @@ export class MeshTransformModifier extends MeshModifier {
     readMeshTransformSettings(this.settings)
     readMeshVertexEdits(this.settings)
   }
-  /** Apply one local-pixel affine, preserving a texture's original reference box. */
+  /** Replay each step against its own input topology in local pixels. */
   protected evaluateMesh(input: Mesh2DGeometry): Mesh2DGeometry {
-    const s = readMeshTransformSettings(this.settings)
-    const edits = readMeshVertexEdits(this.settings)
+    let geometry = input
+    const steps = this.settings.topologySteps
+    if (steps !== undefined) {
+      if (!Array.isArray(steps) || steps.length > 1024) throw new Error('Invalid Edit Mesh operation history.')
+      for (const step of steps) {
+        if (!step?.transform || !step.edit) throw new Error('Invalid Edit Mesh operation.')
+        geometry = applyAffine(geometry, step.transform)
+        geometry = editMeshTopology(geometry, step.edit as MeshTopologyEdit).geometry
+      }
+    }
+    return applyAffine(geometry, this.settings)
+  }
+}
+
+/** Apply the pending affine and selected vertex offsets in the coordinate frame
+ * of the preceding topology step. All inputs are borrowed. */
+function applyAffine(input: Mesh2DGeometry, settings: Readonly<Record<string, unknown>>): Mesh2DGeometry {
+    const s = readMeshTransformSettings(settings)
+    const edits = readMeshVertexEdits(settings)
     if (edits && edits.topologyHash !== input.topology.topologyHash) throw new Error('Mesh topology changed. Reset vertex edits before continuing.')
     if (!edits && !s.x && !s.y && !s.rotation && s.scaleX === 1 && s.scaleY === 1) return input
     const offsets = new Map(edits?.offsets.map(([id, x, y]) => [id, { x, y }]))
@@ -55,5 +73,4 @@ export class MeshTransformModifier extends MeshModifier {
     const result = { ...input, positions, ...(box ? { textureReferenceBounds: box } : {}) }
     if (edits && !new Mesh2DTopologyValidator().validate(result).valid) throw new Error('This vertex edit collapses or reverses a mesh face.')
     return result
-  }
 }

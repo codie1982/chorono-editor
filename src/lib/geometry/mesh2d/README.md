@@ -171,6 +171,10 @@ Entry points:
 - `selection/MeshFaceGeometryConverter`: explicit Bake materialization of old
   Grid cells. It preserves positions/UV/triangles while hashing cell metadata;
   its caller must reject incompatible pin/clip ownership.
+- `edit/topologyEdit`: applies Delete Face, Split Edge, Flip Edge and Fill to
+  local triangle/quad geometry. The stable input hash guards the selection.
+  Split interpolates the new vertex position and UV at the same edge parameter.
+  `edit/topologyChanges` maps each affected logical ID to its replacements.
 - `modeling`: shared Smooth, remeshing, UV transfer and bounded Delaunay/Grid
   strategies; [numerical contracts](modeling/README.md).
 
@@ -186,7 +190,15 @@ face vertices; shared points move once and outer layer transforms stay fixed.
 The independently prepared browser acceptance is
 `node scripts/perf/mesh-face-edit.mjs /tmp/chorono-mesh-face-qa` (stop Next first).
 
-General half-edge/n-gon authoring, per-corner UV/seams, topology remap, targeted
+General half-edge/n-gon authoring, per-corner UV/seams, arbitrary topology remapping, targeted
 modifier scopes, skinning and XPBD are planned extensions. Their appearance in
 the reference PDF is not evidence of a shipped implementation. Preserve source,
 output units, lifetime, rollback and failure contracts when adding them.
+
+A native call such as `makeMeshTopologyCmd(scene, layer.id, editId, {
+kind: 'splitEdge', topologyHash, ids: [edge.id], t: 0.25, vertexId: newId
+})` prepares one validated command. Dispatch it through the editor. Its
+`changes.replacements.edges.get(edge.id)` contains both child IDs. Splitting a
+shared quad edge produces one quad and one triangle per incident quad. The
+tail Edit Mesh stage replays its ordered topology steps before pending vertex
+offsets. Previously saved affine-only stages keep their original evaluation.

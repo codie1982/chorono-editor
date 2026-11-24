@@ -9,7 +9,9 @@ import { assertLayerAncestors } from '../../scene/hierarchy/assertLayerAncestors
 
 import { modifierGeometryDriverReason } from '../../modifiers/sourcePolicy'
 import { accumulateMeshTransform, readMeshTransformSettings } from '../../modifiers/mesh/meshTransformSettings'
-import { accumulateMeshVertexEdits } from '../../modifiers/mesh/meshVertexEdits'
+import { meshTopologyChanges } from '../../geometry/mesh2d/edit/topologyChanges'
+import type { MeshTopologyEdit } from '../../geometry/mesh2d/edit/topologyEdit'
+import { accumulateMeshVertexEdits, readMeshVertexEdits } from '../../modifiers/mesh/meshVertexEdits'
 /** Static geometry authority. Transform/paint playback remains supported;
  * source/topology drivers cannot be silently captured at one evaluated pose. */
 function editable(scene: ChronoScene, id: string): Layer {
@@ -188,7 +190,103 @@ export function makeTransformMeshGeometryCmd(scene: ChronoScene, layerId: string
     : { ...delta, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }
     : previous ? accumulateMeshTransform(readMeshTransformSettings(previous.settings), delta) : delta
   const vertexEdits = accumulateMeshVertexEdits(previous?.settings, layer.mesh2d!.geometry, delta, vertexIds)
-  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings: { ...combined, ...(vertexEdits ? { vertexEdits } : {}) } }
+  const record: ModifierRecord = { id: modifierId, type: 'meshTransform', version: 1, enabled: true, settings: { ...(previous?.settings.topologySteps ? {topologySteps: previous.settings.topologySteps} : {}), ...combined, ...(vertexEdits ? { vertexEdits } : {}) } }
   const modifiers = previous ? stack.modifiers.map((item, i) => i === index ? record : item) : [...stack.modifiers, record]
   return replace(scene, layer, { ...stack, modifiers }, 'Transform mesh geometry')
+}
+
+/** Freeze the pending local transform before the topology edit and keep future
+ * movements in the same tail stage. Replace evaluates atomically against the
+ * captured scene and restores the exact source/stack on Undo. The changes
+ * getter lazily reports stable IDs and replacement components from this result. */
+export function makeMeshTopologyCmd(scene: ChronoScene, layerId: string, modifierId: string, edit: MeshTopologyEdit) {
+  const layer = editable(scene, layerId),
+    mesh = layer.mesh2d
+  if (!mesh || layer.type !== 'mesh2d') throw new Error('Select a Mesh.')
+  if (layer.mesh2d?.pins?.vertexIds.length || layer.mesh2d?.deformation)
+    throw new Error('Remove pins or deformation bindings before changing topology.')
+  if (mesh.geometry.topology.topologyHash !== edit.topologyHash) throw new Error('Mesh topology changed. Select again.')
+  const stack = modifierStackService.stackFor(layer),
+    previous = stack.modifiers.find((r) => r.id === modifierId)
+  if (previous && (previous !== stack.modifiers.at(-1) || !previous.enabled || previous.type !== 'meshTransform'))
+    throw new Error('Re-enter Mesh Edit to use an enabled tail Edit Mesh.')
+  const identity = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, pivotX: 0, pivotY: 0 }
+  const prior: Readonly<Record<string, unknown>> = previous?.settings ?? identity
+  const { topologySteps = [], ...transform } = prior
+  if (!Array.isArray(topologySteps)) throw new Error('Invalid Edit Mesh history.')
+  const source =
+    stack.source.kind === 'mesh2d' && stack.source.mesh.geometry.topology.topologyHash === edit.topologyHash
+      ? stack.source.mesh.source
+      : mesh.source
+  const action = {
+    ...edit,
+    ...(source.kind === 'structuredGrid' && !mesh.geometry.topology.quadIndices ? { legacyGrid: source } : {}),
+  }
+  const record: ModifierRecord = {
+    id: modifierId,
+    type: 'meshTransform',
+    version: 1,
+    enabled: true,
+    settings: { ...identity, topologySteps: [...topologySteps, { transform, edit: action }] },
+  }
+  const modifiers = [...(previous ? stack.modifiers.slice(0, -1) : stack.modifiers), record]
+  const command = replace(
+    scene,
+    layer,
+    { ...stack, modifiers },
+    { splitEdge: 'Split Edge', fill: 'Fill', flipEdge: 'Flip Edge', deleteFace: 'Delete Face' }[edit.kind],
+  )
+  return {
+    ...command,
+    get changes() {
+      const after = command.execute(scene).layers.find((item) => item.id === layerId)!.mesh2d!
+      return meshTopologyChanges(mesh.geometry, after.geometry, action)
+    },
+  }
+}
+
+/** Apply independent layout translations after existing edits in the same
+ * tail stage. Hash validation, face validity, pins and undo follow gesture rules. */
+export function makeMeshLayoutCmd(
+  scene: ChronoScene,
+  layerId: string,
+  modifierId: string,
+  deltas: ReadonlyMap<string, { x: number; y: number }>,
+) {
+  const layer = editable(scene, layerId),
+    mesh = layer.mesh2d
+  if (!mesh) throw new Error('Select a Mesh.')
+  if (!Array.from(deltas.values()).some((d) => Math.hypot(d.x, d.y) > 1e-9)) return null
+  const stack = modifierStackService.stackFor(layer),
+    previous = stack.modifiers.find((r) => r.id === modifierId)
+  if (previous && (previous !== stack.modifiers.at(-1) || !previous.enabled || previous.type !== 'meshTransform'))
+    throw new Error('Re-enter Edit Mesh.')
+  const settings = previous?.settings ?? { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, pivotX: 0, pivotY: 0 }
+  const old = readMeshVertexEdits(settings),
+    topologyHash = mesh.geometry.topology.topologyHash
+  if (old && old.topologyHash !== topologyHash) throw new Error('Mesh topology changed.')
+  const map = new Map(old?.offsets.map(([id, x, y]) => [id, { x, y }]))
+  deltas.forEach((d, id) => {
+    const p = map.get(id)
+    map.set(id, { x: (p?.x ?? 0) + d.x, y: (p?.y ?? 0) + d.y })
+  })
+  const record: ModifierRecord = {
+    id: modifierId,
+    type: 'meshTransform',
+    version: 1,
+    enabled: true,
+    settings: {
+      ...settings,
+      vertexEdits: {
+        topologyHash,
+        offsets: Array.from(map, ([id, p]) => [id, p.x, p.y]),
+      },
+    },
+  }
+  return replace(
+    scene,
+    layer,
+    { ...stack, modifiers: [...(previous ? stack.modifiers.slice(0, -1) : stack.modifiers), record] },
+    'Arrange mesh components',
+  )
 }
