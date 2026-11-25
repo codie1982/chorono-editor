@@ -943,6 +943,14 @@ açılırken aynı topolojiyi korur. Editör, eski bir Grid'in dörtgenlerini an
 | Smooth | Bütün mesh'in komşu vertex'lerini Amount ve Iterations ile yumuşatır. Keep boundary dış sınırı ve delik sınırlarını sabitler. UV ve yüz bağlantıları korunur. |
 | Subdivision | Varsayılan **Delaunay** sınır ve delikleri kısıt olarak tutarak üçgen ağ üretir. **Grid / Karelaj** içeride tam kareler, kesilen sınır hücrelerinde geçiş yüzleri üretir. Levels ve yerel piksel cinsinden Base cell size detay yoğunluğunu belirler. Her iki algoritma da bütün mesh'i işler. |
 | Doku, deformasyon ve kayıt | Doku yerleşimi için fit, offset, scale, rotation, pivot ve flip vardır. Pin önayarları ile topolojiye bağlı deformasyon klibi desteklenir. GPU/Canvas çizimi, bounds ve hit-test hesaplanmış geometriyi kullanır. Düzenlenebilir proje kaynağı ve stack'i saklar. Runtime hesaplanmış geometriyi kullanır. |
+| MCP ile aynı katmanda modelleme | `convert_layer_to_mesh2d` → `split_mesh2d_edge` → `apply_mesh2d_subdivision`. Subdivision aynı satırda güncellenip çalıştırılabilir. Her ayrı çağrı tek Undo oluşturur. |
+
+25 Kasım 2026 tarihinde 2001 portundaki üretim editöründe ayrı bir MCP oturumuyla
+delikli spline testi doğrulandı. Dönüşüm 17 vertex ve 17 üçgen, delik kenarında
+ortadan bölme 18 vertex üretti. Seviye 1 ve 64 yerel px hücre boyutunda Delaunay
+89 vertex ve 130 üçgen, Grid 29 tam dörtgen üretti. Her adımda tek katman, aynı
+kimlik ve origin korundu. Grid kaydı yeniden açılıp aynı satır çalıştırıldığında
+geometri ve doku yerleşimi tekrar doğrulandı. [MCP komutları](mcp.md)
 
 **Panel ve sağ tık menüsündeki yerel topoloji araçları**
 

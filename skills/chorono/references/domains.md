@@ -11,6 +11,17 @@ After editing that source, call `regenerate_mesh2d` explicitly. Both flatten
 tolerance and texture offsets are layer-local composition pixels, independent
 of viewport zoom.
 
+For in-place conversion call `convert_layer_to_mesh2d({layerId})`. Read the
+same layer again. Pick two consecutive indices from a mesh2d.boundaryRings
+loop and look up their IDs in geometry.topology.vertexIds. Call
+`split_mesh2d_edge({layerId, topologyHash, fromVertexId, toVertexId, t:0.5})`
+with the current geometry.topology.topologyHash. Then call
+`apply_mesh2d_subdivision({layerId, algorithm:"delaunay", levels:1, cellSizePx:40})`.
+This executes the stack. Supply the returned scene's Subdivision row id as
+`modifierId` to switch the same row to `grid`. Delaunay retains the split
+boundary vertex. Grid can resample straight boundaries. Each mutation requires
+its own fresh get_scene revision and readToken when called separately.
+
 `set_mesh2d_texture` accepts image/sprite-sheet assets plus `stretch`,
 `contain`, `cover`, `fitX`, `fitY` and `original` placement. Offset, positive
 scale, clockwise rotation, normalized pivot and flip flags are portable

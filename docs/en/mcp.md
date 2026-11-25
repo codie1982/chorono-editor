@@ -1,7 +1,7 @@
 # Chorono MCP catalog and compatibility
 
 Chorono MCP 2.1.0 controls the connected editor through STDIO. The default
-`standard` catalog exposes 62 focused tools. All 99 tool names remain
+`standard` catalog exposes 65 focused tools. All 102 tool names remain
 callable with their existing domain payload and default semantics. Source mutations now require the authorization envelope described below. Tool
 discovery and call resolution are separate; this update does not replace the
 editor's native commands or undo system.
@@ -59,7 +59,7 @@ the agent following the copied request.
    cannot be nested in a mutation batch.
 
 The original `get_capabilities({})` response still returns the full property
-schemas, scripting reference and `tools` compatibility inventory of 99
+schemas, scripting reference and `tools` compatibility inventory of 102
 names. Its `tools` array is not the current client's direct discovery surface.
 Read `catalog: {version:1,profile,advertisedToolNames,aliases}` for that surface;
 each alias is `{name,implementationName}`. `chorono://capabilities` remains the
@@ -74,7 +74,7 @@ original full discovery call.
 | Create or edit ordinary layers | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition` |
 | Import and edit boxed 3D | `import_asset` for GLB/glTF bytes, then `update_model3d` for static pose, camera, lighting and 2D box size |
 | Create/edit animation | `create_timeline`, `update_timeline`, `upsert_keyframes` |
-| Build/edit Mesh2D | `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` |
+| Build/edit Mesh2D | `convert_layer_to_mesh2d`, `split_mesh2d_edge`, `apply_mesh2d_subdivision`, `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` |
 | Review and publish physics bakes | `prepare_rigid_body_bake`, `prepare_voronoi_fracture_bake`, `get_bake_job`, `preview_bake_job`, `cancel_bake_job`, `discard_bake_job`, `commit_bake_job`, `inspect_physics_bake`, `clear_physics_bake` |
 
 | Spline topology, paint and CPU solvers | `prepare_spline_edit`, `apply_spline_edit`, `discard_spline_edit` |
@@ -203,7 +203,7 @@ does not contain every field needed to preserve such data.
 
 Set `CHORONO_MCP_TOOL_PROFILE=legacy` in the **STDIO MCP server process**
 environment when a client needs all original tools directly advertised. The
-legacy catalog lists 99 callable names with corrected descriptions
+legacy catalog lists 102 callable names with corrected descriptions
 and schemas. The default is `standard`; unknown profile values fail at startup.
 Changing the browser/Next environment alone does not select the client's STDIO
 catalog. Reload or reconnect the MCP client after changing the build or profile;

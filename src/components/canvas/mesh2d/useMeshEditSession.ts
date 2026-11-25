@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import type { Layer } from '@/lib/types'
-import { uid } from '@/lib/spline/util/uid'
+import { meshEditStageId } from '@/lib/editor/modifiers/meshEditStageId'
 
 /** Own one modifier ID for an Edit session, independent of tools, pointer
  * gestures, previews and Undo/Redo. Reuse an existing enabled tail Edit Mesh on
@@ -11,9 +11,8 @@ export function useMeshEditSession(active: boolean, layer: Layer | null, documen
   const session = useRef<{ layerId: string; document: AbortSignal; modifierId: string } | null>(null)
   if (!active || layer?.type !== 'mesh2d') session.current = null
   else if (!session.current || session.current.layerId !== layer.id || session.current.document !== document) {
-    const last = layer.modifierStack?.modifiers.at(-1)
     session.current = { layerId: layer.id, document,
-      modifierId: last?.type === 'meshTransform' && last.enabled ? last.id : uid('mesh-edit') }
+      modifierId: meshEditStageId(layer) }
   }
   return session.current?.modifierId ?? null
 }

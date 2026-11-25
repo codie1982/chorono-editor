@@ -24,6 +24,7 @@ export const TOOL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
 export const STANDARD_TOOL_NAMES: readonly string[] = Object.freeze([
   'list_sessions', 'get_capabilities', 'get_handoff_context', 'get_scene', 'list_layers', 'get_layer',
   'list_timelines', 'get_timeline', 'list_assets', 'create_layer', 'update_layer',
+  'convert_layer_to_mesh2d', 'split_mesh2d_edge', 'apply_mesh2d_subdivision',
   'create_mesh2d_from_source', 'regenerate_mesh2d', 'set_mesh2d_texture',
   'set_mesh2d_pins', 'set_mesh2d_deformation',
   'bake_rigid_bodies', 'bake_voronoi_fracture',
