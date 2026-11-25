@@ -37,6 +37,7 @@ export function preflightSvgOutput(scene:ChronoScene,animated:boolean,limits:SVG
     chars+=2048+source.chars*(layer.text?.uppercase?18:6)+source.nodes*128
     if(layer.type==='shape')commands+=ShapeToPathConverter.estimateCommandCount(layer.shapeKind??layer.shape??'rect',layer.size??{width:0,height:0},layer.shapeParams,layer.style?.cornerRadius??0)
     if(layer.type==='path')commands+=(layer.path?.anchors.length??0)+2
+    if(layer.type==='spline'&&layer.spline) for(const sub of Object.values(layer.spline.subShapes)) for(const id of sub.contourIds) { const contour=layer.spline.contours[id]; if(contour) commands+=(contour.segmentIds.length+2)*2 }
     if(!Number.isSafeInteger(commands)||commands>limits.maxCommands)throw new RangeError('SVG geometry command limit exceeded before conversion.')
     if(chars+commands*256>limits.maxChars)throw new RangeError('SVG text preparation limit exceeded.')
   }

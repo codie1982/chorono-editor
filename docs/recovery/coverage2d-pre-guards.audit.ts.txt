@@ -1,0 +1,179 @@
+import { afterAll, describe, expect, it } from 'vitest'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { layerRegistry } from '../../registry'
+import { emptyScene, newRectLayer } from '../../defaults'
+import { runSafeScript } from '../../mcp/sandbox'
+import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
+import { resolveLayerWorldMatrix } from '../../geometry/resolveLayerWorldMatrix'
+import { assertSplineTopology } from '../../spline/topology'
+import { modifierRegistry } from '../../animation/modifiers/ModifierRegistry'
+import '../../animation/modifiers/builtins'
+import { SPLINE_SCRIPT_SURFACE } from '../api/splineSurface'
+import { writePropertyPath } from '../../scene/properties/writePropertyPath'
+
+/** Source-only audit. All authoring text runs in the real QuickJS sandbox over
+ * private in-memory fixtures. Accepted invalid/limited behavior is explicitly
+ * marked as an observed gap, never as proof of native UI equivalence. No user
+ * editor, imported file, network, Console/eval or production code is changed. */
+const evidence: Record<string, unknown> = {}
+const definitions = layerRegistry.getAll().filter(def => def.kind !== 'model3d')
+const propertyCases = definitions.flatMap(def => def.getPropertyGroups(def.createDefault()).flatMap(group => group.schemas.map(schema => ({ kind: def.kind, schema }))))
+const snapshot = (code: string) => runSafeScript(code, emptyScene())
+const findings = (name: string, detail: unknown) => { evidence[name] = detail }
+
+afterAll(async () => {
+  const output = path.resolve('artifacts/script-2d-audit-20261116')
+  await mkdir(output, { recursive: true })
+  await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: '2D source authoring only; no 3D feature audit',
+    definitions: definitions.map(def => { const layer = def.createDefault(); return { kind: def.kind, category: def.category, sourceType: layer.type,
+      properties: def.getPropertyGroups(layer).flatMap(group => group.schemas.map(schema => ({ path: schema.path, type: schema.valueType, animatable: schema.animatable }))) } }),
+    modifierKinds: modifierRegistry.getAll().map(m => m.type), splineSurface: SPLINE_SCRIPT_SURFACE, evidence }, null, 2) + '\n')
+  // Registry-owned identifiers contain no comma/newline; this is a fixed audit
+  // export, not a general CSV formatter for external/user-controlled values.
+  const rows = propertyCases.map(({ kind, schema }) => [kind, schema.path, schema.valueType, schema.animatable,
+    evidence[`property:${kind}:${schema.path}`] ? 'PASS_SOURCE_ROUNDTRIP' : 'NOT_CONFIRMED'].join(','))
+  await writeFile(path.join(output, 'property-coverage.csv'), ['kind,path,valueType,animatable,result', ...rows].join('\n') + '\n')
+})
+
+describe('2D script inventory and actual source operations', () => {
+  it.each(definitions.map(def => def.kind))('creates registered 2D kind %s through the real script bridge', async kind => {
+    const result = await snapshot(`const l=scene.add(${JSON.stringify(kind)});scene.log(JSON.stringify({id:l.id,type:l.type}));`)
+    expect(result.scene.layers).toHaveLength(1)
+    expect(result.scene.layers[0].type).not.toBe('model3d')
+    findings(`create:${kind}`, { accepted: true, hasMediaSource: !!(result.scene.layers[0].image || result.scene.layers[0].video || result.scene.layers[0].audio || result.scene.layers[0].frameSequence),
+      note: ['image', 'video', 'audio', 'frameSequence'].includes(kind) ? 'Placeholder only; import/existing asset is required.' : 'Registry factory is available.' })
+  })
+  it.each(propertyCases)('round-trips $kind / $schema.path through generic source patch', async ({ kind, schema }) => {
+    let value: unknown = schema.defaultValue
+    if (schema.valueType === 'gradient') value = { type: 'linear', angle: 35, stops: [{ offset: 0, color: '#112233' }, { offset: 1, color: '#aabbcc' }] }
+    else if (schema.valueType === 'select') value = schema.options?.at(-1)?.value ?? value
+    else if (schema.valueType === 'color') value = '#123456'
+    else if (schema.valueType === 'boolean') value = !value
+    else if (schema.valueType === 'string') value = 'audit-source'
+    else if (typeof value === 'number') value = Math.max(schema.min ?? -10000, Math.min(schema.max ?? 10000, value + (schema.step ?? 1)))
+    const patch = writePropertyPath({}, schema.path, value, true)
+    const initial = emptyScene()
+    if (schema.path === 'repeater.sourceLayerId') { const source = newRectLayer(); source.id = 'audit-source'; initial.layers = [source] }
+    const result = await runSafeScript(`
+      const l=scene.add(${JSON.stringify(kind)});
+      l.patch({style:{fill:{type:'solid',image:{version:1,assetId:''},gradient:{type:'linear',stops:[{offset:0,color:'#ffffff'},{offset:1,color:'#000000'}]}}}});
+      l.patch(${JSON.stringify(patch)});scene.log(JSON.stringify(l.get(${JSON.stringify(schema.path)})));
+    `, initial)
+    expect(JSON.parse(result.logs[0])).toEqual(value)
+    findings(`property:${kind}:${schema.path}`, { roundTrip: true, limitation: 'Source record only; native ownership/side effects and rendered quality are separately audited.' })
+  })
+  it('authors 2D transforms, geometry, independent paint, text, masks, effects, repeaters and timing as source records', async () => {
+    const result = await snapshot(`
+      const l=scene.add('rect'), mask=scene.add('circle'), text=scene.add('text'), repeater=scene.add('repeater');
+      l.pos=[10,20];l.scale=[2,3];l.rotation=45;l.opacity=.75;l.size=[200,100];l.cornerRadius=8;l.blendMode='multiply';
+      l.patch({transform:{anchorX:100,anchorY:50},style:{fill:{type:'none'},stroke:{type:'none',color:'#123456',width:2}},
+        effects:{blur:2,brightness:1.1,contrast:1.2,saturate:.9},effectsChain:[{id:'effect',type:'glow',enabled:true,params:{radius:8,intensity:.5,color:'#ff0000'}}],
+        masks:[{id:'mask',maskLayerId:mask.id,mode:'subtract',inverted:true,feather:3,opacity:.5}],startMs:100,endMs:900,internalGrid:{size:10}});
+      text.text='Audit';text.font({family:'Inter',size:32,weight:'700',color:'#ffffff'});
+      text.patch({text:{direction:'vertical',lineHeight:1.2,gradient:{type:'linear',stops:[{offset:0,color:'#ffffff'},{offset:1,color:'#000000'}]},stroke:{color:'#ff0000',width:1},shadow:{x:1,y:2,blur:3,color:'#000000'}}});
+      repeater.patch({repeater:{sourceLayerId:l.id,count:3,mode:'linear',transformStep:{x:25,y:10,rotation:5}}});
+      l.followPath(scene.addPath([[0,0],[100,100]],{role:'motion'}).id,{orientToPath:true,progress:.5});
+    `)
+    const layer = result.scene.layers[0]
+    expect(layer).toMatchObject({ transform: { x: 10, y: 20, scaleX: 2, scaleY: 3, anchorX: 100 }, style: { fill: { type: 'none' }, stroke: { type: 'none' } }, effectsChain: [{ type: 'glow' }], masks: [{ mode: 'subtract' }] })
+    expect(result.scene.layers[2].text).toMatchObject({ value: 'Audit', direction: 'vertical', lineHeight: 1.2 })
+    findings('generic-visual-source', { accepted: true, note: 'Record round-trip only. No effect/mask/repeater native CRUD, raster or visual QA implied.' })
+  })
+  it('evaluates typed live expressions and exposes their lack of focused native authoring/bake methods', async () => {
+    const result = await snapshot(`
+      scene.createTimeline({id:'main',durationMs:1000});const l=scene.add('rect');
+      l.patch({propertyExpressions:{version:1,fields:{'transform.x':{resultType:'number',formula:'100*sin(2*pi*timeSec)',timelineId:'main',sources:{}}}}});
+    `)
+    const frame = evaluateSceneFrame(result.scene, 250)
+    expect(frame.overrides.get(`layers.${result.scene.layers[0].id}.transform.x`)).toBeCloseTo(100)
+    findings('property-expression', { genericPatchEvaluates: true, missing: 'Set/remove/convert/review/bake through the native property-expression command workflow.' })
+  })
+  it('uses Timeline.track for scalar controllers, time remapping, OOR and modifiers and bakes a numeric track', async () => {
+    const result = await snapshot(`
+      const t=scene.createTimeline({id:'main',durationMs:1000}),l=scene.add('rect'),target='layers.'+l.id+'.transform.x';
+      t.track(target,{controller:{type:'waveform',waveform:{shape:'sine',amplitude:100,frequency:1,phase:0,offset:0,duty:.5}},outOfRange:{before:'constant',after:'constant'}});
+      t.modifier(target,{type:'offset',parameters:{delta:10}});
+      t.bake(target,30,.001);
+    `)
+    const track = result.scene.timelines[0].tracks[0]
+    expect(track.keyframes.length).toBeGreaterThan(2); expect(track.controller).toBeUndefined()
+    findings('controller-bake', { accepted: true, scalarNumericOnly: true, modifiers: modifierRegistry.getAll().map(m => m.type) })
+  })
+  it('retains Timeline metadata and full key tangent records through explicit source arrays', async () => {
+    const result = await snapshot(`
+      const t=scene.createTimeline({id:'main',durationMs:1000}),l=scene.add('rect'),target='layers.'+l.id+'.transform.x';
+      t.set({loop:true,pingPong:true,loopCount:2,workAreaInMs:100,workAreaOutMs:900,playKeyRange:true,layerIds:[l.id],
+        markers:[{id:'marker',timeMs:300,label:'Beat',type:'beat'}],segments:[{id:'segment',name:'Part',startMs:100,endMs:800}],events:[]});
+      t.key(l,'transform.x',0,0).key(l,'transform.x',1000,100);
+      const keys=t.data.tracks[0].keyframes;keys[0].tangentMode='broken';keys[0].motionTangentMode='aligned';
+      keys[0].easing={type:'customBezier',bezier:{cx1:.25,cy1:.1,cx2:.75,cy2:.9}};
+      t.track(target,{keyframes:keys,easeCurve:[.2,.1,.8,.9],timeWarp:[.2,0,.8,1],multiplierCurve:[0,0,1,1],multiplierAmplitude:1});
+    `)
+    expect(result.scene.timelines[0]).toMatchObject({ loop: true, pingPong: true, markers: [{ id: 'marker' }], tracks: [{ keyframes: [{ tangentMode: 'broken' }, {}] }] })
+    findings('timeline-metadata', { accepted: true, caveat: 'Full arrays replace; no focused bulk key/marker/segment CRUD.' })
+  })
+})
+
+describe('confirmed 2D script gaps; characterization rather than fixes', () => {
+  it('shows single-root legacy Clone copies only the selected/default timeline, unlike native forest cloning', async () => {
+    const result = await snapshot(`
+      const a=scene.createTimeline({id:'first',durationMs:1000}),b=scene.createTimeline({id:'second',durationMs:1000}),l=scene.add('rect');
+      a.key(l,'transform.x',0,10);b.key(l,'transform.y',0,20);scene.clone(l,1,{timelineId:'first'});
+    `)
+    const clone = result.scene.layers[1]
+    expect(result.scene.timelines[0].tracks.some(t => t.target.startsWith('layers.' + clone.id + '.'))).toBe(true)
+    expect(result.scene.timelines[1].tracks.some(t => t.target.startsWith('layers.' + clone.id + '.'))).toBe(false)
+    findings('gap:clone-all-timelines', { reproduced: true, copiedTimeline: 'first', missingTimeline: 'second', recommendation: 'Use shared clone forest contract with explicit source roots and full graph.' })
+  })
+  it('shows raw parent differs from keepWorld Explorer reparent', async () => {
+    const common = `const p=scene.add('group'),l=scene.add('rect');p.pos=[100,0];l.pos=[20,0];`
+    const raw = await snapshot(common + `l.parent(p);`), native = await snapshot(common + `scene.explorer.reparent(l.id,p.id,{keepWorld:true});`)
+    const rawX = resolveLayerWorldMatrix(raw.scene.layers[1], raw.scene).applyToPoint({ x: 0, y: 0 }).x
+    const keptX = resolveLayerWorldMatrix(native.scene.layers[1], native.scene).applyToPoint({ x: 0, y: 0 }).x
+    expect(rawX).toBe(120); expect(keptX).toBe(20)
+    findings('difference:parent', { rawWorldX: rawX, keepWorldX: keptX, recommendation: 'Use scene.explorer.reparent when world placement must remain.' })
+  })
+  it('shows generic patch can write locked source and bypass spline topology validation', async () => {
+    const result = await snapshot(`
+      const l=scene.addSpline('rectangle',{width:100,height:60});l.patch({locked:true});l.pos=[999,0];
+      const data=l.spline.data;delete data.points[Object.keys(data.points)[0]];l.set({spline:data});
+    `)
+    expect(result.scene.layers[0].transform.x).toBe(999)
+    expect(() => assertSplineTopology(result.scene.layers[0].spline!)).toThrow()
+    findings('gap:raw-patch-guards', { reproduced: true, lockedWriteAccepted: true, brokenSplineAccepted: true, recommendation: 'Do not equate raw patch with native guarded commands.' })
+  })
+  it('shows static .pos writes base data rather than the pose key on an animated field', async () => {
+    const result = await snapshot(`const t=scene.createTimeline({id:'main'}),l=scene.add('rect');t.key(l,'transform.x',0,0).key(l,'transform.x',1000,100);l.pos=[500,0];`)
+    expect(result.scene.layers[0].transform.x).toBe(500)
+    expect(evaluateSceneFrame(result.scene, 500).overrides.get(`layers.${result.scene.layers[0].id}.transform.x`)).toBeCloseTo(50)
+    findings('difference:animated-pose', { baseValue: 500, evaluatedAt500Ms: 50, recommendation: 'Use an explicit timeline key; no general viewport manual/auto-key pose command exists in script.' })
+  })
+  it('shows raw expression source accepts an invalid formula without the native review phase', async () => {
+    const result = await snapshot(`scene.createTimeline({id:'main'});scene.add('rect').patch({propertyExpressions:{version:1,fields:{'transform.x':{resultType:'number',formula:'notAFunction(1)',timelineId:'main',sources:{}}}}});`)
+    const frame = evaluateSceneFrame(result.scene, 0)
+    expect(frame.expressionErrors.size).toBeGreaterThan(0)
+    findings('gap:expression-review', { reproduced: true, sourceAccepted: true, runtimeErrors: Array.from(frame.expressionErrors.values()) })
+  })
+  it('reproduces source setters accepting values outside the inspector property bounds', async () => {
+    const result = await snapshot(`const l=scene.add('rect');l.opacity=2;l.size=[-10,0];`)
+    expect(result.scene.layers[0].opacity).toBe(2)
+    expect(result.scene.layers[0].size).toEqual({ width: -10, height: 0 })
+    findings('gap:inspector-bounds', { reproduced: true, opacity: 2, width: -10, height: 0,
+      expectedInspectorBounds: 'opacity 0..1; width/height >=1', note: 'Global finite/structure quotas are not full registry property validation.' })
+  })
+  it('reproduces legacy timeWarp modifier doubling the value under the default additive blend', async () => {
+    const result = await snapshot(`const t=scene.createTimeline({id:'main',durationMs:1000}),l=scene.add('rect');t.key(l,'transform.x',0,0).key(l,'transform.x',1000,100);t.modifier('layers.'+l.id+'.transform.x',{type:'timeWarp',parameters:{amount:100}});`)
+    expect(modifierRegistry.get('timeWarp')).toBeUndefined()
+    expect(evaluateSceneFrame(result.scene, 500).overrides.get(`layers.${result.scene.layers[0].id}.transform.x`)).toBeCloseTo(100)
+    findings('gap:legacy-timeWarp', { reproduced: true, expectedNoOpBase: 50, actualDefaultAddValue: 100, supportedAlternative: 'Timeline.track(target,{timeWarp:BezierTuple})' })
+  })
+  it('records that 2D-only authoring is not currently an enforced general script boundary', async () => {
+    // No model asset/3D animation is imported, rendered or audited. This checks
+    // only whether the 2D public entry rejects the out-of-scope registry kind.
+    const result = await snapshot(`const l=scene.add('model3d');l.patch({model3d:{rotation:{y:30}}});`)
+    expect(result.scene.layers[0].type).toBe('model3d')
+    expect(result.scene.layers[0].model3d!.rotation.y).toBe(30)
+    findings('gap:2d-only-boundary', { reproduced: true, genericRegistryAndPatchPermit3D: true, note: 'Main Timeline key scope has a separate guard; source add/patch is broader.' })
+  })
+})

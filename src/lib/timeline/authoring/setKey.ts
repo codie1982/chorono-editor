@@ -7,15 +7,18 @@ import { assertTrackValues } from '../../animation/typedValues'
 import { nextKfId } from '../../defaults'
 import { boundedKeyTime, compareKeyTime, sameKeyTime } from './keyTimePolicy'
 import { keyableChannels, drivenChannelReason, type KeysetMode } from './keyableChannels'
+import { assertTimelineContext, SCENE_TIMELINE_CONTEXT, type TimelineAuthoringContext } from './TimelineAuthoringContext'
 
 export interface SetKeyOptions {
   timelineId: string; layerIds: readonly string[]; timeMs: number
   keyset?: KeysetMode; selectedTargets?: ReadonlySet<string>
   /** Committed authoring inputs, never final world/renderer overrides. */
   authoredValues?: ReadonlyMap<string, AnimatableValue>
+  /** Host-owned draft scope; omission retains the outer scene Timeline. */
+  context?: TimelineAuthoringContext
 }
 export interface KeyDiagnostic { target: string; reason: string }
-export interface SetKeyPlan { command: EditorCommand | null; diagnostics: KeyDiagnostic[]; targets: string[]; timeMs: number }
+export interface SetKeyPlan { command: EditorCommand | null; diagnostics: KeyDiagnostic[]; targets: string[]; timeMs: number; activateTimelineId?: string }
 
 /** Prepare Set Key against one committed source. Samples ordinary track
  * interpolation in explicit timeline-local ms; untracked properties use typed
@@ -27,6 +30,8 @@ export interface SetKeyPlan { command: EditorCommand | null; diagnostics: KeyDia
  * across execute/undo/redo. Stale source refuses rather than overwriting edits.
  */
 export function prepareSetKey(scene: ChronoScene, options: SetKeyOptions): SetKeyPlan {
+  const context = options.context ?? SCENE_TIMELINE_CONTEXT
+  assertTimelineContext(scene, options.timelineId, context)
   const timeline = scene.timelines.find(item => item.id === options.timelineId)
   if (!timeline) throw new Error('Choose an active timeline before setting keys.')
   const timeMs = boundedKeyTime(options.timeMs, timeline.durationMs)
@@ -40,7 +45,7 @@ export function prepareSetKey(scene: ChronoScene, options: SetKeyOptions): SetKe
     if (layer.type === 'audio' && layer.audio?.timelineId && layer.audio.timelineId !== timeline.id) {
       diagnostics.push({ target: id, reason: 'Audio belongs to another timeline.' }); continue
     }
-    const channels = keyableChannels(layer, trackIndex.forLayer(id), options.keyset ?? 'all', options.selectedTargets ?? new Set())
+    const channels = keyableChannels(layer, trackIndex.forLayer(id), options.keyset ?? 'all', options.selectedTargets ?? new Set(), context)
     if (!channels.length) diagnostics.push({ target: id, reason: 'No existing supported channels in this keyset.' })
     for (const channel of channels) {
       const target = `layers.${id}.${channel.path}`, track = channel.track
@@ -62,6 +67,7 @@ export function prepareSetKey(scene: ChronoScene, options: SetKeyOptions): SetKe
   for (const [target, track] of Array.from(replacements)) if (!timeline.tracks.some(item => item.target === target)) next.tracks.push(track)
   const command: EditorCommand | null = targets.length ? { label: `Set Key · ${members.size} layers · ${targets.length} channels`,
     execute(current) {
+      assertTimelineContext(current, options.timelineId, context)
       if (current.layers !== scene.layers || current.timelines !== scene.timelines || current.bindings !== scene.bindings || current.parameterWires !== scene.parameterWires) throw new Error('Source changed. Read the current scene and set keys again.')
       return { ...current, timelines: current.timelines.map(item => item.id === timeline.id ? next : item) }
     }, undo: current => ({ ...current, timelines: current.timelines.map(item => item.id === timeline.id ? before : item) }) } : null

@@ -25,6 +25,12 @@ Chorono zengin bir katman türü setini destekler. Oluşturmak istediğinize gö
 
 Şekil katmanları, doğrudan canvas üzerinde geometrik ilkeller çizer. Varlık içe aktarmadan illüstrasyonlar ve UI öğeleri oluşturmanın en hızlı yoludur.
 
+Noktaları veya yüzeyi düzenlemek için sağ tık **Convert → Convert Spline / Convert
+2D Mesh** kullanın. Çoklu kapalı seçim Boolean Union ile tek nesneye dönüşür;
+delikler ve ayrık elementler korunur. Kaynak ve dönüşümler Edit'in **Conversion history**
+geçmişine kaydedilir. [Geometri dönüşümleri](geometry-conversion.md), kaynak
+Rebuild, Undo/Redo ve statik geometri sınırlarını açıklar.
+
 Kullanılabilir şekiller:
 
 | Şekil | Açıklama |
@@ -47,13 +53,15 @@ Tüm şekil katmanları dolgu (düz veya degrade), kontur, yol kırpma ve tüm s
 
 ### Metin
 
-Metin katmanları stillendirilmiş metin render eder. Her metin özelliğini — konum, ölçek, renk, opaklık, karakter aralığı ve daha fazlasını — animasyonlayabilirsiniz. Metin katmanları şunları destekler:
+Metin eklediğinizde yazı alanı doğrudan canvas üzerinde açılır. Mevcut metni çift tıklayarak yeniden düzenleyin; `Ctrl/⌘ + Enter` uygular, `Esc` iptal eder. Özellikler panelindeki İçerik alanı da çok satırlı metni kabul eder.
 
-- Font ailesi, ağırlık, boyut, satır yüksekliği, harf aralığı.
-- Dolgu ve kontur (düz renk veya degrade).
-- Hizalamalı (sol, orta, sağ, iki yana yaslı) çok satırlı bloklar.
-- Metin animatörü aracılığıyla karakter başına animasyon (bireysel harfleri rigleme).
+- Yatay satırlar veya sağdan sola sütunlanan dikey, dik duran harfler; sol, orta ve sağ hizalama.
+- Font ailesi, ağırlık, boyut, harf aralığı ve satır yüksekliği. Font boyutu, harf aralığı ve satır yüksekliği zaman çizelgesinde anahtarlanabilir.
+- Düz renk, degrade veya içe aktarılmış görsel dokusu; kontur, gölge ve katman opaklığı.
+- **Metni maske olarak kullan:** Metin panelinden hedef katmanı seçin. Metin düzenlenebilir kalır ve harflerin alfa alanı hedefi gösterir. Hedefin Efektler > Maskeler bölümünde ekle, çıkar, kesiştir, ters çevirme, opaklık ve yumuşatma ayarlanır. Birden fazla **ekle** maskesi birleşir.
 - **Spline'a Dönüştür** — metni düzenlenebilir bezier konturlarına parçalar.
+
+Maske kaynağı çıktıda bağımsız çizilmez; editörde seçildiğinde soluk bir önizlemesi görünür. SVG vektör dışa aktarımı metin dokusunu, degrade dolgusunu ve katman maskelerini henüz taşımaz; raster/video çıktısında canvas sonucu kullanılır.
 
 ### Resim
 
@@ -382,3 +390,14 @@ Sağ tıklama menüsünde ayrıca: **Dönüşüme Göre Seç**, benzer bir dön�
 **Özel logo ana hatları:** Bir Metin katmanı ekleyin, logo metninizi yazın, ardından Özellikler Panelinde **Spline'a Dönüştür**'e tıklayın. Nokta düzenleme moduna geçin ve bireysel harf eğrilerini ayarlayın. El yazısıyla yazma efekti için kontur **Yol Kırpma**'yı %0'dan %100'e animasyonlayın.
 
 **Videoyu maskeleme:** Bir Grup içine video katmanı yerleştirin. Aynı grubun içine bir şekil katmanı çizin ve Özellikler Panelinde **Maske Olarak Kullan**'ı etkinleştirin. Video artık şeklin ana hatlarına kırpılır.
+
+
+### Mesh modifierları — 22 Kasım 2026
+
+Edit → Mesh modifiers listesinde Smooth ve Subdivision vardır. Smooth Amount,
+Iterations ve Keep boundary ayarlarını taşır. Subdivision'da Algorithm varsayılanı
+Delaunay'dir; Grid/Karelaj ayrı kare hücre stratejisidir. Levels ve Base cell size
+detayı kontrol eder. Taslak ayarlar Execute ile listedeki sırada tek sonuca
+uygulanır; önceki çıktı tekrar kaynak olarak kullanılmaz. Yeni kaynak türü
+`authored` geometri snapshot'ıdır; özgün generator stack source'unda kalır.
+[Sayısal sözleşme, UV ve kaynak sınırları](../../src/lib/geometry/mesh2d/modeling/README.md).

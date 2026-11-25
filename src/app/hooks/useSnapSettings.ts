@@ -8,8 +8,8 @@ import { readViewportGrid, writeViewportGrid, VIEWPORT_GRID_STORAGE_KEY } from '
  * Held at the page level so both views see the same state and a dockable
  * panel can edit settings independently of where the canvas lives.
  *
- * Reserved vertex/segment/subdivision fields remain for compatible callers.
- * They are not exposed as working controls; current precision uses bounds,
+ * Reserved segment/subdivision fields remain for compatible callers.
+ * Current precision uses spline drawing vertices, bounds,
  * object points, parent bounds, guides, grid, pixels and independent TRS steps.
  */
 export interface SnapSettings {
@@ -27,7 +27,7 @@ export interface SnapSettings {
     points:  boolean
     guides:  boolean
     pixel:   boolean
-    /** Reserved; dedicated spline/pen vertex collection is not wired. */
+    /** Exact spline anchors for pointer drawing; independent of bounds centers. */
     vertex:  boolean
     /** Spline / pen — closest-point-on-segment snap. */
     segment: boolean

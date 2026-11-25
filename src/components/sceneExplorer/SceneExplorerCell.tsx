@@ -158,7 +158,7 @@ function FlagCell(p: FlagCellProps) {
     <button
       onClick={(e) => { e.stopPropagation(); onToggleFlag(field) }}
       className={`w-full h-full flex items-center justify-center text-[11px] ${colour}`}
-      title={`${field}: ${raw ? 'on' : 'off'} (click to toggle)`}
+      title={field === 'solo' ? `Solo selection (S): ${raw ? 'on' : 'off'}` : `${field}: ${raw ? 'on' : 'off'} (click to toggle)`}
     >
       {isOn ? onLabel : offLabel}
     </button>

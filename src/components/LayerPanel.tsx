@@ -2,7 +2,8 @@
 import { CalculationNumberInput } from '@/components/inputs/CalculationNumberInput'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { layerHelpTopic } from '@/components/help/documentation'
-import { openDocumentFilePicker } from '@/components/import/DocumentFilePicker'
+import { activateAddLayerItem } from '@/components/layers/add/activateAddLayerItem'
+import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
 import { useMemo, useRef, useState } from 'react'
 import type { Layer } from '@/lib/types'
 import { ANIMATION_PRESETS } from '@/lib/timeline/presets'
@@ -16,17 +17,28 @@ import { RowLayout } from '@/lib/editor/virtualization/RowLayout'
 import { useRowWindow } from '@/components/virtualization/useRowWindow'
 import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { useSelectedLayerReveal } from '@/components/layerHierarchy/useSelectedLayerReveal'
+import { itemDetailMenu } from '@/components/detail/detailMenu'
+import { useLayerListSelection } from '@/components/layerHierarchy/useLayerListSelection'
+import { buildSplineEditModeMenu } from '@/components/splineEdit/buildSplineEditModeMenu'
+import type { SplineEditMode } from '@/lib/spline/selection'
 
 interface Props {
-  /** Explicit navigation; ordinary selection never requests a Timeline reveal. */
-  onShowInTimeline?: () => void
+  /** Hard list isolation; source indices, parentIds and commands stay global. */
+  layerScope?: ReadonlySet<string> | null
   onIsolateSelection?: () => void
   onExitIsolation?: () => void
   isolationActive?: boolean
+  onEditContent?: (id: string) => void
+  onEditOperation?: (id: string) => void
+  isBooleanMember?: (id: string) => boolean
+  onSplineEditMode?: (id: string, mode: SplineEditMode) => void
+  onIsolateLayers?: (ids: readonly string[]) => void
   layers: Layer[]
   selectedId: string | null
   selectedIds: Set<string>
   onSelect: (id: string, shiftHeld: boolean) => void
+  /** Atomic list range/toggle selection. Shift uses displayed tree order. */
+  onSelectLayers?: (ids: readonly string[], primaryId: string | null) => void
   /** Add/activate a registry item. Return true to keep this palette open for a
    * persistent tool (including toggling that tool off); void/false closes it.
    * The owner decides capability and source mutation, so this UI never creates
@@ -39,8 +51,11 @@ interface Props {
   onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
   onAddAudio: (file: File) => void
+  onImportModel?: (file: File) => void
   onImportSvg?: (file: File) => void
   onDelete: (id: string) => void
+  /** Delete the explicit context selection in one history step. */
+  onDeleteLayers?: (ids: readonly string[]) => void
   onReorder: (from: number, to: number) => void
   onToggleFlag: (id: string, field: 'locked' | 'hidden' | 'solo') => void
   /** Inline rename — fired on Enter or blur of the rename input. */
@@ -60,6 +75,8 @@ interface Props {
   onToggleInTimeline?: (layerId: string) => void
   /** Duplicate a layer (context-menu entry). */
   onDuplicate?: (layerId: string) => void
+  onGroupSelected?: () => void
+  onUngroupLayer?: (id: string) => void
   /** Copy a focused MCP task prompt from a layer row. */
   onAgentHandoff?: (request: AgentHandoffRequest) => void
   /** Open the shared Claude/Codex/other MCP client connection dialog. */
@@ -70,12 +87,14 @@ type DropZone = 'before' | 'after' | 'into'
 interface DropTargetState { id: string; zone: DropZone }
 
 export default function LayerPanel({
-  layers, selectedId, selectedIds, onSelect, onAdd, activeAddKind,
-  onAddImage, onAddVideo, onAddAudio, onImportSvg, getDocumentSignal,
-  onDelete, onReorder, onToggleFlag, onApplyStagger, onRename,
+  layers, selectedId, selectedIds, layerScope, onSelect, onSelectLayers, onAdd, activeAddKind,
+  onAddImage, onAddVideo, onAddAudio, onImportSvg, onImportModel, getDocumentSignal,
+  onDelete, onDeleteLayers, onReorder, onToggleFlag, onApplyStagger, onRename,
   onMoveInTree, onGroupWith,
   timelineLayerIds, onToggleInTimeline, onDuplicate, onAgentHandoff, onAgentConnections,
-  onShowInTimeline, onIsolateSelection, onExitIsolation, isolationActive = false,
+  onGroupSelected, onUngroupLayer,
+  onIsolateSelection, onExitIsolation, isolationActive = false,
+  onEditContent, onIsolateLayers, onSplineEditMode, onEditOperation, isBooleanMember,
 }: Props) {
   // ── Right-click context menu — layer rows ────────────────────────────────
   const ctxMenu = useContextMenu()
@@ -112,9 +131,10 @@ export default function LayerPanel({
   // Tree expand state — collapsed groups hide their children. Persists across
   // re-renders. Newly created groups default to EXPANDED (not in the set).
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const rows = useMemo(() => buildLegacyLayerRows(layers, collapsedGroups), [layers, collapsedGroups])
+  const rows = useMemo(() => buildLegacyLayerRows(layers, collapsedGroups, layerScope), [layers, collapsedGroups, layerScope])
   const layout = useMemo(() => new RowLayout(rows.map(row => row.layer.type === 'group' ? 20 : 36)), [rows])
   const rowKeys = useMemo(() => rows.map(row => row.layer.id), [rows])
+  const selectRow = useLayerListSelection({ order: rowKeys, selectedId, selectedIds, onSelect, onSelectLayers })
   const listRef = useRef<HTMLUListElement>(null)
   const windowed = useRowWindow(layout, rowKeys, listRef)
   useSelectedLayerReveal({ layers, selectedId, selectedIds, setCollapsedIds: setCollapsedGroups,
@@ -125,33 +145,10 @@ export default function LayerPanel({
     return next
   })
 
-  /** Every media route uses the same captured-document picker guard. */
-  const pickFile = (accept: string, handler: (file: File) => void) => {
-    openDocumentFilePicker({ accept, getDocumentSignal, onFiles: files => handler(files[0]) })
-  }
-
-  /** Media pickers close immediately; persistent native tools keep their
-   * palette available for the next shape or direct same-item toggle. */
-  const handleAddItem = (type: string) => {
-    switch (type) {
-      case 'image':
-        setMenuOpen(false)
-        return pickFile('image/*', onAddImage)
-      case 'video':
-        setMenuOpen(false)
-        return pickFile('video/*', onAddVideo)
-      case 'audio':
-        setMenuOpen(false)
-        return pickFile('audio/*', onAddAudio)
-      case 'svgImport':
-        setMenuOpen(false)
-        return pickFile('.svg,image/svg+xml', file => onImportSvg?.(file))
-      default:
-        // All shape kinds, text, pathStroke, bezierPath, pathStroke —
-        // registry-driven via page.tsx addLayer().
-        setMenuOpen(onAdd(type) === true)
-    }
-  }
+  /** Palette and context menus share native media and persistent-tool routing. */
+  const handleAddItem = (type: string) => setMenuOpen(activateAddLayerItem(type, {
+    onAdd, getDocumentSignal, onAddImage, onAddVideo, onAddAudio, onImportSvg, onImportModel,
+  }))
 
   const activeGroup = ADD_LAYER_GROUPS.find(g => g.title === activeCategory) ?? ADD_LAYER_GROUPS[0]
 
@@ -291,7 +288,7 @@ export default function LayerPanel({
           </div>
 
           {/* Items grid */}
-          <div className="grid grid-cols-2 gap-1 p-2">
+          <div className={`grid ${activeGroup.items.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1 p-2`}>
             {activeGroup.items.map(item => (
               <button
                 key={item.type}
@@ -386,7 +383,7 @@ export default function LayerPanel({
                 setDropTarget((cur) => (cur?.id === layer.id ? null : cur))
               }}
               onDrop={(e) => onDropRow(e, layer, realIdx)}
-              onClick={(e) => onSelect(layer.id, e.shiftKey)}
+              onClick={(e) => selectRow(layer.id, e.shiftKey, e.ctrlKey || e.metaKey)}
               onContextMenu={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -445,7 +442,7 @@ export default function LayerPanel({
               <LayerFlag
                 active={!!layer.solo}
                 onChars="S" offChars="s"
-                title="Solo"
+                title="Solo selection (S)"
                 onClick={(e) => { e.stopPropagation(); onToggleFlag(layer.id, 'solo') }}
                 highlightClass={layer.solo ? 'text-amber-400 font-bold' : ''}
               />
@@ -528,40 +525,14 @@ export default function LayerPanel({
 
       {layers.length > 0 && (
         <div className="px-3 py-1.5 border-t border-gray-700 text-xs text-gray-500">
-          {layers.length} layers
+          {layerScope ? `${layerScope.size}/${layers.length} layers · isolated` : `${layers.length} layers`}
           {selectedIds.size > 1 ? ` · ${selectedIds.size} selected` : ''}
         </div>
       )}
 
       {/* ── Empty-area right-click → Add Layer shortcut ─────────────────── */}
-      {emptyCtxMenu.isOpen && (() => {
-        const addItems = ADD_LAYER_GROUPS
-          .map(group => {
-            const available = group.items.filter(i => i.available)
-            if (available.length === 0) return null
-            return {
-              kind: 'submenu' as const,
-              label: group.title,
-              items: available.map(item => ({
-                kind: 'action' as const,
-                label: item.label,
-                onSelect: () => { handleAddItem(item.type); emptyCtxMenu.close() },
-              })),
-            }
-          })
-          .filter(Boolean) as import('@/components/ui/ContextMenu').MenuItem[]
-        return (
-          <ContextMenu
-            x={emptyCtxMenu.state!.x} y={emptyCtxMenu.state!.y}
-            items={[
-              { kind: 'action', label: 'Add Layer…', disabled: true, onSelect: () => {} },
-              { kind: 'separator' },
-              ...addItems,
-            ]}
-            onClose={emptyCtxMenu.close}
-          />
-        )
-      })()}
+      {emptyCtxMenu.isOpen && <ContextMenu x={emptyCtxMenu.state!.x} y={emptyCtxMenu.state!.y}
+        items={buildAddLayerMenu(handleAddItem)} onClose={emptyCtxMenu.close} />}
 
       {/* ── Layer row right-click context menu ───────────────────────────── */}
       {ctxMenu.isOpen && ctxLayerId && (() => {
@@ -569,36 +540,44 @@ export default function LayerPanel({
         if (!layer) { ctxMenu.close(); return null }
         const inTimeline = timelineLayerIds?.includes(layer.id) ?? false
         const canToggleTimeline = timelineLayerIds !== undefined && !!onToggleInTimeline
+        const ids = selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id]
+        const multi = ids.length > 1
         const items = [
-          ...(onIsolateSelection ? [{ kind: 'action' as const, label: 'Isolate selection',
-            onSelect: () => { onIsolateSelection(); ctxMenu.close(); setCtxLayerId(null) } }] : []),
-          ...(isolationActive && onExitIsolation ? [{ kind: 'action' as const, label: 'Exit isolation',
-            onSelect: () => { onExitIsolation(); ctxMenu.close(); setCtxLayerId(null) } }] : []),
+          ...(!multi && isBooleanMember?.(layer.id) && onEditOperation ? [{ kind: 'action' as const, label: 'Edit Operation', onSelect: () => onEditOperation(layer.id) }] : []),
+          ...(!multi && layer.spline && !layer.booleanResultFor && onSplineEditMode ? [buildSplineEditModeMenu({ onEnter: mode => onSplineEditMode(layer.id, mode) })] : []),
+          ...itemDetailMenu(layer, selectedIds.has(layer.id) ? selectedIds.size : 1,
+            onEditContent ? () => onEditContent(layer.id) : undefined,
+            onIsolateLayers ? () => onIsolateLayers(selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id]) : onIsolateSelection),
+          ...(isolationActive && onExitIsolation ? [{ kind: 'action' as const, label: 'Exit isolation', onSelect: onExitIsolation }] : []),
+          ...(selectedIds.has(layer.id) && selectedIds.size > 1 && onGroupSelected ? [{ kind: 'action' as const, label: 'Group', shortcut: '⌘G', onSelect: onGroupSelected }] : []),
+          ...(!multi && layer.type === 'group' && !layer.booleanOperation && onUngroupLayer ? [{ kind: 'action' as const, label: 'Ungroup', shortcut: '⇧⌘G', onSelect: () => onUngroupLayer(layer.id) }] : []),
           {
             kind: 'action' as const,
             label: inTimeline ? '✕ Remove from Timeline' : '＋ Add to Timeline',
             shortcut: undefined,
-            disabled: !canToggleTimeline,
+            disabled: !canToggleTimeline || multi,
             onSelect: () => { onToggleInTimeline?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
           },
           { kind: 'separator' as const },
           {
             kind: 'action' as const, label: 'Rename',
-            shortcut: 'F2', disabled: false,
+            shortcut: 'F2', disabled: multi,
             onSelect: () => { beginRename(layer); ctxMenu.close(); setCtxLayerId(null) },
           },
           {
-            kind: 'action' as const, label: 'Duplicate',
+            kind: 'action' as const, label: multi ? `Duplicate ${ids.length} layers` : 'Duplicate',
             shortcut: '⌘D', disabled: !onDuplicate,
             onSelect: () => { onDuplicate?.(layer.id); ctxMenu.close(); setCtxLayerId(null) },
           },
           ...(onAgentHandoff ? [agentHandoffMenu({ layerIds: selectedIds.has(layer.id) ? Array.from(selectedIds) : [layer.id] }, onAgentHandoff, onAgentConnections)] : []),
           { kind: 'separator' as const },
           {
-            kind: 'action' as const, label: 'Delete',
-            shortcut: '⌫', disabled: false,
-            onSelect: () => { onDelete(layer.id); ctxMenu.close(); setCtxLayerId(null) },
+            kind: 'action' as const, label: multi ? `Delete ${ids.length} layers` : 'Delete',
+            shortcut: '⌫', disabled: multi && !onDeleteLayers,
+            onSelect: () => { if (onDeleteLayers) onDeleteLayers(ids); else onDelete(layer.id); ctxMenu.close(); setCtxLayerId(null) },
           },
+          { kind: 'separator' as const },
+          ...buildAddLayerMenu(handleAddItem),
         ]
         return (
           <ContextMenu

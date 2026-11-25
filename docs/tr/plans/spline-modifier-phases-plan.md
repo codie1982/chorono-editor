@@ -1,0 +1,94 @@
+# 2D Spline Modifier — Faz 1 / Faz 2
+
+Durum: **Faz 1'in sekiz temel statik modifier'ı uygulandı; Faz 2 Outline/Stroke to Path temel teslimi başladı**. 23 Kasım 2026.
+Kullanıcı kararı: ilk faz mevcut statik Execute akışıyla ilerler. Animasyonlu
+modifier parametreleri ilk fazın ön koşulu değildir; ileri işlemler Faz 2'dedir.
+Native Edit araçlarının teslim durumu
+[ayrı planda](spline-edit-native-tools-plan.md) korunur.
+
+## Faz 1 — temel statik spline modifier'ları
+
+| Modifier | İlk teslim kapsamı | Paylaşılacak mevcut hesap |
+| --- | --- | --- |
+| Offset Path | Tam konturlarda paralel üretim; açıkta Left/Right, kapalıda Inside/Outside; mesafe ve join. | PlanarOutlineBackend ve mevcut Offset hesabı. Kısmi edge zinciri ayrıca native Edit teslimidir. |
+| Round Corners | Uygun köşelerde sabit yarıçaplı, ayarı değiştirilebilir yuvarlama. | Fillet solver ve mevcut corner doğrulamaları. |
+| Path Simplify | Toleransa göre nokta azaltma; korunan anchor, uç, köşe ve delik sözleşmesi aynı kalır. | simplifySplineObjects. |
+| Path Smoothing | Anchor'ları taşımadan komşu noktalara göre Smooth tangent'ler. | smoothSplineObjects / resetSplineTangents. |
+| Path Resample | Yerel px aralığıyla yeniden örnekleme; açık uçlar, köşeler ve kontur sahipliği korunur. Çıktının örneklenmiş polyline olduğu açıkça belirtilir; hata/bütçe kontrol edilir. | Mevcut path sampler, Bézier uzunluk ve adaptif örnekleme hesapları. |
+| Zig Zag | Sabit genlik/aralık ve keskin uçlu zikzak; zamana bağlı hareket yoktur. | Ortak path örnekleme ve yerel normal hesapları. Eğrisel zikzak geçişleri genişletme olarak ele alınır. |
+| Pucker & Bloat | Belirlenmiş merkez çevresinde sabit miktarda içe/dışa deformasyon; nokta ve kollar aynı dönüşüm kuralını izler. | Mevcut yerel geometri dönüşümleri ve sınır doğrulaması. |
+| Repeater | Aynı spline içinde sınırlı sayıda doğrusal/dairesel kontur kopyası; kopyalar layer'ın ortak boyasını kullanır. | RepeaterResolver yerleşim matrisleri ve spline kopyalama yardımcıları. |
+
+Faz 1 uygulama sırası:
+
+1. **Tamamlandı:** Offset Path, Round Corners, Path Simplify ve Path Smoothing;
+   mevcut hesaplara yeni statik parametrik adapter'lar. Ayarlar, Execute, hedef
+   seçimi, sıra/toggle/remove/Bake, Undo/Redo ve çıktı doğrulaması
+   [teslim sözleşmesindedir](../spline-static-modifiers.md).
+2. **Tamamlandı:** Path Resample; ortak bounded Bézier uzunluk/örnekleme hazırlığı.
+3. **Tamamlandı:** Keskin Zig Zag ve Object/custom merkezli radyal Pucker & Bloat.
+4. **Tamamlandı:** Aynı spline içinde doğrusal/dairesel temel Repeater.
+
+İkinci teslimde dört yeni type (`pathResample`, `zigZag`, `puckerBloat`,
+`splineRepeater`) mevcut registry/stack'e eklendi. Kaynak-layer yerel birimleri,
+çıktı/iş bütçeleri ve ileri kapsam sınırları
+[Faz 1 teslim sözleşmesinde](../spline-phase1-modifiers.md) yazılıdır. 577 dosyada
+4.147 test ve gerçek tarayıcıda 17 kabul grubu; birlikte sıra/toggle/Bake,
+Undo/Redo, portable reload, PNG/SVG ve runtime/Mesh adapter'ları doğrulandı.
+Bu durum tüm ileri spline/native Edit planının tamamlandığı anlamına gelmez.
+
+Bu liste mevcut sınıfların doğrudan yeniden görünür yapılması anlamına gelmez.
+Offset/Outline/Chamfer/Fillet'in kayıtlı eski type/default/değerlendirme anlamı
+korunur. Yeni parametrik UI sözleşmesi gerektiğinde açık sürüm/adapter ile
+kurulur. Edit Offset, Fillet, Simplify ve Smooth kaynak değiştiren araçlar olarak
+yerlerinde kalır; modifier sürümleri aynı matematiği kaynak korunarak çalıştırır.
+
+## Faz 1 ortak yürütme sözleşmesi
+
+- Mevcut Modifier, registry, ordered stack ve native modifier komutları kullanılır.
+  Kaynak → etkin modifier'lar, üstten alta → sonuç; her Execute orijinal girdiden
+  başlar. İkinci bir runner veya solver kurulmaz.
+- Her modifier kendi statik ayarlarını sunar; sıra değiştirme, aç/kapat, silme ve
+  Execute mevcuttaki ortak akışa bağlanır. Sonucun tamamı tek komutla uygulanır;
+  başarısız hesap kaynak/geçmişi değiştirmez. Undo/Redo birebir geri döner.
+- Koordinat ve mesafeler kaynak-layer yerel px; layer TRS/origin ve paint ayrı
+  kalır. Repeater bağımsız scene layer'ları üretmez; her kopyanın delik/contour
+  sahipliği korunur. Mevcut layer Repeater kendi akışını sürdürür.
+- Kaynak Object/contour hedefleri ve üretilen ID'ler deterministiktir. Upstream
+  topoloji değişince eski seçim yeni elemana sessizce bağlanmaz. Generated
+  geometriye doğrudan edit için mevcut açık Bake-to-editable/Undo yolu geçerlidir.
+- Açık/kapalı path, delikler, Bézier, kilit/driver, bütçe, clone/instance,
+  save/load, viewport/bounds/picking ve statik runtime/export birlikte doğrulanır.
+  Registry kaydı tek başına tamamlanmış özellik sayılmaz.
+- Parametre keyframe'leri, zaman sözleşmesi ve frame cache bu fazı bloke etmez.
+
+## Faz 2 — ileri geometri, görünüm ve hareket
+
+| İş | Neden sonraki faz? |
+| --- | --- |
+| Variable Width | Path boyunca profil, bant üretimi, renderer ve taşınabilir çıktı entegrasyonu. |
+| Stroke to Path | **İlk geometri teslimi uygulandı:** cap/join/alignment/dash ve gerçek delikli bant; native Outline ile tek hesap. [Sözleşme ve kalanlar](../spline-outline-band.md). |
+| Outline v2'nin tam kapsamı | Adaptif polyline ve bağımsız band paint'i uygulandı; eğri-fit, ayarlanabilir yoğunluk ağırlıkları, preset ve clipboard kalır. [Ayrıntılı plan](spline-outline-band-v2-plan.md). |
+| Boolean Paths modifier | Kaynak operandları ve sıralamayı stack içinde koruma, upstream hedef kimlikleri; layer referansları eklenirse bağımlılık ve döngü denetimi. Mevcut native Boolean işlemleri kullanılmaya devam eder. |
+| Wiggle Paths | Deterministik seed/zaman, zamansal süreklilik, seek ve çıktı eşliği. |
+| Path Dynamics | Physics sahibi, sabit zaman adımı, rest state, seek/cache ve bake yaşam döngüsü. |
+| Animasyonlu modifier parametreleri | Sabit modifier ID'leri üzerinden keyframe adresleme, zamanlı değerlendirme ve cache/runtime/export desteği. |
+
+Trim Paths, mevcut Stroke Trim görünüm akışında kalır; native Edit Trim'in
+kesişimden parça silme anlamı değişmez. Path Follow mevcut Motion/Follow Path
+akışında kalır. Bu iki mevcut özellik Faz 1 için yeniden yazılacak modifier
+eksikleri olarak sayılmaz; ileri genişletmeleri ayrıca değerlendirilir.
+
+23 Kasım source-following düzeltmesi: yeni `liveOutline` girdisi asıl çizgiyi
+korur ve kaynak Edit sırasında bandı otomatik hesaplar. Bu ayrı source-edit
+capability, eski `strokeToPath` veya `outline` davranışını değiştirmez.
+[Canlı Outline teslimi](../spline-live-outline.md) desteklenen prefix/scope,
+kılavuz, Bake ve çıktı sözleşmesini tanımlar.
+
+## Native Edit ile iş sırası
+
+Object Subdivide ve Interpolation native Edit teslimi 23 Kasım 2026'da tamamlandı;
+bu işlemler yeni modifier satırı üretmez. Temel statik modifier fazı yukarıdaki
+sınırlı kapsamla ele alınır. Geometrik
+Outline'ın tam v2 kapsamı ve ileri transform çalışmaları Faz 2'ye bırakılır;
+animasyonlu modifier altyapısı temel modifier'ların teslimini geciktirmez.

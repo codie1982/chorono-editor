@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import path from 'node:path'
+import os from 'node:os'
 import { pollEditor, callEditorTool } from '../broker'
 import { fakeEditor } from './support/fakeEditor'
+import { emptyScene, newImageLayer } from '../../defaults'
 
 describe('live editor broker', () => {
   it('keeps empty history unchanged and clears redo after a new scene edit', async () => {
@@ -165,5 +169,43 @@ describe('live editor broker', () => {
       expect(result.values['layers.hero.opacity']).toBe(0.7)
       await expect(editor.call('evaluate_frame',{timeMs:1000})).rejects.toThrow('specify timelineIds')
     } finally {await editor.close()}
+  })
+  it('exports a complete player scene while excluding physics ownership', async () => {
+    const editor = fakeEditor()
+    const root = await mkdtemp(path.join(os.tmpdir(), 'chorono-runtime-export-'))
+    vi.stubEnv('CHORONO_MCP_PROJECT_DIR', root)
+    try {
+      const source = emptyScene(), image = { ...newImageLayer('poster'), id: 'poster-layer', hidden: true, locked: true }
+      editor.replaceDocument({
+        ...source,
+        assets: [{ id: 'poster', name: 'Poster', type: 'image', url: 'data:image/png;base64,AA==' }],
+        layers: [image],
+        timelines: [{ id: 'main', durationMs: 1000, loop: false, autoplay: false, layerIds: [image.id], tracks: [{
+          target: `layers.${image.id}.opacity`,
+          keyframes: [{ id: 'visible', timeMs: 0, value: 1, easing: { type: 'linear' } }],
+        }] }],
+        parameterWires: [{
+          id: 'wire', enabled: true, source: { propertyPath: 'strength', valueType: 'number' },
+          target: { layerId: image.id, propertyPath: 'opacity', valueType: 'number' },
+          expression: 'source', blendMode: 'override', createdAt: 1, updatedAt: 1,
+        }],
+        initialState: { variant: 'hero' },
+        physics: { schemaVersion: 1, rigidBakes: [], fractureGenerations: [] },
+      })
+
+      const output = await editor.call('export_runtime', { name: 'runtime-parity' })
+      const packaged = JSON.parse(await readFile(output.path, 'utf8'))
+
+      expect(packaged.runtime.assets).toEqual([{ id: 'poster', name: 'Poster', type: 'image', url: 'data:image/png;base64,AA==' }])
+      expect(packaged.runtime.layers[0]).toMatchObject({ id: image.id, hidden: true })
+      expect(packaged.runtime.layers[0]).not.toHaveProperty('locked')
+      expect(packaged.runtime.parameterWires).toHaveLength(1)
+      expect(packaged.runtime.initialState).toEqual({ variant: 'hero' })
+      expect(packaged.runtime).not.toHaveProperty('physics')
+    } finally {
+      vi.unstubAllEnvs()
+      await editor.close()
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

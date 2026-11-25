@@ -1,6 +1,7 @@
 // ── Composition Actions ───────────────────────────────────────────────────────
 
 import type { ActionRegistry } from '../ActionRegistry'
+import { makeUpdateCompositionCmd } from '../../editor/commands-composition'
 
 interface UpdateCompositionParams {
   width?: number
@@ -36,11 +37,7 @@ export function registerCompositionActions(reg: ActionRegistry): void {
         ...(p.frameRate       != null ? { frameRate:       p.frameRate       } : {}),
         ...(p.backgroundColor          ? { backgroundColor: p.backgroundColor } : {}),
       }
-      return {
-        label: 'AI: Update Composition',
-        execute: (s) => ({ ...s, composition: next }),
-        undo:    (s) => ({ ...s, composition: prev }),
-      }
+      return makeUpdateCompositionCmd(next, { label: 'AI: Update Composition' })
     },
   })
 }

@@ -17,7 +17,7 @@ export interface BoxSplineSpec {
 /** Kinds created by a bounding-box drag (line uses multi-click instead). */
 export function isBoxDragKind(kind: SplinePrimitiveKind): boolean {
   return kind === 'rectangle' || kind === 'circle' || kind === 'ellipse'
-      || kind === 'star' || kind === 'ngon' || kind === 'donut' || kind === 'arc'
+      || kind === 'star' || kind === 'ngon' || kind === 'donut' || kind === 'arc' || kind === 'spiral'
 }
 
 export function splineParamsFromBox(kind: SplinePrimitiveKind, box: DrawBox): BoxSplineSpec | null {
@@ -37,6 +37,7 @@ export function splineParamsFromBox(kind: SplinePrimitiveKind, box: DrawBox): Bo
     case 'star':      params = { points: 5, outerRadius: r, innerRadius: r * 0.45 }; break
     case 'ngon':      params = { sides: 6, radius: r }; break
     case 'donut':     params = { outerRadius: r, innerRadius: r * 0.5 }; break
+    case 'spiral': params = {turns:3,startRadius:0,endRadius:Math.max(1,r)}; break
     case 'arc':       params = { radius: r, startAngle: -90, endAngle: 90 }; break
     default:          return null
   }

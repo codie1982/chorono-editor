@@ -5,6 +5,7 @@
 // Used by the File menu "From File…" picker and the AssetsPanel import control.
 
 export const IMPORT_ACCEPT = [
+  '.glb', '.gltf', 'model/gltf-binary', 'model/gltf+json',
   // Images
   'image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif',
   'image/svg+xml',

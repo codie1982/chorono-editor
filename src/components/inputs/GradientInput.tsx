@@ -1,8 +1,7 @@
 // ── GradientInput ───────────────────────────────────────────────────────────────
 //
-// Edits a GradientFill object: linear/radial type, angle (linear only), and a
-// list of colour stops (add / remove / recolour / reposition). Renders a live
-// CSS preview bar. Used by SchemaPanel for any schema with valueType 'gradient'.
+// Edits five gradient types, angle, and color/alpha/position stops. The preview
+// uses the same Canvas paint adapter as the scene. Hosts own source/history.
 
 'use client'
 import { useEffect } from 'react'
@@ -10,6 +9,7 @@ import type { GradientFill, GradientStop } from '@/lib/types'
 import ColorInput from './ColorInput'
 import ScrubInput from './ScrubInput'
 import { NumericPropertyProvider } from './expressions/NumericPropertyContext'
+import { GradientSwatch } from '@/components/paint/GradientSwatch'
 import { TextInput } from './TextInput'
 
 interface Props {
@@ -31,17 +31,6 @@ function coerce(value: GradientFill | undefined): GradientFill {
     return DEFAULT_GRADIENT
   }
   return value
-}
-
-/** CSS preview string. Canvas angle (0 = top→bottom, 90 = left→right) maps to
- *  CSS via (180 − angle); good enough for an indicative swatch. */
-function toCssBackground(g: GradientFill): string {
-  const stops = [...g.stops]
-    .sort((a, b) => a.offset - b.offset)
-    .map(s => `${s.color} ${Math.round(s.offset * 100)}%`)
-    .join(', ')
-  if (g.type === 'radial') return `radial-gradient(circle, ${stops})`
-  return `linear-gradient(${180 - (g.angle ?? 0)}deg, ${stops})`
 }
 
 export default function GradientInput({ value, onChange }: Props) {
@@ -86,20 +75,16 @@ export default function GradientInput({ value, onChange }: Props) {
   return (
     <NumericPropertyProvider><div className="flex flex-col gap-2">
       {/* Preview bar */}
-      <div
-        className="h-6 w-full rounded border border-gray-600"
-        style={{ background: toCssBackground(g) }}
-        title="Gradient preview"
-      />
+      <GradientSwatch gradient={g} />
 
       {/* Type + angle */}
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-0.5">
           <span className="text-[10px] text-gray-500 uppercase tracking-wide">Type</span>
-          <TextInput value={g.type} fieldLabel="Gradient type" options={[{value:'linear',label:'Linear'},{value:'radial',label:'Radial'}]}
+          <TextInput value={g.type} fieldLabel="Gradient type" options={[{value:'linear',label:'Linear'},{value:'radial',label:'Radial'},{value:'angle',label:'Angle'},{value:'reflected',label:'Reflected'},{value:'diamond',label:'Diamond'}]}
             onChange={type => update({type: type as GradientFill['type']})} className={selectClass} />
         </label>
-        {g.type === 'linear' && (
+        {g.type !== 'radial' && (
           <label className="flex flex-col gap-0.5">
             <span className="text-[10px] text-gray-500 uppercase tracking-wide">Angle °</span>
             <ScrubInput
@@ -130,6 +115,8 @@ export default function GradientInput({ value, onChange }: Props) {
                 onChange={(v) => updateStop(i, { offset: Math.max(0, Math.min(1, v / 100)) })}
               />
             </div>
+            <div className="w-16 shrink-0"><ScrubInput fieldLabel={`Gradient stop ${i+1} alpha`} value={s.opacity ?? 100}
+              min={0} max={100} step={1} onChange={opacity => updateStop(i, { opacity })} /></div>
             <button
               type="button"
               onClick={() => removeStop(i)}
@@ -144,7 +131,7 @@ export default function GradientInput({ value, onChange }: Props) {
         ))}
         <button
           type="button"
-          onClick={addStop}
+          onClick={addStop} disabled={g.stops.length >= 256}
           className="self-start text-[11px] text-blue-400 hover:text-blue-300 mt-0.5"
         >
           + Add stop

@@ -109,13 +109,13 @@ export function buildLayerFromParams(p: AddLayerParams): Layer {
         fill: {
           type: 'solid' as const,
           color:   p.fillColor   ?? '#3B82F6',
-          opacity: p.fillOpacity ?? 1,
+          opacity: unitOpacityToPercent(p.fillOpacity),
         },
         ...(p.strokeColor || p.strokeWidth != null ? {
           stroke: {
             color:     p.strokeColor ?? '#000000',
             width:     p.strokeWidth ?? 1,
-            opacity:   1,
+            opacity:   100,
             alignment: 'center' as const,
           },
         } : {}),
@@ -273,7 +273,7 @@ export function applyPatchToLayer(prev: Layer, patch: UpdateLayerParams): Layer 
               type: 'solid' as const,
               ...prev.style?.fill,
               ...(patch.fillColor          ? { color:   patch.fillColor   } : {}),
-              ...(patch.fillOpacity != null ? { opacity: patch.fillOpacity } : {}),
+              ...(patch.fillOpacity != null ? { opacity: unitOpacityToPercent(patch.fillOpacity) } : {}),
             },
           }
         : {}),
@@ -314,6 +314,13 @@ export function applyPatchToLayer(prev: Layer, patch: UpdateLayerParams): Layer 
   }
 
   return next
+}
+
+/** Convert the flat MCP/editor action's documented 0..1 opacity to the
+ * ShapeFill model's 0..100 percentage. Direct internal callers are clamped so
+ * malformed compatibility payloads cannot create out-of-range saved style. */
+function unitOpacityToPercent(value = 1): number {
+  return Math.max(0, Math.min(1, value)) * 100
 }
 
 // ── Action registration ──────────────────────────────────────────────────────

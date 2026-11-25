@@ -1,127 +1,71 @@
-// ── Spline Edit Overlay (BL-73 Sprint 3) ─────────────────────────────────────
-//
-// SVG overlay drawn over the selected spline layer. Visualises the granular
-// model so users can see (and, in Sprint 4, grab) the structure:
-//   • each on-curve point as a small square (white = corner, blue = curve)
-//   • each bezier handle as a blue dot + dashed line back to its point
-//   • the hovered point / handle / segment highlighted in amber
-//
-// Pointer events stay off — hit-testing is done in SceneCanvas. This is purely
-// the visual layer.
-
 'use client'
-
 import type { Layer } from '@/lib/types'
-import type { SplineHandle } from '@/lib/types/spline'
 import type { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { pathToSvgString } from '@/lib/geometry'
+import { splineToPathDefinition } from '@/lib/spline'
+import { subShapeData, splineEdgePath, type SplinePick } from '@/lib/spline/selection'
+import type { SplineEditController } from './splineEdit/useSplineEditSelection'
 
-export type SplineHoverTarget =
-  | { kind: 'point';   id: string }
-  | { kind: 'handle';  pointId: string; handleKind: 'in' | 'out' }
-  | { kind: 'segment'; id: string }
-  | null
-
-interface SplineEditOverlayProps {
-  layer: Layer
-  zoom: number
-  worldMatrix: Matrix2D
-  hover?: SplineHoverTarget
+/** Legacy hover records remain accepted by standalone callers. */
+export type SplineHoverTarget = { kind: 'point'; id: string } | { kind: 'handle'; pointId: string; handleKind: 'in' | 'out' }
+  | { kind: 'segment'; id: string } | null
+interface Props {
+  layer: Layer; zoom: number; worldMatrix: Matrix2D
+  hover?: SplinePick | SplineHoverTarget
   selectedPointId?: string | null
+  selection?: SplineEditController
+  /** Boolean inputs are source ghosts; the host draws the solved result separately. */
+  sourceGhost?: boolean
+  /** Live source guide can be hidden without hiding editable anchors. */
+  liveSource?: boolean; guideVisible?: boolean
 }
-
-const ANCHOR_SIZE  = 7
-const HANDLE_DOT_R = 3.5
-const HOVER_COLOR  = '#F59E0B'
-const SELECT_COLOR = '#2563EB'
-
-export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = null, selectedPointId = null }: SplineEditOverlayProps) {
-  if (layer.type !== 'spline' || !layer.spline) return null
-  const sp = layer.spline
-  const points = Object.values(sp.points)
-  if (points.length === 0) return null
-
-  const toScreen = (x: number, y: number) => {
-    const p = worldMatrix.applyToPoint({ x, y })
-    return { x: p.x * zoom, y: p.y * zoom }
-  }
-
-  // Index handles by point id for quick lookup.
-  const inH:  Record<string, SplineHandle> = {}
-  const outH: Record<string, SplineHandle> = {}
-  for (const h of Object.values(sp.handles)) {
-    (h.kind === 'in' ? inH : outH)[h.pointId] = h
-  }
-
-  // Build the hovered segment's sub-path so it can be highlighted.
-  let hoverSegPath: string | null = null
-  if (hover?.kind === 'segment') {
-    const seg = sp.segments[hover.id]
-    if (seg) {
-      const from = sp.points[seg.fromPointId]
-      const to   = sp.points[seg.toPointId]
-      if (from && to) {
-        const a = toScreen(from.x, from.y)
-        const b = toScreen(to.x, to.y)
-        if (seg.type === 'line') {
-          hoverSegPath = `M ${a.x} ${a.y} L ${b.x} ${b.y}`
-        } else if (seg.type === 'quadratic' && seg.control1) {
-          const c = toScreen(seg.control1.x, seg.control1.y)
-          hoverSegPath = `M ${a.x} ${a.y} Q ${c.x} ${c.y} ${b.x} ${b.y}`
-        } else {
-          const o = outH[from.id] ? toScreen(outH[from.id].x, outH[from.id].y) : a
-          const i = inH[to.id]    ? toScreen(inH[to.id].x,    inH[to.id].y)    : b
-          hoverSegPath = `M ${a.x} ${a.y} C ${o.x} ${o.y} ${i.x} ${i.y} ${b.x} ${b.y}`
-        }
-      }
-    }
-  }
-
-  return (
-    <svg
-      className="absolute inset-0 z-30 overflow-visible pointer-events-none"
-      style={{ width: '100%', height: '100%' }}
-    >
-      {hoverSegPath && (
-        <path d={hoverSegPath} fill="none" stroke={HOVER_COLOR} strokeWidth={2.5} opacity={0.85} />
-      )}
-      {points.map((pt) => {
-        const p    = toScreen(pt.x, pt.y)
-        const inP  = inH[pt.id]  ? toScreen(inH[pt.id].x,  inH[pt.id].y)  : null
-        const outP = outH[pt.id] ? toScreen(outH[pt.id].x, outH[pt.id].y) : null
-        const pointHovered  = hover?.kind === 'point'  && hover.id === pt.id
-        const inHovered     = hover?.kind === 'handle' && hover.pointId === pt.id && hover.handleKind === 'in'
-        const outHovered    = hover?.kind === 'handle' && hover.pointId === pt.id && hover.handleKind === 'out'
-        const pointSelected = selectedPointId === pt.id
-        return (
-          <g key={pt.id}>
-            {inP && (
-              <line x1={p.x} y1={p.y} x2={inP.x} y2={inP.y}
-                stroke="#60A5FA" strokeWidth={1} strokeDasharray="2 2" opacity={0.7} />
-            )}
-            {outP && (
-              <line x1={p.x} y1={p.y} x2={outP.x} y2={outP.y}
-                stroke="#60A5FA" strokeWidth={1} strokeDasharray="2 2" opacity={0.7} />
-            )}
-            {inP && (
-              <circle cx={inP.x} cy={inP.y} r={inHovered ? HANDLE_DOT_R + 1.5 : HANDLE_DOT_R}
-                fill={inHovered ? HOVER_COLOR : '#60A5FA'} stroke="#1E3A8A" strokeWidth={1} />
-            )}
-            {outP && (
-              <circle cx={outP.x} cy={outP.y} r={outHovered ? HANDLE_DOT_R + 1.5 : HANDLE_DOT_R}
-                fill={outHovered ? HOVER_COLOR : '#60A5FA'} stroke="#1E3A8A" strokeWidth={1} />
-            )}
-            <rect
-              x={p.x - (pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE) / 2}
-              y={p.y - (pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE) / 2}
-              width={pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE}
-              height={pointHovered || pointSelected ? ANCHOR_SIZE + 2 : ANCHOR_SIZE}
-              fill={pointHovered ? HOVER_COLOR : pointSelected ? SELECT_COLOR : pt.type === 'corner' ? '#FFFFFF' : '#DBEAFE'}
-              stroke={pointSelected ? '#FFFFFF' : '#1F2937'}
-              strokeWidth={pointSelected ? 1.5 : 1}
-            />
-          </g>
-        )
-      })}
-    </svg>
-  )
+/** Read-only sub-object overlay. World affine + zoom are applied once to paths;
+ * node/handle radii and stroke widths stay in CSS pixels. Only the active mode's
+ * affordances are drawn. Object paths include every contour/hole of that
+ * SubShape. Pointer events remain off; the shared canvas interaction owner
+ * performs mode-specific picking and gestures. Nothing is serialized/exported. */
+export default function SplineEditOverlay({ layer, zoom, worldMatrix, hover = null, selectedPointId = null, selection, sourceGhost = false, liveSource = false, guideVisible = true }: Props) {
+  if (layer.type !== 'spline' || !layer.spline || selection && (!selection.active || selection.layerId !== layer.id)) return null
+  const data = layer.spline, mode = selection?.mode ?? 'point'
+  const ids = selection?.ids ?? (selectedPointId ? [selectedPointId] : [])
+  const toScreen = (point: { x: number; y: number }) => { const world = worldMatrix.applyToPoint(point); return { x: world.x * zoom, y: world.y * zoom } }
+  const a = worldMatrix.applyToPoint({ x: 0, y: 0 }), x = worldMatrix.applyToVector({ x: 1, y: 0 }), y = worldMatrix.applyToVector({ x: 0, y: 1 })
+  const matrix = `matrix(${x.x * zoom} ${x.y * zoom} ${y.x * zoom} ${y.y * zoom} ${a.x * zoom} ${a.y * zoom})`
+  const handles = new Map(Object.values(data.handles).map(handle => [`${handle.pointId}:${handle.kind}`, handle]))
+  return <svg aria-label={`Spline ${mode} selection`} className="absolute inset-0 z-30 overflow-visible pointer-events-none" style={{ width: '100%', height: '100%' }}>
+    {!sourceGhost && guideVisible && <path data-spline-edit-boundary="true" data-spline-source-guide={liveSource || undefined} d={pathToSvgString(splineToPathDefinition(data))} transform={matrix}
+      fill="none" stroke={liveSource ? '#38BDF8' : '#FDBA74'} strokeOpacity={.9} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+    {guideVisible && mode === 'object' && <g transform={matrix}>{Object.values(data.subShapes).map(object => {
+      const selected = ids.includes(object.id), hovered = hover?.kind === 'object' && hover.id === object.id
+      const d = pathToSvgString(splineToPathDefinition(subShapeData(data, object.id)))
+      if (sourceGhost && !selected && !hovered) return null
+      return <g key={object.id} opacity={sourceGhost ? .4 : 1} strokeDasharray={sourceGhost ? '5 4' : undefined}>{!sourceGhost && (selected || hovered) && <path d={d} fill="none" stroke="#FFFFFF" strokeWidth={4.5} vectorEffect="non-scaling-stroke" />}
+      <path data-spline-object-id={object.id} data-selected={selected} d={d}
+        fill="none" stroke={sourceGhost ? '#94a3b8' : selected ? '#EF4444' : '#FDBA74'} strokeWidth={sourceGhost ? 1.25 : selected || hovered ? 2.5 : 1.5}
+        vectorEffect="non-scaling-stroke" /></g>
+    })}</g>}
+    {guideVisible && mode === 'edge' && <g transform={matrix}>{Object.keys(data.segments).map(id => {
+      const selected = ids.includes(id), hovered = (hover?.kind === 'edge' || hover?.kind === 'segment') && hover.id === id
+      const d = pathToSvgString(splineEdgePath(data, id))
+      if (sourceGhost && !selected && !hovered) return null
+      return <g key={id} opacity={sourceGhost ? .4 : 1} strokeDasharray={sourceGhost ? '5 4' : undefined}>{!sourceGhost && (selected || hovered) && <path d={d} fill="none" stroke="#FFFFFF" strokeWidth={5} vectorEffect="non-scaling-stroke" />}
+      <path data-spline-edge-id={id} data-selected={selected} d={d} fill="none"
+        stroke={sourceGhost ? '#94a3b8' : selected ? '#EF4444' : '#FDBA74'} strokeWidth={sourceGhost ? 1.25 : selected || hovered ? 3 : 1.5} vectorEffect="non-scaling-stroke" /></g>
+    })}</g>}
+    {(mode === 'point' || selection?.edgeTool === 'addVertex') && Object.values(data.points).map(point => {
+      const screen = toScreen(point), selected = mode === 'point' ? ids.includes(point.id) : !!selection?.bank.point.includes(point.id), hovered = hover?.kind === 'point' && hover.id === point.id
+      return <g key={point.id} data-spline-point-id={point.id} data-selected={selected}>
+        {(mode === 'point' || selected) && (['in', 'out'] as const).map(kind => {
+          const handle = handles.get(`${point.id}:${kind}`)
+          if (!handle) return null
+          const end = toScreen(handle), active = hover?.kind === 'handle' && hover.pointId === point.id && hover.handleKind === kind
+          return <g key={kind}><line x1={screen.x} y1={screen.y} x2={end.x} y2={end.y} stroke="#FDBA74" strokeWidth={1} strokeDasharray="2 2" opacity={.7} />
+            <circle cx={end.x} cy={end.y} r={active ? 5 : 3.5} fill={active ? '#EF4444' : '#FED7AA'} stroke="#7C2D12" /></g>
+        })}
+        <rect x={screen.x - (selected || hovered ? 4.5 : 3.5)} y={screen.y - (selected || hovered ? 4.5 : 3.5)}
+          width={selected || hovered ? 9 : 7} height={selected || hovered ? 9 : 7}
+          fill={selected ? '#EF4444' : hovered ? '#FED7AA' : '#FFFFFF'} stroke={selected ? '#FFFFFF' : '#C2410C'} strokeWidth={selected ? 1.5 : 1} />
+      </g>
+    })}
+  </svg>
 }

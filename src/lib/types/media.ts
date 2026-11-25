@@ -76,6 +76,7 @@ export interface FrameSequenceData {
  * because those values are still part of this union.
  */
 export type AssetType =
+  | 'model3d'
   | 'image'
   | 'video'
   | 'audio'
@@ -84,6 +85,7 @@ export type AssetType =
   | 'lottie'       // BL-04: LottieDocumentHandler (Phase 3: full keyframe import)
   | 'spriteSheet'  // BL-07: planned
   | 'gif'          // BL-07: planned
+  | 'meshDeformation' // Fixed-topology binary vertex-position clip
 
 // ── Storage (BL-04) ───────────────────────────────────────────────────────────
 

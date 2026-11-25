@@ -73,10 +73,11 @@ undo/redo do. Even a no-op script consumes authorization.
 
 ## Limits and migration
 
-Rebuild/restart the editor and reconnect the STDIO client together for 2.0.0.
+Rebuild/restart the editor and reconnect the STDIO client together for 2.1.0.
 All old names remain callable, but old source payloads without authorization are
-intentionally rejected. Scene format stays 1.x. Standard 40 / legacy 77 discovery
-is unchanged. The catalog advertises `sourceEditing` and the required fields.
+intentionally rejected. Scene format stays 1.x. Current discovery is standard
+44 / legacy 81, including boxed-model edits and three spline-plan tools added after the original 77.
+The catalog advertises `sourceEditing` and the required fields.
 
 The change summary is diagnostic, not provenance/history: at most 100 entries
 per category, 10,000 inspected values and bounded paths/depth. `truncated` means
@@ -89,3 +90,5 @@ Tests in this directory and `../__tests__/sourceAccess.test.ts`,
 `sourceRoute.test.ts` cover identity/expiry, stale writes, manual child/key/path
 preservation, document reset, drag, undo, aliases, batches, retries, plans and
 the final browser race. Real STDIO acceptance scripts live under `scripts/`.
+
+Native spline preparation uses the same plan-bound token lifecycle. Prepare returns a private draft/PNG; Apply requires its new token and commits once, while Discard revokes/releases it without source authorization. Script/spline plans share 50 entries and a 64 MiB estimated retained-source budget in PreparedPlanStore; no silent eviction or PNG retention.

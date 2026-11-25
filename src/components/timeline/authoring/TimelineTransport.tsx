@@ -14,9 +14,8 @@ const actions = [
 
 /** Four navigation triggers flank Play as one aligned five-button transport.
  * Short click performs the common frame/boundary action; hold, right-click or
- * ArrowDown opens related key navigation. Existing keyboard shortcuts and the
- * single domain navigation owner remain authoritative. Scope is explained in
- * each menu/tooltip rather than adding a second toolbar text row.
+ * ArrowDown opens related key navigation. Existing shortcuts and the domain
+ * owner remain authoritative. Scope lives in menu/tooltip, without a text row.
  */
 export function TimelineTransport({ onNavigate, disabled, scope, side }: {
   onNavigate: (intent: TimelineNavigation) => void; disabled: boolean; scope: string

@@ -16,7 +16,7 @@ export type { CanvasRendererOptions } from '../render/CanvasRendererOptions'
 export function useCanvasRenderer(canvasRef: RefObject<HTMLCanvasElement>, opts: CanvasRendererOptions): void {
   const {
     scene, timeMs, selectedLayerId, selectedLayerIds, assets, viewportRef, viewportKey, viewportScale,
-    snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, overrides, paramValues, dragOverrides,
+    snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, meshTrianglesVisible, overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
   } = opts
 
@@ -48,5 +48,5 @@ export function useCanvasRenderer(canvasRef: RefObject<HTMLCanvasElement>, opts:
     return () => task.cancel()
     // opts is a call-site record; scalar/reference visual inputs are listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, overrides, paramValues, dragOverrides, ghostSettings, selectedTimeline, hideEditorUI, viewportKey, layoutRevision, viewportRef, viewportScale, canvasRef])
+  }, [scene, timeMs, selectedLayerId, selectedLayerIds, assets, snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, meshTrianglesVisible, overrides, paramValues, dragOverrides, ghostSettings, selectedTimeline, hideEditorUI, viewportKey, layoutRevision, viewportRef, viewportScale, canvasRef])
 }

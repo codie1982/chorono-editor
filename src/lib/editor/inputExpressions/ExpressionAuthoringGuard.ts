@@ -1,3 +1,4 @@
+import { isModelInstanceInput } from '../../model3d/content/modelInstanceInputs'
 import type { ChronoScene, Layer } from '../../types'
 import { propertyExpressionConstraints, type ScalarExpressionType } from '../../expression/properties/PropertyExpressionCapability'
 import { drivenChannelReason } from '../../timeline/authoring/keyableChannels'
@@ -7,7 +8,7 @@ import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverla
  * instances must be detached/edited at their definition; caller owns source CAS. */
 export function assertExpressionTarget(layer: Layer, path: string, kind: ScalarExpressionType, mode: 'constant' | 'live' = 'constant') {
   if (layer.locked || layer.frozen) throw new Error('Unlock this layer before editing its formula.')
-  if (layer.instanceOf) throw new Error('Edit the instance source or detach this instance first.')
+  if (layer.instanceOf && !isModelInstanceInput(layer, path)) throw new Error('Edit the instance source or detach this instance first.')
   return propertyExpressionConstraints(layer, path, kind, mode)
 }
 /** Native parent/child channel ownership, including currently muted timelines.

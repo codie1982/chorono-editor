@@ -74,3 +74,11 @@ it('falls back for animated rotation/scale and fractional moving phases, while a
   scene.timelines[0].tracks[0].target = 'layers.group.transform.rotationDeg'
   expect(plan(scene).allowsProjection(group, { e: 10, f: 20 })).toBe(false)
 })
+
+it('never freezes an image-painted descendant into a native-free vector proxy', () => {
+  const { scene, group, children } = fixture()
+  children[0].style = { fill: { type: 'image', image: { version: 1, assetId: 'picture' } } }
+  expect(plan(scene).get(group, context)).toBeNull()
+  children[0].style.fill!.type = 'none'
+  expect(plan(scene).get(group, context)).not.toBeNull()
+})

@@ -1,3 +1,4 @@
+import { lerpColor } from '../../color/interpolateColor'
 // ── LifeGradient ───────────────────────────────────────────────────────────────
 //
 // Generic evaluator for ParticleLifeGradient<T>.
@@ -46,14 +47,7 @@ export function evalNumberGradient(
 
 // ── ColorValue specialization ─────────────────────────────────────────────────
 
-export function lerpColor(a: ColorValue, b: ColorValue, t: number): ColorValue {
-  return {
-    r: Math.round(a.r + (b.r - a.r) * t),
-    g: Math.round(a.g + (b.g - a.g) * t),
-    b: Math.round(a.b + (b.b - a.b) * t),
-    a: Math.round(a.a + (b.a - a.a) * t),
-  }
-}
+export { lerpColor } from '../../color/interpolateColor'
 
 export function evalColorGradient(
   g: ParticleLifeGradient<ColorValue>,

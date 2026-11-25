@@ -21,6 +21,8 @@
 // Option B: existing `type: 'shape'` layers are UNCHANGED. Splines are a
 // separate family bridged by the "Convert to Spline" command.
 
+import type { ShapeStyle } from './style'
+
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
 export type SplinePointType =
@@ -115,6 +117,13 @@ export type SplineGeneratorParams =
 
 // ── SubShape ──────────────────────────────────────────────────────────────────
 
+/** Authored adaptive-sampling precision in layer-local px. Omission preserves
+ * each existing consumer's default; exact Bézier source/rendering is unchanged. */
+export interface SplineInterpolation {
+  readonly version: 1
+  readonly tolerancePx: number
+}
+
 export interface SplineSubShape {
   id:   string
   name: string
@@ -126,6 +135,12 @@ export interface SplineSubShape {
   generatorParams?: SplineGeneratorParams
   /** false = parametric (params drive geometry). true = points are canonical. */
   editable: boolean
+  /** Optional Object sampling policy; never stores sampled/generated vertices. */
+  interpolation?: SplineInterpolation
+  /** Versioned independent band appearance. Stroke binding follows the owning
+   * layer stroke as a fill; custom paint stays editable only in Properties.
+   * Omission preserves legacy compound shared-fill rendering. */
+  paint?: { version: 1; source: 'stroke' | 'custom'; style?: ShapeStyle }
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────

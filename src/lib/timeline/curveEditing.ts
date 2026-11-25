@@ -1,3 +1,5 @@
+import type { TimelineAuthoringContext } from './authoring/TimelineAuthoringContext'
+import { assertTimelineEditTarget } from './authoring/timelinePropertyScope'
 import { applyKeyframeBatch, type KeyframeBatchOptions } from './authoring/keyframeBatch'
 import type { ChronoScene, Keyframe, Track, EasingDefinition } from '../types'
 import type { EditorCommand } from '../editor/commands-keyframe'
@@ -163,9 +165,11 @@ export function insertCurveKeyframe(track: Track, timeMs: number, nextId: () => 
     ...(insertedIds.length > 1 ? { message: 'Added an easing midpoint as well to preserve the Ease In Out curve.' } : {}) }
 }
 
-export function makeReplaceCurveKeysCmd(timelineId: string, before: Track, after: Track): EditorCommand {
+/** Exact split-key replacement; forward scope is validated while inverse data
+ * restores the original keys verbatim. The optional context belongs to a host. */
+export function makeReplaceCurveKeysCmd(timelineId: string, before: Track, after: Track, context?: TimelineAuthoringContext): EditorCommand {
   const replace = (scene: ChronoScene, keys: Keyframe[]) => ({ ...scene, timelines: scene.timelines.map(timeline => timeline.id !== timelineId ? timeline : {
     ...timeline, tracks: timeline.tracks.map(track => track.target !== before.target ? track : { ...track, keyframes: keys }),
   }) })
-  return { label: 'Insert Curve Keyframe', execute: scene => replace(scene, after.keyframes), undo: scene => replace(scene, before.keyframes) }
+  return { label: 'Insert Curve Keyframe', execute: scene => { assertTimelineEditTarget(scene, timelineId, before.target, context); return replace(scene, after.keyframes) }, undo: scene => replace(scene, before.keyframes) }
 }

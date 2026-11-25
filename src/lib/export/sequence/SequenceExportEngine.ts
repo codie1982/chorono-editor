@@ -15,8 +15,9 @@ import {editorOutputResources,type OutputResources,type OutputScope} from '../re
 import type {ResourceLease} from '../../resources/residency'
 import { RASTER_EXTENSION, type RasterFormat } from '../raster/ImageEncoders'
 import { ZipWriter } from './ZipWriter'
+import { resolveSequenceFramePlan, sequenceFrameTimeMs, type SequenceFrameRange } from './SequenceFramePlan'
 
-export interface SequenceExportOptions {
+export interface SequenceExportOptions extends SequenceFrameRange {
   /** Per-frame image codec. */
   format: RasterFormat
   /** Frames per second to sample the timeline at. Default = composition.frameRate. */
@@ -70,10 +71,9 @@ export function acquireSequence(scene:ChronoScene,_assets:AssetElementMap,opts:S
 export async function renderSequenceOutput(scene:ChronoScene,opts:SequenceExportOptions,scope:OutputScope,
   signal?:AbortSignal,onProgress?:SequenceProgress,maxArchiveBytes=128*1024**2):Promise<SequenceExportResult>{
   scope.check(signal)
-  const rawFps=opts.fps??scene.composition.frameRate??30,durationMs=scene.composition.durationMs
-  if(!Number.isFinite(rawFps)||!Number.isFinite(durationMs)||durationMs<0)throw new RangeError('Invalid sequence frame rate/duration.')
-  const fps=Math.max(1,rawFps),frameCount=Math.max(1,Math.round(durationMs/1000*fps)),pattern=opts.pattern??'frame_####'
-  if(!Number.isSafeInteger(frameCount)||frameCount>4096)throw new RangeError('Sequence output exceeds the 4096-frame limit.')
+  const plan=resolveSequenceFramePlan(scene.composition.durationMs,opts.fps??scene.composition.frameRate??30,
+    {startTimeMs:opts.startTimeMs,frameCount:opts.frameCount})
+  const {frameCount}=plan,pattern=opts.pattern??'frame_####'
   if(pattern.length>256)throw new RangeError('Sequence filename pattern exceeds 256 characters.')
   const ext=RASTER_EXTENSION[opts.format],minPad=String(frameCount).length
   const zip=new ZipWriter({scope,maxBytes:maxArchiveBytes}),media=new VisualMediaSession();media.start()
@@ -84,7 +84,7 @@ export async function renderSequenceOutput(scene:ChronoScene,opts:SequenceExport
       scope.check(signal)
       const frame=scope.child()
       try{
-        const result=await renderRasterFrame(scene,{format:opts.format,timeMs:i/fps*1000,scale:opts.scale,
+        const result=await renderRasterFrame(scene,{format:opts.format,timeMs:sequenceFrameTimeMs(plan,i),scale:opts.scale,
           background:opts.background,quality:opts.quality},frame,signal,media)
         if(i===0)warnings=result.warnings
         await zip.addBlob(`${formatFrameName(pattern,i+1,minPad)}.${ext}`,result.blob,signal)

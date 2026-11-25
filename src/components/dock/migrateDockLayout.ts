@@ -1,13 +1,14 @@
 import type { DockNode } from './types'
-import { defaultLayout, findLeafOfPanel, removePanel, setActiveTab } from './layoutOps'
+import { defaultLayout, findLeafOfPanel, removePanel, renamePanel, setActiveTab } from './layoutOps'
 
-/** Retire the old Snap/Shortcuts dock entries without resetting a valid custom
+/** Rename Spline Modeling to Edit and retire Snap/Shortcuts without resetting a valid custom
  * layout. Existing removal collapses only emptied leaves; other panel IDs,
  * placement/ratios and closed panels are retained. UI preference only: no scene,
  * selection or history migration. Reapplying is identity-preserving. */
 export function migrateDockLayout(tree: DockNode): DockNode {
-  let result = tree
-  for (const id of ['snap', 'shortcuts']) {
+  let result = renamePanel(tree, 'splineModeling', 'geometryEdit')
+  result = renamePanel(result, 'splineTools', 'geometryEdit')
+  for (const id of ['snap', 'shortcuts', 'splineModeling', 'splineTools']) {
     const leaf = findLeafOfPanel(result, id)
     if (!leaf) continue
     const selected = leaf.panels[leaf.activeIndex]

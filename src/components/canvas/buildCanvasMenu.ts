@@ -8,9 +8,16 @@
 
 import type { Layer } from '@/lib/types'
 import { ANIMATABLE_PROPERTIES, isPropertyAnimatableOn } from '@/lib/types'
+import { keyableChannels } from '@/lib/timeline/authoring/keyableChannels'
 import type { MenuItem } from '@/components/ui/ContextMenu'
+import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
+import { itemDetailMenu } from '@/components/detail/detailMenu'
 
 export interface CanvasMenuHandlers {
+  /** Main editor Add dispatcher; absent in private detail hosts. */
+  addLayer?: (kind: string, origin?: { x: number; y: number }) => void
+  editContent?: () => void
+  isolateSelection?: () => void
   // Clipboard
   cut?:        () => void
   copy?:       () => void
@@ -54,6 +61,7 @@ export interface CanvasMenuHandlers {
    * caller selects the target and supplies the active Timeline context. */
   editMotionKeys?: () => void
   convertToPath?:   () => void
+  convertToMesh2D?: () => void
   saveToLibrary?:   () => void
   createClippingPath?: () => void
   createMask?:      () => void
@@ -66,6 +74,8 @@ export interface CanvasMenuHandlers {
 
   // Lock
   toggleLock?:    () => void
+  /** Atomic selection-wide lock, distinct from the single-target handler. */
+  toggleSelectionLock?: () => void
 
   // Transform
   rotate90CW?:    () => void
@@ -74,6 +84,7 @@ export interface CanvasMenuHandlers {
   flipVertical?:  () => void
 
   // Align (only meaningful with multi-select — caller decides)
+  fitParent?: () => void
   alignLeft?:   () => void
   alignCenter?: () => void
   alignRight?:  () => void
@@ -90,6 +101,9 @@ export interface BuildMenuArgs {
   canUngroup:   boolean          // true when at least one selected layer is a group
   canPaste:     boolean
   handlers:     CanvasMenuHandlers
+  /** Complete selection for common-property animation filtering. A multi
+   * selection without this scope omits Animate rather than using one layer. */
+  selectedLayers?: readonly Layer[]
 }
 
 /**
@@ -97,6 +111,8 @@ export interface BuildMenuArgs {
  * a stub onSelect that does nothing AND the row is disabled — this way the
  * menu always shows the full surface area while clearly marking which
  * features aren't wired yet (avoids the "is this hidden or missing?" trap).
+ * Multiple selection has an explicit menu: target-only commands must not be
+ * exposed there. Animate lists only properties supported by every member.
  */
 export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
   const h         = args.handlers
@@ -104,15 +120,18 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
   const multi     = args.multiCount > 1
   const isLocked  = args.layer.locked === true
 
+  if (multi) return buildMultipleSelectionMenu(args)
+
   return [
+    ...itemDetailMenu(args.layer, args.multiCount, h.editContent, h.isolateSelection),
     // ── Copy / Paste submenu ───────────────────────────────────────────────
     {
       kind: 'submenu', label: 'Copy / Paste',
       items: [
-        action('Cut',       '⌘X', h.cut),
-        action('Copy',      '⌘C', h.copy),
+        action(multi ? `Cut ${args.multiCount} layers` : 'Cut', '⌘X', h.cut),
+        action(multi ? `Copy ${args.multiCount} layers` : 'Copy', '⌘C', h.copy),
         action('Paste',     '⌘V', h.paste, !args.canPaste),
-        action('Duplicate', '⌘D', h.duplicate),
+        action(multi ? `Duplicate ${args.multiCount} layers` : 'Duplicate', '⌘D', h.duplicate),
       ],
     },
 
@@ -146,53 +165,40 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       ],
     },
 
-    action('Group',       '⌘G',     h.group,   !multi),
-    action('Ungroup',     '⇧⌘G',   h.ungroup,  !isGroup),
-    action('Delete',      '⌫',      h.deleteLayer),
+    ...(multi && h.group ? [action('Group', '⌘G', h.group)] : []),
+    ...(!multi && isGroup && h.ungroup ? [action('Ungroup', '⇧⌘G', h.ungroup)] : []),
+    action(multi ? `Delete ${args.multiCount} layers` : 'Delete', '⌫', h.deleteLayer),
 
     sep(),
 
-    action('Center origin', '⇧⌘O', h.centerOrigin),
+    action('Center origin', '⇧⌘O', h.centerOrigin, multi),
 
     // ── Animate submenu — every animatable property for this layer type ───
     {
-      kind: 'submenu', label: 'Animate',
+      kind: 'submenu', label: 'Animate', disabled: multi,
       items: buildAnimateSubmenu(args.layer, h.animateProperty),
     },
     ...(h.editMotionKeys ? [action('Edit motion keys', undefined, h.editMotionKeys)] : []),
 
     // BL-67 — Pick a path layer on the canvas to drive this layer's position.
     action('Assign motion path…', undefined,
-      args.layer.type === 'path' ? undefined : h.assignMotionPath),
-    action('Convert to Spline', undefined, h.convertToPath),
-    action('Save to library',  undefined, h.saveToLibrary),
+      args.layer.type === 'path' || multi ? undefined : h.assignMotionPath),
+    ...buildConversionMenu(args),
+    action('Save to library',  undefined, h.saveToLibrary, multi),
 
     sep(),
 
-    action('Create clipping path', undefined, h.createClippingPath),
-    action('Create mask',          undefined, h.createMask),
+    action('Create clipping path', undefined, h.createClippingPath, multi),
+    action('Create mask',          undefined, h.createMask, multi),
 
     sep(),
 
     // ── Align (multi-select only) ─────────────────────────────────────────
-    {
-      kind: 'submenu', label: 'Align', disabled: !multi,
-      items: [
-        action('Align Left',    undefined, h.alignLeft),
-        action('Align Center',  undefined, h.alignCenter),
-        action('Align Right',   undefined, h.alignRight),
-        action('Align Top',     undefined, h.alignTop),
-        action('Align Middle',  undefined, h.alignMiddle),
-        action('Align Bottom',  undefined, h.alignBottom),
-        sep(),
-        action('Distribute Horizontally', undefined, h.distributeHorizontally, args.multiCount < 3),
-        action('Distribute Vertically',   undefined, h.distributeVertically,   args.multiCount < 3),
-      ],
-    },
+    buildAlignMenu(args),
 
     // ── Arrange (z-order) ─────────────────────────────────────────────────
     {
-      kind: 'submenu', label: 'Arrange',
+      kind: 'submenu', label: 'Arrange', disabled: multi,
       items: [
         action('Bring forward',  '⌘↑',  h.bringForward),
         action('Bring to front', '⇧⌘↑', h.bringToFront),
@@ -201,18 +207,75 @@ export function buildCanvasMenu(args: BuildMenuArgs): MenuItem[] {
       ],
     },
 
-    action(isLocked ? 'Unlock' : 'Lock', '⌘L', h.toggleLock),
+    action(isLocked ? 'Unlock' : 'Lock', '⌘L', h.toggleLock, multi),
 
     sep(),
 
-    action('Rotate 90° right', undefined, h.rotate90CW),
-    action('Rotate 90° left',  undefined, h.rotate90CCW),
+    action('Rotate 90° right', undefined, h.rotate90CW, multi),
+    action('Rotate 90° left',  undefined, h.rotate90CCW, multi),
 
     sep(),
 
-    action('Flip horizontal', undefined, h.flipHorizontal),
-    action('Flip vertical',   undefined, h.flipVertical),
+    action('Flip horizontal', undefined, h.flipHorizontal, multi),
+    action('Flip vertical',   undefined, h.flipVertical, multi),
+    ...(h.addLayer ? [sep(), ...buildAddLayerMenu(h.addLayer)] : []),
   ]
+}
+
+/** Selection-wide commands verified at the canvas/page integration boundary.
+ * Ungroup, origin, arrange, transforms and source-specific clone actions
+ * currently address only the primary/context layer and are deliberately absent.
+ * Clipboard and clone handlers own the full selection; Paste owns its clipboard.
+ */
+function buildMultipleSelectionMenu(args: BuildMenuArgs): MenuItem[] {
+  // TODO(helpers): Explain repeated Cmd/Ctrl-drag offsets near Duplicate;
+  // decide help versus an explicit option before adding any UI.
+  const h = args.handlers
+  const layers = args.selectedLayers
+  const animation = layers?.length === args.multiCount
+    ? buildAnimateSubmenu(args.layer, h.animateProperty, layers) : []
+  return [
+    { kind: 'submenu', label: 'Copy / Paste', items: [
+      action('Cut', '⌘X', h.cut), action('Copy', '⌘C', h.copy),
+      action('Paste', '⌘V', h.paste, !args.canPaste), action('Duplicate', '⌘D', h.duplicate),
+    ] },
+    { kind: 'submenu', label: 'Clone / Array', items: [
+      action('Clone (quick)', '⌥⌘D', h.cloneQuick ?? h.duplicate),
+      action('Clone with settings…', undefined, h.cloneSettings),
+      action('Array…', '⇧⌘A', h.arraySettings),
+    ] },
+    ...buildConversionMenu(args),
+    action('Group', '⌘G', h.group), action('Delete', '⌫', h.deleteLayer),
+    ...(animation.length ? [sep(), { kind: 'submenu' as const, label: 'Animate', items: animation }] : []),
+    sep(), buildAlignMenu(args),
+    ...(h.toggleSelectionLock ? [sep(), action(layers?.every(layer => layer.locked) ? 'Unlock selection' : 'Lock selection',
+      '⌘L', h.toggleSelectionLock)] : []),
+  ]
+}
+
+/** Both conversion commands own the complete compatible selection. Other
+ * mixed multi-selection types omit this source-specific surface entirely. */
+function buildConversionMenu(args: BuildMenuArgs): MenuItem[] {
+  const h = args.handlers
+  if (!h.convertToPath && !h.convertToMesh2D) return []
+  if (args.multiCount > 1 && (args.selectedLayers?.length !== args.multiCount || !args.selectedLayers.every(layer => ['shape', 'spline'].includes(layer.type)))) return []
+  return [{ kind: 'submenu', label: 'Convert', items: [
+    action('Convert Spline', undefined, h.convertToPath), action('Convert 2D Mesh', undefined, h.convertToMesh2D),
+  ] }]
+}
+
+/** Shared selection alignment surface. Distribution needs at least three members. */
+function buildAlignMenu(args: BuildMenuArgs): MenuItem {
+  const h = args.handlers
+  const single = args.multiCount < 2
+  return { kind: 'submenu', label: 'Align', disabled: single && !h.fitParent, items: [
+    action('Align Left', undefined, h.alignLeft, single), action('Align Center', undefined, h.alignCenter, single),
+    action('Align Right', undefined, h.alignRight, single), action('Align Top', undefined, h.alignTop, single),
+    action('Align Middle', undefined, h.alignMiddle, single), action('Align Bottom', undefined, h.alignBottom, single),
+    sep(), action('Distribute Horizontally', undefined, h.distributeHorizontally, args.multiCount < 3),
+    action('Distribute Vertically', undefined, h.distributeVertically, args.multiCount < 3),
+    ...(single && h.fitParent ? [sep(), action('Fit Parent', undefined, h.fitParent, !!args.layer.locked)] : []),
+  ] }
 }
 
 // ── Internal builders ───────────────────────────────────────────────────────
@@ -239,10 +302,13 @@ function noop() { /* placeholder — disabled rows never call this */ }
 function buildAnimateSubmenu(
   layer: Layer,
   animateProperty?: (path: string) => void,
+  selection: readonly Layer[] = [layer],
 ): MenuItem[] {
-  // Group → category headers (separator + items) to match the screenshot
+  const channels = selection.length > 1 ? selection.map(member =>
+    new Set(keyableChannels(member, [], 'all', new Set()).map(channel => channel.path))) : null
   const allowed = ANIMATABLE_PROPERTIES.filter(
-    (p) => isPropertyAnimatableOn(p, layer.type),
+    (p) => selection.every(member => isPropertyAnimatableOn(p, member.type))
+      && (!channels || channels.every(paths => paths.has(p.path))),
   )
   const byGroup = new Map<string, typeof allowed>()
   for (const p of allowed) {

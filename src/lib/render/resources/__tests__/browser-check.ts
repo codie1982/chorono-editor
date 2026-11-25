@@ -10,31 +10,43 @@ function canvas(width = 128, height = 96): HTMLCanvasElement {
 }
 
 /**
- * Frozen pre-pool reference: fresh content and silhouette canvases, matching
- * MaskRenderer before resource pooling. Kept only in this browser regression
- * fixture so native clipping/filter/compositing can be compared byte-for-byte.
+ * Fresh-canvas reference for mask alpha and mode ordering. It owns each
+ * scratch canvas independently of the renderer's surface pool.
  */
 function reference(masks: MaskDefinition[], args: MaskRenderArgs): void {
   if (!masks.length) { args.renderHost(args.destCtx); return }
   const content = canvas(args.width, args.height), context = content.getContext('2d')!
   args.renderHost(context)
+  const matte = canvas(args.width, args.height), matteCtx = matte.getContext('2d')!
+  let hasMatte = false
   for (const mask of masks) {
     const layer = args.getLayer(mask.maskLayerId)
     if (!layer) continue
     const silhouette = canvas(args.width, args.height), maskCtx = silhouette.getContext('2d')!
+    maskCtx.save()
     if (mask.feather && mask.feather > 0) maskCtx.filter = `blur(${mask.feather}px)`
     args.renderMask(layer, maskCtx)
-    maskCtx.filter = 'none'
+    maskCtx.restore()
     if (mask.inverted) {
-      maskCtx.save(); maskCtx.globalCompositeOperation = 'difference'; maskCtx.fillStyle = '#fff'
+      maskCtx.save(); maskCtx.globalCompositeOperation = 'xor'; maskCtx.fillStyle = '#fff'
       maskCtx.fillRect(0, 0, args.width, args.height); maskCtx.restore()
     }
-    context.save(); context.globalAlpha = mask.opacity ?? 1
-    context.globalCompositeOperation = mask.mode === 'subtract' ? 'destination-out' : 'destination-in'
-    context.drawImage(silhouette, 0, 0); context.restore()
+    if (!hasMatte && mask.mode === 'subtract') {
+      matteCtx.fillStyle = '#fff'; matteCtx.fillRect(0, 0, args.width, args.height)
+    }
+    matteCtx.save(); matteCtx.globalAlpha = mask.opacity ?? 1
+    matteCtx.globalCompositeOperation = mask.mode === 'subtract' ? 'destination-out'
+      : mask.mode === 'intersect' && hasMatte ? 'destination-in' : 'source-over'
+    matteCtx.drawImage(silhouette, 0, 0); matteCtx.restore()
+    hasMatte = true
+  }
+  if (hasMatte) {
+    context.globalCompositeOperation = 'destination-in'
+    context.drawImage(matte, 0, 0)
   }
   args.destCtx.drawImage(content, 0, 0)
   content.width = content.height = 0
+  matte.width = matte.height = 0
 }
 
 /** Provides translated/rotated gradient content and deliberately unbalanced mask clips. */
@@ -86,6 +98,7 @@ async function check(): Promise<void> {
   const pool = new CanvasSurfacePool({ maxBytes: 1024 * 1024 })
   const renderer = new MaskRenderer(pool)
   const results: Array<{ name: string; changedChannels: number }> = []
+  const pixelChecks: Record<string, boolean> = {}
   const example = (label: string, output: HTMLCanvasElement) => {
     const figure = document.createElement('figure'), caption = document.createElement('figcaption')
     caption.textContent = label; figure.append(caption, output)
@@ -107,6 +120,18 @@ async function check(): Promise<void> {
         ])
       }
     }
+    const union = canvas()
+    renderer.render([
+      { id: 'left', maskLayerId: 'circle', mode: 'add' },
+      { id: 'right', maskLayerId: 'box', mode: 'add' },
+    ], argumentsFor(union))
+    const alphaAt = (surface: HTMLCanvasElement, x: number, y: number) =>
+      surface.getContext('2d')!.getImageData(x, y, 1, 1).data[3]
+    pixelChecks.addUnion = alphaAt(union, 30, 44) > 0 && alphaAt(union, 95, 44) > 0
+    const inverse = canvas()
+    renderer.render([{ id: 'inverse', maskLayerId: 'circle', mode: 'add', inverted: true }], argumentsFor(inverse))
+    pixelChecks.inverseAlpha = alphaAt(inverse, 50, 44) === 0 && alphaAt(inverse, 95, 44) > 0
+    union.width = union.height = inverse.width = inverse.height = 0
     run('no masks', [])
     run('missing mask', [{ id: 'a', maskLayerId: 'missing', mode: 'add', opacity: 1 }])
     for (let frame = 0; frame < 60; frame++) {
@@ -118,9 +143,10 @@ async function check(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 2100))
     const afterGrace = pool.getSnapshot()
     const passed = results.every(result => result.changedChannels === 0)
-      && beforeGrace.allocations === 2 && afterGrace.residentBytes === 0
-    document.querySelector('#status')!.textContent = passed ? 'PASS — exact pixels, two surfaces, idle bytes released' : 'FAIL'
-    document.querySelector('#results')!.textContent = JSON.stringify({ passed, results, beforeGrace, afterGrace }, null, 2)
+      && Object.values(pixelChecks).every(Boolean)
+      && beforeGrace.allocations === 3 && afterGrace.residentBytes === 0
+    document.querySelector('#status')!.textContent = passed ? 'PASS — exact pixels, three surfaces, idle bytes released' : 'FAIL'
+    document.querySelector('#results')!.textContent = JSON.stringify({ passed, results, pixelChecks, beforeGrace, afterGrace }, null, 2)
   } finally {
     pool.dispose()
   }

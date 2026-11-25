@@ -4,6 +4,8 @@ import type { Asset, Layer } from '../../types'
 import { prepareRenderFrame } from '../prepareRenderFrame'
 import { VisualDemandResolver } from './VisualDemandResolver'
 import type { MediaFrameInput } from './types'
+import { newStructuredGridMesh2DLayer } from '../../registry/definitions/mesh2d/Mesh2DDefinition'
+import { setMesh2DDeformation, setMesh2DTexture } from '../../mesh2d'
 
 const asset = (id: string, type: Asset['type'] = 'image'): Asset => ({ id, name: id, type, url: id, width: 20, height: 20 })
 function image(id: string, x = 0): Layer { const l = newImageLayer(id, 20, 20); l.id = id; l.transform = { ...l.transform, x, y: 0 }; return l }
@@ -17,6 +19,17 @@ function setup(layers: Layer[], assets = layers.filter(l => l.image).map(l => as
 const ids = (input: MediaFrameInput) => new VisualDemandResolver().resolve(input).map(d => d.asset.id).sort()
 
 describe('canonical frame media dependency demand', () => {
+  it('demands only nested Solo media through effect groups, but retains complete referenced mask groups', () => {
+    const group: Layer = { ...newRectLayer(), id: 'g', type: 'group', effects: { blur: 2 } }
+    group.transform = { ...group.transform, x: 0, y: 0 }
+    const nested: Layer = { ...group, id: 'nested', parentId: group.id }
+    const child = { ...image('child'), parentId: nested.id, solo: true }
+    const sibling = { ...image('sibling'), parentId: nested.id }
+    expect(ids(setup([group, nested, child, sibling, image('outside')]).input)).toEqual(['child'])
+    const host = image('host'); host.solo = true
+    host.masks = [{ id: 'group-mask', maskLayerId: group.id, mode: 'intersect', inverted: false, feather: 0 }]
+    expect(ids(setup([host, group, nested, { ...child, solo: false }, sibling]).input)).toEqual(['child', 'host', 'sibling'])
+  })
   it('reports missing referenced source metadata instead of claiming an empty required set is ready', () => {
     const { input, resolver } = setup([image('missing')], [])
     expect(resolver.resolve(input)).toEqual([]); expect(resolver.missing).toEqual(['missing'])
@@ -72,5 +85,32 @@ describe('canonical frame media dependency demand', () => {
     l.hidden = true
     const { input } = setup([l], [asset('sheet', 'spriteSheet')])
     expect(ids(input)).toEqual([]); expect(ids({ ...input, rootIds: [l.id] })).toEqual(['sheet'])
+  })
+  it('requests Mesh2D texture and deformation assets through the same frame closure', () => {
+    const mesh = setMesh2DDeformation(setMesh2DTexture(newStructuredGridMesh2DLayer(), 'fabric'), 'clip')
+    const { input } = setup([mesh], [asset('fabric'), asset('clip', 'meshDeformation')])
+    expect(ids(input)).toEqual(['clip', 'fabric'])
+  })
+})
+
+describe('shape and background image paint demand', () => {
+  it('uses active paint only while preserving the sparse native-free vector path', () => {
+    const layer = { ...newRectLayer(), id: 'paint', transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotationDeg: 0, anchorX: 0, anchorY: 0 }, size: { width: 20, height: 20 },
+      style: { fill: { type: 'image' as const, image: { version: 1 as const, assetId: 'picture' } } } }
+    const { scene, input } = setup([layer], [asset('picture')])
+    expect(ids(input)).toEqual(['picture'])
+    const hiddenPaint = { ...scene, layers: [{ ...layer, style: { fill: { ...layer.style.fill, type: 'none' as const } } }] }
+    expect(ids({ ...input, frame: prepareRenderFrame(hiddenPaint, 0) })).toEqual([])
+    const moved = { ...scene, layers: [{ ...layer, transform: { ...layer.transform, x: 900 } }] }
+    expect(ids({ ...input, frame: prepareRenderFrame(moved, 0) })).toEqual([])
+    expect(ids({ ...input, frame: prepareRenderFrame(moved, 0), selected: new Set(['paint']) })).toEqual(['picture'])
+  })
+  it('loads a background with no layers and suppresses it for explicit/disabled output backgrounds', () => {
+    const { scene, input } = setup([], [asset('picture')])
+    scene.composition.backgroundFill = { type: 'image', image: { version: 1, assetId: 'picture' } }
+    const frame = prepareRenderFrame(scene, 0)
+    expect(ids({ ...input, frame })).toEqual(['picture'])
+    expect(ids({ ...input, frame, includeBackground: false })).toEqual([])
+    expect(ids({ ...input, frame, rootIds: [] })).toEqual([])
   })
 })

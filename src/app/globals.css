@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shared bidirectional rotation cursor, 32 CSS px with a centered hotspot.
+   A white outline keeps the dark curved arrow visible on either canvas theme. */
+.cursor-rotate {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22 A11 11 0 1 1 26 22 M3 17 L6 22 L11 20 M21 20 L26 22 L29 17' stroke='white' stroke-width='5'/%3E%3Cpath d='M6 22 A11 11 0 1 1 26 22 M3 17 L6 22 L11 20 M21 20 L26 22 L29 17' stroke='%230f172a' stroke-width='2.5'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair;
+}
+
 /* Chorono Builder — dark-first global stiller */
 :root {
   color-scheme: dark;

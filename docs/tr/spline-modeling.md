@@ -1,6 +1,25 @@
 # Spline modelleme: Offset, Outline, Chamfer ve Fillet
 
-Seçili spline katmanı için **Spline Modeling** dock sekmesini Properties düğmesinden açın veya View menüsünden geri getirin. Kontur, işlem ve **katmana yerel piksel** cinsinden pozitif mesafe seçin. Kapalı konturda Offset/Outline yönü outward/inward; açık konturda kontur sırasına göre left/right'tır. **Preview** kaynak/history'yi değiştirmez; **Apply** tek Undo adımıyla uygular, **Cancel** atar. Önizleme sonrasında belge veya revision değişirse yeniden Preview gerekir.
+Seçili spline katmanı için bağımsız **Edit** dock sekmesini açın; Properties
+üzerindeki **Open Edit** düğmesi veya panel menüsü de bu sekmeyi açar. Eski
+Spline Modeling sekmesinin kayıtlı konumu Edit'e taşınır. Üstteki işlem
+listesinden Offset, Outline, Chamfer veya Fillet seçin; yalnız seçilen işlemin
+ayarları altta görünür. **Source**, canvas'ta seçilen noktanın düzenleyicisini
+ve kapalı spline'dan ayrı Mesh2D oluşturma işlemini içerir. Nokta seçmek Edit
+panelini açar. Basic Shape katmanları bu panelde düzenlenmez; kendi parametrik
+kontrolleri Properties'te kalır. Mesh2D kaynak/grid, texture, deformation clip ve
+pin ayarları da Edit'te ayrı satırlardan açılır. Transform, görünüm ve spline
+fill/stroke/trim kontrolleri Properties'te kalır. Animasyon eğrisi modifier'ları
+ayrı **Animation Modifiers** panelindedir.
+
+Kontur ve **katmana yerel piksel** cinsinden pozitif mesafe seçin. Kapalı
+konturda Offset/Outline yönü outward/inward; açık konturda kontur sırasına göre
+left/right'tır. **Preview** kaynak/history'yi değiştirmez; **Apply** tek Undo
+adımıyla uygular, **Cancel** atar. Önizleme sonrasında belge veya revision
+değişirse yeniden Preview gerekir. Layer veya işlem değiştirmek geçici taslağı
+atar. Bu liste mevcut modelleme araçlarının ayarlarını düzenler; kalıcı,
+sıralanabilir geometri modifier kayıtları eklemez. Offset/Outline ayrı layer
+oluşturur; Chamfer/Fillet kaynak konturu değiştirir.
 
 Offset, paralel konturu yeni kardeş spline katmanına koyar. Outline, kapalı kaynakta iki even-odd konturlu bant; açık kaynakta uçları kapatılmış şerit üretir. Kaynak geometri ve animasyonu değişmez. Chamfer/Fillet yalnız seçili konturu yeniden oluşturur. Panelde birden fazla uygun köşe seçilebilir; canvas'taki nokta da kullanılabilir. Açık uçlar ve kilitli noktalar seçilemez. Değiştirilecek kontura adreslenmiş animasyon track'i varsa işlem reddedilir; önce bake veya track temizliği gerekir. Diğer konturların kayıtları ve kimlikleri korunur.
 

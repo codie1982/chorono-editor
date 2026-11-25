@@ -20,6 +20,7 @@ const GIF  = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]
 const MP3_ID3 = [0x49, 0x44, 0x33, 0x04]
 const OGG  = [0x4F, 0x67, 0x67, 0x53]
 const WOFF2 = [0x77, 0x4F, 0x46, 0x32]
+const CHMD2D = [0x43, 0x48, 0x4D, 0x44, 0x32, 0x44, 0x30, 0x31]
 const PDF  = [0x25, 0x50, 0x44, 0x46, 0x2D]
 // RIFF containers: "RIFF" + size(4) + format(4)
 const RIFF = [0x52, 0x49, 0x46, 0x46]
@@ -61,6 +62,12 @@ describe('FileTypeDetector — magic bytes', () => {
 
   it('detects WOFF2 font', async () => {
     expect(await det.detect(fileFromBytes(WOFF2, 'x.woff2'))).toBe('font/woff2')
+  })
+
+  it('detects a Mesh2D deformation clip by magic bytes and routes it as an asset', async () => {
+    const format = await det.detect(fileFromBytes(CHMD2D, 'motion.bin', 'application/octet-stream'))
+    expect(format).toBe('application/x-chorono-mesh-deformation')
+    expect(getImportKind(format)).toBe('asset')
   })
   it('detects WOFF font magic bytes and routes it as an asset', async () => {
     const format = await det.detect(fileFromBytes([0x77,0x4f,0x46,0x46], 'custom.bin'))
@@ -161,6 +168,7 @@ describe('FileTypeDetector — static helpers', () => {
   it('label returns human-readable names', () => {
     expect(FileTypeDetector.label('image/png')).toBe('PNG Image')
     expect(FileTypeDetector.label('application/dxf')).toBe('DXF CAD Drawing')
+    expect(FileTypeDetector.label('application/x-chorono-mesh-deformation')).toBe('Chorono Mesh2D Deformation')
   })
 
   it('isSupported reflects Phase 1 coverage', () => {
@@ -183,6 +191,7 @@ describe('getImportKind', () => {
       'video/mp4', 'video/mov', 'video/webm',
       'audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg',
       'font/woff2', 'font/ttf', 'font/otf',
+      'application/x-chorono-mesh-deformation',
     ]
     for (const f of assetFormats) expect(getImportKind(f)).toBe('asset')
   })

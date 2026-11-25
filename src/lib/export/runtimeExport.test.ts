@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { exportToRuntime } from './runtimeExport'
 import type { ChronoScene, StateMachineDefinition } from '../types'
+import { newStructuredGridMesh2DLayer } from '../registry/definitions/mesh2d/Mesh2DDefinition'
 
 const sceneBase: ChronoScene = {
   formatVersion: '1.0.0',
@@ -22,6 +23,13 @@ const machine = (): StateMachineDefinition => ({
 })
 
 describe('exportToRuntime — state machines (BL-09)', () => {
+  it('preserves portable Mesh2D source and topology for runtime rendering', () => {
+    const mesh = newStructuredGridMesh2DLayer()
+    const out = exportToRuntime({ ...sceneBase, layers: [mesh] })
+    expect(out.layers[0].type).toBe('mesh2d')
+    expect(out.layers[0].mesh2d).toEqual(mesh.mesh2d)
+  })
+
   it('omits the field entirely when the scene has no machines', () => {
     const out = exportToRuntime(sceneBase)
     expect('stateMachines' in out).toBe(false)

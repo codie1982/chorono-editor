@@ -10,6 +10,9 @@ export interface EditorLayerRow {
   readonly contextOnly: boolean
 }
 export interface EditorLayerRowsOptions {
+  /** Hard view boundary, including Find. Omitted/null keeps the full forest.
+   * Scoped children of outside parents become view roots without source edits. */
+  readonly layerScope?: ReadonlySet<string> | null
   readonly collapsedIds?: ReadonlySet<string>
   /** Actual eligible/matching identities, before ancestor closure; null = all. */
   readonly matches?: ReadonlySet<string> | null
@@ -29,14 +32,15 @@ export interface EditorLayerRowsOptions {
  * source. No second parent graph, global cache, DOM or renderer state is owned.
  */
 export function buildEditorLayerRows(layers: readonly Layer[], options: EditorLayerRowsOptions = {}): EditorLayerRow[] {
-  const index = new LayerIndex(layers), visible = options.matches ? index.ancestorIds(options.matches) : null
+  const sources = options.layerScope ? layers.filter(layer => options.layerScope!.has(layer.id)) : layers
+  const index = new LayerIndex(sources), visible = options.matches ? index.ancestorIds(options.matches) : null
   if (visible) index.ancestorIds(options.revealIds ?? []).forEach(id => visible.add(id))
   const compare = options.compare
   const order = (siblings: readonly Layer[], roots = false) => {
     const sorted = compare ? [...siblings].sort(compare) : [...siblings]
     return roots ? [...sorted.filter(layer => layer.pinned), ...sorted.filter(layer => !layer.pinned)] : sorted
   }
-  const roots = layers.filter(layer => !layer.parentId || !index.get(layer.parentId))
+  const roots = sources.filter(layer => !layer.parentId || !index.get(layer.parentId))
   const result: EditorLayerRow[] = [], visited = new Set<string>()
   const walk = (sources: readonly Layer[]) => {
     const pending = sources.map(layer => ({ layer, depth: 0 })).reverse()
@@ -58,7 +62,7 @@ export function buildEditorLayerRows(layers: readonly Layer[], options: EditorLa
   }
   walk(order(roots, true))
   // Malformed rootless cycles remain inspectable, but do not alter valid order.
-  walk(layers.filter(layer => !visited.has(layer.id) && (!visible || visible.has(layer.id))))
+  walk(sources.filter(layer => !visited.has(layer.id) && (!visible || visible.has(layer.id))))
   return result
 }
 

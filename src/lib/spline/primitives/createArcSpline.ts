@@ -1,6 +1,7 @@
 import type { SplinePathData, ArcSplineParams } from '@/lib/types/spline'
 import type { AnchorSpec } from '../util/buildSplineData'
 import { buildSplineData } from '../util/buildSplineData'
+import { circularArcCubics } from '../../geometry/bezier/circularArc'
 
 /**
  * Open circular arc, split into ≤90° cubic chunks. 0° = 12 o'clock.
@@ -11,25 +12,9 @@ export function createArcSpline(params: ArcSplineParams): SplinePathData {
   const startRad = (params.startAngle - 90) * (Math.PI / 180)
   const endRad   = (params.endAngle   - 90) * (Math.PI / 180)
 
-  const total = endRad - startRad
-  const steps = Math.max(1, Math.ceil(Math.abs(total) / (Math.PI / 2)))
-  const step  = total / steps
-  const k     = (4 / 3) * Math.tan(step / 4)
-
-  const anchors: AnchorSpec[] = []
-  for (let i = 0; i <= steps; i++) {
-    const a   = startRad + i * step
-    const cos = Math.cos(a)
-    const sin = Math.sin(a)
-    const x   = r * cos
-    const y   = r * sin
-
-    const spec: AnchorSpec = { x, y, type: 'smooth' }
-    // tangent direction (derivative of circle) scaled by k·r
-    if (i < steps) spec.out = { x: x - k * r * sin, y: y + k * r * cos }
-    if (i > 0)     spec.in  = { x: x + k * r * sin, y: y - k * r * cos }
-    anchors.push(spec)
-  }
+  const curves = circularArcCubics({ x: 0, y: 0 }, r, startRad, endRad - startRad, Infinity, Infinity)
+  const anchors: AnchorSpec[] = curves.map((curve, i) => ({ ...curve[0], type: 'smooth', out: curve[1], ...(i ? { in: curves[i - 1][2] } : {}) }))
+  anchors.push({ ...curves.at(-1)![3], type: 'smooth', in: curves.at(-1)![2] })
 
   return buildSplineData({
     kind: 'arc',

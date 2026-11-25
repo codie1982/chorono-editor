@@ -10,6 +10,8 @@ import type { PathBounds } from '@/lib/geometry/computePathBounds'
 export type Handle = SelectionResizeHandle
 
 export interface MoveState {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'move'
   /** Primary (the layer actually clicked). Used for snapshot + selection focus. */
   layerId: string
@@ -136,6 +138,8 @@ export interface NewAnchorDrawDrag {
 /** Scale-mode axis gizmo drag — modifies transform.scaleX / scaleY
  *  rather than the layer's width/height (which is what ResizeState does). */
 export interface ScaleAxisState {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'scaleAxis'
   layerId: string
   originalLayer: Layer
@@ -165,7 +169,11 @@ export interface ScaleAxisState {
 
 /** BL-73 Sprint 4 — dragging a spline on-curve point. */
 export interface SplinePointDrag {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'splinePoint'
+  /** Optional multi-point selection; omitted preserves the legacy single-point drag. */
+  pointIds?: readonly string[]
   layerId: string
   originalLayer: Layer
   pointId: string
@@ -180,6 +188,8 @@ export interface SplinePointDrag {
 
 /** BL-73 Sprint 4 — dragging a spline bezier handle. */
 export interface SplineHandleDrag {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
   kind: 'splineHandle'
   layerId: string
   originalLayer: Layer
@@ -194,6 +204,35 @@ export interface SplineHandleDrag {
   worldToLocal: Matrix2D
 }
 
+/** Local sub-object transform. The complete inverse and local anchor pivot are
+ * pinned at gesture start, with unique point IDs and immutable source geometry.
+ * No layer transform or keyframe target is edited by this drag. */
+export interface SplineGeometryDrag {
+  /** Captured unit axes in composition space; omitted means legacy Scene. */
+  axisFrame?: Matrix2D
+  kind: 'splineGeometry'
+  layerId: string
+  originalLayer: Layer
+  pointIds: readonly string[]
+  operation: 'move' | 'rotate' | 'scale'
+  /** Hard X/Y constraint in the captured toolbox axis frame. */
+  axisLock?: 'x' | 'y' | null
+  startClientX: number
+  startClientY: number
+  startLocal: { x: number; y: number }
+  pivot: { x: number; y: number }
+  worldToLocal: Matrix2D
+}
+
+/** Whole-mesh local geometry gesture; its stable modifier ID belongs to this
+ * preview/commit session. Layer placement, anchor, topology and UVs stay fixed. */
+export interface MeshGeometryDrag extends Omit<SplineGeometryDrag, 'kind' | 'pointIds'> {
+  kind: 'meshGeometry'
+  /** Selected stable vertices; omission preserves whole-mesh Object editing. */
+  vertexIds?: readonly string[]
+  modifierId: string
+}
+
 export type ActiveDrag =
   | MoveState
   | ResizeState
@@ -204,6 +243,8 @@ export type ActiveDrag =
   | ScaleAxisState
   | SplinePointDrag
   | SplineHandleDrag
+  | SplineGeometryDrag
+  | MeshGeometryDrag
 
 /** CSS cursor for each resize handle (diagonal pairs share a cursor). */
 export const HANDLE_CURSORS: Record<Handle, string> = {

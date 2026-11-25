@@ -1,6 +1,7 @@
 import type { ChronoScene, Timeline, Track } from '@/lib/types'
 import type { TrackNode } from '@/components/dope-sheet/types'
 import { buildTimelineLayerRows } from '@/lib/timeline/hierarchy/timelineLayerRows'
+import type { TimelineAuthoringContext } from '@/lib/timeline/authoring/TimelineAuthoringContext'
 
 /** Display groups retain existing property names and target identities. */
 function groupLabel(path: string): string {
@@ -18,17 +19,19 @@ function groupLabel(path: string): string {
  * parent-first construction supports deeply nested and out-of-order source;
  * no scene, track, key or metadata is changed. Node IDs preserve old collapse
  * and summary-key contracts. Collapse is applied later by the row flattener.
+
+ * Explicit content context projects only the bound owner channels. Structural ancestor rows gain no key editing authority.
  */
 export function buildHierarchy(scene: ChronoScene, timeline: Timeline | null,
   filterAnimatedOnly: boolean, filterSelectedObjectOnly: boolean, filterText: string,
-  selectedLayerId: string | null, selectedLayerIds?: ReadonlySet<string>): TrackNode[] {
+  selectedLayerId: string | null, selectedLayerIds?: ReadonlySet<string>, context?: TimelineAuthoringContext, layerScope?: ReadonlySet<string> | null): TrackNode[] {
   if (!timeline) return []
   const root: TrackNode = { id: 'scene', name: 'Scene', type: 'group', depth: 0,
     children: [], expanded: true, hasKeys: false, isParent: true }
   const nodes: TrackNode[] = [root], parents: TrackNode[] = [root]
   const query = filterText.trim().toLowerCase()
   const rows = buildTimelineLayerRows(scene.layers, timeline, { selectedOnly: filterSelectedObjectOnly,
-    selectedId: selectedLayerId, selectedIds: selectedLayerIds, animatedOnly: filterAnimatedOnly, filter: filterText }).rows
+    selectedId: selectedLayerId, selectedIds: selectedLayerIds, animatedOnly: filterAnimatedOnly, filter: filterText, context, layerScope }).rows
   for (const row of rows) {
     const { layer, depth } = row
     parents.length = depth + 1

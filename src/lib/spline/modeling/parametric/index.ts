@@ -1,0 +1,6 @@
+export { resampleSplineObjects } from './resample'
+export { zigZagSplineObjects } from './zigZag'
+export { puckerBloatSplineObjects } from './puckerBloat'
+export type { PuckerBloatOptions } from './puckerBloat'
+export { repeatSplineObjects } from './repeat'
+export type { SplineRepeatOptions } from './repeat'

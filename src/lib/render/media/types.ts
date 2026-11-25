@@ -5,6 +5,8 @@ export type PreparedRenderFrame = ReturnType<typeof prepareRenderFrame>
 /** Borrowed synchronous frame inputs. Area/padding use backing pixels, time ms;
  * caller matrix maps composition to backing space. No scene/DOM is persisted. */
 export interface MediaFrameInput {
+  /** Output hosts can suppress scene-background residency independently of layers. */
+  includeBackground?: boolean
   frame: PreparedRenderFrame; context: CanvasRenderingContext2D
   area?: PathBounds; padding?: number; prefetchMs?: number; selected?: ReadonlySet<string>
   /** Explicit renderSingleLayer/ghost roots bypass standalone root filtering. */

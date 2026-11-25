@@ -14,6 +14,35 @@ function registeredPanels(): Set<string> {
 }
 
 describe('resource panel dock integration', () => {
+  it('places Edit next to Properties and restores it as an independent tab', () => {
+    const tree = defaultLayout()
+    const propertiesLeaf = findLeafOfPanel(tree, 'properties')!
+    expect(findLeafOfPanel(tree, 'geometryEdit')).toBe(propertiesLeaf)
+    expect(findLeafOfPanel(tree, 'splineModeling')).toBeNull()
+    const closed = removePanel(tree, 'geometryEdit')
+    const opened = addPanelToLayout(closed, 'geometryEdit', 'properties')
+    const leaf = findLeafOfPanel(opened, 'geometryEdit')!
+    expect(leaf.id).toBe(propertiesLeaf.id)
+    expect(leaf.panels[leaf.activeIndex]).toBe('geometryEdit')
+  })
+
+  it('restores Edit tools into old layouts without replacing their arrangement', () => {
+    const old = removePanel(defaultLayout(), 'geometryEdit'), before = JSON.stringify(old)
+    expect(isValidLayout(old, registeredPanels())).toBe(true)
+    const opened = addPanelToLayout(old, 'geometryEdit', 'properties')
+    expect(findLeafOfPanel(opened, 'geometryEdit')?.id).toBe(findLeafOfPanel(old, 'properties')?.id)
+    expect(findLeafOfPanel(opened, 'geometryEdit')?.panels.filter(id => id === 'geometryEdit')).toHaveLength(1)
+    expect(JSON.stringify(old)).toBe(before)
+    expect(addPanelToLayout(opened, 'geometryEdit', 'canvas')).toBe(opened)
+  })
+  it('restores a new motion panel beside Properties and respects an existing moved tab', () => {
+    const before = defaultLayout(), saved = JSON.stringify(before)
+    const opened = addPanelToLayout(before, 'motionKeys', 'properties')
+    expect(findLeafOfPanel(opened, 'motionKeys')?.id).toBe(findLeafOfPanel(opened, 'properties')?.id)
+    expect(findLeafOfPanel(opened, 'motionKeys')?.panels.filter(id => id === 'motionKeys')).toHaveLength(1)
+    expect(JSON.stringify(before)).toBe(saved)
+    expect(addPanelToLayout(opened, 'motionKeys', 'layers')).toBe(opened)
+  })
   it('accepts old saved layouts missing the new panel and preserves closed panels', () => {
     const old = removePanel(defaultLayout(), 'resourceMonitor')
     const closed = removePanel(old, 'properties')

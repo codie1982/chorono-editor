@@ -13,11 +13,14 @@ import { buildViewportKeyframeCommands } from '@/lib/editor/viewportKeyframes'
 import { buildViewportNudgeCommand } from '@/lib/editor/viewportNudge'
 import { combineLayerSelection, createLayerSelection, toggleLayerSelection, type LayerSelection } from '@/lib/selection/layerSelection'
 import type { ChronoScene, Layer } from '@/lib/types'
+import ToolGroup from '@/components/TopToolbar/ToolGroup'
+import { useToolMode } from '@/app/hooks/useToolMode'
+import type { SelectionRegionStyle } from '@/lib/selection/selectionGesture'
 
 type Point = { x: number; y: number }
 type Tool = ComponentProps<typeof SceneCanvas>['toolMode']
-interface Fixture { name: string; scene: ChronoScene; selected: string[]; primary?: string; timeMs?: number; tool?: Tool }
-interface Runtime { editor: EditorStateReturn; selection: LayerSelection; snapEnabled: boolean; timelineSeeks: () => number }
+interface Fixture { name: string; scene: ChronoScene; selected: string[]; primary?: string; timeMs?: number; tool?: Tool; toolbar?: boolean }
+interface Runtime { editor: EditorStateReturn; selection: LayerSelection; snapEnabled: boolean; timelineSeeks: () => number; mode: Tool; style: SelectionRegionStyle }
 interface Check { name: string; passed: true; evidence: unknown }
 let runtime: Runtime | undefined
 let host: HTMLElement
@@ -30,18 +33,23 @@ const FREE_MOVE = 'Drag — free move (X + Y together)'
  * and cleanup. Selection and animation commands follow the production contracts.
  * No connected editor, localStorage, application route or private drag ref is used. */
 function Subject({ fixture }: { fixture: Fixture }) {
-  const editor = useEditorState(fixture.scene), snap = useSnapSettings()
+  const editor = useEditorState(fixture.scene), snap = useSnapSettings({ persist: false })
   const assets = useAssetCache(editor.scene.assets)
+  const tools = useToolMode(fixture.tool ?? 'select')
+  const activeTool = fixture.toolbar ? tools.mode : fixture.tool ?? 'move'
+  const [containment, setContainment] = useState<'inside' | 'touching'>('touching')
   const [selection, setSelection] = useState(() => createLayerSelection(fixture.selected, fixture.primary ?? null))
   const selectedIds = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds])
   const timeMs = fixture.timeMs ?? 0
   const timelineSeeks = useRef(0)
   const overrides = useMemo(() => evaluateTimelines(editor.scene.timelines, timeMs), [editor.scene.timelines, timeMs])
   useEffect(() => { snap.setEnabled(false) }, [])
-  useLayoutEffect(() => { runtime = { editor, selection, snapEnabled: snap.settings.enabled, timelineSeeks: () => timelineSeeks.current } })
+  useLayoutEffect(() => { runtime = { editor, selection, snapEnabled: snap.settings.enabled, timelineSeeks: () => timelineSeeks.current, mode: activeTool, style: tools.selectionStyle } })
   useKeyboard({
     onUndo: editor.undo, onRedo: editor.redo, isTransactionActive: editor.isTransactionActive,
     onPlayToggle: () => {}, onDeleteSelected: () => {}, onDuplicateSelected: () => {},
+    onClearSelection: () => setSelection(createLayerSelection([])),
+    onToolChange: fixture.toolbar ? tools.chooseTool : undefined,
     onStepBack: () => { timelineSeeks.current++ }, onStepForward: () => { timelineSeeks.current++ },
     getContext: () => 'canvas',
     onNudgeSelected: (dx, dy) => {
@@ -51,17 +59,22 @@ function Subject({ fixture }: { fixture: Fixture }) {
       if (command) editor.dispatchCommand(command)
     },
   })
-  return <SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap}
+  const viewport = <SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap}
     selectedLayerId={selection.primaryId} selectedLayerIds={selectedIds}
     onSelectLayer={(id, shiftHeld = false) => setSelection(previous => id == null ? createLayerSelection([])
       : shiftHeld ? toggleLayerSelection(previous, id) : createLayerSelection([id], id))}
     onSelectByGeometry={(ids, mode) => setSelection(previous => combineLayerSelection(previous, ids, mode))}
     getShortcutContext={() => 'canvas'} timeMs={timeMs} overrides={overrides}
-    isPlaying={false} previewMode={false} toolMode={fixture.tool ?? 'move'}
+    isPlaying={false} previewMode={false} toolMode={activeTool}
+    selectionStyle={tools.selectionStyle} selectionContainMode={containment}
+    {...(fixture.toolbar ? { panMode: tools.mode === 'pan', onPanModeChange: tools.setPan } : {})}
     selectedTimeline={editor.scene.timelines[0] ?? null}
     buildLayerCommitCommands={changes => buildViewportKeyframeCommands(editor.getScene(), changes, {
       timelineId: fixture.scene.timelines[0]?.id ?? '', timeMs, autoKeyframe: false,
     })} />
+  return fixture.toolbar ? <div className="flex flex-1 min-w-0 min-h-0 flex-col"><ToolGroup mode={tools.mode} onChange={tools.setMode}
+    onPanToggle={tools.togglePan} selectionStyle={tools.selectionStyle} onSelectionStyleChange={tools.setSelectionStyle}
+    containMode={containment} onContainModeChange={setContainment} />{viewport}</div> : viewport
 }
 
 /** Deterministic source fixtures: dimensions are composition pixels, rotations
@@ -129,18 +142,19 @@ function center(element: Element): Point {
 /** Dispatch through actual React/window pointer handlers, with synchronous
  * commit barriers. Mouse pointer ID matches the real Run-button interaction;
  * no capture/geometry/session method is replaced by a test double. */
-function pointer(target: EventTarget, type: string, point: Point, shiftKey = false, pointerId = POINTER_ID) {
+function pointer(target: EventTarget, type: string, point: Point, shiftKey = false, pointerId = POINTER_ID,
+  modifiers: { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean } = {}) {
   flushSync(() => target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true,
     pointerId, pointerType: 'mouse', isPrimary: pointerId === POINTER_ID, button: 0,
     buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
-    clientX: point.x, clientY: point.y, shiftKey })))
+    clientX: point.x, clientY: point.y, shiftKey, ...modifiers })))
 }
 /** One complete real pointer gesture. Preview and release intentionally arrive
  * without a RAF between them to exercise the latest-sample/commit boundary. */
-function drag(target: Element, start: Point, end: Point) {
+function drag(target: Element, start: Point, end: Point, sourceEdit = true) {
   pointer(target, 'pointerdown', start)
   pointer(window, 'pointermove', end)
-  assert(live().editor.isTransactionActive(), 'Pointer movement did not open a transaction.')
+  assert(live().editor.isTransactionActive() === sourceEdit, sourceEdit ? 'Pointer movement did not open a transaction.' : 'View/selection gesture incorrectly opened a source transaction.')
   pointer(window, 'pointerup', end)
   assert(!live().editor.isTransactionActive(), 'Release left a transaction open.')
 }
@@ -213,7 +227,15 @@ async function rotationCheck(mount: (fixture: Fixture) => Promise<void>) {
   const marker = toComposition(center(titled('Rotation pivot'))), expected = { x: 340, y: 205 }
   close(marker.x, expected.x, 'Visible shared pivot X'); close(marker.y, expected.y, 'Visible shared pivot Y')
   const before = structuredClone(live().editor.getScene())
-  quarterTurnRing(); await frames()
+  const ring = host.querySelector('[data-testid="rotation-ring"]')!, box = ring.getBoundingClientRect()
+  assert(host.querySelectorAll('[data-rotation-direction]').length === 4, 'Tangential rotation arrows missing')
+  const start = { x: box.right, y: box.top + box.height / 2 }, end = { x: box.left + box.width / 2, y: box.bottom }
+  pointer(ring, 'pointerdown', start); pointer(window, 'pointermove', end); await frames()
+  const hud = host.querySelector('[data-testid="transform-hud"]')!.getBoundingClientRect()
+  const viewport = host.querySelector('[data-testid="canvas-viewport"]')!.getBoundingClientRect()
+  assert(hud.left >= viewport.left && hud.right <= viewport.right && hud.top >= viewport.top && hud.bottom <= viewport.bottom, 'Rotation HUD escaped viewport')
+  assert(Math.hypot(hud.left - end.x, hud.top - end.y) < 80, 'Angle label is too far from the rotation ring')
+  pointer(window, 'pointerup', end); await frames()
   const after = live().editor.getScene()
   for (const original of before.layers) {
     const pivot = { x: original.transform.anchorX, y: original.transform.anchorY }
@@ -477,6 +499,136 @@ async function pathCheck(mount: (fixture: Fixture) => Promise<void>) {
 /** Standalone visible acceptance runner. Failures leave the current real canvas
  * mounted for inspection, with the completed checks and exact source manifest.
  * Re-running remounts isolated fixtures; closing the page releases their hooks. */
+/** Both empty composition pixels and empty pasteboard clear all selection.
+ * UI controls and active Escape cancellation must retain it without source or
+ * history changes; modifier-click semantics remain covered by selectionCheck.
+ */
+async function deselectionCheck(mount: (fixture: Fixture) => Promise<void>) {
+  const source = sceneWith(rectangle('a', 150, 120), rectangle('b', 400, 220))
+  const fixture = { name: 'clear-selection', scene: source, selected: ['a', 'b'] }
+  await mount(fixture)
+  const blank = toClient({ x: 740, y: 440 })
+  pointer(canvas(), 'pointerdown', blank); pointer(window, 'pointerup', blank); await frames()
+  equal(Array.from(live().selection.selectedIds), [], 'Empty composition did not clear selection')
+  await mount(fixture)
+  const viewport = host.querySelector<HTMLElement>('[data-testid="canvas-viewport"]')!
+  const rect = viewport.getBoundingClientRect(), outside = { x: rect.left + 12, y: rect.bottom - 12 }
+  pointer(viewport, 'pointerdown', outside); pointer(window, 'pointerup', outside); await frames()
+  equal(Array.from(live().selection.selectedIds), [], 'Empty pasteboard did not clear selection')
+  await mount(fixture)
+  ;(titled('Zoom out (Cmd+scroll)') as HTMLElement).click(); await frames()
+  equal(Array.from(live().selection.selectedIds), ['a', 'b'], 'Zoom control cleared selection')
+  flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))); await frames()
+  equal(Array.from(live().selection.selectedIds), [], 'Idle Escape did not clear selection')
+  equal(live().editor.getScene(), source, 'Deselection wrote source')
+  assert(!live().editor.canUndo, 'Deselection created history')
+  await mount(fixture)
+  const start = toClient({ x: 190, y: 145 }), end = { x: start.x + 30, y: start.y + 20 }
+  pointer(canvas(), 'pointerdown', start); pointer(window, 'pointermove', end)
+  flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))); await frames()
+  equal(Array.from(live().selection.selectedIds), ['a', 'b'], 'Gesture Escape also deselected objects')
+  equal(live().editor.getScene(), source, 'Gesture Escape did not roll back source')
+  assert(!live().editor.canUndo && !live().editor.isTransactionActive(), 'Cancelled drag retained history/transaction')
+  await mount({ ...fixture, tool: 'selection-box' })
+  pointer(canvas(), 'pointerdown', blank); pointer(window, 'pointermove', { x: blank.x - 50, y: blank.y - 50 })
+  flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))); await frames()
+  equal(Array.from(live().selection.selectedIds), ['a', 'b'], 'Marquee Escape cleared the previous selection')
+  record('Blank surfaces and idle Escape clear selection; controls/gesture cancellation preserve source and selection', { selectedAfterCancel: Array.from(live().selection.selectedIds) })
+}
+
+/** Empty-start selection is an ordinary manipulation behavior. Actual toolbar
+ * preferences/shortcuts must not steal object drags or replace transform tools. */
+async function regionSelectionCheck(mount: (fixture: Fixture) => Promise<void>) {
+  const source = sceneWith(rectangle('a', 150, 120), rectangle('b', 400, 220))
+  const choose = async (title: string) => { (titled(title) as HTMLElement).click(); await frames() }
+  for (const [style, title] of [['box', 'Box Select (B)'], ['lasso', 'Lasso Select (L)'], ['circle', 'Circle Select (O)'], ['paint', 'Paint Select (W)']] as const) {
+    await mount({ name: `region-${style}`, scene: source, selected: ['b'], toolbar: true })
+    assert(titled('Box Select (B)').getAttribute('aria-pressed') === 'true', 'Box is not the default selection style')
+    await choose(title); assert(live().mode === 'select' && live().style === style, 'Style replaced the manipulation tool')
+    const route = style === 'lasso' ? [{ x: 130, y: 100 }, { x: 250, y: 100 }, { x: 250, y: 190 }, { x: 130, y: 190 }, { x: 130, y: 100 }]
+      : style === 'paint' ? [{ x: 130, y: 100 }, { x: 190, y: 145 }, { x: 250, y: 190 }]
+      : style === 'circle' ? [{ x: 130, y: 100 }, { x: 260, y: 200 }] : [{ x: 130, y: 100 }, { x: 250, y: 190 }]
+    pointer(canvas(), 'pointerdown', toClient(route[0]))
+    for (const point of route.slice(1)) pointer(window, 'pointermove', toClient(point))
+    pointer(window, 'pointerup', toClient(route[route.length - 1])); await frames()
+    equal(Array.from(live().selection.selectedIds), ['a'], `${style} did not select the region`)
+    equal(live().editor.getScene(), source, `${style} rewrote source`)
+    assert(!live().editor.canUndo, 'Region selection created source history')
+    drag(canvas(), toClient({ x: 190, y: 145 }), toClient({ x: 210, y: 160 })); await frames()
+    close(live().editor.getScene().layers[0].transform.x, 170, `${style} stole an object drag`)
+    close(live().editor.getScene().layers[0].transform.y, 135, `${style} changed object-drag Y`)
+    assert(live().selection.primaryId === 'a', 'Object down did not select its target')
+    flushSync(() => live().editor.undo()); await frames(); equal(live().editor.getScene(), source, `${style} object drag lost one-step Undo`)
+  }
+  record('All four region styles start only on empty space; object drags remain normal and preserve one Undo', { default: 'box' })
+  for (const [tool, title] of [['move', 'Move (G)'], ['rotate', 'Rotate (R)'], ['scale', 'Scale (S)'], ['anchor', 'Anchor / Pivot (A)']] as const) {
+    await mount({ name: `region-${tool}`, scene: source, selected: ['b'], toolbar: true })
+    await choose(title)
+    drag(canvas(), toClient({ x: 130, y: 100 }), toClient({ x: 250, y: 190 }), false); await frames()
+    equal(Array.from(live().selection.selectedIds), ['a'], `${tool} did not permit empty-space selection`)
+    assert(live().mode === tool, 'Selection replaced the active transform tool')
+  }
+  await choose('Circle Select (O)'); assert(live().mode === 'anchor', 'Changing style lost Anchor tool')
+  await choose('Pan (M / H)')
+  const before = Array.from(live().selection.selectedIds)
+  drag(canvas(), toClient({ x: 30, y: 30 }), toClient({ x: 70, y: 60 }), false); await frames()
+  equal(Array.from(live().selection.selectedIds), before, 'Pan unexpectedly made a region selection')
+  await choose('Pan (M / H)'); assert(live().mode === 'anchor' && live().style === 'circle', 'Pan did not restore tool/style independently')
+  equal(live().editor.getScene(), source, 'Tool/style/Pan operations rewrote source')
+  record('Move/Rotate/Scale/Anchor share empty-space selection; Pan retains exclusive drag ownership', { tool: live().mode, style: live().style })
+  await mount({ name: 'region-containment', scene: source, selected: ['b'], toolbar: true })
+  const partialStart = toClient({ x: 130, y: 100 }), partialEnd = toClient({ x: 180, y: 140 })
+  drag(canvas(), partialStart, partialEnd, false); await frames()
+  equal(Array.from(live().selection.selectedIds), ['a'], 'Touching did not include partial overlap')
+  const inside = host.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Select fully enclosed objects"]')!
+  assert(inside?.getAttribute('aria-checked') === 'false', 'Containment switch is missing/default is wrong')
+  inside.click(); await frames()
+  drag(canvas(), partialStart, partialEnd, false); await frames()
+  equal(Array.from(live().selection.selectedIds), [], 'Inside included a partially enclosed object')
+  assert(inside.getAttribute('aria-checked') === 'true', 'Inside switch did not report its state')
+  inside.click(); await frames()
+  drag(canvas(), partialStart, partialEnd, false); await frames()
+  equal(Array.from(live().selection.selectedIds), ['a'], 'Single containment toggle did not restore Touching')
+  await mount({ name: 'region-add', scene: source, selected: ['b'], toolbar: true })
+  const start = toClient({ x: 130, y: 100 }), end = toClient({ x: 250, y: 190 })
+  pointer(canvas(), 'pointerdown', start, true); pointer(window, 'pointermove', end, true); pointer(window, 'pointerup', end, true); await frames()
+  equal(Array.from(live().selection.selectedIds), ['b', 'a'], 'Shift region did not add to prior selection')
+  pointer(canvas(), 'pointerdown', start, false, POINTER_ID, { altKey: true })
+  pointer(window, 'pointermove', end, false, POINTER_ID, { altKey: true }); pointer(window, 'pointerup', end, false, POINTER_ID, { altKey: true }); await frames()
+  equal(Array.from(live().selection.selectedIds), ['b'], 'Alt region did not subtract from prior selection')
+  assert(!live().editor.canUndo, 'Region modifiers/containment created source history')
+  record('Inside/Touching and Shift/Alt apply one common selection policy', { selection: Array.from(live().selection.selectedIds) })
+}
+
+/** Independent switches drive actual ring and scale gestures, not just engine methods. */
+async function transformSnapCheck(mount: (fixture: Fixture) => Promise<void>) {
+  const source = sceneWith(rectangle('a', 200, 150))
+  await mount({ name: 'independent-transform-snaps', scene: source, selected: ['a'], toolbar: true })
+  const click = async (selector: string) => { const control = host.querySelector<HTMLElement>(selector); assert(control, `Missing snap control ${selector}`); control.click(); await frames() }
+  await click('[title="Snap settings"]')
+  assert(host.querySelector<HTMLInputElement>('[aria-label="Snap to Grid"]')!.disabled, 'Hidden grid target is enabled')
+  await click('[data-snap-tab="rotation"]'); await click('[aria-label="Enable rotation snapping"]')
+  await click('[aria-label="Set rotation snap step to 45 degrees"]')
+  await click('[data-snap-tab="scale"]'); await click('[aria-label="Enable scale snapping"]')
+  await click('[aria-label="Set scale snap step to 10 percent"]')
+  await click('[aria-label="Close Snap settings"]')
+  assert(!live().snapEnabled, 'Transform snapping turned Move on')
+  titled('Rotate (R)').dispatchEvent(new MouseEvent('click', { bubbles: true })); await frames()
+  const ring = host.querySelector('[data-testid="rotation-ring"]')!, bounds = ring.getBoundingClientRect(), pivot = center(ring), radius = bounds.width / 2
+  const end = { x: pivot.x + radius * Math.cos(40 * Math.PI / 180), y: pivot.y + radius * Math.sin(40 * Math.PI / 180) }
+  drag(ring, { x: bounds.right, y: pivot.y }, end); await frames()
+  close(live().editor.getScene().layers[0].transform.rotationDeg, 45, 'UI rotation increment was not applied')
+  flushSync(() => live().editor.undo()); await frames(); equal(live().editor.getScene(), source, 'Snapped rotation did not undo exactly')
+  titled('Scale (S)').dispatchEvent(new MouseEvent('click', { bubbles: true })); await frames()
+  const handle = titled('Drag — scale X axis'), start = center(handle), target = { x: start.x + canvas().getBoundingClientRect().width / 800 * 16, y: start.y }
+  drag(handle, start, target); await frames()
+  close(live().editor.getScene().layers[0].transform.scaleX, 1.2, 'UI scale increment was not applied')
+  close(live().editor.getScene().layers[0].transform.scaleY, 1, 'Scale changed its inactive axis')
+  flushSync(() => live().editor.undo()); await frames(); equal(live().editor.getScene(), source, 'Snapped scale did not undo exactly')
+  assert(!live().editor.canUndo, 'Snap preference wrote source history')
+  record('Independent Move/Rotate/Scale settings drive real gestures and preserve one Undo', { rotateStep: 45, scalePercent: 10, moveEnabled: false })
+}
+
 async function main() {
   document.body.innerHTML = '<style>body{margin:20px;background:#101827;color:#e5edf8;font:14px system-ui}button{padding:9px 14px;background:#2563eb;color:white;border:0;border-radius:6px}button:disabled{opacity:.5}#viewport-host{display:flex;position:relative;width:960px;height:650px;max-width:100%;border:1px solid #475569}pre{white-space:pre-wrap;overflow-wrap:anywhere}#checks{color:#86efac}</style><h1>Viewport pointer acceptance</h1><p>Isolated fixtures · actual SceneCanvas, history, snap and animation commands · connected documents unchanged</p><button id="run-viewport">Run viewport checks</button><p id="status">Ready</p><pre id="checks"></pre><section id="viewport-host"></section><pre id="report">No checks run.</pre>'
   host = document.getElementById('viewport-host')!
@@ -501,8 +653,8 @@ async function main() {
         sourceFiles: prepared.sources.length, bundleSha256: prepared.bundleSha256, baseCssSha256: prepared.baseCssSha256 }
       await moveChecks(mount); await rotationCheck(mount); await activePivotCheck(mount); await animatedCheck(mount)
       await commonResizeCheck(mount); await keyboardNudgeCheck(mount)
-      await selectionCheck(mount); await cancelCheck(mount); await overlappingPointerCheck(mount)
-      await singularResizeCheck(mount); await keyedAnchorCheck(mount); await pathCheck(mount)
+      await selectionCheck(mount); await deselectionCheck(mount); await cancelCheck(mount); await overlappingPointerCheck(mount)
+      await singularResizeCheck(mount); await keyedAnchorCheck(mount); await pathCheck(mount); await regionSelectionCheck(mount); await transformSnapCheck(mount)
       status.textContent = `PASS · ${checks.length} checks`
       document.getElementById('report')!.textContent = JSON.stringify({ passed: true, checks, manifest,
         elapsedMs: performance.now() - started, userAgent: navigator.userAgent, dpr: devicePixelRatio,

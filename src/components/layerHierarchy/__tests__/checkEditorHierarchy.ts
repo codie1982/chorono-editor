@@ -21,8 +21,8 @@ export async function checkEditorHierarchy(getScene: () => ChronoScene) {
   const scroll = (panel: HTMLElement) => panel.dataset.panel === 'Explorer'
     ? panel.querySelector<HTMLElement>('[role="tree"]')! : panel.querySelector<HTMLElement>('.overflow-y-auto')!
   const button = (root: ParentNode, label: string) => {
-    const found = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent?.trim() === label)
-    assert(found, `Missing button ${label}`); return found
+    const found = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent?.trim() === label || node.getAttribute('aria-label') === label)
+    assert(found, `Missing button ${label}`); if (found.closest('details') && !found.closest('details')!.open) found.closest('details')!.querySelector('summary')!.click(); return found
   }
   const action = async (name: string) => { document.querySelector<HTMLButtonElement>(`[data-action="${name}"]`)!.click(); await frames() }
   const select = async (id: string) => { document.querySelector<HTMLButtonElement>(`[data-select="${id}"]`)!.click(); await frames(); button(panels[1], 'Find selected').click(); await frames() }

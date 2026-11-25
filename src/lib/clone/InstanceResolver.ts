@@ -13,7 +13,7 @@
 //                                     bounds cycles/deep imported chains)
 //
 // Fields that come from SOURCE at render time:
-//   type, shape, shapeKind, shapeParams, path, spline, style, size,
+//   type, shape, shapeKind, shapeParams, path, spline, mesh2d, style, size,
 //   text, image, video, audio, pathStroke, motionPath, followPath,
 //   masks, internalGrid
 //
@@ -22,17 +22,21 @@
 //   effectsChain, startMs, endMs, hidden, locked, solo, pinned,
 //   frozen, colorLabel, tappable, draggable, dragConfig, paramBindings
 
+import { applyModelInstanceInputs } from '../model3d/content/modelInstanceInputs'
 import type { Layer } from '../types'
 import type { LayerLookup } from '@/lib/scene/LayerIndex'
 
 /** Visual fields cherry-picked from the source. */
-const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
+export const INSTANCE_SOURCE_FIELDS: readonly (keyof Layer)[] = [
   'type',
   'shape',
   'shapeKind',
   'shapeParams',
   'path',
   'spline',
+  'mesh2d',
+  'geometryConversion',
+  'modifierStack',
   'particleEmitter',
   'style',
   'size',
@@ -40,6 +44,7 @@ const SOURCE_VISUAL_KEYS: Array<keyof Layer> = [
   'image',
   'video',
   'audio',
+  'model3d',
   'frameSequence',
   'pathStroke',
   'motionPath',
@@ -83,9 +88,9 @@ export function resolveInstanceLayer(
   const composed: Layer = {
     ...layer, // base = instance (transform / opacity / id / name / parentId / effects / etc.)
   }
-  for (const key of SOURCE_VISUAL_KEYS) {
+  for (const key of INSTANCE_SOURCE_FIELDS) {
     const value = resolvedSource[key]
-    if (value !== undefined) {
+    if (value !== undefined || key === 'modifierStack') {
       // The cast is safe: SOURCE_VISUAL_KEYS lists Layer-typed keys.
       ;(composed as unknown as Record<string, unknown>)[key as string] = value
     }
@@ -95,6 +100,7 @@ export function resolveInstanceLayer(
   // forbids.)
   if (!composed.type) composed.type = resolvedSource.type
 
+  if (composed.type === 'model3d') composed.model3d = applyModelInstanceInputs(composed.model3d, layer.model3dInputValues)
   return composed
 }
 

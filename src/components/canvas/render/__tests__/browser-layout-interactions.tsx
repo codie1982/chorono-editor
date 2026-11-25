@@ -52,7 +52,7 @@ function tracePointer(phase: string, event?: PointerEvent) {
  * ordinary selection, evaluated animation and the same public key-command
  * callback as the main page. It never changes gap or guide implementation. */
 function Subject({ fixture }: { fixture: Fixture }) {
-  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings({ persist: false })
   const [selection, setSelection] = useState(() => createLayerSelection(fixture.selected, fixture.primary))
   const ids = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds]), timeMs = fixture.timeMs ?? 500
   const frame = useMemo(() => evaluateTimelines(editor.scene.timelines, timeMs), [editor.scene.timelines, timeMs])
@@ -126,7 +126,9 @@ function fixture(kind: 'four' | 'animated' | 'parent' = 'four'): Fixture {
     const parent: Layer = { ...rectangle('parent', 100, 250), type: 'group', size: undefined,
       transform: { x: 100, y: 250, anchorX: 0, anchorY: 0, scaleX: 1.2, scaleY: 0.8, rotationDeg: 12 } }
     const child = { ...rectangle('child', 0, 0), parentId: parent.id }
-    scene.layers = [parent, child, right]
+    const peer: Layer = { ...right, type: 'group', size: undefined }
+    const peerChild = { ...rectangle('right-child', 0, 0), parentId: peer.id }
+    scene.layers = [parent, child, peer, peerChild]
     return { scene, selected: ['parent', 'child', 'right'], primary: 'right' }
   }
   return { scene, selected: kind === 'four' ? ['top', 'middle', 'bottom', 'right'] : ['middle', 'right'], primary: 'middle' }

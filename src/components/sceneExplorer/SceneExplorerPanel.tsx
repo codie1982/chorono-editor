@@ -1,5 +1,6 @@
 'use client'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import { useLayerListSelection } from '@/components/layerHierarchy/useLayerListSelection'
 /**
  * BL-52 — Scene Explorer Panel
  *
@@ -29,7 +30,9 @@ import SceneExplorerRow, {
   type DropZone,
 } from './SceneExplorerRow'
 import ContextMenu from '@/components/ui/ContextMenu'
-import { buildSceneExplorerMenu, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
+import { buildAddLayerMenu } from '@/components/layers/add/buildAddLayerMenu'
+import { buildSceneExplorerMenu, duplicateExplorerSelection, type SceneExplorerMenuHandlers } from './buildSceneExplorerMenu'
+import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 import { agentHandoffMenu } from '@/components/agentHandoff/menu'
 import type { AgentHandoffRequest } from '@/lib/agentHandoff/prompt'
 import BulkOperationsToolbar from './BulkOperationsToolbar'
@@ -50,6 +53,8 @@ import { WindowedRows } from '@/components/virtualization/WindowedRows'
 import { DEFAULT_VISIBILITY_FILTERS, type LayerVisibilityFilters } from '@/lib/sceneExplorer/visibilityFilters'
 
 interface Props {
+  /** Temporary hard list boundary; never used as source command data. */
+  layerScope?: ReadonlySet<string> | null
   layers: Layer[]
   /** The currently-active timeline (used by the optional Anim column). */
   timeline: Timeline | null
@@ -58,6 +63,11 @@ interface Props {
 
   // Selection + edit
   onSelect: (id: string, shiftHeld: boolean, metaHeld: boolean) => void
+  onSelectLayers?: (ids: readonly string[], primaryId: string | null) => void
+  /** Transient pick tools may consume a row activation before normal single,
+   * range or additive selection. Returning true preserves the target selection.
+   * Applies to click and keyboard activation; does not mutate row source data. */
+  onPickLayer?: (id: string) => boolean
   onRename: (id: string, name: string) => void
 
   // Flag toggles (lock/hidden/solo/pinned)
@@ -92,8 +102,8 @@ interface Props {
 }
 
 export default function SceneExplorerPanel({
-  layers, timeline, selectedId, selectedIds,
-  onSelect, onRename, onToggleFlag,
+  layers, timeline, selectedId, selectedIds, layerScope,
+  onSelect, onSelectLayers, onPickLayer, onRename, onToggleFlag,
   onMoveInTree, onGroupWith,
   contextHandlers, onClearSelection, onAgentHandoff, onAgentConnections,
   isLayerAnimated, doesLayerHaveEffects,
@@ -230,17 +240,23 @@ export default function SceneExplorerPanel({
   }, [sortState])
   const rows = useMemo(
     () => buildSceneExplorerRows(layers, {
-      collapsedIds, subInfoExpandedIds, timeline, revealIds: findSelection.revealIds,
+      collapsedIds, subInfoExpandedIds, timeline, layerScope, revealIds: findSelection.revealIds,
       textFilter, sort: activeSort,
       visibilityFilters,
       isAnimated: isLayerAnimated,
       hasEffects: doesLayerHaveEffects,
     }),
-    [layers, collapsedIds, subInfoExpandedIds, timeline, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects, findSelection.revealIds],
+    [layers, layerScope, collapsedIds, subInfoExpandedIds, timeline, textFilter, activeSort, visibilityFilters, isLayerAnimated, doesLayerHaveEffects, findSelection.revealIds],
   )
   const scrollRef = useRef<HTMLDivElement>(null)
   const layout = useMemo(() => RowLayout.fixed(rows.length, SCENE_EXPLORER_ROW_HEIGHT), [rows.length])
   const rowKeys = useMemo(() => rows.map(row => row.id), [rows])
+  const selectableKeys = useMemo(() => rows.filter(row => row.kind === 'layer').map(row => row.id), [rows])
+  const selectListRow = useLayerListSelection({ order: selectableKeys, selectedId, selectedIds,
+    onSelect: (id, additive) => onSelect(id, false, additive), onSelectLayers })
+  const selectRow = (id: string, shift = false, additive = false) => {
+    if (!onPickLayer?.(id)) selectListRow(id, shift, additive)
+  }
   const canFocusRow = useCallback((index: number) => rows[index].kind === 'layer', [rows])
   const windowed = useRowWindow(layout, rowKeys, scrollRef, undefined, canFocusRow)
   useSelectedLayerReveal({ layers, selectedId, selectedIds, setCollapsedIds,
@@ -253,6 +269,7 @@ export default function SceneExplorerPanel({
   useEffect(() => {
     if (!hovered) return
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || hasVisibleKeyboardScope()) return
       const tgt = e.target as HTMLElement | null
       if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return
       // Don't intercept during an inline rename either (input already
@@ -297,9 +314,9 @@ export default function SceneExplorerPanel({
 
       // Cmd/Ctrl+D → duplicate
       if (meta && (e.key === 'd' || e.key === 'D') && selIds.length > 0) {
-        if (contextHandlers?.duplicate) {
+        if (contextHandlers?.duplicate || contextHandlers?.duplicateLayers) {
           e.preventDefault()
-          selIds.forEach((id) => contextHandlers.duplicate!(id))
+          duplicateExplorerSelection(selIds, { duplicate: contextHandlers.duplicate ?? (() => {}), duplicateLayers: contextHandlers.duplicateLayers })
         }
         return
       }
@@ -408,7 +425,12 @@ export default function SceneExplorerPanel({
   return (
     <div
       className="flex flex-col h-full bg-gray-900 text-gray-200"
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={event => {
+        event.preventDefault()
+        if (contextHandlers?.addLayer && !(event.target as Element).closest('[data-virtual-row],[role="treeitem"],input,button,select')) {
+          setMenuState({ x: event.clientX, y: event.clientY, targetId: '' })
+        }
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -446,7 +468,7 @@ export default function SceneExplorerPanel({
         onChange={setVisibilityFilters}
       />
 
-      {branches.roots.length > 0 && <SubtreeOperationsToolbar
+      {branches.roots.length > 0 && <SubtreeOperationsToolbar compact
         selectedCount={branches.roots.length} affectedCount={branches.ids.size}
         hasChildren={branches.hasChildren} counts={branches.counts}
         canSetFlag={field => !!onSetSubtreeFlag || field !== 'frozen' && !!contextHandlers?.bulkToggleFlag}
@@ -547,7 +569,7 @@ export default function SceneExplorerPanel({
               onBeginRename={() => beginRename(row.layer)}
               onCommitRename={commitRename}
               onCancelRename={cancelRename}
-              onSelect={onSelect}
+              onSelect={selectRow}
               onNavigate={direction => {
                 if (direction === 'parent') { windowed.focusKey(row.layer.parentId ?? ''); return }
                 const step = direction === 'up' ? -1 : 1
@@ -662,7 +684,8 @@ export default function SceneExplorerPanel({
       {/* Context menu (BL-53) */}
       {menuState && contextHandlers && (() => {
         const target = layers.find((l) => l.id === menuState.targetId)
-        if (!target) return null
+        if (!target) return menuState.targetId === '' && contextHandlers.addLayer
+          ? <ContextMenu x={menuState.x} y={menuState.y} items={buildAddLayerMenu(contextHandlers.addLayer)} onClose={() => setMenuState(null)} /> : null
         // Effective selection: include the target so single-row right-clicks
         // operate on just that row.
         const ids = selectedIds.has(target.id)
@@ -670,8 +693,14 @@ export default function SceneExplorerPanel({
           : [target.id]
         // Provide safe defaults for any handlers the caller omitted.
         const handlers: SceneExplorerMenuHandlers = {
+          addLayer: contextHandlers.addLayer,
+          editContent: contextHandlers.editContent,
+          splineEditMode: contextHandlers.splineEditMode,
+          editOperation: contextHandlers.editOperation,
+          isBooleanMember: contextHandlers.isBooleanMember,
           rename:        contextHandlers.rename        ?? (() => {}),
           duplicate:     contextHandlers.duplicate     ?? (() => {}),
+          duplicateLayers: contextHandlers.duplicateLayers,
           deleteLayers:  contextHandlers.deleteLayers  ?? (() => {}),
           groupLayers:   contextHandlers.groupLayers   ?? (() => {}),
           ungroupGroup:  contextHandlers.ungroupGroup,

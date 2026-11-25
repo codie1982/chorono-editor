@@ -3,11 +3,19 @@ import type { ActiveDrag } from '../../types/canvasDragTypes'
 import type { CanvasDragPreview, CanvasPointerSample } from './dragTypes'
 import { moveAnchor, moveInHandle, moveOutHandle } from '@/lib/path/pathOps'
 import { moveSplinePoint, moveSplineHandle } from '@/lib/spline'
+import { transformSplineSelection } from '@/lib/spline/selection'
+import { angleDegFromPivot, wrapAngle180 } from '@/lib/canvas/math/rotateMath'
+import { moveSplinePoints } from '@/lib/spline/edit/moveSplinePoints'
 import { calculateAnchorMove } from '@/lib/canvas/math/anchorMath'
 import { calculateResize } from '@/lib/canvas/math/resizeMath'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { MAX_MODEL_BOX_SIDE } from '@/lib/model3d/source/modelDefaults'
 import { resizeHandlePoint, snapResizeHandle, reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
+import { makeTransformMeshGeometryCmd } from '@/lib/editor/modifiers/commands'
+import { nearestSplineVertex } from '@/lib/snap/splineVertexSnap'
+import type { SplineVertexTarget } from '@/lib/snap/SnapCandidate'
+import { constrainAxisDelta } from '@/lib/canvas/math/transformAxes'
 
 type GeometryDrag = Exclude<ActiveDrag, { kind: 'move' | 'rotate' | 'scaleAxis' }>
 interface GeometryPreviewInput {
@@ -17,14 +25,34 @@ interface GeometryPreviewInput {
   delta: { x: number; y: number }
   snap: { grid: boolean; pixel: boolean; size: number }
   resolveSnap?: (point: Vec2) => SnapResult
+  componentVertices?: readonly SplineVertexTarget[]
+  componentSpace?: 'local' | 'scene'
   snapRadiusWorld?: number
 }
 
 /** Pure path/spline/anchor/size preview from the gesture's immutable baseline.
  * Geometry deltas use the complete displayed inverse; path points keep their
  * existing topology and custom pivot. No per-frame geometry is accumulated. */
-export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSnap, snapRadiusWorld = 0 }: GeometryPreviewInput): CanvasDragPreview {
+export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSnap, componentVertices, componentSpace,snapRadiusWorld = 0 }: GeometryPreviewInput): CanvasDragPreview {
   const original = drag.originalLayer
+  if (
+    (delta.x || delta.y) &&
+    (drag.kind === 'splinePoint' ||
+      ((drag.kind === 'meshGeometry' || drag.kind === 'splineGeometry') && drag.operation === 'move'))
+  ) {
+    const world = drag.worldToLocal.invert(),
+      start = world.applyToPoint(drag.kind === 'splinePoint' ? { x: drag.startX, y: drag.startY } : drag.startLocal)
+    const pointer = { x: start.x + delta.x, y: start.y + delta.y }
+    let target: Vec2 | undefined = nearestSplineVertex(componentVertices ?? [], pointer, snapRadiusWorld)
+    if (!target && snap.grid && snap.size > 0) {
+      const local = componentSpace === 'local',
+        p = local ? drag.worldToLocal.applyToPoint(pointer) : pointer
+      const rounded = { x: Math.round(p.x / snap.size) * snap.size, y: Math.round(p.y / snap.size) * snap.size }
+      const candidate = local ? world.applyToPoint(rounded) : rounded
+      if (Math.hypot(candidate.x - pointer.x, candidate.y - pointer.y) <= snapRadiusWorld) target = candidate
+    }
+    if (target) delta = { x: target.x - start.x, y: target.y - start.y }
+  }
   if (drag.kind === 'pathPoint') {
     const anchor = original.path?.anchors[drag.anchorIndex]
     if (!anchor || !original.path) return previewLayer(base, original, original, [])
@@ -36,11 +64,36 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
         : moveOutHandle(original.path, drag.anchorIndex, (anchor.outX ?? anchor.x) + local.x, (anchor.outY ?? anchor.y) + local.y)
     return previewLayer(base, original, { ...original, path }, changedRecord(original.path, path) ? ['path'] : [])
   }
+  if (drag.kind === 'splineGeometry' || drag.kind === 'meshGeometry') {
+    const constrained = drag.operation === 'move' ? constrainAxisDelta(delta, drag.axisLock, event.shiftKey, drag.axisFrame) : { dx: delta.x, dy: delta.y }
+    const local = drag.worldToLocal.applyToVector({ x: constrained.dx, y: constrained.dy }), { pivot, startLocal } = drag
+    const end = { x: startLocal.x + local.x, y: startLocal.y + local.y }
+    const angle = wrapAngle180(angleDegFromPivot(pivot.x, pivot.y, end.x, end.y) - angleDegFromPivot(pivot.x, pivot.y, startLocal.x, startLocal.y))
+    const initialRadius = Math.hypot(startLocal.x - pivot.x, startLocal.y - pivot.y)
+    const scale = Math.max(.01, Math.hypot(end.x - pivot.x, end.y - pivot.y) / Math.max(1e-6, initialRadius))
+    const transform = drag.operation === 'move' ? { x: local.x, y: local.y }
+      : drag.operation === 'rotate' ? { rotation: event.shiftKey ? Math.round(angle / 15) * 15 : angle }
+      : { scaleX: scale, scaleY: scale }
+    if (drag.kind === 'meshGeometry') {
+      const settings = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1,
+        pivotX: pivot.x, pivotY: pivot.y, ...transform }
+      if (!settings.x && !settings.y && !settings.rotation && settings.scaleX === 1 && settings.scaleY === 1)
+        return previewLayer(base, original, original, [])
+      const command = makeTransformMeshGeometryCmd(base, original.id, drag.modifierId, settings, drag.vertexIds)
+      const scene = command.execute(base), next = scene.layers.find(layer => layer.id === original.id)!
+      return { ...previewLayer(base, original, next, ['modifierStack'], `Edit Mesh · ${drag.operation}`), scene, geometryCommand: command }
+    }
+    if (!original.spline) return previewLayer(base, original, original, [])
+    const spline = transformSplineSelection(original.spline, new Set(drag.pointIds), transform, pivot)
+    return previewLayer(base, original, { ...original, spline }, changedRecord(original.spline, spline) ? ['spline'] : [],
+      drag.operation === 'rotate' ? `${(transform.rotation ?? angle).toFixed(1)}°` : drag.operation === 'scale' ? `${(scale * 100).toFixed(1)}%` : `${local.x.toFixed(1)}, ${local.y.toFixed(1)} px`)
+  }
   if (drag.kind === 'splinePoint' || drag.kind === 'splineHandle') {
     if (!original.spline) return previewLayer(base, original, original, [])
-    const local = drag.worldToLocal.applyToVector(delta)
+    const constrained = constrainAxisDelta(delta, null, event.shiftKey, drag.axisFrame)
+    const local = drag.worldToLocal.applyToVector({ x: constrained.dx, y: constrained.dy })
     const spline = drag.kind === 'splinePoint'
-      ? moveSplinePoint(original.spline, drag.pointId, drag.startX + local.x, drag.startY + local.y)
+      ? drag.pointIds ? moveSplinePoints(original.spline, drag.pointIds, local.x, local.y) : moveSplinePoint(original.spline, drag.pointId, drag.startX + local.x, drag.startY + local.y)
       : moveSplineHandle(original.spline, drag.pointId, drag.handleKind, drag.startX + local.x, drag.startY + local.y)
     return previewLayer(base, original, { ...original, spline }, changedRecord(original.spline, spline) ? ['spline'] : [])
   }
@@ -68,31 +121,39 @@ export function previewGeometryDrag({ base, drag, event, delta, snap, resolveSna
   if (!original.size) return previewLayer(base, original, original, [])
   const displayed = drag.displayTransform ?? original.transform
   const local = drag.worldToLocal?.applyToVector(delta) ?? delta
+  const proportional = event.metaKey || event.ctrlKey
+  const centered = proportional && event.shiftKey
+  const multiplier = centered ? 2 : 1
   const input = { x: 0, y: 0, width: original.size.width, height: original.size.height,
-    anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x, dy: local.y,
-    proportional: event.metaKey || event.ctrlKey, snapPixel: snap.pixel, minSize: 4,
+    anchorX: displayed.anchorX, anchorY: displayed.anchorY, handle: drag.handle, dx: local.x * multiplier, dy: local.y * multiplier,
+    proportional, snapPixel: snap.pixel, minSize: 4,
 
+    maxSize: original.type === 'model3d' ? MAX_MODEL_BOX_SIDE : undefined,
     boundsWidth: Number.MAX_SAFE_INTEGER, boundsHeight: Number.MAX_SAFE_INTEGER }
   let size = calculateResize(input)
-  const matrix = drag.worldToLocal?.invert(), proportional = event.metaKey || event.ctrlKey
+  const matrix = drag.worldToLocal?.invert()
+  const offsetFor = (value: typeof size) => ({
+    x: centered || proportional && !/[we]/.test(drag.handle) ? (original.size!.width - value.width) / 2
+      : drag.handle.includes('w') ? original.size!.width - value.width : 0,
+    y: centered || proportional && !/[ns]/.test(drag.handle) ? (original.size!.height - value.height) / 2
+      : drag.handle.includes('n') ? original.size!.height - value.height : 0,
+  })
   const localHandle = (value: typeof size) => resizeHandlePoint({ ...value,
-    x: drag.handle.includes('w') ? original.size!.width - value.width : 0,
-    y: drag.handle.includes('n') ? original.size!.height - value.height : 0 }, drag.handle)
+    ...offsetFor(value) }, drag.handle)
   let candidateGuides: CanvasDragPreview['guides'] = []
   if (matrix && resolveSnap) {
     const originalHandle = resizeHandlePoint({ x: 0, y: 0, ...original.size }, drag.handle)
-    const direction = proportional ? { x: (drag.handle.includes('w') ? -1 : drag.handle.includes('e') ? 1 : .5) * original.size.width,
-      y: (drag.handle.includes('n') ? -1 : drag.handle.includes('s') ? 1 : .5) * original.size.height }
+    const direction = proportional ? { x: (drag.handle.includes('w') ? -1 : drag.handle.includes('e') ? 1 : 0) * original.size.width,
+      y: (drag.handle.includes('n') ? -1 : drag.handle.includes('s') ? 1 : 0) * original.size.height }
       : drag.handle.length === 1 ? { x: 'ew'.includes(drag.handle) ? 1 : 0, y: 'ns'.includes(drag.handle) ? 1 : 0 } : null
     const acquired = snapResizeHandle(matrix.applyToPoint(localHandle(size)), direction && matrix.applyToVector(direction), snapRadiusWorld, resolveSnap)
     if (acquired.guides.length) {
       const endpoint = drag.worldToLocal!.applyToPoint(acquired.point)
-      size = calculateResize({ ...input, dx: endpoint.x - originalHandle.x, dy: endpoint.y - originalHandle.y, snapPixel: false })
+      size = calculateResize({ ...input, dx: (endpoint.x - originalHandle.x) * multiplier, dy: (endpoint.y - originalHandle.y) * multiplier, snapPixel: false })
       candidateGuides = reachedResizeGuides(matrix.applyToPoint(localHandle(size)), acquired.guides)
     }
   }
-  const left = drag.handle.includes('w') ? original.size.width - size.width : 0
-  const top = drag.handle.includes('n') ? original.size.height - size.height : 0
+  const { x: left, y: top } = offsetFor(size)
   // The custom pivot is authored independently of geometry size. Keep a fixed:
   // M = T(x+a) R S T(-a); preserving the opposite corner requires only R·S
   // times its local size shift. Proportional reanchoring would change the

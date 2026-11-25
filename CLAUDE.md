@@ -41,7 +41,7 @@ Follow the repository standards in `AGENTS.md`. Memory notes such as **[[coding_
 ### Multi-Mode System
 - Foundational contracts live in `src/lib/core`; 2D source types live in `src/lib/types`, and implementations stay in their owning feature directories. Understand Layer, Timeline, Track, Keyframe and ChronoScene before changing their contracts
 - Share geometry/topology/math and meaningful render preparation through explicit adapters; preserve 2D/3D coordinate and backend differences
-- Use ModeRegistry when a new mode is explicitly in scope; the active roadmap remains 2D/2.5D
+- Use ModeRegistry when a new mode is explicitly in scope; follow the separate 2D and 3D roadmaps in `docs/tr/`, with boxed 3D inside the 2D editor and no independent 3D workspace currently approved
 - See [[arch_multi_mode_system]] in memory
 
 ### Scripting & Events

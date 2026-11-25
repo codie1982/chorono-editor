@@ -31,15 +31,16 @@ export async function renderRasterFrame(scene:ChronoScene,opts:RasterExportOptio
   requireFrameBytes(baseW,baseH);requireFrameBytes(outW,outH)
   const warnings:string[]=[]
   let background=opts.background??'scene'
+  if(background==='scene' && scene.composition.backgroundInExport===false)background='transparent'
   if(background==='transparent'&&!RASTER_SUPPORTS_ALPHA[opts.format]){
     background={color:'#ffffff'};warnings.push(`${opts.format.toUpperCase()} has no alpha channel — transparent background exported as white.`)
   }
   const base=acquireOutputCanvas(scope,baseW,baseH)
   let target:ReturnType<typeof acquireOutputCanvas>|undefined
   try{
-    return await withMediaFrame(scene,timeMs,base.context,{signal,paramValues:opts.paramValues},async(assets,overrides)=>{
+    return await withMediaFrame(scene,timeMs,base.context,{signal,paramValues:opts.paramValues,includeBackground:background==='scene'},async(assets,overrides)=>{
       scope.check(signal)
-      canvasRenderer.render(base.context,scene,timeMs,null,assets,{overrides,renderMode:'preview',background,paramValues:opts.paramValues})
+      canvasRenderer.render(base.context,scene,timeMs,null,assets,{overrides,renderMode:'preview',output:true,background,paramValues:opts.paramValues})
       scope.check(signal)
       let canvas=base.canvas
       if(scale!==1){

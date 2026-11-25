@@ -1,3 +1,4 @@
+import { compositionFill, imagePaintAssetIds } from '../../paint/paintSource'
 import type { Asset, Layer } from '../../types'
 import { rendererRegistry } from '../../registry'
 import { createLayerWorldMatrixResolver } from '../../geometry/resolveLayerWorldMatrix'
@@ -40,7 +41,8 @@ export class VisualDemandResolver {
     const { frame, context, selected } = input, { scene, sourceScene, overrides, timeMs, index } = frame
     this.index(scene.assets)
     this.absent.clear()
-    if (!this.nativeAssets.length) {
+    const backgroundIds = input.includeBackground !== false && !input.rootIds ? imagePaintAssetIds(compositionFill(scene.composition)) : []
+    if (!this.nativeAssets.length && !backgroundIds.length) {
       if (this.sourceLayers !== sourceScene.layers) {
         this.sourceLayers = sourceScene.layers
         this.possible = sourceScene.layers.some(layer => layer.image || layer.video || layer.frameSequence
@@ -50,7 +52,7 @@ export class VisualDemandResolver {
     }
     const branches=this.demandBranches.select(frame)
     const result = new Map<string, VisualDemand>(), visited = new Map<string, number>()
-    const visibility = new LayerDrawVisibility(scene.layers, timeMs)
+    const visibility = new LayerDrawVisibility(scene.layers, timeMs, index)
     const world = createLayerWorldMatrixResolver(scene, timeMs, overrides, index), native = context.getTransform?.()
     const base = native ? new Matrix2D(native.a, native.b, native.c, native.d, native.e, native.f) : null
     const raw = input.area ?? { x: 0, y: 0, width: context.canvas?.width ?? scene.composition.width, height: context.canvas?.height ?? scene.composition.height }
@@ -59,7 +61,7 @@ export class VisualDemandResolver {
     const add = (id: string, layer: Layer | undefined, required: boolean) => {
       const asset = this.byId.get(id)
       if (!asset) { this.absent.add(id); return }
-      if (!['image', 'spriteSheet', 'video', 'font'].includes(asset.type)) return
+      if (!['image', 'spriteSheet', 'video', 'font', 'meshDeformation', 'model3d'].includes(asset.type)) return
       const layerId = asset.type === 'video' ? layer?.id ?? `unknown:${id}` : undefined
       let key:string
       try {key=asset.type==='font'?describeFont(asset).key:JSON.stringify(['visual',asset.id, asset.url, layerId ?? null])}
@@ -67,12 +69,13 @@ export class VisualDemandResolver {
       const old = result.get(key)
       result.set(key, { key, asset, layerId, required: required || !!old?.required })
     }
+    backgroundIds.forEach(id => add(id, undefined, true))
     const fonts=fontCatalog(scene.assets)
     const variants=fonts.fonts.length?fontFamilyVariants(sourceScene.timelines):new Map<string,readonly string[]>()
     const addFonts=(families:readonly string[],required:boolean)=>families.forEach(css=>fonts.find(css).forEach(font=>add(font.asset.id,undefined,required)))
-    const walk = (layer: Layer, inheritedUnsafe = false, required = true) => {
+    const walk = (layer: Layer, inheritedUnsafe = false, required = true, sceneOccurrence = true) => {
       // A referenced copy may be visible where an ordinary occurrence was not.
-      const mode = Number(inheritedUnsafe) + Number(required) * 2
+      const mode = Number(inheritedUnsafe) + Number(required) * 2 + Number(sceneOccurrence) * 4
       const bit = 1 << mode
       if ((visited.get(layer.id) ?? 0) & bit) return
       visited.set(layer.id, (visited.get(layer.id) ?? 0) | bit)
@@ -89,15 +92,17 @@ export class VisualDemandResolver {
       if (!dependencies) this.nativeAssets.forEach(asset => add(asset.id, asset.type === 'video' ? layer : undefined, required))
       else {
         dependencies.assetIds?.forEach(id => add(id, layer, required))
-        dependencies.layerIds?.forEach(id => { const source = index.get(id); if (source && visibility.active(source)) walk(source, true, required) })
+        dependencies.layerIds?.forEach(id => { const source = index.get(id); if (source && visibility.active(source)) walk(source, true, required, false) })
         if(dependencies.fontFamilies)addFonts([...dependencies.fontFamilies,...(variants.get(layer.id)??[])],required)
       }
       // Mask rendering intentionally bypasses the source's standalone time/hidden
       // gate, just as the existing surface pipeline's drawMask callback does.
-      layer.masks?.forEach(mask => { const source = index.get(mask.maskLayerId); if (source) walk(source, true, required) })
-      if (plugin.paint?.sceneChildren) index.childrenOf(layer.id).forEach(child => { if (branches.has(child.id)&&visibility.active(child)) walk(child, unsafe, required) })
+      layer.masks?.forEach(mask => { const source = index.get(mask.maskLayerId); if (source) walk(source, true, required, false) })
+      if (plugin.paint?.sceneChildren) index.childrenOf(layer.id).forEach(child => {
+        if (branches.has(child.id) && (sceneOccurrence ? visibility.sceneChild(child) : visibility.active(child))) walk(child, unsafe, required, sceneOccurrence)
+      })
     }
-    if (input.rootIds) input.rootIds.forEach(id => { const layer = index.get(id); if (layer) walk(layer, true) })
+    if (input.rootIds) input.rootIds.forEach(id => { const layer = index.get(id); if (layer) walk(layer, true, true, false) })
     else index.roots.forEach(layer => { if (branches.has(layer.id)&&visibility.root(layer)) walk(layer) })
     // Selected text needs metrics even when its ordinary occurrence is hidden
     // or outside the active range. Other selected media keeps existing policy.
@@ -128,6 +133,6 @@ export class VisualDemandResolver {
   private index(assets: readonly Asset[]): void {
     if (assets === this.assets) return
     this.assets = assets; this.byId.clear(); assets.forEach(asset => this.byId.set(asset.id, asset))
-    this.nativeAssets = assets.filter(asset => ['image', 'spriteSheet', 'video', 'font'].includes(asset.type))
+    this.nativeAssets = assets.filter(asset => ['image', 'spriteSheet', 'video', 'font', 'meshDeformation', 'model3d'].includes(asset.type))
   }
 }

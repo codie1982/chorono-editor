@@ -1,4 +1,5 @@
 'use client'
+import type { TimelineAuthoringContext } from '@/lib/timeline/authoring/TimelineAuthoringContext'
 import { useRef, useState, useCallback, useEffect } from 'react'
 import type { ChronoScene, Keyframe } from '@/lib/types'
 import type { EditorStateReturn } from '@/app/hooks/useEditorState'
@@ -26,6 +27,7 @@ interface DragSession {
 }
 
 interface UseCurveDragArgs {
+  context?: TimelineAuthoringContext
   collisionPolicy?: KeyCollisionPolicy
   editor: EditorStateReturn
   timelineId: string | null
@@ -81,7 +83,8 @@ export function useCurveDrag(args: UseCurveDragArgs) {
     })
     const lead = drag.pending.find(change => change.keyframe.id === leader.keyframe.id)!.keyframe
     setPreview({ kfId: lead.id, ms: lead.timeMs, value: lead.value as number })
-    latest.current.editor.previewTransaction(applyCurveKeyframeChanges(drag.base, drag.timelineId, drag.pending))
+    try { latest.current.editor.previewTransaction(applyCurveKeyframeChanges(drag.base, drag.timelineId, drag.pending)) }
+    catch (error) { latest.current.onWarning?.((error as Error).message) }
   }, [])
 
   const end = useCallback((event?: PointerEvent) => {
@@ -92,14 +95,14 @@ export function useCurveDrag(args: UseCurveDragArgs) {
       return change.keyframe.timeMs !== before.timeMs || change.keyframe.value !== before.value
     })
     if (!changed) { cancel(); return }
-    if (curveChangesCollide(drag.base, drag.timelineId, drag.pending, { collisionPolicy: latest.current.collisionPolicy })) {
+    if (curveChangesCollide(drag.base, drag.timelineId, drag.pending, { collisionPolicy: latest.current.collisionPolicy, context: latest.current.context })) {
       cancel()
       latest.current.onWarning?.('Move the keyframe to a free time; the drag was cancelled to preserve the existing keys.')
       return
     }
     dragRef.current = null
     release(drag)
-    try { latest.current.editor.commitTransaction(makeCurveKeyframeChangesCmd(drag.base, drag.timelineId, drag.pending, { collisionPolicy: latest.current.collisionPolicy })) }
+    try { latest.current.editor.commitTransaction(makeCurveKeyframeChangesCmd(drag.base, drag.timelineId, drag.pending, { collisionPolicy: latest.current.collisionPolicy, context: latest.current.context })) }
     catch (error) { latest.current.editor.cancelTransaction(); latest.current.onWarning?.((error as Error).message) }
     setPreview(null)
     latest.current.onDragEnd?.()

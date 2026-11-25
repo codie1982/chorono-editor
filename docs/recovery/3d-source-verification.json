@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-17",
+  "unit": {
+    "files": 456,
+    "tests": 3522,
+    "passed": true
+  },
+  "focused3D": {
+    "files": 29,
+    "tests": 161,
+    "passed": true
+  },
+  "typecheck": true,
+  "mcpBuild": true,
+  "cliBuild": true,
+  "productionBuild": true,
+  "renderBrowser": [
+    {
+      "name": "packages",
+      "passed": true,
+      "checks": 24,
+      "errors": []
+    },
+    {
+      "name": "clips",
+      "passed": true,
+      "checks": 58,
+      "errors": []
+    }
+  ],
+  "detailFlow": {
+    "checks": [
+      "Private edits preserve main model/history before Apply",
+      "Timeline view opens",
+      "Dope Sheet view opens",
+      "Curve Editor view opens",
+      "Private Curve Editor hides outer Bake actions",
+      "Apply creates exactly one main Undo step",
+      "Primitive and private stable-ID keys survive Apply",
+      "One Undo restores original imported content",
+      "Redo restores applied primitive and clip",
+      "Cancel preserves prior main history/source",
+      "No runtime errors"
+    ],
+    "errors": []
+  },
+  "scope": "Independent generated fixtures; user editor on 2012 was not used or mutated."
+}

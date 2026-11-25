@@ -25,6 +25,14 @@ export type SnapTargetType =
 
 export interface Vec2 { x: number; y: number }
 
+/** Evaluated anchor in composition pixels. Identity is retained for explicit
+ * same-layer endpoint joining; a positional snap alone never welds geometry. */
+export interface SplineVertexTarget extends Vec2 {
+  layerId: string
+  pointId: string
+  openEndpoint: boolean
+}
+
 /** A potential snap target collected by one of the collectors. Engine
  *  ranks candidates by priority + proximity, picks the winner per axis. */
 export interface SnapCandidate {
@@ -39,6 +47,8 @@ export interface SnapCandidate {
   /** Origin label — useful for debugging + the snap tooltip. */
   label: string
   sourceLayerId?: string
+  /** Present only for an exact two-axis spline anchor acquisition. */
+  vertex?: SplineVertexTarget
 }
 
 /** Final snap outcome returned by SnapEngine. */

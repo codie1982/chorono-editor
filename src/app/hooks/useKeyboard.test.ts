@@ -17,13 +17,16 @@ function harness(options: { context?: ShortcutContext; nudge?: boolean; active?:
       getClientRects: () => scopeVisible ? [{}] : [] }] : [],
   })
   let active = options.active ?? true
-  const undo = vi.fn(), remove = vi.fn(), copy = vi.fn(), paste = vi.fn()
+  const undo = vi.fn(), remove = vi.fn(), copy = vi.fn(), paste = vi.fn(), clear = vi.fn()
   const nudge = vi.fn(), stepBack = vi.fn(), stepForward = vi.fn(), tool = vi.fn()
+  const solo = vi.fn(), property = vi.fn()
   useKeyboard({
     onUndo: undo, onRedo: vi.fn(), onPlayToggle: vi.fn(), onStepBack: stepBack, onStepForward: stepForward,
     onNudgeSelected: options.nudge ? nudge : undefined,
     onDeleteSelected: remove, onDuplicateSelected: vi.fn(), onCopy: copy, onPaste: paste,
     onToolChange: tool,
+    onSoloSelected: solo, onTimelineShowProperty: property,
+    onClearSelection: clear,
     getContext: () => options.context ?? 'timeline', isTransactionActive: () => active,
   })
   const key = (name: string, metaKey = false, tagName = 'DIV', init: {
@@ -36,13 +39,35 @@ function harness(options: { context?: ShortcutContext; nudge?: boolean; active?:
     listeners.get('keydown')?.(event)
     return event
   }
-  return { undo, remove, copy, paste, nudge, stepBack, stepForward, tool, key,
+  return { undo, remove, clear, copy, paste, nudge, stepBack, stepForward, tool, solo, property, key,
     finishDrag: () => { active = false }, setBlockingScope: (value: boolean, visible = true) => {
       blockingScope = value; scopeVisible = visible
     } }
 }
 
 describe('keyboard commands during an animation drag', () => {
+  it.each(['canvas', 'layerPanel'] as const)('solos selection once per press in %s and keeps Scale on Shift+S', (context) => {
+    const h = harness({ context, active: false })
+    h.key('s'); h.key('s', false, 'DIV', { repeat: true })
+    expect(h.solo).toHaveBeenCalledTimes(1)
+    h.key('s', false, 'INPUT'); h.key('s', true)
+    h.key('s', false, 'DIV', { nestedScope: true })
+    h.setBlockingScope(true); h.key('s'); h.setBlockingScope(false)
+    expect(h.solo).toHaveBeenCalledTimes(1)
+    h.key('S', false, 'DIV', { shiftKey: true })
+    if (context === 'canvas') expect(h.tool).toHaveBeenCalledExactlyOnceWith('scale')
+    else expect(h.tool).not.toHaveBeenCalled()
+  })
+
+  it('preserves timeline S and blocks Solo during a drag transaction', () => {
+    const timeline = harness({ context: 'timeline', active: false })
+    timeline.key('s')
+    expect(timeline.property).toHaveBeenCalledExactlyOnceWith('scale')
+    expect(timeline.solo).not.toHaveBeenCalled()
+    const canvas = harness({ context: 'canvas' })
+    canvas.key('s'); expect(canvas.solo).not.toHaveBeenCalled()
+    canvas.finishDrag(); canvas.key('s'); expect(canvas.solo).toHaveBeenCalledTimes(1)
+  })
   it('dispatches M and H Pan toggles once per press and leaves inputs/context/modifiers alone', () => {
     const h = harness({ context: 'canvas', active: false })
     h.key('m'); h.key('m', false, 'DIV', { repeat: true }); h.key('h')
@@ -77,6 +102,19 @@ describe('keyboard commands during an animation drag', () => {
 })
 
 describe('canvas arrow nudging through the shortcut registry', () => {
+  it('clears canvas/list selection on idle Escape, preserving active gestures, typing and modal ownership', () => {
+    const h = harness({ context: 'canvas' })
+    h.key('Escape'); expect(h.clear).not.toHaveBeenCalled()
+    h.finishDrag()
+    h.key('Escape'); expect(h.clear).toHaveBeenCalledTimes(1)
+    for (const tag of ['INPUT', 'TEXTAREA', 'SELECT']) h.key('Escape', false, tag)
+    h.key('Escape', false, 'DIV', { defaultPrevented: true })
+    h.key('Escape', false, 'DIV', { nestedScope: true })
+    h.setBlockingScope(true); h.key('Escape')
+    expect(h.clear).toHaveBeenCalledTimes(1)
+    const timeline = harness({ context: 'timeline', active: false })
+    timeline.key('Escape'); expect(timeline.clear).not.toHaveBeenCalled()
+  })
   it('moves every arrow direction by composition pixels, with Shift selecting ten pixels', () => {
     const h = harness({ context: 'canvas', nudge: true, active: false })
     for (const [key, dx, dy] of [['ArrowLeft', -1, 0], ['ArrowRight', 1, 0], ['ArrowUp', 0, -1], ['ArrowDown', 0, 1]] as const) {

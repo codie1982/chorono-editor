@@ -17,12 +17,12 @@ export async function checkTimelineAuthoring(editor: EditorStateReturn) {
   const time = () => Number(state().dataset.time)
   const button = (root: ParentNode, text: string) => {
     const node = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent?.trim() === text || item.getAttribute('aria-label') === text || item.title === text)
-    assert(node, `Missing button: ${text}`); return node
+    assert(node, `Missing button: ${text}`); if (node.closest('details') && !node.closest('details')!.open) node.closest('details')!.querySelector('summary')!.click(); return node
   }
   const click = async (root: ParentNode, text: string) => { button(root, text).click(); await frames() }
   const slide = async () => {
     const node = panel.querySelector<HTMLButtonElement>('button[title^="Slide selected keyframes forward"]')!
-    assert(node, 'Slide button missing'); node.click(); await frames()
+    assert(node, 'Slide button missing'); if (node.closest('details') && !node.closest('details')!.open) node.closest('details')!.querySelector('summary')!.click(); node.click(); await frames()
   }
   const action = async (name: string) => { document.querySelector<HTMLButtonElement>(`[data-action="${name}"]`)!.click(); await frames() }
   const choose = async (value: string) => {

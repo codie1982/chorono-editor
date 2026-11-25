@@ -4,6 +4,7 @@ import type { LayerDefinition } from './LayerDefinition'
 import type { Layer } from '@/lib/types'
 import { ALL_SPLINE_DEFINITIONS } from './definitions/spline'
 import { newSplineLayerFromPrimitive } from '@/lib/defaults'
+import { mesh2DDefinition } from './definitions/mesh2d/Mesh2DDefinition'
 
 const mockDef = (kind: string, category: any = 'Basic Shapes'): LayerDefinition => ({
   kind,
@@ -71,6 +72,14 @@ describe('LayerRegistry', () => {
       registry.register(def)
       const layer = { id: 'l', name: 'L', type: 'text' } as Layer
       expect(registry.findForLayer(layer)).toBe(def)
+    })
+
+    it('resolves a Mesh2D layer to its source-aware definition', () => {
+      registry.register(mesh2DDefinition)
+      const layer = mesh2DDefinition.createDefault()
+      expect(registry.findForLayer(layer)).toBe(mesh2DDefinition)
+      expect(registry.findForLayer(layer)?.getPropertyGroups(layer).map(group => group.title))
+        .toEqual(['Transform', 'Appearance', 'Geometry', 'Fill'])
     })
 
     it('returns undefined when no match', () => {

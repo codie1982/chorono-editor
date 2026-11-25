@@ -7,7 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 // Read-only stdio acceptance. Only tools/list and local metadata discovery run;
 // no connected scene, file export, user token or broker HTTP request is used.
-const [directory = '.', target = 'artifacts/validation/mcp-quality-20261110/after'] = process.argv.slice(2)
+const [directory = '.', target = 'artifacts/validation/mcp-model3d-20261114'] = process.argv.slice(2)
 const root = path.resolve(directory), output = path.resolve(target)
 const report = { profiles: {}, aliases: 0 }
 await mkdir(output, { recursive: true })
@@ -40,14 +40,29 @@ async function inspect(profile) {
       return JSON.parse(result.content[0].text)
     }
     const { tools } = await client.listTools(), summary = await call({ summary: true })
-    assert.equal(tools.length, profile === 'standard' ? 40 : 77)
+    assert.equal(tools.length, profile === 'standard' ? 44 : 81)
     assert.equal(summary.version, '2.1.0'); assert.equal(summary.sourceEditing.required, true)
     assert.equal(summary.sourceEditing.authoring.version, 1)
+    assert.equal(summary.splineEditing.version, 1)
+    for (const name of ['prepare_spline_edit','apply_spline_edit','discard_spline_edit']) {
+      const detail = await call({toolName:name})
+      assert.equal(detail.callableInBatch, false)
+      assert(tools.some(tool=>tool.name===name))
+      if(name!=='discard_spline_edit') {
+        assert(detail.tool.inputSchema.required.includes('readToken'))
+        assert(detail.tool.inputSchema.required.includes('expectedRevision'))
+      }
+    }
     const sourceDetail = await call({toolName:'create_layer'})
     assert(sourceDetail.tool.inputSchema.required.includes('readToken'))
     assert(sourceDetail.tool.inputSchema.required.includes('expectedRevision'))
     assert(!sourceDetail.batchInputSchema.required.includes('readToken'))
     assert(!sourceDetail.batchInputSchema.required.includes('expectedRevision'))
+    const modelDetail = await call({toolName:'update_model3d'})
+    assert.equal(modelDetail.callableInBatch, true)
+    assert.equal(modelDetail.tool.inputSchema.properties.patch.properties.camera.properties.yaw.type, 'number')
+    const importDetail = await call({toolName:'import_asset'})
+    assert.equal(importDetail.tool.inputSchema.properties.data.maxLength, 4 * Math.ceil(16 * 1024 ** 2 / 3))
     assert.equal(new Set(tools.map(tool => tool.name)).size, tools.length)
     assert.deepEqual(tools.map(tool => tool.name), summary.catalog.advertisedToolNames)
     assert.equal(summary.tools, undefined); assert.equal(summary.scripting, undefined)
@@ -64,7 +79,7 @@ async function inspect(profile) {
       assert.deepEqual(modern.tool.inputSchema, legacy.tool.inputSchema)
     }
     const full = await call({})
-    assert.equal(full.tools.length, 77); assert.equal(typeof full.scripting, 'string')
+    assert.equal(full.tools.length, 81); assert.equal(typeof full.scripting, 'string')
     await writeFile(path.join(output, `${profile}-catalog.json`), JSON.stringify(tools, null, 2) + '\n')
     report.profiles[profile] = { tools: tools.length, schemaProperties: docs.count,
       undocumentedProperties: docs.missing.length, jsonBytes: Buffer.byteLength(JSON.stringify(tools)),

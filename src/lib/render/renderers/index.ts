@@ -10,6 +10,8 @@
 //   3. Registering both in registry/bootstrap.ts
 // No other file changes — open/closed principle satisfied.
 
+import { imagePaint, imagePaintAssetIds, stylePaintAssetIds } from '../../paint/paintSource'
+import { layerPaintAssetIds } from '../../paint/paintSource'
 import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry'
@@ -18,18 +20,20 @@ import {
   drawShape, drawText, drawImageLayer, drawVideoLayer, drawBezierPath, drawSplineLayer,
 } from '@/lib/renderer'
 import { drawPathStrokeLayer } from '@/lib/runtime/pathStrokeRenderer'
+import { mesh2DRendererPlugin } from './Mesh2DRendererPlugin'
+export { mesh2DRendererPlugin }
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
 export const shapeRendererPlugin: LayerRendererPlugin = {
   id: 'shape',
-  nativeMediaFree: true,
-  mediaDependencies: () => ({}),
+  nativeMediaFree: layer => !layer.style?.fill?.image,
+  mediaDependencies: layer => ({ assetIds: stylePaintAssetIds(layer.style) }),
   // Outside stroke uses destination-over, which depends on the live backdrop.
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => layer.style?.stroke?.alignment !== 'outside', localBounds: nativePaintBounds },
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => layer.style?.stroke?.alignment !== 'outside' && !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'shape' && !!layer.size,
   render(ctx: RenderContext, layer: Layer): void {
-    drawShape(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+    drawShape(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)
   },
 }
 
@@ -37,11 +41,14 @@ export const shapeRendererPlugin: LayerRendererPlugin = {
 
 export const textRendererPlugin: LayerRendererPlugin = {
   id: 'text',
-  mediaDependencies: layer => ({fontFamilies:[layer.text?.fontFamily??'sans-serif']}),
+  mediaDependencies: layer => ({
+    fontFamilies: [layer.text?.fontFamily ?? 'sans-serif'],
+    assetIds: layer.text?.textureAssetId ? [layer.text.textureAssetId] : [],
+  }),
   paint: { alphaSafe: true },
   supports: (layer: Layer) => layer.type === 'text',
   render(ctx: RenderContext, layer: Layer): void {
-    drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides)
+    drawText(ctx.canvas, layer, ctx.paramValues, ctx.overrides, ctx.assets)
   },
 }
 
@@ -86,12 +93,12 @@ export const pathStrokeRendererPlugin: LayerRendererPlugin = {
 
 export const bezierPathRendererPlugin: LayerRendererPlugin = {
   id: 'bezierPath',
-  nativeMediaFree: true,
-  mediaDependencies: () => ({}),
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: true, localBounds: nativePaintBounds },
+  nativeMediaFree: layer => !layer.style?.fill?.image,
+  mediaDependencies: layer => ({ assetIds: stylePaintAssetIds(layer.style) }),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !imagePaint(layer.style?.fill), localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'path' && !!layer.path,
   render(ctx: RenderContext, layer: Layer): void {
-    drawBezierPath(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+    drawBezierPath(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)
   },
 }
 
@@ -155,12 +162,12 @@ export const repeaterRendererPlugin: LayerRendererPlugin = {
 
 export const splineRendererPlugin: LayerRendererPlugin = {
   id: 'spline',
-  nativeMediaFree: true,
-  mediaDependencies: () => ({}),
-  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: true, localBounds: nativePaintBounds },
+  nativeMediaFree: layer => !layerPaintAssetIds(layer).length,
+  mediaDependencies: layer => ({ assetIds: layerPaintAssetIds(layer) }),
+  paint: { alphaSafe: true, regionSafe: true, staticRasterSafe: layer => !layerPaintAssetIds(layer).length, localBounds: nativePaintBounds },
   supports: (layer: Layer) => layer.type === 'spline' && !!layer.spline,
   render(ctx: RenderContext, layer: Layer): void {
-    drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues)
+    drawSplineLayer(ctx.canvas, layer, ctx.overrides, ctx.paramValues, ctx.assets)
   },
 }
 
@@ -185,6 +192,7 @@ export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
   pathStrokeRendererPlugin,
   bezierPathRendererPlugin,
   splineRendererPlugin,
+  mesh2DRendererPlugin,
   groupRendererPlugin,
   repeaterRendererPlugin,
   particleRendererPlugin,

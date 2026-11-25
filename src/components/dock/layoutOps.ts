@@ -59,6 +59,14 @@ export function setActiveTab(tree: DockNode, leafId: string, panelId: string): D
   })
 }
 
+/** Renames an existing panel in place. The replacement ID must be absent. */
+export function renamePanel(tree: DockNode, previousId: string, nextId: string): DockNode {
+  if (findLeafOfPanel(tree, nextId)) return tree
+  return mapNode(tree, node => node.kind === 'leaf' && node.panels.includes(previousId)
+    ? { ...node, panels: node.panels.map(id => id === previousId ? nextId : id) }
+    : node)
+}
+
 /** Set the collapsed flag of one leaf. */
 export function setLeafCollapsed(tree: DockNode, leafId: string, collapsed: boolean): DockNode {
   return mapNode(tree, (n) =>
@@ -314,7 +322,7 @@ export function defaultLayout(): DockNode {
               { kind: 'leaf', id: 'canvas-leaf',     panels: ['canvas', 'stateMachine'], activeIndex: 0 },
               {
                 kind: 'leaf', id: 'properties-leaf',
-                panels: ['properties', 'splineModeling', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview',  'shortcuts'],
+                panels: ['properties', 'geometryEdit', 'physicsSimulations', 'jobsBake', 'resourceMonitor', 'particles', 'assets', 'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview'],
                 activeIndex: 0,
               },
             ],

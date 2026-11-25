@@ -24,7 +24,12 @@ export class NativeDemandBranches {
     const layers=frame.sourceScene.layers,revision=this.registry.getRevision()
     if(layers!==this.layers||revision!==this.revision){
       this.layers=layers;this.revision=revision
-      this.candidates=layers.filter(layer=>!!layer.instanceOf||!!layer.masks?.length||!this.registry.find(layer)?.nativeMediaFree).map(layer=>layer.id)
+      this.candidates=layers.filter(layer=>{
+        if(layer.instanceOf||layer.masks?.length)return true
+        const certificate=this.registry.find(layer)?.nativeMediaFree
+        const free=typeof certificate==='function'?certificate(layer):certificate
+        return !free
+      }).map(layer=>layer.id)
     }
     const branches=new Set<string>()
     for(const id of this.candidates){

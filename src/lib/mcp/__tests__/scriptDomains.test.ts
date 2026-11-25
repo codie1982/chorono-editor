@@ -142,18 +142,16 @@ describe('QuickJS native script domains', () => {
     expect(Object.values(result.scene.layers[2].spline!.contours)).toHaveLength(2)
   })
 
-  it('cleans animation targets for removed spline elements without removing unrelated tracks', async () => {
-    const result = await runSafeScript(`
+  it('refuses deleting keyed spline geometry without dropping human animation targets', async () => {
+    const created = await runSafeScript(`
       const timeline=scene.createTimeline({id:'geometry',durationMs:1000});
-      const curve=scene.addSpline('rectangle',{width:100,height:60});
+      const curve=scene.addSpline('rectangle',{width:100,height:60},{name:'Guarded'});
       const point=Object.keys(curve.spline.data.points)[0];
       timeline.key(curve,'spline.points.'+point+'.x',0,-50).key(curve,'opacity',0,1);
-      curve.spline.removePoint(point);
-      scene.log(point);
     `, emptyScene())
-    expect(result.scene.timelines[0].tracks.map(track => track.target)).toEqual([`layers.${result.scene.layers[0].id}.opacity`])
-    expect(result.scene.layers[0].spline!.points[result.logs[0]]).toBeUndefined()
-    assertSplineTopology(result.scene.layers[0].spline!)
+    const before = structuredClone(created.scene)
+    await expect(runSafeScript(`const curve=scene.find('Guarded');curve.spline.removePoint(Object.keys(curve.spline.data.points)[0]);`, created.scene)).rejects.toThrow(/keyed|timeline|reference/)
+    expect(created.scene).toEqual(before)
   })
 
   it('queries and edits the same hierarchy, links and timeline metadata used by Scene Explorer', async () => {

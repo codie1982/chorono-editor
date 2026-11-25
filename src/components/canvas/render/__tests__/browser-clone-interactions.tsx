@@ -28,7 +28,7 @@ const checks: Check[] = [], FREE_MOVE = 'Drag — free move (X + Y together)'
  * refs or mocked capture. Duplicate button and the real keyboard hook share
  * one handler; this does not substitute for mounting the entire page shell. */
 function Subject({ fixture }: { fixture: Fixture }) {
-  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(fixture.scene), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings({ persist: false })
   const [selection, setSelection] = useState(() => createLayerSelection(fixture.selected, fixture.primary))
   const ids = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds]), timeMs = fixture.timeMs ?? 500
   const frame = useMemo(() => evaluateTimelines(editor.scene.timelines, timeMs), [editor.scene.timelines, timeMs])

@@ -34,6 +34,7 @@ const COLOR_MAP: Record<string, string> = {
   'style.cornerRadius':     '#c084fc',  // violet
   'text.fontSize':          '#fbbf24',  // gold
   'text.letterSpacing':     '#fcd34d',  // pale gold
+  'text.lineHeight':        '#fde68a',  // light gold
   'motionPath.offset':      '#94a3b8',  // slate
 }
 const FALLBACK_COLORS = ['#38bdf8', '#a3e635', '#f472b6', '#fb7185', '#facc15']

@@ -8,6 +8,22 @@ Kullanıcı bir katman grubunu ve ona ait animasyonu **yeniden kullanılabilir b
 
 İlk dikey dilim: başlık + renkli kart + logo, tek giriş/çıkış klibi → kütüphaneye kaydet → iki instance ekle → başlık ve rengi bağımsız değiştir → farklı başlangıç zamanlarında oynat → portable kaydet → canonical runtime export et.
 
+**13 Kasım kapsam netleştirmesi:** [İç animasyon planındaki](item-owned-animation-plan.md)
+minimal definition/instance ve number kontrolleri ortak ilk kullanım kontratıdır;
+ayrı bir rakip sistem kurulmaz. Parametrik saat örneğinde tek definition'ın
+örnekleri farklı başlangıç saati/hız/faz taşır. Ortak `Timeline[]` tipi ve
+evaluator kullanılır; iç kliplerin hepsinin ana scene Timeline listesinde veya
+görünümünde olması gerekmez. Katalog/cloud/ileri nested araçlar bu temel örneğin
+önkoşulu değildir. Güncel teslim sırasını üst yol haritası belirler; başlıktaki
+4 Kasım export önkoşulu tarihsel sıradır.
+Bu kapsam için yeni ana plan açılmaz; [koordinasyon belgesinin](item-owned-animation-plan.md)
+IA1a/IA1b dilimleri minimal tanım/örnek ve gerçek detay animasyonunu birlikte
+teslim eder. Bu belge kaynak/library/sürüm yönetiminin ayrıntı sahibi olarak kalır.
+**14 Kasım önceliği:** [ana plan §3.2](../production-2d-roadmap.md) 3D0–3D6'yı
+öne aldı. IA0'ın ortak kontratı 3D tüketicisiyle dar biçimde çıkarılır; native
+3D klip için önce bu belgedeki 2D saat/library authoring'ini teslim etmek şart
+değildir. C0/C1 ve 2D IA1, 3D → Poly → UV sonrasındaki bileşen aşamasındadır.
+
 ## 2. Mevcut temel ve fark
 
 `Layer.instanceOf`, `clone/InstanceResolver.ts` ve clone komutları kaynak katmanın görsel alanlarını paylaşan live instance sunuyor. Grup, parent, timeline ve native undo altyapısı var. Bu temel korunur.
@@ -49,11 +65,24 @@ Mevcut timeline evaluator kullanılır; ikinci bir animasyon motoru yazılmaz. C
 
 İlk animated teslim tek klip instance'ıdır. İç içe bileşen ve bileşen içi state machine ayrı C2 aşamasıdır; cycle/depth kontrolü ve bağımsız runtime state'i olmadan aktif edilmez. State-machine local clock işi [Character Motion planıyla](../character-motion-plan.md) aynı ortak değerlendirme sözleşmesine bağlanır; iki farklı clock çözümü oluşturulmaz.
 
+Particle/repeater ileride aynı definition'ın tüketicisi olabilir. Emission
+kaydı definition/sürüm, seed, kontrol dağılımları ve içerik saati politikası
+taşır. Doğumda belirlenen instance parametreleri sabit kalır; particle age veya
+scene-synced clock seçimi açıktır. Binlerce kalıcı Layer/Track üretmek veya her
+kare random seçmek bu sözleşmenin parçası değildir. Mevcut particle renderer'da
+component desteği henüz yoktur; bütçe, deterministic spawn ve eski seed
+regresyon kabulüyle kendi aşamasında eklenir.
+
 ## 6. Resolver, düzenleme ve sürümleme
 
 `ComponentResolver` salt tanım + instance + evaluation context'ten türetilmiş scene/override görünümü üretir. Renderer, hit-test, bounds, MCP preview ve exporter aynı çözümü kullanır. Render sırasında source scene'e yeni katman veya keyframe yazılmaz.
 
 `Edit Definition` yalnız seçili definition'ın authoring bağlamını açar; ayrı mod oluşturmaz. Değişiklik yeni version üretir. Instance sürümü pin'lidir; kütüphanede yeni sürüm çıkınca mevcut projeler kendiliğinden değişmez. Kullanıcı update, mevcut sürümü tutma veya detach seçebilir. Kontrol id'lerinin sürümler arası uyumu doğrulanır.
+
+İlk Apply politikası: instance içinden açılan definition edit'i yeni sürümü
+üretip yalnız o instance'ın pin'ini günceller; etki kapsamı Apply öncesi
+gösterilir. Library kaynağından edit yeni sürümü kaydeder; başka instance'lar
+sessizce güncellenmez. Toplu update daha ileri sürüm yönetimidir.
 
 Detach, çözülmüş görünüm ve animasyonu normal katmanlara dönüştürür; ids/references/tracks bağımsız olur. Save-to-library, instantiate, update ve detach her biri tek undo transaction'ıdır. Undo'nun gerektirdiği definition/asset/cache erken temizlenmez.
 

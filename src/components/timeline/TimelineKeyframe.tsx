@@ -56,7 +56,7 @@ export default function TimelineKeyframe({
       aria-label={`Keyframe at ${Math.round(kf.timeMs)} milliseconds${glyphAccessibility?.ordinal ? ` · ${glyphAccessibility.ordinal}` : ''}`}
       aria-describedby={glyphAccessibility?.descriptionId}
       aria-pressed={!!isSelected}
-      style={positionStyle}
+      style={{ ...positionStyle, cursor: 'ew-resize' }}
       onClick={(e) => {
         e.stopPropagation()
         // Pointer clicks are selected once by useKeyframeDrag.onLoneClick.
@@ -73,7 +73,7 @@ export default function TimelineKeyframe({
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}
     >
-      <div className={`w-3 h-3 rotate-45 cursor-grab active:cursor-grabbing border transition-transform
+      <div className={`w-3 h-3 rotate-45 cursor-ew-resize border transition-transform
         ${colorClass}
         ${isDragging || isSelected ? 'scale-125' : 'hover:scale-125'}`} />
 

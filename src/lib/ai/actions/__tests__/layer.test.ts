@@ -5,6 +5,28 @@ import { ActionRegistry } from '../../ActionRegistry'
 import { emptyScene } from '@/lib/defaults'
 import type { ChronoScene, Asset } from '@/lib/types'
 
+describe('buildLayerFromParams — shape opacity units', () => {
+  it('converts documented unit opacity to the model percentage', () => {
+    const opaque = buildLayerFromParams({
+      id: 'opaque', name: 'Opaque', type: 'shape', shapeKind: 'rect', fillOpacity: 1,
+    })
+    const half = buildLayerFromParams({
+      id: 'half', name: 'Half', type: 'shape', shapeKind: 'rect', fillOpacity: 0.5,
+    })
+    expect(opaque.style?.fill?.opacity).toBe(100)
+    expect(half.style?.fill?.opacity).toBe(50)
+  })
+
+  it('uses the same conversion when updating a shape', () => {
+    const reg = new ActionRegistry()
+    registerLayerActions(reg)
+    const layer = buildLayerFromParams({ id: 'box', name: 'Box', type: 'shape', shapeKind: 'rect' })
+    const scene = { ...emptyScene(), layers: [layer] }
+    const command = reg.get('update_layer')!.toCommand!({ layerId: 'box', fillOpacity: 0.25 }, scene)!
+    expect(command.execute(scene).layers[0].style?.fill?.opacity).toBe(25)
+  })
+})
+
 describe('buildLayerFromParams — repeater', () => {
   it('builds a linear repeater with a transform step', () => {
     const layer = buildLayerFromParams({

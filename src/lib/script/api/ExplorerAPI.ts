@@ -241,7 +241,7 @@ export class ExplorerAPI {
       if (scene.layers.some(layer => layer.id === command.groupId)) throw new Error('Group id already exists.')
       const next = command.execute(scene)
       return { ...next, layers: next.layers.map(layer => layer.id === command.groupId ? { ...layer,
-        ...(options.name ? { name: options.name.trim() } : {}), transform: { x: 0, y: 0, anchorX: 0, anchorY: 0, rotationDeg: 0, scaleX: 1, scaleY: 1 } } : layer) }
+        ...(options.name ? { name: options.name.trim() } : {}) } : layer) }
     })
     return command.groupId
   }

@@ -18,6 +18,8 @@ export const MIN_SELECTION_RESIZE_EXTENT = 1e-4
  * the cursor. No bounds/source data is mutated and no preview is accumulated.
  *
  * Corners pin the opposite corner; edges pin the opposite edge's midpoint.
+ * With `centered`, the box center is pinned and pointer deltas affect both
+ * sides symmetrically; existing callers default to the opposite-handle pivot.
  * Proportional corners use the dominant fractional extent change; proportional
  * edges use their active axis and expand the perpendicular axis symmetrically.
  * Positive scale factors are clamped using the shared MIN_SCALE policy and a
@@ -27,7 +29,7 @@ export const MIN_SELECTION_RESIZE_EXTENT = 1e-4
  * Returns null for invalid/non-finite bounds, deltas, handles or tiny extents.
  */
 export function selectionResize(bounds: Readonly<SelectionResizeBounds>, handle: SelectionResizeHandle,
-  deltaWorld: Readonly<Point>, proportional: boolean): SelectionResizeResult | null {
+  deltaWorld: Readonly<Point>, proportional: boolean, centered = false): SelectionResizeResult | null {
   const { x, y, width, height } = bounds
   if (![x, y, width, height, deltaWorld.x, deltaWorld.y].every(Number.isFinite)
       || width < MIN_SELECTION_RESIZE_EXTENT || height < MIN_SELECTION_RESIZE_EXTENT
@@ -35,8 +37,9 @@ export function selectionResize(bounds: Readonly<SelectionResizeBounds>, handle:
       || !['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'].includes(handle)) return null
   const west = handle.includes('w'), east = handle.includes('e')
   const north = handle.includes('n'), south = handle.includes('s')
-  const rawX = west ? 1 - deltaWorld.x / width : east ? 1 + deltaWorld.x / width : 1
-  const rawY = north ? 1 - deltaWorld.y / height : south ? 1 + deltaWorld.y / height : 1
+  const multiplier = centered ? 2 : 1
+  const rawX = west ? 1 - multiplier * deltaWorld.x / width : east ? 1 + multiplier * deltaWorld.x / width : 1
+  const rawY = north ? 1 - multiplier * deltaWorld.y / height : south ? 1 + multiplier * deltaWorld.y / height : 1
   let factorX = rawX, factorY = rawY
   const minimumX = Math.max(MIN_SCALE, MIN_SELECTION_RESIZE_EXTENT / width)
   const minimumY = Math.max(MIN_SCALE, MIN_SELECTION_RESIZE_EXTENT / height)
@@ -49,6 +52,6 @@ export function selectionResize(bounds: Readonly<SelectionResizeBounds>, handle:
     factorY = Math.max(minimumY, factorY)
   }
   if (![factorX, factorY, width * factorX, height * factorY].every(Number.isFinite)) return null
-  return { pivot: { x: west ? x + width : east ? x : x + width / 2,
+  return { pivot: centered ? { x: x + width / 2, y: y + height / 2 } : { x: west ? x + width : east ? x : x + width / 2,
     y: north ? y + height : south ? y : y + height / 2 }, factorX, factorY }
 }
