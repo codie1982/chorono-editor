@@ -75,6 +75,10 @@ import { useMeshEditSession } from './canvas/mesh2d/useMeshEditSession'
 import { OffArtboardOverlay } from './canvas/overlays/OffArtboardOverlay'
 import { isOffArtboardBounds } from '@/lib/canvas/math/offArtboardOutlines'
 import { AnchorHandle } from './canvas/overlays/AnchorHandle'
+import type { IKDiagnostics } from '@/lib/rig2d/diagnostics'
+import { PivotLinkViewport } from './rig2d/PivotLinkViewport'
+import { hitIKTargetMarker } from './rig2d/pivotViewport'
+import type { PivotPicking } from './rig2d/usePivotPicking'
 import { SelectionOriginsOverlay } from './canvas/overlays/SelectionOriginsOverlay'
 import { SoloModeOverlay } from './canvas/overlays/SoloModeOverlay'
 import { MoveAxisGizmo, ScaleAxisGizmo } from './canvas/overlays/AxisGizmos'
@@ -132,6 +136,9 @@ interface Props {
   scene: ChronoScene
   /** Display/hit-test-only projection; commands always borrow scene as source. */
   displayScene?: ChronoScene
+  pivotPicking?: PivotPicking
+  ikDiagnostics?: IKDiagnostics
+  onRigDragPreview?: (values: Map<string, number>) => void
   editor: EditorStateReturn
   getShortcutContext?: () => ShortcutContext
   timeMs: number
@@ -340,7 +347,7 @@ const PADDING   = 24
 const NO_MOTION_KEYS: ReadonlySet<string> = new Set()
 
 export default function SceneCanvas({
-  scene, displayScene = scene, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, selectionToolMode, assets, onSelectLayer, onSelectLayers, onAgentHandoff, onAgentConnections,
+  scene, displayScene = scene, pivotPicking, ikDiagnostics, onRigDragPreview, editor, getShortcutContext, timeMs, selectedLayerId, selectedLayerIds, selectionToolMode, assets, onSelectLayer, onSelectLayers, onAgentHandoff, onAgentConnections,
   textEditRequestId, onTextEditRequestDone,
   overrides: runtimeOverrides, paramValues, previewMode, isPlaying, onLayerClickInPreview, onLayerDragInPreview,
   panMode: controlledPanMode, onPanModeChange, toolMode, onToolModeChange, snap,
@@ -605,7 +612,7 @@ export default function SceneCanvas({
   const { dragRef, startDrag, snapPoint: dragSnapPoint } = useCanvasDrag({
     snapLayerIds,
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,transformSpace,
-    readScale, setGuides, setDragHud, setDragOverrides,
+    readScale, setGuides, setDragHud, setDragOverrides: onRigDragPreview ?? setDragOverrides,
     onAfterLayerCommit, onAfterCloneDrag, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
     timeMs, overrides, ...meshFrameQuery,
     contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${transformSpace}:${motionEditing}:${arrayEditing}:${placingShape}:${panMode}:${toolMode}:${splineEditController.layerId}:${splineEditController.active}:${splineEditController.mode}:${geometryEditActive}:${geometryEditMode}`,
@@ -690,10 +697,10 @@ export default function SceneCanvas({
     startDrag({ pointerId: event.pointerId, currentTarget: canvasRef.current ?? event.currentTarget })
   }, [scene, timeMs, overrides, editor, dragRef, startDrag, pivotMode, motionEditing, arrayEditing, transformSpace])
 
-  /** Outside-composition wireframes use the same root selection and native
+  /** Off-artboard wireframes and IK targets use the same root selection and native
    * transform owner as painted bodies. Pan bubbles to the viewport; ordinary
    * edits preserve multi-selection, parent-local animation and clone policies. */
-  const handleOffArtboardPointerDown = useCallback((id: string, event: React.PointerEvent<SVGRectElement>) => {
+  const handleLayerProxyPointerDown = useCallback((id: string, event: React.PointerEvent) => {
     if (event.button === 1 || (panMode && event.button === 0)) return
     if (event.button !== 0 || dragRef.current || editor.isTransactionActive() || hideEditorUI || motionEditing || arrayEditing) return
     const target = geometryScene.layers.find(layer => layer.id === id)
@@ -1293,6 +1300,14 @@ export default function SceneCanvas({
         {/* Canvas + selection overlay share the same scaled box */}
         <div
           className="relative"
+          onPointerDownCapture={event => {
+            if (event.button !== 0 || !ikDiagnostics?.size || measurementSelection.size !== 1 || !gizmo.frame || panMode ||
+              pivotPicking?.pick || pathPickMode || contentInspection || (toolMode !== 'select' && toolMode !== 'move')) return
+            const hit = event.target as Element
+            if (hit !== canvasRef.current && !hit.closest('[data-handle], [data-off-artboard-id]')) return
+            const id = hitIKTargetMarker(event.currentTarget, event.clientX, event.clientY)
+            if (id) handleLayerProxyPointerDown(id, event)
+          }}
           style={{
             width: `${width * zoom}px`, height: `${height * zoom}px`,
             outline: previewMode ? '2px solid #f59e0b' : undefined,
@@ -1453,6 +1468,9 @@ export default function SceneCanvas({
             }}
           />
 
+          {!hideEditorUI && <PivotLinkViewport key={pivotPicking?.pick?.step ?? 'inspect'} scene={geometryScene} selection={measurementSelection}
+            timeMs={timeMs} overrides={frameGeometryOverrides} zoom={zoom} picking={pivotPicking} diagnostics={ikDiagnostics}
+            viewportRef={containerRef} canvasRef={canvasRef} hitOptions={meshFrameQuery} />}
           {!hideEditorUI && physicsOverlay?.enabled && <PhysicsViewportOverlay
             scene={scene}
             timeMs={timeMs}
@@ -1489,7 +1507,7 @@ export default function SceneCanvas({
             scene={displayScene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
             cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
-            onLayerPointerDown={handleOffArtboardPointerDown} onDiagnostics={setOffArtboardDiagnostic} />}
+            onLayerPointerDown={handleLayerProxyPointerDown} onDiagnostics={setOffArtboardDiagnostic} />}
 
           {/* Hover preview — red outline showing which layer a click would select.
               Only rendered when a non-selected layer is under the cursor and no

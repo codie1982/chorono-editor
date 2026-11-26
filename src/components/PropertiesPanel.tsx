@@ -1,4 +1,7 @@
 'use client'
+import type { IKDiagnostics } from '@/lib/rig2d/diagnostics'
+import type { PivotPicking } from './rig2d/usePivotPicking'
+import { PivotLinkControls } from './PropertiesPanel/PivotLinkControls'
 import { SplineAppearanceControls } from './paint/SplineAppearanceControls'
 import { ImagePaintControls } from './paint/ImagePaintControls'
 import { CompositionBackgroundControls } from './paint/CompositionBackgroundControls'
@@ -37,10 +40,11 @@ import { centerOrigin } from '@/lib/editor/layerTransforms'
 import AudioInspector from '@/components/audio/AudioInspector'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
-type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
+type PropTab = 'properties' | 'links' | 'effects' | 'motion' | 'interact'
 
 const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
   { id: 'properties', label: 'Properties', icon: '🎨' },
+  { id: 'links',      label: 'Link & IK',  icon: '↗' },
   { id: 'effects',    label: 'Effects',    icon: '✨' },
   { id: 'motion',     label: 'Motion',     icon: '🎬' },
   { id: 'interact',   label: 'Interact',   icon: '🖱' },
@@ -51,6 +55,8 @@ const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
 
 interface Props {
   layer: Layer | null
+  pivotPicking?: PivotPicking
+  ikDiagnostics?: IKDiagnostics
   composition: Composition
   onLayerChange: (layer: Layer) => void
   onCompositionChange: (comp: Composition) => void
@@ -344,7 +350,7 @@ export default function PropertiesPanel({
   parameters = [], allLayers = [], allTimelines = [],
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
-  dispatchCommand,
+  dispatchCommand, pivotPicking, ikDiagnostics,
   currentTimeMs = 0, selectedTimelineId, onNormalizeAudio, getScene, isTransactionActive, expressionFrame, expressionExternalTime,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
@@ -402,12 +408,13 @@ export default function PropertiesPanel({
 
       {/* ── Tab bar — only visible when a layer is selected ── */}
       {layer && (
-        <div className="flex border-b border-gray-800 shrink-0 bg-gray-950/60">
-          {TABS.map(t => (
+        <div className="flex overflow-x-auto border-b border-gray-800 shrink-0 bg-gray-950/60">
+          {TABS.filter(t => t.id !== 'links' || !!pivotPicking).map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] uppercase
+              aria-pressed={activeTab === t.id}
+              className={`flex-auto shrink-0 whitespace-nowrap flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] uppercase
                 tracking-wider transition-colors border-b-2
                 ${activeTab === t.id
                   ? 'text-blue-300 border-blue-500 bg-gray-900'
@@ -451,6 +458,7 @@ export default function PropertiesPanel({
         {/* ── Layer özellikleri ──────────────────────────────────────── */}
         {layer && (
           <>
+            {activeTab === 'links' && scene && pivotPicking && <PivotLinkControls key={layer.id} layer={layer} scene={scene} picking={pivotPicking} diagnostics={ikDiagnostics} />}
             {/* Schema-driven properties: rendered for layer types that DON'T
                 already have a rich hand-written UI (group, repeater).
                 particleEmitter has its own dedicated dock tab — see below for
@@ -2077,9 +2085,9 @@ export default function PropertiesPanel({
             </>)}{/* end of Motion tab */}
 
             {/* Group / Repeater: helpful tab content reminder */}
-            {(layer.type === 'group' || layer.type === 'repeater') && activeTab !== 'properties' && (
+            {(layer.type === 'group' || layer.type === 'repeater') && activeTab !== 'properties' && activeTab !== 'links' && (
               <p className="text-xs text-gray-600 text-center py-8 italic">
-                {layer.type === 'group' ? 'Groups' : 'Repeaters'} only use the Properties tab.
+                {layer.type === 'group' ? 'Groups' : 'Repeaters'} use the Properties and Link &amp; IK tabs.
               </p>
             )}
           </>

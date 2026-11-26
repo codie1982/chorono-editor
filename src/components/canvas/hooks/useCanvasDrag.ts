@@ -43,7 +43,7 @@ export interface UseCanvasDragOptions {
   readScale: () => { sx: number; sy: number }
   setGuides: (g: Guide[]) => void
   setDragHud: Dispatch<SetStateAction<{ x: number; y: number; label: string } | null>>
-  setDragOverrides: Dispatch<SetStateAction<Map<string, number>>>
+  setDragOverrides: (values: Map<string, number>) => void
   /** Build animation writes before the source edit commits, in the same undo. */
   buildLayerCommitCommands?: (changes: readonly CanvasLayerChange[]) => EditorCommand[]
   /** Legacy notification, used only without the atomic animation builder. */

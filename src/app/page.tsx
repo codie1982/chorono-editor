@@ -114,6 +114,7 @@ import type { MeshSelectionSummary } from '@/components/canvas/mesh2d/meshEditSe
 import { useSplineDrawingPreferences } from '@/components/splineEdit/useSplineDrawingPreferences'
 import { splineEditTools } from '@/components/splineEdit/tools/splineEditTools'
 import { SplineEditInspector } from '@/components/splineEdit/SplineEditInspector'
+import { usePivotPicking } from '@/components/rig2d/usePivotPicking'
 import { useSplineAttachPicking } from '@/components/splineEdit/useSplineAttachPicking'
 import { booleanOwner } from '@/lib/editor/boolean/operationPlan'
 import { useBooleanPreview } from '@/components/booleanPreview/useBooleanPreview'
@@ -516,13 +517,31 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const expressionAuthoringClock = useMemo(() => (!isPlaying || activeKeyRange) && !manualPreview && selectedTlId && scene.timelines.some(item => item.id === selectedTlId)
     ? { timelineId: selectedTlId, localTimeMs: authoringTime(scene.timelines.find(item => item.id === selectedTlId)!, currentTimeMs) } : null,
     [isPlaying, activeKeyRange, manualPreview, selectedTlId, scene.timelines, currentTimeMs])
+  const [rigDragOverrides, setRigDragOverrides] = useState<Map<string, number>>(new Map())
   const frame = useMemo(
-    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs, expressionAuthoringClock)),
+    () => renderWorkMonitor.measure('evaluation', () => runtime.evaluateFrame(currentTimeMs, expressionAuthoringClock, rigDragOverrides)),
     // We deliberately include paramValues so slider edits cause a re-eval.
     // One revision includes segment/test playback and queued events while paused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scene, playbackScene, currentTimeMs, isPlaying, manualPreview, selectedTlId, runtime.paramValues, runtime.segmentState, runtime.frameRevision, expressionAuthoringClock],
+    [scene, playbackScene, currentTimeMs, isPlaying, manualPreview, selectedTlId, runtime.paramValues, runtime.segmentState, runtime.frameRevision, expressionAuthoringClock, rigDragOverrides],
   )
+
+  // Auto-key dispatch helper (BL-41). Returns true if the mode is currently
+  // effective. Two modes write keyframes:
+  //   • autoKeyMode === 'auto'   → always (paused or playing)
+  //   • autoKeyMode === 'record' → only WHEN PLAYBACK IS RUNNING
+  //     (mimics 3ds Max / Maya record mode — live performance capture).
+  // Manual mode never auto-writes; user must press K or use ◆ buttons.
+  const isAutoKeyActive = useCallback((): boolean => {
+    const mode = timelineSettings.autoKeyMode
+      ?? (timelineSettings.autoKeyframe ? 'auto' : 'manual')
+    if (mode === 'auto')   return true
+    if (mode === 'record') return isPlaying
+    return false
+  }, [timelineSettings.autoKeyMode, timelineSettings.autoKeyframe, isPlaying])
+
+  const pivotPicking = usePivotPicking(scene, selectedLayer, currentTimeMs, frame, dispatchCommand,
+    editor.isTransactionActive, editor.getDocumentSignal(), isPlaying || manualPreview || !!runtime.segmentState, expressionAuthoringClock, isAutoKeyActive())
 
   /** Manual transport is local and paused; work-area playback never wraps an edit. */
   const isolatedSelectedIds = useMemo(() => layerIsolation.contentScope
@@ -1226,20 +1245,6 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     }
   }, [scene.layers, selectedLayerIds, dispatchCommand])
 
-  // Auto-key dispatch helper (BL-41). Returns true if the mode is currently
-  // effective. Two modes write keyframes:
-  //   • autoKeyMode === 'auto'   → always (paused or playing)
-  //   • autoKeyMode === 'record' → only WHEN PLAYBACK IS RUNNING
-  //     (mimics 3ds Max / Maya record mode — live performance capture).
-  // Manual mode never auto-writes; user must press K or use ◆ buttons.
-  const isAutoKeyActive = useCallback((): boolean => {
-    const mode = timelineSettings.autoKeyMode
-      ?? (timelineSettings.autoKeyframe ? 'auto' : 'manual')
-    if (mode === 'auto')   return true
-    if (mode === 'record') return isPlaying
-    return false
-  }, [timelineSettings.autoKeyMode, timelineSettings.autoKeyframe, isPlaying])
-
   // Snapshot any animatable properties that changed between prev → next.
   // Called after a Layer property mutation when auto-key is active.
   const autoKeyChangedProps = useCallback((prev: Layer, next: Layer) => {
@@ -1274,13 +1279,15 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     dispatchCommand(makeKeyframeLayerSnapshotCmd(selectedTlId, next, timelineAuthoring.localTimeMs, toKey))
   }, [selectedTlId, timelineAuthoring.localTimeMs, dispatchCommand, isAutoKeyActive, scene.timelines])
 
+  const viewportKeyTimeMs = selectedTlId ? timelineAuthoring.localTimeMs : currentTimeMs
+
   /** Compose viewport keys with its source-layer commands in one transaction.
    * Read the synchronous current scene so a fast final pointer sample never
    * keys a stale React render; unchanged animated channels remain untouched. */
   const viewportKeyCommands = useCallback((changes: readonly ViewportLayerChange[]) =>
     buildViewportKeyframeCommands(editor.getScene(), changes, {
-      timelineId: selectedTlId, timeMs: timelineAuthoring.localTimeMs, autoKeyframe: isAutoKeyActive(),
-    }), [editor.getScene, selectedTlId, timelineAuthoring.localTimeMs, isAutoKeyActive])
+      timelineId: selectedTlId, timeMs: viewportKeyTimeMs, timeBasis: 'local', autoKeyframe: isAutoKeyActive(),
+    }), [editor.getScene, selectedTlId, viewportKeyTimeMs, isAutoKeyActive])
 
   const updateLayer = useCallback((next: Layer) => {
     const prev = scene.layers.find((l) => l.id === next.id)
@@ -1406,8 +1413,12 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     if (document.aborted || editor.getDocumentSignal() !== document || editor.isTransactionActive()) return
     const current = editor.getScene()
     if (current.layers.find(layer => layer.id === id)?.type !== 'group') return
-    const cmd = makeUngroupCmd(current, id)
-    if (cmd) dispatchCommand(cmd)
+    try {
+      const cmd = makeUngroupCmd(current, id)
+      if (cmd) dispatchCommand(cmd)
+    } catch (error) {
+      toast.error('Cannot ungroup', { detail: (error as Error).message })
+    }
   }, [editor.getDocumentSignal, editor.getScene, editor.isTransactionActive, dispatchCommand])
   const ungroupSelected = useCallback(() => { if (selectedLayerId) void ungroupLayer(selectedLayerId) }, [selectedLayerId, ungroupLayer])
 
@@ -1492,14 +1503,14 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     const ids = selectedLayerIds.size ? selectedLayerIds : new Set(selectedLayerId ? [selectedLayerId] : [])
     try {
       const command = buildViewportNudgeCommand(editor.getScene(), ids, { x: dx, y: dy }, {
-        timelineId: selectedTlId, timeMs: timelineAuthoring.localTimeMs, autoKeyframe: isAutoKeyActive(), overrides: frame.overrides,
+        timelineId: selectedTlId, timeMs: viewportKeyTimeMs, timeBasis: 'local', autoKeyframe: isAutoKeyActive(), overrides: frame.overrides,
       })
       if (command) dispatchCommand(command)
     } catch (error) {
       toast.warning('Cannot move selection', { detail: error instanceof Error ? error.message : String(error) })
     }
   }, [motionKeyEditing, isPlaying, manualPreview, runtime.segmentState, editor.isTransactionActive, editor.getScene,
-    selectedLayerIds, selectedLayerId, selectedTlId, timelineAuthoring.localTimeMs, isAutoKeyActive, frame.overrides, dispatchCommand])
+    selectedLayerIds, selectedLayerId, selectedTlId, viewportKeyTimeMs, isAutoKeyActive, frame.overrides, dispatchCommand])
 
   // ── Global keyboard shortcuts ────────────────────────────────────────────
   useKeyboard({
@@ -1776,7 +1787,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     selectedIds={selectedLayerIds}
                     onSelect={(id, shift, meta) => selectLayer(id, shift || meta)}
                     onSelectLayers={replaceLayerSelection}
-                    onPickLayer={pickSplineToAttach}
+                    onPickLayer={id => pivotPicking.choose(id) || pickSplineToAttach(id)}
                     onRename={renameLayer}
                     onToggleFlag={toggleLayerFlag}
                     onMoveInTree={moveLayerInTree}
@@ -1856,6 +1867,9 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     shapePlacementHint={shapeCreation.hint}
                     onShapePlacementComplete={shapeCreation.complete}
                     scene={scene} displayScene={layerIsolation.scene}
+                    pivotPicking={pivotPicking}
+                    ikDiagnostics={frame.ikDiagnostics}
+                    onRigDragPreview={frame.ikDiagnostics.size || rigDragOverrides.size ? setRigDragOverrides : undefined}
                     physicsOverlay={physicsViewportOverlay}
                     onPhysicsBondSelect={bondId => setPhysicsViewportOverlay(previous => ({
                       ...previous,
@@ -2083,6 +2097,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                       </button>
                     </div>}
                     <PropertiesPanel
+                      pivotPicking={pivotPicking}
+                      ikDiagnostics={frame.ikDiagnostics}
                       expressionFrame={frame}
                       expressionExternalTime={expressionAuthoringClock}
                       getScene={editor.getScene}
