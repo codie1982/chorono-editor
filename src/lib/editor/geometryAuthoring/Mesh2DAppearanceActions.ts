@@ -27,7 +27,7 @@ const nullableAssetId = {
 }
 
 /**
- * Registers the focused Mesh2D MCP authoring surface.
+ * Registers the shared Mesh2D appearance and source authoring commands.
  *
  * These adapters reuse the same pure generators and immutable authoring
  * helpers as the inspector. Every operation returns a native editor command,
@@ -35,7 +35,7 @@ const nullableAssetId = {
  * shared MCP/editor boundary. No decoded image, GPU resource or deformation
  * sample is retained here.
  */
-export function registerMesh2DMCPActions(registry: ActionRegistry): void {
+export function registerMesh2DAppearanceActions(registry: ActionRegistry): void {
   register(registry, {
     id: 'mcp.createMesh2DFromSource',
     toolName: 'create_mesh2d_from_source',

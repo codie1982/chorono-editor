@@ -1,3 +1,5 @@
+import { RIG_WRITE_NAMES, RIG_DIAGNOSTICS } from './rig2d/tools'
+import { buildRigCommand, readRigDiagnostics, type DisplayedRig } from './rig2d/editorRig'
 import { prepareEditorSplineReply } from './spline/prepareEditorSplineReply'
 import type { SplineExecutors } from './spline/prepareSplineWorkload'
 import { AuthoringHintCollector } from '../editor/authoring/AuthoringHints'
@@ -57,6 +59,8 @@ export interface MCPHost {
   currentTimeMs: number
   isPlaying: boolean
   getLiveFrame: () => { overrides: OverrideMap; paramValues: ParamValueMap }
+  /** Displayed FK and solved pose with the same key authoring clock as Link & IK. */
+  getDisplayedRig?: () => DisplayedRig
   getRuntimeState: () => JsonObject
   setRuntimeTest: (active: boolean) => void
   selectTimeline: (id: string) => void
@@ -143,6 +147,13 @@ export async function executeEditorJobInScope(job: BridgeJob, host: MCPHost, sco
     }
     if (method === 'apply_scene') return commit(args.scene, args.label ?? 'MCP change', args.authoringHints ?? {})
     await validateToolCall(requestedMethod, args)
+    if (RIG_WRITE_NAMES.has(method) || method === RIG_DIAGNOSTICS.name) {
+      const live = host.getDisplayedRig?.()
+      if (!live) throw new Error('This editor host does not expose the displayed Link & IK frame.')
+      if (method === RIG_DIAGNOSTICS.name) return { revision, ...readRigDiagnostics(before, args, host.currentTimeMs, live) }
+      const command = buildRigCommand(method, args, before, host.currentTimeMs, live)
+      return commit(command.execute(before), command.label, commandAuthoringHints(command))
+    }
     if (method === 'prepare_spline_edit') {
       return { revision, documentEpoch, ...await prepareEditorSplineReply(before,
         { ...args, operation: args.operation, timeMs: args.timeMs ?? host.currentTimeMs }, scope, ensureWritable, editor.getDocumentSignal(), signal, host.splineExecutors) }

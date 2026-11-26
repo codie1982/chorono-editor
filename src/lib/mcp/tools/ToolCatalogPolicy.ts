@@ -1,3 +1,5 @@
+import { RIG_WRITE_NAMES, RIG_DIAGNOSTICS } from '../rig2d/tools'
+
 /** Published discovery profiles. Standard is the focused authoring surface;
  * legacy preserves the pre-1.1 names in tools/list for existing integrations.
  * Both profiles accept every historical call through the same validation path. */
@@ -22,8 +24,10 @@ export const TOOL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
  * native mutations can be schema-discovered and invoked inside batch_actions;
  * clients needing every historical tool directly select the legacy profile. */
 export const STANDARD_TOOL_NAMES: readonly string[] = Object.freeze([
+  ...Array.from(RIG_WRITE_NAMES), RIG_DIAGNOSTICS.name,
   'list_sessions', 'get_capabilities', 'get_handoff_context', 'get_scene', 'list_layers', 'get_layer',
   'list_timelines', 'get_timeline', 'list_assets', 'create_layer', 'update_layer',
+  'resolve_spline_boolean', 'transform_mesh2d_vertices', 'convert_layer_to_spline', 'edit_mesh2d_topology', 'edit_2d_modifier_stack',
   'convert_layer_to_mesh2d', 'split_mesh2d_edge', 'apply_mesh2d_subdivision',
   'create_mesh2d_from_source', 'regenerate_mesh2d', 'set_mesh2d_texture',
   'set_mesh2d_pins', 'set_mesh2d_deformation',

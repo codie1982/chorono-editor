@@ -8,8 +8,8 @@ import { emptyScene } from '../../defaults'
 describe('versioned MCP discovery and callable compatibility', () => {
   it('publishes focused workflows while retaining the historical discovery profile', async () => {
     const standard = await getToolCatalog(), legacy = await getToolCatalog('legacy')
-    expect(standard).toHaveLength(65)
-    expect(legacy).toHaveLength(102)
+    expect(standard).toHaveLength(79)
+    expect(legacy).toHaveLength(116)
     expect(new Set(standard.map(tool => tool.name)).size).toBe(standard.length)
     expect(standard.map(tool => tool.name)).toEqual(expect.arrayContaining([
       'get_handoff_context', 'get_scene', 'get_layer', 'create_layer', 'upsert_keyframes', 'render_preview',
@@ -41,10 +41,10 @@ describe('versioned MCP discovery and callable compatibility', () => {
 
   it('separates lightweight and exact-schema discovery from the old full response', async () => {
     const full = await getCapabilities() as any
-    expect(full.tools).toHaveLength(102)
+    expect(full.tools).toHaveLength(116)
     expect(full.scripting).toContain('scene.add')
     expect(full.catalog).toMatchObject({ version: 1, profile: 'standard' })
-    expect(full.catalog.advertisedToolNames).toHaveLength(65)
+    expect(full.catalog.advertisedToolNames).toHaveLength(79)
     const summary = await getCapabilities('standard', { summary: true }) as any
     expect(summary.tools).toBeUndefined()
     expect(summary.scripting).toBeUndefined()

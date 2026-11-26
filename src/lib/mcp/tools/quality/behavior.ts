@@ -1,6 +1,7 @@
+import { RIG_WRITE_NAMES, RIG_DIAGNOSTICS } from '../../rig2d/tools'
 import type { ToolDefinition } from '../../protocol'
 
-const READERS = new Set(['list_layers', 'list_assets', 'describe_layer', 'describe_timeline', 'get_scene_json',
+const READERS = new Set([RIG_DIAGNOSTICS.name, 'list_layers', 'list_assets', 'describe_layer', 'describe_timeline', 'get_scene_json',
   'evaluate_at_time', 'list_timelines', 'list_sessions', 'get_capabilities', 'get_scene', 'render_preview',
   'discard_spline_edit', 'evaluate_frame', 'get_runtime', 'get_audio_state', 'validate_scene', 'get_bake_job', 'preview_bake_job',
   'inspect_physics_bake'])
@@ -32,8 +33,8 @@ export function toolBehavior(implementationName: string, original?: ToolDefiniti
     destructiveHint: !readOnly && !localNonDestructive && !transport,
     idempotentHint: readOnly || implementationName === 'list_projects',
     openWorldHint: REMOTE_ASSETS.has(implementationName) || (!readOnly && !localNonDestructive && !transport
-      && !['save_project', 'load_project', 'run_script', 'batch_actions', 'apply_script_plan', 'prepare_spline_edit', 'apply_spline_edit', 'discard_spline_edit', 'undo', 'redo',
-        'clear_scene', 'update_composition', 'update_layer', 'delete_layer', 'patch_object', 'update_model3d', 'update_timeline',
+      && !RIG_WRITE_NAMES.has(implementationName) && !['save_project', 'load_project', 'run_script', 'batch_actions', 'apply_script_plan', 'prepare_spline_edit', 'apply_spline_edit', 'discard_spline_edit', 'undo', 'redo',
+        'resolve_spline_boolean', 'transform_mesh2d_vertices', 'convert_layer_to_spline', 'edit_mesh2d_topology', 'edit_2d_modifier_stack', 'clear_scene', 'update_composition', 'update_layer', 'delete_layer', 'patch_object', 'update_model3d', 'update_timeline',
         'delete_timeline', 'add_keyframes', 'set_keyframes', 'update_track', 'remove_track', 'add_modifier',
         'bake_track', 'configure_particles', 'set_initial_state', 'set_interactive', 'edit_entity',
         'bake_rigid_bodies', 'bake_voronoi_fracture', 'commit_bake_job', 'clear_physics_bake',

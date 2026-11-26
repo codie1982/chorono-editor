@@ -1,3 +1,4 @@
+import { RIG_WRITES, RIG_DIAGNOSTICS } from './rig2d/tools'
 import { SPLINE_TOOLS } from './spline/tools'
 import { extra } from './tools/extraTool'
 import { LIMITS, type JsonObject, type ToolDefinition } from './protocol'
@@ -230,7 +231,7 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
     'Commit the exact scene prepared by run_script dryRun, preserving its generated ids without executing code again. Requires the same editor and unchanged scene revision; expired, consumed or foreign plans fail. Successful plans are consumed. Returns JSON text with revision, scene summaries, logs and commandCount; use run_script to prepare a new plan.', {
       planId: { type: 'string', description: 'Unconsumed planId returned by run_script dryRun in this editor session within the last five minutes.' },
     }, ['planId']),
-  ...SPLINE_TOOLS,
+  ...SPLINE_TOOLS, ...RIG_WRITES, RIG_DIAGNOSTICS,
   extra('batch_actions',
     'Apply ordered native scene actions atomically as one undo step. Later actions see earlier changes; any failure discards the batch. Returns JSON text with revision, composition, layer/timeline summaries and addedLayerIds. Supports ActionRegistry mutations only, not scripts, reads, playback or file tools; use run_script for procedural authoring.', {
       actions: {

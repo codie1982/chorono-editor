@@ -13,8 +13,8 @@ import { keyframeInputSchema } from '../animation/typedValueSchema'
 import { layerPatchSchema, particlePatchSchema } from './schema/registryPayloadSchemas'
 import { modifierSchema } from './schema/modifierSchema'
 import { trackPatchSchema } from './schema/trackPatchSchema'
-import { registerMesh2DModelingActions } from './actions/Mesh2DModelingActions'
-import { registerMesh2DMCPActions } from './actions/Mesh2DMCPActions'
+import { registerMesh2DModelingActions } from '../editor/geometryAuthoring/Mesh2DModelingActions'
+import { registerMesh2DAppearanceActions } from '../editor/geometryAuthoring/Mesh2DAppearanceActions'
 import { model3dPatchSchema, model3dBoxSchema } from './schema/model3dPatchSchema'
 import { patchModelPresentation } from '../model3d/source/modelPatch'
 
@@ -127,7 +127,7 @@ export function bootstrapMCPActions(): Promise<void> {
       if (!handle || handle.type !== 'particleEmitter') throw new Error('Particle emitter not found')
       handle.configureParticles(p.config)
     })
-    registerMesh2DMCPActions(actionRegistry)
+    registerMesh2DAppearanceActions(actionRegistry)
     registerMesh2DModelingActions(actionRegistry)
     register('edit_entity', 'Add, shallow-update or remove an authored parameter, trigger, binding, wire or state machine by id. Add requires a unique id; update/remove require an existing id. value arrays/nested objects replace existing values and id stays fixed. Prefer the dedicated add_* tools for initial creation; control_runtime changes live values without changing authored defaults.', {
       collection: { type: 'string', enum: ['parameters', 'triggers', 'bindings', 'parameterWires', 'stateMachines'], description: 'Scene collection containing the record; read current records with get_scene.' },

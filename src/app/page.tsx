@@ -465,6 +465,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const mcp = useMCPBridge({ editor, assets: assetCache, selectedTimelineId: selectedTlId, currentTimeMs, isPlaying,
     getLayerSelection: () => layerSelection,
     getLiveFrame: () => frame,
+    getDisplayedRig: () => ({ frame, autoKey: isAutoKeyActive(), clock: expressionAuthoringClock, editingBlocked: isPlaying || manualPreview || !!runtime.segmentState }),
     getRuntimeState: () => ({ parameters: Object.fromEntries(runtime.paramValues), stateMachines: Array.from(runtime.smRuntimes.values(), rt => ({id:rt.sm.id,stateId:rt.currentStateId,stateName:rt.currentState?.name,timelineId:rt.activeTimelineId})) }),
     setRuntimeTest: runtime.setSMTestActive,
     selectTimeline, isolateTimelines: setMCPTimelineIds, seek: handleSeek, playToggle: handlePlayToggle, setSpeed: setPlaybackSpeed,
