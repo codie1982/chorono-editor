@@ -13,10 +13,11 @@ import type { SplinePathData } from './spline'
 import type { MaskDefinition } from './mask'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 import type { StateMachineDefinition } from './statemachine-chorono'
+import type { Mesh2DData } from './mesh2d'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
+export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'mesh2d' | 'group' | 'repeater' | 'particleEmitter'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
@@ -313,6 +314,8 @@ export interface Layer {
   audio?:      AudioData
   /** Sprite-sheet / frame-sequence animation — used when type === 'frameSequence'. */
   frameSequence?: FrameSequenceData
+  /** Fixed-topology 2D render/deformation source — used when type === 'mesh2d'. */
+  mesh2d?: Mesh2DData
   effects?:    LayerEffects
   /** Plugin-based effect chain (glow/shadow/etc.) applied AFTER rendering. */
   effectsChain?: PluginEffect[]
@@ -736,6 +739,9 @@ export interface ChronoScene {
   /** Optional sparse editor attribution. Missing legacy data means unknown;
    * portable saves/history preserve it, runtime exporters explicitly omit it. */
   authoring?: import('./authoring').SceneAuthoring
+  /** Optional 2D simulation recipes and bake ownership. Dense caches and
+   * engine objects are runtime-only and must not be serialized here. */
+  physics?: import('./physics').PhysicsSceneData
   initialState: Record<string, unknown>
 }
 

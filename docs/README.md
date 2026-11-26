@@ -4,6 +4,8 @@
 
 ## Releases / Sürümler
 
+- [v0.5.0 release notes](releases/v0.5.0.md) / [Türkçe sürüm notları](tr/releases/v0.5.0.md)
+- [v0.5.0 validation and limitations](releases/v0.5.0-validation.md)
 - [v0.4.0 release notes](releases/v0.4.0.md) / [Türkçe sürüm notları](tr/releases/v0.4.0.md)
 - [v0.4.0 validation and limitations](releases/v0.4.0-validation.md)
 - [v0.3.0 release notes](releases/v0.3.0.md) / [Türkçe sürüm notları](tr/releases/v0.3.0.md)
@@ -11,7 +13,12 @@
 - [v0.2.0 release notes](releases/v0.2.0.md) / [Türkçe sürüm notları](tr/releases/v0.2.0.md)
 - [v0.2.0 validation and measurement scope](releases/v0.2.0-validation.md)
 - [Changelog](../CHANGELOG.md)
-- [Current 2D / 2.5D roadmap](tr/production-2d-roadmap.md)
+- [Current 2D development roadmap](tr/production-2d-roadmap.md)
+- [2D UI contracts and visual layout plan](tr/production-2d-ui-contracts.md)
+- [Current 3D development roadmap](tr/production-3d-roadmap.md)
+- [Shared 2D–3D foundations and strict boundaries](tr/shared-2d-3d-foundations.md)
+- [3D4: detailed model and poseable character production plan](tr/plans/model-production-quality-plan.md)
+- [2D emitter, collider and surface-target interaction plan](tr/plans/emitter-collider-surface-interaction-plan.md)
 
 ## Install on your computer / Bilgisayarınıza kurun
 

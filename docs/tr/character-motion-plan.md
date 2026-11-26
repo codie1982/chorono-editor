@@ -1,12 +1,21 @@
 # Character Motion: mimari ve geliştirme planı
 
-Tarih: 4 Kasım 2026. Durum: mimari öneri; bu belgede tarif edilen yeni özellikler henüz uygulanmadı. Kapsam: mevcut Chorono 2D editöründe karakter rigleme, sprite klipleri, IK ve state machine ile davranış kontrolü.
+Tarih: 4 Kasım 2026. Sadeleştirme: 17 Kasım 2026. Erteleme kararı: 18 Kasım
+2026. Durum: mimari öneri ve **aktif sırayı bloke etmeyen sonraki faz backlog'u**;
+bu belgede tarif edilen yeni özellikler henüz uygulanmadı. Uygulama başlamadan
+önce Sprite Character kliplerinin manuel seçimi, minimum State Machine clip
+action'ı, runtime saat/geçiş davranışı ve MVP sınırı birlikte yeniden
+kararlaştırılacaktır. Mevcut plan içeriği bu karar verilene kadar korunur.
 
 ## 1. Ürün kararı
 
 **Character Motion, mevcut sahne sisteminin üzerinde çalışan bir karakter bileşeni ve ona ait çalışma alanı olacak.** Kullanıcı sahneye tek bir Character ekleyecek; altında gövde parçaları, kemikler, kontrol noktaları ve animasyon klipleri düzenlenebilecek.
 
-İlk sürüm mevcut `2danimation` modunu, grup hiyerarşisini, timeline'ları ve state machine motorunu kullanacak. Yeni bir renderer, ikinci timeline motoru veya bağımsız state machine sistemi kurulmayacak. Sahnedeki Character, bir kök `group` ve onu tanımlayan ek verilerle temsil edilecek; ilk sürümde `LayerType` içine yeni bir çizim türü eklemek gerekmeyecek.
+İlk sürüm mevcut `2danimation` modunu, grup hiyerarşisini ve timeline'ları
+kullanacak. Yeni bir renderer, ikinci timeline motoru veya bağımsız state
+machine sistemi kurulmayacak. Sahnedeki Character, bir kök `group` ve onu
+tanımlayan ek verilerle temsil edilecek; ilk sürümde `LayerType` içine yeni bir
+çizim türü eklemek gerekmeyecek.
 
 ```mermaid
 flowchart TD
@@ -14,7 +23,7 @@ flowchart TD
     C --> R[Rig: kemikler ve parça bağlantıları]
     C --> S[Sprite: kareler ve klipler]
     C --> K[IK hedefleri ve kısıtlar]
-    C --> M[Mevcut State Machine]
+    C -. Yeniden karar kapısı .-> M[Mevcut State Machine]
     M --> T[Mevcut Timeline klipleri]
     T --> P[Poz ve kare değerlendirmesi]
     R --> P
@@ -23,7 +32,24 @@ flowchart TD
     I --> V[Mevcut sahne renderer'ı]
 ```
 
-Üç temsil aynı bileşende desteklenecek: parçalardan oluşan **rigged**, karelerden oluşan **sprite** ve bunları birlikte kullanan **hybrid**. Örneğin kemiklerle hareket eden gövdeye, sprite kareleriyle göz kırpan bir yüz bağlanabilecek. Hybrid'in veri modeli baştan korunacak; birleşik kullanımın arayüzü temel iki akıştan sonra tamamlanacak.
+MVP iki temsil sunar: karelerden oluşan **sprite** ve parçalardan oluşan
+**rigged**. Veri şeması gelecekteki **hybrid** temsili okuyabilecek biçimde
+sürümlenir; ancak hybrid UI, kemiğe bağlı sprite slotu ve birleşik kabul MVP'yi
+bloke etmez.
+
+### 1.1. Sadeleştirilmiş kapsam
+
+| Katman | İçerik | Karar |
+| --- | --- | --- |
+| Character MVP adayı | Sprite Character, adlandırılmış klip, rigid rig/FK, iki kemikli analitik IK, Setup/Animate, Char Detail, undo ve basic save/load/player/raster parity | Ertelendi; aktif uygulama sırasının dışında |
+| Yeniden karar kapısı | Manuel `Active Clip`, minimum State Machine `Set/Play Character Clip` action'ı, state-entry klip saati ve ileri transition/blend sınırı | Uygulama başlamadan önce sonuçlandırılacak |
+| Sonraki Character genişlemesi | Gelişmiş State Machine koşulları/completion, hybrid sprite+rig ve ortak BakeService üzerinden character bake | MVP sınırı kararlaştırıldıktan sonra ayrı teslim |
+| Backlog | FABRIK/CCD, uzun zincir ve full-body IK, foot planting, retargeting, mesh skin/weight, lip-sync, sprite crossfade ve draw-order animasyonu | Aktif programın dışında |
+
+Mesh2D/spline-to-mesh Character MVP'nin önkoşulu değildir ve güncel ana planda
+Character'dan önce başlar. Character da Mesh2D, simülasyon veya export'un
+önkoşulu değildir. İlk rig yeniden açılırsa rigid layer attachment kullanır;
+deformable mesh/skin daha sonraki ayrı iştir.
 
 ## 2. Repoda doğrulanan mevcut durum
 
@@ -49,11 +75,12 @@ Aşağıdaki kayıtlar **önerilen yeni modeldir**; mevcut MCP veya script API's
 | Kayıt | Sorumluluk ve temel alanlar |
 | --- | --- |
 | `ChronoScene.characters?` | Sahnedeki karakter örnekleri. Yoksa eski sahne davranışı aynen sürer. |
-| `CharacterDefinition` | `id`, `name`, `schemaVersion`, `rootLayerId`, `representation`, kemikler, attachment'lar, kontroller, klipler ve isteğe bağlı `stateMachineId`. İlk sürümde sahneye yerleştirilmiş tek örneği tanımlar. |
+| `CharacterDefinition` | `id`, `name`, `schemaVersion`, `rootLayerId`, `representation: 'sprite' | 'rigged' | 'hybrid'`, visual slot'lar, kemikler, attachment'lar, kontroller, klipler ve isteğe bağlı `stateMachineId`. İlk sürümde sahneye yerleştirilmiş tek örneği tanımlar. |
+| `CharacterVisualSlot` | Character içindeki çizilebilir rolü tanımlar: stable `id`, ad, `layerId`, `kind: 'sprite' | 'layer'`, isteğe bağlı `boneId` ve yerel ofset. Saf sprite karakterde tek `Primary` slot; hybrid karakterde gövde, yüz veya ekipman gibi birden çok slot bulunabilir. |
 | `BoneDefinition` | `id`, `name`, `layerId`, pozitif `length`, bind/rest transform ve isteğe bağlı dönme sınırları. `layerId` sıradan bir grup katmanıdır. |
 | `AttachmentDefinition` | Görsel `layerId` ile onu taşıyan `boneId` ilişkisi. Yerel bağlantı ofseti görsel katmanın transform'unda tutulur. |
 | `IKConstraint` | `id`, iki kemik referansı, `targetLayerId`, `bendDirection`, `enabled`, varsayılan ağırlık ve isteğe bağlı ağırlık parametresi referansı. |
-| `CharacterClip` | `id`, `name`, `timelineId`, temsil türü. Sprite klibi ayrıca sprite katmanı, kaynak kare listesi/aralığı, FPS, loop ve pivot bilgisini taşır. Süre ve loop davranışı ilgili timeline'a derlenir. |
+| `CharacterClip` | `id`, `name`, `timelineId`, temsil türü. Sprite kanalı ayrıca hedef slotu, kaynak kare listesi/aralığı, ilk FPS/loop ve pivot bilgisini taşır. Nihai frame exposure'ları ilgili timeline'daki basamaklı `frameSequence.frameIndex` track'idir; ayrı görünmez oynatıcı yoktur. |
 
 Karakter bir sahne örneğidir; tekrar kullanılabilir karakter kütüphanesi ve paylaşılan asset tanımı ayrı bir sonraki aşamadır. İlk sürümde karakter çoğaltılırken tüm katman, kemik, kontrol, klip, timeline, state machine ve karaktere özel parametre kimlikleri yeniden eşlenir. Medya asset'leri paylaşılabilir. Bir kopyanın hareketi diğerini değiştirmemeli.
 
@@ -94,11 +121,50 @@ Hedef grupları kökün altında, çözdükleri kemik zincirinin dışında tutu
 
 İlk sürüm zincir içinde birim ölçek, kök ve üst ebeveynlerde uniform ölçek ve yatay yön çevirme destekler. Sıfır ölçek, zincir içi nonuniform ölçek veya shear altında constraint kapatılır ve açık tanı gösterilir; `NaN` veya yanlış poz üretilmez. Bu sınır tüm karakterin normal çizimini durdurmaz.
 
-Kemik limitleri varsa sonuç limitlere uymalı; bu durumda hedefe tam erişim garanti edilmez. Erişim hatası raporlanır. Aynı kemiğe yazan birden çok constraint ve constraint bağımlılık döngüsü ilk sürümde reddedilir. FABRIK/CCD, uzun zincir, otomatik foot planting, fizik ve gelişmiş IK/FK eşleme sonraki aşamalardır.
+Kemik limitleri varsa sonuç limitlere uymalı; bu durumda hedefe tam erişim garanti edilmez. Erişim hatası raporlanır. Aynı kemiğe yazan birden çok constraint ve constraint bağımlılık döngüsü ilk sürümde reddedilir. FABRIK/CCD, uzun zincir, otomatik foot planting, fizik ve gelişmiş IK/FK eşleme aktif programın dışındaki backlog'dur.
 
 ## 6. Sprite klipleri ve sprite hazırlama
 
 Mevcut sprite-sheet ve GIF import'u korunur. Üzerine adlandırılmış klip düzenleme eklenir: kareleri seç → `idle`, `walk`, `run`, `jump` gibi isim ver → FPS, loop, kare sırası ve tutarlı pivot belirle → önizle.
+
+### 6.1. Hangi aşamada eklenir?
+
+Sprite Character, Character şeması ve ortak klip saati kurulduktan sonraki
+**ilk çalışan Character Motion dikey dilimidir**. Rig/FK ve IK'yi beklemez.
+Bunun nedeni mevcut `frameSequence` import/render altyapısının yeniden
+kullanılabilmesi ve Character root, clip/timeline, Scene Explorer, Char Detail,
+save/load, player ve raster çıktı sözleşmelerinin solver riskinden önce gerçek
+bir kullanıcı akışıyla doğrulanabilmesidir.
+
+Ertelenmiş aday sıra: **ürün kapısı → Character/clip sözleşmesi → Sprite
+Character → Rig/FK → iki kemikli IK → basic save/load/player/raster parity**.
+Ürün kapısı; manuel `Active Clip` ile minimum State Machine clip action'ının
+hangisinin MVP kabulüne gireceğini ve state-entry klip saatini kararlaştırır.
+Saf sprite karakter kemik gerektirmez. Hybrid, gelişmiş State Machine geçişleri
+ve kapsamlı bake ayrı genişleme olarak değerlendirilir.
+
+### 6.2. Sahneye ekleme
+
+Üç açık giriş yolu vardır:
+
+1. **Add → Character → Sprite Character:** asset seç veya sprite sheet/GIF içe
+   aktar. Grid, frame sayısı, pivot ve ilk frame aralığı doğrulanır. Tek atomik
+   komut bir Character root grubu, altında `frameSequence` Primary slotu,
+   `CharacterDefinition`, varsayılan `Default` klibi ve klibin timeline'ını
+   oluşturur. Scene Explorer'da tek üst seviye Character görünür; teknik sprite
+   layer'ı genişletildiğinde alt öğedir.
+2. **Import Sprite Sheet → Create as Character:** mevcut plain frame-sequence
+   import akışı korunur; kullanıcı açıkça Character seçerse aynı atomik kurulum
+   yapılır. Normal sprite layer içe aktarması kendiliğinden Character'a çevrilmez.
+3. **Wrap as Character:** seçili mevcut `frameSequence` layer'ını görünümünü ve
+   dünya transformunu koruyarak Character root altına alır; asset kopyalanmaz.
+   İşlem önizleme, Apply/Cancel, source revision guard ve tek undo kullanır.
+
+İlk kurulum bütün sheet'i yanlışlıkla `Idle` saymaz. Kullanıcının seçtiği aralık
+`Default` klibini üretir; sonra Clip Editor'da Idle/Walk/Run/Jump olarak
+bölünebilir. En az bir geçerli frame seçilmeden Apply aktif olmaz.
+
+### 6.3. Kontrol ve zaman sözleşmesi
 
 İlk sürüm düzenli grid kullanır; adlandırılmış klip ardışık aralık veya sıralı kare listesi olabilir. Düzensiz atlas/trim/rotation metadata'sı ayrı import aşamasıdır. Kaynak kareler aynı hücre boyutuna ve ortak karakter pivotuna göre hizalanır; görünür şeklin değişmesi karakterin sahnede zıplamasına neden olmamalı.
 
@@ -106,9 +172,40 @@ Mevcut sprite-sheet ve GIF import'u korunur. Üzerine adlandırılmış klip dü
 
 Klipler ayrı bir görünmez oynatıcı tarafından yürütülmez. Timeline'ın yerel saati hem rig keyframe'lerini hem sprite karelerini sürer. State değiştiğinde yeni klip, tanımlanan giriş davranışına göre başlar.
 
+- **Setup:** sheet/grid, karakter boyutu, Primary veya hybrid slot, ortak pivot,
+  bone attachment ve object-fit düzenlenir; klip frame exposure'ı yazılmaz.
+- **Animate:** aktif klip seçilir; thumbnail strip ve dope sheet'te kare ekle,
+  sırala, çoğalt, sil, exposure süresini değiştir, loop/FPS başlangıç ayarını
+  uygula ve frame-by-frame scrub yapılır. Sonraki exposure düzenlemelerinde
+  basamaklı timeline track'i tek doğruluk kaynağıdır.
+- **Test:** state, parametre ve olaylar klip seçer; kullanıcı aynı anda elle
+  başka klibi zorlamıyorsa runtime sonucu gösterilir. Debug override açıkça
+  etiketlenir ve kaynak state machine'e yazılmaz.
+- **Canvas:** saf sprite karakterde yalnız Character root transformu düzenlenir.
+  Hybrid slot seçildiğinde slot ofseti veya bağlı kemik düzenlenir; aktif klip
+  karesi root sürüklemesiyle değişmez.
+
+İlk sürüm sprite geçişinde atomik frame/clip değişimi kullanır; otomatik
+crossfade üretmez. Playback speed, loop ve one-shot completion klip/state yerel
+saatine aittir. İki Character aynı asset'i paylaşabilir fakat aktif klip,
+timeline, state local time ve slot override'ları instance'a aittir.
+
+### 6.4. Hybrid kullanım — MVP sonrası
+
+Hybrid ilk kabulü küçük tutulur: rig'e bağlı bir Primary/body layer ile bir
+sprite slotu birlikte çalışır; örneğin head kemiğine bağlı yüz slotunda blink
+veya mouth kareleri oynar. Sprite slot normal `AttachmentDefinition` yaşam
+döngüsünü ve aynı Character timeline'ını kullanır. İlk sürüm bağımsız slot draw
+order animasyonu, çok katmanlı lip-sync sistemi veya otomatik yön/varyant
+seçimi sunmaz.
+
 Rig animasyonundan sprite hazırlama da hedef kapsamındadır: seçili klibi belirli FPS, aralık, sabit canvas/pivot ve transparan arka planla örnekle → PNG kareleri ve sheet/atlas metadata'sı üret → karakter sprite klibi olarak yeniden içe al. Bu çıktı aşaması editable rig'in yerine geçmez. İlk dilimde kaynak görsel veya karakter hareketini üretken AI ile kendiliğinden üretmek varsayılmaz.
 
-## 7. State machine ve ortak klip saati
+## 7. State machine ve ortak klip saati — MVP sonrası
+
+Bu bölüm temel klip düzenleme ve manuel klip seçiminin kabulünü bekletmez.
+MVP'de kullanıcı aktif klibi Character Motion içinden açıkça seçer; otomatik
+state/parametre/olay yönlendirmesi sonraki Character genişlemesidir.
 
 Mevcut `StateMachineDefinition` ve `ChronoSMState.timelineId` bağlantısı kullanılacak. Character Motion içindeki klip listesi state'lere timeline bağlamayı kolaylaştıracak; mevcut State Machine grafiği karakterin makinesine filtrelenebilecek.
 
@@ -144,60 +241,143 @@ State entry/exit parametre değişikliklerinin aynı karede mi sonraki karede mi
 
 Canvas renderer'a özel IK eklenmez. Saf `evaluateCharacterFrame` katmanı mevcut override haritasını zenginleştirir. Editör, standalone player, MCP preview ve raster/sequence export aynı değerlendirme yolunu kullanır. Kontrol overlay'leri render çıktısına girmez.
 
-## 9. Character Motion çalışma alanı
+## 9. Character Motion çalışma alanı ve Char Detail
 
-Mevcut dock sisteminde `Character Motion` paneli/çalışma alanı eklenir. Karakter seçimi Scene Explorer ve canvas seçimiyle senkron olur. Kalıcı modelde yeni `EditorMode` gerektirmez.
+Mevcut dock sisteminde `Character Motion` paneli/çalışma alanı ve sağ inspector
+olarak `Char Detail` eklenir. Karakter seçimi Scene Explorer ve canvas
+seçimiyle senkron olur. Kalıcı modelde yeni `EditorMode` gerektirmez.
+Panel anatomisi, durum görünümü, klavye/drag alternatifleri ve responsive dock
+davranışı [ortak 2D UI sözleşmesini](production-2d-ui-contracts.md) izler.
 
 | Bölüm | İşlev |
 | --- | --- |
-| Sol | Karakter listesi; seçili karakterin kemikleri, parçaları, kontrolleri ve klipleri |
+| Sol | Karakter listesi; seçili karakterin Visual Slots, kemikler, parçalar, kontroller ve klipleri |
 | Orta | Mevcut canvas üzerinde eklem/kemik/hedef overlay'i; gerekirse mevcut State Machine grafiğine geçiş |
-| Sağ | Seçili kemik, attachment, IK veya sprite klibi özellikleri |
+| Sağ — Char Detail | Seçili character/root, bone, attachment, IK constraint/target, sprite veya clip özellikleri; doğrulama ve bake eylemleri |
 | Alt | Seçili klibin mevcut timeline / dope sheet / curve editor görünümü |
 
-Üç çalışma bağlamı: **Setup** kemik/bağ/rest pose düzenler; **Animate** seçili klibe poz ve kare anahtarları yazar; **Test** parametre/olayla state machine çalıştırır. Aktif bağlam açıkça görünür. Bir state veya klip seçildiğinde ilgili timeline açılır; yanlış klibe keyframe yazılamaz.
+MVP'nin iki çalışma bağlamı vardır: **Setup** kemik/bağ/rest pose veya sprite
+kaynak/pivot ayarını düzenler; **Animate** seçili klibe poz ve kare anahtarları
+yazar. MVP sonrası **Test** bağlamı parametre/olayla State Machine'i çalıştırır.
+Aktif bağlam açıkça görünür. Bir klip seçildiğinde ilgili timeline açılır;
+yanlış klibe keyframe yazılamaz.
 
 Klip yokken timeline yazma işlemi disabled olur ve klip oluşturma eylemi sunulur. Kemik/IK hedef sürüklemesi tek undo transaction'ıdır; sayısal alanlarla eşdeğer düzenleme mümkündür. Hatalar ilgili zincir veya klip yanında görünür; renk tek ayırt edici olmaz. Dar dock alanlarında yardımcı özellikler katlanır, temel seçim ve pozlandırma erişilebilir kalır.
 
-UI/UX becerisinin yerel araması bu editör akışı için ilgili sonuç vermedi. Bu bölüm, mevcut Chorono yerleşimi ve becerinin genel erişilebilirlik/etkileşim ilkelerine dayanan öneridir.
+Char Detail bağlama göre sekmeler gösterir: **Character**, **Rig**, **Bone**,
+**Attachment**, **IK**, **Sprite**, **Clip/State** ve **Bake**. Setup bağlamında
+rest transform, parent, bone length/limits, attachment offset ve IK zinciri;
+Animate bağlamında aktif clip, target, IK weight ve key durumu; Test bağlamında
+state, parametre, olay ve çözüm tanıları görünür. Aynı alanın canvas tutamacı
+ve sayısal girişi aynı native komutu kullanır. Rig validation; döngü, eksik
+layer/bone, sıfır uzunluk, singular ölçek, sahiplik çakışması ve ulaşılamayan
+IK hedefini ilgili kayıt üzerinde gösterir.
+
+Sprite Character seçiliyken `Sprite` sekmesi asset/grid/slot/pivot/fit'i;
+`Clip/State` sekmesi aktif clip, frame aralığı, FPS başlangıç değeri, loop,
+one-shot ve state bağlantısını gösterir. Animate bağlamında panelin üstünde
+aktif clip adı ve `Editing Sprite Frames` kapsam etiketi bulunur. Alt timeline
+yalnız seçili slotun basamaklı frame track'ini filtreleyebilir; `Show Rig +
+Sprite Channels` ile hybrid kanallar birlikte açılır. Klip seçilmeden frame
+ekleme disabled olur ve `Create Clip` eylemi sunulur.
+
+MVP görsel kabulü Setup ve Animate bağlamlarının normal, boş, hatalı rig,
+ulaşılamayan IK ve dar dock durumlarını gerçek ekran görüntüsüyle karşılaştırır.
+Test ve stale bake görünümleri ilgili sonraki teslimde eklenir. Yalnız panel
+kaydı veya property değer testi yeterli değildir.
 
 ## 10. Kayıt, export ve MCP sözleşmesi
 
 Portable proje rig, karakter, klip, constraint, state machine ve medya verilerini kayıpsız taşır. `characters` bulunmayan eski projeler yüklenir. Karakter verisinin kendi `schemaVersion` alanı olur; desteklenmeyen sürümler sessizce düşürülmez.
 
-İki export yolu için ortak alan sözleşmesi ve round-trip fixture gerekir. Özellikle state machine, parameter wire, karakter metadata'sı ve sprite kontrolünün korunması doğrulanmalıdır. Karakter eklemeden önce mevcut `RuntimeOptimizer` / `exportToRuntime` farkı giderilir veya ortak serializer'a bağlanır.
+İki export yolu için ortak alan sözleşmesi ve round-trip fixture gerekir.
+MVP'de karakter metadata'sı, sprite frame track'i, rig/IK kontrolü ve kullanılan
+parameter wire'ların korunması doğrulanır. State Machine alanları sonraki
+genişleme eklendiğinde aynı serializer üzerinden taşınır. Karakter eklemeden
+önce mevcut `RuntimeOptimizer` / `exportToRuntime` farkı giderilir veya ortak
+serializer'a bağlanır.
 
 - **Interactive runtime:** desteklenen karakter modelini, kontrolleri ve IK'yi taşımalıdır. Runtime capability/sürüm denetimi olmadan eski player'a başarılı export ilan edilmez.
 - **Baked klip / sprite / video:** belirli parametre ve olay girdileriyle örneklenen sonuçtur. Dinamik IK hedeflerinin veya tüm state machine davranışının korunacağı anlamına gelmez.
 - **SVG:** var olan exporter'ın taşıyamadığı dinamik karakter kontrolü için açık uyarı veya desteklenen baked/statik çıktı sunulur.
 
-MCP ekleme sırası: önce karakteri ve rig'i okuma → native atomik komutlarla karakter/kemik/attachment/constraint/klip düzenleme → script handle'ları → deterministik klip önizleme ve bake. Komut isimleri uygulama aşamasında tool catalog ve gerçek şemalarla kesinleşir; bu belgedeki model isimleri çağrılabilir API sayılmaz.
+MVP sonrası karakter bake'i ana plandaki ortak typed `BakeService` yaşam döngüsünü kullanır:
+immutable source/replay snapshot → progress/cancel destekli preview → seçili
+FPS/zaman aralığında FK+IK değerlendirmesi → bone transform track'leri veya
+PNG/sprite sheet çıktısı → atomik commit ve tek undo. Kaynak rig, constraint,
+clip ve state machine korunur. Target, rest pose, clip, event/parameter girdisi
+veya solver sürümü değişince sonuç stale olur. Re-bake, sonradan kullanıcı
+tarafından değiştirilmiş track'i sessizce ezmez; yeni sürüm veya açık replace
+uygular. Dinamik IK/state davranışını track'e bake etmek ile interactive runtime
+olarak taşımak ayrı export seçenekleridir.
+
+MCP ekleme sırası: önce Character/visual slot/clip okuma → native atomik
+komutlarla Sprite Character ekleme ve klip düzenleme → rig/kemik/attachment/IK
+komutları → temel script handle'ları ve deterministik klip önizleme. Hybrid slot
+ve bake komutları ilgili sonraki teslimde eklenir. Komut isimleri uygulama
+aşamasında tool catalog ve gerçek
+şemalarla kesinleşir; bu belgedeki model isimleri çağrılabilir API sayılmaz.
 
 Tüm mutasyonlar mevcut revision, requestId, undo ve script dry-run/plan kurallarına uyar. MCP/API değişiklikleriyle birlikte `skills/chorono/` altındaki canonical skill ve referanslar güncellenir; generated CLI skill dosyaları elle düzenlenmez.
 
 ## 11. Uygulama sırası ve kabul ölçütleri
 
+Bu bölüm aktif uygulama emri değildir; Character Motion yeniden açıldığında
+kullanılacak aday iç sıradır. Aşağıdaki karar kapısı kapanmadan Aşama 0 başlamaz.
+
 | Aşama | Teslim | Kabul ölçütü |
 | --- | --- | --- |
-| 0 — Ortak sözleşmeler | Character şeması, doğrulama, klip saati tasarımı, ortak export alanları | Eski sahne aynen yüklenir; state machine ve wire export'ta kaybolmaz; kontrollü zamanla aynı klip aynı pozu verir. |
-| 1 — Rig/FK | Character oluşturma, kemik grupları, rigid attachment, Setup/Animate temeli | İki kemikli kol pozlandırılır; çocuk parçalar doğru izler; bind/rest poz ve undo/redo korunur; kayıt tekrar açılır. |
-| 2 — İki kemikli IK | Hedef kontrolü, yön, ağırlık, erişim ve ölçek tanıları | Eli sürükleyince kol çözülür; 0/1 ve ara ağırlıklar, aynalama, erişim dışı ve sıfır ölçek güvenli çalışır; target scrub edilebilir. |
-| 3 — Klip ve sprite | Adlandırılmış rig/sprite klipleri, kare listesi, FPS/pivot, yerel klip saati | Idle ve Walk ayrı timeline'lardır; sprite kareleri doğru sınırda değişir; klip başlatma, duraklatma ve seek tutarlıdır. |
-| 4 — Davranış | Mevcut SM ile karakter klipleri, blend, completion, parametre izolasyonu | Idle → Walk → Jump → Idle çalışır; sprite ve rig aynı saat sözleşmesine uyar; iki karakter bağımsız test edilir. |
-| 5 — Teslim ve otomasyon | Runtime parity, MCP/script, rig → kare/sheet bake, UI tamamlaması | Editör, player, MCP ve raster export aynı girdide eşleşir; portable proje açılır; capability uyarıları doğrulanır. |
+| Karar kapısı | Manuel `Active Clip`, minimum `Set/Play Character Clip` State Machine action'ı, state-entry saat sıfırlama/devam politikası ve ileri transition/blend sınırı | Idle/Walk kliplerinin editör, player ve runtime'da nasıl seçileceği tek ve test edilebilir sözleşmeyle kesinleşir; ölü klip metadata'sı bırakılmaz. |
+| 0 — Ortak Character/clip sözleşmesi | Character, Visual Slot, klip saati, discrete frame track, doğrulama ve export alanları | Eski sahne aynen yüklenir; kontrollü zamanla aynı klip aynı kare/pozu verir; plain frame-sequence davranışı değişmez. |
+| 1 — Sprite Character dikey dilimi | Add/import/wrap akışları, root + Primary slot, Default/adlandırılmış klip, thumbnail strip, timeline, Char Detail, save/load ve raster çıktı | Sprite Character tek atomik işlemle sahneye eklenir; Default, Idle ve Walk doğru frame sınırlarında seek/loop eder; pivot sabittir; undo ve reopen çalışır. |
+| 2 — Rig/FK | Kemik grupları, rigid layer attachment, rig klipleri ve Setup/Animate temeli | İki kemikli kol pozlandırılır; çocuk parçalar doğru izler; bind/rest poz ve undo/redo korunur; Sprite Character gerilemez. |
+| 3 — İki kemikli IK ve MVP parity | Hedef, yön, ağırlık, limit/erişim tanıları; bağlama duyarlı Char Detail; basic player/MCP/save-load/raster eşliği | Eli sürükleyince kol çözülür; Sprite ve rig klipleri editör/player'da aynı görünür; undo, reopen ve raster çıktı çalışır. |
+| Sonraki A — Davranış | Mevcut State Machine ile sprite/rig klip seçimi, completion ve parametre izolasyonu | Idle → Walk → Jump → Idle çalışır; iki karakterin local time/state'i bağımsızdır. |
+| Sonraki B — Hybrid | Visual Slot'un kemiğe attachment'ı; aynı klipte rig ve basamaklı sprite kanalları | Head kemiğine bağlı yüz slotu blink oynatırken rig pozu/IK ve pivot korunur; saf sprite ve saf rig davranışı değişmez. |
+| Sonraki C — Character bake | Ortak BakeService ile rig/IK → track ve rig → kare/sheet bake; stale/re-bake/replace | Kaynak korunur; progress/cancel, tek undo ve editor/player/raster eşliği doğrulanır. |
 
-0–5 birlikte ilk tamamlanmış sürümü oluşturur. Aşama 1–2 sonunda küçük bir rig/IK prototipi görülebilir; bütün Character Motion özelliği tamamlanmış sayılmaz. İlk uygulanacak dikey dilim: **tek karakter kökü + iki kemikli kol + bir attachment + hareket eden IK hedefi + bir klip + kayıt/yükleme**. Ardından aynı karaktere ikinci klip ve state geçişi eklenir.
+Karar kapısı ve 0–3 birlikte ilk tamamlanmış Character MVP adayını oluşturur.
+Sonraki A–C ayrı ürün genişlemeleridir ve Mesh2D veya diğer 2D işlerin
+başlangıcını bekletmez. Character fazı yeniden açılırsa ilk aday dikey dilim:
+**tek Sprite Character kökü, Primary slot, Default
+ve Idle/Walk klipleri, thumbnail/frame track düzenleme, Char Detail,
+kayıt/yükleme ve raster çıktı**. İkinci dikey dilim aynı Character sözleşmesine
+iki kemikli rig/FK ve attachment ekler; üçüncü dilim IK'yi tamamlar. Hybrid ancak
+MVP kapandıktan sonra ayrı genişleme olarak açılır.
 
-İlk sürümün dışında: mesh deformation ve skin weight, otomatik görsel parçalara ayırma, tam otomatik rig, retargeting, root motion, uzun IK zincirleri, fizik, blend tree, bağımsız slot sırası ve karakter asset kütüphanesi. Bunlar mevcut modele ileride eklenebilir; temel rig/sprite/IK/state machine tesliminin önkoşulu yapılmaz.
+MVP dışında: State Machine otomasyonu, hybrid, character bake,
+düzensiz/rotated atlas metadata'sı, otomatik yön varyantı, sprite crossfade,
+bağımsız slot draw-order animasyonu, tam lip-sync sistemi, mesh deformation ve
+skin weight, otomatik görsel parçalara ayırma, tam otomatik rig, retargeting,
+root motion, fizik, blend tree ve karakter asset kütüphanesi. FABRIK/CCD ve
+uzun zincir IK aktif programdan çıkarılmıştır.
 
 ## 12. Uygulama haritası ve doğrulama
 
-Önerilen yeni alanlar: `src/lib/types/character.ts`, `src/lib/character/` altında model doğrulama, klip derleme, pose/blend ve IK; `src/lib/editor/commands-character.ts`; `src/components/character/` altında panel, inspector ve overlay. Ortak klip saati/değerlendirme yardımcıları `src/lib/statemachine/` veya ortak runtime alanında tutulur. Kesin dosya sınırları ilk dilimde belirlenir.
+Önerilen yeni alanlar: `src/lib/types/character.ts`, `src/lib/character/`
+altında model doğrulama, visual slot sahipliği, sprite clip/hold-track derleme,
+pose/blend ve IK; `src/lib/editor/commands-character.ts` içinde add/import/wrap,
+clip, rig ve constraint komutları; `src/components/character/` altında kurulum,
+frame strip, panel, inspector ve overlay. Ortak klip saati/değerlendirme
+yardımcıları `src/lib/statemachine/` veya ortak runtime alanında tutulur. Kesin
+dosya sınırları ilk dilimde belirlenir.
 
 Entegrasyon noktaları: `types/core.ts`, `types/media.ts`, katman property registry'si, `useInteractiveRuntime`, `useSMRuntime`, `ChronoPlayer`, frame-sequence renderer, dock layout, import/save ve her iki runtime exporter. Sahne değerlendirmesi kullanan preview, hit-test ve export yolları nihai karakter override'larını almalıdır.
 
-Anlamlı testler: FK dünya koordinatı; bind sırasında görünümü koruma; IK erişim/ayna/limit/singularity; karakter kopyasında kimlik eşleme; eksik track ve açı blend'i; sprite sınırları; state'e girişte sıfırlanan saat; one-shot olayının tekliği; iki karakterin bağımsızlığı; eski/yeni proje round-trip'i; export alanlarının korunması; editör/player eşdeğerliği.
+MVP testleri: Add/import/wrap atomikliği ve exact undo; plain frame-sequence
+gerilemesi; frame listesi, hold exposure, son frame, loop ve pivot sabitliği;
+sprite instance local time bağımsızlığı; FK dünya koordinatı; bind sırasında
+görünümü koruma; IK erişim/ayna/limit/singularity; karakter kopyasında kimlik
+eşleme; eksik track ve açı blend'i; eski/yeni proje round-trip'i; export
+alanlarının korunması ve editör/player eşdeğerliği. State local time, one-shot
+ve hybrid attachment testleri ilgili sonraki teslimde eklenir.
 
-Görsel kabul sahnesi: iki karakter; bir rig kolu ve bacak, bir sprite karakter; Idle/Walk/Jump; hedef sürükleme, kök döndürme/ölçekleme ve aynalama. Klip başı, ara poz, geçiş ortası ve son kare gerçek render görüntüleriyle incelenir. Yalnızca sayısal frame değerlendirmesi görsel kabul yerine geçmez.
+MVP görsel kabul sahnesi: iki karakter; saf Sprite Character ve iki kemikli kol
+ile rigid attachment kullanan Rigged Character. Default, Idle ve Walk;
+thumbnail/frame exposure düzenleme, manuel klip seçimi, hedef sürükleme, kök
+döndürme/ölçekleme ve aynalama doğrulanır. Hybrid ve otomatik Idle/Walk/Jump
+geçişi sonraki teslimin ayrı kabul sahnesidir. Klip başı, ara poz ve son kare
+gerçek render görüntüleriyle incelenir; sayısal değerlendirme tek başına yeterli
+değildir.
 
 Uygulama değişikliklerinde repo sözleşmesi gereği `npm test`, `npm run mcp:build` ve `npm run build` çalıştırılır; build öncesinde Next sunucusu durdurulur. Bu belge yalnızca mimari plan eklediği için uygulama testleri çalıştırılmadı.

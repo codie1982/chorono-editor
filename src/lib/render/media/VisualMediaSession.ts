@@ -4,8 +4,15 @@ import { VisualDemandResolver } from './VisualDemandResolver'
 import type { MediaFrameBridge, MediaFrameInput, VisualDemand } from './types'
 import { MediaElementSnapshot, type MediaElementRecord } from './MediaElementSnapshot'
 import {fontAssetService,FontBindingsSnapshot,type FontAssetService,type FontLease,type FontBindingRecord} from '../../asset/fonts'
+import {
+  meshDeformationAssetService,
+  MeshDeformationBindingsSnapshot,
+  type MeshDeformationAssetService,
+  type MeshDeformationBindingRecord,
+  type MeshDeformationLease,
+} from '../../asset/meshDeformation'
 
-interface Consumer { demand: VisualDemand; controller: AbortController; state: 'idle' | 'loading' | 'ready' | 'error'; lease?: VisualLease|FontLease; error?: string; detach?: () => void }
+interface Consumer { demand: VisualDemand; controller: AbortController; state: 'idle' | 'loading' | 'ready' | 'error'; lease?: VisualLease|FontLease|MeshDeformationLease; error?: string; detach?: () => void }
 let nextScope = 0
 
 /**
@@ -27,7 +34,11 @@ export class VisualMediaSession implements MediaFrameBridge {
   private missing: readonly string[] = []
   /** Borrow one service contract; a process-local scope prevents native clip
    * clocks from aliasing across editor/player/jobs without serializing IDs. */
-  constructor(private readonly service: VisualAssetService = visualAssetService,private readonly fontService:FontAssetService=fontAssetService) {}
+  constructor(
+    private readonly service: VisualAssetService = visualAssetService,
+    private readonly fontService: FontAssetService = fontAssetService,
+    private readonly deformationService: MeshDeformationAssetService = meshDeformationAssetService,
+  ) {}
 
   /** Activate the owner; listener is invalidation only, not resource ownership. */
   start(changed?: () => void): void { this.active = true; this.changed = changed }
@@ -83,7 +94,20 @@ export class VisualMediaSession implements MediaFrameBridge {
   elements(frameDemand = true): AssetElementMap {
     const records: MediaElementRecord[] = []
     const fonts:FontBindingRecord[]=[]
+    const deformations: MeshDeformationBindingRecord[] = []
     this.consumers.forEach((consumer, key) => {
+      if (consumer.demand.asset.type === 'meshDeformation') {
+        const lease = consumer.lease as MeshDeformationLease | undefined
+        if (lease) {
+          const clip = lease.value
+          deformations.push({
+            assetId: consumer.demand.asset.id,
+            clip,
+            live: () => this.consumers.get(key) === consumer && (consumer.lease as MeshDeformationLease | undefined)?.value === clip,
+          })
+        }
+        return
+      }
       if(consumer.demand.asset.type==='font'){
         fonts.push({asset:consumer.demand.asset,get alias(){const value=consumer.lease?.value;return value&&'alias'in value?value.alias:undefined},state:()=>{
           if(this.consumers.get(key)!==consumer)return 'notResident'
@@ -97,7 +121,12 @@ export class VisualMediaSession implements MediaFrameBridge {
       const element=value.element
       records.push({ assetId: asset.id, layerId, element, live: () => this.consumers.get(key) === consumer && consumer.lease?.value===value })
     })
-    return new MediaElementSnapshot(records, frameDemand ? this : undefined,new FontBindingsSnapshot(fonts))
+    return new MediaElementSnapshot(
+      records,
+      frameDemand ? this : undefined,
+      new FontBindingsSnapshot(fonts),
+      new MeshDeformationBindingsSnapshot(deformations),
+    )
   }
   /** Readiness/errors only; no acquire or LRU refresh. IDs refer to source assets. */
   snapshot() {
@@ -130,9 +159,11 @@ export class VisualMediaSession implements MediaFrameBridge {
       if (this.inFlight >= 2) break
       this.inFlight++; consumer.state = 'loading'
       const { asset, layerId, key } = consumer.demand
-      const preparation:Promise<VisualLease|FontLease>=asset.type==='font'
+      const preparation:Promise<VisualLease|FontLease|MeshDeformationLease>=asset.type==='font'
         ?this.fontService.acquire(asset,{signal:consumer.controller.signal})
-        :this.service.acquire(asset, { consumerId: layerId ? `${this.scope}:${layerId}` : undefined, signal: consumer.controller.signal })
+        :asset.type === 'meshDeformation'
+          ?this.deformationService.acquire(asset, { signal: consumer.controller.signal })
+          :this.service.acquire(asset, { consumerId: layerId ? `${this.scope}:${layerId}` : undefined, signal: consumer.controller.signal })
       preparation.then(lease => {
         if (!this.active || consumer.controller.signal.aborted || this.consumers.get(key) !== consumer) { lease.release(); return }
         consumer.state = 'ready'

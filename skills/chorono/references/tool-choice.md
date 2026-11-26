@@ -1,7 +1,7 @@
 # Choose a native tool
 
 Use the tool names actually advertised by the connected MCP client. In MCP
-2.1.0 the default `standard` catalog exposes 40 common tools; older clients or
+2.1.0 the default `standard` catalog exposes 58 focused tools; older clients or
 the `legacy` profile may advertise the original names. The `tools` array in
 `get_capabilities({})` remains the original compatibility inventory. For the
 current discovery surface, use `get_capabilities({summary:true})` and read
@@ -20,7 +20,54 @@ arguments. Script signatures remain in `chorono://scripting`.
 | Add or update typed keys | `upsert_keyframes` | Takes explicit `timelineId`, `layerId`, `property` and `keyframes`; legacy name is `set_keyframes`. It does not replace the entire track. |
 | Verify evaluated values | `evaluate_frame` | Includes bindings, parameter wires and runtime inputs. Legacy `evaluate_at_time` / `evaluate_timeline_values` is timeline-only. |
 | Verify pixels | `render_preview` | Produces actual PNG content; evaluated values alone do not prove appearance. |
+| Start a deliberately empty editable scene | `clear_scene` | Clears layers and timelines together with dependent physics, runtime and authoring records in one undo step. It preserves composition settings, assets, asset collections and editor guides. |
+| Build/edit Mesh2D | `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` | Fixed topology, appearance placement, pins and deformation reference are separate contracts. |
+| Review and bake rigid/fracture simulation | `prepare_rigid_body_bake` or `prepare_voronoi_fracture_bake`, then `get_bake_job`, `preview_bake_job` and `commit_bake_job` | Prepare binds a fresh source read but does not edit it; commit needs another fresh source read. For Re-bake pass `replaceRecordId`, inspect with `inspect_physics_bake`, and set `replaceEdited:true` only for an explicit destructive choice. `clear_physics_bake` is separately undoable. None are native batch sub-actions. |
+| Final 2D render | `render_2d` | `auto` prefers Chorono Render and falls back to built-in PNG/PNG-sequence output. It does not mutate source. |
 | Read or test live behavior | `get_runtime`, `control_runtime` | Runtime state/parameters are separate from saved authoring definitions. |
+
+The compatibility calls `bake_rigid_bodies` and `bake_voronoi_fracture` still
+prepare and publish in one request. Prefer the persistent prepare/status/preview/
+commit workflow whenever a person or agent must inspect the dense result, cancel
+it independently, or surface it in the editor's Jobs & Bake queue. A bake job id
+is private to the creating MCP connection and paired editor session.
+
+Use `clear_scene` only when the requested workflow needs a true fresh start. Do
+not emulate it by deleting visible layers alone: that can leave dependent bake,
+runtime or provenance data behind. The command is undoable as one source edit;
+read `get_scene` again before the next mutation.
+
+Voronoi accepts either a fixed-time trigger or a qualifying impact against
+explicit static colliders. Impact jobs must be reviewed after the Worker has
+recorded exact contact evidence; they cannot commit an unresolved placeholder.
+Optional explosion settings add deterministic one-shot radial/directional
+velocity and spin, and must be presented as artistic external energy rather
+than natural collision force.
+Alternatively, `cluster` starts fragments as shared-boundary/manual bonded
+compound components. It cannot be combined with explosion. Review job bond and
+split counts, then inspect the committed `bondedCluster` break sequence; this
+is the same Worker recipe used by the product UI.
+For authored interaction, pass fixed-step-aligned `cluster.forcedBreaks` and
+`cluster.damageResets`; inspect their counts/schedules and confirm a forced
+break's realized tick before commit. Use `replaceRecordId` for the same
+single-undo Re-bake workflow as Canvas Group/Split/Unbreakable editing.
+
+Alternatively, `secondary` precomputes one convex child generation from a
+root `parentFragmentIndex`. Its fixed-time event must follow the root event.
+Use `budgets` to cap realized hierarchy depth, generation/fragment/triangle
+counts and portable bytes. This first recursive slice is incompatible with an
+impact root or bonded root cluster. Review both preview `events`; after commit
+read `recursiveHierarchy` from `inspect_physics_bake` before Re-bake or Clear.
+
+Committed bake lifecycle is ownership-guarded. Read `inspect_physics_bake`
+before Re-bake or Clear. Untouched output can be replaced or cleared directly;
+fracture inspection also exposes its atomic topology event and exact-event
+render/collider quality, so validate those metrics together with rendered PNGs.
+edited, incomplete or legacy output refuses by default. `replaceEdited:true` on
+the first `commit_bake_job` call or `discardEdited:true` on
+`clear_physics_bake` is an explicit destructive decision. Duplicate targets or
+layer ids remain blocked because ownership is ambiguous. Both mutations require
+a new `get_scene` authorization and create one undo step.
 
 Before preserving or replacing nested effects, masks, particle or spline data,
 read the complete source through `get_scene` (or `layer.data` inside a script).

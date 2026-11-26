@@ -2,8 +2,12 @@ import {describe,expect,it} from 'vitest'
 import {emptyScene,newRectLayer,newAudioLayer} from '../../defaults'
 import {assertRasterLayerSupport} from './assertRasterLayerSupport'
 import {LayerRendererRegistry} from '../../registry'
+import {newStructuredGridMesh2DLayer} from '../../registry/definitions/mesh2d/Mesh2DDefinition'
 
 describe('raster backend capability',()=>{
+  it('accepts registered Mesh2D content for final raster output',()=>{
+    expect(()=>assertRasterLayerSupport({...emptyScene(),layers:[newStructuredGridMesh2DLayer()]})).not.toThrow()
+  })
   it('accepts registered built-ins and explicitly nonvisual audio',()=>{
     expect(()=>assertRasterLayerSupport({...emptyScene(),layers:[newRectLayer(),newAudioLayer('audio',1000)]})).not.toThrow()
   })

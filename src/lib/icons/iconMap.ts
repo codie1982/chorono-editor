@@ -146,6 +146,7 @@ export const LAYER_TYPE_ICON: Record<string, string> = {
   audio:            'audio',
   pathStroke:       'motionPath',
   path:             'bezierPath',
+  mesh2d:           'box3d',
   svg:              'svgImport',
   group:            'group',
   mask:             'rectMask',
@@ -231,6 +232,12 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Donut',     type: 'splineDonut',     icon: 'ring',      available: true  },
       { label: 'NGon',      type: 'splineNGon',      icon: 'polygon',   available: true  },
       { label: 'Star',      type: 'splineStar',      icon: 'star',      available: true  },
+    ],
+  },
+  {
+    title: 'Mesh & Surface',
+    items: [
+      { label: 'Structured Grid', type: 'mesh2d', icon: 'box3d', available: true },
     ],
   },
   {

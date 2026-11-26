@@ -19,6 +19,190 @@ const projectName = {
   type: 'string',
   description: 'Project basename, optionally ending in .chorono.json. Starts with a letter/digit; at most 100 characters before extension, using letters, digits, dots, underscores or hyphens. No paths or "..".',
 }
+const rigidMaterial = {
+  type: 'object', additionalProperties: false,
+  description: 'Optional physical material. Omitted fields use density 1, friction 0.2, restitution 0.2 and airFriction 0.01.',
+  properties: {
+    densityKgPerSquareMeter: { type: 'number', exclusiveMinimum: 0, description: 'Positive mass per square metre before conversion to solver units.' },
+    friction: { type: 'number', minimum: 0, maximum: 1, description: 'Surface friction from 0 to 1.' },
+    restitution: { type: 'number', minimum: 0, maximum: 1, description: 'Bounce coefficient from 0 to 1.' },
+    airFriction: { type: 'number', minimum: 0, exclusiveMaximum: 1, description: 'Per-step air damping in [0,1).' },
+  },
+}
+const rigidVelocity = {
+  type: 'object', additionalProperties: false,
+  description: 'Initial composition-pixel velocity; omitted axes default to zero.',
+  properties: {
+    x: { type: 'number', description: 'Horizontal pixels per second, positive right.' },
+    y: { type: 'number', description: 'Vertical pixels per second, positive down.' },
+  },
+}
+const gravity = {
+  type: 'object', additionalProperties: false,
+  description: 'Gravity in metres per second squared; defaults to {x:0,y:9.81}.',
+  properties: {
+    x: { type: 'number', description: 'Horizontal gravity, positive right.' },
+    y: { type: 'number', description: 'Vertical gravity, positive down.' },
+  },
+}
+const rigidBakeProperties = {
+  timelineId: { type: 'string', description: 'Existing target timeline id; its transform targets must not already be animated or driven.' },
+  startTimeMs: { type: 'number', minimum: 0, description: 'Bake start in target-timeline milliseconds; defaults to zero.' },
+  durationMs: { type: 'number', exclusiveMinimum: 0, maximum: 120000, description: 'Positive simulation duration in milliseconds within the target timeline.' },
+  stepHz: { type: 'number', minimum: 1, maximum: 240, description: 'Fixed solver ticks per second; defaults to 120.' },
+  sampleFps: { type: 'number', minimum: 1, maximum: 120, description: 'Editable output key samples per second; defaults to 30 and must align with stepHz.' },
+  pixelsPerMeter: { type: 'number', exclusiveMinimum: 0, maximum: 10000, description: 'Composition pixels per physics metre; defaults to 100.' },
+  gravity,
+  bodies: {
+    type: 'array', minItems: 1, maxItems: 128,
+    description: 'Unique supported rectangle layers; at least one must be dynamic.',
+    items: { type: 'object', additionalProperties: false, required: ['layerId', 'motionType'], properties: {
+      layerId: { type: 'string', description: 'Root, non-instanced rectangle shape layer id.' },
+      motionType: { type: 'string', enum: ['dynamic', 'static'], description: 'dynamic receives tracks; static acts only as a collider.' },
+      material: rigidMaterial,
+      initialVelocityPxPerSecond: rigidVelocity,
+      initialAngularVelocityDegPerSecond: { type: 'number', description: 'Initial clockwise degrees per second; defaults to zero.' },
+    } },
+  },
+  recordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Optional unique persisted ownership id; omit for a deterministic recipe-derived id.' },
+  replaceRecordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Existing rigid bake record to replace. Its owned output is removed only at commit; cannot be combined with recordId.' },
+  replaceEdited: { type: 'boolean', description: 'Direct bake only: true explicitly permits replacing edited/legacy owned output. Default false refuses hash conflicts. Persistent jobs choose this on commit_bake_job.' },
+}
+const voronoiBakeProperties = {
+  sourceLayerId: { type: 'string', description: 'Root fully opaque solid closed shape/spline, fixed-topology Mesh2D, or image rectangle with persisted dimensions; becomes the dynamic fracture source. Concave, holed and multi-ring sources preserve connected region topology with compound colliders. Deformation-bound Mesh2D must be baked first.' },
+  staticLayerIds: { type: 'array', maxItems: 127, uniqueItems: true, items: { type: 'string' }, description: 'Optional root rectangle colliders such as floor and walls.' },
+  timelineId: { type: 'string', description: 'Existing target timeline id with no colliding source/fragment transform or visibility tracks.' },
+  startTimeMs: { type: 'number', minimum: 0, description: 'Bake start in target-timeline milliseconds; defaults to zero.' },
+  durationMs: { type: 'number', exclusiveMinimum: 0, maximum: 120000, description: 'Positive simulation duration in milliseconds within the target timeline.' },
+  fractureTimeMs: { type: 'number', exclusiveMinimum: 0, description: 'Simulation-local fracture time aligned to an interior fixed-step tick. Required for the default/time trigger; omit for impact.' },
+  fractureTrigger: {
+    type: 'object', additionalProperties: false,
+    description: 'Optional trigger policy. Omit or use kind=time with fractureTimeMs. Impact uses the first qualifying pre-solve contact and requires selected static colliders.',
+    required: ['kind'],
+    properties: {
+      kind: { type: 'string', enum: ['time', 'impact'] },
+      minimumRelativeNormalSpeedPxPerSecond: { type: 'number', exclusiveMinimum: 0, description: 'Required for impact: minimum contact-point closing speed in composition pixels/s.' },
+      colliderLayerIds: { type: 'array', minItems: 1, maxItems: 127, uniqueItems: true, items: { type: 'string' }, description: 'Impact-only subset of staticLayerIds. Omit to use every selected static collider.' },
+    },
+  },
+  explosion: {
+    type: 'object', additionalProperties: false,
+    description: 'Optional artistic external energy applied once at fracture; this is separate from physical impact energy.',
+    required: ['centerLocalOffsetPx', 'radialVelocityPxPerSecond', 'directionDeg', 'directionalVelocityPxPerSecond', 'spinVelocityDegPerSecond', 'variation', 'seed'],
+    properties: {
+      centerLocalOffsetPx: { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: {
+        x: { type: 'number', description: 'Source-local horizontal offset from the source centre of mass.' },
+        y: { type: 'number', description: 'Source-local vertical offset from the source centre of mass.' },
+      } },
+      radialVelocityPxPerSecond: { type: 'number', minimum: 0 },
+      directionDeg: { type: 'number', description: 'Composition-space clockwise direction; 0 right, 90 down.' },
+      directionalVelocityPxPerSecond: { type: 'number', minimum: 0 },
+      spinVelocityDegPerSecond: { type: 'number', minimum: 0 },
+      variation: { type: 'number', minimum: 0, maximum: 1, description: 'Seeded per-fragment multiplier range around one.' },
+      seed: { type: 'integer', minimum: 0, maximum: 4294967295 },
+    },
+  },
+  fragmentCount: { type: 'integer', minimum: 2, maximum: 100, description: 'Requested Voronoi cell count. Concave or holed intersections may realize additional disconnected fragment bodies; no filled region is silently dropped.' },
+  seed: { type: 'integer', minimum: 0, maximum: 4294967295, description: 'Unsigned deterministic random seed.' },
+  generationId: { type: 'string', minLength: 1, maxLength: 110, pattern: '^[A-Za-z0-9_-]+$', description: 'Unique stable ASCII topology prefix. Generated fragment layer ids append -fragment-N and remain valid portable scene ids.' },
+  cluster: {
+    type: 'object', additionalProperties: false,
+    description: 'Optional FRACTURE2 bonded cluster. Presence starts all fragments as compound connected components. Contact load breaks shared-boundary bonds, then components split with mass/centre/momentum checks. Cannot be combined with artistic explosion.',
+    properties: {
+      graphId: { type: 'string', minLength: 1, maxLength: 96, pattern: '^[A-Za-z0-9_-]+$', description: 'Stable graph prefix; defaults to <generationId>-cluster.' },
+      defaults: {
+        type: 'object', additionalProperties: false,
+        description: 'Automatic shared-boundary bond material. Omitted fields use the editor defaults.',
+        properties: {
+          impulseStrength: { type: 'number', exclusiveMinimum: 0, description: 'One-tick solver contact load that immediately breaks a bond; default 40.' },
+          damageThreshold: { type: 'number', exclusiveMinimum: 0, description: 'Accumulated scalar damage that breaks a bond; default 80.' },
+          damageDecayPerSecond: { type: 'number', minimum: 0, description: 'Non-healing damage reduction per second; default 0.' },
+          relativeNormalSpeedScale: { type: 'number', minimum: 0, description: 'Contact normal speed contribution to bond load; default 0.1.' },
+          variation: { type: 'number', minimum: 0, maximum: 1, description: 'Seeded per-bond strength/toughness variation around one; default 0.1.' },
+          seed: { type: 'integer', minimum: 0, maximum: 4294967295, description: 'Bond variation seed; defaults to the fracture seed.' },
+        },
+      },
+      overrides: {
+        type: 'array', maxItems: 1024,
+        description: 'Optional unordered fragment-pair overrides. Generated fragment ids are <generationId>-fragment-N. mode=disabled removes an automatic bond; mode=manual may add a non-adjacent bond.',
+        items: {
+          type: 'object', additionalProperties: false, required: ['fragmentAId', 'fragmentBId'],
+          properties: {
+            fragmentAId: { type: 'string', minLength: 1, maxLength: 128 },
+            fragmentBId: { type: 'string', minLength: 1, maxLength: 128 },
+            mode: { type: 'string', enum: ['auto', 'disabled', 'manual'] },
+            impulseStrength: { type: 'number', exclusiveMinimum: 0 },
+            damageThreshold: { type: 'number', exclusiveMinimum: 0 },
+            damageDecayPerSecond: { type: 'number', minimum: 0 },
+            relativeNormalSpeedScale: { type: 'number', minimum: 0 },
+            unbreakable: { type: 'boolean' },
+          },
+        },
+      },
+      forcedBreaks: {
+        type: 'array', maxItems: 1024,
+        description: 'Optional fixed-tick bond breaks. timeMs is simulation-local and must align to stepHz; source=user records an explicit Break at playhead action.',
+        items: {
+          type: 'object', additionalProperties: false, required: ['bondId', 'timeMs', 'source'],
+          properties: {
+            bondId: { type: 'string', minLength: 1, maxLength: 160 },
+            timeMs: { type: 'number', exclusiveMinimum: 0 },
+            source: { type: 'string', enum: ['timeline', 'user'] },
+          },
+        },
+      },
+      damageResets: {
+        type: 'array', maxItems: 1024,
+        description: 'Optional fixed-tick accumulated-damage resets. Omit bondId to reset the complete graph; timeMs is simulation-local and aligned to stepHz.',
+        items: {
+          type: 'object', additionalProperties: false, required: ['timeMs', 'source'],
+          properties: {
+            bondId: { type: 'string', minLength: 1, maxLength: 160 },
+            timeMs: { type: 'number', exclusiveMinimum: 0 },
+            source: { type: 'string', enum: ['timeline', 'user'] },
+          },
+        },
+      },
+    },
+  },
+  secondary: {
+    type: 'object', additionalProperties: false,
+    description: 'Optional FRACTURE3 precomputed child generation. It replaces one convex root fragment at a later fixed-time tick. The first slice supports one child generation, convex roots, and cannot be combined with impact or a bonded root cluster.',
+    required: ['parentFragmentIndex', 'fractureTimeMs', 'fragmentCount', 'seed'],
+    properties: {
+      parentFragmentIndex: { type: 'integer', minimum: 0, maximum: 99, description: 'Zero-based root fragment index selected as the child source.' },
+      fractureTimeMs: { type: 'number', exclusiveMinimum: 0, description: 'Simulation-local child event time on an interior fixed tick after the root event.' },
+      fragmentCount: { type: 'integer', minimum: 2, maximum: 100, description: 'Requested child Voronoi fragment count.' },
+      seed: { type: 'integer', minimum: 0, maximum: 4294967295, description: 'Unsigned deterministic child-generation seed.' },
+      generationId: { type: 'string', minLength: 1, maxLength: 110, pattern: '^[A-Za-z0-9_-]+$', description: 'Stable child topology prefix. Omit for <root>-g1-p<index>.' },
+      budgets: {
+        type: 'object', additionalProperties: false,
+        description: 'Optional admission limits measured from both realized generation manifests before solver allocation.',
+        properties: {
+          maxDepth: { type: 'integer', minimum: 1, maximum: 8, description: 'Maximum hierarchy depth; this first slice realizes depth 1.' },
+          maxGenerations: { type: 'integer', minimum: 1, maximum: 32, description: 'Maximum total generation count; root plus child requires 2.' },
+          maxFragments: { type: 'integer', minimum: 1, maximum: 4096, description: 'Maximum realized fragments across the hierarchy.' },
+          maxTriangles: { type: 'integer', minimum: 1, maximum: 65536, description: 'Maximum realized render triangles across the hierarchy.' },
+          maxPortableBytes: { type: 'integer', minimum: 1, maximum: 67108864, description: 'Maximum UTF-8 JSON bytes for realized generation manifests.' },
+        },
+      },
+    },
+  },
+  recordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Optional unique persisted bake ownership id.' },
+  replaceRecordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Existing fracture bake record to replace atomically. Its generated layers/topology remain until commit; cannot combine with recordId.' },
+  replaceEdited: { type: 'boolean', description: 'Direct bake only: true explicitly permits replacing edited/legacy owned output. Default false refuses hash conflicts. Persistent jobs choose this on commit_bake_job.' },
+  stepHz: { type: 'number', minimum: 1, maximum: 240, description: 'Fixed solver ticks per second; defaults to 120.' },
+  sampleFps: { type: 'number', minimum: 1, maximum: 120, description: 'Editable output key samples per second; defaults to 30 and must align with stepHz.' },
+  pixelsPerMeter: { type: 'number', exclusiveMinimum: 0, maximum: 10000, description: 'Composition pixels per physics metre; defaults to 100.' },
+  gravity,
+  material: rigidMaterial,
+  initialVelocityPxPerSecond: rigidVelocity,
+  initialAngularVelocityDegPerSecond: { type: 'number', description: 'Source initial clockwise degrees per second; defaults to zero.' },
+}
+const bakeJobId = {
+  type: 'string', pattern: '^bake-[A-Za-z0-9_-]{8,120}$',
+  description: 'Opaque persistent id returned by a prepare_*_bake call in this MCP client/editor session.',
+}
 
 /**
  * Metadata for tools implemented by the broker/editor rather than ActionRegistry.
@@ -105,7 +289,7 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
   extra('load_project',
     'Replace the connected editor scene with a saved .chorono.json file from the configured project directory, as one undoable edit. Returns JSON text with revision and scene summaries. Missing, invalid, oversized or symlinked files fail before applying. Use list_projects to find names and save_project to preserve the current scene first; not for importing SVG or runtime JSON.', { name: projectName }, ['name']),
   extra('export_runtime',
-    'Export validated, optimized runtime JSON for Chorono players from the connected scene, embedding local blob media. Writes .runtime.json under the configured project directory/exports. Returns JSON text with path, bytes, sha256, revision and warnings; inspect warnings for conversion loss. Existing filenames fail. Use save_project for editable source, export_svg for a vector frame, or export_sequence for raster frames.', { name: exportName }),
+    'Export validated, optimized runtime JSON for Chorono players from the connected scene, embedding local blob media. The player payload preserves visual layers/visibility, assets, timelines, parameters, wires, state machines and initial state; editor guides, authoring provenance and physics ownership recipes are omitted because committed physics already plays through ordinary tracks. Writes .runtime.json under the configured project directory/exports. Returns JSON text with path, bytes, sha256, revision and warnings; inspect warnings for conversion loss. Existing filenames fail. Use save_project for editable source, export_svg for a vector frame, or export_sequence for raster frames.', { name: exportName }),
   extra('export_svg',
     'Export one vector SVG frame from the connected scene. Writes .svg under CHORONO_MCP_PROJECT_DIR/exports or <project root>/projects/exports; never overwrites files. Returns JSON text with path, bytes, sha256, revision and warnings. Unsupported layer kinds may be skipped: inspect warnings. Use render_preview for PNG pixels, export_sequence for animation frames, or save_project for the editable source.', {
       name: exportName,
@@ -117,6 +301,54 @@ export const EXTRA_TOOLS: ToolDefinition[] = [
       fps: { type: 'number', minimum: 1, maximum: 60, description: 'Frames per second; defaults to composition.frameRate. Reduce duration, resolution or FPS if export limits are exceeded.' },
       timelineIds,
     }),
+  extra('bake_rigid_bodies',
+    'Run the deterministic Matter.js fixed-step solver for supported root rectangle layers and publish ordinary transform tracks plus a versioned rigid-bake ownership record as one undoable scene transaction. Dense solver samples and runtime objects are not stored in scene JSON. Prefer prepare_rigid_body_bake plus status/preview/commit when the result must be reviewed or cancelled.',
+    rigidBakeProperties, ['timelineId', 'durationMs', 'bodies']),
+  extra('bake_voronoi_fracture',
+    'Generate deterministic Voronoi fracture for a supported closed shape/spline, fixed-topology Mesh2D or image rectangle; trigger the root by fixed time or qualifying impact; optionally use one-shot artistic explosion, a FRACTURE2 bonded compound cluster, or one FRACTURE3 precomputed convex child generation. Recursive input records stable lineage and enforces realized depth/generation/fragment/triangle/byte budgets before simulation. Cluster contact load breaks bonds and rebuilds connected components. Concave, holed or multi-ring roots publish connected Mesh2D fragments with compound colliders. Prefer prepare_voronoi_fracture_bake for review or cancellation.',
+    voronoiBakeProperties, ['sourceLayerId', 'timelineId', 'durationMs', 'fragmentCount', 'seed', 'generationId']),
+  extra('prepare_rigid_body_bake',
+    'Start a persistent rigid-body Worker preview without changing scene JSON or undo history. Requires a fresh get_scene revision/readToken to bind the prepared source. Returns immediately with bakeJob.jobId; poll get_bake_job, inspect preview_bake_job, then commit_bake_job with a new source read, or cancel/discard it.',
+    rigidBakeProperties, ['timelineId', 'durationMs', 'bodies']),
+  extra('prepare_voronoi_fracture_bake',
+    'Start a persistent deterministic Voronoi/rigid Worker preview. It retains root time/impact, optional artistic explosion or bonded cluster, and optional FRACTURE3 one-child fixed-time recursion with lineage/resource budgets. Recursive preview exposes both topology events and merged parent visibility; no fragments or tracks are created before commit. Concave roots retain compound topology, while the first recursive child slice requires a convex root and cannot combine with impact or a bonded cluster. Requires a fresh get_scene revision/readToken.',
+    voronoiBakeProperties, ['sourceLayerId', 'timelineId', 'durationMs', 'fragmentCount', 'seed', 'generationId']),
+  extra('get_bake_job',
+    'Read one persistent bake job status, monotonic progress, retained report and source-stale diagnostics. The job belongs to the MCP client/editor session that prepared it. This does not change scene source or playback.',
+    { jobId: bakeJobId }, ['jobId'], true),
+  extra('preview_bake_job',
+    'Sample one ready dense physics preview at local simulation time without changing scene source, playback or undo history. Returns body poses, visibility and collider geometry; use commit_bake_job only after reviewing it.', {
+      jobId: bakeJobId,
+      timeMs: { type: 'number', minimum: 0, description: 'Simulation-local preview time in milliseconds; clamped to the prepared duration. Omit to use the fracture event or a representative early frame.' },
+    }, ['jobId'], true),
+  extra('cancel_bake_job',
+    'Request cooperative cancellation for a queued/running persistent bake. It never removes committed scene data. Status remains queryable until discard_bake_job releases the record.',
+    { jobId: bakeJobId }, ['jobId']),
+  extra('discard_bake_job',
+    'Release a persistent bake job and any unpublished dense preview buffers. This does not undo a completed scene commit and the job id becomes invalid.',
+    { jobId: bakeJobId }, ['jobId']),
+  extra('inspect_physics_bake',
+    'Inspect one committed rigid/fracture bake without mutation. Reports current/edited/incomplete/legacy ownership, source state and exact hash/identity issues. Fracture records report topology events and exact-event render/collider quality. Recursive records include generation lineage plus admitted/used depth, generation, fragment, triangle and byte budgets. Bonded records include graph/material and break/split actions. Read this before Clear or Re-bake.',
+    { recordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Persisted rigid bake record id from get_scene.' } }, ['recordId'], true),
+  extra('clear_physics_bake',
+    'Remove only the tracks, fragment layers, topology and timeline memberships owned by one committed bake as one undoable edit. Default refuses edited, incomplete or legacy output. Set discardEdited:true only after explicitly deciding to delete those edits; ambiguous duplicate targets still refuse.', {
+      recordId: { type: 'string', minLength: 1, maxLength: 256, description: 'Persisted rigid bake record id to clear.' },
+      discardEdited: { type: 'boolean', description: 'Default false. True explicitly deletes remaining edited/legacy bake-owned output; duplicate target/layer ids still refuse.' },
+    }, ['recordId']),
+  extra('commit_bake_job',
+    'Publish one ready, reviewed bake preview as ordinary editable tracks and provenance in a single undoable source edit. A replacement defaults to preserving edited output and refuses hash conflicts; set replaceEdited:true only for an explicit destructive Replace choice. Read get_scene immediately before commit and pass its expectedRevision/readToken.',
+    { jobId: bakeJobId, replaceEdited: { type: 'boolean', description: 'Default false. True explicitly replaces edited/legacy output for a job prepared with replaceRecordId.' } }, ['jobId']),
+  extra('render_2d',
+    'Render one PNG still or a complete 2D video source from the connected scene. auto prefers a running Chorono Render service and transfers frames there for final PNG/MP4 output; when unavailable it falls back to a local PNG or PNG-sequence ZIP written under the configured exports directory. This does not mutate the editable scene.', {
+      name: { ...exportName, description: 'Optional local output basename and Chorono Render title. No path components; existing local files are never overwritten.' },
+      intent: { type: 'string', enum: ['still', 'video'], description: 'still renders one frame at timeMs; video samples the complete composition duration.' },
+      backend: { type: 'string', enum: ['auto', 'chorono', 'builtin'], description: 'auto (default) prefers Chorono Render and falls back to the built-in renderer. chorono refuses when the service is unavailable; builtin never contacts it.' },
+      timeMs: { type: 'number', minimum: 0, description: 'Still-frame composition time in milliseconds; defaults to the current editor playhead. Ignored for video.' },
+      fps: { type: 'number', minimum: 1, maximum: 60, description: 'Sampling frame rate; defaults to composition.frameRate. Used for video and recorded with transferred stills.' },
+      scale: { type: 'number', minimum: 1, maximum: 4, description: 'Integer-like output resolution multiplier from 1 to 4; dimensions and memory limits still apply.' },
+      background: { type: 'string', enum: ['scene', 'transparent'], description: 'Use the saved scene background or preserve PNG alpha. MP4 finishing composites transparent pixels on black.' },
+      timelineIds,
+    }, ['intent']),
   extra('import_asset',
     'Import supplied base64 file bytes through the editor import pipeline as one undoable scene edit. Returns JSON text with revision, scene summaries and addedLayerIds; parser/validation errors do not commit. No arbitrary local path or server-side URL fetch is accepted. Use list_assets to reuse existing assets; load_project restores a saved Chorono project.', {
       name: { type: 'string', description: 'Source filename including extension, for example logo.png. Used by the import pipeline; not a local filesystem path.' },

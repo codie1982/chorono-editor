@@ -6,7 +6,7 @@ import './host.css'
 const params = new URLSearchParams(location.search)
 const view = params.get('view') ?? 'layers'
 const selection = params.get('layer') ?? ({ text: 'headline', path: 'path', particles: 'particles', spline: 'spline' }[view] ?? 'card')
-const dialogs = ['composition', 'clone', 'array', 'json', 'bake', 'export-image', 'export-svg', 'export-sequence', 'wires'].includes(view)
+const dialogs = ['composition', 'clone', 'array', 'json', 'bake', 'export-image', 'export-svg', 'export-sequence', 'render-settings', 'wires'].includes(view)
 const wide = dialogs || ['timeline', 'curves', 'dope-sheet', 'canvas', 'state-machine', 'tools', 'shortcuts'].includes(view)
 // An explicit panel width exercises real dock sizing without changing component CSS.
 const requestedWidth = Number(params.get('width'))

@@ -18,6 +18,8 @@ import {
   drawShape, drawText, drawImageLayer, drawVideoLayer, drawBezierPath, drawSplineLayer,
 } from '@/lib/renderer'
 import { drawPathStrokeLayer } from '@/lib/runtime/pathStrokeRenderer'
+import { mesh2DRendererPlugin } from './Mesh2DRendererPlugin'
+export { mesh2DRendererPlugin }
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
@@ -185,6 +187,7 @@ export const ALL_BUILT_IN_RENDERERS: LayerRendererPlugin[] = [
   pathStrokeRendererPlugin,
   bezierPathRendererPlugin,
   splineRendererPlugin,
+  mesh2DRendererPlugin,
   groupRendererPlugin,
   repeaterRendererPlugin,
   particleRendererPlugin,

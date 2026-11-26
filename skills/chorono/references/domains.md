@@ -2,6 +2,115 @@
 
 Read the connected `chorono://scripting` contract, capabilities and scene first. These namespaces edit the same native scene data as the editor. Use them through isolated MCP `run_script`, inspect a dry-run plan, commit that plan, then inspect real previews. Times on timelines are milliseconds; spline coordinates are layer-local; particle life positions are normalized to 0..1.
 
+## Mesh2D and simulation bake
+
+Use `create_layer({kind:'mesh2d'})` for a structured grid. To derive fixed
+topology from an existing supported closed shape or closed spline, use
+`create_mesh2d_from_source`; the source remains separate and authoritative.
+After editing that source, call `regenerate_mesh2d` explicitly. Both flatten
+tolerance and texture offsets are layer-local composition pixels, independent
+of viewport zoom.
+
+`set_mesh2d_texture` accepts image/sprite-sheet assets plus `stretch`,
+`contain`, `cover`, `fitX`, `fitY` and `original` placement. Offset, positive
+scale, clockwise rotation, normalized pivot and flip flags are portable
+appearance data; they do not mutate UVs/connectivity. `set_mesh2d_pins` accepts
+the deterministic `topEdge`, `corners`, `boundary` or `clear` preset, or an
+explicit stable vertex-id list from the current topology. `set_mesh2d_deformation`
+references an existing binary `meshDeformation` asset with start time,
+positive playback rate and loop settings. Missing/wrong asset types and stale
+vertex ids fail before mutation. These native commands are batchable; obtain a
+fresh `get_scene` token and put authorization only on the outer batch.
+
+Use `prepare_rigid_body_bake` for supported root, non-instanced rectangle layers.
+At least one body is `dynamic`; `static` bodies act as colliders. A reviewed
+commit publishes ordinary x/y/rotation tracks and a versioned ownership record
+in one undo step. Use `prepare_voronoi_fracture_bake` for a fully opaque root
+solid closed shape/spline, fixed-topology Mesh2D, or image rectangle with
+positive persisted asset dimensions. Convex solid sources retain deterministic
+fragment path layers. Concave, holed and multi-ring sources clip canonical
+Mesh2D triangles into edge-connected fragment meshes; every connected component
+gets a non-overlapping compound collider. Image and Mesh2D UVs are interpolated
+at new clip edges and retain their texture-reference space. Shape/spline sources
+reuse the canonical Mesh2D flatten/contour validator. Deformation-bound Mesh2D
+must be baked to static geometry before preview.
+Enabled effects, masks and motion blur are
+rejected before Preview. The commit also publishes visibility/pose tracks and
+topology provenance atomically. The fracture time must align to an interior
+fixed solver tick. Alternatively choose an impact trigger with a positive
+relative-normal-speed threshold and one or more explicit static collider layer
+ids. The Worker records the first qualifying contact's exact tick/time,
+collider, point, normal and measured speed; a missing qualifying contact fails
+instead of publishing an unresolved recipe. Optional artistic explosion adds
+deterministic one-shot radial/directional velocity and spin from a source-local
+centre, composition-space direction, bounded variation and unsigned seed. It
+is disclosed external energy, not contact force or an ongoing field. Generation
+ids, record ids and layer ids are stable model
+identities, not display names. `generationId` is 1–110 ASCII word characters or
+hyphens so generated seed and fragment ids remain valid portable scene ids;
+do not use colons, spaces, paths, or display labels.
+
+Add `cluster` to the Voronoi request to keep generated fragments in bonded
+compound connected components. It is mutually exclusive with `explosion`.
+Defaults control positive impulse strength/damage threshold, non-negative
+damage decay and relative-normal-speed load, seeded 0..1 variation and seed.
+Pair overrides use generated fragment ids to customize, disable or explicitly
+add a manual bond; `unbreakable:true` prevents contact damage from breaking it.
+The Worker applies one contact load per fixed tick, splits the intact bond graph
+into canonical components and verifies mass, centre and both momenta before
+publishing poses. Review `clusterCount`, `bondCount`, `bondBreakCount` and
+`clusterSplitCount` in job status. After commit, `inspect_physics_bake` exposes
+`bondedCluster` and its portable realized break sequence. These are an artistic
+scalar bond model, not FEM stress or crack-tip propagation.
+
+Use `cluster.forcedBreaks` for an explicit fixed-tick break and
+`cluster.damageResets` to clear accumulated damage for one bond or the complete
+graph. Each action uses simulation-local `timeMs`, must align to `stepHz`, and
+records `source:"timeline"` or `source:"user"`. A forced break intentionally
+overrides `unbreakable`; a reset runs before contact load on that tick. The
+Inspector returns both canonical schedules and the realized `reason:"forced"`
+event. Product Canvas bond selection and Re-bake use these same portable fields.
+
+Add `secondary` to precompute one FRACTURE3 child generation. Supply a
+zero-based `parentFragmentIndex`, a later fixed-step `fractureTimeMs`, child
+`fragmentCount`/`seed`, and optionally a stable child `generationId`. The first
+slice requires a convex root and timed root event and cannot combine with a
+bonded root cluster. Optional `budgets` bound realized `maxDepth`,
+`maxGenerations`, `maxFragments`, `maxTriangles` and `maxPortableBytes` before
+the Worker starts. Preview returns both topology events and uses the merged
+root-fragment visibility interval. After commit, `inspect_physics_bake` returns
+`topologyEvents` and `recursiveHierarchy` with entries, limits, usage and hash;
+Clear/Re-bake owns every generation atomically.
+
+Both prepare tools are standalone and cannot run inside `batch_actions`. Read
+`get_scene` immediately before prepare and pass its revision/readToken. Keep the
+returned job id in the same MCP connection/editor session: poll `get_bake_job`,
+inspect `preview_bake_job`, and either `cancel_bake_job`/`discard_bake_job` or
+read `get_scene` again and call `commit_bake_job`. Prepare, status, preview,
+cancel and discard do not write scene source; commit publishes exactly one undo
+step. Existing transform writers or target collisions are rejected rather than
+overwritten. To re-simulate a committed record, first call
+`inspect_physics_bake`. Fracture inspection also returns the atomic
+`topologyEvent` and exact-event `renderColliderQuality`; review its textual
+status, body counts and maximum/mean pixel delta together with rendered frames.
+For bonded output also review `bondedCluster` material/break/split evidence.
+Then prepare with `replaceRecordId`. A current ownership set replaces safely;
+edited/incomplete/legacy output remains untouched unless
+the user explicitly chooses `replaceEdited:true` on `commit_bake_job`.
+`clear_physics_bake` has the same safe default and requires
+`discardEdited:true` to delete changed output. Duplicate targets remain blocked;
+both commit and clear are one undoable source edit. The compatibility calls `bake_rigid_bodies` and
+`bake_voronoi_fracture` retain the older one-request prepare+publish workflow.
+Browser execution uses a dedicated one-shot
+Worker with progress, cooperative cancellation, a finite deadline, and
+transferable dense buffers; unsupported runtimes retain the deterministic
+bounded-yield inline runner. Start with short duration and moderate sample FPS,
+inspect representative `render_preview` frames before/at/after collision or
+fracture. For impact recipes, inspect the returned realized trigger evidence as
+well as the pixels; for explosion, compare the same seed before/after activation.
+Then validate and save. Dense solver buffers and Matter.js handles
+are never persisted in ordinary scene JSON.
+
 ## Particle emitters
 
 `scene.particlePresets` lists detached preset metadata: `id`, `name`, `category`, `description`, `tags`, `mobileSafe`, and `complexity`. Pass the metadata `id` to preset methods; a display name is not necessarily a recognized alias. Create an emitter with `scene.addEmitter(presetId,options)` and access its particle domain with `emitter.particles`.

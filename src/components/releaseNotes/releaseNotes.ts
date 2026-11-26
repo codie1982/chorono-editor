@@ -1,10 +1,10 @@
 /** The announcement is deliberately version-pinned. Updating the app without
  * new notes cannot silently replay old release content. */
 export const featuredReleaseNotes = {
-  version: '0.4.0',
-  title: 'Spline modeling and editor precision',
-  url: 'https://github.com/codie1982/chorono-editor/releases/tag/v0.4.0',
-  turkishUrl: 'https://github.com/codie1982/chorono-editor/blob/v0.4.0/docs/tr/releases/v0.4.0.md',
+  version: '0.5.0',
+  title: 'Mesh2D, physics baking and fracture',
+  url: 'https://github.com/codie1982/chorono-editor/releases/tag/v0.5.0',
+  turkishUrl: 'https://github.com/codie1982/chorono-editor/blob/v0.5.0/docs/tr/releases/v0.5.0.md',
 } as const
 
 export const RELEASE_NOTES_SEEN_KEY = 'chorono.releaseNotes.lastShownVersion'

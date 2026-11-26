@@ -32,6 +32,7 @@ export type ImportFormat =
   | 'font/woff2'
   | 'font/ttf'
   | 'font/otf'
+  | 'application/x-chorono-mesh-deformation'
   // Document formats (multi output)
   | 'image/svg+xml'
   | 'application/lottie+json'
@@ -56,6 +57,7 @@ export function getImportKind(format: ImportFormat): ImportKind {
     'video/mp4', 'video/mov', 'video/webm',
     'audio/mp3', 'audio/wav', 'audio/aac', 'audio/ogg',
     'font/woff', 'font/woff2', 'font/ttf', 'font/otf',
+    'application/x-chorono-mesh-deformation',
   ]
   return assetFormats.includes(format) ? 'asset' : 'document'
 }

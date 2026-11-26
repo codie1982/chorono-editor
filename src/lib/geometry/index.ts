@@ -12,3 +12,30 @@ export type {
 export { M, L, C, Q, Z, buildPathOnCanvas, pathToSvgString } from './PathCommand'
 export { ShapeToPathConverter } from './ShapeToPathConverter'
 export type { Size } from './ShapeToPathConverter'
+export {
+  StructuredGridMesh2DGenerator,
+  SplineBoundaryMesh2DGenerator,
+  ShapeBoundaryMesh2DGenerator,
+  SplineBoundaryRingBuilder,
+  Mesh2DTopologyHasher,
+  Mesh2DAdjacencyBuilder,
+  Mesh2DBoundaryRingExtractor,
+  Mesh2DTopologyValidator,
+  computeMesh2DLocalBounds,
+  computeMesh2DPositionBounds,
+  containsMesh2DPoint,
+} from './mesh2d'
+export type { Mesh2DBoundaryRing } from './mesh2d'
+export type {
+  StructuredGridMesh2DOptions,
+  SplineBoundaryMesh2DOptions,
+  Mesh2DShapeKind,
+  ShapeBoundaryInput,
+  SplineBoundaryPoint,
+  SplineBoundaryRing,
+  Mesh2DAdjacency,
+  Mesh2DEdgeAdjacency,
+  Mesh2DValidationDiagnostic,
+  Mesh2DValidationResult,
+  Mesh2DValidationSeverity,
+} from './mesh2d'

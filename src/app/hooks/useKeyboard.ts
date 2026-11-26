@@ -60,6 +60,7 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
   'canvas.tool.rotate':         'rotate',
   'canvas.tool.scale':          'scale',
   'canvas.tool.anchor':         'anchor',
+  'canvas.tool.texture':        'texture',
   'canvas.tool.box-select':     'selection-box',
   'canvas.tool.lasso-select':   'selection-lasso',
   'canvas.tool.circle-select':  'selection-circle',

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MCPHost } from '@/lib/mcp/editor'
 import {withEditorReply} from '@/lib/mcp/output/EditorReply'
 import type { BridgeJob } from '@/lib/mcp/protocol'
+import { mcpPhysicsBakeJobs } from '@/lib/mcp/bake/MCPPhysicsBakeJobManager'
 
 export function useMCPBridge(host: MCPHost) {
   const hostRef = useRef(host)
@@ -27,6 +28,7 @@ export function useMCPBridge(host: MCPHost) {
     connectionRef.current = null
     setConnection(null)
     setStatus('Disconnected')
+    mcpPhysicsBakeJobs.cancelAll()
     hostRef.current.isolateTimelines(null)
     hostRef.current.setRuntimeTest(false)
     if (current) await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${current.token}` }, body: JSON.stringify({ op: 'disconnect', sessionId: current.id }) }).catch(() => {})
@@ -65,7 +67,10 @@ export function useMCPBridge(host: MCPHost) {
           setStatus('Connected')
           setError(error ?? '')
         } catch (failure) {
-          if (!controller.signal.aborted) { setError((failure as Error).message); setStatus('Connection lost'); stopped = true; setConnection(null) }
+          if (!controller.signal.aborted) {
+            mcpPhysicsBakeJobs.cancelAll()
+            setError((failure as Error).message); setStatus('Connection lost'); stopped = true; setConnection(null)
+          }
         }
       }
     }

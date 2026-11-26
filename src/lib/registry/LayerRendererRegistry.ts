@@ -26,6 +26,17 @@ export interface LayerPaintCapability {
   localBounds?(layer: Layer, context: CanvasRenderingContext2D): PathBounds | null
 }
 
+/**
+ * Transient viewport preferences supplied to selected-layer editor overlays.
+ *
+ * These flags are never scene data and never reach preview/export rendering.
+ * A missing flag means the corresponding diagnostic overlay is disabled.
+ */
+export interface EditorOverlayPreferences {
+  /** Draw fixed-topology triangle edges for selected mesh layers. */
+  readonly meshTriangles?: boolean
+}
+
 export interface LayerRendererPlugin<T extends Layer = Layer> {
   /** Stable id for debugging / hot-swap. */
   id: string
@@ -54,6 +65,15 @@ export interface LayerRendererPlugin<T extends Layer = Layer> {
    * the plugin draws in LAYER-LOCAL coordinates.
    */
   render(ctx: RenderContext, layer: T): void
+
+  /**
+   * Optional selected-layer editor chrome drawn after content/effects.
+   *
+   * CanvasRenderer calls this only in editor mode for the selected layer and
+   * never while producing masks, preview/export frames or static proxies.
+   * Implementations must not mutate source data or retain the frame context.
+   */
+  renderEditorOverlay?(ctx: RenderContext, layer: T, preferences: EditorOverlayPreferences): void
 }
 
 export class LayerRendererRegistry {

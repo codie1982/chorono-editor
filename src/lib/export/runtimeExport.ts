@@ -2,13 +2,11 @@
 // Strips editor-only metadata so the resulting JSON is the minimal scene the
 // Chorono runtime (Android/iOS/WASM) needs to play back the animation.
 
-import type {
-  ChronoScene, Layer, Timeline, Track, Keyframe, Composition,
-  Asset, Trigger, Binding, SceneParameter,
-  StateMachineDefinition, ChronoSMState,
-} from '../types'
+import type { ChronoScene, Timeline, Track, Keyframe } from '../types'
+import type { RuntimeAnimation } from '../types/runtime'
 import { withoutAuthoring } from '../editor/authoring/AuthoringConverter'
 import { bakeTrack } from '../animation/baking/bake'
+import { defaultRuntimeSceneCompiler } from './runtime/RuntimeSceneCompiler'
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -32,28 +30,13 @@ export interface RuntimeExportOptions {
   bakeTolerance?: number
 }
 
-export interface RuntimeScene {
-  formatVersion: '1.0.0'
-  composition: Composition
-  assets: Asset[]
-  layers: Layer[]
-  timelines: Timeline[]
-  triggers: Trigger[]
-  bindings: Binding[]
-  /** Runtime-tunable parameters — read by the host platform via setParam(). */
-  parameters: SceneParameter[]
-  /** Interactive state machines (BL-09). Present only when the scene defines
-   *  any; editor-only node positions are stripped. */
-  stateMachines?: StateMachineDefinition[]
-  initialState: Record<string, unknown>
-}
+export type RuntimeScene = RuntimeAnimation
 
 /**
  * Build a runtime-only scene from an editor scene.
  *
- *  - Removes editor meta: layer.locked / hidden / solo / colorLabel / name
+ *  - Uses RuntimeSceneCompiler for one player-visible/source-only field policy
  *  - Drops audio assets (runtime handles audio separately, not in this format)
- *  - Drops the `_kf` prefix from keyframe IDs (kept stable but compact)
  *  - Optionally snaps keyframe times to frame boundaries
  *  - Optionally collapses redundant consecutive identical keyframes
  */
@@ -67,57 +50,16 @@ export function exportToRuntime(scene: ChronoScene, opts: RuntimeExportOptions =
     bakeTolerance = 0.005,
   } = opts
   scene = withoutAuthoring(scene)
-  const frameRate = Math.max(1, scene.composition.frameRate)
+  const compiled = defaultRuntimeSceneCompiler.compile(scene)
+  const frameRate = Math.max(1, compiled.composition.frameRate)
 
   return {
-    formatVersion: scene.formatVersion,
-    composition:   scene.composition,
-    // Drop audio assets — runtime audio engine is out-of-band
-    assets: scene.assets.filter((a) => a.type !== 'audio'),
-    // Drop audio layers + strip editor meta from the rest
-    layers: scene.layers
-      .filter((l) => l.type !== 'audio')
-      .map(stripLayerMeta),
-    timelines: scene.timelines.map((tl) => normaliseTimeline(tl, {
+    ...compiled,
+    timelines: compiled.timelines.map((tl) => normaliseTimeline(tl, {
       frameRate, snapKeyframesToFrames, collapseIdenticalKeyframes,
       bakeSignalSystem, bakeFps, bakeTolerance, durationMs: tl.durationMs,
     })),
-    triggers:     scene.triggers,
-    bindings:     scene.bindings,
-    parameters:   scene.parameters,
-    // BL-09 — carry state machines into the runtime, minus editor node coords.
-    ...(scene.stateMachines && scene.stateMachines.length > 0
-      ? { stateMachines: scene.stateMachines.map(stripSMEditorMeta) }
-      : {}),
-    initialState: scene.initialState,
   }
-}
-
-// ── State machine cleanup ──────────────────────────────────────────────────────
-
-/** Drop editor-only node positions from each state — runtime ignores them. */
-function stripSMEditorMeta(sm: StateMachineDefinition): StateMachineDefinition {
-  return {
-    ...sm,
-    states: sm.states.map((s): ChronoSMState => {
-      const { x: _x, y: _y, ...rest } = s
-      return rest
-    }),
-  }
-}
-
-// ── Layer cleanup ────────────────────────────────────────────────────────────
-
-function stripLayerMeta(layer: Layer): Layer {
-  // Drop editor-only flags. Keep `name` for runtime debug logs.
-  // BL-55 — strip `frozen` (freeze is an editor-only authoring affordance,
-  // runtime should treat the layer as fully selectable + opaque).
-  const {
-    locked: _l, hidden: _h, solo: _s, pinned: _p, colorLabel: _c,
-    frozen: _f, inputExpressions: _inputExpressions,
-    ...rest
-  } = layer
-  return rest
 }
 
 // ── Timeline cleanup ─────────────────────────────────────────────────────────

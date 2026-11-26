@@ -15,9 +15,10 @@ For fonts, import the actual supported font file, read the registered family fro
 | Editable portable project | `save_project`; local blob media is embedded and the scene remains editable |
 | Reopen existing work | `list_projects`, then `load_project` by project name |
 | Clean frame for inspection | `render_preview`; returns actual PNG image content |
-| Runtime playback data | `export_runtime`; inspect optimization and validation diagnostics |
+| Runtime playback data | `export_runtime`; preserves visual layers/visibility, embedded assets, timelines, parameters, wires, state machines and initial state. Physics ownership/recipes stay source-only because committed bake playback is carried by ordinary tracks. Inspect optimization and validation diagnostics. |
 | Vector still | `export_svg`; report unsupported-feature/export warnings |
 | Frame sequence | `export_sequence`; ZIP of images, bounded workload, no audio |
+| Preferred final 2D output | `render_2d` with `backend:'auto'`; transfers to Chorono Render when available, otherwise writes built-in PNG/PNG-sequence output |
 | Audio preview | `render_audio_preview`; real stereo PCM WAV plus peak/RMS/clipping, up to 10 seconds |
 | Audio mix | `export_audio`; stereo PCM WAV with gain automation, fades, pan and master gain, up to 120 seconds / 24 MB |
 
@@ -32,7 +33,7 @@ quality. Cancellation may keep a non-abortable encoder, renderer or consumer
 active until it actually settles; the resource panel shows pending/protected and
 failed-cleanup state. Legacy raw output helpers do not manage caller retention.
 
-At this implementation version, a sequence call is bounded to 300 frames, 4 MP per frame and 24 MB ZIP output. A 10-second sequence at 30 FPS reaches 300 frames. Audio mixdown is a separate WAV operation; image sequences have no soundtrack. Query connected capabilities before a large output. MP4/GIF/WebM encoding and video/audio muxing require an additional encoder workflow.
+At this implementation version, a built-in MCP sequence call is bounded to 300 frames, 4 MP per frame and 24 MB ZIP output. A 10-second sequence at 30 FPS reaches 300 frames. `render_2d` with `backend:'auto'` first probes the authenticated same-origin Chorono Render bridge: a connected service receives a PNG frame archive and owns final PNG/MP4 encoding; if it is absent, the built-in path writes PNG or a PNG-sequence ZIP. Use `backend:'chorono'` when absence must be an error and `backend:'builtin'` when external transfer is unwanted. Chorono video transfer accepts at most 1,800 frames, 4,096 px per dimension and even MP4 dimensions. Audio mixdown remains a separate WAV operation; current `render_2d` does not mux it into video.
 
 ## Editable audio clips
 

@@ -24,12 +24,18 @@ export const TOOL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
 export const STANDARD_TOOL_NAMES: readonly string[] = Object.freeze([
   'list_sessions', 'get_capabilities', 'get_handoff_context', 'get_scene', 'list_layers', 'get_layer',
   'list_timelines', 'get_timeline', 'list_assets', 'create_layer', 'update_layer',
+  'create_mesh2d_from_source', 'regenerate_mesh2d', 'set_mesh2d_texture',
+  'set_mesh2d_pins', 'set_mesh2d_deformation',
+  'bake_rigid_bodies', 'bake_voronoi_fracture',
+  'prepare_rigid_body_bake', 'prepare_voronoi_fracture_bake', 'get_bake_job',
+  'preview_bake_job', 'cancel_bake_job', 'discard_bake_job', 'commit_bake_job',
+  'inspect_physics_bake', 'clear_physics_bake',
   'upsert_keyframes', 'create_timeline', 'update_timeline', 'clone_layer',
   'array_layer', 'group_layers', 'ungroup_layer', 'delete_layer', 'run_script',
   'apply_script_plan', 'batch_actions', 'render_preview', 'evaluate_frame',
   'get_runtime', 'control_playback', 'control_runtime', 'validate_scene',
   'save_project', 'load_project', 'list_projects', 'import_asset', 'export_runtime',
-  'export_svg', 'export_sequence', 'export_audio', 'render_audio_preview',
+  'export_svg', 'export_sequence', 'render_2d', 'export_audio', 'render_audio_preview',
   'get_audio_state', 'undo', 'redo', 'update_composition',
 ])
 

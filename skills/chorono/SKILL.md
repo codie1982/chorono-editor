@@ -30,9 +30,9 @@ Generated scripts run only through the isolated MCP sandbox. It exposes synchron
 
 - Read [collaborative-editing.md](references/collaborative-editing.md) when continuing or revising existing work, especially after manual changes, uncertain retries or overlapping edits.
 - Read [animation.md](references/animation.md) for keyframes, multiple timelines, modifiers, cloning, paths and procedural scripts.
-- Read [domains.md](references/domains.md) for particle configuration and life channels, spline points/handles/contours, and Scene Explorer hierarchy queries and edits.
+- Read [domains.md](references/domains.md) for Mesh2D authoring, rigid/Voronoi bake, particle configuration and life channels, spline points/handles/contours, and Scene Explorer hierarchy queries and edits.
 - Read [interaction.md](references/interaction.md) for state machines, runtime events, parameters, bindings and wiring.
-- Read [media-and-output.md](references/media-and-output.md) for asset import, typography, effects, masks, portable projects and exports.
+- Read [media-and-output.md](references/media-and-output.md) for asset import, typography, effects, masks, portable projects, built-in output and Chorono Render transfer.
 
 For code-driven scene design, read the complete scene with `scene.snapshot()`, a complete layer with `layer.data`, or one field with `layer.get(path)`. Collection getters and `Timeline.data` return detached copies; mutating those copies does not edit the scene. Prefer `layer.patch(partial)` to merge nested settings while preserving unspecified fields. `replace_layer_fields` (legacy `patch_object`) and `Layer.set` retain shallow replacement behavior. Use capability schemas for geometry, typography, effects, masks and repeater structures.
 

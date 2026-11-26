@@ -14,6 +14,7 @@ import { motionPathDefinition }   from './definitions/path/MotionPathDefinition'
 import { pathStrokeDefinition }   from './definitions/path/PathStrokeDefinition'
 import { groupDefinition }        from './definitions/scene/GroupDefinition'
 import { repeaterDefinition }     from './definitions/scene/RepeaterDefinition'
+import { mesh2DDefinition }       from './definitions/mesh2d/Mesh2DDefinition'
 import { ALL_BUILT_IN_RENDERERS } from '@/lib/render/renderers'
 // BL-13 — Particle Effect Engine
 import { particleEmitterDefinition } from './definitions/particles/ParticleEmitterDefinition'
@@ -47,6 +48,9 @@ export function bootstrapLayerRegistry(): void {
 
   // Frame Sequence / Sprite Sheet (BL-07)
   layerRegistry.register(frameSequenceDefinition)
+
+  // Fixed-topology 2D mesh/surface sources
+  layerRegistry.register(mesh2DDefinition)
 
   // Groups & Scene Graph
   layerRegistry.register(groupDefinition)

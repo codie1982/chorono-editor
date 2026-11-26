@@ -84,6 +84,7 @@ export type AssetType =
   | 'lottie'       // BL-04: LottieDocumentHandler (Phase 3: full keyframe import)
   | 'spriteSheet'  // BL-07: planned
   | 'gif'          // BL-07: planned
+  | 'meshDeformation' // Fixed-topology binary vertex-position clip
 
 // ── Storage (BL-04) ───────────────────────────────────────────────────────────
 

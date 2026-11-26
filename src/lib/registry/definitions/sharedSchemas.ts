@@ -65,7 +65,7 @@ export const fillGroup = (): PropertyGroup => ({
     },
     { id: 'fillOpacity',  path: 'style.fill.opacity',  group: 'Fill', label: 'Opacity', valueType: 'percent', animatable: true, defaultValue: 100, min: 0, max: 100, step: 1 },
   ],
-  showWhen: (l) => (l.type === 'shape' || l.type === 'spline' || l.type === 'path') && !!l.style?.fill,
+  showWhen: (l) => (l.type === 'shape' || l.type === 'spline' || l.type === 'path' || l.type === 'mesh2d') && !!l.style?.fill,
 })
 
 // ── Stroke (shapes) ───────────────────────────────────────────────────────────

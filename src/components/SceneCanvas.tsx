@@ -9,7 +9,7 @@ import { projectFrameFonts, projectFrameFontOverrides } from '@/lib/render/media
 import { hitTestLayer, hitTestLayersAt, type AssetElementMap } from '@/lib/renderer'
 import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
-import { selectionGeometry } from './canvas/overlays/selectionGeometry'
+import { selectionGeometry, usesGeometryDrivenSelectionFrame } from './canvas/overlays/selectionGeometry'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import { drivenChannelReason } from '@/lib/timeline/authoring/keyableChannels'
 import { resolveLayerWorldMatrix } from '@/lib/geometry/resolveLayerWorldMatrix'
@@ -88,6 +88,9 @@ import { selectionResize } from '@/lib/canvas/math/selectionResize'
 import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
 import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
 import type { ShortcutContext } from '@/lib/shortcuts'
+import { Mesh2DTextureOverlay } from './canvas/mesh2d/Mesh2DTextureOverlay'
+import { PhysicsViewportOverlay } from './physics/PhysicsViewportOverlay'
+import type { PhysicsViewportOverlaySettings } from './physics/PhysicsViewportOverlayState'
 
 interface Props {
   scene: ChronoScene
@@ -145,12 +148,13 @@ interface Props {
    *    pan     → canvas drag mode (no gizmos)
    *    pen     → path anchor editing (existing behaviour) */
   toolMode?: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor'
+    | 'texture'
     | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
     | 'spline-draw' | 'shape-draw'
   /** BL-66 — Push a tool-mode change up to the page (e.g. double-clicking a
    *  path enters pen mode so the user can immediately edit it; cancelling
    *  path pick mode returns to 'select'). */
-  onToolModeChange?: (next: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor') => void
+  onToolModeChange?: (next: 'select' | 'pan' | 'pen' | 'move' | 'rotate' | 'scale' | 'anchor' | 'texture') => void
   /** BL-73 — Active spline primitive being drawn (null = not in draw mode). */
   splineDrawKind?: SplinePrimitiveKind | null
   /** BL-73 — When set, drawn splines append into this layer instead of a new one. */
@@ -256,6 +260,10 @@ interface Props {
   /** A committed ID selects the new shape and may rearm a fresh template;
    * no ID means cancelled placement. Never reuse an already committed ID. */
   onShapePlacementComplete?: (id?: string) => void
+  /** Local editor-only fracture diagnostics; never part of scene/export. */
+  physicsOverlay?: PhysicsViewportOverlaySettings
+  /** Select an editor-only fracture bond without changing scene history. */
+  onPhysicsBondSelect?: (bondId: string) => void
 }
 
 const PADDING   = 24
@@ -271,6 +279,7 @@ export default function SceneCanvas({
   ghostSettings, selectedTimeline,
   selectedKeyframeIds, onSelectKeyframes, onSeekKeyframe, onMotionEditingChange, onEditMotionTiming, motionControlsHost, onOpenMotionControls,
   arrayAuthoring, shapePlacementLayer = null, onShapePlacementComplete,
+  physicsOverlay, onPhysicsBondSelect,
   pathPickMode = null, onAssignPath, onExitPathPickMode,
   splineDrawKind = null, splineAppendTargetId = null, onSplineDrawCommit, onDrawSplineLine, onSplinePointSelected,
 }: Props) {
@@ -319,6 +328,7 @@ export default function SceneCanvas({
   // the authored scene/ref, keeping runtime names out of history and save data.
   const geometryScene = useMemo(() => projectFrameFonts(displayScene, assets.fonts), [displayScene, assets])
   const geometryOverrides = useMemo(() => overrides && projectFrameFontOverrides(scene, overrides, assets.fonts), [scene, overrides, assets])
+  const meshFrameQuery = useMemo(() => ({ meshDeformations: assets.meshDeformations }), [assets])
   const geometrySceneRef = useRef(geometryScene)
   useEffect(() => { geometrySceneRef.current = geometryScene }, [geometryScene])
   const { width, height } = scene.composition
@@ -329,7 +339,8 @@ export default function SceneCanvas({
     zoom, pan, panDragRef, isPanning, cancelPan,
     fitAll, fitWidth, fitHeight, actualSize, zoomTo, fitSelection, centreSelection,
     zoomIn, zoomOut, beginPan, handleWheel,
-  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene: geometryScene, selectedLayerId, timeMs, overrides: geometryOverrides })
+  } = useZoomAndPan({ width, height, padding: PADDING, containerRef, scene: geometryScene,
+    selectedLayerId, timeMs, overrides: geometryOverrides, ...meshFrameQuery })
 
   // ── Snap config — owned upstream by useSnapSettings ─────────────────────
   // Mirror to a ref so pointermove closures see fresh values without being
@@ -372,6 +383,7 @@ export default function SceneCanvas({
   const gridInFront = snapSettings.grid.inFront
   const [showGuides,  setShowGuides]  = useState(true)
   const [showMeasurements, setShowMeasurements] = useState(true)
+  const [showMeshTriangles, setShowMeshTriangles] = useState(false)
 
   // ── Right-click context menu — opens at cursor on a layer hit ────────────
   // Targets the right-clicked layer (not necessarily the selected one) so
@@ -475,7 +487,7 @@ export default function SceneCanvas({
   // BL-60 Faz 3 — Canvas marquee selection tools (box / lasso / circle / paint).
   const { selectionOverlay, beginSelectionDrag } = useSelectionTools({
     canvasRef, sceneRef: geometrySceneRef, width, height,
-    frame: { timeMs, overrides: geometryOverrides },
+    frame: { timeMs, overrides: geometryOverrides, ...meshFrameQuery },
     selectionContainMode, onSelectByGeometry,
   })
 
@@ -510,7 +522,8 @@ export default function SceneCanvas({
     canvasRef, compositionRef, sceneRef, editorRef, snapRef, engineRef, guidesRef,
     readScale, setGuides, setDragHud, setDragOverrides,
     onAfterLayerCommit, onSelectLayer, onSelectLayers, buildLayerCommitCommands,
-    timeMs, overrides, contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
+    timeMs, overrides, ...meshFrameQuery,
+    contextKey: `${selectedTimeline?.id ?? ''}:${timeMs}:${hideEditorUI}:${pivotMode}:${motionEditing}:${arrayEditing}:${placingShape}`,
     onWarning: setTransformWarning,
   })
 
@@ -668,7 +681,7 @@ export default function SceneCanvas({
     //    instead of changing selection. Lets the author exercise layer-click
     //    rules without leaving the builder.
     if (previewMode) {
-      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides)
+      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       // Prefer draggable layer over tappable when both are set, since drag
       // requires the drag-start handler to capture the pointer immediately.
       for (const id of stack) {
@@ -763,7 +776,7 @@ export default function SceneCanvas({
     const requestedCloneMode = resolveCloneDragMode(e)
     let hit: string | null
     if (e.altKey && !requestedCloneMode) {
-      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides)
+      const stack = hitTestLayersAt(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       if (stack.length === 0) hit = null
       else {
         const cur = selectedLayerId ?? ''
@@ -771,7 +784,7 @@ export default function SceneCanvas({
         hit = idx === -1 ? stack[0] : stack[(idx + 1) % stack.length]
       }
     } else {
-      hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+      hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
       hit = canvasSelectionPickTarget(hit, layerIndex,
         selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), !!requestedCloneMode && e.altKey)
     }
@@ -796,7 +809,7 @@ export default function SceneCanvas({
       ? Array.from(selectedLayerIds) : [layer.id]
     beginMoveForSelection(ids, layer.id, e, null, requestedCloneMode)
   }, [scene, geometryScene, geometryOverrides, timeMs, width, height, overrides, onSelectLayer,
-    editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode,
+    editor, startDrag, panMode, beginPan, selectedLayerId, selectedLayerIds, previewMode, meshFrameQuery,
     onLayerClickInPreview, toolMode, onSelectByGeometry, beginSelectionDrag, tryStartPathEdit,
     pathPickMode, onExitPathPickMode, splineDrawKind, onSplineDrawPointerDown, zoom,
     beginMoveForSelection, layerIndex, motionEditing, arrayEditing, arrayAuthoring?.close, placingShape, shapePlacement.begin, cancelPan])
@@ -913,7 +926,7 @@ export default function SceneCanvas({
     const ids = selectedLayerIds?.size ? Array.from(selectedLayerIds) : [selectedLayerId]
     const prepared = prepareTransformTargets(scene, ids, timeMs, overrides, { activeId: selectedLayerId, pivotMode })
     if (!prepared.ok) { setTransformWarning(prepared.reason); return }
-    const resolveBounds = createLayerWorldBoundsResolver(geometryScene, timeMs, geometryOverrides)
+    const resolveBounds = createLayerWorldBoundsResolver(geometryScene, timeMs, geometryOverrides, meshFrameQuery)
     const bounds = prepared.targets.reduce<PathBounds | null>((value, target) => {
       const layer = geometryScene.layers.find(item => item.id === target.id)
       const item = layer && resolveBounds(layer)
@@ -931,7 +944,7 @@ export default function SceneCanvas({
       selectionResize: { bounds, handle } }
     startDrag(event)
   }, [scene, geometryScene, geometryOverrides, timeMs, overrides, selectedLayerId, selectedLayerIds,
-    pivotMode, editor, dragRef, startDrag])
+    pivotMode, editor, dragRef, startDrag, meshFrameQuery])
 
   // ── Preview-mode drag (fires dragStart/Move/End on draggable layers) ──────
   const { beginPreviewDrag } = usePreviewDrag({
@@ -978,6 +991,7 @@ export default function SceneCanvas({
     viewportRef: containerRef, viewportScale: zoom, viewportKey: `${zoom}:${pan.x}:${pan.y}`,
     scene: displayScene, timeMs, selectedLayerId, selectedLayerIds, assets,
     snapEnabled, snapToGridOn, gridSize, gridVisible: snapSettings.grid.visible, gridInFront,
+    meshTrianglesVisible: showMeshTriangles,
     overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
   })
@@ -1023,11 +1037,17 @@ export default function SceneCanvas({
     if (!selectedLayer || hideEditorUI) return null
     return resolveLayerWorldMatrix(selectedLayer, scene, timeMs, displayOverrides)
   }, [selectedLayer, scene, timeMs, displayOverrides, hideEditorUI])
+  const selectedMeshTexture = useMemo(() => {
+    if (rawSelectedLayer?.type !== 'mesh2d' || rawSelectedLayer.mesh2d?.appearance?.kind !== 'texture') return null
+    const assetId = rawSelectedLayer.mesh2d.appearance.textureAssetId
+    return assetId ? assets.get(assetId) ?? null : null
+  }, [rawSelectedLayer, assets])
   // Most playback frames have no selection/hover bounds consumer. Keep this
   // scope lazy instead of materializing/indexing every layer just to discard
   // the resolver. Visible rulers still need their selected extents in playback.
   const boundsForFrame = useMemo(() => createLayerWorldBoundsResolver(geometryScene, timeMs,
-    frameGeometryOverrides, { deferPreparation: true }), [geometryScene, timeMs, frameGeometryOverrides])
+    frameGeometryOverrides, { deferPreparation: true, ...meshFrameQuery }),
+  [geometryScene, timeMs, frameGeometryOverrides, meshFrameQuery])
   const selectedWorldBounds = useMemo(() => rawSelectedLayer && (!hideEditorUI || showRulers)
     ? boundsForFrame(rawSelectedLayer)
     : null, [rawSelectedLayer, boundsForFrame, hideEditorUI, showRulers])
@@ -1065,7 +1085,7 @@ export default function SceneCanvas({
     frame: false, resize: false, cornerRot: false, ring: false,
     axisMove: false, axisScale: false, anchor: false,
   } : {
-    frame:     toolMode !== 'anchor' && toolMode !== 'pan' && toolMode !== 'pen',
+    frame:     toolMode !== 'anchor' && toolMode !== 'pan' && toolMode !== 'pen' && toolMode !== 'texture',
     resize:    toolMode === 'select' || toolMode === 'scale',
     cornerRot: toolMode === 'select',
     ring:      toolMode === 'rotate',
@@ -1101,9 +1121,11 @@ export default function SceneCanvas({
     const dx = dragHud.x - center.x, dy = dragHud.y - center.y, distance = Math.hypot(dx, dy) || 1
     hudPoint = { ...dragHud, x: center.x + dx / distance * rotationRingRadius, y: center.y + dy / distance * rotationRingRadius }
   }
-  // Vector geometry wins over retained size metadata; groups use the union
-  // of visible children. Regular sized objects keep their resize frame.
-  const usesWorldFrame = selectedLayer?.type === 'path' || selectedLayer?.type === 'spline' || selectedLayer?.type === 'group'
+  // Vector and mesh geometry wins over retained size metadata; groups use the
+  // union of visible children. Mesh2D source controls own geometry dimensions,
+  // so a generic size-box resize would desynchronise the persisted triangles.
+  // Regular raster/parametric sized objects keep their resize frame.
+  const usesWorldFrame = usesGeometryDrivenSelectionFrame(selectedLayer)
   const hasFrameGeometry = !!selectedLayer && (usesWorldFrame ? !!selectedWorldBounds : !!selectedLayer.size)
   const showFrame =
     !!selectedLayer && hasFrameGeometry && !selectedLayer.locked && !selectedLayer.frozen && !selectedLayer.hidden
@@ -1210,7 +1232,7 @@ export default function SceneCanvas({
               const sy = height / rect.height
               const cx = (e.clientX - rect.left) * sx
               const cy = (e.clientY - rect.top)  * sy
-              const hitId = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+              const hitId = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
               const hitLayer = hitId ? scene.layers.find((l) => l.id === hitId) : null
               if (hitLayer?.type === 'path' && !hitLayer.locked) {
                 onSelectLayer(hitId!)
@@ -1249,7 +1271,7 @@ export default function SceneCanvas({
                 }
               }
 
-              const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+              const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
               if (!hit) {
                 e.preventDefault()
                 emptyCanvasCtx.open(e)
@@ -1278,7 +1300,7 @@ export default function SceneCanvas({
                 const sy = height / rect.height
                 const cx = (clientX - rect.left) * sx
                 const cy = (clientY - rect.top)  * sy
-                const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides)
+                const hit = hitTestLayer(geometryScene, timeMs, cx, cy, geometryOverrides, meshFrameQuery)
                 const target = canvasSelectionPickTarget(hit, layerIndex,
                   selectedLayerIds ?? new Set(selectedLayerId ? [selectedLayerId] : []), deepPick)
                 setHoveredLayerId((cur) => (cur === target ? cur : target))
@@ -1333,10 +1355,18 @@ export default function SceneCanvas({
             }}
           />
 
+          {!hideEditorUI && physicsOverlay?.enabled && <PhysicsViewportOverlay
+            scene={scene}
+            timeMs={timeMs}
+            overrides={overrides}
+            settings={physicsOverlay}
+            onBondSelect={onPhysicsBondSelect}
+          />}
+
           {shapePlacement.draft && <ShapePlacementOutline bounds={boundsForFrame(shapePlacement.draft)}
             width={width} height={height} zoom={zoom} />}
 
-          {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && containerRef.current && <OffArtboardOverlay
+          {!hideEditorUI && !arrayEditing && !motionEditing && !placingShape && toolMode !== 'pen' && toolMode !== 'spline-draw' && toolMode !== 'texture' && containerRef.current && <OffArtboardOverlay
             scene={displayScene} selectedIds={measurementSelection} boundsFor={boundsForFrame} composition={{ width, height }}
             zoom={zoom} pan={pan} containerEl={containerRef.current} canvasRef={canvasRef}
             cursor={isPanning ? 'grabbing' : panMode ? 'grab' : 'crosshair'}
@@ -1373,7 +1403,7 @@ export default function SceneCanvas({
               sampled from the position-keyframe interpolation. Drawn UNDER
               the selection frame so handles stay clickable. */}
           {selectedLayer && !selectedLayer.hidden && (!selectedLayerIds || selectedLayerIds.has(selectedLayer.id))
-            && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && (
+            && !hideEditorUI && !arrayEditing && !placingShape && toolMode !== 'spline-draw' && toolMode !== 'pen' && toolMode !== 'texture' && (
             <MotionPathOverlay
               layer={selectedLayer}
               scene={scene}
@@ -1400,6 +1430,12 @@ export default function SceneCanvas({
           )}
 
           {arrayAuthoring?.active && !hideEditorUI && <ArrayViewportOverlay authoring={arrayAuthoring} canvasRef={canvasRef} zoom={zoom} />}
+
+          {toolMode === 'texture' && rawSelectedLayer?.type === 'mesh2d' && selectedMeshTexture && selectedWorldMatrix
+            && !hideEditorUI && !arrayEditing && !motionEditing && !placingShape && (
+            <Mesh2DTextureOverlay layer={rawSelectedLayer} texture={selectedMeshTexture}
+              worldMatrix={selectedWorldMatrix} zoom={zoom} canvasRef={canvasRef} editor={editor} />
+          )}
 
           {/* BL-66 / BL-67 — Dashed editor overlay for motion-role path layers
               (hidden in CanvasRenderer) + clickable pick targets when the user
@@ -1679,6 +1715,7 @@ export default function SceneCanvas({
           gridInFront={gridInFront}   onToggleGridFront={() => snap.setGridInFront(!gridInFront)}
           showGuides={showGuides}     onToggleGuides={() => setShowGuides((v) => !v)}
           showMeasurements={showMeasurements} onToggleMeasurements={() => setShowMeasurements(value => !value)}
+          showMeshTriangles={showMeshTriangles} onToggleMeshTriangles={() => setShowMeshTriangles(value => !value)}
         />
         <SnapSettingsMenu snap={snap} />
       </div>

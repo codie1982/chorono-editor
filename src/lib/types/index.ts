@@ -77,6 +77,64 @@ export type {
 } from './media'
 
 export type {
+  Mesh2DGridDiagonal,
+  StructuredGridMesh2DSource,
+  SplineBoundaryMesh2DSource,
+  ShapeBoundaryMesh2DSource,
+  FractureFragmentMesh2DSource,
+  Mesh2DSource,
+  Mesh2DTopology,
+  Mesh2DGeometry,
+  Mesh2DData,
+} from './mesh2d'
+
+export type {
+  RigidBodyMotionType,
+  RigidBodyCollider,
+  RigidBodyMaterial,
+  RigidBodyAuthoring,
+  RigidBodySnapshot,
+  RigidBodyBakeRecipe,
+  RigidFractureEvent,
+  RigidFractureCluster,
+  RigidFractureBondBreakEvent,
+  RigidPoseCacheHeader,
+  RigidBakeTrackOwnership,
+  RigidBakeLayerOwnership,
+  RigidBakeGenerationOwnership,
+  RigidBakeRecord,
+  PhysicsSceneData,
+} from './physics'
+
+export type {
+  FracturePoint2D,
+  FractureBounds2D,
+  FractureAppearanceSnapshot,
+  FractureSeedPoint,
+  FragmentGeometry,
+  FractureSourceGeometry,
+  FractureGeneration,
+  FractureRegionRingGeometry,
+  FractureRegionSourceGeometry,
+  FractureRegionFragmentGeometry,
+  FractureFragmentAdjacency,
+  FractureRegionGeneration,
+  AnyFractureGeneration,
+  FractureGenerationBudgetLimits,
+  FractureGenerationBudgetUsage,
+  FractureGenerationLineageEntry,
+  FractureGenerationHierarchy,
+} from './fracture'
+
+export type {
+  FractureBondDefaults,
+  FractureBondOverride,
+  FractureBond,
+  FractureBondGraph,
+  FractureClusterComponent,
+} from './fractureCluster'
+
+export type {
   LayerEffects,
   MotionPath,
   PluginEffect,

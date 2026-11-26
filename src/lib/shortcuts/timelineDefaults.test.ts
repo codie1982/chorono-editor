@@ -19,6 +19,8 @@ describe('timeline shortcut defaults without overwriting custom assignments', ()
     expect(registry.resolve(event('.'), 'timeline')).toBe('timeline.nav.nextKeyframe')
     expect(registry.resolve(event(','), 'timeline')).toBe('timeline.nav.prevKeyframe')
     expect(registry.resolve(event('j'), 'timeline')).toBe('timeline.nav.prevKeyframeLegacy')
+    expect(registry.resolve(event('t'), 'canvas')).toBe('canvas.tool.texture')
+    expect(registry.resolve(event('t'), 'timeline')).toBe('timeline.property.opacity')
   })
   it('preserves an explicitly registered old K assignment, leaving the new command unassigned', () => {
     const registry = new ShortcutRegistry()

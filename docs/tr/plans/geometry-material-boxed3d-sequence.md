@@ -1,4 +1,17 @@
-# Poly, materyal ve kutulu 3D için güncel geliştirme sırası
+# Poly, materyal ve kutulu 3D — eski birleşik sıra kaydı
+
+**17 Kasım 2026 kapsam ayrımı:** Bu belge, daha önce onaylanan planlar arası
+uygulama önceliğinin tarihsel kaydıdır. Güncel 2D teslimleri
+[2D ana planında](../production-2d-roadmap.md), 3D teslimleri
+[3D ana planında](../production-3d-roadmap.md) izlenir. Aşağıdaki eski
+“sıradaki” ve CFX ifadeleri 12 Kasım kapanışı sırasındaki kararı anlatır;
+yeni kapsam veya tamamlanma kanıtı değildir.
+
+**17 Kasım sonraki kullanıcı kararı:** [3D ana planına](../production-3d-roadmap.md)
+eklenen [3D4 ayrıntılı model ve karakter üretimi](model-production-quality-plan.md)
+3D hattında sıradaki ana çalışmadır. Aşağıdaki tarihsel sıra ve ayrı rig/
+malzeme kapsamı ifadeleri bu yeni aşamanın yerine geçmez; 2D işlerinin kendi
+Poly → UV ve sonraki sırası korunur.
 
 8 Kasım 2026; ara iş sadeleştirmesi 10 Kasım 2026. Kullanıcı tarafından onaylandı.
 Önce D0–D2 kullanıcı onaylı hata özeti/sürüm ara işi tamamlandı.

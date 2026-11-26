@@ -22,19 +22,19 @@ export default function ReleaseNotesDialog({ onClose }: { onClose(): void }) {
       </header>
       <main className="min-h-0 overflow-y-auto px-5 py-6 sm:px-7 sm:py-7">
         <h2 id="release-notes-title" className="text-2xl font-semibold leading-tight text-white sm:text-3xl">What’s new in Chorono</h2>
-        <p className="mt-2 text-sm leading-6 text-gray-300">{featuredReleaseNotes.title}. A few highlights from this release:</p>
+        <p className="mt-2 text-sm leading-6 text-gray-300">{featuredReleaseNotes.title}</p>
         <ul className="mt-6 space-y-3">
           <li className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-            <h3 className="font-semibold text-white">Model splines directly</h3>
-            <p className="mt-1 text-sm leading-6 text-gray-300">Offset, Outline, Chamfer and Fillet now have Preview, Apply and Cancel in the Spline Modeling panel.</p>
+            <h3 className="font-semibold text-white">Create and texture 2D meshes</h3>
+            <p className="mt-1 text-sm leading-6 text-gray-300">Start with a grid, closed shape or spline. Adjust the texture, pin vertices and play baked deformation.</p>
           </li>
           <li className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-            <h3 className="font-semibold text-white">Snap with more control</h3>
-            <p className="mt-1 text-sm leading-6 text-gray-300">Move, Rotate and Scale snapping share one menu, with grid and guide options in the same place.</p>
+            <h3 className="font-semibold text-white">Preview physics before applying</h3>
+            <p className="mt-1 text-sm leading-6 text-gray-300">Review rigid motion and Voronoi fracture in Jobs &amp; Bake. Apply the result in one Undo step.</p>
           </li>
           <li className="rounded-lg border border-gray-700 bg-gray-800/60 p-4">
-            <h3 className="font-semibold text-white">Bring an agent into the edit</h3>
-            <p className="mt-1 text-sm leading-6 text-gray-300">Send a selected layer’s context to your connected agent, and keep Motion Keys in its own panel.</p>
+            <h3 className="font-semibold text-white">Render a frame or sequence</h3>
+            <p className="mt-1 text-sm leading-6 text-gray-300">Download PNG output directly or send frames to a running local Chorono Render service.</p>
           </li>
         </ul>
       </main>

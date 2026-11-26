@@ -107,6 +107,7 @@ import FileMenu        from '@/components/TopToolbar/FileMenu'
 import RasterExportDialog from '@/components/export/RasterExportDialog'
 import SVGExportDialog   from '@/components/export/SVGExportDialog'
 import SequenceExportDialog from '@/components/export/SequenceExportDialog'
+import RenderSettingsDialog from '@/components/export/RenderSettingsDialog'
 import {useSceneOutputActions} from './hooks/useSceneOutputActions'
 import ImportUrlModal    from '@/components/modals/ImportUrlModal'
 import ImportPreviewModal from '@/components/modals/ImportPreviewModal'
@@ -131,6 +132,10 @@ import AssetsPanel         from '@/components/panels/AssetsPanel'
 import StateMachinePanel       from '@/components/panels/StateMachinePanel'
 import ScriptConsolePanel      from '@/components/panels/ScriptConsolePanel'
 import ParticlePanel       from '@/components/particles/ParticlePanel'
+import PhysicsSimulationsPanel from '@/components/physics/PhysicsSimulationsPanel'
+import { usePhysicsBakeController } from '@/components/physics/usePhysicsBakeController'
+import { DEFAULT_PHYSICS_VIEWPORT_OVERLAY_SETTINGS } from '@/components/physics/PhysicsViewportOverlayState'
+import JobsBakePanel from '@/components/bake/JobsBakePanel'
 import DockLayout       from '@/components/dock/DockLayout'
 import DockOuterEdges   from '@/components/dock/DockOuterEdges'
 import { DockDragProvider } from '@/components/dock/dragContext'
@@ -147,6 +152,11 @@ import { prepareCloneForest } from '@/lib/editor/commands-clone-forest'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
 import { makeBakeRepeaterCmd } from '@/lib/editor/commands-repeater'
 import { defaultCloneAlignOptions } from '@/lib/clone/CloneAlign'
+import {
+  canCreateShapeBoundaryMesh2D,
+  newShapeBoundaryMesh2DLayer,
+  newSplineBoundaryMesh2DLayer,
+} from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 import { targetsLayer } from '@/lib/timeline/TrackTargetParser'
 // ── Mode system bootstrap ─────────────────────────────────────────────────────
 import '@/lib/modes/bootstrap'
@@ -172,6 +182,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [initialScene] = useState(() => session.scene ?? createChoronoDemo())
   const sessionIdentity = useSessionIdentity()!
   const editor = useEditorState(initialScene, session.history)
+  const physicsBake = usePhysicsBakeController(editor)
+  const [physicsViewportOverlay, setPhysicsViewportOverlay] = useState(DEFAULT_PHYSICS_VIEWPORT_OVERLAY_SETTINGS)
   const recovery = useSceneSessionRecovery(editor, session)
   useEffect(() => acquireDiagnosticSharing(() => !editor.isTransactionActive()), [editor.isTransactionActive])
   const {
@@ -228,7 +240,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
     'layers', 'sceneExplorer', 'canvas', 'stateMachine', 'properties', 'timeline', 'curveEditor', 'dopeSheet',
     'curveModifiers',
     'parameters', 'events', 'motionBinding', 'wiring', 'selection', 'runtimePreview', 'assets',
-    'particles', 'player', 'scriptConsole', 'resourceMonitor', 'splineModeling', 'motionKeys',
+    'particles', 'physicsSimulations', 'jobsBake', 'player', 'scriptConsole', 'resourceMonitor', 'splineModeling', 'motionKeys',
   ])
 
   // ── SM sub-mod toggle (BL-09) ────────────────────────────────────────────
@@ -638,6 +650,34 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       toast.error('Text → Spline failed: ' + (err as Error).message)
     }
   }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer,editor.getDocumentSignal])
+
+  /** Create a separate, source-linked Mesh2D from the selected closed spline. */
+  const createMesh2DFromSpline = useCallback(() => {
+    const source = scene.layers.find(layer => layer.id === selectedLayerId)
+    if (source?.type !== 'spline' || !source.spline) return
+    try {
+      const mesh = newSplineBoundaryMesh2DLayer(source)
+      dispatchCommand(makeAddLayerCmd(mesh))
+      selectLayer(mesh.id)
+      toast.success(`Created "${mesh.name}" — source spline was preserved`)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Spline could not be converted to Mesh2D')
+    }
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
+
+  /** Create a separate, source-linked Mesh2D from a supported closed shape. */
+  const createMesh2DFromShape = useCallback(() => {
+    const source = scene.layers.find(layer => layer.id === selectedLayerId)
+    if (!source || !canCreateShapeBoundaryMesh2D(source)) return
+    try {
+      const mesh = newShapeBoundaryMesh2DLayer(source)
+      dispatchCommand(makeAddLayerCmd(mesh))
+      selectLayer(mesh.id)
+      toast.success(`Created "${mesh.name}" — source shape was preserved`)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Shape could not be converted to Mesh2D')
+    }
+  }, [scene.layers, selectedLayerId, dispatchCommand, selectLayer])
 
   /**
    * BL-67 — Assign a path layer as another layer's motion path.
@@ -1133,6 +1173,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
   const [showSvgExport, setShowSvgExport] = useState(false)
   // BL-83 — image sequence (ZIP) export dialog visibility.
   const [showSequenceExport, setShowSequenceExport] = useState(false)
+  const [showRenderSettings, setShowRenderSettings] = useState(false)
 
   // ── Scene JSON helpers (used by FileMenu) ────────────────────────────────
   const {saveSceneJson,copySceneJson,exportSceneHtml,exportRuntimeJson}=useSceneOutputActions(editor.committedScene,importDocument,editor.getCommittedHistory)
@@ -1334,6 +1375,8 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
       { id: 'assets',         title: 'Assets',         render: () => null },
 
       { id: 'particles',      title: 'Particle',       render: () => null },
+      { id: 'physicsSimulations', title: 'Physics',    render: () => null },
+      { id: 'jobsBake',       title: 'Jobs & Bake',    render: () => null },
       { id: 'scriptConsole',  title: 'Script',         render: () => null },
 
       { id: 'resourceMonitor', title: 'Resources & Performance', render: () => null },
@@ -1366,6 +1409,7 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onExportImage={() => setShowRasterExport(true)}
           onExportSvg={() => setShowSvgExport(true)}
           onExportSequence={() => setShowSequenceExport(true)}
+          onRender={() => setShowRenderSettings(true)}
           onExportHtml={exportSceneHtml}
           onCopySceneJson={copySceneJson}
           onShowShortcuts={() => setShowHelp(true)}
@@ -1441,7 +1485,10 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
           onCopySceneJson={copySceneJson}
           onInspectJson={() => setShowJson(true)}
           exports={{ onExportRuntime: exportRuntimeJson, onExportImage: () => setShowRasterExport(true),
-            onExportSvg: () => setShowSvgExport(true), onExportSequence: () => setShowSequenceExport(true), onExportHtml: exportSceneHtml }}
+            onExportSvg: () => setShowSvgExport(true),
+            onExportSequence: () => setShowSequenceExport(true),
+            onRender: () => setShowRenderSettings(true),
+            onExportHtml: exportSceneHtml }}
         />
 
         <InteractivePreviewButton layers={scene.layers} active={manualPreview}
@@ -1577,6 +1624,11 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                     shapePlacementLayer={shapeCreation.template}
                     onShapePlacementComplete={shapeCreation.complete}
                     scene={scene} displayScene={layerIsolation.scene}
+                    physicsOverlay={physicsViewportOverlay}
+                    onPhysicsBondSelect={bondId => setPhysicsViewportOverlay(previous => ({
+                      ...previous,
+                      selectedBondId: bondId,
+                    }))}
                     editor={editor}
                     getShortcutContext={getShortcutContext}
                     timeMs={currentTimeMs}
@@ -1759,11 +1811,25 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 id: 'properties', title: 'Properties',
                 render: () => (
                   <div className="flex flex-col h-full bg-gray-900 overflow-hidden">
-                    {selectedLayer?.type === 'spline' && <button type="button"
-                      onClick={() => dock.dispatchRestorePanel('splineModeling')}
-                      className="mx-3 mt-2 rounded border border-blue-600 px-2 py-1 text-left text-xs text-blue-200 hover:bg-blue-900/30">
-                      Open Spline Modeling · Offset / Outline / Chamfer / Fillet
-                    </button>}
+                    {selectedLayer?.type === 'spline' && <div className="mx-3 mt-2 grid gap-2">
+                      <button type="button"
+                        onClick={() => dock.dispatchRestorePanel('splineModeling')}
+                        className="min-h-9 rounded border border-blue-600 px-3 py-2 text-left text-xs text-blue-200 transition-colors hover:bg-blue-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+                        Open Spline Modeling · Offset / Outline / Chamfer / Fillet
+                      </button>
+                      <button type="button"
+                        onClick={createMesh2DFromSpline}
+                        className="min-h-9 rounded border border-cyan-700 bg-cyan-950/20 px-3 py-2 text-left text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+                        Create Mesh2D from closed spline
+                      </button>
+                    </div>}
+                    {canCreateShapeBoundaryMesh2D(selectedLayer ?? undefined) && <div className="mx-3 mt-2 grid gap-2">
+                      <button type="button"
+                        onClick={createMesh2DFromShape}
+                        className="min-h-9 rounded border border-cyan-700 bg-cyan-950/20 px-3 py-2 text-left text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+                        Create Mesh2D from closed shape
+                      </button>
+                    </div>}
                     <PropertiesPanel
                       expressionFrame={frame}
                       expressionExternalTime={expressionAuthoringClock}
@@ -1986,6 +2052,25 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
                 ),
               },
               {
+                id: 'physicsSimulations', title: 'Physics',
+                render: () => (
+                  <PhysicsSimulationsPanel
+                    scene={scene}
+                    selectedLayerId={selectedLayerId}
+                    selectedTimelineId={selectedTlId}
+                    currentTimeMs={currentTimeMs}
+                    controller={physicsBake}
+                    onOpenParticles={() => dock.dispatchRestorePanel('particles')}
+                    viewportOverlay={physicsViewportOverlay}
+                    onViewportOverlayChange={setPhysicsViewportOverlay}
+                  />
+                ),
+              },
+              {
+                id: 'jobsBake', title: 'Jobs & Bake',
+                render: () => <JobsBakePanel controller={physicsBake} editor={editor} />,
+              },
+              {
                 // BL-76 — Authoring Script REPL (JS host + scene API facade).
                 id: 'scriptConsole', title: 'Script',
                 render: () => (
@@ -2109,6 +2194,23 @@ function BuilderWorkspace({ session }: { session: BrowserRecoverySession }) {
             else toast.success(base)
           }}
           onError={(message) => toast.error('Sequence export failed', { detail: message })}
+        />
+      )}
+
+      {showRenderSettings && (
+        <RenderSettingsDialog
+          scene={scene}
+          assets={assetCache}
+          currentTimeMs={currentTimeMs}
+          documentSignal={importDocument}
+          onClose={() => setShowRenderSettings(false)}
+          onCompleted={(completion, warnings) => {
+            const message = completion.backend === 'chorono'
+              ? `Opened ${completion.intent === 'still' ? 'current frame' : `${completion.frameCount}-frame video source`} in Chorono Render`
+              : `Rendered ${completion.filename ?? (completion.artifact === 'png' ? 'PNG' : 'PNG sequence')} with the built-in renderer`
+            toast.success(message, warnings.length ? { detail: warnings.join(' ') } : undefined)
+          }}
+          onError={(message) => toast.error('Render failed', { detail: message })}
         />
       )}
 

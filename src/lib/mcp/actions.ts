@@ -13,6 +13,7 @@ import { keyframeInputSchema } from '../animation/typedValueSchema'
 import { layerPatchSchema, particlePatchSchema } from './schema/registryPayloadSchemas'
 import { modifierSchema } from './schema/modifierSchema'
 import { trackPatchSchema } from './schema/trackPatchSchema'
+import { registerMesh2DMCPActions } from './actions/Mesh2DMCPActions'
 
 let ready: Promise<void> | undefined
 const str = { type: 'string', description: 'String value in the native model; use returned stable ids for references.' }
@@ -115,6 +116,7 @@ export function bootstrapMCPActions(): Promise<void> {
       if (!handle || handle.type !== 'particleEmitter') throw new Error('Particle emitter not found')
       handle.configureParticles(p.config)
     })
+    registerMesh2DMCPActions(actionRegistry)
     register('edit_entity', 'Add, shallow-update or remove an authored parameter, trigger, binding, wire or state machine by id. Add requires a unique id; update/remove require an existing id. value arrays/nested objects replace existing values and id stays fixed. Prefer the dedicated add_* tools for initial creation; control_runtime changes live values without changing authored defaults.', {
       collection: { type: 'string', enum: ['parameters', 'triggers', 'bindings', 'parameterWires', 'stateMachines'], description: 'Scene collection containing the record; read current records with get_scene.' },
       operation: { type: 'string', enum: ['add', 'update', 'remove'], description: 'add inserts a new record, update merges top-level fields, remove deletes it.' },

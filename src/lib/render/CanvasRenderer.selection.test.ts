@@ -7,12 +7,14 @@ import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { CanvasRenderer } from './CanvasRenderer'
 import { rendererRegistry } from '@/lib/registry'
 import { CanvasSurfacePool } from './resources/CanvasSurfacePool'
+import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 
 /** Records composition-space rectangles, including any active canvas transform. */
 function recordingCanvas() {
   let matrix = Matrix2D.identity()
   const rectangles: number[][] = []
   const fills: string[] = []
+  let strokes = 0
   const states: Array<{ matrix: Matrix2D; alpha: number; fill: string; stroke: string; dash: number[] }> = []
   const ctx = {
     globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
@@ -46,10 +48,11 @@ function recordingCanvas() {
     },
     setLineDash(dash: number[]) { this.dash = dash },
     clearRect() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
-    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, closePath() {}, stroke() {},
+    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, closePath() {}, stroke() { strokes++ },
     fill() { fills.push(this.fillStyle) },
   }
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, rectangles, fills, saveDepth:()=>states.length }
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, rectangles, fills,
+    strokeCount: () => strokes, saveDepth:()=>states.length }
 }
 
 function triangle(): Layer {
@@ -74,6 +77,26 @@ function render(layers: Layer[], selectedId: string, options = {}) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CanvasRenderer selection outlines', () => {
+  it('shows selected Mesh2D triangles only for the enabled editor diagnostic', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    const cleanEditor = render([layer], layer.id, { selectionOutline: false })
+    expect(cleanEditor.fills).toHaveLength(1)
+    expect(cleanEditor.strokeCount()).toBe(0)
+    const topologyEditor = render([layer], layer.id, {
+      selectionOutline: false,
+      editorOverlays: { meshTriangles: true },
+    })
+    expect(topologyEditor.fills).toHaveLength(1)
+    expect(topologyEditor.strokeCount()).toBe(1)
+    const preview = render([layer], layer.id, {
+      selectionOutline: false,
+      renderMode: 'preview',
+      editorOverlays: { meshTriangles: true },
+    })
+    expect(preview.fills).toHaveLength(1)
+    expect(preview.strokeCount()).toBe(0)
+  })
+
   it('unwinds parent canvas state after scratch admission fails, keeping the next frame correctly positioned', () => {
     const pool=new CanvasSurfacePool({maxBytes:0}), renderer=new CanvasRenderer(pool)
     const group={...newRectLayer(),type:'group' as const}

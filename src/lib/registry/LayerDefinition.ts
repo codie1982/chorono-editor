@@ -19,6 +19,7 @@ export type LayerCategory =
   | 'Basic Shapes'
   | 'Path & Vector'
   | 'Spline Objects'
+  | 'Mesh & Surface'
   | 'Text'
   | 'Media'
   | 'Effects'
@@ -47,6 +48,17 @@ export interface LayerDefinition<T extends Layer = Layer> {
    * Sections evaluate `showWhen` against the current layer instance.
    */
   getPropertyGroups(layer: T): PropertyGroup[]
+
+  /**
+   * Optional immutable property edit strategy for derived-data layers.
+   *
+   * SchemaPanel calls this instead of the generic dot-path writer when a field
+   * changes. Implementations may regenerate validated geometry or related
+   * source data and must return one complete layer snapshot for one undo step.
+   * Throwing rejects the edit; implementations must not mutate `layer` or keep
+   * browser/GPU resources. Ordinary layers omit the hook.
+   */
+  applyPropertyChange?(layer: T, path: string, value: unknown): T
 
   /** Opt-in: the paths, types and constraints returned by getPropertyGroups
    * are independent of the layer and stable for this definition's lifetime.

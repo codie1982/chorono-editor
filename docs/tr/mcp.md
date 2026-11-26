@@ -1,7 +1,7 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.1.0: varsayılan `standard` keşif kataloğu 41 ortak aracı yayımlar.
-Eski 77 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 58 odaklı aracı yayımlar.
+95 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
 Chorono MCP, STDIO üzerinden standart MCP konuşan yerel bir sunucudur. Claude Desktop, Claude Code ve Codex aynı editör bağlantısını kullanabilir. Ayrıca bir model API anahtarı gerekmez: model istemcide çalışır, MCP editörde araçları yürütür.
@@ -130,7 +130,7 @@ readToken veya bağlantı kimlik bilgilerini kaydetmez; araç yalnız okuma yapa
 Claude Code ve Codex için araç kullanım iş akışları ayrıca `skills/` altında dağıtılır. Skill kurulum CLI'si, yerel deneme ve npm paketleme için [skill rehberini](skills.md) okuyun. Skill kurulumu bu MCP bağlantısının yerine geçmez.
 
 Sunucu aynı ActionRegistry/domain komutlarını kullanır. Varsayılan STDIO
-`tools/list` yüzeyi sık kullanılan 41 aracı gösterir; uzman eylemler tekil şema
+`tools/list` yüzeyi sık kullanılan 58 aracı gösterir; uzman eylemler tekil şema
 keşfi ve `batch_actions` ile kullanılabilir. Bu ayrım katman/kompozisyon,
 keyframe/timeline, clone/array, spline/path, particle ve state-machine
 kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları kullanır:
@@ -139,11 +139,23 @@ kabiliyetlerini kaldırmaz. Yeni istemciler aşağıdaki tercih edilen adları k
 | --- | --- |
 | Keşif | `list_sessions`, `get_capabilities`, `get_handoff_context`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets`, `validate_scene` |
 | Nesneler | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition`, `import_asset` |
+| Mesh2D | `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` |
 | Animasyon | `create_timeline`, `update_timeline`, `upsert_keyframes` |
+| Bake / fizik | `prepare_rigid_body_bake`, `prepare_voronoi_fracture_bake`, `get_bake_job`, `preview_bake_job`, `cancel_bake_job`, `discard_bake_job`, `commit_bake_job`, `inspect_physics_bake`, `clear_physics_bake`; tek çağrılı uyumluluk için `bake_rigid_bodies`, `bake_voronoi_fracture` |
 | Script | `run_script`, `apply_script_plan`, `batch_actions` |
 | İzleme | `render_preview`, `evaluate_frame`, `control_playback`, `control_runtime`, `get_runtime`, `undo`, `redo` |
-| Dosyalar | `save_project`, `list_projects`, `load_project`, `export_runtime`, `export_svg`, `export_sequence` |
+| Dosyalar | `save_project`, `list_projects`, `load_project`, `export_runtime`, `export_svg`, `export_sequence`, `render_2d` |
 | Ses | `get_audio_state`, `render_audio_preview`, `export_audio` |
+
+`export_runtime`, editörün eski runtime yoluyla aynı canonical sahne-alanı
+derleyicisini kullanır. Composition, embedded görsel asset'ler, `hidden` dahil
+görsel layer'lar, timeline, parameter, trigger, binding, parameter wire,
+state-machine ve initial state korunur. Editör/source-only authoring verisi ile
+physics ownership/recipe atılır; committed physics bake solver olmadan normal
+timeline track'leri üzerinden oynar. Audio, destekleyen bir çağıran açıkça
+dahil etmedikçe ayrı profil/çıktıdır. Track optimizasyonu redundant key'leri
+kaldırabileceğinden kabul, key dizilerinin birebir eşitliğini değil
+değerlendirilmiş değer ve render karelerinin eşliğini karşılaştırır.
 
 ### Keşif ve uzman araçlar
 
@@ -162,7 +174,124 @@ Salt okuma, dosya ve playback/runtime taşıma araçları mutasyon batch'ine gir
 klibi düzenlemeleri bu uzman mutasyon yolunu kullanabilir; scriptte aynı domain
 işlemleri de vardır.
 
-`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 78 aracın
+Mesh2D araçları editördeki aynı kaynak dönüştürme ve authoring yardımcılarını
+kullanır. Shape/spline kaynağı ayrı ve düzenlenebilir kalır; texture placement,
+stable vertex pinleri ve binary deformation referansı UV/topolojiyi sessizce
+değiştirmez. Bu beş native araç `batch_actions` içinde de kullanılabilir.
+
+İncelenebilir uzun işlerde `prepare_rigid_body_bake` veya
+`prepare_voronoi_fracture_bake` kullanın. Prepare çağrısı güncel `get_scene`
+revision/token yetkisini tüketerek kaynağa bağlı, kalıcı bir `bakeJob.jobId`
+döndürür; sahne veya undo history değişmez. `get_bake_job` ile progress/status
+okunur, hazır sonuç `preview_bake_job` ile örneklenir. `cancel_bake_job`
+cooperative iptal ister; `discard_bake_job` kaydı ve yayımlanmamış dense
+buffer'ları bırakır. Yalnız `commit_bake_job`, hemen öncesindeki yeni
+`get_scene` okumasıyla yetkilendirilir ve tek undo transaction'ı yayınlar.
+Job kimliği onu oluşturan gerçek MCP bağlantısı ve editör sekmesine özeldir;
+başka bağlantı kullanamaz. MCP bağlantısı kapanırsa sahip olduğu işler iptal
+edilir. Aynı tabdaki **Jobs & Bake** paneli progress, stale/error, preview,
+Cancel, Apply ve Discard durumlarını kullanıcıya gösterir; panelden Apply insan
+komutu olarak normal editor history yolundan geçer.
+
+Re-bake öncesinde `inspect_physics_bake`, kaydın output durumunu `current`,
+`edited`, `incomplete` veya `legacy`; kaynak durumunu `current`, `changed` veya
+`unavailable` olarak raporlar. Fracture kayıtlarında ayrıca atomik
+source→fragment tick/zaman/body kimliklerini taşıyan `topologyEvent` ve kesin
+olay karesindeki görünür sınır–derlenmiş collider sayıları, maksimum/ortalama
+pixel farkı ile açık pass/warning/unavailable durumunu taşıyan
+`renderColliderQuality` döner. Statik çevre collider'ları bu farka katılmaz.
+Prepare çağrısına `replaceRecordId` verildiğinde
+eski bake sahneden silinmez; yalnız replacement preview hazırlanır. Commit
+varsayılan olarak hash uyuşmazlığını reddeder. Kullanıcı düzenlemelerini silme
+kararı açıkça verilmişse ilk `commit_bake_job` çağrısına `replaceEdited:true`
+verilir. `clear_physics_bake` de varsayılan olarak yalnız doğrulanmış çıktıyı
+siler; değiştirilmiş/legacy çıktı için `discardEdited:true` gerekir. Duplicate
+track target veya layer kimliğinde sahiplik belirsiz olduğundan zorla silme de
+reddedilir. Re-bake, Clear ve Undo her biri tek source transaction'ıdır.
+
+`clear_scene` normal oluşturma ön adımı değil, açık bir fresh-start
+mutasyonudur. Layer ve timeline'larla birlikte onlara bağlı physics, runtime ve
+authoring metadata'sını tek undo adımında temizler; composition ayarlarını,
+yeniden kullanılabilir asset/collection verisini ve editor guide'larını korur.
+Böylece yeni sahne, kaldırılmış nesnelere ait eski bir bake'i göstermez.
+
+`bake_rigid_bodies` ve `bake_voronoi_fracture` geriye uyumlu tek çağrılı
+hazırla+yayınla yollarıdır; ayrı insan incelemesi gereken işlerde persistent
+akış tercih edilir. Bütün fizik bake araçları batch içine alınmaz. Browser'da
+rigid/Voronoi solver dedicated Worker
+kullanır; Worker yoksa aynı deterministic fixed-step runner bounded inline
+fallback'tir. Worker progress/cancel/deadline ve transferable dense buffer
+sözleşmesine sahiptir. İlk rigid dilimi root, instance olmayan rectangle
+collider'larını destekler. Voronoi kaynağı tam opak solid kapalı shape/spline,
+sabit-topology `Mesh2D` veya kalıcı pozitif asset boyutları bulunan root image
+rectangle olabilir. Shape/spline sınırı canonical Mesh2D flatten ve contour
+doğrulamasını kullanır. Kaynak üçgenleri Voronoi hücreleriyle kesilir; yeni
+kenar vertex'lerinde authored UV enterpole edilir. Concave, delikli ve çok
+halkalı bölgeler bağlı component'lere ayrılır; her component ayrı Mesh2D
+fragment ve non-overlap convex parçalardan oluşan compound collider üretir.
+Deformation bağlı Mesh2D statik geometriye bake edilene kadar açık hatayla
+reddedilir. Convex solid kaynaklar kompakt path akışını korur; kompleks solid,
+image ve Mesh2D kaynaklar kaynak UV/texture yerleşimini koruyan bake-owned
+`Mesh2D` fragmentler üretir. Efekt, mask ve motion blur
+Preview öncesinde açık tanıyla reddedilir. Dense solver
+örnekleri scene JSON/history'ye yazılmaz.
+Voronoi `generationId` değeri 1–110 karakter uzunluğunda ASCII harf/rakam,
+alt çizgi veya tire olmalıdır; fragment ve seed sahne kimlikleri bu kökten
+üretilir. Kolon gibi başka ayraçlar portable layer kimliği değildir.
+
+Voronoi çağrısı `fractureTrigger.kind` ile `time` veya `impact` kullanır. `time`
+için `fractureTimeMs` iç fixed-step tick'e hizalanmalıdır. `impact` için pozitif
+`minimumRelativeNormalSpeedPxPerSecond` ve en az bir açık statik
+`colliderLayerIds` gerekir; iş ilk uygun temasın kesin tick/zaman, collider,
+temas noktası, normal ve ölçülen hızını reviewed recipe'ye yazar. Eşik
+sağlanmazsa job açık hatayla biter ve commit edilemez. İsteğe bağlı `explosion`;
+kaynak-yerel merkez, kompozisyon-uzayı yönü, radial/directional hız, spin,
+0–1 variation ve unsigned seed taşır. Bu değerler fragment etkinleşirken yalnız
+bir kez eklenen deterministik **artistic external energy**'dir; doğal temas
+kuvveti veya her kare uygulanan field değildir. Commit ve Re-bake, gerçekleşmiş
+impact kanıtını ve explosion ayarlarını recipe hash/provenance içinde korur.
+
+İsteğe bağlı `cluster` alanı FRACTURE2 bonded cluster'ı etkinleştirir ve
+`explosion` ile birlikte kullanılamaz. `defaults`; pozitif impulse strength,
+damage threshold, non-negative decay/relative-normal-speed scale, 0–1 seeded
+variation ve unsigned seed taşır. `overrides`, üretilen iki fragment kimliğini
+vererek otomatik bond'u özelleştirir/devre dışı bırakır veya açık manual bond
+ekler; `unbreakable` kalıcı authoring politikasıdır. Worker başlangıçta graph'ın
+intact connected component'ini tek compound body yapar. Her fixed tick'te aynı
+teması bir kez toplar, en yakın kırılabilir bond'a scalar load/damage uygular ve
+kopuşta sağlam graph component'lerini aynı tick'te yeniden kurar. Mass, centre
+of mass, linear momentum ve angular momentum tolerans dışında kalırsa job
+başarısız olur; gizli enerji eklenmez. `get_bake_job` raporu cluster/bond/break/
+split sayılarını, `inspect_physics_bake` ise `bondedCluster` altında graph
+materiali, manual/unbreakable sayıları ve portable break event sırasını döner.
+`cluster.forcedBreaks`, graph'taki bir `bondId` ile fixed-step'e hizalı local
+`timeMs` ve `timeline|user` kaynağı taşıyarak Unbreakable dahil açık kopuş
+authoring'i yapar. `cluster.damageResets` aynı zaman sözleşmesiyle tek bond'un
+veya `bondId` verilmeden bütün graph'ın birikmiş hasarını o tick'in temas
+yükünden önce sıfırlar. Impact topology daha geç etkinleşirse süresi geçmiş
+action ilk etkin cluster tick'inde uygulanır. Job raporu authored forced/reset
+sayılarını; `bondedCluster` ise canonical schedule'ları ve gerçekleşen forced
+break kanıtını da döndürür. Product UI'daki Break at playhead ve Reset Damage
+bu MCP alanlarıyla aynı recipe/hash yolunu kullanır.
+
+İsteğe bağlı `secondary` alanı FRACTURE3'ün ilk recursive dilimini açar.
+`parentFragmentIndex` kök neslin sıfır tabanlı parçasını, `fractureTimeMs` kök
+olaydan sonraki fixed-step child olayını, `fragmentCount`/`seed` ise çocuk
+Voronoi topolojisini tanımlar. `generationId` verilmezse kararlı bir `g1-pN`
+kimliği üretilir. İlk dilim yalnız convex kök + time trigger destekler; impact
+ve bonded root cluster ile birleşmez. `budgets.maxDepth`, `maxGenerations`,
+`maxFragments`, `maxTriangles`, `maxPortableBytes` realized iki manifest
+üzerinden Worker başlamadan uygulanır. Preview `events` ile iki topology
+olayını verir; commit sonrasında `inspect_physics_bake.topologyEvents` ve
+`recursiveHierarchy` lineage, used/limit ve hash kanıtını döndürür. Clear ve
+Re-bake iki generation'ı ve bütün child katmanlarını atomik sahiplenir.
+
+`render_2d` source mutation değildir. `backend:auto`, çalışan Chorono Render'ı
+önceler; still için PNG, video için MP4 bitirme akışına frame ZIP'i aktarır.
+Servis yoksa built-in renderer still PNG veya video PNG-sequence ZIP'i üretir.
+`backend:chorono` açık seçilirse sessiz fallback yerine bağlantı hatası verir.
+
+`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 95 aracın
 uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
 Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
 `catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
@@ -199,7 +328,7 @@ Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
 
 Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
 `CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
-`legacy`, iyileştirilmiş açıklama/şemalarla eski 77 adı yayımlar; `standard`
+`legacy`, iyileştirilmiş açıklama/şemalarla 95 adı yayımlar; `standard`
 varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
 değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
 bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.

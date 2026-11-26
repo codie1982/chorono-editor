@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0] — release candidate
+
+- Create Mesh2D layers from grids, closed shapes and splines. Edit texture
+  placement and pins, and play baked mesh deformation from portable projects.
+- Review track, rigid-body and fracture bakes in Jobs & Bake. Apply a job in
+  one Undo step, and use ownership checks when replacing or clearing its output.
+- Bake deterministic Voronoi fracture for shapes, splines and textured meshes,
+  including complex regions, breakable bonds and recursive secondary events.
+- Render PNG or a PNG sequence with the built-in renderer. A running local
+  Chorono Render service can receive the sequence for MP4 finishing.
+
+[Release notes](docs/releases/v0.5.0.md) · [Türkçe](docs/tr/releases/v0.5.0.md) · [Validation and limitations](docs/releases/v0.5.0-validation.md)
+
 ## [0.4.0] — 2026-11-17
 
 Added editable spline modeling and restored 2D precision workflows.

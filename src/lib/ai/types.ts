@@ -79,6 +79,8 @@ export interface AIToolProperty {
   enum?: string[]
   minimum?: number
   maximum?: number
+  exclusiveMinimum?: number
+  exclusiveMaximum?: number
   items?: AIToolProperty
   properties?: Record<string, AIToolProperty>
   required?: string[]
@@ -86,6 +88,7 @@ export interface AIToolProperty {
   anyOf?: readonly AIToolProperty[]
   minItems?: number
   maxItems?: number
+  uniqueItems?: boolean
   additionalProperties?: boolean | AIToolProperty
 }
 

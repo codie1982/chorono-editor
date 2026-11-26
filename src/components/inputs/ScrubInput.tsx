@@ -9,6 +9,9 @@ import { numericPropertyConstraints } from '@/lib/expression/properties/NumericP
 interface Props {
   value:     number
   onChange:  (v: number) => void
+  /** Called when a typed draft parses within bounds even if it equals the
+   * controlled value and therefore does not dispatch `onChange`. */
+  onValidDraft?: () => void
   min?:      number
   max?:      number
   step?:     number
@@ -49,7 +52,7 @@ interface Props {
  * Hold SHIFT while dragging for 10× sensitivity; ALT for 0.1× (fine adjust).
  */
 export default function ScrubInput({
-  value, onChange, min, max, step = 1,
+  value, onChange, onValidDraft, min, max, step = 1,
   sensitivity, className = '',
   placeholder, disableScrub, disabled, title, propertyPath, fieldLabel,
 }: Props) {
@@ -95,6 +98,7 @@ export default function ScrubInput({
     dirtyRef.current = false
     const result = inspectNumericLiteral(text, { min, max }), current = latest.current
     setError(result.error ?? '')
+    if (!result.error) onValidDraft?.()
     if (result.value !== null && result.value !== current.value) current.onChange(result.value)
     else if (!result.error) setText(String(current.value))
   }

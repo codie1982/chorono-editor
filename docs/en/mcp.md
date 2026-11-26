@@ -1,7 +1,7 @@
 # Chorono MCP catalog and compatibility
 
 Chorono MCP 2.1.0 controls the connected editor through STDIO. The default
-`standard` catalog exposes 41 common tools. All 78 tool names remain
+`standard` catalog exposes 58 focused tools. All 95 tool names remain
 callable with their existing domain payload and default semantics. Source mutations now require the authorization envelope described below. Tool
 discovery and call resolution are separate; this update does not replace the
 editor's native commands or undo system.
@@ -59,7 +59,7 @@ the agent following the copied request.
    cannot be nested in a mutation batch.
 
 The original `get_capabilities({})` response still returns the full property
-schemas, scripting reference and `tools` compatibility inventory of 78
+schemas, scripting reference and `tools` compatibility inventory of 95
 names. Its `tools` array is not the current client's direct discovery surface.
 Read `catalog: {version:1,profile,advertisedToolNames,aliases}` for that surface;
 each alias is `{name,implementationName}`. `chorono://capabilities` remains the
@@ -73,10 +73,75 @@ original full discovery call.
 | Read source and inspect records | `get_handoff_context`, `get_scene`, `list_layers`, `get_layer`, `list_timelines`, `get_timeline`, `list_assets` |
 | Create or edit ordinary layers | `create_layer`, `update_layer`, `delete_layer`, `clone_layer`, `array_layer`, `group_layers`, `ungroup_layer`, `update_composition` |
 | Create/edit animation | `create_timeline`, `update_timeline`, `upsert_keyframes` |
+| Build/edit Mesh2D | `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`, `set_mesh2d_pins`, `set_mesh2d_deformation` |
+| Review and publish physics bakes | `prepare_rigid_body_bake`, `prepare_voronoi_fracture_bake`, `get_bake_job`, `preview_bake_job`, `cancel_bake_job`, `discard_bake_job`, `commit_bake_job`, `inspect_physics_bake`, `clear_physics_bake` |
 | Procedural work or native batches | `run_script`, `apply_script_plan`, `batch_actions` |
 | Verify pixels/values/runtime | `render_preview`, `evaluate_frame`, `get_runtime`, `control_playback`, `control_runtime` |
 | Check/save/reopen | `validate_scene`, `save_project`, `load_project`, `list_projects`, `undo`, `redo` |
 | Media and output | `import_asset`, `export_runtime`, `export_svg`, `export_sequence`, `export_audio`, `render_audio_preview`, `get_audio_state` |
+
+`export_runtime` uses the same canonical runtime scene-field compiler as the
+editor's legacy runtime path. It preserves composition, embedded visual assets,
+visual layers including `hidden`, timelines, parameters, triggers, bindings,
+parameter wires, state machines and initial state. It omits editor/source-only
+authoring data and physics ownership/recipes; a committed physics bake plays
+without a solver through its ordinary timeline tracks. Audio remains a separate
+profile/output unless explicitly included by a supporting caller. Track
+optimization may remove redundant keys, so acceptance compares evaluated
+values and rendered frames rather than requiring identical key arrays.
+
+For a reviewable physics bake, prepare with a fresh `get_scene` revision/token,
+poll `get_bake_job`, sample the ready cache with `preview_bake_job`, then either
+cancel/discard it or read the scene again and call `commit_bake_job`. Prepare and
+preview do not edit source; commit publishes one undoable edit. Job ids are
+private to the creating MCP connection and paired editor session. The older
+`bake_rigid_bodies` and `bake_voronoi_fracture` calls retain their one-request
+prepare-and-publish behavior for compatibility.
+
+The current Voronoi source adapter accepts a fully opaque root solid convex
+shape, a single closed convex spline, a convex fixed-topology `Mesh2D`, or an
+image rectangle with positive persisted asset dimensions. Shape/spline
+boundaries reuse the canonical Mesh2D flattening and contour validator, then
+require one hole-free convex ring. Solid sources publish path fragments. Image
+sources publish bake-owned `Mesh2D` fragments whose normalized UVs address the
+complete source rectangle and keep the source texture/fit semantics. Mesh2D
+sources clip their validated source triangles and interpolate authored UVs
+into fixed-topology fragment meshes. Concave, holed, multi-ring and
+deformation-bound Mesh2D sources, enabled effects, masks and motion blur are
+rejected before Preview rather than being silently approximated or dropped.
+
+Choose `fractureTrigger.kind` as `time` or `impact`. A timed trigger requires
+`fractureTimeMs` on an interior fixed-step tick. Impact requires a positive
+`minimumRelativeNormalSpeedPxPerSecond` and at least one explicit static
+`colliderLayerIds` entry. The job realizes the first qualifying contact into
+the reviewed recipe with exact tick/time, collider, point, normal and measured
+relative-normal speed; if none occurs, the job fails and cannot be committed.
+Optional `explosion` stores a source-local centre, composition-space direction,
+radial/directional velocity, spin, 0–1 variation and unsigned seed. It is
+deterministic one-shot **artistic external energy** added when fragments
+activate, not natural contact force or a per-frame field. Commit and Re-bake
+retain realized impact evidence and explosion settings in recipe provenance.
+
+Before Re-bake or Clear, call `inspect_physics_bake`. It reports output as
+`current`, `edited`, `incomplete` or `legacy`, and source as `current`,
+`changed` or `unavailable`. Fracture records additionally return
+`topologyEvent` with the atomic source-to-fragment tick/time/body identities and
+`renderColliderQuality` with exact-event visible-boundary versus compiled
+collider counts, maximum/mean pixel delta and explicit pass/warning/unavailable
+status. Static environment colliders are excluded from the delta. Pass
+`replaceRecordId` to a prepare call to build a
+replacement preview without removing the committed bake. Commit refuses hash
+conflicts by default; pass `replaceEdited:true` on the first
+`commit_bake_job` call only after an explicit destructive Replace choice.
+`clear_physics_bake` similarly needs `discardEdited:true` for changed/legacy
+output. Duplicate targets or layer ids remain blocked because ownership is
+ambiguous. Re-bake and Clear each publish one undoable source edit.
+
+`clear_scene` is an explicit fresh-start mutation, not a routine creation
+prelude. It removes layers, timelines and their dependent physics, runtime and
+authoring metadata in one undoable edit while preserving composition settings,
+reusable assets/collections and editor guides. This prevents a newly authored
+scene from exposing a stale bake that belongs to removed objects.
 
 Native spline, particle, state-machine, advanced track and audio clip edits are
 available through single-tool discovery and mutation batches, or directly in
@@ -121,7 +186,7 @@ does not contain every field needed to preserve such data.
 
 Set `CHORONO_MCP_TOOL_PROFILE=legacy` in the **STDIO MCP server process**
 environment when a client needs all original tools directly advertised. The
-legacy catalog lists exactly the original 77 names with corrected descriptions
+legacy catalog lists 95 callable names with corrected descriptions
 and schemas. The default is `standard`; unknown profile values fail at startup.
 Changing the browser/Next environment alone does not select the client's STDIO
 catalog. Reload or reconnect the MCP client after changing the build or profile;
