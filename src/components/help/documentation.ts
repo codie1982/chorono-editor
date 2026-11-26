@@ -107,6 +107,7 @@ export const resourceHelpTopics = {
 /** Property tabs have dedicated guides; the general tab remains an overview. */
 export const propertyHelpTopics = {
   properties: 'editor/properties',
+  links: 'editor/properties/transform',
   effects: 'editor/properties/effects',
   motion: 'editor/properties/motion',
   interact: 'editor/properties/interact',
