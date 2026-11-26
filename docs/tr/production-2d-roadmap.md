@@ -13,13 +13,21 @@ için **v0.6.0'a taşındı**. v0.6.0 kapsamı masaüstü editör dönüşümü,
 uygulama paketine gömülü Chorono Render ve Öncelik 10–12'dir; ayrıntılar
 [v0.6.0 ana planında](plans/v0.6.0-master-plan.md)
 tutulur. FRACTURE4/5, emitter/particle, Fabric, Blob/liquid, smoke/fire ve
-Character Motion [v0.10.0 ileri 2D planına](plans/v0.10.0-advanced-2d-plan.md)
+ileri karakter animasyonu [v0.10.0 ileri 2D planına](plans/v0.10.0-advanced-2d-plan.md)
 taşındı. v0.7.0–v0.9.0 arasındaki düzenlemeler henüz kararlaştırılmadı. 2D içinde kullanılan 3D katman, 3D kamera ve
 3D compositing teslimleri [ayrı 3D ana planındadır](production-3d-roadmap.md).
 Bu ayrım daha önce onaylanan **planlar arası** uygulama önceliğini tek başına
 değiştirmez; [eski birleşik sıra](plans/geometry-material-boxed3d-sequence.md)
 o kararın tarihsel kaydıdır. §12'deki eski sıra ifadeleri de teslim gününün
 kaydıdır; güncel kapsam ve durum için bu giriş ile §1 esas alınır.
+
+25 Kasım 2026 güncellemesi. Normal 2D katmanlarda rijit pivot bağlantısı ve iki parçalı IK, Properties → Link & IK üzerinden kullanılabilir. Sprite klipleri ve State Machine entegrasyonu ileri fazda değerlendirilecektir. [Karakter parçaları için kurulum ve kapsam](character-motion-plan.md) · [IK geliştirme ve kabul planı](plans/ik2d-etkilesim-ve-cozum-plani.md)
+
+**26 Kasım 2026 · Link & IK MCP teslimi tamamlandı.** Pivot bağlama ve ayırma, iki parçalı IK kurulumu ve kaldırma, bükülme, eklem limitleri ve kare tanıları standart katalogda. Bağlı editörde panel ve MCP aynı uç konumunu verdi. İki anahtar arasında pozu koruyarak ayırmada tek Undo bağlantıyı, IK’yi ve özgün anahtarları geri getirdi. [Araçlar ve kabul sonuçları](plans/ik2d-etkilesim-ve-cozum-plani.md#mcp-teslimi)
+
+**IK/FK ağırlığı ve poz eşleme.** Üst parçanın Link & IK sekmesinde ağırlık ve iki yönlü Match kullanılabilir. Geçiş o karede omzu, dirseği, ucu ve parçaların dönüşünü korur. [Kullanım ve anahtarlama](plans/ik2d-etkilesim-ve-cozum-plani.md#ikfk-ağırlığı-ve-poz-eşleme)
+
+**26 Kasım 2026 · MCP ve Script API kapsamı.** Link & IK kurulum, ağırlık ve poz eşleme komutları ile Mesh2D dönüşüm, topoloji, görünüm ve modifier stack işlemleri ortak editör komutlarını kullanır. Spline nokta/kenar araçları mevcut `layer.spline.edit` girişinde kalır. [Kapsam, kullanım örnekleri ve açık işler](script-2d-coverage-audit.md#26-kasım-2026-ek-kontrol)
 
 24 Kasım 2026 Spline durum kaydı: Point/Edge/Object native araçları, görünüm,
 akıllı dönüşüm ve Boolean akışı, sekiz temel statik modifier ve kaynak çizgiyi
@@ -568,30 +576,9 @@ arası eski sıra [3D planında](production-3d-roadmap.md) korunur.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
-Character Motion; Character Motion dock'u ile sağdaki Char Detail inspector'ını
-birlikte teslim eder. MVP'de Setup rest pose/rig/attachment, Animate klip ve key
-akışını yönetir. Sonraki Test bağlamı state/parametre/olay akışını açar. Char Detail seçili character, bone,
-attachment, IK constraint/target, sprite ve clip özelliklerini; doğrulama,
-sayısal düzenleme ve bake eylemlerini gösterir. İlk IK iki kemikli analitik
-çözümdür; uzun zincir FABRIK/CCD aktif 2D programda yoktur. Genel per-character text
-animator eski backlog'da ayrı iştir. Caption planı zamanlı konuşma/kelime
-akışını kapsar; aynı text layout/renderer altyapısı paylaşılır.
+**25 Kasım 2026 — karakter parçaları için katman bağlantıları.** Aynı grup içindeki görsel katmanlar Properties → Link & IK üzerinden pivotlarıyla bağlanır. Üst parça, ona bağlı alt parça ve uçtaki hedef iki parçalı IK zincirini oluşturur. Hedef normal bir katmandır ve timeline üzerinden animasyonlanabilir. Seçili zincirde viewport hedefi ve gerçek bileği ayrı işaretler. Link & IK, erişim sınırı aşılırsa aradaki mesafeyi kompozisyon pikseliyle gösterir. Prefer this pose, eşit uzunluktaki kol omuza katlandığında kullanılacak omuz yönünü kaydeder. Omuz ve dirsek bağımsız açı aralıklarına ve kilitlere sahiptir. Viewport yerel limit yaylarını, panel sınırlandığında etkin eklemi gösterir. Kurulum, erişim sınırları, Undo ve kaynak dosyaları [2D pivot bağlantıları ve IK](character-motion-plan.md) belgesindedir.
 
-Character Motion yeniden açılırsa öneri sırası: **ürün kapısı: manuel Active
-Clip + minimum State Machine clip action + runtime saat/geçiş sınırı → ortak
-Character/clip sözleşmesi → Sprite Character → rig/FK → iki kemikli IK → basic
-parity**. Bu sıra şu anda aktif uygulama emri değildir. Sprite Character, rig ve
-IK'yi beklemez; mevcut sprite-sheet/GIF
-importu ile `frameSequence` renderer'ını gerçek ilk tüketici olarak kullanır.
-`Add → Character → Sprite Character`, import sırasında açık `Create as
-Character` seçimi veya mevcut frame-sequence için `Wrap as Character` tek undo
-transaction'ıyla root, Primary visual slot, Default clip ve timeline üretir.
-Normal sprite importu kendiliğinden Character'a dönüşmez. Klip kareleri mevcut
-timeline'da hold/discrete `frameSequence.frameIndex` track'iyle kontrol edilir;
-ayrı gizli sprite player oluşturulmaz. Minimum clip-selection köprüsünün MVP'ye
-girip girmeyeceği yeniden ürün kararının zorunlu konusudur; gelişmiş State
-Machine otomasyonu, hybrid sprite slot ve kapsamlı character bake daha sonraki
-bağımsız genişlemelerdir. Character işleri Mesh2D başlangıcını bloke etmez.
+Sprite klip seçimi ve State Machine geçişleri ayrı bir gelecek kararıdır. Özel Character oluşturucu, Char Detail ve ayrı Setup/Animate çalışma alanı önceki tasarım arşivindedir.
 
 Import, portable kayıt, interactive runtime ve fixed render farklı
 capability'lerdir. Character, Mesh2D ve simulation türleri kendi dikey
@@ -639,7 +626,7 @@ Mevcut inspector/spreadsheet, keyframe time/value/easing komutları, curve edito
 | Bileşen ve format | Instance'a özel metin, renk, görsel, boyut, crop, yerleşim; orana özel offset, satır kırımı ve safe area | Kaynak tanım ve diğer oranlar etkilenmez. Değeri varsayılana döndür ve instance override'ını kaldır ayrı eylemlerdir. |
 | Veriden üretim | Hücre/mapping hatasını, seçili satırın kontrolünü ve çıktısını düzeltme | Dataset/mapping değişimi ile yalnız o çıktı için satır override'ı ayrıdır; başka satırın sonucuna yazmaz. |
 | Ses ve altyazı | Analiz range/smoothing, hatalı beat marker'ı, cue/kelime zamanları, metin ve satır kırımı | Otomatik analiz yenilenince elle düzeltilen zaman/marker'lar korunur veya açık sürüm çakışması olarak gösterilir. |
-| Karakter ve sprite | Rest pose/attachment, IK hedefi ve ağırlığı, dirsek yönü, sprite pivot/kare sırası/klip zamanları | Setup ve Animate ayrıdır. Aktif IK'nin sürdüğü kemiğe gizli FK düzeltmesi yazılmaz; hedef veya IK ağırlığı üzerinden düzenlenir. |
+| Karakter parçaları ve sprite | Katman pivotu, bağlı alt parça, hedef konumu ve dirsek yönü. Sprite klipleri ileri fazdadır. | Hedef konumu viewport, sayısal alan veya timeline üzerinden düzenlenir. Dirsek yönü Properties → Link & IK bölümünde değiştirilir. |
 | Mesh2D ve kumaş kaynağı | Kaynak spline/shape noktaları, grid/triangulation çözünürlüğü, UV fit ve pin vertex/grupları | Genel Poly modelleme yapılmaz. Kaynak veya üretim ayarı değişince topology hash değişir ve bağımlı constraint/cache/bake stale olur. |
 | Blob Surface | “+” etki noktası ekle, taşı, radius/weight/threshold ayarla; merge grubu ve ayrılan bölgeleri incele | Aynı grupta birleşme/ayrılma görsel alan hesabıdır. Sıvı cache'inin yüzey görünümünü düzenlemek particle fiziğini yeniden çözmez. |
 | Rigid/fracture | Collider noktası, kütle/sekme, başlangıç hızları; Voronoi seed noktaları, parça sayısı ve kırılma anı | Collider ve parça geçerliliği yeniden doğrulanır. Geometri/kırılma değişirse bağımlı bake eski olur. |
@@ -687,7 +674,7 @@ Kabul senaryoları: AI ürettiği kartın tek hareketini düzeltip koruma; iki i
 
 ## 7A. 2D UI sözleşmeleri ve görünüm planı
 
-Yeni Mesh2D, Character Motion/Char Detail, physics, fabric, fluid, component,
+Yeni Mesh2D, katman bağlantıları, physics, fabric, fluid, component,
 Jobs & Bake ve Render Preview arayüzlerinin yerleşimi ve ortak davranışı
 [2D UI sözleşmesinde](production-2d-ui-contracts.md) tanımlıdır. Görsel dil
 mevcut koyu, dock edilebilir Chorono editörünü korur; yeni özellikler ayrı bir
@@ -695,8 +682,7 @@ uygulama kabuğu veya birbiriyle uyumsuz modal akışlar kurmaz.
 
 Ana görünüm; sol Scene Explorer/Layers, orta canvas ve araç overlay'i, sağ
 bağlama duyarlı Detail inspector, altta Timeline/Dope Sheet/Curve Editor ve
-üstte kısa global/job durumundan oluşur. Character Motion `Setup / Animate /
-Test`, simülasyonlar `Edit Source / Preview / Inspect Bake`, çıktı ise
+üstte kısa global/job durumundan oluşur. Katman bağlantıları Properties içinde düzenlenir. Simülasyonlar `Edit Source / Preview / Inspect Bake`, çıktı ise
 `Viewport / Final / A-B` bağlamlarını açıkça gösterir. Her feature'ın normal,
 empty, loading, invalid, stale, failed ve completed görünümü planlanır.
 

@@ -1,7 +1,7 @@
 # Chorono MCP catalog and compatibility
 
 Chorono MCP 2.1.0 controls the connected editor through STDIO. The default
-`standard` catalog exposes 65 focused tools. All 102 tool names remain
+`standard` catalog exposes 79 focused tools. All 116 tool names remain
 callable with their existing domain payload and default semantics. Source mutations now require the authorization envelope described below. Tool
 discovery and call resolution are separate; this update does not replace the
 editor's native commands or undo system.
@@ -59,7 +59,7 @@ the agent following the copied request.
    cannot be nested in a mutation batch.
 
 The original `get_capabilities({})` response still returns the full property
-schemas, scripting reference and `tools` compatibility inventory of 102
+schemas, scripting reference and `tools` compatibility inventory of 116
 names. Its `tools` array is not the current client's direct discovery surface.
 Read `catalog: {version:1,profile,advertisedToolNames,aliases}` for that surface;
 each alias is `{name,implementationName}`. `chorono://capabilities` remains the
@@ -203,7 +203,7 @@ does not contain every field needed to preserve such data.
 
 Set `CHORONO_MCP_TOOL_PROFILE=legacy` in the **STDIO MCP server process**
 environment when a client needs all original tools directly advertised. The
-legacy catalog lists 102 callable names with corrected descriptions
+legacy catalog lists 116 callable names with corrected descriptions
 and schemas. The default is `standard`; unknown profile values fail at startup.
 Changing the browser/Next environment alone does not select the client's STDIO
 catalog. Reload or reconnect the MCP client after changing the build or profile;
@@ -301,3 +301,16 @@ with 2.0.0. [Maintainer contract and bounds](../../src/lib/editor/authoring/READ
 3D0–3D6 native detail tools use model source v3. Node/clip structural authoring remains a native UI workflow; MCP import/static presentation edits and prepared preview/portable output keep their existing revision/token contracts. See [model detail implementation](../tr/model-detail-3d-packages.md).
 
 Native spline plans reuse editor command/solver guards, return actual draft PNGs and commit once using the returned plan-bound token. They are not batchable. See the [spline contract](../tr/mcp-spline-editing.md) and [script compatibility audit](../tr/script-api-compatibility-audit.md).
+
+## 2D pivot links and two-bone IK
+
+Pause at the desired frame and read `get_scene` before each edit. These standalone tools use the same displayed frame and timeline authoring clock as Properties → Link & IK. Each edit requires a fresh revision/token pair and creates one Undo entry.
+
+1. Link the lower segment to the upper with `link_layer_pivots_2d(layerId, driverLayerId)`. Place a separate sibling target at the tip and call `bind_two_bone_ik_2d(upperLayerId, lowerLayerId, targetLayerId)`. Animate target position with `upsert_keyframes`.
+2. Use `set_ik2d_joint_limits` on shoulder or elbow. Supply enabled, minDeg, maxDeg and optional lockedDeg, or pass a null limit to reset. Use `set_ik2d_bend` to flip, preferPose or clearPreference.
+3. Read `get_ik2d_diagnostics` for the live frame or supply timeMs to sample authored inputs. Optional timelineId isolates one timeline at local authoring time. Specify upperLayerId to inspect a single chain. The tip-to-target distances are in shared-parent and composition pixels. Inactive chains include a reason.
+4. `remove_two_bone_ik_2d` leaves the pivot link in place. `unlink_layer_pivots_2d` accepts restoreSource or keepPose. The latter preserves position and angle at this frame and keys already animated channels on the active timeline. Undo restores the pivot link, dependent IK and original keys together.
+
+Use `set_ik2d_weight` with upperLayerId and weight in 0–1 to blend, or `match_ik2d_pose` with upperLayerId and to set to fk or ik to preserve the displayed pose. Both accept optional autoKey, defaulting to the editor setting. Each write needs its own current revision and readToken.
+
+Geometry actions available directly and in batches include `convert_layer_to_spline`, `resolve_spline_boolean`, `transform_mesh2d_vertices`, `edit_mesh2d_topology` and `edit_2d_modifier_stack`. Inspect the stack tool with get_capabilities for its modifier descriptors. Scripts use the same action names with `layer.geometry2d`. [Script API](scripting.md)

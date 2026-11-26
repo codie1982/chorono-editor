@@ -126,3 +126,21 @@ Yukarıdaki waveform `160 + 12*sin(2*tSec)` üretir; frekans Hz, phase radyandı
 `timeline.bake(target,60,0.005,{startMs:0,endMs:1000})` ve native `bake_track` optional `startMs`/`endMs` timeline-local ms kullanır; bounds atlanırsa tam timeline seçilir. FPS pozitif ve en fazla 240, örnek sayısı en fazla 20.000, tolerance 0..1 örneklerde normalize dikey sadeleştirme hatasıdır. Pencere dışı eski key'ler ve ilgisiz metadata korunur; controller/OOR/modifier/time remapping global olarak kaldırılır. Dışarıda kalan key'ler/constant uçlar çalışır. Örnekleme hatası FPS'e bağlıdır; tolerance sürekli matematiksel eşlik garantisi değildir. Geçersiz/non-finite/stale kaynak reddedilir; Cancel source değiştirmez.
 
 Wire önizlemesi ve runtime aynı güvenli parser/evaluator'ı kullanır. `source`/`s` o anki pre-wire evaluated input'tur; örtük zaman/çarpma yoktur. `2+3`, scientific notation ve açık çarpma çalışır; `^` sağdan birleşir ve unary işaretten önceliklidir (`-2^2=-4`, `(-2)^2=4`). Yanlış argüman sayısı, bilinmeyen isim, non-finite/domain hatası ve çevrim açıklanır; hedefin pre-wire değeri korunur. Wires aynı input frame'i okur; iterative feedback yapmaz. Katman kaynakları numeric scalar, scene parametreleri legacy boolean/numeric-string dönüşümü kullanır. Sınırlar 4096 karakter, 1024 token/node ve 64 nesting seviyesidir. Serbest zaman expression controller'ı ayrı özelliktir.
+
+## 2D geometri ve Link & IK
+
+`layer.geometry2d(toolName, options?)` aynı adlı MCP komutunun seçeneklerini alır. Katman kimliğini receiver sağlar. Dönüş değeri etkilenen katman kimliğidir. `create_mesh2d_from_source` bağımsız bir katman üretip onun kimliğini döndürür. Örneğin `layer.geometry2d('convert_layer_to_mesh2d')` aynı katmanı dönüştürür. Ardından `layer.geometry2d('edit_2d_modifier_stack',{operation:{kind:'add',type:'meshSmooth'}})` Smooth ekler. Satır kimliği `layer.data.modifierStack.modifiers` üzerinden okunur.
+
+`layer.rig2d(action, {timelineId?, timeMs?, autoKey?})` geçerli script taslağını örnekler. Varsayılan zaman 0 ms, timeline scriptin seçtiği veya ilk timeline, Auto Key kapalıdır. Yazma sonucu `null`, tanı sonucu ilgili zincirin çözülen kaydıdır. Var olan ağırlık anahtarları Manual modunda da güncellenir. `setWeight` 0–1 aralığında harmanlar. `matchFK` ve `matchIK` poz koruyarak geçiş yapar.
+
+```javascript
+const upper = scene.get('upper'), lower = scene.get('lower');
+lower.rig2d({kind:'link', driverId:upper.id});
+upper.rig2d({kind:'ik', lowerId:lower.id, targetId:'target'});
+const frame = {timelineId:'walk', timeMs:600, autoKey:true};
+upper.rig2d({kind:'setWeight', weight:0.4}, frame);
+upper.rig2d({kind:'matchFK'}, frame);
+scene.log(JSON.stringify(upper.rig2d({kind:'diagnostics'}, frame)));
+```
+
+Örnek üç bağımsız kardeş katman, ayrı pivot konumları ve mevcut bir `walk` timeline’ı kullanır. `unlinkKeepPose` takipçi katmana uygulanır. Ağırlık kanalı `twoBoneIK2d.weight` olarak anahtarlanır. Tam işlem listeleri `get_capabilities({summary:true}).scriptAuthoring` altında bulunur.

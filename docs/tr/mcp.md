@@ -1,7 +1,7 @@
 # Claude ve Codex için Chorono MCP
 
-MCP 2.1.0: varsayılan `standard` keşif kataloğu 65 odaklı aracı yayımlar.
-102 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
+MCP 2.1.0: varsayılan `standard` keşif kataloğu 79 odaklı aracı yayımlar.
+116 araç adı çağrılabilir kalır; domain payload/çıktı davranışları korunur. Source mutasyonları artık aşağıdaki zorunlu okuma alanlarını taşır.
 Güncel adlar, keşif ve geçiş aşağıdadır. [English catalog guide](../en/mcp.md).
 
 Chorono MCP, STDIO üzerinden standart MCP konuşan yerel bir sunucudur. Claude Desktop, Claude Code ve Codex aynı editör bağlantısını kullanabilir. Ayrıca bir model API anahtarı gerekmez: model istemcide çalışır, MCP editörde araçları yürütür.
@@ -321,7 +321,7 @@ Re-bake iki generation'ı ve bütün child katmanlarını atomik sahiplenir.
 Servis yoksa built-in renderer still PNG veya video PNG-sequence ZIP'i üretir.
 `backend:chorono` açık seçilirse sessiz fallback yerine bağlantı hatası verir.
 
-`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 102 aracın
+`get_capabilities({})` eski kapsamlı yanıtı korur: `tools` 116 aracın
 uyum envanteridir; bütün katman property şemaları ve script API'si de döner.
 Bu listeyi istemcinin güncel doğrudan tool listesi sanmayın. Katalog bilgisi
 `catalog: {version:1,profile,advertisedToolNames,aliases}` alanındadır;
@@ -358,7 +358,7 @@ Efekt, maske, particle veya spline verisini koruyarak değiştirmeden önce tam
 
 Doğrudan eski araç listesini bekleyen istemcide STDIO sunucusunun ortamına
 `CHORONO_MCP_TOOL_PROFILE=legacy` verin ve MCP bağlantısını yeniden yükleyin.
-`legacy`, iyileştirilmiş açıklama/şemalarla 102 adı yayımlar; `standard`
+`legacy`, iyileştirilmiş açıklama/şemalarla 116 adı yayımlar; `standard`
 varsayılandır. Geçersiz profil başlangıç hatasıdır. Tarayıcı/Next ortamını
 değiştirmek tek başına STDIO istemci kataloğunu değiştirmez. Daha önce açık
 bağlantılar yeni build/profili görmek için yeniden bağlanmalıdır.
@@ -509,3 +509,21 @@ istenmeyen değişiklik izni değildir. Genel key upsert semantiği değişmedi.
 ## Spline düzenleme ve script eşliği
 
 `prepare_spline_edit` → önizleme inceleme → `apply_spline_edit` / `discard_spline_edit` akışı Point/Edge/Object, çizerek birleştirme, Offset, Chamfer, Fillet ve Boolean işlemlerini kapsar. Hazırlama kaynak okuma yetkisi ister; uygulama hazırlamanın döndürdüğü **yeni plan tokenını** kullanır. [Sözleşme ve örnekler](mcp-spline-editing.md), [script uyumluluk incelemesi](script-api-compatibility-audit.md).
+
+## 2D pivot bağlantıları ve iki parçalı IK
+
+Önce `get_scene` ile izleyen parça, sürücü ve hedefin kimliklerini al. Her düzenleme çağrısına güncel `expectedRevision` ve `readToken` ver. Bu araçlar duraklatılmış editörün görünen karesini kullanır. Her çağrı ayrı bir Undo adımıdır.
+
+| Araç | İşlem |
+|---|---|
+| `link_layer_pivots_2d` | `layerId` ile izleyen parçayı, `driverLayerId` ile aynı gruptaki sürücüyü belirt. |
+| `bind_two_bone_ik_2d` | Alt parça üst parçaya bağlıyken `upperLayerId`, `lowerLayerId` ve uçtaki `targetLayerId` ile zinciri kur. Hedefi `upsert_keyframes` ile hareket ettir. |
+| `set_ik2d_joint_limits` | Üst parçada `joint` olarak shoulder veya elbow seç. `limit` içinde enabled, minDeg, maxDeg ve isteğe bağlı lockedDeg ver. `null` eklem ayarını sıfırlar. |
+| `set_ik2d_bend` | flip bükülme tarafını değiştirir, preferPose o karedeki omuz yönünü kaydeder, clearPreference bu tercihi siler. |
+| `get_ik2d_diagnostics` | Görünen kareyi oku veya timeMs ile örnekle. timelineId tek bir timeline’ı yerel saatinde örnekler. upperLayerId verilirse yalnız o zincir döner. Her zincirde hedef ve gerçek uç arasındaki mesafe hem ortak grup hem kompozisyon pikseliyle bulunur. |
+| `remove_two_bone_ik_2d` | Üst parçadaki IK’yi kaldırır. Alt parçanın pivot bağlantısı korunur. |
+| `unlink_layer_pivots_2d` | `layerId` ve `mode` alır. restoreSource kaynak poza döner. keepPose geçerli karede konumu ve dönüşü korur. Aktif timeline’da zaten animasyonlu olan ve değeri değişen kanala yerel zamanda anahtar yazar. Bir Undo bağlantıyı, ona bağlı IK’yi ve önceki anahtarları birlikte geri getirir. |
+
+`set_ik2d_weight({upperLayerId, weight, autoKey?})` ağırlığı 0–1 aralığında ayarlar. `match_ik2d_pose({upperLayerId, to:'fk'|'ik', autoKey?})` görünen pozu koruyarak uç moda geçer. İki araç da Auto Key belirtilmediğinde panelin durumunu kullanır. Her yazma için güncel revision ve readToken gerekir.
+
+`convert_layer_to_spline`, `resolve_spline_boolean`, `transform_mesh2d_vertices`, `edit_mesh2d_topology` ve `edit_2d_modifier_stack` standart araçlardır ve batch içinde çalışır. Son aracın ayrıntılı keşif sonucu modifier alanlarını içerir. Aynı geometri isimleri QuickJS içinde `layer.geometry2d` üzerinden kullanılabilir. [2D script kapsamı](script-2d-coverage-audit.md#26-kasım-2026-ek-kontrol)

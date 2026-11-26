@@ -1,7 +1,7 @@
 # Choose a native tool
 
 Use the tool names actually advertised by the connected MCP client. In MCP
-2.1.0 the default `standard` catalog exposes 65 focused tools; older clients or
+2.1.0 the default `standard` catalog exposes 79 focused tools; older clients or
 the `legacy` profile may advertise the original names. The `tools` array in
 `get_capabilities({})` remains the original compatibility inventory. For the
 current discovery surface, use `get_capabilities({summary:true})` and read
@@ -122,3 +122,16 @@ not require changing local configuration.
 `get_scene` preserves optional source attribution in `scene.authoring`; `get_layer` adds descriptive self/subtree contribution information. Actor metadata is not a write permission. Missing provenance stays unknown.
 
 For Point/Edge/Object source edits and native spline CPU solvers, use the single prepare_spline_edit → inspect PNG/changeSummary → apply_spline_edit or discard_spline_edit workflow. It is not a mutation batch. Simple procedural source edits may use layer.spline.edit; asynchronous solvers are not synchronous script calls. Read [spline-editing.md](spline-editing.md) for exact boundaries.
+
+For 2D jointed parts use standalone pivot and IK tools at the paused playhead.
+Link the lower to the upper with `link_layer_pivots_2d`, then call
+`bind_two_bone_ik_2d` with a separate sibling target at the tip.
+Animate that target using `upsert_keyframes`. Use `set_ik2d_joint_limits`
+and `set_ik2d_bend` for constraints. Inspect `get_ik2d_diagnostics` live
+or at an explicit time. `remove_two_bone_ik_2d` preserves the pivot link.
+To detach, choose `unlink_layer_pivots_2d` with explicit mode `restoreSource`
+or `keepPose`. Seek first for keepPose and refresh source authority before each edit.
+
+For IK/FK blending, use `set_ik2d_weight` (0–1). To switch while retaining the current frame pose use `match_ik2d_pose` with to=fk or ik. The paused editor supplies the frame and Auto Key unless explicitly overridden. For a procedural sequence use `layer.rig2d({kind:'matchFK'}, {timelineId,timeMs})` on the upper segment. Script time defaults to zero.
+
+Use `edit_2d_modifier_stack` for Smooth, live Outline and ordered geometry stages. Fetch its modifierDescriptors with get_capabilities. `edit_mesh2d_topology` takes a topology hash and explicit component IDs. `transform_mesh2d_vertices` uses local-pixel mesh edits and retains the layer origin. `resolve_spline_boolean` merges an existing recipe into its owner or separates its inputs. Scripts call registered geometry actions using `layer.geometry2d(toolName,options)`. The receiver supplies the layer ID. Discover exact script operations under scriptAuthoring in the capabilities summary.

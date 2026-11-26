@@ -5,6 +5,28 @@ Kapsam: mevcut **2D sahne üretimi ve düzenlemesi**. 3D modelleme, kamera,
 materyal, rig ve iç 3D Timeline yetenekleri bu incelemenin dışında tutuldu.
 Yalnız scriptin 2D sınırını aşıp aşmadığı ayrıca denetlendi.
 
+## 26 Kasım 2026 ek kontrol
+
+Bu bölüm ana planın §9A, §12.65–82 ve §12.90–102 teslimlerini, Mesh2D araçlarını ve Link & IK güncellemesini kapsar. Aşağıdaki 16 Kasım envanteri tarihsel kayıttır.
+
+| Alan | Doğrulanan giriş | Sınır veya açık iş |
+| --- | --- | --- |
+| Pivot link, iki parçalı IK ve IK/FK | Dokuz MCP aracı ve `layer.rig2d(action, options)`. Bind, limit, bükülme, ağırlık, Match, tanı ve pozu koruyarak ayırma aynı editör komutlarını kullanır. | MCP görünen kareyi okur. Script kendi taslağındaki seçili timeline’ı örnekler. Canlı State Machine, fare hareketi ve geçici hedef sürüklemesi script girdisi değildir. |
+| Spline Point / Edge / Object | `layer.spline.edit` ve `prepare_spline_edit` içinde `topology` eylemleri Break, Fuse, Reset/Paste Tangents, Split, Trim, Extend, Add Vertex, Divide, Simplify, Smooth, Subdivide ve Interpolation sunar. `getPoint/getHandle` ile tangent okunabilir. | Etkileşimli clipboard ve seçim oturumu editörde kalır. Script açık kimlik, koordinat ve tangent verisi kullanır. |
+| Spline Boolean ve Outline | Union/Subtract/Intersect/XOR önizlemesi mevcut prepare/apply işidir. `resolve_spline_boolean` Merge veya Separate uygular. `edit_2d_modifier_stack` içinde `liveOutline` kaynak değişiklikleriyle yeniden hesaplanır. | Yeni Boolean çözümü ve native Offset/Chamfer/Fillet önizlemesi için MCP planı gerekir. Eski `outlineContour` paralel kontur üretir. |
+| Mesh2D modelleme | `layer.geometry2d` ve MCP aynı şemaları kullanır. Aynı katmanda dönüşüm, Split/Flip Edge, Delete Face, Fill Hole, seçili vertex dönüşümü, Smooth, Delaunay/Grid ve stack düzenleme kullanılabilir. | Edge/Face dönüşümünde köşe kimlikleri verilir. Panelin geçici edit modu ve ghost görünümü headless girdiler arasında bulunmaz. |
+| Mesh2D görünüm ve kaynak | Bağımsız kaynak mesh oluşturma/yenileme, texture atama ve yerleşim, pin ve deformasyon asset bağlama aynı girişte yer alır. | Texture yerleşimi geometri UV’lerini değiştirmez. İleri UV kanal düzenleme ayrı planlanır. |
+| Rigid body / Voronoi / bake | Native MCP prepare, inspect, preview, commit, cancel, clear ve re-bake akışları. Script dönen kaynak katman ve anahtarları okuyabilir. | Worker, iş ömrü, iptal ve çıktı dosyaları host tarafından yönetilir. |
+| Diğer source düzenlemeleri | Scene/Timeline/Explorer/Particle yüzeyi mevcut. Ham alan yazımında sahiplik ve 2D kapsam denetimleri güncellendi. | Timeline bar retime/split, asset koleksiyonu ve reusable component authoring için özel SceneAPI girişi eksik. Geometri modifier ayarlarının animasyonu ve ileri karakter/IK özellikleri ileri fazda. |
+
+`get_capabilities({summary:true}).scriptAuthoring` güncel `rig2d` ve `geometry2d` işlem adlarını listeler. `get_capabilities({toolName:'edit_2d_modifier_stack'})` modifier alanlarını, birimlerini ve seçeneklerini döndürür. [Güncel script sözleşmesi](scripting.md) · [Ham kaynak korumaları](script-source-guards.md) · [MCP ve QuickJS kabul testleri](../../src/lib/mcp/__tests__/rigGeometryScript.test.ts)
+
+### Kabul sonuçları
+
+- 2001 portunda ayrı bir üretim editörü oturumunda 600 ms’de IK ağırlığı %40’a getirildi. FK ve IK yönlerinde Match sonrasında omuz, dirsek, uç ve iki eklem açısı korundu. Her yönde doğrudan MCP ve QuickJS planının ürettiği PNG baytları eşleşti. Dry run sahneyi değiştirmedi ve her Apply tek Undo ile başlangıca döndü. IK’ye geçişte hedef seçilen pozun ucuna taşındı.
+- Aynı editörde bir dikdörtgen aynı katmanda Spline ve Mesh2D’ye dönüştürüldü. Smooth eklenip ayarı değiştirildi. Bir vertex hareketi geri alındı. Script üzerinden Delaunay Subdivision ve Execute sonrasında mesh 98 üçgen içeriyordu.
+- Otomatik kabulde delik açma/doldurma, Boolean sahibine Merge, Separate, geçersiz topoloji kimliği, Auto Key ve iki yönlü poz eşliği sınandı. Tam test paketi 596 dosyada 4.281 testi geçti.
+
 ## Sonuç ve kanıtın sınırı
 
 **Script, uygulamadaki bütün 2D işlemleri karşılamıyor.** Kaynak alanlarına

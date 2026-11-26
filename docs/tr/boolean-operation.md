@@ -18,6 +18,8 @@ birleştirmez. Kısmen kullanılan spline'da seçilmeyen Objects kendi stil ve k
   Shape/Spline'lardır. Aynı başlangıç/bitiş ömrünü paylaşırlar; child taşımazlar.
 - Girdinin kendi key'leri (boş/muted track dahil), wire/binding/expression,
   constraint, mask/effect veya dış okuyucusu varsa Apply açıklamalı reddedilir.
+  Pivot bağlantısı veya IK bulunan yeni girdiler de reddedilir. Eski işlemler
+  kayıtlı girdileriyle açılabilir ve Edit Operation üzerinden düzenlenebilir.
   Ortak parent animasyonu ve ilgisiz kaynak/elle key'ler korunur.
 - Girdi geometrisi statik olarak değiştirilebilir. Açık/bozuk/limit aşan geometri
   commit edilemez. Sonuç topology'si türetilmiştir; Point/Edge edit veya generated

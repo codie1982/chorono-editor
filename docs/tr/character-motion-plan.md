@@ -1,11 +1,38 @@
-# Character Motion: mimari ve geliştirme planı
+# 2D pivot bağlantıları ve iki parçalı IK
 
-Tarih: 4 Kasım 2026. Sadeleştirme: 17 Kasım 2026. Erteleme kararı: 18 Kasım
-2026. Durum: mimari öneri ve **aktif sırayı bloke etmeyen sonraki faz backlog'u**;
-bu belgede tarif edilen yeni özellikler henüz uygulanmadı. Uygulama başlamadan
-önce Sprite Character kliplerinin manuel seçimi, minimum State Machine clip
-action'ı, runtime saat/geçiş davranışı ve MVP sınırı birlikte yeniden
-kararlaştırılacaktır. Mevcut plan içeriği bu karar verilene kadar korunur.
+25 Kasım 2026 ürün kararı. Gövde, kol, bacak ve hedef için mevcut sahne katmanları kullanılır. Aynı araç menteşeler ve mekanik kollar için de kullanılabilir.
+
+## Editörde kurulum
+
+1. Üst kol, ön kol ve hedefi aynı grubun içine veya sahnenin köküne yerleştir. Üst kol pivotunu omza, ön kol pivotunu dirseğe, hedef pivotunu bileğe koy. Görünmez bir kontrol için hedef olarak boş grup kullanılabilir.
+2. Ön kolu seç. **Properties → Link & IK** sekmesinde **Pick driver in viewport** düğmesine bas, ardından viewport’ta üst kola tıkla. Bağlama anındaki görünüm korunur. Üst kolun yer değiştirmesi ve dönüşü ön kola aktarılır.
+3. Üst kolu seç, aynı sekmede **Set up IK in viewport** düğmesine bas. Önce viewport’ta ön kola, sonra bilekteki hedefe tıkla. Hedefin konumunu değiştir veya timeline’da anahtarla. **Flip bend** dirseğin büküldüğü tarafı değiştirir.
+4. İki parça eşit uzunluktaysa hedefi omza getirdiğinde dirsek birden fazla konumda durabilir. Üst kolu seçip **Prefer this pose** düğmesine basarak o karedeki omuz yönünü tercih olarak kaydedebilirsin. **Clear preferred pose** kaynak omuz yönüne döndürür. İki işlem de Undo ile geri alınır.
+5. **Shoulder limit** veya **Elbow limit** altında **Enabled** seç. Min ve Max açılarını dereceyle girip **Apply** düğmesine bas. Omuzun sıfır yönü sürücünün X eksenidir. Sürücü yoksa ortak grubun X ekseni kullanılır. Dirseğin sıfırı üst segmentin devamıdır. **Lock current angle** o eklemi o karedeki açıda sabitler. **Unlock angle** kayıtlı aralığa döner. **Reset** yalnız o eklemin sınırını temizler.
+6. **Remove IK** pivot bağlantısını korur. **Unlink pivots** parçayı kendi kaynak transformuna döndürür. **Pozu koruyarak ayır** ise parçayı seçili karede gördüğün konum ve açıyla serbest bırakır. Düğmenin altında değişecek X, Y ve dönüş kanallarını görebilirsin. Anahtarlı bir kanala o karede anahtar yazılır, statik bir kanalın kaynak değeri güncellenir. Alt parçayı ayırmak ona bağlı iki parçalı IK’yi de kaldırır. Tek Undo bağlantıyı, IK’yi ve önceki değerleri birlikte geri getirir.
+
+Seçili parçanın pivotundan sürücüye uzanan bakır renkli kesikli okun yönü, hangi katmanın izlendiğini gösterir. Omuz, dirsek veya hedef seçildiğinde turkuaz nişangâh hedefi, bakır halka bileğin ulaştığı noktayı gösterir. İkisi arasında boşluk kalırsa ince bir çizgi belirir. **Link & IK** sekmesi her ilgili zincir için mesafeyi kompozisyon pikseliyle ve uzanmayı sınırlayan koşulu gösterir. Eklem yayı turkuazdır. Etkin sınıra gelindiğinde ilgili uç bakır renkte görünür. Çizgiler yalnız editör görünümünde yer alır. Hedef seçerken Esc veya sağ tık işlemi iptal eder. Boş bir grubu seçmek için viewport’ta işaretlenen pivotuna tıklayabilirsin.
+
+**Hedefi animasyonlamak için** timeline’da kareyi seç, **Auto** modunu aç ve hedefin nişangâhını merkezinden sürükle. Küçük bir şekil veya boş grup hedef olarak kullanılabilir. Fareyi bıraktığında hedefin değişen X/Y kanalları o kareye yazılır. Tek Undo konumu ve anahtarları birlikte geri alır. Sürüklerken Esc’ye basarsan hedef ve kol önceki poza döner. İlk timeline da gerekirse fareyi bıraktığında oluşur.
+
+## Veri ve değerlendirme
+
+- Katmanın isteğe bağlı `pivotLink2d` kaydı sürücü kimliğini, bağlama anındaki pivotu (ortak üst grubun yerel piksel koordinatları) ve dönüşü (derece) taşır. Bağlı parça, sürücüsünün hareketini izlerken kendi animasyonunu korur. Ölçek, sürücüden bağlı parçaya aktarılmaz.
+- Üst parçadaki `twoBoneIK2d` alt parça kimliğini, hedef kimliğini, alt parça pivotuna göre yerel uç vektörünü ve bükülme yönünü tutar. Aynı eklem tek bir IK zincirinde sürülür. Döngü oluşturan bir hedef bağlanamaz.
+- Timeline, parametreler ve ifadeler değerlendirildikten sonra bağlantılar bağımlılık sırasıyla çözülür. İki parçanın uzunlukları o karenin FK pozundan gelir. Analitik çözüm hedef uzaklığını iki parçanın toplamı ile uzunluk farkı arasında sınırlar. Hedef erişilemeyecek kadar uzaktaysa uzuv tam açılır. Çözülen poz yalnız o karenin transform değerlerinde yaşar.
+- `evaluateSceneFrame(scene, timeMs).ikDiagnostics.get(upperId)` o karede çözülen omuz, dirsek, bilek ve özgün hedefi verir. `local` ortak grup uzayını, `composition` üst grupların dönüşümlerinden sonraki konumları ve mesafeyi içerir. `status` yerel erişimi belirtir. Geçersiz zincirde `inactive` ile `reason` döner. Bu ölçümler geçicidir.
+- İsteğe bağlı `twoBoneIK2d.preferredShoulderOffsetDeg`, o karenin FK üst segmentine göre saat yönünde derece cinsinden omuz farkıdır. Çözücü bu farkı tam katlanmadaki belirsiz yön ve limitli çözümde eşit hatalı, aynı taraftaki pozlar arasında seçim için kullanır. Önceki kareye bağımlılık yoktur. Kayıtta alan yoksa kaynak FK yönü kullanılır.
+- `shoulderLimit` ve `elbowLimit` bağımsız, isteğe bağlı `{ enabled, minDeg, maxDeg, lockedDeg? }` kayıtlarıdır. Örneğin 170°…190° yirmi derecelik bir yayı tanımlar. `jointLimits.ts` analitik çözümleri, aralık sınırlarını ve düz/katlı konumları ileri kinematikle karşılaştırır. Yerel uç uzaklığı en küçük olan poz seçilir. Hedef konumu korunur. Bir eklem hedefe yaklaşmayı engellediğinde kare tanısı `limited` olur. Kilit ve etkin Min/Max bilgisi hedefe ulaşılmış olsa da okunabilir.
+- İşlemler `src/lib/rig2d/commands.ts`, kare planlama `frame.ts`, analitik çözüm `pose.ts` içindedir. Katman kimlikleri sahne dosyasında saklanır. Ortak grubu kopyalamak bağlantılı bir düzeneğin tamamını çoğaltır.
+- İlk kapsam iki parçalı rijit 2D hareketle sınırlıdır. Sprite klip yönetimi, skin ağırlıkları, uzun IK zincirleri ve bake ileride bağımsız olarak değerlendirilebilir.
+
+Editörde **Ungroup**, statik öteleme, dönme ve pozitif eşit ölçek altındaki pivot bağlantılarını yeni üst grubun koordinatlarına taşır. Zincirin bütün parçaları ve hedefi birlikte taşınmalıdır. Dönüşüm uygulanmış grupta hareketli eklem dönüşümlerini önce bake et. Grup dönüşümü özdeşse çocuk animasyonu korunur.
+
+Sayısal kabul örnekleri, viewport geliştirmeleri ve ileri fazların sırası [2D IK etkileşim ve hesaplama planındadır](plans/ik2d-etkilesim-ve-cozum-plani.md).
+
+## Arşiv — önceki Character Motion önerisi
+
+Aşağıdaki bölümler Kasım 2026’da değerlendirilen özel Character bileşeni ve çalışma alanının tarihsel taslağıdır. Güncel uygulama kapsamı yukarıdaki katman bağlantılarıdır.
 
 ## 1. Ürün kararı
 

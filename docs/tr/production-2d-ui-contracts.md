@@ -59,7 +59,7 @@ Geniş masaüstü varsayılanı:
 - **Orta canvas:** üretim sonucunun kendisi ve seçili aracın geçici overlay'i.
   Tutamaç, kemik, pin, collider, field ve contour kontrolleri final render'a
   girmez.
-- **Sağ dock:** seçimin bağlamına göre Properties, Char Detail, Mesh Detail,
+- **Sağ dock:** seçimin bağlamına göre Properties, Mesh Detail,
   Physics/Fabric/Fluid Detail veya Render Detail. Başlık her zaman düzenlenen
   nesne ve kapsamı gösterir.
 - **Alt dock:** zaman, klip, keyframe ve eğriler. Aktif character/clip/cache
@@ -160,7 +160,14 @@ ayrıdır. Vertex/triangle sayısı, degenerate/non-manifold tanısı ve topolog
 hash kısa özet olarak gösterilir. Topology değişiminin hangi pin/cache/bake'i
 stale yapacağı Apply öncesi listelenir.
 
-### 5.2. Character Motion ve Char Detail
+### 5.2. Parça bağlantıları ve IK
+
+Layer veya Scene Explorer'dan seçilen parçanın **Properties → Link & IK** sekmesi bağlantıyı gösterir. Alt parça seçiliyken sürücü viewport’ta tıklanır. Kesikli ok sürücüyü, noktalı çizginin sonundaki baklava işareti IK hedefini gösterir. Üst parçada bağlı alt parça, uç hedefi ve dirsek yönü düzenlenir. Hedef sıradan bir katmandır. Kullanıcı onu viewport'ta taşıyabilir veya Properties ve Timeline üzerinden konumunu değiştirebilir. Her bağlantı, yön değişimi ve kaldırma işlemi ayrı Undo adımıdır.
+
+Sprite klip ve ayrı Character çalışma alanına ilişkin eski panel taslağı [karakter tasarım arşivinde](character-motion-plan.md) tutulur.
+
+<details>
+<summary>Arşiv · Character Motion ve Char Detail için önceki arayüz taslağı</summary>
 
 ```text
 ┌ Character Motion ─────────┬──────────────────────────┬ Char Detail ───────┐
@@ -217,6 +224,8 @@ Move Right düğme ve klavye komutlarına sahiptir. Pivot değişikliği bütün
 etkiliyorsa kapsam ve sonuç önizlemesi Apply öncesinde görünür. Hybrid modda
 `Show Rig + Sprite Channels` iki kanal grubunu aynı timeline'da açar; sprite
 karesi ile kemik key'i farklı saat motorlarında ilerlemez.
+
+</details>
 
 ### 5.3. Physics, fracture ve particle
 
