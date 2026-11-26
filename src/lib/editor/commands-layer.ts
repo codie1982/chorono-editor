@@ -3,6 +3,7 @@
 import type { ChronoScene, Layer } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 import { makeAddAudioClipCmd } from './commands-audio'
+import { pruneDeletedLinks } from '../rig2d/types'
 import { nextKfId } from '../defaults'
 import { assertModelContentPatch } from '../model3d/animation/modelClipOwnership'
 import { LayerIndex } from '../scene/LayerIndex'
@@ -36,7 +37,7 @@ export function makeDeleteLayersCmd(layerIds: readonly string[], label = 'Delete
       const removed = new LayerIndex(scene.layers).subtreeIds(roots)
       if (!removed.size) return scene
       return { ...scene,
-        layers: scene.layers.filter(l => !removed.has(l.id)),
+        layers: scene.layers.filter(l => !removed.has(l.id)).map(l => pruneDeletedLinks(l, removed)),
         timelines: scene.timelines.map(tl => ({ ...tl,
           layerIds: tl.layerIds?.filter(id => !removed.has(id)),
           tracks: tl.tracks.filter(tr => !removed.has(tr.target.match(/^layers\.([^.]+)\./)?.[1] ?? '')),

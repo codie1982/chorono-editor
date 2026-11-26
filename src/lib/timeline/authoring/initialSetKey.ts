@@ -1,5 +1,5 @@
 import type { ChronoScene } from '../../types'
-import { newTimeline } from '../../defaults'
+import { newAuthoringTimeline } from '../../defaults'
 import { prepareSetKey, type SetKeyOptions, type SetKeyPlan } from './setKey'
 
 /** Explicit outer-editor Set Key convenience for scenes with no Timeline.
@@ -9,7 +9,7 @@ import { prepareSetKey, type SetKeyOptions, type SetKeyPlan } from './setKey'
  * source fails through the existing Set Key guard. Content hosts do not call it. */
 export function prepareInitialSetKey(scene: ChronoScene, options: Omit<SetKeyOptions, 'timelineId'>): SetKeyPlan {
   if (scene.timelines.length) throw new Error('Select an existing Timeline before creating an initial one.')
-  const timeline = { ...newTimeline(), durationMs: scene.composition.durationMs, loop: false, autoplay: false }
+  const timeline = newAuthoringTimeline(scene.composition.durationMs)
   const staged = { ...scene, timelines: [timeline] }
   const plan = prepareSetKey(staged, { ...options, timelineId: timeline.id })
   const inner = plan.command

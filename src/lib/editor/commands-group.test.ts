@@ -1,11 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { emptyScene, newRectLayer, newSplineLayerFromPrimitive, newTimeline } from '../defaults'
+import { DEFAULT_TRANSFORM, emptyScene, newRectLayer, newSplineLayerFromPrimitive, newTimeline } from '../defaults'
 import type { Layer } from '../types'
 import { createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
 import { resolveLayerWorldMatrix } from '../geometry/resolveLayerWorldMatrix'
 import { unionBounds } from '../geometry/boundsMath'
 import { makeGroupSiblingLayersCmd } from './branches/HierarchyCommands'
 import { makeGroupCmd, makeUngroupCmd } from './commands-group'
+import { makePivotCommand } from '../rig2d/commands'
+
+/** A bent sibling rig with a mirrored lower segment and a target moved after binding. */
+function groupedRig() {
+  const lower = newRectLayer(), upper = newRectLayer(), target = newRectLayer()
+  upper.transform = { ...DEFAULT_TRANSFORM, x: 0, y: 0 }
+  lower.transform = { ...upper.transform, x: 30, scaleX: -1, rotationDeg: 15 }
+  target.transform = { ...upper.transform, x: 50 }
+  const base = { ...emptyScene(), layers: [upper, lower, target] }
+  const group = makeGroupCmd(base.layers.map(layer => layer.id))
+  const grouped = group.execute(base)
+  const linked = makePivotCommand(grouped, lower.id, { kind: 'link', driverId: upper.id }).execute(grouped)
+  const rigged = makePivotCommand(linked, upper.id, { kind: 'ik', lowerId: lower.id, targetId: target.id }).execute(linked)
+  const scene = { ...rigged, layers: rigged.layers.map(layer => layer.id === target.id
+    ? { ...layer, transform: { ...layer.transform, x: 37, y: 17 } } : layer) }
+  return { scene, groupId: group.groupId, ids: [upper.id, lower.id, target.id] }
+}
 
 /** A rotated/reflected sibling scene with an animated descendant and custom origins. */
 function fixture(nested: boolean) {
@@ -76,5 +93,57 @@ describe('group creation placement', () => {
       const after = resolveLayerWorldMatrix(ungrouped.layers.find(layer => layer.id === original.id)!, ungrouped).toArray()
       after.forEach((value, i) => expect(value).toBeCloseTo(before[i], 8))
     }
+  })
+})
+
+describe('ungrouping pivot links and IK', () => {
+  it.each([{ rotationDeg: 0, scale: 1 }, { rotationDeg: 33, scale: 1.5 }])(
+    'preserves world matrices, bindings and Undo at rotation $rotationDeg and scale $scale', ({ rotationDeg, scale }) => {
+      const { scene, groupId, ids } = groupedRig()
+      const moved = { ...scene, layers: scene.layers.map(layer => layer.id === groupId
+        ? { ...layer, transform: { ...layer.transform, x: 100, y: 40, rotationDeg, scaleX: scale, scaleY: scale } } : layer) }
+      const command = makeUngroupCmd(moved, groupId)!, next = command.execute(moved)
+      for (const id of ids) {
+        const before = resolveLayerWorldMatrix(moved.layers.find(layer => layer.id === id)!, moved).toArray()
+        const after = resolveLayerWorldMatrix(next.layers.find(layer => layer.id === id)!, next).toArray()
+        after.forEach((value, i) => expect(value).toBeCloseTo(before[i], 8))
+      }
+      expect(next.layers.find(layer => layer.id === ids[0])!.twoBoneIK2d).toBe(moved.layers.find(layer => layer.id === ids[0])!.twoBoneIK2d)
+      expect(command.undo(next)).toEqual(moved)
+    })
+
+  it('transports a locked undriven shoulder to the new axes while preserving the elbow and world pose', () => {
+    const { scene, groupId, ids } = groupedRig()
+    const limited = makePivotCommand(scene, ids[0], { kind: 'setJointLimit', joint: 'shoulder',
+      limit: { enabled: true, minDeg: -20, maxDeg: 50, lockedDeg: 10 } }).execute(scene)
+    const both = makePivotCommand(limited, ids[0], { kind: 'setJointLimit', joint: 'elbow',
+      limit: { enabled: true, minDeg: -60, maxDeg: 90 } }).execute(limited)
+    const moved = { ...both, layers: both.layers.map(l => l.id === groupId
+      ? { ...l, transform: { ...l.transform, rotationDeg: 40 } } : l) }
+    const cmd = makeUngroupCmd(moved, groupId)!, after = cmd.execute(moved)
+    const upper = after.layers.find(l => l.id === ids[0])!
+    expect(upper.twoBoneIK2d?.shoulderLimit).toMatchObject({ minDeg: 20, maxDeg: 90, lockedDeg: 50 })
+    expect(upper.twoBoneIK2d?.elbowLimit).toEqual(both.layers.find(l => l.id === ids[0])!.twoBoneIK2d?.elbowLimit)
+    for (const id of ids) {
+      const original = resolveLayerWorldMatrix(moved.layers.find(l => l.id === id)!, moved).toArray()
+      resolveLayerWorldMatrix(after.layers.find(l => l.id === id)!, after).toArray().forEach((x, i) => expect(x).toBeCloseTo(original[i], 8))
+    }
+    expect(cmd.undo(after)).toEqual(moved)
+  })
+
+  it('keeps identity-group child animation and rejects lossy or cross-boundary changes', () => {
+    const { scene, groupId, ids } = groupedRig()
+    const targetTrack = { target: `layers.${ids[2]}.transform.x`, keyframes: [] }
+    const animated = { ...scene, timelines: [{ ...newTimeline(), tracks: [targetTrack] }] }
+    expect(makeUngroupCmd(animated, groupId)!.execute(animated).timelines[0].tracks[0]).toBe(targetTrack)
+
+    const groupTrack = { target: `layers.${groupId}.transform.x`, keyframes: [] }
+    const drivenGroup = { ...scene, timelines: [{ ...newTimeline(), tracks: [groupTrack] }] }
+    expect(() => makeUngroupCmd(drivenGroup, groupId)!.execute(drivenGroup)).toThrow(/Bake animated/)
+    const stretched = { ...scene, layers: scene.layers.map(layer => layer.id === groupId
+      ? { ...layer, transform: { ...layer.transform, scaleX: 2 } } : layer) }
+    expect(() => makeUngroupCmd(stretched, groupId)!.execute(stretched)).toThrow(/uniform/)
+    const crossing = { ...scene, layers: scene.layers.map(layer => layer.id === ids[2] ? { ...layer, parentId: undefined } : layer) }
+    expect(() => makeUngroupCmd(crossing, groupId)!.execute(crossing)).toThrow(/same group/)
   })
 })

@@ -491,6 +491,11 @@ export function newTimeline(): Timeline {
   }
 }
 
+/** Create the first timeline for a Set Key or Auto Key edit at composition duration. */
+export function newAuthoringTimeline(durationMs: number): Timeline {
+  return { ...newTimeline(), durationMs, autoplay: false }
+}
+
 // ── State Machine factories (BL-09) ─────────────────────────────────────────
 
 /** Generate a unique ID for a state machine. */

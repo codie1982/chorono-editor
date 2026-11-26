@@ -11,9 +11,11 @@
 import type { ChronoScene, Layer, Track, Keyframe } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 import { newGroupLayer } from '@/lib/registry/definitions/scene/GroupDefinition'
-import { Matrix2D } from '../geometry/Matrix2D'
+import { DEFAULT_TRANSFORM } from '../defaults'
+import { layerTransformMatrix } from '../geometry/layerTransformMatrix'
 import { groupSelectionPivot, type GroupPlacementOptions } from './branches/GroupPlacement'
 import { localTransform } from './branches/WorldPlacement'
+import { prepareUngroupPivotLinks } from './branches/UngroupPivotLinks'
 
 /** Generate a fresh keyframe id without depending on the global counter. */
 const freshKfId = () => `kf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
@@ -104,7 +106,9 @@ export function makeGroupCmd(layerIds: string[], options: GroupPlacementOptions 
  * the duplicated group track is added ADDITIVELY only if the child has no
  * pre-existing track for that property (to avoid double-animation).
  *
- * Snapshots the full pre-execute scene state for clean undo.
+ * Static, uniformly scaled pivot rigs are rebased with their source transforms.
+ * Unsupported rig changes reject before publishing. Undo restores the group and
+ * each child's original parent, transform, pivot binding and local shoulder range.
  */
 export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorCommand | null {
   const groupSnapshot = scene.layers.find(l => l.id === groupId && l.type === 'group')
@@ -112,11 +116,8 @@ export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorComma
   if (groupSnapshot.booleanOperation) throw new Error('Use Edit Operation for a Boolean group; ordinary Ungroup cannot discard its recipe and protected sources.')
 
   const newParentId = groupSnapshot.parentId
-  // Full child snapshots (so undo can restore parentId AND transform)
-  const childSnapshots = scene.layers
-    .filter(l => l.parentId === groupId)
-    .map(l => ({ id: l.id, prevParentId: l.parentId, prevTransform: { ...l.transform } }))
-  const childIds = childSnapshots.map(c => c.id)
+  const childSnapshots = new Map(scene.layers.filter(layer => layer.parentId === groupId).map(layer => [layer.id, layer]))
+  const childIds = Array.from(childSnapshots.keys())
 
   // Capture the group's tracks across every timeline
   const groupTrackPrefix = `layers.${groupId}.`
@@ -138,27 +139,19 @@ export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorComma
       //    translate-only; now rotation + scale are preserved so the visual
       //    layout doesn't change when ungrouping a rotated/scaled group.
       const gt = groupSnapshot.transform
-      const groupMat = Matrix2D.translation(gt.x + gt.anchorX, gt.y + gt.anchorY)
-        .rotate(gt.rotationDeg ?? 0)
-        .scale(gt.scaleX ?? 1, gt.scaleY ?? 1)
-        .translate(-gt.anchorX, -gt.anchorY)
+      const groupMat = layerTransformMatrix({ ...DEFAULT_TRANSFORM, ...gt })
       const identityGroup = gt.x === 0 && gt.y === 0 && gt.rotationDeg === 0 && gt.scaleX === 1 && gt.scaleY === 1
+      const pivotPatches = prepareUngroupPivotLinks(s, groupSnapshot, groupMat, identityGroup)
 
       const layers = s.layers
         .filter(l => l.id !== groupId)
         .map(l => {
           if (l.parentId !== groupId) return l
           const ct = l.transform
-          const childMat = Matrix2D.translation(ct.x + ct.anchorX, ct.y + ct.anchorY)
-            .rotate(ct.rotationDeg ?? 0)
-            .scale(ct.scaleX ?? 1, ct.scaleY ?? 1)
-            .translate(-ct.anchorX, -ct.anchorY)
-          const composed = groupMat.multiply(childMat)
-          return {
-            ...l,
-            parentId: newParentId,
-            transform: identityGroup ? ct : localTransform(composed, ct),
+          const patch = pivotPatches.get(l.id) ?? {
+            transform: identityGroup ? ct : localTransform(groupMat.multiply(layerTransformMatrix({ ...DEFAULT_TRANSFORM, ...ct })), ct),
           }
+          return { ...l, ...patch, parentId: newParentId }
         })
 
       // ── 2. Update timelines: remove group tracks, duplicate to children ──
@@ -197,7 +190,7 @@ export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorComma
     },
 
     undo(_s: ChronoScene): ChronoScene {
-      // Full pre-execute snapshot restore. We capture only what changed —
+      // Restore only what changed —
       // the group itself, the children's parentId+transform, and the tracks.
       // To restore, walk current state and patch back:
       //   - Re-add the group layer
@@ -213,15 +206,14 @@ export function makeUngroupCmd(scene: ChronoScene, groupId: string): EditorComma
         }
       }
 
-      const layers = [
-        ...cur.layers.map(l => {
-          const snap = childSnapshots.find(c => c.id === l.id)
-          return snap
-            ? { ...l, parentId: snap.prevParentId, transform: snap.prevTransform }
-            : l
-        }),
-        groupSnapshot,
-      ]
+      const layers = cur.layers.map(l => {
+        const snap = childSnapshots.get(l.id)
+        return snap ? { ...l, parentId: snap.parentId, transform: snap.transform,
+          ...(snap.pivotLink2d ? { pivotLink2d: snap.pivotLink2d } : {}),
+          ...(!snap.pivotLink2d && snap.twoBoneIK2d?.shoulderLimit && groupSnapshot.transform.rotationDeg
+            ? { twoBoneIK2d: snap.twoBoneIK2d } : {}) } : l
+      })
+      layers.splice(scene.layers.indexOf(groupSnapshot), 0, groupSnapshot)
 
       const timelines = cur.timelines.map(tl => {
         // Drop the duplicated child tracks (only those we added)

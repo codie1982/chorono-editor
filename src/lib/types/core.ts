@@ -346,6 +346,8 @@ export interface Layer {
   effectsChain?: PluginEffect[]
   /** Temporal trail effect driven by layer velocity. See renderMotionBlurTrails. */
   motionBlur?: MotionBlurConfig
+  pivotLink2d?: import('../rig2d/types').PivotLink2D
+  twoBoneIK2d?: import('../rig2d/types').TwoBoneIK2D
   motionPath?: MotionPath
   /** Drives layer position from another path layer's geometry. */
   followPath?: FollowPath

@@ -1,5 +1,7 @@
+import { evaluateRigFrame } from '../rig2d/evaluateRigFrame'
+import type { IKDiagnostics } from '../rig2d/diagnostics'
 import type { ChronoScene } from '../types'
-import { evaluateTimelines, type OverrideMap } from '../evaluator'
+import { evaluateTimelines, mergeOverrides, type OverrideMap } from '../evaluator'
 import { applyParamBindingsToOverrides, buildParamValues, type ParamValueMap } from './paramResolver'
 import { evaluateBindings } from './bindingEvaluator'
 import { propertyExpressionEvaluator, type ExpressionClock, type SceneDriverResult } from '../expression/properties/evaluatePropertyExpressions'
@@ -9,17 +11,22 @@ import { modelContentFrame } from '../model3d/animation/modelClipFrame'
 export interface SceneFrameOptions extends Omit<ExpressionClock, 'globalTimeMs'> {
   /** Stateful host's already evaluated SM/timeline map; never ticked again. */
   readonly baseOverrides?: OverrideMap
+  /** Transient authored drag channels take precedence over animation before IK. */
+  readonly rigDragOverrides?: Map<string, number>
   /** Host-resolved parameter frame. Defaults are used only when absent. */
   readonly paramValues?: ParamValueMap
 }
 export interface SceneFrameResult extends SceneDriverResult {
+  readonly ikDiagnostics: IKDiagnostics
   readonly paramValues: ParamValueMap
+  /** Evaluated local channels before pivot links and IK, borrowed from this frame. */
+  readonly rigSourceOverrides: OverrideMap
   readonly wireSourceOverrides: OverrideMap
 }
 
 /** Deterministic shared scene-property frame in composition milliseconds.
  * Order: timelines/host base → owner-local model clips → parameter bindings →
- * linear bindings → jointly planned Wire/live-expression drivers. Does not advance a clock, SM or event
+ * linear bindings → jointly planned Wire/live-expression drivers → rigid pivot links and two-bone IK. Does not advance a clock, SM or event
  * queue and never writes source/history. Hosts own any stateful base/parameters;
  * offline renderer/export uses explicit time and authored defaults. */
 export function evaluateSceneFrame(scene: ChronoScene, timeMs: number, options: SceneFrameOptions = {}): SceneFrameResult {
@@ -28,6 +35,9 @@ export function evaluateSceneFrame(scene: ChronoScene, timeMs: number, options: 
   const parameters = applyParamBindingsToOverrides(scene.layers, paramValues, modelContentClock(scene, timeMs, base))
   const bindings = evaluateBindings(scene.bindings ?? [], parameters, paramValues, scene)
   const evaluated = propertyExpressionEvaluator.evaluate(scene, bindings, paramValues, { ...options, globalTimeMs: timeMs })
-  return { ...evaluated, overrides: modelParameterFrame(scene, evaluated.overrides),
+  const source = modelParameterFrame(scene, evaluated.overrides)
+  const rigSourceOverrides = options.rigDragOverrides?.size ? mergeOverrides(source, options.rigDragOverrides) : source
+  const rig = evaluateRigFrame(scene, timeMs, rigSourceOverrides)
+  return { ...evaluated, ...rig, rigSourceOverrides,
     wireSourceOverrides: bindings, paramValues }
 }

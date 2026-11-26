@@ -43,6 +43,7 @@ export function cloneSingleLayer<L extends Layer>(
       `CloneMode "${mode}" not implemented yet. Use 'copy' or 'instance'.`,
     )
   }
+  if (mode === 'instance' && (source.pivotLink2d || source.twoBoneIK2d)) throw new Error('Use independent Copy for layers with pivot links or IK.')
   if (mode === 'instance' && (source.booleanOperation || source.booleanResultFor)) throw new Error('Boolean operation content requires independent Copy, including its protected source tree.')
 
   // 'copy' = full deep clone with independent visual fields.

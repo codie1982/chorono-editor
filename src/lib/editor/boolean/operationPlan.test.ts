@@ -18,6 +18,8 @@ import { executeAuthoredCommand } from '../authoring/AuthoringCommand'
 import { parseSceneJson } from '../../format/scene/SceneJsonConverter'
 import { exportSVG } from '../../export/vector/SVGExporter'
 import { createRectangleSpline, createDonutSpline, mergeSplineData } from '../../spline'
+import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
+import { makePivotCommand } from '../../rig2d/commands'
 
 /** Fixed source fixture makes loss of IDs/manual keys/stacking observable. */
 export function operationFixture(): ChronoScene {
@@ -80,6 +82,26 @@ describe('persisted Boolean operation', () => {
     const singular = structuredClone(next); singular.layers.find(layer => layer.booleanOperation)!.booleanOperation!.sampling = [0, 0, 0, 0]
     expect(() => assertSceneBooleanOperations(singular)).toThrow(/recipe/)
   })
+  it('rejects a pivot-driven Boolean input and keeps previously saved operations editable', () => {
+    const scene = operationFixture()
+    scene.layers.unshift({ ...newRectLayer(), id: 'driver' })
+    const linked = makePivotCommand(scene, 'a', { kind: 'link', driverId: 'driver' }).execute(scene)
+    const driven = { ...linked, layers: linked.layers.map(layer => layer.id === 'driver'
+      ? { ...layer, transform: { ...layer.transform, x: layer.transform.x + 20 } } : layer) }
+    const frame = evaluateSceneFrame(driven, 0).overrides
+    expect(frame.get('layers.a.transform.x')).toBe(30)
+    const targets = [{ layerId: 'a', label: 'A' }, { layerId: 'b', label: 'B' }]
+    const settings = { operation: 'union', reverse: false, tolerancePx: .25 } as const
+    expect(() => prepareBooleanOperation(driven, targets, settings, 0, frame)).toThrow(/pivot links and IK/)
+
+    const { next, plan } = apply(scene)
+    const pivotLink2d = linked.layers.find(layer => layer.id === 'a')!.pivotLink2d
+    const legacy = { ...next, layers: next.layers.map(layer => layer.id === 'a' ? { ...layer, pivotLink2d } : layer) }
+    const loaded = parseSceneJson(JSON.stringify(legacy))
+    const edit = prepareBooleanOperation(loaded, [], settings, 0, new Map(), plan.ownerId)
+    expect(edit.request.operands).toEqual(plan.request.operands)
+  })
+
   it('edits only the recipe and rejects stale completion', () => {
     const scene = operationFixture(), { next, plan } = apply(scene)
     const edit = prepareBooleanOperation(next, [], { operation: 'subtract', reverse: true, tolerancePx: .1 }, 0, new Map(), plan.ownerId)

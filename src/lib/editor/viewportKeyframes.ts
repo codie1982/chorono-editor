@@ -1,7 +1,8 @@
 import type { ChronoScene, Layer, Timeline, Track } from '../types'
 import type { EditorCommand } from './commands-keyframe'
-import { computeLocalTime } from '../evaluator'
-import { nextKfId } from '../defaults'
+import { authoringTime } from '../timeline/authoring/timelineNavigation'
+import { makeAddTimelineCmd } from './commands-timeline'
+import { newAuthoringTimeline, nextKfId } from '../defaults'
 import { ensureLayerInTimeline, insertKf, updateKfValue } from '../timeline/keyframeOps'
 
 /** One source-layer edit, with optional channel intent from an evaluated
@@ -15,18 +16,21 @@ export interface ViewportLayerChange {
 
 export interface ViewportKeyframeOptions {
   timelineId: string
-  /** Project playhead in milliseconds; mapped through the evaluator's clock. */
+  /** Milliseconds on the supplied clock. Existing callers supply project playback time. */
   timeMs: number
+  timeBasis?: 'globalPlayback' | 'local'
   /** Auto/active Record keys new channels; Manual edits existing keyed ones. */
   autoKeyframe: boolean
 }
 
 const CHANNELS = ['x', 'y', 'scaleX', 'scaleY', 'rotationDeg'] as const
-interface TransformKeyEdit { layerId: string; target: string; value: number }
+/** A numeric track edit. An optional initial sample holds its pre-edit value
+ * until the first keyed switch on a previously unanimated channel. */
+export interface ScalarKeyEdit { layerId: string; target: string; value: number; initialValue?: number }
 
 /** Extract transform intent only. Geometry-only edits do not require a clock
  * or a timeline, even when their layer happens to have transform animation. */
-function intendedKeys(changes: readonly ViewportLayerChange[]): TransformKeyEdit[] {
+function intendedKeys(changes: readonly ViewportLayerChange[]): ScalarKeyEdit[] {
   return changes.flatMap(change => CHANNELS.filter(channel => change.changedProperties
     ? change.changedProperties.includes(`transform.${channel}`)
     : change.prev.transform[channel] !== change.next.transform[channel]).map(channel => ({
@@ -48,10 +52,10 @@ function assertEditableTrack(track: Track): void {
  * retain identity, easing, tangents and unknown metadata. A new key is linear;
  * other key records and tracks are retained. Ambiguous near-time collisions
  * fail before the command is returned, without deleting neighbouring keys. */
-function applyKeys(scene: ChronoScene, edits: readonly TransformKeyEdit[],
+function applyKeys(scene: ChronoScene, edits: readonly ScalarKeyEdit[],
   timeline: Timeline, timeMs: number): ChronoScene {
   let next = scene
-  for (const { target, value, layerId } of edits) {
+  for (const { target, value, layerId, initialValue } of edits) {
       if (!Number.isFinite(value)) throw new Error('Transform values must be finite.')
       const track = timeline.tracks.find(item => item.target === target)
       const nearby = track?.keyframes.filter(key => Math.abs(key.timeMs - timeMs) <= 1) ?? []
@@ -62,6 +66,9 @@ function applyKeys(scene: ChronoScene, edits: readonly TransformKeyEdit[],
         next = { ...next, timelines: next.timelines.map(tl => tl.id !== timeline.id ? tl : {
           ...tl, tracks: [...tl.tracks, { target, keyframes: [] }],
         }) }
+      }
+      if (!track?.keyframes.length && initialValue !== undefined && timeMs > 1e-6) {
+        next = insertKf(next, timeline.id, target, { id: nextKfId(), timeMs: 0, value: initialValue, easing: { type: 'hold' } })
       }
       next = nearby.length
         ? updateKfValue(next, timeline.id, target, nearby[0].id, value)
@@ -77,13 +84,19 @@ function applyKeys(scene: ChronoScene, edits: readonly TransformKeyEdit[],
  * commands. Preparation is immutable and all-or-nothing; errors leave history
  * untouched. Execute/undo replace only the chosen timeline and retain all
  * other scene fields, so the surrounding layer command remains authoritative.
- * Existing callers without intent use raw transform differences. No controller
- * is baked and no inactive timeline is changed implicitly. */
+ * Local authoring includes the final frame even on a looping timeline. Auto
+ * Key in a scene with no timeline stages its first timeline with the keys.
+ * Existing callers without intent use raw transform differences. */
 export function buildViewportKeyframeCommands(scene: ChronoScene,
   changes: readonly ViewportLayerChange[], options: ViewportKeyframeOptions): EditorCommand[] {
-  const intended = intendedKeys(changes)
+  return buildScalarKeyframeCommands(scene, intendedKeys(changes), options)
+}
+
+/** Stage numeric property keys on one authoring clock, sharing collision,
+ * driven-track, timeline membership and exact Undo rules with viewport edits. */
+export function buildScalarKeyframeCommands(scene: ChronoScene, intended: readonly ScalarKeyEdit[], options: ViewportKeyframeOptions): EditorCommand[] {
   if (!intended.length) return []
-  const before = scene.timelines.find(tl => tl.id === options.timelineId)
+  const existing = scene.timelines.find(tl => tl.id === options.timelineId)
   const targets = new Set(intended.map(edit => edit.target))
   for (const timeline of scene.timelines) {
     for (const track of timeline.tracks) {
@@ -94,6 +107,8 @@ export function buildViewportKeyframeCommands(scene: ChronoScene,
       assertEditableTrack(track)
     }
   }
+  const before = existing ?? (!scene.timelines.length && !options.timelineId && options.autoKeyframe
+    ? newAuthoringTimeline(scene.composition.durationMs) : undefined)
   if (!before) return []
   const edits = intended.filter(edit => options.autoKeyframe
     || before.tracks.some(track => track.target === edit.target && track.keyframes.length > 0))
@@ -102,9 +117,11 @@ export function buildViewportKeyframeCommands(scene: ChronoScene,
       || !Number.isFinite(before.durationMs) || before.durationMs <= 0) {
     throw new Error('The active timeline must have a valid playhead and duration.')
   }
-  const time = computeLocalTime(before, options.timeMs)
-  const after = applyKeys(scene, edits, before, time)
+  const time = authoringTime(before, options.timeMs, options.timeBasis ?? 'globalPlayback')
+  const staged = existing ? scene : { ...scene, timelines: [before] }
+  const after = applyKeys(staged, edits, before, time)
     .timelines.find(tl => tl.id === before.id)!
+  if (!existing) return [makeAddTimelineCmd(after)]
   if (after === before) return []
   const replace = (source: ChronoScene, timeline: Timeline): ChronoScene => ({
     ...source, timelines: source.timelines.map(tl => tl.id === timeline.id ? timeline : tl),

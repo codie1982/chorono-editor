@@ -7,13 +7,7 @@ export interface Point {
   y: number
 }
 
-/** Normalise an angle (degrees) into the (-180, 180] range used by transforms. */
-export function wrapAngle180(deg: number): number {
-  let d = deg
-  while (d > 180)  d -= 360
-  while (d < -180) d += 360
-  return d
-}
+export { wrapAngle180 } from '../../geometry/CoordinateSystem'
 
 /** Angle (degrees) from a pivot to a point, measured with atan2 (0° = +X). */
 export function angleDegFromPivot(pivotX: number, pivotY: number, x: number, y: number): number {

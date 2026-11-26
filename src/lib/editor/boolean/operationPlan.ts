@@ -40,7 +40,9 @@ export function prepareBooleanOperation(scene: ChronoScene, targets: readonly Bo
   const sources = Array.from(new Set(inputs.map(input => input.layerId))).map(id => {
     const layer = scene.layers.find(item => item.id === id)
     if (!layer) throw new Error('A Boolean source no longer exists.')
-    assertStaticBooleanInput(scene, layer); assertLayerAncestors(scene, layer, { editable: true }); return layer
+    assertStaticBooleanInput(scene, layer, existing ? 'retained' : 'new')
+    assertLayerAncestors(scene, layer, { editable: true })
+    return layer
   })
   const primary = sources[0]
   sources.sort((a, b) => scene.layers.indexOf(a) - scene.layers.indexOf(b))

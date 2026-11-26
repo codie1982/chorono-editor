@@ -59,3 +59,11 @@ export function distance(a: Vec2, b: Vec2): number {
 export function lerp(a: Vec2, b: Vec2, t: number): Vec2 {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
 }
+
+/** Wrap a finite degree offset to [−180, 180], retaining its sign at a half turn. */
+export function wrapAngle180(deg: number): number {
+  const remainder = deg % 360
+  if (remainder > 180) return remainder - 360
+  if (remainder < -180) return remainder + 360
+  return remainder === 0 ? 0 : remainder
+}

@@ -27,8 +27,12 @@ export function assertBooleanRecipe(value: BooleanOperationData): void {
 /** Reject competing geometry/presentation writers instead of baking a single
  * animated input pose. A shared parent/Boolean group may still animate normally.
  * Static source geometry can be edited and re-evaluated; result geometry cannot
- * be independently keyed. This policy includes muted/empty timeline tracks. */
-export function assertStaticBooleanInput(scene: ChronoScene, layer: Layer): void {
+ * be independently keyed. This policy includes muted/empty tracks. Retained
+ * inputs may carry dormant pivot metadata from projects saved before the rig
+ * check, so those recipes can still be opened, edited and separated. */
+export function assertStaticBooleanInput(scene: ChronoScene, layer: Layer, admission: 'new' | 'retained' = 'new'): void {
+  if (admission === 'new' && (layer.pivotLink2d || layer.twoBoneIK2d))
+    throw new Error('Boolean Apply uses static input geometry. Remove or bake pivot links and IK before applying.')
   if (!['shape', 'spline'].includes(layer.type) || layer.instanceOf || layer.booleanResultFor || layer.booleanOperation || layer.motionPath || layer.followPath
     || layer.hidden || layer.locked || layer.frozen || layer.solo || layer.masks?.length || layer.effectsChain?.length || layer.motionBlur
     || Object.keys(layer.effects ?? {}).length || Object.keys(layer.propertyExpressions?.fields ?? {}).length || Object.keys(layer.paramBindings ?? {}).length)
@@ -59,7 +63,7 @@ export function assertBooleanOperation(scene: ChronoScene, owner: Layer): void {
   for (const id of Array.from(ids)) {
     const layer = scene.layers.find(item => item.id === id)
     if (!layer || layer.parentId !== owner.id) throw new Error('A Boolean source is missing or moved. Restore its original ID and parent.')
-    assertStaticBooleanInput(scene, layer)
+    assertStaticBooleanInput(scene, layer, 'retained')
     assertLayerUnreferenced(unowned, id, 'A protected Boolean input has an external reader. Reference the operation/result instead.')
     if ((layer.startMs ?? 0) !== (owner.startMs ?? 0) || (layer.endMs ?? scene.composition.durationMs) !== (owner.endMs ?? scene.composition.durationMs)) throw new Error('Boolean inputs and operation must share the same lifetime.')
     for (const input of recipe.inputs.filter(item => item.layerId === id)) if (input.subShapeId && !layer.spline?.subShapes[input.subShapeId]) throw new Error('A Boolean source Object no longer exists.')
