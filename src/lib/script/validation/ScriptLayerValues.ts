@@ -26,6 +26,11 @@ export function finiteScriptNumber(value: unknown, field: string, min = -Infinit
  * canonical typed colors; static source keeps CSS strings. Unknown extension
  * paths retain their domain validator rather than receiving guessed types. */
 export function assertScriptPropertyValue(layer: Layer, path: string, value: unknown, key = false, scene?: ChronoScene): void {
+  if (path === 'twoBoneIK2d.weight') {
+    if (!layer.twoBoneIK2d) throw new Error('Bind an IK chain before keying its weight.')
+    finiteScriptNumber(value, path, 0, 1)
+    return
+  }
   // Particle source enums/uint32 seeds are wider than their inspector widgets.
   // Its existing domain validator is authoritative for both raw edits and keys.
   if (path.startsWith('particleEmitter.')) {

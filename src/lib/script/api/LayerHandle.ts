@@ -1,3 +1,5 @@
+import { scriptGeometry2D } from './geometry2d'
+import { scriptRig2D, type ScriptRigAction, type ScriptRigOptions } from './rig2d'
 import { makeScriptPatchCommand } from '../validation/ScriptPatchCommand'
 // ── LayerHandle (BL-76) ───────────────────────────────────────────────────────
 // Script-facing wrapper around a single layer id. Property setters translate to
@@ -63,6 +65,10 @@ export class LayerHandle {
   get data(): Layer { return copyScriptData(this._layer()) }
   get(path: string): unknown { return readScriptPath(this._layer(), path) }
   get particles(): ParticleHandle { return new ParticleHandle(this.id, this.ctx) }
+  /** Execute a registered 2D geometry command on this source and return its result layer ID. */
+  geometry2d(operation: string, settings?: Record<string, unknown>) { return scriptGeometry2D(this.ctx, this.id, operation, settings) }
+  /** Apply a native 2D rig action or query this chain at an authored frame. */
+  rig2d(action: ScriptRigAction, options?: ScriptRigOptions) { return scriptRig2D(this.ctx, this.id, action, options) }
   get spline(): SplineHandle { return new SplineHandle(this.id, this.ctx) }
 
   // ── Generic patch ─────────────────────────────────────────────────────────────

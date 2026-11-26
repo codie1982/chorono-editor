@@ -29,6 +29,8 @@ const facade = `
     get data() { return call('layer.get', this.id, 'data'); }
     get particles() { return new Particles(this.id); }
     get spline() { return new Spline(this.id); }
+    geometry2d(...args) { return call('layer.method', this.id, 'geometry2d', ...args); }
+    rig2d(...args) { return call('layer.method', this.id, 'rig2d', ...args); }
     get(path) { return call('layer.method', this.id, 'get', path); }
     set(patch) { call('layer.method', this.id, 'set', patch); return this; }
     patch(patch) { call('layer.method', this.id, 'patch', patch); return this; }
@@ -130,7 +132,7 @@ export async function runSafeScript(code: string, initial: ChronoScene, timeoutM
     const keyframes = scene.timelines.reduce((n, tl) => n + tl.tracks.reduce((m, tr) => m + tr.keyframes.length, 0), 0)
     if (keyframes > LIMITS.keyframes) throw budgetError = new Error('Keyframe limit exceeded')
   } }, line => { if (logs.length < 200 && line.length < 4096) logs.push(line) })
-  const layerMethods = new Set(['get', 'set', 'patch', 'font', 'stroke', 'shapeParam', 'parent', 'interactive', 'followPath', 'configureParticles', 'key', 'audioGain', 'audioFades', 'moveAudio', 'trimAudio', 'splitAudio'])
+  const layerMethods = new Set(['geometry2d', 'rig2d', 'get', 'set', 'patch', 'font', 'stroke', 'shapeParam', 'parent', 'interactive', 'followPath', 'configureParticles', 'key', 'audioGain', 'audioFades', 'moveAudio', 'trimAudio', 'splitAudio'])
   const layerProperties = new Set(['data', 'pos', 'opacity', 'rotation', 'scale', 'size', 'fill', 'text', 'cornerRadius', 'blendMode', 'name', 'type'])
   const sceneCollections = new Set(['assets', 'assetCollections', 'parameters', 'triggers', 'bindings', 'parameterWires', 'stateMachines', 'initialState', 'particlePresets'])
   const timelineMethods = new Set(['set', 'track', 'removeTrack', 'modifier', 'bake', 'key'])

@@ -1,3 +1,4 @@
+import { assertLinkPlan } from '../../rig2d/frame'
 import type { ChronoScene, Layer } from '../../types'
 import type { EditorCommand } from '../../editor/commands-keyframe'
 import { makeUpdateLayerCmd } from '../../editor/commands-layer'
@@ -61,6 +62,9 @@ function assertPatch(scene: ChronoScene, before: Layer, after: Layer): void {
   if (before.spline && !sameScriptValue(before.spline, after.spline)) {
     if (!after.spline) throw new Error('Spline geometry is required.')
     assertSplineTopology(after.spline); assertSplineLocks(before.spline, after.spline)
+  }
+  if (paths.some(path => ['twoBoneIK2d', 'pivotLink2d', 'parentId'].some(key => propertyPathsOverlap(path, key)))) {
+    assertLinkPlan(scene.layers.map(layer => layer.id === after.id ? after : layer), scene.layers, new Set([after.id]))
   }
   assertScriptLayerValues(before, after, scene)
 }
