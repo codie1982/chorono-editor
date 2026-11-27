@@ -1,6 +1,6 @@
 # Simulation Core — 2D ortak mimari
 
-Tarih: 4 Kasım 2026. Durum: uygulama öncesi mimari karar. Rigid Body, Fracture, Cloth ve Fluids planlarının ortak sözleşmesidir. Mevcut özelliklerin uygulanmış olduğu anlamına gelmez.
+Tarih: 4 Kasım 2026. Destruction kapsamı: 18 Kasım 2026. Durum: uygulama öncesi mimari karar. Rigid Body, Fracture, Cloth ve Fluids planlarının ortak sözleşmesidir. Mevcut özelliklerin uygulanmış olduğu anlamına gelmez.
 
 **Güncel kapsam kararı: bütün geliştirmeler yalnızca `2danimation` modunda yapılacak. 3D mod, scene adapter, solver, kamera, renderer, timeline ve exporter geliştirmesi bu planın ve aşamaların dışındadır.** Önceki boyutlar arası değerlendirme yalnızca [arşiv referansıdır](archive/simulation-core-2d-3d-reference.md); uygulama talimatı değildir. Gelecekte 3D ancak yeni ve açık bir kullanıcı talebiyle ele alınır.
 
@@ -24,9 +24,9 @@ flowchart TD
     P --> V[Mevcut 2D timeline, renderer, exporter]
 ```
 
-Kardeş planlar: [Rigid Body & Fracture](physics-fracture-bake-plan.md), [Cloth / Fabric](cloth-fabric-simulation-bake-plan.md), [Liquid & Fluids](fluid-liquid-simulation-bake-plan.md). Character Motion planı ayrı kalır.
+Kardeş planlar: [Rigid Body & Fracture](physics-fracture-bake-plan.md), [Cloth / Fabric](cloth-fabric-simulation-bake-plan.md), [Liquid & Fluids](fluid-liquid-simulation-bake-plan.md) ve [Emitter / Collider / Surface Target](emitter-collider-surface-interaction-plan.md). Character Motion planı ayrı kalır.
 
-6 Kasım 2026 geometri eki: [Editable Poly 2D / native ağ üretimi / Blob Surface](../production-2d-roadmap.md#9-editable-poly-2d-native-ağ-üretimi-ve-blob-surface). Poly vertex/triangle/quad kaynak topolojisi, grid/triangulation, sınır çıkarımı, doğrulama ve UV/buffer yardımcıları paylaşılır. Solver adapter'ları kendi rest state, constraint ve collider derlemesini yapar. Blob scalar field→contour üretimi sıvının görünüm adapter'ıdır; ortak fizik solver'ı değildir.
+17 Kasım 2026 geometri kararı: [Mesh2D / spline-to-mesh / Blob Surface](../production-2d-roadmap.md#9-mesh2d-spline-to-mesh-ve-blob-surface). Sabit vertex/triangle/UV topolojisi, structured grid, spline/shape triangulation, sınır çıkarımı, doğrulama ve buffer yardımcıları paylaşılır. Kullanıcıya açık Editable Poly 2D geliştirilmez. Solver adapter'ları kendi rest state, constraint ve collider derlemesini yapar. Blob scalar field→contour üretimi sıvının görünüm adapter'ıdır; ortak fizik solver'ı değildir.
 
 ## 2. Repoda doğrulanan sınırlar
 
@@ -45,7 +45,10 @@ Aşağıdaki isimler önerilen yeni sınıf/sözleşmelerdir; mevcut MCP çağr�
 | `SimulationJob` / job manager | Queue, worker, progress, cancel, failed, stale ve completed durumlarını yönetir. |
 | `AffectedObjectResolver` | Alan hedefleri, collider listeleri, ignore çiftleri ve koleksiyonları somut id'lere çözer. |
 | `FieldSystem` | Gravity, rüzgâr, vortex ve diğer desteklenen alanları simülasyon zamanında örnekler. |
+| `SceneGeometryRef` / geometry compiler | Kararlı layer referansını shape, spline, text glyph veya `Mesh2D` için solver'dan bağımsız bir geometri snapshot'ına derler; font/topology/transform sürümünü ve capability tanısını taşır. |
+| Emission geometry query | Seed'li konum, tangent, normal ve örnekleme ağırlığını üretir; point/path/perimeter/fill/glyph/vertex/edge/triangle modlarını solver'dan ayırır. |
 | Collider source/query sözleşmesi | Kaynak geometri, transform, yüzey hızı ve malzemeyi sunar; rigid/fluid düzlemsel temasları ve kumaşın yerel derinlik temasları ilgili solver'da çözülür. |
+| Surface geometry query | En yakın nokta, tangent, normal, yüzey koordinatı, offset ve detach bilgisini sunar; collision ile yüzey boyunca hareketi birbirine karıştırmaz. |
 | `SimulationCacheStore` | Türlü clip manifest'i, binary chunk, hash, sürüm, byte bütçesi ve yükleme yaşam döngüsünü yönetir. |
 | `BakeService` / bake record | Sonucu mevcut 2D timeline/asset modeline derler; generated ownership, tek undo, yeniden bake ve kullanıcı değişikliği denetimini yürütür. |
 | Capability ve diagnostics | Solver, renderer, cache decoder ve exporter desteğini doğrular; desteklenmeyen sonucu sessizce düşürmez. |
@@ -70,7 +73,7 @@ Ortak fizik verisi metre, saniye ve kilogram gibi açık birimlerle normalize ed
 | Cloth | Job, fields, kaynak seçimi, binary cache ve bake ownership | Yüzey constraints, pin, yerel derinlik ve deformable mesh çizimi |
 | Liquid / PBF | Particle/numeric buffer ve komşuluk yardımcıları gerektiğinde, job ve alanlar | 2D density/boundary çözümü ve particle/contour cache |
 | Smoke / grid flow | Recipe, job, fields, emitter ve cache storage | 2 eksenli grid/advection/projection ve density/dye texture |
-| Voronoi Fracture | Rigid-body çözümü, seed, job ve bake ownership | Düzlemsel polygon parçaları, centroid ve görsel kesimi |
+| Voronoi / Destruction | Rigid-body çözümü, seed, job, event cache ve bake ownership | Düzlemsel fragment polygon/mesh'i, adjacency, cluster/bond grafiği, damage policy, recursive generation ve görsel kesim |
 
 Particle spatial hash veya numeric buffer gibi yardımcılar, en az iki mevcut 2D/surface ihtiyacında yararı doğrulandığında ortaklaştırılır. Kullanılmayacak dimension-generic kernel veya gelecekteki moda yönelik adapter eklenmez.
 
@@ -80,7 +83,9 @@ Alan tanımı ortak: kind, transform/uzay, kapsam hacmi, yön, şiddet/zaman eğ
 
 Collider sözleşmesi geometri yanında kapalı/açık sınır, signed distance/normal veya desteklenen temas query'si, boundary velocity ve malzeme sunar. Rigid/fluid düzlemsel primitive'ler kullanır. Kumaşın yerel derinlik temasları kendi primitive proxy'lerini açıkça tanımlar; render layer sırası fiziksel derinlik sayılmaz.
 
-Field targets, collision targets, pin targets ve emitter sources ayrı ilişkilerdir. Collection üyeliği snapshot'ta çözülür. Boyut veya solver capability'si uyuşmayan nesne hedef listesinde hata/tanı verir; referansın varlığı etkileşimin desteklendiği anlamına gelmez.
+Field targets, collision targets, surface-follow targets, pin targets ve emitter sources ayrı ilişkilerdir. Aynı layer birden fazla rolde açıkça seçilebilir; görünür layer otomatik collider değildir. Collection üyeliği snapshot'ta çözülür. Boyut veya solver capability'si uyuşmayan nesne hedef listesinde hata/tanı verir; referansın varlığı etkileşimin desteklendiği anlamına gelmez. Text glyph, spline, shape ve `Mesh2D` adapter'larının ayrıntılı veri/UI sözleşmesi [sahne geometrisi etkileşim planındadır](emitter-collider-surface-interaction-plan.md).
+
+Emission, collision ve surface query'leri interface-segregated kalır. Yalnız emitter kullanan görsel partikül collision API'sine; yalnız collider kullanan rigid solver surface-follow API'sine bağımlı olmaz. Text collision gerçek glyph konturunu ve delikleri korur; `measureText` kutusu veya tek convex hull fiziksel glyph geometrisi sayılmaz. Affine hareketli hedef yerel geometriyi yeniden kullanabilir; deforme veya değişken topolojili hedef frame'e özgü rebuild/bake ve açık kaynak bütçesi ister.
 
 İlk karma sahneler one-way çalışır: örneklenmiş rigid/collider trajectory'si cloth/fluid'e girdi olur. İki yönlü etkileşim ortak alt-adım, temas/kuvvet alışverişi ve kararlılık gerektirir. Aynı job manager'da iki solver bulunması iki yönlü coupling'i otomatik sağlamaz.
 
@@ -89,6 +94,10 @@ Field targets, collision targets, pin targets ve emitter sources ayrı ilişkile
 Ortak clip header'ı: schema/solver sürümü, source/recipe hash'i, boyut, birimler/koordinat uzayı, sample times, interpolation politikası, channel manifest'i ve chunk hash/byte bilgileri. Payload türü açıkça ayrılır:
 
 - `rigidPose`: 2D poz/açı; interpolasyon tam tur dönmelerini korur.
+- `fractureEventSequence`: immutable fragment-generation manifest referansları,
+  parent/child lineage, cluster split, bond break ve olay tick'leri; olaylar
+  arasında fragment pozları `rigidPose` semantiğini kullanır. Geometri her
+  örnekte tekrarlanmaz.
 - `meshDeformation`: sabit topoloji ve UV, vertex poz örnekleri; kumaş için uygundur.
 - `particleFluid`: stable particle id, yaşam aralığı, poz ve gerekli ek kanallar.
 - `gridField`: çözünürlük, hücre/face yerleşimi, domain transform'u ve scalar/vector alanlar.
@@ -97,11 +106,18 @@ Ortak clip header'ı: schema/solver sürümü, source/recipe hash'i, boyut, biri
 
 Cache storage, hash, sıkıştırma ve yükleme protokolü paylaşılır; payload decoder ve interpolator ayrı tutulur. Gaz yoğunluk grid'ini kumaş vertex buffer'ı gibi, değişen sıvı yüzeyini sabit topolojili mesh gibi oynatmak desteklenmez.
 
+Fracture topology'si yalnız kayıtlı generation olaylarında değişir ve
+fragment kimlikleri olaylar arasında kararlıdır. Bu nedenle
+`fractureEventSequence`, her örnekte serbestçe değişebilen fluid
+`surfaceSequence` ile birleştirilmez. Rastgele seek/checkpoint etkin generation
+manifest'ini, canlı fragment/cluster setini ve bond damage durumunu birlikte
+geri yükler. Bir topology olayı yarım uygulanamaz.
+
 2D rigid bake normal keyframe'lere derlenebilir. Kumaş/fluid/gaz çoğunlukla binary clip ve timeline playback kontrolü gerektirir. BakeService ilgili output-kind derleyicisini seçer ve mevcut 2D timeline'ı kullanır; kendi keyframe motorunu yazmaz.
 
 2D sıvı contour'larının topolojisi değişebilir. Kumaşın sabit-topoloji decoder'ı buna otomatik uygun değildir. Clip decoder'ları farklı 2D sonuç türlerinin ihtiyacına göre ayrılır.
 
-Poly kaynak quad yüzleri runtime/solver için kararlı triangle ağına derlenebilir; bu eşleme topology hash'ine girer. Marching Squares çıktısında aynı contour/vertex kimliği kareler arasında garanti edilmez. Sıvı hareket cache'i ve yüzey appearance recipe/hash'i ayrı tutulur; görsel threshold/örnekleme değişimi mümkünse kayıtlı particle verisini yeniden kullanır. Tek kareyi Poly'ye dönüştürme yeni bir kaynak nesne üretir; değişken topology klibini sabit mesh payload'ı yapmaz.
+Structured grid veya spline-to-mesh kaynağı runtime/solver için kararlı triangle ağına derlenir; bu eşleme topology hash'ine girer. Marching Squares çıktısında aynı contour/vertex kimliği kareler arasında garanti edilmez. Sıvı hareket cache'i ve yüzey appearance recipe/hash'i ayrı tutulur; görsel threshold/örnekleme değişimi mümkünse kayıtlı particle verisini yeniden kullanır. Tek kareyi Mesh2D snapshot'a dönüştürme yeni bir sabit topolojili kaynak üretir; değişken topology klibini sabit mesh payload'ı yapmaz.
 
 ## 8. Bütçeler ve runtime
 
@@ -115,7 +131,11 @@ Solver çalıştırmadan playback, ilgili cache decoder ve renderer desteği ger
 
 ## 9. Uygulama sırası ve kabul
 
-Genel geliştirme önceliği [2D üretim yol haritasında](../production-2d-roadmap.md) tanımlıdır: önce export tutarlılığı, bileşen kütüphanesi ve çoklu format üretimi. Aşağıdaki sıra yalnız simülasyon işine gelindiğinde onun iç bağımlılıklarını belirtir; ana öncelik kuyruğunu değiştirmez.
+Genel geliştirme önceliği [2D üretim yol haritasında](../production-2d-roadmap.md)
+tanımlıdır. Aşağıdaki sıra yalnız simülasyon işine gelindiğinde onun iç
+bağımlılıklarını belirtir; ana plandaki Mesh2D, BakeService, simülasyon ve
+canonical render/export sırasını değiştirmez. Character Motion güncel aktif
+sıranın dışındadır ve bu çekirdeğin önkoşulu değildir.
 
 1. Ortak recipe, snapshot adapter, clock, job ve cache header'ını ilk 2D rigid bake içinde uygula; varsayımsal bütün solver'ları önce yazma.
 2. Cloth ve Liquid 2D ile ikinci/üçüncü payload türlerini ekle; ortak helper sınırlarını somut kullanımda doğrula.

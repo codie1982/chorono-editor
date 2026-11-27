@@ -2,10 +2,11 @@ import type { ToolDefinition } from '../../protocol'
 import { editorDescriptions } from './editorDescriptions'
 import { inspectionDescriptions } from './inspectionDescriptions'
 import { audioFileDescriptions } from './audioFileDescriptions'
+import { model3dDescriptions } from './model3dDescriptions'
 import { describeInputSchema } from './describeInputSchema'
 import { toolBehavior } from './behavior'
 
-const descriptions = { ...editorDescriptions, ...inspectionDescriptions, ...audioFileDescriptions }
+const descriptions = { ...editorDescriptions, ...inspectionDescriptions, ...audioFileDescriptions, ...model3dDescriptions }
 
 /** Present one callable tool with selection guidance and truthful IO hints.
  * implementationName selects the existing handler contract even when tool.name

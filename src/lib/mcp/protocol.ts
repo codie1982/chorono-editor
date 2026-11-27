@@ -1,3 +1,6 @@
+import { assertScenePaint } from '../paint/validatePaint'
+import { assertModelLayer } from '../model3d/source/modelCapabilities'
+import { assertModelClipOwnership } from '../model3d/animation/modelClipOwnership'
 import type { ChronoScene } from '../types'
 import { assertTrackValues, isColorTarget } from '../animation/typedValues'
 import {measureJson} from '../format/json'
@@ -8,6 +11,7 @@ import type { SourceAuthorization } from './source/EditorSourceIdentity'
 import { assertScenePropertyExpressions } from '../expression/properties/PropertyExpression'
 import { assertNumericInputExpressions } from '../editor/inputExpressions/NumericInputExpression'
 import type { SceneSelection } from './selection/SceneSelection'
+import { compositionSettingsValid } from '../scene/compositionSettings'
 
 export const MCP_VERSION = '2.1.0'
 export const LIMITS = { layers: CLONE_WORKLOAD_LIMITS.layers, timelines: 100, keyframes: CLONE_WORKLOAD_LIMITS.keyframes, sceneBytes: 32 * 1024 * 1024, scriptBytes: 128 * 1024, scriptMs: 2000, scriptMemory: 32 * 1024 * 1024, commands: 20000, previewPixels: 4_194_304, requestBytes: 48 * 1024 * 1024 }
@@ -40,6 +44,7 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
   const scene = value as ChronoScene
   if (!scene || !scene.composition || !Array.isArray(scene.layers) || !Array.isArray(scene.timelines) || !Array.isArray(scene.assets) || !Array.isArray(scene.parameters) || !Array.isArray(scene.bindings) || !Array.isArray(scene.triggers)) throw new Error('Invalid Chorono scene')
   if (!String(scene.formatVersion).startsWith('1.')) throw new Error('Unsupported scene version')
+  assertScenePaint(scene)
   assertSceneGuides(scene.editorGuides)
   assertAuthoringData(scene.authoring)
   assertScenePropertyExpressions(scene)
@@ -47,7 +52,7 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
   const comp = scene.composition
   if (comp.audioVolume !== undefined && (!Number.isFinite(comp.audioVolume) || comp.audioVolume < 0 || comp.audioVolume > 4)) throw new Error('Invalid master audio gain')
   if (comp.audioMuted !== undefined && typeof comp.audioMuted !== 'boolean') throw new Error('Invalid master audio mute')
-  if (!(comp.width >= 1 && comp.width <= 8192 && comp.height >= 1 && comp.height <= 8192 && comp.frameRate >= 1 && comp.frameRate <= 120 && comp.durationMs >= 0 && comp.durationMs <= 3600000)) throw new Error('Invalid composition dimensions, duration or frame rate')
+  if (!compositionSettingsValid(comp)) throw new Error('Invalid composition dimensions, duration or frame rate')
   if (scene.layers.length > LIMITS.layers || scene.timelines.length > LIMITS.timelines || scene.assets.length > 500) throw new Error('Scene object limit exceeded')
   const unique = (items: Array<{ id: string }>) => {
     const ids = new Set<string>()
@@ -71,6 +76,8 @@ export function assertScene(value: unknown): asserts value is ChronoScene {
       seen.add(parent)
       parent = byId.get(parent)?.parentId
     }
+    assertModelLayer(layer, scene.layers)
+    assertModelClipOwnership(scene, layer)
     if (layer.particleEmitter && layer.particleEmitter.emitter.maxParticles > 10000) throw new Error('Particle limit exceeded')
     if (layer.type === 'audio' && layer.audio) {
       const audio = layer.audio

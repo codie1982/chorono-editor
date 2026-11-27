@@ -7,12 +7,15 @@ import { Matrix2D } from '@/lib/geometry/Matrix2D'
 import { CanvasRenderer } from './CanvasRenderer'
 import { rendererRegistry } from '@/lib/registry'
 import { CanvasSurfacePool } from './resources/CanvasSurfacePool'
+import { newStructuredGridMesh2DLayer } from '@/lib/registry/definitions/mesh2d/Mesh2DDefinition'
 
 /** Records composition-space rectangles, including any active canvas transform. */
 function recordingCanvas() {
   let matrix = Matrix2D.identity()
   const rectangles: number[][] = []
   const fills: string[] = []
+  let strokes = 0
+  const events: string[] = []
   const states: Array<{ matrix: Matrix2D; alpha: number; fill: string; stroke: string; dash: number[] }> = []
   const ctx = {
     globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1,
@@ -46,16 +49,18 @@ function recordingCanvas() {
     },
     setLineDash(dash: number[]) { this.dash = dash },
     clearRect() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
-    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, closePath() {}, stroke() {},
-    fill() { fills.push(this.fillStyle) },
+    bezierCurveTo() {}, quadraticCurveTo() {}, arcTo() {}, closePath() {}, stroke() { strokes++; events.push('grid') },
+    fill() { fills.push(this.fillStyle); events.push('layer') },
   }
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, rectangles, fills, saveDepth:()=>states.length }
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, rectangles, fills, events,
+    strokeCount: () => strokes, saveDepth:()=>states.length }
 }
 
 function triangle(): Layer {
-  return newSplineLayerFromData(createPolylineSpline([
+  const layer = newSplineLayerFromData(createPolylineSpline([
     { x: -60, y: 40 }, { x: 0, y: -80 }, { x: 90, y: 20 },
   ], true), { x: 200, y: 180, name: 'Editable triangle' })
+  return { ...layer, style: { fill: { type: 'solid', color: '#3B82F6' }, stroke: { color: '#FFFFFF', width: 0 } } }
 }
 
 function expectRectangle(actual: number[][], expected: number[]) {
@@ -74,6 +79,50 @@ function render(layers: Layer[], selectedId: string, options = {}) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('CanvasRenderer selection outlines', () => {
+  it('renders only a nested Solo child, then the whole subtree for group Solo', () => {
+    const group: Layer = { ...newRectLayer(), id: 'solo-group', type: 'group' }
+    const child = { ...newRectLayer(), id: 'solo-child', parentId: group.id, solo: true }
+    const sibling = { ...newRectLayer(), id: 'solo-sibling', parentId: group.id }
+    const outside = { ...newRectLayer(), id: 'solo-outside' }
+    expect(render([group, child, sibling, outside], '', { selectionOutline: false }).fills).toHaveLength(1)
+    expect(render([{ ...group, solo: true }, { ...child, solo: false }, sibling, outside], '', { selectionOutline: false }).fills).toHaveLength(2)
+  })
+  it('shows selected Mesh2D triangles only for the enabled editor diagnostic', () => {
+    const layer = newStructuredGridMesh2DLayer()
+    const cleanEditor = render([layer], layer.id, { selectionOutline: false })
+    expect(cleanEditor.fills).toHaveLength(1)
+    expect(cleanEditor.strokeCount()).toBe(0)
+    const topologyEditor = render([layer], layer.id, {
+      selectionOutline: false,
+      editorOverlays: { meshTriangles: true },
+    })
+    expect(topologyEditor.fills).toHaveLength(1)
+    expect(topologyEditor.strokeCount()).toBe(1)
+    const preview = render([layer], layer.id, {
+      selectionOutline: false,
+      renderMode: 'preview',
+      editorOverlays: { meshTriangles: true },
+    })
+    expect(preview.fills).toHaveLength(1)
+    expect(preview.strokeCount()).toBe(0)
+  })
+
+  it('draws editor grid on either side of opaque content and never in preview/export mode', () => {
+    const layer = triangle()
+    expect(render([layer], layer.id, { grid: { size: 20, inFront: false } }).events).toEqual(['grid', 'layer'])
+    expect(render([layer], layer.id, { grid: { size: 20, inFront: true } }).events).toEqual(['layer', 'grid'])
+    expect(render([layer], layer.id, { grid: { size: 20 } }).events).toEqual(['layer', 'grid'])
+    for (const inFront of [true, false]) expect(render([layer], layer.id,
+      { grid: { size: 20, inFront }, renderMode: 'preview' }).events).toEqual(['layer'])
+  })
+
+  it('rejects non-finite or pathological grid spacing without changing content', () => {
+    const layer = triangle()
+    for (const size of [NaN, Infinity, -1, 0, .001, 10001]) {
+      expect(render([layer], layer.id, { grid: { size } }).events).toEqual(['layer'])
+    }
+    expect(render([layer], layer.id, { grid: { size: 12.5 } }).events).toEqual(['layer', 'grid'])
+  })
   it('unwinds parent canvas state after scratch admission fails, keeping the next frame correctly positioned', () => {
     const pool=new CanvasSurfacePool({maxBytes:0}), renderer=new CanvasRenderer(pool)
     const group={...newRectLayer(),type:'group' as const}

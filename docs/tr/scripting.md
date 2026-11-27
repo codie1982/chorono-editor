@@ -9,9 +9,9 @@ Claude ve Codex için MCP `run_script` kullanılır. Kod izole QuickJS içinde e
 Önce `list_sessions`, `get_capabilities`, `chorono://scripting` ve `get_scene` okuyun. Birden fazla editör varsa `sessionId` seçin. Bağlı sürümün nesne türleri, özellik şemaları, particle presetleri ve sınırları capabilities içinde bulunur.
 
 1. Sahneyi ve revision'ı okuyun; ilgisiz çalışmayı koruyun.
-2. `run_script({code,dryRun:true,expectedRevision,requestId})` çağırın.
+2. `get_scene` içindeki revision ve tek kullanımlık readToken ile `run_script({code,dryRun:true,expectedRevision,readToken,requestId})` çağırın.
 3. Dönen nesne/timeline özetini, logları ve `planId` değerini inceleyin.
-4. Aynı çalışan MCP sunucusunda `apply_script_plan({planId,expectedRevision,requestId})` ile planı uygulayın. Kodu tekrar çalıştırmayın; plan üretilmiş kimlikleri korur. Plan beş dakika sonra, sahne değiştiğinde veya sunucu yeniden başladığında geçersizleşir; ayrı kısa ömürlü stdio süreçleri plan paylaşmaz.
+4. Planın döndürdüğü **yeni** readToken ve revision ile aynı çalışan MCP sunucusunda `apply_script_plan({planId,expectedRevision,readToken,requestId})` çağırın. Kodu tekrar çalıştırmayın; plan üretilmiş kimlikleri korur. Plan beş dakika sonra, sahne değiştiğinde veya sunucu yeniden başladığında geçersizleşir; ayrı kısa ömürlü stdio süreçleri plan paylaşmaz.
 5. Gerçek `render_preview` görüntülerini inceleyin; doğrulayıp `save_project` ile kaydedin.
 
 Hata durumunda çalışma sahnesi uygulanmaz. Başarılı uygulama tek geri alma adımıdır. Import, oynatma, çalışma zamanı olayları, önizleme, kayıt ve export ayrı MCP araçlarıdır; script içinde tarayıcı/dosya API'si açmazlar.
@@ -31,6 +31,12 @@ scene.log(scene.snapshot().layers.length, scene.assets.length);
 ```
 
 `layer.patch(partial)` nesneleri özyinelemeli birleştirir, dizileri değiştirir; belirtilmeyen alt alanları korur. `layer.set(partial)` eski davranışını korur: `audio`, `style`, `transform` gibi iç içe bir nesne verildiğinde o nesnenin tamamını değiştirir. Okunan kopyayı değiştirmek sahneyi değiştirmez; düzenleme için handle/entity komutlarını kullanın. Katmanın kimliği patch ile değiştirilemez.
+
+`set`, `patch` ve konum/boyut/renk gibi statik kısa yollar artık ortak korumadan geçer. Katmanın veya atasının locked/frozen olması, değişen alanın herhangi bir timeline'da key/controller ile yönetilmesi ya da binding/wire/expression/path tarafından sürülmesi işlemi reddeder. Animasyonlu değeri `key` ile düzenleyin. Kilidi açmak için önce yalnızca `{locked:false}` / `{frozen:false}` yazın; kilit açmayı geometri değişikliğiyle birleştirmeyin. Mevcut formula/binding kaydını ham patch ile silip korumayı aşmak mümkün değildir.
+
+Değişen değerler tür, sonlu sayı, tanımlı aralık/seçenek ve geometri bütünlüğü açısından doğrulanır; değerler otomatik düzeltilmez. Dokunulmayan eski alanlar korunur. `set({transform:{x:10}})` eksik bir transform bırakacağı için reddedilir; `patch({transform:{x:10}})` diğer transform alanlarını korur. Alan animasyonluysa bu ikinci çağrı da reddedilir. Ayrıntılar ve sürüm uyumluluğu: [Script kaynak korumaları](script-source-guards.md).
+
+Script yalnızca 2D kaynağı düzenler. Mevcut `model3d` katmanının dış 2D kutusu yerleştirilebilir/key alabilir; iç `model3d` verisi, iç track'ler ve bunlara bağlı referanslar korunur. 3D içerik oluşturma, kopyalama, silme ve iç kamera/model düzenleme yerel MCP araçlarının ayrı kapsamıdır. Capabilities içindeki `scriptAuthoring` bu ayrımı bildirir.
 
 ## Kod ile birden fazla animasyon
 
@@ -120,3 +126,21 @@ Yukarıdaki waveform `160 + 12*sin(2*tSec)` üretir; frekans Hz, phase radyandı
 `timeline.bake(target,60,0.005,{startMs:0,endMs:1000})` ve native `bake_track` optional `startMs`/`endMs` timeline-local ms kullanır; bounds atlanırsa tam timeline seçilir. FPS pozitif ve en fazla 240, örnek sayısı en fazla 20.000, tolerance 0..1 örneklerde normalize dikey sadeleştirme hatasıdır. Pencere dışı eski key'ler ve ilgisiz metadata korunur; controller/OOR/modifier/time remapping global olarak kaldırılır. Dışarıda kalan key'ler/constant uçlar çalışır. Örnekleme hatası FPS'e bağlıdır; tolerance sürekli matematiksel eşlik garantisi değildir. Geçersiz/non-finite/stale kaynak reddedilir; Cancel source değiştirmez.
 
 Wire önizlemesi ve runtime aynı güvenli parser/evaluator'ı kullanır. `source`/`s` o anki pre-wire evaluated input'tur; örtük zaman/çarpma yoktur. `2+3`, scientific notation ve açık çarpma çalışır; `^` sağdan birleşir ve unary işaretten önceliklidir (`-2^2=-4`, `(-2)^2=4`). Yanlış argüman sayısı, bilinmeyen isim, non-finite/domain hatası ve çevrim açıklanır; hedefin pre-wire değeri korunur. Wires aynı input frame'i okur; iterative feedback yapmaz. Katman kaynakları numeric scalar, scene parametreleri legacy boolean/numeric-string dönüşümü kullanır. Sınırlar 4096 karakter, 1024 token/node ve 64 nesting seviyesidir. Serbest zaman expression controller'ı ayrı özelliktir.
+
+## 2D geometri ve Link & IK
+
+`layer.geometry2d(toolName, options?)` aynı adlı MCP komutunun seçeneklerini alır. Katman kimliğini receiver sağlar. Dönüş değeri etkilenen katman kimliğidir. `create_mesh2d_from_source` bağımsız bir katman üretip onun kimliğini döndürür. Örneğin `layer.geometry2d('convert_layer_to_mesh2d')` aynı katmanı dönüştürür. Ardından `layer.geometry2d('edit_2d_modifier_stack',{operation:{kind:'add',type:'meshSmooth'}})` Smooth ekler. Satır kimliği `layer.data.modifierStack.modifiers` üzerinden okunur.
+
+`layer.rig2d(action, {timelineId?, timeMs?, autoKey?})` geçerli script taslağını örnekler. Varsayılan zaman 0 ms, timeline scriptin seçtiği veya ilk timeline, Auto Key kapalıdır. Yazma sonucu `null`, tanı sonucu ilgili zincirin çözülen kaydıdır. Var olan ağırlık anahtarları Manual modunda da güncellenir. `setWeight` 0–1 aralığında harmanlar. `matchFK` ve `matchIK` poz koruyarak geçiş yapar.
+
+```javascript
+const upper = scene.get('upper'), lower = scene.get('lower');
+lower.rig2d({kind:'link', driverId:upper.id});
+upper.rig2d({kind:'ik', lowerId:lower.id, targetId:'target'});
+const frame = {timelineId:'walk', timeMs:600, autoKey:true};
+upper.rig2d({kind:'setWeight', weight:0.4}, frame);
+upper.rig2d({kind:'matchFK'}, frame);
+scene.log(JSON.stringify(upper.rig2d({kind:'diagnostics'}, frame)));
+```
+
+Örnek üç bağımsız kardeş katman, ayrı pivot konumları ve mevcut bir `walk` timeline’ı kullanır. `unlinkKeepPose` takipçi katmana uygulanır. Ağırlık kanalı `twoBoneIK2d.weight` olarak anahtarlanır. Tam işlem listeleri `get_capabilities({summary:true}).scriptAuthoring` altında bulunur.

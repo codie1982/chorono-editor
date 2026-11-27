@@ -14,6 +14,8 @@ import { useMotionDrawing } from './canvas/motion/useMotionDrawing'
 import { useMotionKeyDrag, motionPointerWorld } from './canvas/motion/useMotionKeyDrag'
 import { useMotionKeyboard } from './canvas/motion/useMotionKeyboard'
 import { isMotionNodeSelected, selectMotionNode, trajectoryNodeRef, type MotionEditorMode } from './canvas/motion/types'
+import { useMotionCurveEditing } from './canvas/motion/useMotionCurveEditing'
+import { MotionCurveControls } from './canvas/motion/MotionCurveControls'
 
 export interface MotionPathOverlayProps {
   layer: Layer
@@ -88,6 +90,8 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
     if (!props.selectedKeyframeIds) setLocalSelection(ids)
     props.onSelectKeyframes?.(ids)
   }, [props.selectedKeyframeIds, props.onSelectKeyframes])
+  const curves = useMotionCurveEditing({ model, editor, canvasRef, zoom, enabled: mode === 'select' && !props.interactionDisabled && model.capability.editable,
+    onSelect: select, onSeek: props.onSeek, onWarning: setWarning })
   const editingCallback = useRef(props.onEditingChange); editingCallback.current = props.onEditingChange
   useEffect(() => {
     editingCallback.current?.(mode !== 'off')
@@ -98,12 +102,17 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
     onSelect: select, onSeek: props.onSeek, onWarning: setWarning })
   const drawing = useMotionDrawing({ scene, editor, timelineId, layerId: layer.id, durationMs: model.durationMs,
     localTimeMs: currentTimeMs, contextKey, documentSignal, apply: actions.apply, onWarning: setWarning })
-  const drag = useMotionKeyDrag({ editor, timelineId, layerId: layer.id, canvasRef, contextKey,
+  const drag = useMotionKeyDrag({ editor, timelineId, layerId: layer.id, canvasRef, contextKey: `${contextKey}:${!!props.interactionDisabled}`,
     documentSignal, onSelect: select, onWarning: setWarning, snapWorldPoint: props.snapWorldPoint })
   const moveSelected = useCallback((dx: number, dy: number) => actions.apply(() => moveTrajectoryNodes(editor.getScene(), {
     timelineId, layerId: layer.id, nodes: selectedNodes.map(trajectoryNodeRef), deltaWorld: { x: dx, y: dy },
   })), [actions.apply, editor, timelineId, layer.id, selectedNodes])
-  const cancel = useCallback(() => { drag.cancel(); drawing.clear(); changeMode('select') }, [drag.cancel, drawing.clear, changeMode])
+  /** Escape rolls back a live gesture first; idle selection mode exits motion
+   * editing so the next Escape can reach ordinary layer deselection. */
+  const cancel = useCallback(() => {
+    const dragging = editor.isTransactionActive()
+    drag.cancel(); drawing.clear(); changeMode(dragging || mode !== 'select' ? 'select' : 'off')
+  }, [drag.cancel, drawing.clear, changeMode, editor.isTransactionActive, mode])
   useMotionKeyboard({ active: mode !== 'off' && !props.interactionDisabled, canEdit: model.capability.editable,
     hasSelection: selectedNodes.length > 0, move: moveSelected, remove: actions.remove, cancel })
   const preview = useMemo(() => drawing.previewScene ? buildTrajectoryModel(drawing.previewScene, timelineId, layer.id) : null,
@@ -144,6 +153,7 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
       <MotionKeyToolbar mode={mode} onModeChange={changeMode} timelineId={timelineId} selectedCount={selectedNodes.length} editable={editable}
         duplicateMs={duplicateMs} onDuplicateMs={setDuplicateMs} onDuplicate={() => actions.duplicate(duplicateMs)} onDelete={actions.remove} />
       {active && <>
+        <p className="mt-2 text-xs text-slate-400">Path reference: anchor / pivot{props.interactionDisabled ? ' · Pan mode: key editing paused' : ''}.</p>
         <p className="mt-1 text-xs text-slate-300">{mode === 'draw' ? 'Place route points, set timing, then Apply. Source stays unchanged during preview.'
           : mode === 'add' ? `Click to set a position key at ${currentTimeMs.toFixed(2)} ms.` : 'Click a key to select and seek. Shift adds/removes; drag or use arrows to move selected keys.'}</p>
         {!!model.nodes.length && <label className="mt-2 flex items-center gap-2 text-xs text-slate-300">Key time
@@ -161,7 +171,7 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
         {selectedNodes.length === 1 && mode === 'select' && <MotionKeyInspector node={selectedNodes[0]} durationMs={model.durationMs}
           disabled={!editable} onApply={actions.numeric} />}
         {mode === 'draw' && <MotionDrawingPanel settings={drawing.settings} onChange={drawing.setSettings} pointCount={drawing.points.length}
-          durationMs={model.durationMs} canApply={drawing.canApply} onApply={drawing.apply} onClear={drawing.clear} onCancel={cancel} />}
+          durationMs={model.durationMs} canApply={drawing.canApply && editable} onApply={drawing.apply} onClear={drawing.clear} onCancel={cancel} />}
         {layer.followPath && <div className="mt-2 flex gap-2 text-xs">
           <button type="button" className="rounded border border-slate-500 px-2 py-1 disabled:opacity-40" disabled={!props.onEditPathSource}
             onClick={() => props.onEditPathSource?.(layer.followPath!.pathLayerId)}>Edit Path Source</button>
@@ -179,9 +189,12 @@ export default function MotionPathOverlay(props: MotionPathOverlayProps) {
       {lines.map((samples, index) => <polyline key={index} points={samples.map(sample => `${sample.world.x * zoom},${sample.world.y * zoom}`).join(' ')}
         fill="none" stroke={preview ? '#fbbf24' : '#7dd3fc'} strokeWidth={2} strokeDasharray={preview ? '5 3' : undefined} pointerEvents="none" />)}
       {drawing.points.map((point, index) => <circle key={`draft-${index}`} cx={point.x * zoom} cy={point.y * zoom} r={4} fill="#fbbf24" pointerEvents="none" />)}
+      {mode === 'select' && <MotionCurveControls model={model} lines={lines} selected={selectedNodes} zoom={zoom}
+        enabled={!props.interactionDisabled && model.capability.editable} editing={curves} />}
       {model.nodes.map(node => <g key={node.id} data-motion-node-id={node.id} data-motion-time-ms={node.timeMs}
         transform={`translate(${node.world.x * zoom} ${node.world.y * zoom})`} role="button" tabIndex={mode === 'select' && !props.interactionDisabled ? 0 : -1}
         aria-label={`Motion key ${node.timeMs.toFixed(2)} milliseconds`} aria-pressed={isMotionNodeSelected(node, selection)}
+        onContextMenu={event => curves.context(event, node)}
         aria-disabled={props.interactionDisabled || undefined}
         style={{ pointerEvents: mode === 'select' && !props.interactionDisabled ? 'all' : 'none', cursor: model.capability.editable ? 'grab' : 'pointer' }}
         onPointerDown={beginNode(node)} onKeyDown={event => { if (!props.interactionDisabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopPropagation(); pick(node, event.shiftKey) } }}>

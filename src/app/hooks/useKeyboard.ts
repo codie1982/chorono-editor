@@ -11,6 +11,8 @@ import { hasVisibleKeyboardScope } from '@/lib/shortcuts/keyboardScope'
 export type TimelineProperty = 'position' | 'scale' | 'rotation' | 'opacity'
 
 interface Handlers {
+  /** Suspend this host while a separate detail authoring surface owns shortcuts. */
+  enabled?: boolean
   onUndo: () => void
   onRedo: () => void
   onPlayToggle: () => void
@@ -21,6 +23,10 @@ interface Handlers {
   onNudgeSelected?: (dx: number, dy: number) => void
   onDeleteSelected: () => void
   onDuplicateSelected: () => void
+  /** Solo the selected objects/groups, or exit an identical Solo selection. */
+  onSoloSelected?: () => void
+  /** Canvas/list selection only. Active tools keep first refusal on Escape. */
+  onClearSelection?: () => void
   onCopy?: () => void
   onPaste?: () => void
   onShowHelp?: () => void
@@ -32,6 +38,8 @@ interface Handlers {
   onOpenArrayModal?: () => void
   /** Single-key tool shortcuts (V/M/H/P/G/R/S/A). Pan is a toggle request. No-op if absent. */
   onToolChange?: (mode: ToolMode) => void
+  /** Enter a component level for the selected editable Spline/Mesh; digits are idempotent. */
+  onGeometryEditMode?: (mode: 'point' | 'edge' | 'object') => void
   /** Timeline context — reveal a property track (P/S/R/T) or all keyed (U). */
   onTimelineShowProperty?: (prop: TimelineProperty | 'all') => void
   /** Timeline context — add/remove a keyframe for a property at the playhead. */
@@ -42,8 +50,8 @@ interface Handlers {
   onTimelinePrevKeyframe?: () => void
   onTimelineNextKeyframe?: () => void
   /** Returns the active editor panel's context. Drives which binding
-   *  wins when the same key is mapped in multiple contexts (e.g. S = Scale
-   *  tool on the canvas, Show Scale track in the timeline). */
+   *  wins when the same key is mapped in multiple contexts (e.g. S = Solo
+   *  selection on the canvas, Show Scale track in the timeline). */
   getContext?: () => ShortcutContext
   /** Drag previews must finish or cancel before another command changes history. */
   isTransactionActive?: () => boolean
@@ -60,6 +68,7 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
   'canvas.tool.rotate':         'rotate',
   'canvas.tool.scale':          'scale',
   'canvas.tool.anchor':         'anchor',
+  'canvas.tool.texture':        'texture',
   'canvas.tool.box-select':     'selection-box',
   'canvas.tool.lasso-select':   'selection-lasso',
   'canvas.tool.circle-select':  'selection-circle',
@@ -72,19 +81,20 @@ const TOOL_BY_ID: Record<string, ToolMode> = {
  * active context) to a shortcut id, then dispatch the matching handler.
  *
  * Context-awareness means the same physical key can do different things
- * depending on the active panel: `S` is the Scale tool on the canvas
+ * depending on the active panel: `S` solos the selection on the canvas
  * but "Show Scale track" in the timeline.
  */
 export function useKeyboard(handlers: Handlers) {
   const {
+    enabled = true,
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected,
+    onDeleteSelected, onDuplicateSelected, onSoloSelected, onClearSelection,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
-    onToolChange,
+    onToolChange, onGeometryEditMode,
     onTimelineShowProperty, onTimelineToggleKeyframe,
     onTimelinePrevKeyframe, onTimelineNextKeyframe, onSetKey, onTimelineNavigate,
     getContext,
@@ -93,6 +103,7 @@ export function useKeyboard(handlers: Handlers) {
   } = handlers
 
   useEffect(() => {
+    if (!enabled) return
     // Build the id → action map fresh each effect run so it closes over the
     // latest handlers. Missing handlers leave the slot undefined (no-op).
     const actions: Record<string, (() => void) | undefined> = {
@@ -115,7 +126,13 @@ export function useKeyboard(handlers: Handlers) {
       'canvas.nudge.up10':    onNudgeSelected ? () => onNudgeSelected(0, -10) : undefined,
       'canvas.nudge.down10':  onNudgeSelected ? () => onNudgeSelected(0, 10) : undefined,
 
+      'canvas.edit.point': onGeometryEditMode ? () => onGeometryEditMode('point') : undefined,
+      'canvas.edit.edge': onGeometryEditMode ? () => onGeometryEditMode('edge') : undefined,
+      'canvas.edit.object': onGeometryEditMode ? () => onGeometryEditMode('object') : undefined,
+
       'canvas.select.duplicate':  onDuplicateSelected,
+      'canvas.select.solo': onSoloSelected,
+      'canvas.select.clear': onClearSelection,
       'canvas.select.cloneQuick': onCloneQuick,
       'canvas.select.copy':       onCopy,
       'canvas.select.paste':      onPaste,
@@ -151,7 +168,7 @@ export function useKeyboard(handlers: Handlers) {
       // Native form controls, IME and inner widgets own their keyboard input.
       if (e.defaultPrevented || e.isComposing || !target
           || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
-          || target.closest?.('[role="menu"], [role="dialog"], [aria-modal="true"], dialog')) {
+          || target.closest?.('[role="menu"], [role="dialog"], [aria-modal="true"], dialog, [data-editor-input-scope]')) {
         return
       }
 
@@ -172,6 +189,7 @@ export function useKeyboard(handlers: Handlers) {
       e.preventDefault()
       // Holding a toggle key must not alternate tools on native key repeat.
       if (e.repeat && id === 'timeline.keyframe.set') return
+      if (e.repeat && id === 'canvas.select.solo') return
       if (e.repeat && (id === 'canvas.tool.pan' || id === 'canvas.tool.panLegacy')) return
       if (isTransactionActive?.()) return
       action()
@@ -180,14 +198,15 @@ export function useKeyboard(handlers: Handlers) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [
+    enabled,
     onUndo, onRedo, onPlayToggle,
     onStepBack, onStepForward,
     onNudgeSelected,
-    onDeleteSelected, onDuplicateSelected,
+    onDeleteSelected, onDuplicateSelected, onSoloSelected, onClearSelection,
     onCopy, onPaste, onShowHelp,
     onGroupSelected, onUngroupSelected,
     onCloneQuick, onOpenArrayModal,
-    onToolChange,
+    onToolChange, onGeometryEditMode,
     onTimelineShowProperty, onTimelineToggleKeyframe,
     onTimelinePrevKeyframe, onTimelineNextKeyframe, onSetKey, onTimelineNavigate,
     getContext,

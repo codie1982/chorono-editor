@@ -1,14 +1,32 @@
 # Chorono — 3D modelleme ve 2D sahneye 3D katman entegrasyonu
 
+**Plan sahipliği, 17 Kasım 2026:** Bu belge [3D ana planının](production-3d-roadmap.md)
+ayrıntılı mimari kaydıdır. Aşağıdaki 5–6 Kasım sıra ve kapsam cümleleri
+tarihsel değerlendirmedir; güncel teslim sırası ve durum 3D ana planında
+izlenir. [2D ana planı](production-2d-roadmap.md) 3D teslimi içermez.
+İki hattın yeniden kullandığı temel contract'lar ve paylaşılmaması gereken
+domain yapıları [2D–3D ortak temel sözleşmesinde](shared-2d-3d-foundations.md)
+tanımlıdır; bu belge o sınırların 3D adapter ayrıntılarını açıklar.
+
+**17 Kasım 2026 kapsam genişlemesi:** [3D4 model/karakter üretim programı](plans/model-production-quality-plan.md)
+bu belgedeki dar lathe/extrude/malzeme önerisini genişletir. Mevcut 3D detay
+editöründe geometri/modifier, UV/doku, stilize fiziksel GPU kalite profili,
+sculpt ve rig/IK/corrective üretimi plan kapsamındadır. Aşağıdaki eski
+"ayrı dilim" ifadeleri bu işleri kapsam dışı bırakmaz; teslim kapıları 3D4'te
+izlenir. Bağımsız üst düzey 3D belge ve hacimsel solver kapsamı açılmaz.
+
 Tarih: 5 Kasım 2026. Güncelleme: 6 Kasım 2026, 2D içindeki kutulu 3D nesne düzenleme akışı netleştirildi. Durum: kaynak kod incelemesine dayanan mimari ve geliştirme planı; uygulama başlatılmadı. Aşağıdaki yeni tip, servis ve capability adları öneridir; mevcut MCP veya scripting API'si değildir.
 
 ## 1. Karar ve kapsam
 
-**Yerel Three.js tabanlı üretim sistemi eklenebilir. İlk teslim, 2D kompozisyonda kendi kutusunda düzenlenebilen bir 3D sahne katmanıdır. Ayrı `3d-modeling` çalışma alanı ihtiyaç olduğunda aynı çekirdek üzerine eklenebilir.** Model, kamera, ışık ve malzeme verileri iki kullanım arasında paylaşılır; tam modelleme modu 2D içindeki kullanımın önkoşulu değildir.
+**Yerel Three.js tabanlı üretim sistemi eklenebilir. İlk teslim, 2D kompozisyonda kendi kutusunda düzenlenebilen bir 3D sahne katmanıdır. 21 Kasım 2026 dört mode kararıyla 3D Mode kesin ürün alanıdır; bağımsız descriptor/kabuk aynı çekirdek üzerine aşamalı bağlanır.** Model, kamera, ışık ve malzeme verileri iki kullanım arasında paylaşılır; tam modelleme kabuğunun tamamlanması 2D içindeki ilk 3D kullanımın önkoşulu değildir.
 
 2D kompozisyona 3D model koymak için tam modelleme editörünün tamamlanması gerekmez. İçe aktarılan bir GLB veya parametrik model, kendi kamerasıyla render edilerek 2D katman yığınına katılır. Ayrı modelleme alanı bu varlığın hazırlanmasını ve düzenlenmesini sağlar. Bu değerlendirme, önceki yalnız 2D geliştirme kararına yeni bir ürün kapsamı önerisidir; bütün 3D işlerinin uygulamaya alındığı anlamına gelmez.
 
-[2D üretim yol haritasındaki](production-2d-roadmap.md) export tutarlılığı → bileşen kütüphanesi → çoklu format önceliği korunur. Bu belge 3D model/render entegrasyonunu planlar. Arşivdeki 3D rigid body, kumaş, sıvı solver'larını yeniden aktif etmez; game engine ve video editor kapsamını genişletmez.
+Bu belge 3D model/render entegrasyonunu planlar; 2D işlerinin güncel sırası
+[2D ana planındadır](production-2d-roadmap.md). Arşivdeki 3D rigid body,
+kumaş ve sıvı solver'larını yeniden aktif etmez; game engine ve video editor
+kapsamını genişletmez.
 
 ## 2. Kodda doğrulanan başlangıç
 
@@ -23,7 +41,7 @@ Tarih: 5 Kasım 2026. Güncelleme: 6 Kasım 2026, 2D içindeki kutulu 3D nesne d
 | `render/gpu/GPUCompositor.ts` | Particle GPU çıktısını Canvas2D'ye aktarıyor; transform/opacity zaten GPU'ya işlendiği için bunları sıfırlıyor. | GPU → Canvas2D yaklaşımı referanstır; particle'a özgü sözleşme 3D katman için doğrudan kullanılamaz. |
 | `types/media.ts`, import/asset sistemi | Model/3D scene asset türü yok; embedded/external/projectPackage storage tanımları var. | Model, texture, environment ve decoder bağımlılıkları eklenir; tanımlı storage seçeneklerinin uçtan uca desteği ayrıca doğrulanır. |
 | `package.json` | Three.js bağımlılığı yok. | Sürümü sabitlenmiş, istemcide gerektiğinde yüklenen bir entegrasyon gerekir. |
-| Runtime export | Mevcut iki serializer farklı alanlar taşıyor. | Yeni 3D veriler [canonical export planına](../../plan/EXPORT_CONSISTENCY_2D_PLAN.md) eklenir; üçüncü serializer açılmaz. |
+| Runtime export | Mevcut iki serializer farklı alanlar taşıyor. | Yeni 3D veriler [canonical export planının](plans/export-consistency-2d-plan.md) capability sözleşmesiyle değerlendirilir; üçüncü serializer açılmaz. |
 
 Bu belge inceleme öncesinde boştu. Genel multi-mode iskeleti başlangıç sağlar; bütün modların bugün aynı uygulama koduyla çalıştığı iddia edilemez.
 
@@ -70,7 +88,7 @@ Paylaşım mevcut ihtiyaçlarla sınırlıdır. `PropertySchema` bugün `Layer` 
 
 Global `AnimatableValue` hemen Vec3/quaternion ile genişletilmez. Basit ürün dönüşü scalar açı kontrolüyle tanımlanabilir; genel 3D yönelim blend'i quaternion slerp gerektirir ve dört bağımsız sayı track'iyle eşdeğer sayılmaz. Ayrı 3D modda yeni track türü gerekiyorsa evaluator, curve editor, clone/remap, validator, state blend ve export desteği birlikte geliştirilir.
 
-Bir asset'in birden çok instance'ı geometri ve texture paylaşabilir; kontrol değerleri, local saat ve değiştirilen materyal durumu instance'a aittir. Asset sürümü pin'lenir. Kaynağı düzenlemek bütün instance'ları sessizce değiştirmez; güncelleme ve bağımsızlaştırma politikası [bileşen planıyla](../../plan/COMPONENT_LIBRARY_2D_PLAN.md) uyumlu olur.
+Bir asset'in birden çok instance'ı geometri ve texture paylaşabilir; kontrol değerleri, local saat ve değiştirilen materyal durumu instance'a aittir. Asset sürümü pin'lenir. Kaynağı düzenlemek bütün instance'ları sessizce değiştirmez; güncelleme ve bağımsızlaştırma politikası [bileşen planıyla](plans/component-library-2d-plan.md) uyumlu olur.
 
 ## 5. Render ve kompozit sözleşmesi
 
@@ -109,7 +127,7 @@ Güncel `WebGLRenderer` WebGL2 gerektirir. Desteksiz cihazda 2D düzenleme açı
 
 Three.js ve loader'lar 3D kullanıldığında lazy load edilir. Next.js server render aşamasında GPU/DOM nesnesi yaratılmaz. Yalnız 2D içeren projede 3D renderer/context kurulmaz. Eski 2D projeyi açmak, kaydetmek ve export etmek mevcut davranışını korumalıdır.
 
-Ayrı `3d-modeling` moduna ihtiyaç doğduğunda gerçek descriptor, scene state, viewport, seçim modeli ve moda ait dock yerleşimi bağlanır. Mod değişimi 2D scene'i 3D tipine cast etmez. Her belgenin mode/schema kimliği, geçmişi ve asset sahipliği belirgindir; 2D projeden açılan 3D asset düzenlemesi çağıran projeye referans üzerinden döner.
+3D Mode'un gerçek descriptor, scene state, viewport, seçim modeli ve moda ait dock yerleşimi ortak çekirdek hazır oldukça bağlanır. Mod değişimi 2D scene'i 3D tipine cast etmez. Her belgenin mode/schema kimliği, geçmişi ve asset sahipliği belirgindir; 2D projeden açılan 3D asset düzenlemesi çağıran projeye referans üzerinden döner.
 
 ### 6.1. Önerilen kullanım: 2D içinde kutulu 3D nesne
 
@@ -189,7 +207,7 @@ Bileşen; model asset'ini sürümüyle referanslar, renk/dönüş/clip gibi aç�
 | D1 — 2D'de kullanılabilir 3D katman | Katman definition/schema, statik GLB/primitive, kamera/ışık/malzeme, portable asset | Ekle/düzenle/sil/undo/save/reopen; hazır asset bekleyen raster export; eski 2D projelerde regresyon yok. |
 | D2 — zaman ve bake | Scalar controls, bir GLB clip'i, instance local saat, alpha sequence bake | Seek/reverse/sıra dışı kare aynı poz; aynı profil editor/export parity; stale/cancel/re-bake ve kaynak korunumu. |
 | D3 — ürün sahnesi | Lathe/extrude, studio preset, kontrollü wax dökümü ve cam kalite denemesi | 10 saniyelik mum sahnesi gerçek kareleri ve 1080p render ölçümleriyle değerlendirilir. |
-| D4 — ihtiyaç halinde ayrı 3D Modeling modu | Aynı asset/render çekirdeğiyle gerçek descriptor/workspace, 3D seçim/gizmo, bağımsız scene ve dar kapsamlı GLB export | Mod değişimi 2D geçmiş/yerleşim/sahneyi korur; round-trip ve hedef capability kayıpları açık. |
+| D4 — 3D Mode kabuğu | Aynı asset/render çekirdeğiyle gerçek descriptor/workspace, 3D seçim/gizmo, bağımsız document ve dar kapsamlı GLB export | Mod değişimi 2D geçmiş/yerleşim/sahneyi korur; round-trip ve hedef capability kayıpları açık. |
 
 D0 iç denemesi mevcut export E0–E2 işlerinden bağımsız küçük bir teknik inceleme olabilir. D1'in teslimi canonical export'un asset/capability ve frame sözleşmesine dayanır; 2D üretim önceliklerinin yerini kendiliğinden almaz. D2 genel 3D state blending veya fizik teslimi sayılmaz. D4 başlamadan ilk model katmanı kullanılabilir hale gelebilir.
 

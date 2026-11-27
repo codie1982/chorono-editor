@@ -1,4 +1,9 @@
+import { splinePaintGroups } from '../../spline/paint/objectPaint'
+import { splineToPathDefinition } from '../../spline/splineToPath'
+import { compositionFill, compositionForOutput } from '../../paint/paintSource'
+import { computePathBounds } from '../../geometry/computePathBounds'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
+import { assertBooleanOutput } from '@/lib/booleanOperations/projectOperations'
 // ── SVGExporter ───────────────────────────────────────────────────────────────
 //
 // BL-84 — exports a scene frame to a static SVG document. Shapes and paths are
@@ -59,7 +64,7 @@ export interface SVGExportResult {
 type OverrideMap = ReturnType<typeof evaluateTimelines>
 
 /** Layer kinds whose base geometry the V1 SVG adapter serializes. */
-const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
+const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'spline', 'text', 'group'])
 
 /** Serialize the same static/SMIL SVG with bounded geometry/text construction.
  * Scene is borrowed and never changed. Native output ownership belongs to the
@@ -67,6 +72,7 @@ const SUPPORTED = new Set<Layer['type']>(['shape', 'path', 'text', 'group'])
  * Invalid/oversized geometry, cycles and unsupported precision reject before
  * dense conversion. Unsupported layer kinds retain their existing warnings. */
 export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGExportResult {
+  assertBooleanOutput(scene)
   if (opts.animated && scene.layers.some(layer => Object.keys(layer.propertyExpressions?.fields ?? {}).length)) throw new Error('Animated SVG cannot evaluate live property expressions. Bake to keyframes or use raster output; a static SVG supports the selected frame.')
   measureJson(scene,{maxBytes:96*1024**2})
   const limits=resolveSvgOutputLimits(opts.limits)
@@ -75,6 +81,7 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
   const precision = opts.precision ?? 2
   if(!Number.isInteger(precision)||precision<0||precision>12||!Number.isFinite(timeMs))throw new RangeError('Invalid SVG time/precision.')
   const warnings: string[] = []
+  if (opts.animated && scene.timelines.some(timeline => timeline.tracks.some(track => track.keyframes.length && /\.style\.fill\.image\./.test(track.target)))) warnings.push('Animated SVG freezes image placement at timeMs; image offset, scale and rotation keys require raster/sequence output.')
   const gradients = new GradientRegistry()
   const overrides = evaluateSceneFrame(scene, timeMs).overrides
   scene = materializeRenderScene(scene, overrides)
@@ -105,14 +112,11 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
 
   // Background rectangle (skipped when transparent).
   const bg = opts.background ?? 'scene'
-  const bgColor =
-    bg === 'transparent' ? null
-    : bg === 'scene'      ? composition.backgroundColor
-    : bg.color
-  const bgRect = bgColor
-    ? `<rect width="${composition.width}" height="${composition.height}" fill="${escapeXml(bgColor)}"/>\n`
-    : ''
+  const bgFill = bg === 'transparent' ? { type: 'none' as const } : bg === 'scene'
+    ? compositionFill(compositionForOutput(composition)) : { type: 'solid' as const, color: bg.color }
+  const bgRect = bgFill.type !== 'none' ? `<rect width="${composition.width}" height="${composition.height}"${buildStyleAttrs({ fill: bgFill }, gradients, { assets: scene.assets, box: { x: 0, y: 0, width: composition.width, height: composition.height } })}/>\n` : ''
 
+  if (gradients.toDefs().includes('href="blob:')) throw new Error('SVG image sources must be embedded before export. Use the portable SVG output action or raster export.')
   const defs = gradients.toDefs()
   const defsBlock = defs ? `<defs>\n${defs}\n</defs>\n` : ''
 
@@ -130,7 +134,7 @@ export function exportSVG(scene: ChronoScene, opts: SVGExportOptions = {}): SVGE
   return {
     svg,
     filename: `${composition.id || 'scene'}.svg`,
-    warnings,
+    warnings: [...warnings, ...gradients.warnings],
   }
 }
 
@@ -203,7 +207,7 @@ function writeChildren(layers:readonly Layer[],ctx:BuildCtx,writer:BoundedTextBu
     }
     if(layer.type==='group'){
       writer.append(`<g${xform}${opacity}>\n`);writeChildren(ctx.index.childrenOf(layer.id),ctx,writer);writer.append('\n</g>')
-    }else writer.append(layer.type==='shape'?buildShape(layer,ctx,xform,opacity):layer.type==='path'?buildPath(layer,ctx,xform,opacity):buildText(layer,ctx,xform,opacity))
+    }else writer.append(layer.type==='shape'?buildShape(layer,ctx,xform,opacity):layer.type==='path'?buildPath(layer,ctx,xform,opacity):layer.type==='spline'?buildSpline(layer,ctx,xform,opacity):buildText(layer,ctx,xform,opacity))
     if(anims)writer.append('\n</g>')
   }
 }
@@ -213,7 +217,7 @@ function buildShape(layer: Layer, ctx: BuildCtx, xform: string, opacity: string)
   const kind = layer.shapeKind ?? layer.shape ?? 'rect'
   const def = ShapeToPathConverter.convert(kind, size, layer.shapeParams, layer.style?.cornerRadius ?? 0)
   const d = pathToSvgString(def)
-  const style = buildStyleAttrs(layer.style, ctx.gradients)
+  const style = buildStyleAttrs(layer.style, ctx.gradients, { assets: ctx.scene.assets, box: { x: 0, y: 0, width: size.width, height: size.height } })
   return `<path d="${d}"${style}${xform}${opacity}/>`
 }
 
@@ -221,8 +225,33 @@ function buildPath(layer: Layer, ctx: BuildCtx, xform: string, opacity: string):
   if (!layer.path || layer.path.anchors.length === 0) return ''
   const def = bezierPathToPathDefinition(layer.path)
   const d = pathToSvgString(def)
-  const style = buildStyleAttrs(layer.style, ctx.gradients)
+  const style = buildStyleAttrs(layer.style, ctx.gradients, { assets: ctx.scene.assets, box: computePathBounds(def) ?? { x: 0, y: 0, width: 0, height: 0 } })
   return `<path d="${d}"${style}${xform}${opacity}/>`
+}
+
+/** Emit canonical spline contours with their nonzero/evenodd holes. Open
+ * contours are stroke-only, matching Canvas2D. Uses shared path conversion and
+ * preflight admission; generated Boolean splines require no SVG-only geometry. */
+function buildSpline(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
+  return splinePaintGroups(layer).map(group => buildSplinePaintGroup(group.layer, ctx, xform, opacity)).join('')
+}
+
+/** One independently painted compound path, shared by ordinary and band Objects. */
+function buildSplinePaintGroup(layer: Layer, ctx: BuildCtx, xform: string, opacity: string): string {
+  if (!layer.spline) return ''
+  const data = layer.spline, all = splineToPathDefinition(data), closed = splineToPathDefinition(data, { closedOnly: true })
+  if (!all.commands.length) return ''
+  const box = computePathBounds(all) ?? { x: 0, y: 0, width: 0, height: 0 }
+  const paint = { assets: ctx.scene.assets, box }, rule = ` fill-rule="${data.fillRule}"`
+  const stroke = layer.style?.stroke
+  if (stroke && stroke.alignment && stroke.alignment !== 'center' && Object.values(data.contours).every(contour => contour.closed)) {
+    const d = pathToSvgString(all), region = ctx.gradients.registerStrokeRegion(d, data.fillRule, box, stroke.alignment, stroke.width)
+    const fill = `<path d="${d}"${rule}${buildStyleAttrs({ ...layer.style, stroke: undefined }, ctx.gradients, paint)}${xform}${opacity}/>`
+    return fill + `<path d="${d}" ${region}${buildStyleAttrs({ fill: { type: 'none' }, stroke: { ...stroke, width: stroke.width * 2 } }, ctx.gradients, paint)}${xform}${opacity}/>`
+  }
+  if (Object.values(data.contours).every(contour => contour.closed)) return `<path d="${pathToSvgString(all)}"${rule}${buildStyleAttrs(layer.style, ctx.gradients, paint)}${xform}${opacity}/>`
+  const fill = closed.commands.length ? `<path d="${pathToSvgString(closed)}"${rule}${buildStyleAttrs({ ...layer.style, stroke: undefined }, ctx.gradients, paint)}${xform}${opacity}/>` : ''
+  return fill + `<path d="${pathToSvgString(all)}"${buildStyleAttrs({ ...layer.style, fill: { type: 'none' } }, ctx.gradients, paint)}${xform}${opacity}/>`
 }
 
 /** Emit the materialized frame's text case/decoration and numeric style using

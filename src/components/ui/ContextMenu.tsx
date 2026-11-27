@@ -21,6 +21,8 @@ export interface MenuActionItem {
   label:     string
   shortcut?: string                  // e.g. '⌘D' — shown right-aligned
   disabled?: boolean
+  /** Explain a capability/ownership restriction without widening the menu label. */
+  disabledReason?: string
   /** Optional small leading icon — anything renderable. */
   icon?:     ReactNode
   onSelect:  () => void
@@ -242,6 +244,8 @@ function MenuLayer({
 
 // ── Single row ──────────────────────────────────────────────────────────────
 
+/** A menu row supports pointer activation and focused Enter/Space/Right.
+ * Submenu activation is idempotent; dismissal belongs to the owning menu. */
 function Row({ item, isOpen, onEnter, onActivate }: {
   item:       MenuActionItem | MenuSubmenuItem
   isOpen:     boolean
@@ -266,9 +270,15 @@ function Row({ item, isOpen, onEnter, onActivate }: {
       aria-disabled={disabled}
       aria-haspopup={item.kind === 'submenu' ? 'menu' : undefined}
       aria-expanded={item.kind === 'submenu' ? isOpen : undefined}
+      title={item.kind === 'action' ? item.disabledReason : undefined}
       className={`group flex w-full items-center gap-2 px-3 py-1 text-left text-[13px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 ${rowClass}`}
       onMouseEnter={onEnter}
       onClick={(e) => { if (!disabled) { e.stopPropagation(); onActivate(e.currentTarget) } }}
+      onKeyDown={event => {
+        if (!disabled && (event.key === 'Enter' || event.key === ' ' || item.kind === 'submenu' && event.key === 'ArrowRight')) {
+          event.preventDefault(); event.stopPropagation(); onActivate(event.currentTarget)
+        }
+      }}
     >
       {'icon' in item && item.icon ? <span className="w-4 text-center">{item.icon}</span> : null}
       <span className="flex-1 truncate">{item.label}</span>

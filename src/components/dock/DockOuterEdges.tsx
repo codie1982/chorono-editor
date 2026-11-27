@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, type RefObject } from 'react'
 import { useDockDrag } from './dragContext'
-import type { DockEdge } from './types'
+import type { DockEdge, DockTheme } from './types'
 
 const EDGE_THICK_PX = 32       // outer-zone thickness (cursor must be this close to an edge)
 export const ROOT_LEAF_ID = '__ROOT__'  // pseudo leaf id signalling "drop onto root, not a leaf"
@@ -9,6 +9,7 @@ export const ROOT_LEAF_ID = '__ROOT__'  // pseudo leaf id signalling "drop onto 
 interface Props {
   /** Ref to the dock container — used to read its viewport rect. */
   containerRef: RefObject<HTMLDivElement | null>
+  theme?: DockTheme
 }
 
 /**
@@ -21,7 +22,7 @@ interface Props {
  * Renders the corresponding preview rectangle (30% of dock on that side)
  * so the drop is WYSIWYG.
  */
-export default function DockOuterEdges({ containerRef }: Props) {
+export default function DockOuterEdges({ containerRef, theme = 'default' }: Props) {
   const { drag, hoverTarget, setHoverTarget } = useDockDrag()
 
   useEffect(() => {
@@ -69,11 +70,11 @@ export default function DockOuterEdges({ containerRef }: Props) {
   return (
     <div className="absolute inset-0 pointer-events-none z-[60] dock-overlay-in">
       <div
-        className="absolute bg-blue-500/40 border-2 border-blue-400 shadow-2xl shadow-blue-500/30 transition-all duration-150"
+        className={`absolute border-2 shadow-2xl transition-all duration-150 ${theme === 'model3d' ? 'bg-cyan-700/40 border-cyan-500 shadow-cyan-950/30' : 'bg-blue-500/40 border-blue-400 shadow-blue-500/30'}`}
         style={style}
       />
       <div
-        className="absolute text-[10px] font-mono text-blue-100 bg-blue-900/90 px-2 py-1 rounded pointer-events-none"
+        className={`absolute text-[10px] font-mono px-2 py-1 rounded pointer-events-none ${theme === 'model3d' ? 'text-cyan-100 bg-[#164e63]' : 'text-blue-100 bg-blue-900/90'}`}
         style={
           edge === 'left'   ? { left: 8,        top: '50%',  transform: 'translateY(-50%)' } :
           edge === 'right'  ? { right: 8,       top: '50%',  transform: 'translateY(-50%)' } :

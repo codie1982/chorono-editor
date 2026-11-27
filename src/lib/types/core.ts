@@ -1,3 +1,4 @@
+import type { Model3DData } from '../model3d/types'
 // ── Core Scene Types ──────────────────────────────────────────────────────────
 // The data model shared between builder, evaluator, renderer, and runtime JSON.
 // All types here belong to the '2danimation' mode. See src/lib/core/ for the
@@ -13,10 +14,11 @@ import type { SplinePathData } from './spline'
 import type { MaskDefinition } from './mask'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 import type { StateMachineDefinition } from './statemachine-chorono'
+import type { Mesh2DData } from './mesh2d'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-export type LayerType   = 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'group' | 'repeater' | 'particleEmitter'
+export type LayerType   = 'model3d' | 'shape' | 'text' | 'image' | 'video' | 'audio' | 'frameSequence' | 'pathStroke' | 'path' | 'spline' | 'mesh2d' | 'group' | 'repeater' | 'particleEmitter'
 export type ShapeType   = 'rect'  | 'circle'
 export type PlaybackAction =
   | 'play' | 'pause' | 'stop' | 'reverse' | 'seek' | 'setValue'
@@ -135,6 +137,10 @@ export interface Keyframe {
   easing: EasingDefinition
   /** Bezier-handle linkage mode. Defaults to 'broken' when undefined. */
   tangentMode?: TangentMode
+  /** Viewport position-handle linkage at this node. Distinct from tangentMode,
+   * which links temporal easing handles within a scalar segment. Evaluation
+   * still uses the ordinary X/Y customBezier easing; absent means independent. */
+  motionTangentMode?: 'aligned' | 'broken'
   /** BL-46 — modifiers scoped to the segment from THIS keyframe to the
    *  NEXT keyframe in time. Empty / undefined = no modifiers on this
    *  segment. The last keyframe's segmentModifiers is unused (no next
@@ -230,6 +236,10 @@ export interface Timeline {
   tracks: Track[]
   workAreaInMs?: number
   workAreaOutMs?: number
+  /** Editor playback only: derive the play span from this Timeline's first and
+   * last finite in-duration keys. Overrides Work Area without modifying it;
+   * runtime/export duration and key data remain unchanged. Default false. */
+  playKeyRange?: boolean
   markers?: TimelineMarker[]
   segments?: TimelineSegment[]
   /** BL-36 — discrete event markers fired when the playhead crosses them
@@ -270,6 +280,18 @@ export interface Transform {
 //   UI: right-click layer → "Add Modifier ▶" submenu in LayerPanel.
 
 export interface Layer {
+  /** Canonical, ordered non-destructive geometry source and modifier instances. */
+  modifierStack?: import('../modifiers/geometryTypes').GeometryModifierStackData
+  /** Persistent, source-preserving geometry representation stages. */
+  geometryConversion?: import('./geometryConversion').GeometryConversionData
+  /** Non-destructive Boolean group recipe; original child geometry stays source. */
+  booleanOperation?: import('./booleanOperation').BooleanOperationData
+  /** Generated spline child. Point topology is evaluated, never directly keyed. */
+  booleanResultFor?: string
+  /** Versioned source for the boxed 3D adapter; independent of the 2D transform. */
+  model3d?: Model3DData
+  /** Thin 3D instance exposed-input overrides; shared node/clip definitions remain inherited. */
+  model3dInputValues?: Record<string, number | boolean>
   id: string
   /** Human-friendly display name, e.g. "Logo", "Background" */
   name: string
@@ -288,6 +310,10 @@ export interface Layer {
   path?: BezierPath
   /** Spline object data — used when type === 'spline'. Holds SubShapes + contours. */
   spline?: SplinePathData
+  /** Independent appearance for deterministic generated spline Object IDs.
+   * Kept outside geometry so toggle/reorder/Execute do not erase Properties
+   * edits. Runtime projection materializes it onto ordinary Object paint. */
+  splinePaintOverrides?: { version: 1; objects: Record<string, ShapeStyle | null> }
   /**
    * Visual vs motion guide path. Defaults to 'visual' when type === 'path'.
    * Motion paths are not rendered as visible strokes during playback — they
@@ -313,11 +339,15 @@ export interface Layer {
   audio?:      AudioData
   /** Sprite-sheet / frame-sequence animation — used when type === 'frameSequence'. */
   frameSequence?: FrameSequenceData
+  /** Fixed-topology 2D render/deformation source — used when type === 'mesh2d'. */
+  mesh2d?: Mesh2DData
   effects?:    LayerEffects
   /** Plugin-based effect chain (glow/shadow/etc.) applied AFTER rendering. */
   effectsChain?: PluginEffect[]
   /** Temporal trail effect driven by layer velocity. See renderMotionBlurTrails. */
   motionBlur?: MotionBlurConfig
+  pivotLink2d?: import('../rig2d/types').PivotLink2D
+  twoBoneIK2d?: import('../rig2d/types').TwoBoneIK2D
   motionPath?: MotionPath
   /** Drives layer position from another path layer's geometry. */
   followPath?: FollowPath
@@ -702,6 +732,11 @@ export interface Composition {
   /** Optional gradient background. When set (≥2 stops), it is painted instead of
    *  backgroundColor. backgroundColor remains the fallback for solid mode. */
   backgroundGradient?: GradientFill
+  /** Optional modern background paint. Omitted preserves legacy color/gradient. */
+  backgroundFill?: import('./style').ShapeFill
+  /** False keeps the scene background visible only in the editor. Export and
+   * runtime adapters omit it unless an explicit output background is chosen. */
+  backgroundInExport?: boolean
 }
 
 // ── Root Scene ────────────────────────────────────────────────────────────────
@@ -736,6 +771,9 @@ export interface ChronoScene {
   /** Optional sparse editor attribution. Missing legacy data means unknown;
    * portable saves/history preserve it, runtime exporters explicitly omit it. */
   authoring?: import('./authoring').SceneAuthoring
+  /** Optional 2D simulation recipes and bake ownership. Dense caches and
+   * engine objects are runtime-only and must not be serialized here. */
+  physics?: import('./physics').PhysicsSceneData
   initialState: Record<string, unknown>
 }
 

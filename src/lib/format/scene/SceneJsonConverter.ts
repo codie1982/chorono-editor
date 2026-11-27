@@ -1,8 +1,16 @@
+import { assertScenePaint } from '../../paint/validatePaint'
+import { assertModelLayer } from '../../model3d/source/modelCapabilities'
+import { assertModelClipOwnership } from '../../model3d/animation/modelClipOwnership'
 import { assertNumericInputExpressions } from '../../editor/inputExpressions/NumericInputExpression'
 import { assertScenePropertyExpressions } from '../../expression/properties/PropertyExpression'
 import type { ChronoScene } from '../../types'
 import { assertAuthoringData } from '../../editor/authoring/AuthoringValidation'
 import { assertSceneGuides } from '../../geometry/guides/sceneGuideData'
+import { assertPhysicsSceneData } from '../../physics/PhysicsSceneValidation'
+import { assertSceneBooleanOperations } from '../../booleanOperations/validation'
+import { assertConversionRecipe } from '../../geometry/conversion/GeometryConversionService'
+import { assertSceneModifierStacks } from '../../modifiers'
+import { assertSplineInterpolation } from '../../spline/sampling/interpolation'
 
 /** Shared recognition for an editable scene source. Merge keeps the historical
  * 1.x/layers/composition minimum; complete document opening additionally requires
@@ -27,9 +35,17 @@ export function parseSceneJson(text: string, complete = false): ChronoScene {
   if (!isChoronoScene(scene, complete)) throw new Error(complete
     ? 'Not a complete Chorono scene: expected version 1.x, composition, layers, assets, timelines, parameters, bindings and triggers.'
     : 'Not a valid Chorono scene: expected version 1.x, a composition object and a layers array.')
+  scene.layers.forEach(layer => assertModelLayer(layer, scene.layers))
+  scene.layers.forEach(layer => { for (const object of Object.values(layer.spline?.subShapes ?? {})) if (object.interpolation !== undefined) assertSplineInterpolation(object.interpolation) })
+  scene.layers.forEach(layer => assertModelClipOwnership(scene, layer))
   scene.layers.forEach(assertNumericInputExpressions)
   assertScenePropertyExpressions(scene)
+  if (Array.isArray(scene.assets)) assertScenePaint(scene)
   assertSceneGuides(scene.editorGuides)
+  assertSceneBooleanOperations(scene)
+  scene.layers.forEach(layer => { if (layer.geometryConversion) assertConversionRecipe(layer.geometryConversion) })
+  assertSceneModifierStacks(scene)
   assertAuthoringData(scene.authoring)
+  assertPhysicsSceneData(scene.physics)
   return scene
 }

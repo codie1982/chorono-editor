@@ -46,3 +46,13 @@ export function trajectoryPositionFromWorld(context: TrajectoryContext, localTim
   const position = { x: local.x - context.layer.transform.anchorX, y: local.y - context.layer.transform.anchorY }
   return [position.x, position.y].every(Number.isFinite) ? position : null
 }
+
+/** Parent-local position value → displayed anchor in composition pixels at
+ * the handle's own node time. Shared inverse contract with position writes;
+ * animated parent motion is not frozen to the current playhead. */
+export function trajectoryPositionToWorld(context: TrajectoryContext, localTimeMs: number, position: Readonly<TrajectoryPoint>): TrajectoryPoint {
+  const frame = evaluateTrajectoryFrame(context.scene, context.timeline.id, localTimeMs)
+  const parent = context.layer.parentId ? context.index.get(context.layer.parentId) : undefined
+  const matrix = parent ? resolveLayerWorldMatrix(parent, context.scene, localTimeMs, frame, context.index) : Matrix2D.identity()
+  return matrix.applyToPoint({ x: position.x + context.layer.transform.anchorX, y: position.y + context.layer.transform.anchorY })
+}

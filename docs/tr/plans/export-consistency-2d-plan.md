@@ -1,6 +1,6 @@
 # 2D Export Tutarlılığı — öncelik 1
 
-Tarih: 4 Kasım 2026. Güncelleme: 6 Kasım 2026; viewport'tan bağımsız yüksek kaliteli final render ve Render Preview planı §9'a eklendi. Durum: plan; uygulama yapılmadı. Kapsam yalnız `2danimation`. Üst yol haritası: [2D üretim planı](../production-2d-roadmap.md).
+Tarih: 4 Kasım 2026. Güncelleme: 22 Kasım 2026; viewport'tan bağımsız yüksek kaliteli final render ve Render Preview planı §9'dadır. Durum: E0/E1 canonical runtime alan-sınırı ilk dilimi uygulandı; tam E1 loader/giriş birliği ile E2/E3 açıktır. Kapsam yalnız `2danimation`. Üst yol haritası: [2D üretim planı](../production-2d-roadmap.md). Tam E/FQ kapsamı v0.5.0'dan çıkarılıp masaüstü çıktı bağımlılıkları ve ayrı kurulum gerektirmeyen, uygulama paketine gömülü Chorono Render ile birlikte [v0.6.0 ana planındaki](v0.6.0-master-plan.md) Öncelik 10 → 11 → 12 sırasına taşındı; v0.5.0 bunu beklemez.
 
 ## 1. Teslim hedefi
 
@@ -14,8 +14,8 @@ Aynı profil karşılaştırması ile farklı kalite profillerinin karşılaşt�
 
 | Giriş/yol | Mevcut durum | Planlanan işlem |
 | --- | --- | --- |
-| `RuntimeExporter` → `RuntimeOptimizer` | File menüsü ve MCP kullanıyor; çıktı alanlarında assets/stateMachines/parameterWires/initialState yok | Canonical runtime compiler'a bağla; alan kaybını regression fixture'ıyla yakala. |
-| `exportToRuntime` / JSON penceresi | Assets ve stateMachines taşıyor; audio ayrı politikayla çıkarılıyor; parameterWires yok | Ayrı serializer olmaktan çıkar; aynı profil/options ile ortak compiler'ı çağır. |
+| `RuntimeExporter` → `RuntimeOptimizer` | `RuntimeSceneCompiler` ile assets/stateMachines/parameterWires/initialState ve `hidden` dahil canonical alan sınırına bağlandı; optimizer yalnız track normalizasyonu/dedup yapıyor | File/JSON/MCP exact options/profile ve package/loader/capability birliğini tamamla. |
+| `exportToRuntime` / JSON penceresi | Aynı `RuntimeSceneCompiler` alan sınırını kullanıyor; target'a özgü signal bake/snapping politikası ayrı kalıyor | Legacy loader ve profile/options sözleşmesini File/MCP yolu ile tamamla. |
 | HTML yolları | `Exporter2DHTML` placeholder; `export/html/htmlExport.ts` harici runtime script'i yükleyen ayrı yol | Çalışan yol ve capability'leri tek giriş altında birleştir; dependency biçimini açık göster. |
 | `Exporter2DGIF`, `Exporter2DWebM` | Arayüz mevcut, export metotları henüz uygulanmamış | Desteklenmiş format olarak gösterme; gerçek encoder teslimi ayrı iş. |
 | Raster/sequence | Canvas renderer'ı kullanıyor; örnekleme/export seçenekleri kendi yollarında | Ortak frame request, asset hazırlığı ve capability doğrulamasını kullan. |
@@ -42,6 +42,16 @@ Mevcut bare RuntimeScene ve RuntimePackage biçimleri sürümlü loader adapter'
 ## 4. Tek derleme ve değerlendirme hattı
 
 Önerilen hat: immutable snapshot → referans/capability doğrulama → asset hazırlama → canonical runtime compile → opsiyonel güvenli bake/optimize → target serialize/render → output manifest.
+
+21 Kasım ilk uygulama diliminde gerçek giriş
+`src/lib/export/runtime/RuntimeSceneCompiler.ts` oldu. Sözleşme ve kullanım
+örneği `src/lib/export/runtime/README.md` içinde tutulur. Derleyici composition,
+embedded visual assets, `hidden` dahil visual layer, timeline, parameter,
+trigger, binding, wire, state-machine ve initial state'i korur; authoring,
+physics ownership/recipe ve yoğun source-only cache'i çıkarır. Committed physics
+sonucu normal track'lerle oynar. `RuntimeOptimizer` ve `exportToRuntime` bu aynı
+alan sınırını çağırır; optimizer veya legacy target politikası kendi alan
+allowlist'ini tutmaz. Audio varsayılan visual runtime profilinde ayrıdır.
 
 Eski public fonksiyonlar geçişte uyum wrapper'ı olabilir; farklı alan listeleri tutmaz. RuntimeOptimizer geometri/track optimizasyonu yapar; kendi bağımsız scene serializer'ı olmaz. İşlevler mevcut modüllerden ayrıştırılır, paralel ikinci exporter mimarisi kurulmaz.
 
@@ -78,21 +88,35 @@ Tanılar `code`, `severity`, object/asset/timeline referansı ve önerilen eylem
 | E2 | Player/frame değerlendirme, asset/font ve audio profil tutarlılığı | Gerçek render ve davranış replay'i editör/standalone/MCP'de eşleşir; ses aralığı doğru veya ayrı teslimi açık. |
 | E3 | HTML/raster/sequence ve format capability UI'si; güvenli optimizer | Offline profil ağ olmadan açılır; unsupported encoder kapalıdır; desteklenen çıktılar doğru kaynak/süre kullanır. |
 
+**21 Kasım uygulama durumu:** E0/E1'in canonical alan allowlist'i ve iki runtime
+yolunun bu sınıra bağlanması regression testleriyle geçti. MCP `export_runtime`
+32-fragment ve 720°/s full-turn bake fixture'larında player/render parity ile
+doğrulandı. Tam E1 kapalı sayılmaz: File/JSON/MCP'nin exact options/profile
+birliği, versioned legacy loader ve package/capability manifest işi açıktır.
+E2 asset/font/audio ve davranış replay geneli ile E3 format/HTML/raster işleri
+de açıktır.
+
 **P1 bileşen çalışmasına geçiş kapısı:** E1 + E2'nin mevcut temel 2D fixture'larında geçmesi. Yeni codec'lerin tamamlanması veya henüz uygulanmayan simulation özellikleri bu geçişi bekletmez. E3'teki exporter kontrolleri çoklu format tesliminden önce tamamlanır.
 
 Golden fixture: parent/pivot/mask/instance; text/font/color; spline/particle; iki timeline; state machine + wire; ses fade/trim; hold/overshoot. Kontrol: semantik normalize JSON, piksel/geometry toleransı, olay sırası, PCM aralık/parite ve portable round-trip. Bunların hepsi tek dev sahne yerine ayrık minimal fixture'larla da sınanır.
 
 ## 8. Entegrasyon ve sınırlar
 
-Mevcut dosyalar: `export/RuntimeExporter.ts`, `RuntimeOptimizer.ts`, `runtimeExport.ts`, `RuntimeValidator.ts`, `types/runtime.ts`, `player/RuntimeSceneLoader.ts`, `ChronoPlayer.ts`, `JsonModal.tsx`, export dialog'ları ve MCP editor bridge. Değişikliklerin kesin sınırları E0'da belirlenir. Canonical skill ve API şemaları uygulamayla birlikte güncellenir.
+Mevcut dosyalar: `export/RuntimeExporter.ts`, `RuntimeOptimizer.ts`,
+`runtimeExport.ts`, `runtime/RuntimeSceneCompiler.ts`, `RuntimeValidator.ts`,
+`types/runtime.ts`, `player/RuntimeSceneLoader.ts`, `ChronoPlayer.ts`,
+`JsonModal.tsx`, export dialog'ları ve MCP editor bridge. Sonraki değişiklikler
+mevcut compiler sınırını genişletir; paralel serializer kurmaz. Canonical skill
+ve API şemaları uygulamayla birlikte güncellenir.
 
-Bu belge yalnız plan yazar. Uygulamada repo kontrolleri `npm test`, `npm run mcp:build`, `npm run build`; build öncesi Next sunucusunu durdurma kuralı geçerlidir. Hiçbir 3D işi bu kapsama eklenmez.
+Repo kontrolleri `npm test`, `npm run mcp:build`, `npm run build`; build öncesi
+Next sunucusunu durdurma kuralı geçerlidir. Hiçbir 3D işi bu kapsama eklenmez.
 
 ## 9. Viewport'tan bağımsız yüksek kaliteli 2D final render
 
 ### 9.1. Hedef ve kaynak kod incelemesi
 
-**Hızlı viewport, seçili kareyi final kalitesiyle gösteren Render Preview ve yüksek kaliteli final export aynı sahne değerlendirmesini kullanır; çalışma çözünürlüğü/örnekleme/renk profili ayrı seçilir.** Render süresi çıktı zamanını belirlemez. Bu plan genel 2D/2.5D kompozisyonlar içindir; belirli sahne veya katman id'sine özel değildir.
+**Hızlı viewport, seçili kareyi final kalitesiyle gösteren Render Preview ve yüksek kaliteli final export mevcut Chorono 2D evaluator, renderer registry ve compositor hattını kullanır; çalışma çözünürlüğü/örnekleme/renk profili ayrı seçilir.** İkinci bir genel 2D render motoru veya timeline kurulmaz. Render süresi çıktı zamanını belirlemez. Character FK/IK, Mesh2D, bake clip'leri, mask/effect ve normal katmanlar aynı canonical frame request'ten çözülür. Bu plan genel 2D kompozisyonlar içindir; belirli sahne veya katman id'sine özel değildir.
 
 Yerel checkout'ta doğrulanan başlangıç:
 
@@ -120,9 +144,15 @@ Renderer clear işlemini backing koordinatlarında bütün hedefe uygular; backg
 
 Output aspect ratio değişimi ilk sürümde [çoklu format compiler'ının](multiformat-production-2d-plan.md) işidir. Final renderer kendi başına nesneleri yeniden yerleştirmez; verilen resolved variant'ı çizer. Raster image/video/sprite kaynakları kendi orijinal çözünürlüğüyle sınırlıdır; vektörlerin yüksek çözünürlükte yeniden çizilmesi bitmap kaynağa yeni detay kazandırdığı anlamına gelmez.
 
-### 9.3. İlk teslim: native hedef çözünürlük, supersampling ve Render Preview
+### 9.3. İlk teslim: Chorono 2D renderer ile native hedef çözünürlük, supersampling ve Render Preview
 
-İlk backend mevcut Canvas2D/registry/GPU köprüsüdür. Yeni bir sahne veya timeline motoru kurulmaz. Path/shape/spline ve yazı hedef backing'e yeniden çizilir. Fontlar hazır ve sürümü pin'li olmalı; layout ve kadraj logical uzayda korunur. Yüksek çözünürlükte ölçüm ve glyph çizimi tutarsız hale gelmemeli.
+İlk backend mevcut Canvas2D/registry/GPU köprüsüdür. Yeni bir sahne, timeline
+veya genel renderer kurulmaz. Character değerlendirmesi renderer öncesinde
+nihai layer override'larını üretir; Mesh2D ve simulation cache renderer'ları
+registry adapter'ı olarak aynı compositor'a yüzey verir. Path/shape/spline ve
+yazı hedef backing'e yeniden çizilir. Fontlar hazır ve sürümü pin'li olmalı;
+layout ve kadraj logical uzayda korunur. Yüksek çözünürlükte ölçüm ve glyph
+çizimi tutarsız hale gelmemeli.
 
 Mask, feather, stroke, shadow offset, blur radius ve glow gibi authored değerler logical piksel anlamını korur; pass onları ilgili backing ölçeğine bir kez çevirir. Particle SDF, efekt shader ve motion-blur sample canvas'ı aynı target sözleşmesini izler. Önceden düşük çözünürlükte cache'lenmiş bir maskeyi/efekti büyütmek Final High sayılmaz. Cache anahtarı source/version/time yanında output/internal ölçü, ROI, backend ve kalite profilini içerir.
 

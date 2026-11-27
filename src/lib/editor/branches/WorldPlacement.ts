@@ -1,22 +1,27 @@
 import type { ChronoScene, Transform } from '../../types'
 import { Matrix2D } from '../../geometry/Matrix2D'
 import { LayerIndex } from '../../scene/LayerIndex'
+import { propertyPathsOverlap } from '../../scene/properties/propertyPathsOverlap'
 
 /** Shared Explorer script/UI guard for a constant source-to-parent transform.
  * Transform tracks (even empty/controller tracks), path constraints and bound
  * transform inputs require an explicit bake or script keepWorld:false. Does
  * not reject a descendant's animation when its root world matrix stays fixed.
- * Pure validation; errors publish no command or source mutation.
+ * The rebasing mode permits pivot/IK only when the caller transports the whole
+ * rig. Other transform drivers still reject without mutating source.
  */
-export function assertStaticTransform(scene: ChronoScene, ids: readonly string[]): void {
+export function assertStaticTransform(scene: ChronoScene, ids: readonly string[], mode: 'static' | 'rebase-pivot-links' = 'static'): void {
+  const transformPath = (path: string) => propertyPathsOverlap(path, 'transform')
   const index = new LayerIndex(scene.layers)
   for (const id of ids) {
     const layer = index.get(id)
     if (!layer) throw new Error(`Layer '${id}' was not found.`)
-    if (layer.followPath || layer.motionPath || Object.keys(layer.paramBindings ?? {}).some(path => path.startsWith('transform.'))
-      || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === id && binding.target.property?.startsWith('transform.'))
-      || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === id && wire.target.propertyPath.startsWith('transform.'))
-      || scene.timelines.some(timeline => timeline.tracks.some(track => track.target.startsWith(`layers.${id}.transform.`)))) {
+    if ((mode === 'static' && (layer.pivotLink2d || layer.twoBoneIK2d)) || layer.followPath || layer.motionPath
+      || Object.keys(layer.paramBindings ?? {}).some(transformPath)
+      || Object.keys(layer.propertyExpressions?.fields ?? {}).some(transformPath)
+      || scene.bindings.some(binding => binding.target.type === 'layerProperty' && binding.target.layerId === id && transformPath(binding.target.property ?? ''))
+      || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === id && transformPath(wire.target.propertyPath))
+      || scene.timelines.some(timeline => timeline.tracks.some(track => propertyPathsOverlap(track.target, `layers.${id}.transform`)))) {
       throw new Error('Preserving world placement for animated transforms requires baking first; use keepWorld:false for an intentional local-space move.')
     }
   }

@@ -5,8 +5,10 @@ import { makeAddLayerCmd } from '@/lib/editor/commands-layer'
 import { canPlaceShape, placeShapeInGesture } from '@/lib/editor/placement'
 import { canvasPointerWorld } from '../interactions/canvasCoordinates'
 import { EditorPointerSession, type EditorPointerSample } from '../interactions/EditorPointerSession'
+import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
+import { reachedResizeGuides } from '@/lib/canvas/math/resizeSnapping'
 
-interface PlacementPreview { scene: ChronoScene; layer: Layer | null; command: EditorCommand | null }
+interface PlacementPreview { scene: ChronoScene; layer: Layer | null; command: EditorCommand | null; snapPoint?: Vec2 }
 
 export interface ShapePlacementSessionOptions {
   getEditor: () => EditorStateReturn
@@ -17,6 +19,10 @@ export interface ShapePlacementSessionOptions {
   onDraft: (layer: Layer | null) => void
   onClose: (committedId?: string) => void
   onWarning?: (message: string) => void
+  /** Pure composition-pixel acquisition shared with the viewport pointer. */
+  snapPoint?: (point: { x: number; y: number }) => { x: number; y: number }
+  resolveSnap?: (point: Vec2) => SnapResult
+  onSnapPoint?: (point?: Vec2) => void
 }
 
 /**
@@ -43,7 +49,8 @@ export class ShapePlacementSession extends EditorPointerSession<PlacementPreview
     if (options.getEditor().getScene().layers.some(layer => layer.id === options.template.id)) {
       throw new Error('The placement layer already belongs to the scene.')
     }
-    const start = canvasPointerWorld(options.canvas, options.start.clientX, options.start.clientY)
+    const resolve = (point: Vec2) => options.resolveSnap?.(point).point ?? options.snapPoint?.(point) ?? point
+    const start = resolve(canvasPointerWorld(options.canvas, options.start.clientX, options.start.clientY))
     const phase = { finishing: false }
     let committedId: string | undefined
     super({ startClientX: options.start.clientX, startClientY: options.start.clientY, allowClick: true }, {
@@ -54,13 +61,18 @@ export class ShapePlacementSession extends EditorPointerSession<PlacementPreview
       preview: (base, sample) => {
         const useDefaultSize = Math.hypot(sample.clientX - options.start.clientX, sample.clientY - options.start.clientY) <= 3
         if (useDefaultSize && !phase.finishing) return { scene: base, layer: null, command: null }
-        const end = canvasPointerWorld(options.canvas, sample.clientX, sample.clientY)
+        const rawEnd = canvasPointerWorld(options.canvas, sample.clientX, sample.clientY), acquisition = options.resolveSnap?.(rawEnd)
+        const end = acquisition?.point ?? resolve(rawEnd)
         const layer = placeShapeInGesture(options.template, start, end, { useDefaultSize, constrain: sample.shiftKey })
         const command = makeAddLayerCmd(layer)
-        return { scene: command.execute(base), layer, command }
+        const segment = (layer.shapeKind ?? layer.shape) === 'line' || (layer.shapeKind ?? layer.shape) === 'arrow'
+        const endpoint = segment ? { x: layer.transform.x + (layer.shapeParams?.x2 ?? 0), y: layer.transform.y + (layer.shapeParams?.y2 ?? 0) }
+          : { x: layer.transform.x + (end.x < start.x ? 0 : layer.size!.width), y: layer.transform.y + (end.y < start.y ? 0 : layer.size!.height) }
+        return { scene: command.execute(base), layer, command,
+          snapPoint: acquisition && reachedResizeGuides(endpoint, acquisition.guides).length ? endpoint : undefined }
       },
       hasChanges: preview => preview.command !== null,
-      show: preview => options.onDraft(preview.layer),
+      show: preview => { options.onDraft(preview.layer); options.onSnapPoint?.(preview.snapPoint) },
       commit: (_base, preview) => {
         if (!preview.command || !preview.layer) return
         options.getEditor().commitTransaction(preview.command)

@@ -1,11 +1,15 @@
 'use client'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
+import type { TransformSpace } from '@/lib/canvas/math/transformAxes'
+import { legacySelectionStyle, selectionRegionForTool, type SelectionRegionStyle } from '@/lib/selection/selectionGesture'
 
 export type ToolMode =
   | 'select' | 'pan' | 'pen'
   | 'move' | 'rotate' | 'scale' | 'anchor'
+  /** Mesh2D texture placement handles; does not transform the layer itself. */
+  | 'texture'
   // BL-60 Faz 3 — Canvas selection tools (drag a shape, select layers inside)
-  | 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+  | SelectionToolMode
   // BL-73 — Spline drawing (drag-to-create / multi-click line)
   | 'spline-draw'
   /** Persistent native shape placement selected through Layer → Add. */
@@ -13,20 +17,29 @@ export type ToolMode =
 
 /** True for any of the four canvas-shape selection tools. */
 export function isSelectionTool(m: ToolMode): boolean {
-  return m === 'selection-box' || m === 'selection-lasso'
-      || m === 'selection-circle' || m === 'selection-paint'
+  return legacySelectionStyle(m) !== null
 }
 
-/** Selection containment mode (BL-60 Faz 3). Applies only when a canvas
- *  selection tool is active. `'inside'` = layer's bounds must fit fully
+export type SelectionToolMode = 'selection-box' | 'selection-lasso' | 'selection-circle' | 'selection-paint'
+
+/** Selection containment preference for every ordinary viewport tool.
+ * `'inside'` = layer's bounds must fit fully
  *  in the dragged shape; `'touching'` = any overlap counts. */
 export type SelectionContainMode = 'inside' | 'touching'
 
 interface ToolGroupProps {
+  transformSpace?: TransformSpace
+  onTransformSpaceChange?: (space: TransformSpace) => void
   mode:     ToolMode
   onChange: (m: ToolMode) => void
   /** Shared toggle restores the editor's previous tool instead of Select. */
   onPanToggle?: () => void
+  /** Always-selected region preference, independent of the manipulation tool. */
+  selectionStyle?: SelectionRegionStyle
+  onSelectionStyleChange?: (style: SelectionRegionStyle) => void
+  /** Persistent marquee type; changing it does not replace the Select tool. */
+  selectionMode?: SelectionToolMode
+  onSelectionModeChange?: (mode: SelectionToolMode) => void
   /** When true, pen tool is auto-active because a path layer is selected. */
   penAuto?: boolean
   /** BL-60 Faz 3 — Current containment mode for canvas selection tools. */
@@ -45,7 +58,10 @@ interface ToolBtnProps {
 function ToolBtn({ active, hint, shortcut, onClick, children }: ToolBtnProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-label={`${hint} tool`}
+      aria-pressed={active}
       title={`${hint} (${shortcut})`}
       className={`w-9 h-9 flex items-center justify-center rounded transition-colors text-base
         ${active
@@ -65,15 +81,19 @@ function Divider() {
  * Tool group — 3DS Max-style isolated transform modes plus the legacy
  * Select / Pan / Pen utilities. Move/Rotate/Scale/Anchor each hide all
  * other gizmos so the user always sees only the handles relevant to the
- * current operation.
+ * current operation. Region style and containment are independent preferences
+ * for empty-space selection, not exclusive manipulation tools.
  */
 export default function ToolGroup({
-  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange,
+  mode, onChange, onPanToggle, penAuto, containMode, onContainModeChange, selectionStyle = 'box', onSelectionStyleChange, selectionMode, onSelectionModeChange,
+  transformSpace = 'scene', onTransformSpaceChange,
 }: ToolGroupProps) {
   const effectivePen = mode === 'pen' || penAuto
-  const showContainToggle = isSelectionTool(mode) && containMode != null && onContainModeChange != null
+  const style = legacySelectionStyle(mode) ?? (selectionMode ? legacySelectionStyle(selectionMode) : null) ?? selectionStyle
+  const chooseStyle = (value: SelectionRegionStyle) => onSelectionStyleChange ? onSelectionStyleChange(value) : onSelectionModeChange ? onSelectionModeChange(`selection-${value}` as SelectionToolMode) : onChange(`selection-${value}` as ToolMode)
+  const showContainToggle = selectionRegionForTool(mode, style) != null && containMode != null && onContainModeChange != null
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex shrink-0 items-center gap-1">
       <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/compound-splines#draw-and-append-spline-contours' : 'editor/canvas/tools'} compact />
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -101,46 +121,62 @@ export default function ToolGroup({
           <path d="M8 1 L8 5 L12 5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'scale'} hint="Scale" shortcut="S" onClick={() => onChange('scale')}>
+      <ToolBtn active={mode === 'scale'} hint="Scale" shortcut="Shift+S" onClick={() => onChange('scale')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="6" height="6" />
           <rect x="9" y="9" width="4" height="4" strokeDasharray="1 1" />
           <path d="M9 9 L13 13 M9 13 L13 13 L13 9" />
         </svg>
       </ToolBtn>
+      {onTransformSpaceChange && <label className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-gray-600 bg-gray-800 px-2 text-xs text-gray-300">
+        Axes
+        <select aria-label="Transform axes" value={transformSpace} onChange={event => onTransformSpaceChange(event.target.value as TransformSpace)}
+          title="Scene: horizontal / vertical. Local: follows the active object's rotation and parents."
+          className="min-w-0 rounded bg-gray-800 py-1 text-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400">
+          <option value="scene">Scene</option><option value="local">Local</option>
+        </select>
+      </label>}
       <ToolBtn active={mode === 'anchor'} hint="Anchor / Pivot" shortcut="A" onClick={() => onChange('anchor')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="3" />
           <path d="M8 1 L8 4 M8 12 L8 15 M1 8 L4 8 M12 8 L15 8" strokeLinecap="round" />
         </svg>
       </ToolBtn>
+      <ToolBtn active={mode === 'texture'} hint="Texture" shortcut="T" onClick={() => onChange('texture')}>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2.5 2.5 H13.5 V13.5 H2.5 Z" />
+          <path d="M2.5 10 L6 6.5 L8.5 9 L10 7.5 L13.5 11" />
+          <circle cx="10.8" cy="5.2" r="1.2" />
+        </svg>
+      </ToolBtn>
 
       <Divider />
 
-      {/* BL-60 Faz 3 — Canvas selection tools */}
-      <ToolBtn active={mode === 'selection-box'} hint="Box Select" shortcut="B" onClick={() => onChange('selection-box')}>
+      {/* Independent region preference: one style always stays selected. */}
+      <div role="group" aria-label="Selection region style" className="flex items-center gap-1">
+      <ToolBtn active={style === 'box'} hint="Box Select" shortcut="B" onClick={() => chooseStyle('box')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect x="2.5" y="2.5" width="11" height="11" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-lasso'} hint="Lasso Select" shortcut="L" onClick={() => onChange('selection-lasso')}>
+      <ToolBtn active={style === 'lasso'} hint="Lasso Select" shortcut="L" onClick={() => chooseStyle('lasso')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 6 Q2 2 7 2 Q12 2 13 6 Q13 11 7 11 Q4 11 4 13 L6 14" strokeDasharray="1.5 1" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-circle'} hint="Circle Select" shortcut="O" onClick={() => onChange('selection-circle')}>
+      <ToolBtn active={style === 'circle'} hint="Circle Select" shortcut="O" onClick={() => chooseStyle('circle')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="5.5" strokeDasharray="2 1.5" />
         </svg>
       </ToolBtn>
-      <ToolBtn active={mode === 'selection-paint'} hint="Paint Select" shortcut="W" onClick={() => onChange('selection-paint')}>
+      <ToolBtn active={style === 'paint'} hint="Paint Select" shortcut="W" onClick={() => chooseStyle('paint')}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 13 L10 6 L11 5 L13 7 L12 8 L5 15 L2 14 Z" fill="currentColor" fillOpacity="0.15" />
         </svg>
       </ToolBtn>
 
-      {/* BL-60 Faz 3 — Containment mode toggle (visible only with a selection
-          tool active). One icon switch selects Inside / Touching. */}
+      </div>
+      {/* Shared containment for all ordinary manipulation tools. */}
       {showContainToggle && (
         <>
           <Divider />

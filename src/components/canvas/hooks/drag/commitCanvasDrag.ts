@@ -13,6 +13,9 @@ export interface CanvasDragCommitOptions {
   onSelectLayer: (id: string | null, shiftHeld?: boolean) => void
   onSelectLayers?: (ids: readonly string[]) => void
   onWarning?: (message: string) => void
+  /** Receives the evaluated root-parent-local offset used by a committed
+   * clone drag, allowing the next Duplicate command to repeat that pattern. */
+  onAfterCloneDrag?: (offset: { x: number; y: number }) => void
 }
 
 /** Commit source edits and their animation commands in the same transaction.
@@ -20,6 +23,7 @@ export interface CanvasDragCommitOptions {
  * The optional legacy notification runs only when no atomic builder is supplied. */
 export function commitCanvasDrag(editor: EditorStateReturn, base: ChronoScene, drag: ActiveDrag,
   preview: CanvasDragPreview, options: CanvasDragCommitOptions): void {
+  if (preview.geometryCommand) { editor.commitTransaction(preview.geometryCommand); return }
   if (drag.kind === 'move' && drag.cloneMode) {
     commitClone(editor, base, drag, preview, options)
     return
@@ -40,6 +44,8 @@ function commitClone(editor: EditorStateReturn, base: ChronoScene, drag: Extract
     ? prepareCloneDrag(base, drag).atOffsets(cloneDragOffsets(drag, preview)) : undefined)
   if (!command) { editor.cancelTransaction(); return }
   editor.commitTransaction(command)
+  const offsets = cloneDragOffsets(drag, preview)
+  options.onAfterCloneDrag?.(preview.cloneOffset ?? Object.values(offsets)[0] ?? { x: 0, y: 0 })
   if (command.diagnostics.length) options.onWarning?.(command.diagnostics.join(' '))
   const ids = command.result.suggestedSelection
   if (options.onSelectLayers) options.onSelectLayers(ids)
@@ -52,6 +58,6 @@ function commitClone(editor: EditorStateReturn, base: ChronoScene, drag: Extract
 /** Human-readable undo labels describe the edited responsibility. */
 function dragLabel(kind: ActiveDrag['kind'], count: number): string {
   const name = { move: 'Move', rotate: 'Rotate', scaleAxis: 'Scale', resize: 'Resize', anchor: 'Move anchor',
-    pathPoint: 'Edit path point', newAnchorDraw: 'Add path point', splinePoint: 'Edit spline point', splineHandle: 'Edit spline handle' }[kind]
+    pathPoint: 'Edit path point', newAnchorDraw: 'Add path point', splinePoint: 'Edit spline point', splineHandle: 'Edit spline handle', splineGeometry: 'Transform spline selection', meshGeometry: 'Transform mesh geometry' }[kind]
   return count > 1 ? `${name} ${count} layers` : name
 }

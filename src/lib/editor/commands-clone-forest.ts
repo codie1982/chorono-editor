@@ -1,4 +1,5 @@
 import type { ChronoScene, Layer } from '../types'
+import { assertLinkPlan } from '../rig2d/frame'
 import { parseTrackTarget } from '../timeline/TrackTargetParser'
 import { resolveCloneForest, cloneForestSourceGuard } from '../clone/CloneForestSource'
 import { prepareCloneOccurrences } from '../clone/CloneForestPreparation'
@@ -57,7 +58,12 @@ export function prepareCloneForest(base: ChronoScene, options: CloneForestOption
       const item = placements[i], deltaMs = item.timeOffsetMs ?? 0
       if (!Number.isFinite(deltaMs)) throw new Error('Clone time offset must be finite.')
       for (const rawTemplate of occurrence.layers) {
-        const template = offsetCloneRange(rawTemplate, deltaMs, base.composition.durationMs)
+        let template = offsetCloneRange(rawTemplate, deltaMs, base.composition.durationMs)
+        const link = template.pivotLink2d
+        const copiedDriver = link && rootCopies.get(link.driverId)
+        const shift = copiedDriver && item.roots[copiedDriver.id]
+        if (link && shift) template = { ...template, pivotLink2d: { ...link,
+          bindPivot: { x: link.bindPivot.x + shift.x, y: link.bindPivot.y + shift.y } } }
         const root = rootCopies.get(template.id)
         if (!root) { newLayers.push(template); continue }
         const offset = item.roots[root.id] ?? { x: 0, y: 0 }, x = offset.x, y = offset.y
@@ -81,6 +87,7 @@ export function prepareCloneForest(base: ChronoScene, options: CloneForestOption
         [...(additions.get(timelineId) ?? []), ...tracks.map(track => offsetCloneTrack(translateCloneTrack(track, rootOffsets), deltaMs, base.timelines.find(value => value.id === timelineId)!.durationMs))]))
     }
     const createdIds = new Set(newLayers.map(layer => layer.id)), createdTargets = new Set(Array.from(additions.values()).flat().map(track => track.target))
+    if (newLayers.some(layer => layer.twoBoneIK2d || layer.pivotLink2d)) assertLinkPlan([...base.layers, ...newLayers], base.layers, createdIds)
     const createdKeyIds = new Set(Array.from(additions.values()).flatMap(tracks => tracks.flatMap(track => track.keyframes.map(key => key.id))))
     const label = `${mode === 'instance' ? 'Instance' : 'Copy'} ${roots.length} source roots (${count} ${count === 1 ? 'occurrence' : 'occurrences'})`
     if (base.triggers.length || base.stateMachines?.length) diagnostics.push('Scene triggers and state-machine graphs stay external; this operation copies layers and their selected timeline tracks.')

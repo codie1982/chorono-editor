@@ -7,6 +7,7 @@ import { makeCloneForestCmd } from '@/lib/editor/commands-clone-forest'
 import RasterExportDialog from '../export/RasterExportDialog'
 import SVGExportDialog from '../export/SVGExportDialog'
 import SequenceExportDialog from '../export/SequenceExportDialog'
+import RenderSettingsDialog from '../export/RenderSettingsDialog'
 import JsonModal from '../JsonModal'
 import TrackBakeDialog from '../timeline/baking/TrackBakeDialog'
 import type { DocumentationState } from './useDocumentationState'
@@ -36,5 +37,6 @@ export function DialogHost({ view, state: s }: { view: string; state: Documentat
   if (view === 'export-image') return <RasterExportDialog {...props} />
   if (view === 'export-svg') return <SVGExportDialog {...props} />
   if (view === 'export-sequence') return <SequenceExportDialog {...props} />
+  if (view === 'render-settings') return <RenderSettingsDialog {...props} currentTimeMs={s.timeMs} />
   return null
 }

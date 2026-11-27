@@ -14,8 +14,16 @@ import { treatSplineCorners } from '@/lib/spline/modeling/cornerTreatment'
 import { assertContourAnimationSafe } from '@/lib/spline/modeling/animationGuard'
 import { modeledSplineLayer } from '@/lib/spline/modeling/modelingLayer'
 
-type Mode = 'offset' | 'outline' | 'chamfer' | 'fillet'
-interface Props {
+export const SPLINE_MODELING_OPERATIONS = [
+  { id: 'offset', label: 'Offset' },
+  { id: 'outline', label: 'Outline' },
+  { id: 'chamfer', label: 'Chamfer' },
+  { id: 'fillet', label: 'Fillet' },
+] as const
+
+export type SplineModelingOperation = typeof SPLINE_MODELING_OPERATIONS[number]['id']
+type Mode = SplineModelingOperation
+export interface SplineModelingPanelProps {
   layer: Layer | null
   selectedPointId: string | null
   getScene: () => ChronoScene
@@ -25,6 +33,8 @@ interface Props {
   dispatchCommand: (command: EditorCommand) => void
   onSelectLayer: (id: string) => void
   onClearPoint: () => void
+  /** Controlled operation for hosts that provide their own operation picker. */
+  operation?: Mode
 }
 interface Preview { data: SplinePathData; source: Layer; revision: number; document: AbortSignal; mode: Mode; contourId: string }
 
@@ -35,9 +45,15 @@ interface Preview { data: SplinePathData; source: Layer; revision: number; docum
  * replace one contour; offset/outline create a sibling spline layer so source
  * geometry and animation remain untouched. State is per mounted panel.
  */
-export default function SplineModelingPanel(props: Props) {
+export default function SplineModelingPanel(props: SplineModelingPanelProps) {
+  return <SplineModelingSettings key={JSON.stringify([props.layer?.id, props.operation])} {...props} />
+}
+
+/** Keeps draft settings and previews scoped to the mounted layer and operation. */
+function SplineModelingSettings(props: SplineModelingPanelProps) {
   const { layer } = props
-  const [mode, setMode] = useState<Mode>('offset')
+  const [localMode, setMode] = useState<Mode>('offset')
+  const mode = props.operation ?? localMode
   const [amount, setAmount] = useState(10)
   const [direction, setDirection] = useState<OffsetDirection>('outward')
   const [contourId, setContourId] = useState('')
@@ -114,20 +130,24 @@ export default function SplineModelingPanel(props: Props) {
   const y1 = Math.max(sourceBounds.y + sourceBounds.height, (previewBounds?.y ?? sourceBounds.y) + (previewBounds?.height ?? sourceBounds.height))
   const pad = Math.max(4, (Math.max(x1 - x0, y1 - y0)) * 0.08)
 
-  return <div className="h-full overflow-auto bg-gray-900 p-3 text-xs text-gray-200 space-y-3" data-panel="spline-modeling">
-    <div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">Spline Modeling</div>{help}</div>
+  return <div className={`space-y-3 text-xs text-gray-200 ${props.operation ? '' : 'h-full overflow-auto bg-gray-900 p-3'}`} data-panel="spline-modeling">
+    <div className="flex items-center justify-between gap-2">
+      <h3 className="font-semibold text-sm">{props.operation ? SPLINE_MODELING_OPERATIONS.find(item => item.id === mode)?.label : 'Spline Modeling'}</h3>
+      {help}
+    </div>
+    <p className="text-gray-400">{cornerMode ? 'Apply updates the source contour.' : 'Apply creates a separate spline layer.'}</p>
     <label className="block space-y-1">Contour
       <select aria-label="Spline contour" value={activeId ?? ''} onChange={event => change(() => { setContourId(event.target.value); setPointIds([]) })}
         className="block w-full rounded border border-gray-700 bg-gray-800 p-1.5">
         {contours.map((item, index) => <option key={item.id} value={item.id}>Contour {index + 1} · {item.closed ? 'closed' : 'open'}</option>)}
       </select>
     </label>
-    <label className="block space-y-1">Operation
+    {!props.operation && <label className="block space-y-1">Operation
       <select aria-label="Spline modeling operation" value={mode} onChange={event => change(() => setMode(event.target.value as Mode))}
         className="block w-full rounded border border-gray-700 bg-gray-800 p-1.5">
-        <option value="offset">Offset</option><option value="outline">Outline</option><option value="chamfer">Chamfer</option><option value="fillet">Fillet</option>
+        {SPLINE_MODELING_OPERATIONS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
       </select>
-    </label>
+    </label>}
     <label className="block space-y-1">{mode === 'fillet' ? 'Radius' : 'Distance'} (local px)
       <input aria-label="Spline modeling amount" type="number" min="0.01" max="10000" step="0.5" value={amount}
         onChange={event => change(() => setAmount(Number(event.target.value)))} className="block w-full rounded border border-gray-700 bg-gray-800 p-1.5" />

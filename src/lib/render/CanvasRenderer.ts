@@ -20,6 +20,7 @@ import { buildEffectsFilter } from '@/lib/types'
 import { getLayerValue, type OverrideMap } from '@/lib/evaluator'
 import type { AssetElementMap } from '@/lib/renderer'
 import { layerRegistry, rendererRegistry } from '@/lib/registry'
+import type { EditorOverlayPreferences } from '@/lib/registry/LayerRendererRegistry'
 import type { RenderContext, ParamValueMap, RenderMode } from './RenderContext'
 import { LayerSurfacePipeline } from './resources/LayerSurfacePipeline'
 import { planLayerSurfaceRegion } from './resources/planLayerSurfaceRegion'
@@ -65,6 +66,8 @@ export interface CanvasRenderOptions {
   /** False when the editor's DOM overlay owns the selection frame. Plugins
    * still receive isSelected; only the duplicate canvas outline is disabled. */
   selectionOutline?: boolean
+  /** Transient selected-layer diagnostics. Omitted flags default to hidden. */
+  editorOverlays?: EditorOverlayPreferences
   /**
    * BL-66 — 'editor' (default) draws selection outlines + grid; 'preview'
    * draws content only (used during playback and the export pipeline so
@@ -78,6 +81,8 @@ export interface CanvasRenderOptions {
    *   { color }     → explicit solid colour override
    */
   background?: 'scene' | 'transparent' | { color: string }
+  /** Preview mode is also used in-editor; only output hosts apply export visibility. */
+  output?: boolean
 }
 
 /**
@@ -138,7 +143,9 @@ export class CanvasRenderer {
     const editorChrome = renderMode === 'editor'
     const boundsForFrame = editorChrome && options.selectionOutline !== false
       && (selectedLayerId || options.selectedLayerIds?.size)
-      ? createLayerWorldBoundsResolver(scene, timeMs, overrides) : undefined
+      ? createLayerWorldBoundsResolver(scene, timeMs, overrides, {
+        meshDeformations: assets.meshDeformations,
+      }) : undefined
 
     // Unknown caller state can expand paint or modify destination outside bounds.
     const safeCaller = (!ctx.filter || ctx.filter === 'none')
@@ -155,11 +162,12 @@ export class CanvasRenderer {
       rendererRegistry, this.lodCache, options.lod, area, paint) : undefined
     let completed = false
     try {
-    drawCompositionBackground(ctx, composition, options.background ?? 'scene')
+    drawCompositionBackground(ctx, composition, options.background ?? 'scene', assets, options.output === true)
     if (editorChrome && options.grid?.inFront === false) this.drawGrid(ctx, composition.width, composition.height, options.grid.size)
 
-    const visibility = new LayerDrawVisibility(layers, timeMs)
+    const visibility = new LayerDrawVisibility(layers, timeMs, layerIndex)
     assets.media?.request({ frame: prepared, context: ctx, area: options.visibleArea,
+      includeBackground: (options.background ?? 'scene') === 'scene' && !(options.output && composition.backgroundInExport === false),
       padding: options.mediaPadding, prefetchMs: options.mediaPrefetchMs,
       selected: new Set([...Array.from(options.selectedLayerIds ?? []), ...(selectedLayerId ? [selectedLayerId] : [])]) })
 
@@ -170,7 +178,20 @@ export class CanvasRenderer {
       editorChrome && (id === selectedLayerId || !!options.selectedLayerIds?.has(id))
     for (const layer of layerIndex.roots) {
       if (!visibility.root(layer)) continue
-      this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, layerIndex, timeMs, isSelected(layer.id), renderMode, options.selectionOutline ?? true, boundsForFrame, sourceScene, paint, true, lod)
+      this.renderLayer(ctx, layer, overrides, paramValues, assets, scene, layerIndex, timeMs, isSelected(layer.id), renderMode, options.selectionOutline ?? true, options.editorOverlays ?? {}, boundsForFrame, sourceScene, paint, true, lod, visibility)
+    }
+
+    // A mask source is omitted from the final composition. Show its ink faintly
+    // only while selected in the editor so the author can position the text.
+    const selectedMask = editorChrome && selectedLayerId ? layerIndex.get(selectedLayerId) : undefined
+    if (selectedMask && !selectedMask.parentId && visibility.active(selectedMask)
+        && layers.some(layer => layer.masks?.some(mask => mask.maskLayerId === selectedMask.id))) {
+      ctx.save()
+      try {
+        ctx.globalAlpha *= 0.35
+        this.renderLayer(ctx, selectedMask, overrides, paramValues, assets, scene, layerIndex, timeMs,
+          true, renderMode, options.selectionOutline ?? true, options.editorOverlays ?? {}, boundsForFrame, sourceScene, paint, true, lod)
+      } finally { ctx.restore() }
     }
 
     // ── Optional grid overlay (editor only) ───────────────────────────────
@@ -196,11 +217,13 @@ export class CanvasRenderer {
     isSelected:   boolean,
     renderMode:   RenderMode = 'editor',
     selectionOutline = true,
+    editorOverlays: EditorOverlayPreferences = {},
     boundsForFrame?: LayerWorldBoundsResolver,
     sourceScene: ChronoScene = scene,
     paint?: PaintFrame,
     allowCulling = true,
     lod?: GroupLodFrame,
+    visibility?: LayerDrawVisibility,
   ): void {
     // Nested repeaters/groups remain bounded even when animated counts exceed
     // the static scene's workload. No authored data is changed by this budget.
@@ -263,7 +286,7 @@ export class CanvasRenderer {
       if (plugin) paint?.dispatch(layer)
 
       // ── Dispatch via registry ─────────────────────────────────────────────
-      const renderContextFor = (canvas: CanvasRenderingContext2D, childCulling = allowCulling && directPaint(layer) && plugin?.paint?.sceneChildren === true, diagnostics = true): RenderContext => ({
+      const renderContextFor = (canvas: CanvasRenderingContext2D, childCulling = allowCulling && directPaint(layer) && plugin?.paint?.sceneChildren === true, diagnostics = true, sceneVisibility: LayerDrawVisibility | null | undefined = visibility): RenderContext => ({
         canvas,
         scene,
         layerIndex,
@@ -282,7 +305,9 @@ export class CanvasRenderer {
           const child = layerIndex.get(id)
           if (!child) return
           if (!layerDrawActive(child, timeMs)) return
-          this.renderLayer(canvas, child, overrides, paramValues, assets, scene, layerIndex, timeMs, false, renderMode, selectionOutline, boundsForFrame, sourceScene, diagnostics ? paint : undefined, childCulling, diagnostics && childCulling ? lod : undefined)
+          const childVisibility = plugin?.paint?.sceneChildren ? sceneVisibility ?? undefined : undefined
+          if (childVisibility && !childVisibility.sceneChild(child)) return
+          this.renderLayer(canvas, child, overrides, paramValues, assets, scene, layerIndex, timeMs, false, renderMode, selectionOutline, editorOverlays, boundsForFrame, sourceScene, diagnostics ? paint : undefined, childCulling, diagnostics && childCulling ? lod : undefined, childVisibility)
         },
       })
       const renderContext = renderContextFor(ctx)
@@ -310,7 +335,7 @@ export class CanvasRenderer {
               resolveLayerWorldMatrix(target, scene, timeMs, overrides, layerIndex).applyToCanvas(offCtx)
               offCtx.globalAlpha *= Math.max(0, Math.min(1, target.opacity))
               const p = rendererRegistry.find(target)
-              if (p) { paint?.dispatch(target); p.render(renderContextFor(offCtx, false), target) }
+              if (p) { paint?.dispatch(target); p.render(renderContextFor(offCtx, false, true, null), target) }
             } finally { offCtx.restore() }
           }
 
@@ -348,6 +373,7 @@ export class CanvasRenderer {
             if (rot   !== 0)                   ctx.rotate((rot * Math.PI) / 180)
             if (scaleX !== 1 || scaleY !== 1)  ctx.scale(scaleX, scaleY)
             ctx.translate(-anchorX, -anchorY)
+            if (isSelected && renderMode === 'editor') plugin.renderEditorOverlay?.(renderContextFor(ctx), layer, editorOverlays)
             if (isSelected && selectionOutline) this.drawSelection(ctx, layer, scene, timeMs, overrides, boundsForFrame, layerIndex)
           } finally { ctx.restore() }
           return
@@ -356,6 +382,7 @@ export class CanvasRenderer {
         if (!lod?.draw(layer, ctx, target => plugin.render(renderContextFor(target, false, false), layer), 100000 - this._renderedLayerCount)) {
           plugin.render(renderContext, layer)
         }
+        if (isSelected && renderMode === 'editor') plugin.renderEditorOverlay?.(renderContext, layer, editorOverlays)
       }
 
       // ── Selection outline ─────────────────────────────────────────────────
@@ -448,6 +475,7 @@ export class CanvasRenderer {
       false,       // never show selection outline on ghost frames
       'preview',   // BL-66 — ghost frames are pure content (no anchors/chrome)
       false,
+      {},
       undefined,
       sourceScene,
     )

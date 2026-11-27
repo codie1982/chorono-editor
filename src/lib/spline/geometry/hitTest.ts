@@ -1,3 +1,4 @@
+import { distToSegmentSq } from '../../geometry/segmentDistance'
 // ── Spline hit-testing (BL-73 Sprint 3) ──────────────────────────────────────
 //
 // All tests take LAYER-LOCAL coords (caller subtracts layer.transform) and a
@@ -39,15 +40,6 @@ export function hitTestSplineHandle(data: SplinePathData, x: number, y: number, 
   return best
 }
 
-function distToSegmentSq(px: number, py: number, ax: number, ay: number, bx: number, by: number): { dSq: number; t: number } {
-  const vx = bx - ax, vy = by - ay
-  const len2 = vx * vx + vy * vy
-  let t = len2 > 0 ? ((px - ax) * vx + (py - ay) * vy) / len2 : 0
-  t = Math.max(0, Math.min(1, t))
-  const cx = ax + t * vx, cy = ay + t * vy
-  const dx = px - cx, dy = py - cy
-  return { dSq: dx * dx + dy * dy, t }
-}
 
 function cubicAt(p0: number, c1: number, c2: number, p1: number, t: number): number {
   const u = 1 - t

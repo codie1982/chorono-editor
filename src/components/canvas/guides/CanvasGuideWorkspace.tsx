@@ -6,6 +6,7 @@ import { useCanvasGuideEditing } from './useCanvasGuideEditing'
 import { useViewportCursor } from './useViewportCursor'
 import { useCanvasViewportMetrics } from './useCanvasViewportMetrics'
 import { GuideInspector } from './GuideInspector'
+import type { SnapResult, Vec2 } from '@/lib/snap/SnapCandidate'
 
 export interface CanvasGuideWorkspaceProps {
   scene: ChronoScene
@@ -21,6 +22,9 @@ export interface CanvasGuideWorkspaceProps {
   enabled: boolean
   /** Pan navigation does not need the decorative cursor point/crosshair. */
   cursorEnabled?: boolean
+  /** Pointer feedback also works while guide editing is disabled for a tool. */
+  pointerEnabled?: boolean
+  resolveSnap?: (point: Vec2) => SnapResult
   onWarning?: (message: string) => void
 }
 
@@ -36,17 +40,20 @@ export interface CanvasGuideWorkspaceProps {
 export function CanvasGuideWorkspace(props: CanvasGuideWorkspaceProps) {
   const { canvasRef, containerEl, composition, zoom, pan, selectedRect, showRulers, showGuides, enabled } = props
   const editing = useCanvasGuideEditing(props)
-  const cursor = useViewportCursor(containerEl, canvasRef, enabled && showRulers && props.cursorEnabled !== false, `${zoom}:${pan.x}:${pan.y}`)
+  const rawCursor = useViewportCursor(containerEl, canvasRef, (props.pointerEnabled ?? enabled) && (showRulers || !!props.resolveSnap) && props.cursorEnabled !== false, `${zoom}:${pan.x}:${pan.y}`)
+  const snap = rawCursor && props.resolveSnap?.(rawCursor)
+  const cursor = snap?.snapped ? snap.point : rawCursor
   const frame = useCanvasViewportMetrics(containerEl, canvasRef.current, composition, zoom, pan)
   const sx = cursor ? frame.originX + cursor.x * frame.scaleX : 0
   const sy = cursor ? frame.originY + cursor.y * frame.scaleY : 0
   return <>
-    {cursor && <div data-testid="canvas-cursor-crosshair" data-x={cursor.x} data-y={cursor.y} className="absolute top-[18px] left-[18px] right-0 bottom-0 overflow-hidden pointer-events-none z-10">
-      <div className="absolute top-0 bottom-0 border-l border-cyan-300/35" style={{ left: sx - 18 }} />
-      <div className="absolute left-0 right-0 border-t border-cyan-300/35" style={{ top: sy - 18 }} />
+    {cursor && <div data-testid="canvas-cursor-crosshair" data-x={cursor.x} data-y={cursor.y} data-snapped={!!snap?.snapped}
+      data-snap-targets={snap?.guides.map(guide => guide.source).join(',') ?? ''} className="absolute top-[18px] left-[18px] right-0 bottom-0 overflow-hidden pointer-events-none z-10">
+      {showRulers && <><div className="absolute top-0 bottom-0 border-l border-cyan-300/35" style={{ left: sx - 18 }} />
+      <div className="absolute left-0 right-0 border-t border-cyan-300/35" style={{ top: sy - 18 }} /></>}
       <svg data-testid="canvas-cursor-point" aria-hidden="true" width={12} height={12} viewBox="0 0 12 12"
         className="absolute pointer-events-none" style={{ left: sx - 18, top: sy - 18, transform: 'translate(-50%, -50%)' }}>
-        <circle cx={6} cy={6} r={4.25} fill="#0f172a" stroke="#67e8f9" strokeWidth={1.25} />
+        <circle cx={6} cy={6} r={4.25} fill="#0f172a" stroke={snap?.snapped ? '#fbbf24' : '#67e8f9'} strokeWidth={snap?.snapped ? 2 : 1.25} />
         <circle cx={6} cy={6} r={1.5} fill="#ecfeff" />
       </svg>
     </div>}

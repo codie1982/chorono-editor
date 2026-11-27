@@ -6,6 +6,9 @@ import { featuredReleaseNotes } from '@/components/releaseNotes/releaseNotes'
 import { exportMenuItems } from './exportMenuItems'
 
 interface FileMenuProps {
+  /** Scoped 3D drafts expose Help here; file commands wait for Apply & return
+   * so a download cannot silently omit unapplied model edits. */
+  detailEditing?: boolean
   /** Current scene filename (composition.id by default). */
   filename: string
   onRename:        (next: string) => void
@@ -27,6 +30,8 @@ interface FileMenuProps {
   onExportSvg?:    () => void
   /** BL-83 — open the image sequence (PNG/JPEG/WEBP → ZIP) export dialog. */
   onExportSequence?: () => void
+  /** Open capability-aware single-frame/video render settings. */
+  onRender?: () => void
   /** Standalone self-playing HTML (CDN runtime + embedded scene). */
   onExportHtml?:   () => void
   onCopySceneJson: () => void
@@ -109,10 +114,12 @@ export default function FileMenu(props: FileMenuProps) {
       {open && (
         <div
           role="menu"
-          className="absolute left-0 top-full mt-1 w-64 bg-gray-900 border border-gray-700 rounded-lg
+          className="absolute left-0 top-full mt-1 max-h-[min(40rem,calc(100dvh-4rem))] w-64 overflow-y-auto bg-gray-900 border border-gray-700 rounded-lg
                      shadow-2xl z-50 py-1.5 animate-[dock-leaf-in_180ms_ease-out]"
           onClick={(e) => e.stopPropagation()}
         >
+          {props.detailEditing && <p className="px-3 py-2 text-xs leading-5 text-slate-300">Apply &amp; return to use scene file commands with your 3D changes.</p>}
+          <fieldset disabled={props.detailEditing} className={props.detailEditing ? 'opacity-45' : undefined}>
           {/* ── Filename ── */}
           <div className="px-3 py-1.5">
             <div className="text-[9px] uppercase tracking-wider text-gray-500 mb-1">Filename</div>
@@ -241,6 +248,7 @@ export default function FileMenu(props: FileMenuProps) {
             </>
           )}
 
+          </fieldset>
           {/* ── Help ── */}
           <div className={sectionLabel}>Help</div>
           {props.onShowWelcome && <button className={item + ' min-h-[44px]'} onClick={() => { setOpen(false); props.onShowWelcome!() }}>
@@ -249,8 +257,8 @@ export default function FileMenu(props: FileMenuProps) {
           {props.onShowReleaseNotes && <button className={item + ' min-h-[44px]'} onClick={() => { setOpen(false); props.onShowReleaseNotes!() }}>
             What’s New · v{featuredReleaseNotes.version}
           </button>}
-          <button className={item} onClick={() => { setOpen(false); props.onShowShortcuts() }}>
-            ⌨ Show Shortcuts (Cmd+/)
+          <button aria-label="Keyboard Shortcuts" className={item} onClick={() => { setOpen(false); ref.current?.querySelector<HTMLButtonElement>('button')?.focus(); props.onShowShortcuts() }}>
+            Keyboard Shortcuts…
           </button>
           <a
             href="https://github.com/anthropics/claude-code"

@@ -36,7 +36,7 @@ function fixture() {
 }
 function Host({ session }: { session: BrowserRecoverySession }) {
   const editor = useEditorState(session.scene ?? fixture(), session.history), recovery = useSceneSessionRecovery(editor, session)
-  const scene = editor.scene, assets = useAssetCache(scene.assets), snap = useSnapSettings()
+  const scene = editor.scene, assets = useAssetCache(scene.assets), snap = useSnapSettings({ persist: false })
   const [message, setMessage] = useState('Ready'), [time, setTime] = useState(0)
   const identity = useSessionIdentity()!
   const move = () => { const layer = editor.getScene().layers[0]; editor.dispatchCommand(makeUpdateLayerCmd(layer.id, { transform: { ...layer.transform, x: layer.transform.x + 17.5, y: 94.25 } }, layer)) }

@@ -1,12 +1,15 @@
 import type { ChronoScene, Keyframe, Track } from '../../types'
 import type { EditorCommand } from '../../editor/commands-keyframe'
 import { boundedKeyTime, compareKeyTime, sameKeyTime } from './keyTimePolicy'
+import { assertTimelineEditTarget } from './timelinePropertyScope'
+import type { TimelineAuthoringContext } from './TimelineAuthoringContext'
+import { LayerIndex } from '../../scene/LayerIndex'
 
 export type KeyCollisionPolicy = 'reject' | 'overwrite'
 export interface KeyTimeMove { timelineId: string; target: string; kfId: string; fromMs: number; toMs: number }
 export interface KeyInsertion { timelineId: string; target: string; kf: Keyframe }
 export interface KeyframeBatch { moves?: readonly KeyTimeMove[]; insertions?: readonly KeyInsertion[] }
-export interface KeyframeBatchOptions { collisionPolicy?: KeyCollisionPolicy }
+export interface KeyframeBatchOptions { collisionPolicy?: KeyCollisionPolicy; context?: TimelineAuthoringContext }
 
 /** Simultaneous immutable source edit. All identities, times and collisions
  * validate before returning any scene. Swapping selected keys is supported;
@@ -19,9 +22,11 @@ export interface KeyframeBatchOptions { collisionPolicy?: KeyCollisionPolicy }
 export function applyKeyframeBatch(scene: ChronoScene, batch: KeyframeBatch, options: KeyframeBatchOptions = {}): ChronoScene {
   const operations = [...(batch.moves ?? []), ...(batch.insertions ?? [])]
   if (!operations.length) return scene
+  const layers = new LayerIndex(scene.layers)
   const groups = new Map<string, Map<string, { moves: KeyTimeMove[]; inserts: KeyInsertion[] }>>()
   const trackTargets = new Map(scene.timelines.map(timeline => [timeline.id, new Set(timeline.tracks.map(track => track.target))]))
   for (const item of operations) {
+    assertTimelineEditTarget(scene, item.timelineId, item.target, options.context, layers)
     if (!trackTargets.get(item.timelineId)?.has(item.target)) throw new Error(`Missing timeline or track: ${item.target}. No keys were changed.`)
     let targets = groups.get(item.timelineId)
     if (!targets) { targets = new Map(); groups.set(item.timelineId, targets) }

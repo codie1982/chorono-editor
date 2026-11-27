@@ -1,4 +1,7 @@
 'use client'
+import { isTextureAsset, startTextureDrag } from './assets/textureAssetDrag'
+import { AssetIndex } from '@/lib/asset/AssetIndex'
+import { newModelLayer } from '@/lib/model3d/source/modelDefaults'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 // ── AssetsPanel ───────────────────────────────────────────────────────────────
 // Browse all uploaded image / video / audio assets in the scene. Each row
@@ -46,6 +49,7 @@ interface Props {
 }
 
 const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> = {
+  model3d: { bg: 'bg-sky-900', fg: 'text-sky-200', icon: '3D' },
   image:       { bg: 'bg-sky-900/50',     fg: 'text-sky-300',     icon: '🖼' },
   video:       { bg: 'bg-purple-900/50',  fg: 'text-purple-300',  icon: '▶' },
   audio:       { bg: 'bg-emerald-900/50', fg: 'text-emerald-300', icon: '♪' },
@@ -55,6 +59,7 @@ const TYPE_BADGES: Record<AssetType, { bg: string; fg: string; icon: string }> =
   lottie:      { bg: 'bg-indigo-900/50',  fg: 'text-indigo-300',  icon: '◎' },
   spriteSheet: { bg: 'bg-teal-900/50',    fg: 'text-teal-300',    icon: '⊞' },
   gif:         { bg: 'bg-pink-900/50',    fg: 'text-pink-300',    icon: '⟳' },
+  meshDeformation: { bg: 'bg-cyan-900/50', fg: 'text-cyan-300', icon: '⌁' },
 }
 
 export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFiles, selectedTimelineId, currentTimeMs = 0 }: Props) {
@@ -73,18 +78,8 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
   // Width comes from the shared ResizeObserver; it does not follow playback.
   useEffect(() => { setGridWidth(windowed.viewport.width) }, [windowed.viewport.width])
 
-  // Track which layers reference each asset (so we know what gets deleted)
-  const layersByAsset = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const l of scene.layers) {
-      const aid = l.image?.assetId ?? l.video?.assetId ?? l.audio?.assetId
-      if (!aid) continue
-      const list = map.get(aid) ?? []
-      list.push(l.id)
-      map.set(aid, list)
-    }
-    return map
-  }, [scene.layers])
+  const assetIndex = useMemo(() => { const index = new AssetIndex(); index.build(scene.layers, scene.composition); return index }, [scene.layers, scene.composition])
+  const layersByAsset = useMemo(() => new Map(scene.assets.map(asset => [asset.id, assetIndex.getLayerIds(asset.id)])), [scene.assets, assetIndex])
 
   // Inventory summary: total bytes + count of assets no layer references.
   const inventory = useMemo(() => {
@@ -92,10 +87,10 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
     let unused = 0
     for (const a of scene.assets) {
       totalBytes += a.metadata?.filesize ?? 0
-      if ((layersByAsset.get(a.id)?.length ?? 0) === 0) unused++
+      if (assetIndex.isOrphan(a.id)) unused++
     }
     return { totalBytes, unused }
-  }, [scene.assets, layersByAsset])
+  }, [scene.assets, assetIndex])
 
   // ── Import via the universal pipeline ────────────────────────────────────
   const handleImportClick = () => importInputRef.current?.click()
@@ -109,6 +104,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
   const addLayerFromAsset = (a: Asset) => {
     let layer
     switch (a.type) {
+      case 'model3d': layer = newModelLayer(`model3d_${crypto.randomUUID()}`, a.id, a.name); break
       case 'image': layer = newImageLayer(a.id, a.width ?? 200, a.height ?? 150); break
       case 'video': layer = newVideoLayer(a.id, a.width ?? 320, a.height ?? 180, a.durationMs); break
       case 'audio': layer = newAudioLayer(a.id, a.durationMs); break
@@ -130,10 +126,10 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
     const refLayers   = scene.layers.filter(l => refLayerIds.includes(l.id))
     const layerCount  = refLayers.length
 
-    if (layerCount > 0) {
+    if (layerCount > 0 || assetIndex.hasCompositionReference(a.id)) {
       const ok = confirm(
         `Delete asset "${a.name}"?\n\n` +
-        `${layerCount} layer${layerCount === 1 ? '' : 's'} referencing it will also be removed.`,
+        `${layerCount} layer${layerCount === 1 ? '' : 's'} referencing it will also be removed.` + (assetIndex.hasCompositionReference(a.id) ? '\nThe composition background also uses this image.' : ''),
       )
       if (!ok) return
     }
@@ -156,7 +152,7 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
 
   // ── Discovery: remove all unused (orphan) assets in one undo step ────────
   const cleanupUnused = () => {
-    const orphans = scene.assets.filter(a => (layersByAsset.get(a.id)?.length ?? 0) === 0)
+    const orphans = scene.assets.filter(a => assetIndex.isOrphan(a.id))
     if (orphans.length === 0) return
     const ok = confirm(
       `Remove ${orphans.length} unused asset${orphans.length === 1 ? '' : 's'}?\n\n` +
@@ -239,12 +235,15 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
           renderRow={(index, attributes) => <div {...attributes} className="grid grid-cols-2 gap-2 items-start"
             style={{ height: rowHeight, paddingBottom: 8 }}>
         {scene.assets.slice(index * 2, index * 2 + 2).map(a => {
-          const refCount = layersByAsset.get(a.id)?.length ?? 0
+          const refCount = assetIndex.getRefCount(a.id)
           const badge    = TYPE_BADGES[a.type]
           return (
             <div
               key={a.id}
               data-asset-id={a.id}
+              draggable={isTextureAsset(a)}
+              onDragStart={event => startTextureDrag(event, a)}
+              title={isTextureAsset(a) ? 'Drag onto a 2D mesh to assign its texture' : undefined}
               className="border border-gray-700 rounded overflow-hidden bg-gray-900/50 group hover:border-blue-500/60 transition-colors"
               onContextMenu={(e) => {
                 e.preventDefault()

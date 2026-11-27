@@ -15,6 +15,9 @@ import { evaluateTimelines, type OverrideMap } from '../evaluator'
 import { resolveLayerWorldBounds, createLayerWorldBoundsResolver } from '../geometry/resolveLayerWorldBounds'
 import { resolveLayerWorldMatrix } from '../geometry/resolveLayerWorldMatrix'
 import type { PathBounds } from '../geometry/computePathBounds'
+import type { MeshDeformationBindings } from '../asset/meshDeformation'
+import type { SelectionRegion } from './selectionGesture'
+import { CanvasSelectionEligibility } from './CanvasSelectionEligibility'
 
 interface Vec2 { x: number; y: number }
 interface AABB { x: number; y: number; w: number; h: number }
@@ -30,6 +33,8 @@ export type SelectionContainMode = 'inside' | 'touching'
 export interface SelectionFrameOptions {
   timeMs?: number
   overrides?: OverrideMap
+  /** Borrowed clips used to measure the displayed Mesh2D deformation frame. */
+  meshDeformations?: MeshDeformationBindings
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +63,9 @@ export function layerAnchorWorldPos(scene: ChronoScene, layer: Layer): Vec2 {
  * input scene, overrides and geometry are never mutated. */
 export function getLayerWorldBounds(scene: ChronoScene, layer: Layer, options: SelectionFrameOptions = {}): AABB {
   const { timeMs, overrides } = resolveSelectionFrame(scene, options)
-  const b = resolveLayerWorldBounds(layer, scene, timeMs, overrides)
+  const b = resolveLayerWorldBounds(layer, scene, timeMs, overrides, {
+    meshDeformations: options.meshDeformations,
+  })
   return asSelectionBounds(scene, layer, b, timeMs, overrides)
 }
 
@@ -189,9 +196,10 @@ export function segmentsIntersect(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2): boole
 // Bulk hit-tests against scene layers (with mode parameter)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Select non-audio, visible, unlocked, unfrozen layers by composition-pixel
- * rectangle bounds. Results preserve scene order and source/override inputs.
- * Frame options are optional for backward-compatible static callers. */
+/** Select eligible viewport layers by composition-pixel rectangle bounds.
+ * Eligibility includes ancestor flags, opacity, lifetime and solo; results
+ * preserve scene order and source/override inputs. Omitted frame uses static
+ * transforms at 0 ms; supplying time/overrides uses the displayed frame. */
 export function layersInRect(
   scene: ChronoScene,
   rect: AABB,
@@ -237,6 +245,19 @@ export function layersUnderPaintBrush(
   return layersInCircle(scene, { x: cursor.x, y: cursor.y, r: radius }, 'touching', frame)
 }
 
+/** One query contract for every viewport region style. Regions and results use
+ * composition pixels; paint deliberately retains touching-only semantics.
+ * No source, ordering, frame overrides or supplied region arrays are mutated. */
+export function layersInSelectionRegion(scene: ChronoScene, region: SelectionRegion,
+  mode: SelectionContainMode, frame: SelectionFrameOptions = {}): Set<string> {
+  switch (region.kind) {
+    case 'box': return layersInRect(scene, region, mode, frame)
+    case 'circle': return layersInCircle(scene, { x: region.cx, y: region.cy, r: region.r }, mode, frame)
+    case 'lasso': return layersInPolygon(scene, region.points, mode, frame)
+    case 'paint': return layersUnderPaintBrush(scene, { x: region.cx, y: region.cy }, region.r, frame)
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,22 +273,14 @@ function resolveSelectionFrame(scene: ChronoScene, options: SelectionFrameOption
 /** Share frame evaluation and canonical bounds preparation across one query. */
 function selectLayersByBounds(scene: ChronoScene, options: SelectionFrameOptions, matches: (bounds: AABB) => boolean): Set<string> {
   const { timeMs, overrides } = resolveSelectionFrame(scene, options)
-  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides)
+  const boundsForFrame = createLayerWorldBoundsResolver(scene, timeMs, overrides, {
+    meshDeformations: options.meshDeformations,
+  })
+  const eligibility = new CanvasSelectionEligibility(scene.layers, timeMs, overrides)
   const out = new Set<string>()
   for (const layer of scene.layers) {
-    if (!isSelectable(layer, overrides)) continue
+    if (!eligibility.accepts(layer)) continue
     if (matches(asSelectionBounds(scene, layer, boundsForFrame(layer), timeMs, overrides))) out.add(layer.id)
   }
   return out
-}
-
-/** Preserve per-layer selection exclusions, using evaluated boolean flags
- * when supplied by the displayed frame. Group/child scope remains caller-owned. */
-function isSelectable(layer: Layer, overrides: OverrideMap): boolean {
-  for (const flag of ['hidden', 'locked', 'frozen'] as const) {
-    const value = overrides.get(`layers.${layer.id}.${flag}`)
-    if (typeof value === 'boolean' ? value : layer[flag]) return false
-  }
-  if (layer.type === 'audio') return false   // audio has no canvas presence
-  return true
 }

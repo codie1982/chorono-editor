@@ -1,7 +1,9 @@
+import { hasTransformDriver } from '@/lib/scene/properties/hasTransformDriver'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import type { ChronoScene, Layer, Transform } from '@/lib/types'
 import { type OverrideMap } from '@/lib/evaluator'
 import { Matrix2D } from '@/lib/geometry/Matrix2D'
+import { layerTransformMatrix as transformMatrix } from '@/lib/geometry/layerTransformMatrix'
 import { createLayerWorldMatrixResolver } from '@/lib/geometry/resolveLayerWorldMatrix'
 import { resolveDisplayTransform } from '@/lib/render/resolveDisplayTransform'
 import { LayerIndex } from '@/lib/scene/LayerIndex'
@@ -28,7 +30,7 @@ export interface TransformPreparationOptions {
 
 export interface TransformDiagnostic { ok: false; reason: string; layerId?: string }
 export type TransformPreparation = TransformDiagnostic | {
-  ok: true; targets: PreparedTransformTarget[]; pivot: Point
+  ok: true; targets: PreparedTransformTarget[]; pivot: Point; activeTarget: PreparedTransformTarget
 }
 /** Complete evaluated pose. Commit adapters must diff against the matching
  * target.transform and patch only those channels onto originalLayer.transform;
@@ -39,32 +41,6 @@ export type TransformEditResult = TransformDiagnostic | { ok: true; changes: Tra
 /** Return a diagnostic instead of partially preparing/applying a selection. */
 function failure(reason: string, layerId?: string): TransformDiagnostic {
   return { ok: false, reason, ...(layerId ? { layerId } : {}) }
-}
-
-/** Compose Chorono's parent-local T(position + anchor) R S T(-anchor). */
-function transformMatrix(transform: Readonly<Transform>): Matrix2D {
-  return Matrix2D.translation(transform.x + transform.anchorX, transform.y + transform.anchorY)
-    .rotate(transform.rotationDeg).scale(transform.scaleX, transform.scaleY)
-    .translate(-transform.anchorX, -transform.anchorY)
-}
-
-/** Identify target-owned drivers whose rendered output cannot safely become a
- * new TRS input. Animated parents remain valid: only the edited root is tested. */
-function hasTransformDriver(scene: ChronoScene, layer: Layer): boolean {
-  const transformPath = (path: string | undefined) => path?.startsWith('transform.')
-  return !!(layer.followPath || layer.motionPath
-    || Object.keys(layer.propertyExpressions?.fields ?? {}).some(transformPath)
-    || Object.keys(layer.paramBindings ?? {}).some(transformPath)
-    || scene.bindings.some(binding => binding.target.type === 'layerProperty'
-      && binding.target.layerId === layer.id && transformPath(binding.target.property))
-    || scene.parameterWires?.some(wire => wire.enabled && wire.target.layerId === layer.id
-      && transformPath(wire.target.propertyPath))
-    || scene.timelines.some(timeline => timeline.tracks.some(track =>
-      track.target.startsWith(`layers.${layer.id}.transform.`) && (
-        (track.controller && track.controller.type !== 'keyframe') || track.easeCurve || track.timeWarp
-        || track.multiplierCurve || track.modifiers?.some(modifier => modifier.enabled)
-        || track.keyframes.some(key => key.segmentModifiers?.some(modifier => modifier.enabled))
-      ))))
 }
 
 /**
@@ -79,7 +55,8 @@ function hasTransformDriver(scene: ChronoScene, layer: Layer): boolean {
  * same scene/frame. Returned matrices/points use composition pixels. A single
  * target uses its actual pivot. Selection center means the bounding-box center
  * of ROOT PIVOTS, not geometry bounds or all selected descendants. Active mode
- * uses the selected root containing activeId. Original layers are borrowed;
+ * uses the selected root containing activeId. activeTarget exposes that root
+ * (or the first authored root) independently of the chosen pivot. Original layers are borrowed;
  * copied transforms are frozen. Discard snapshots when time/source/scope changes.
  */
 export function prepareTransformTargets(
@@ -118,7 +95,7 @@ export function prepareTransformTargets(
     x: (Math.min(...pivots.map(point => point.x)) + Math.max(...pivots.map(point => point.x))) / 2,
     y: (Math.min(...pivots.map(point => point.y)) + Math.max(...pivots.map(point => point.y))) / 2,
   }
-  return { ok: true, targets, pivot }
+  return { ok: true, targets, pivot, activeTarget: active || targets[0] }
 }
 
 /** Move all captured roots by a composition-pixel vector. The inverse parent
@@ -164,7 +141,7 @@ function matrixTransform(matrix: Matrix2D, previous: Readonly<Transform>): Trans
 
 /** Apply one world affine to captured roots; never return a partly transformed
  * selection. Parent inverses are fixed at gesture start, not preview-dependent. */
-function applyWorldTransform(targets: readonly PreparedTransformTarget[], world: Matrix2D): TransformEditResult {
+export function applyWorldTransform(targets: readonly PreparedTransformTarget[], world: Matrix2D): TransformEditResult {
   const changes: TransformChange[] = []
   for (const target of targets) {
     const transform = matrixTransform(target.worldToParent.multiply(world).multiply(target.worldMatrix), target.transform)
@@ -185,9 +162,14 @@ export function rotateTransformTargets(targets: readonly PreparedTransformTarget
 
 /** Scale composition axes about a common world pivot. Signed nonzero factors
  * support reflection; callers choose sensitivity/snapping. Rotated/nonuniform
- * combinations requiring shear fail explicitly; no approximate pose is written. */
-export function scaleTransformTargets(targets: readonly PreparedTransformTarget[], pivotWorld: Point, factorX: number, factorY: number): TransformEditResult {
+ * combinations requiring shear fail explicitly; no approximate pose is written.
+ * Optional axisFrame is a nonsingular, translation-free composition-space basis;
+ * Local callers pass the active root's normalized world columns. The same
+ * affine acts on all roots about the common pivot, preserving group spacing. */
+export function scaleTransformTargets(targets: readonly PreparedTransformTarget[], pivotWorld: Point, factorX: number, factorY: number, axisFrame?: Matrix2D): TransformEditResult {
   if (![pivotWorld.x, pivotWorld.y, factorX, factorY].every(Number.isFinite) || factorX === 0 || factorY === 0) return failure('Scale factors must be finite and nonzero; pivot must be finite.')
   if (factorX === 1 && factorY === 1) return { ok: true, changes: targets.map(target => ({ id: target.id, originalLayer: target.originalLayer, transform: { ...target.transform } })) }
-  return applyWorldTransform(targets, Matrix2D.translation(pivotWorld.x, pivotWorld.y).scale(factorX, factorY).translate(-pivotWorld.x, -pivotWorld.y))
+  if (axisFrame && (!axisFrame.toArray().every(Number.isFinite) || Math.abs(axisFrame.determinant()) < 1e-9)) return failure('Scale axes must be finite and nonsingular.')
+  const scale = axisFrame ? axisFrame.scale(factorX, factorY).multiply(axisFrame.invert()) : Matrix2D.scale(factorX, factorY)
+  return applyWorldTransform(targets, Matrix2D.translation(pivotWorld.x, pivotWorld.y).multiply(scale).translate(-pivotWorld.x, -pivotWorld.y))
 }

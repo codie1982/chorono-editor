@@ -1,4 +1,5 @@
-import { BoundedTextReader } from '../resources/io'
+import { BoundedBinaryReader, BoundedTextReader } from '../resources/io'
+import { ModelHandler } from './handlers/asset/ModelHandler'
 import { GifImportService } from './gif'
 import { editorMediaPreparation } from '../resources/jobs'
 import { editorResourceBudget } from '../resources/budget'
@@ -25,6 +26,7 @@ import { SpriteSheetHandler }       from './handlers/asset/SpriteSheetHandler'
 import { VideoHandler }             from './handlers/asset/VideoHandler'
 import { AudioHandler }             from './handlers/asset/AudioHandler'
 import { FontHandler }              from './handlers/asset/FontHandler'
+import { MeshDeformationHandler }   from './handlers/asset/MeshDeformationHandler'
 
 // Document handlers
 import { SvgDocumentHandler }       from './handlers/document/SvgDocumentHandler'
@@ -42,12 +44,17 @@ export function initImportPipeline(): void {
   _initialized = true
 
   // ── Asset handlers ──────────────────────────────────────────────────────────
+  importManager.registerHandler(new ModelHandler())
   importManager.registerHandler(new GifHandler(new GifImportService({ budget: editorResourceBudget, executor: editorMediaPreparation })))   // before ImageHandler — claims image/gif
   importManager.registerHandler(new ImageHandler())
   importManager.registerHandler(new SpriteSheetHandler())  // explicit format only (image/spritesheet)
   importManager.registerHandler(new VideoHandler())
   importManager.registerHandler(new AudioHandler())
   importManager.registerHandler(new FontHandler())
+  importManager.registerHandler(new MeshDeformationHandler(
+    new BoundedBinaryReader({ budget: editorResourceBudget, maxBytes: 64 * 1024 ** 2 }),
+    editorResourceBudget,
+  ))
 
   // ── Document handlers ───────────────────────────────────────────────────────
   importManager.registerHandler(new SvgDocumentHandler(new BoundedTextReader({ budget: editorResourceBudget, maxInputBytes: 16 * 1024 ** 2 })))

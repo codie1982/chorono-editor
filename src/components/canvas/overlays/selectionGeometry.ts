@@ -14,3 +14,14 @@ export function selectionGeometry(layer: Layer, frame: OverrideMap, assets: read
   return visual.text && textLayoutFields.some(path => frame.has('layers.' + layer.id + '.text.' + path))
     ? { ...visual, size: measureTextLayout(visual.text, assets) } : visual
 }
+
+/**
+ * Identifies layers whose authored geometry, rather than `size`, owns the
+ * editor selection frame. Its handles scale the layer transform rather than
+ * resizing retained size metadata, preserving mesh/spline source geometry.
+ * Call this with an instance-resolved layer.
+ */
+export function usesGeometryDrivenSelectionFrame(layer: Layer | null | undefined): boolean {
+  return layer?.type === 'path' || layer?.type === 'spline'
+    || layer?.type === 'mesh2d' || layer?.type === 'group'
+}

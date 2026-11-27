@@ -116,13 +116,14 @@ export function formatParameterRef(ref: ParameterRef, scene: ChronoScene): strin
 /** Every animatable property on a layer, as ParameterRefs. Filters out
  *  properties whose layerTypes don't include this layer's type. */
 export function listLayerParameterRefs(layer: Layer): ParameterRef[] {
-  return ANIMATABLE_PROPERTIES
+  const legacy: ParameterRef[] = ANIMATABLE_PROPERTIES
     .filter((p) => !p.layerTypes || p.layerTypes.includes(layer.type))
     .map((p) => ({
       layerId: layer.id,
       propertyPath: p.path,
       valueType: 'number' as ParameterValueType,
     }))
+  return [...legacy, ...Object.entries(layer.model3dInputValues ?? {}).map(([id, value]): ParameterRef => ({ layerId: layer.id, propertyPath: `model3dInputValues.${id}`, valueType: typeof value === 'boolean' ? 'boolean' : 'number' })), ...Object.entries(layer.model3d?.content?.parameters ?? {}).map(([id, p]): ParameterRef => ({ layerId: layer.id, propertyPath: `model3d.content.parameters.${id}.value`, valueType: p.type }))]
 }
 
 /** Every scene parameter as a ParameterRef. */

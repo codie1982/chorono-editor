@@ -46,11 +46,12 @@ export function RotateRing({ x, y, radius, isDragging, onPointerDown }: RotateRi
         </g>
         <circle
           data-testid="rotation-ring"
+          className="cursor-rotate"
           cx={outer} cy={outer} r={radius}
           fill="none"
           stroke="transparent"
           strokeWidth={BAND * 2}
-          style={{ pointerEvents: 'stroke', cursor: 'grab' }}
+          style={{ pointerEvents: 'stroke' }}
           onPointerDown={onPointerDown}
         ><title>Rotate around pivot</title></circle>
       </svg>

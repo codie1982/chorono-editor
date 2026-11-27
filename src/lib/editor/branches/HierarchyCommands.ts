@@ -6,6 +6,7 @@ import type { EditorCommand } from '../commands-keyframe'
 import { makeMoveLayerToCmdWithSnapshot } from '../commands-layer'
 import { makeGroupCmd, type GroupCmdResult } from '../commands-group'
 import { assertStaticTransform, localTransform } from './WorldPlacement'
+import type { GroupPlacementOptions } from './GroupPlacement'
 
 /** Reject malformed source chains and inherited/subtree protection before
  * changing hierarchy. Does not silently repair or bypass source flags. */
@@ -58,17 +59,17 @@ export function makeMoveLayerInTreeCmd(scene: ChronoScene, id: string, parentId:
   }, undo: native.undo }
 }
 
-/** Identity-group only sibling selection. Normalizes overlapping parent/child
+/** Center-pivot identity grouping of sibling selection. Normalizes overlapping parent/child
  * roots, rejects mixed parents/protected branches and reuses the native group
  * command. Animated children keep identical local transforms and tracks.
  * Multi-parent grouping needs an explicit conversion/bake and is not guessed.
  */
-export function makeGroupSiblingLayersCmd(scene: ChronoScene, ids: readonly string[]): GroupCmdResult | null {
+export function makeGroupSiblingLayersCmd(scene: ChronoScene, ids: readonly string[], options: GroupPlacementOptions = {}): GroupCmdResult | null {
   const index = new LayerIndex(scene.layers), selected = new Set(ids)
   const roots = scene.layers.filter(layer => selected.has(layer.id) &&
     !Array.from(index.ancestorIds([layer.id], false)).some(ancestor => selected.has(ancestor)))
   if (!roots.length) return null
   roots.forEach(layer => editableChain(index, layer.id, true))
   if (roots.some(layer => layer.parentId !== roots[0].parentId)) throw new Error('Group requires sibling layers with a common parent.')
-  return makeGroupCmd(roots.map(layer => layer.id))
+  return makeGroupCmd(roots.map(layer => layer.id), options)
 }

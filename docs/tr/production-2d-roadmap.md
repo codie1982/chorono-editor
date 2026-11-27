@@ -1,26 +1,134 @@
-# Chorono 2D / 2.5D — birleşik üretim ve geliştirme yol haritası
+# Chorono 2D — üretim ve geliştirme yol haritası
 
-Tarih: 4 Kasım 2026. Güncelleme: 11 Kasım 2026. **Güncel ve onaylanan sıra:**
-tamamlanan kullanıcı onaylı tanı servisi/sürüm kontrolü D0–D2 ara işinden sonra
-tamamlanan E−1.Q/E−1.1/E−1.2/E−1.3 MCP açıklığı/güvenli düzenleme/köken/ortak hiyerarşi, E−1.4 Set Key/transport ve
-E−1.5 prosedürel eğri/bake sonrasında E−1.5A input expression ve kalan
-viewport/ortak araç kabulü → dar entegrasyon sözleşmeleri →
-kutulu 3D → Poly/UV/material → ileri kutulu 3D → bileşen/karakter → fizik,
-kumaş, Blob/sıvı/akış → export/final kalite → çoklu format/otomasyon → bütün
-ürünü kapsayan ikinci optimizasyon ve birleşik kabul.
-[Ayrıntılı sıra ve bağımlılık sınırları](plans/geometry-material-boxed3d-sequence.md)
-bu sıranın uygulama rehberidir. Önceki sıra kayıtları §12'de tarihsel kanıttır;
-güncel iş kuyruğu bu bölüm ve bağlantılı sıra belgesidir.
+Tarih: 4 Kasım 2026. Kapsam ayrımı: 17 Kasım 2026. Destruction kapsamı: 18
+Kasım 2026. **Bu belgenin güncel
+uygulama kapsamı yalnız 2D editörünün üretim özellikleridir.** Tamamlanan
+E−1 ortak düzenleme, input expression ve dar entegrasyon kapılarından sonra
+Mesh2D, ortak typed BakeService ve fizik/kırılmanın FRACTURE3'e kadarki dikey
+dilimleri tamamlandı. **22 Kasım 2026 sürüm kararıyla v0.5.0 kapsamı burada
+donduruldu.** Önceden v0.5.0 için düşünülen 10 → 11 → 12; canonical
+import/export ve final render → mevcut çıktılar için job/otomasyon MVP'si →
+hedefli optimizasyon ve kabul sırası, yeni bağımlılık kararları gerektirdiği
+için **v0.6.0'a taşındı**. v0.6.0 kapsamı masaüstü editör dönüşümü, aynı
+uygulama paketine gömülü Chorono Render ve Öncelik 10–12'dir; ayrıntılar
+[v0.6.0 ana planında](plans/v0.6.0-master-plan.md)
+tutulur. FRACTURE4/5, emitter/particle, Fabric, Blob/liquid, smoke/fire ve
+ileri karakter animasyonu [v0.10.0 ileri 2D planına](plans/v0.10.0-advanced-2d-plan.md)
+taşındı. v0.7.0–v0.9.0 arasındaki düzenlemeler henüz kararlaştırılmadı. 2D içinde kullanılan 3D katman, 3D kamera ve
+3D compositing teslimleri [ayrı 3D ana planındadır](production-3d-roadmap.md).
+Bu ayrım daha önce onaylanan **planlar arası** uygulama önceliğini tek başına
+değiştirmez; [eski birleşik sıra](plans/geometry-material-boxed3d-sequence.md)
+o kararın tarihsel kaydıdır. §12'deki eski sıra ifadeleri de teslim gününün
+kaydıdır; güncel kapsam ve durum için bu giriş ile §1 esas alınır.
 
-**11 Kasım sonraki faz kaydı:** [CFX — ileri katman/kompozisyon/efekt, video
-kurgu, yerel tracking ve 3D compositing](plans/advanced-compositing-tracking-plan.md)
-mevcut serinin son optimizasyon ve birleşik kabulünden **sonraki ayrı faza**
-eklenmiştir. Mevcut sıra ve sıradaki E−1.5A değişmez; CFX yeni bir ara iş değildir.
+25 Kasım 2026 güncellemesi. Normal 2D katmanlarda rijit pivot bağlantısı ve iki parçalı IK, Properties → Link & IK üzerinden kullanılabilir. Sprite klipleri ve State Machine entegrasyonu ileri fazda değerlendirilecektir. [Karakter parçaları için kurulum ve kapsam](character-motion-plan.md) · [IK geliştirme ve kabul planı](plans/ik2d-etkilesim-ve-cozum-plani.md)
+
+**26 Kasım 2026 · Link & IK MCP teslimi tamamlandı.** Pivot bağlama ve ayırma, iki parçalı IK kurulumu ve kaldırma, bükülme, eklem limitleri ve kare tanıları standart katalogda. Bağlı editörde panel ve MCP aynı uç konumunu verdi. İki anahtar arasında pozu koruyarak ayırmada tek Undo bağlantıyı, IK’yi ve özgün anahtarları geri getirdi. [Araçlar ve kabul sonuçları](plans/ik2d-etkilesim-ve-cozum-plani.md#mcp-teslimi)
+
+**IK/FK ağırlığı ve poz eşleme.** Üst parçanın Link & IK sekmesinde ağırlık ve iki yönlü Match kullanılabilir. Geçiş o karede omzu, dirseği, ucu ve parçaların dönüşünü korur. [Kullanım ve anahtarlama](plans/ik2d-etkilesim-ve-cozum-plani.md#ikfk-ağırlığı-ve-poz-eşleme)
+
+**26 Kasım 2026 · MCP ve Script API kapsamı.** Link & IK kurulum, ağırlık ve poz eşleme komutları ile Mesh2D dönüşüm, topoloji, görünüm ve modifier stack işlemleri ortak editör komutlarını kullanır. Spline nokta/kenar araçları mevcut `layer.spline.edit` girişinde kalır. [Kapsam, kullanım örnekleri ve açık işler](script-2d-coverage-audit.md#26-kasım-2026-ek-kontrol)
+
+24 Kasım 2026 Spline durum kaydı: Point/Edge/Object native araçları, görünüm,
+akıllı dönüşüm ve Boolean akışı, sekiz temel statik modifier ve kaynak çizgiyi
+koruyan canlı Outline teslimleri [§9A’da](#9a-spline-edit-görünüm-ve-modifier-teslimleri)
+birleştirildi. §12.83–§12.102 tarihsel teslim kayıtlarıdır. Bu ek teslimler
+geliştirme branch’indedir; v0.5.0 kapsam dondurma veya release kararı bu
+doküman güncellemesiyle değiştirilmez.
+
+FRACTURE4'e yeniden başlanacaksa yarım prototipin gerçek durumu, temizlenen
+dosyalar, korunacak hash/snapshot/collider sözleşmeleri ve F4-0–F4-6 sırası
+[FRACTURE4 devralma kaydından](plans/fracture4-damage-deformation-handoff.md)
+izlenir. v0.6.0 ve v0.10.0 kapsam kararları bağımsız tam 3D workspace, Game
+Engine modu, mobil paketleme veya CFX genişlemesini içeri almaz.
+
+3D modelleme, 3D karakter ve 3D render teslimleri bu belgede sıralanmaz;
+[3D ana planında](production-3d-roadmap.md) izlenir. İki hattın aynı işi ikinci
+kez geliştirmemesi gereken servisler ile kesin ayrım sınırları
+[2D–3D ortak temel sözleşmesindedir](shared-2d-3d-foundations.md).
+Game Mode'un canlı runtime, kod editörleri ve platform paketleme işleri
+[ayrı ana planında](game-engine-mode-roadmap.md); 2D, 3D, Game ve Render
+modlarının ortak sıra ve kapıları
+[dört ana mod planında](product-mode-master-plan.md) tutulur.
+Bu teknik 2D planındaki statik görsel/layout işleri
+[2D Mode'a](2d-graphics-roadmap.md), zaman/rig/compositing/video işleri
+[Render Mode'a](render-mode-roadmap.md) ürün olarak açılır.
+
+## v0.5.0 branch ve entegrasyon kaydı — 18 Kasım 2026
+
+Bu roadmap kapsamındaki ilk v0.5.0 dikey dilimleri
+`codex/mesh2d-mesh0` branch'inde geliştirildi. Repository'de kayıtlı yerel ve
+uzak-tracking Git referanslarının erişilebilirlik kontrolünde aşağıdaki
+commitleri içeren başka bir branch bulunmadı.
+
+| Gerçekleşen 2D geliştirme | Geliştirildiği branch | Commit / aralık | v0.5.0 durumu |
+| --- | --- | --- | --- |
+| Mesh2D topoloji, layer, spline/shape dönüşümü, texture ve deformasyon | `codex/mesh2d-mesh0` | `ff80d3a5`–`56e67b56` | Yerel main'de; v0.5.0 adayı |
+| Chorono Render 2D ve dahili render fallback | `codex/mesh2d-mesh0` | `4cf90550`–`b14f46fb` | Yerel main'de; v0.5.0 adayı |
+| Typed BakeService ve Mesh2D deformation bake | `codex/mesh2d-mesh0` | `aaf3066a`–`251f2d3d` | Yerel main'de; v0.5.0 adayı |
+| 2D rigid body bake | `codex/mesh2d-mesh0` | `13aca9c3` | Yerel main'de; v0.5.0 adayı |
+| İlk deterministik Voronoi fracture dilimi | `codex/mesh2d-mesh0` | `fcd22d8b` | Yerel main'de; v0.5.0 adayı |
+| Voronoi v2 portable kimlikleri, canlı kabul ve rigid Worker sınırı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Kalıcı MCP bake job, Jobs & Bake insan inceleme UI'ı ve opacity birim düzeltmesi | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Olay-korumalı rigid keyframe sadeleştirme ve kalite raporu UI'ı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Sahiplik hash'li güvenli Re-bake / Clear Bake, Inspector ve MCP yaşam döngüsü | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Image fracture Mesh2D görünümü, kaynak UV koruması ve canlı kabul | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Yerel main'de; v0.5.0 adayı |
+| Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Yerel main'de; v0.5.0 adayı |
+| Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Yerel main'de; v0.5.0 adayı |
+| Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Yerel main'de; v0.5.0 adayı |
+| Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Yerel main'de; v0.5.0 adayı |
+| Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Yerel main'de; v0.5.0 adayı |
+| Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dilim yerel main'de; v0.5.0 adayı |
+| FRACTURE2 Canvas bond authoring, fixed-tick break/reset, MCP tamamlama ve temiz canlı kabul | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5`, `3336a1db` | Aşama 6 ve temiz UI/MCP kabulü tamamlandı |
+| FRACTURE3 recursive generation, lineage/bütçe, portable forest, ürün UI/MCP ve temiz canlı kabul | `codex/mesh2d-mesh0` | `fe0c4f45`–`72711c78`, `206853a3`, `5eaf8ca9`, `acc68a08` | İlk secondary destruction dilimi ve canlı UI/MCP kabulü tamamlandı |
+| Akıllı Shape/Spline/Mesh dönüşümü ve genel Modifier/Registry/Execute altyapısı | `codex/mesh2d-mesh0` | `000d5608`, `51003e08`, `e5fda161`, `05939389` | 22 Kasım ek 2D teslimi; release ataması yapılmadı |
+| Spline Edit, paint/Boolean ve native Point/Edge/Object araçları | `codex/mesh2d-mesh0` | `5f06d860`, `9ae5b052`, `0dd7f11b`–`5b20483b` | 22–23 Kasım ek 2D teslimleri; kapsam §9A |
+| Sekiz temel statik Spline modifier ve bağımsız panel/stack akışı | `codex/mesh2d-mesh0` | `bcb8312d`–`03f7d940` | Faz 1 tamamlandı; release ataması yapılmadı |
+| Outline bant geometrisi, Stroke to Path ve canlı kaynak düzenleme | `codex/mesh2d-mesh0` | `6e4a94bb`–`30a48e8d` | İlk geometri/canlı kaynak teslimi; tam v2 açık |
+| Mesh Vertex/Edge/Face, mantıksal quad seçimi ve Edit Mesh stack entegrasyonu | `codex/mesh2d-mesh0` | `40f0e55a` | 24 Kasım ek 2D teslimi; 4.188 test ve native UI kabulü, release ataması yapılmadı |
+| Mesh yerel topoloji araçları, ortak Edit transformları ve Spline → Mesh kabulü | `codex/mesh2d-mesh0` | `9066079e`, `bb7ad083`, `a7d38a7b`, `18f8934b` | 24 Kasım. Üretim editöründe MESH-18 ve MESH-19 geçti. Ayrıntılar §9.2'de. |
+| Assets'ten Mesh2D'ye temel doku sürükle-bırak | `main` | `6022aad4` | 27 Kasım ek 2D teslimi; sürüm ataması yapılmadı. |
+
+Spline satırları 24 Kasım durum eşleştirmesidir; sonraki ek geliştirmeyi
+v0.5.0’a atanmış release kapsamı olarak yorumlamaz.
+
+Tablodaki bütün commitler yerel `main` geçmişindedir.
+`codex/release-v0.5.0` sürüm adayı ayrı dalda durur; bu tablodaki sonraki
+2D teslimlerine otomatik sürüm ataması yapılmaz.
+
+3D geliştirmelerin gerçek branch'i `codex/developing-3d-mode`'dur ve bu 2D
+teslim tablosuna dahil değildir. Gelecek 2D dikey dilimleri başka feature
+branch'lerinde geliştirilirse branch adı ve commit aralığı bu tabloya eklenmeden
+v0.5.0 entegrasyonuna alınmamalıdır.
+
+v0.6.0 geliştirme branch'i `codex/editor-v0.6.0`, başlangıç commit'i
+`fd0424a8`. V6 dikeylerinin teslim kayıtları bu bölümde ve
+[v0.6.0 ana planında](plans/v0.6.0-master-plan.md) izlenir.
+v0.10.0 geliştirme branch'i de henüz açılmadı; aradaki sürümler ve V10-0
+bağımlılık doğrulaması tamamlanmadan aktif sıra sayılmaz.
+
+Bu kayıttaki gerçekleşmiş dilimlerin kullanıcı tarafından uygulanacak test
+sırası ve kanıt şablonu
+[`v0.5.0 manuel test yürütme planında`](releases/v0.5.0-manual-test-plan.md),
+tek tek ekran adımları
+[`elle kabul testi kılavuzunda`](releases/v0.5.0-manual-acceptance-tests.md)
+tanımlıdır. Gerçekleşen işlerin ayrıntılı teslim envanteri
+[`v0.5.0 tamamlanan 2D geliştirmeler`](releases/v0.5.0-2d-completed-work.md)
+belgesindedir.
+
+**Sonraki 2D faz:** [CFX1–CFX9 ileri katman/kompozisyon/efekt, video kurgu ve
+yerel tracking](plans/advanced-compositing-tracking-plan.md), daha önce
+onaylanan birleşik serinin kabulünden sonradır. CFX10–CFX11 3D
+compositing/kamera çözümü ayrı
+[3D ana planında](production-3d-roadmap.md) izlenir.
 
 Genel optimizasyonun ilk kabulü §12.37'de, viewport V1/V2 §12.40'ta ve V3
-position key authoring §12.41'de tamamlandı. Yeni alanlar henüz uygulanmadı.
-2.5D; 2D çalışma alanında kutulu 3D ve derinlikli kumaş anlamındadır;
-bağımsız tam 3D Modeling veya Game Engine modunu etkinleştirmez.
+position key authoring §12.41'de tamamlandı. Planlanan yeni üretim alanları
+henüz uygulanmış sayılmaz.
+Kumaşın yerel derinlikli dalgalanması 2D canvas'a çizilen bir 2D editör
+efektidir; bağımsız 3D çalışma alanı veya hacimsel 3D simülasyon değildir.
 
 **8 Kasım ek kullanıcı önceliği tamamlandı:** V5 sonrası [komşu mesafesi düzenleme,
 seçim ve ruler/guide araçları](viewport-layout-editing.md) uygulandı.
@@ -41,8 +149,11 @@ kabul edilirse düzenli anonim özet gönderimi başlar, ayarlardan kapatılabil
 D0–D2 tamamlandı (§12.48–50): kalıcı ilk açılış onayı, kuyruk, gerçek alıcı
 API/depo, aynı izinle sürüm kontrolü ve ayrı admin hata yönetimi. D2'nin güncel
 kabul sınırları [uygulama belgesindedir](diagnostic-management.md); public
-hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi de tamamlandı (§12.52);
-E−1.1 zorunlu okuma/revision da tamamlandı (§12.53); E−1.2 kaynak kökeni de tamamlandı (§12.54); E−1.3 ortak hiyerarşi de tamamlandı (§12.55); E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake (§12.58) tamamlandı. Sırada E−1.5A input expression (§12.59), ardından kalan ortak araç kabulü var.**
+hosting/yayın ayrıdır. **E−1.Q MCP araç kalitesi (§12.52), E−1.1 zorunlu
+okuma/revision (§12.53), E−1.2 kaynak kökeni (§12.54), E−1.3 ortak hiyerarşi
+(§12.55), E−1.4 Set Key/transport (§12.56) ve E−1.5 zorunlu eğri/bake
+(§12.58) tamamlandı. E−1.5A input expression, V6/E−1.7 ve dar entegrasyon
+12 Kasım'da kapandı (§12.64).**
 Paylaşım tercihi localStorage'da saklanır; her açılışta veya olağan güncellemede
 tekrar sorulmaz. Yönetim token'ı ayrı, yalnız sayfa belleğindedir.
 Son [capture kaybı, kalıcı tanı kaydı ve ardışık
@@ -61,24 +172,29 @@ shape kimliği düzeltmeleri](pointer-gesture-lifecycle.md) ise uygulanıp doğr
 | Tamamlandı — E−1.1 | Zorunlu güncel sahne okuması/revision | MCP 2.0.0; istemci/belge/revision token, son browser CAS, plan/batch/retry ve değişiklik özeti. |
 | Tamamlandı — E−1.2 | İnsan/ajan kaynak kökeni | Optional bounded authoring v1; creation/field/last writer, copy/import, history, portable ve runtime temizliği. |
 | Tamamlandı — E−1.3 | Ortak editör hiyerarşisi | Explorer/Timeline tek source tree, Find, subtree flags/undo, çoklu dal filtreleri ve güvenli UI reparent. |
-| Devam ediyor — sırada A5 | E−1.5A, ardından kalan E−1 ve araç kabulü | A1–A4 typed input, live driver ve adapter/bake uygulandı; [A4 sözleşmesi](typed-input-expressions.md). Sırada A5 ve V6/E−1.7. Set Key/transport ve zorunlu prosedürel eğri/bake tamamlandı. |
-| Sonra 1 | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği. |
-| Sonra 2 | Kutulu 3D ilk sürüm | GLB/glTF, model hiyerarşisi, kamera/ışık/material, şeffaf yüzey, 2D Timeline ve portable save/load. |
-| Sonra 3 | Editable Poly 2D | Vertex/edge/tri/quad, grid/triangulation, selection/bounds/renderer/undo. |
-| Sonra 4 | Texture, vertex color, UV ve basit material | Texture gizmo ve UV paneli; dokulu/deforme mesh adapter'ı. |
-| Sonra 5 | Kutulu 3D ileri düzenleme | Çoklu model, camera animasyonu, imported rig/clip/morph; rig oluşturma/IK ayrı artımlı dilimler. |
-| Sonra 6 | Bileşen kütüphanesi ve Character Motion | Source component/local clock; 2D rig/FK/IK/sprite/state-machine. |
-| Sonra 7 | Simulation Core, rigid, Voronoi ve particle fiziği | Poly kaynaklı kırılma; sabit adım, gravity/field/collision, cache/bake. |
-| Sonra 8 | Fabric/kumaş | Poly rest mesh/UV; gravity/wind/pin/collision ve bake. |
-| Sonra 9 | Blob Surface, sıvı, akış/duman | Değişken topoloji, contour/mesh görünümü; alanlar/collision ve bake. |
-| Sonra 10 | Tamamlayıcı 2D üretim araçları | Particle V2+, runtime konsolu, gelişmiş metin, çizim/fırça. |
-| Sona taşındı 1 | Export tutarlılığı ve yüksek kaliteli final render | Yeni türlerin parity/capability'si; hedef çözünürlükte redraw, sampling/preview; ardından ileri renk/backend/FP16. |
-| Sona taşındı 2 | Çoklu format ve üretim otomasyonu | Ekran oranları/codec desteği, queue, data-driven üretim, audio-driven hareket ve kelime zamanlı altyazı. |
-| En son | İkinci genel optimizasyon, ileri profiler ve birleşik kabul | Four Seasons + yeni Poly/3D/rig/cloth/Blob/fluid/export alanlarında CPU/bellek/GPU/job ve görüntü eşliği. |
-| Mevcut seriden sonraki ayrı faz — CFX | İleri katman/kompozisyon/efekt, maske, video kurgu, yerel tracking ve 3D compositing | [CFX1–CFX11](plans/advanced-compositing-tracking-plan.md); mevcut kapıları veya sıradaki işi bloke etmez, kendi regresyon/çıktı kabulü gerekir. |
+| Tamamlandı | E−1.5A, kalan E−1 ve araç kabulü | A1–A5, V6/E−1.7; [kabul ve sınırlar](pre3d-acceptance.md). |
+| Tamamlandı | Ortak dar entegrasyon | Source/asset kimliği, kesin frame saati, çıktı capability ve kaynak sahipliği; [sözleşme](pre3d-frame-contract.md). |
+| Her 2D dikey teslimle | UI sözleşmesi ve görünüm kabulü | Mevcut dock kabuğu; canvas overlay, bağlama duyarlı inspector, klavye/sayısal alternatif, loading/error/stale/job durumları ve gerçek ekran kabulü. [Ayrıntılı UI planı](production-2d-ui-contracts.md). |
+| Uygulandı — Mesh2D ve temel Edit araçları | Üretim, dönüşüm, görünüm, deformasyon, yerel topoloji ve modifier stack | Structured Grid ve Shape/Spline dönüşümü, Vertex/Edge/Face, dört topoloji aracı, Smooth ve Delaunay/Grid Subdivision. Üretim editöründe MESH-18/19 geçti. MESH-05–17'nin kabulü açık. [Ayrıntılı Mesh bloğu](#92-mesh2d-veri-modeli-ve-spline-dönüşümü) |
+| Tamamlandı — Spline native temel | Point/Edge/Object Edit, görünüm ve akıllı dönüşüm/Boolean | [Güncel kapsam §9A](#9a-spline-edit-görünüm-ve-modifier-teslimleri): native Apply/Undo, sürekli Add Vertex, Trim/Extend, Simplify/Smooth/Subdivide/Interpolation; fill/stroke Properties'te. Edge erişilebilirlik kabulü açık. |
+| Tamamlandı — Spline modifier Faz 1 | Sekiz temel statik modifier ve genel ordered Execute | Edit modundan bağımsız stack; hedef/ayar, sıra/toggle/remove/Bake ve kaynak koruma. [Teslim](spline-phase1-modifiers.md). Animasyonlu parametreler ertelendi. |
+| Tamamlandı — Outline ilk teslimi | Canlı kaynak çizgisi, gerçek bant ve Stroke to Path | [Kaynak düzenleme](spline-live-outline.md), guide/enable/Bake, bağımsız paint ve delikli bant uygulandı; tam Outline v2 tamamlandı sayılmaz. |
+| Açık — yerel Spline kuyruğu | Edge görünürlüğü, kısmi zincir, gelişmiş Edit transformu ve ileri modifier'lar | [Sıra ve kabul §9A.4](#9a4-kalan-işler-ve-teslim-sırası); sürüm ataması yoktur, mevcut v0.6.0/v0.10.0 kapsamı değişmez. |
+| Tamamlandı — typed temel + ürün/MCP UI'ı | Ortak typed BakeService | Job/preview/commit/stale/cancel/undo sahipliği, Mesh2D/rigid adapter temeli, Physics + Jobs & Bake dock, kalıcı MCP job akışı ve sahiplik hash'li güvenli Re-bake / Clear Bake tamamlandı. Character/IK payload'ı ancak ertelenen Character fazı açıldığında eklenir. |
+| v0.5.0 kapsamı donduruldu | Simulation Core, rigid ve Voronoi | FRACTURE3'e kadar mevcut kapsam tamamlandı; yeni çıktı altyapısı eklenmez. Yalnız mevcut teslimlerde release blocker hata bulunursa düzeltilir. |
+| v0.6.0 giriş kapısı | Masaüstü shell ve çıktı adapter kararları | Shell/Next runtime, paket içine gömülecek Chorono Render modül sınırı, codec/container, dosya sahipliği, worker/process, asset/font/audio, kaynak bütçesi, MCP, dağıtım ve güvenlik kararları gerçek fixture ile kapatılır. |
+| v0.6.0 — masaüstü editör | Yerel uygulama kabuğu, gömülü Chorono Render ve native servisler | Open/save/recovery, native file/output, tek paket/launcher/update altında render process'i ve MCP yaşam döngüsü, paketleme, signing/update ve temiz makine kabulü. Ayrı Chorono Render kurulumu/discovery yoktur. |
+| v0.6.0 — Öncelik 10 | Import/export tutarlılığı, Render Preview ve yüksek kaliteli final render | Bağımlılık kapısından sonra tek canonical frame/compiler; hedef çözünürlükte redraw, Final Native/High ve açık capability/fallback. |
+| v0.6.0 — Öncelik 11 | Mevcut çıktılar için çoklu iş ve otomasyon MVP'si | Frozen source'lu bounded queue, progress/cancel/retry, output manifest; mevcut raster/sequence ve uygulama içindeki Chorono Render MP4. |
+| v0.6.0 — Öncelik 12 | Hedefli optimizasyon ve birleşik v0.6.0 kabulü | Yalnız ölçülmüş blocker'lar; Four Seasons, UI/MCP, portable, görsel parity, test/MCP/build ve release notu. |
+| v0.10.0 — ileri 2D | FRACTURE4/5, emitter/particle, Cloth, Blob/liquid, smoke/fire ve Character Motion | Aradaki sürümlerden ve V10-0 yeniden doğrulamasından sonra; masaüstü/çıktı v0.6.0'da kalır. |
+| Sürümü belirlenecek | Tamamlayıcı 2D araçlar | Particle V2+, runtime console, gelişmiş text ve çizim/fırça bu v0.10.0 kararına dahil edilmedi. |
+| Mevcut seriden sonraki ayrı 2D faz — CFX1–CFX9 | İleri katman/kompozisyon/efekt, maske, video kurgu ve yerel tracking | [CFX ayrıntıları](plans/advanced-compositing-tracking-plan.md); 3D compositing/kamera çözümü [3D planında](production-3d-roadmap.md). |
 
-Tam export/refactor ve kapsamlı son optimizasyon ertelenir; her yeni feature'ın
-kaynak bütçesi, acquire/release/dispose, cache invalidation, kaydet/aç/undo/clone,
+Canonical import/export ve final render kapanışı v0.6.0 Öncelik 10'a taşındı;
+v0.5.0 bunu beklemez. Kapsamlı genel refactor ile ölçülmemiş optimizasyon
+ertelenir. Her yeni feature'ın kaynak
+bütçesi, acquire/release/dispose, cache invalidation, kaydet/aç/undo/clone,
 doğru zamanda değerlendirme ve asgari raster çıktı/bake kontrolleri ertelenmez.
 Desteksiz exporter yeni layer'ı sessizce atlayamaz; capability/fallback açık olur.
 Son optimizasyon turu kritik bellek sızıntısı veya doğruluk hatasını bekletme izni değildir.
@@ -97,26 +213,94 @@ flowchart TD
     DIAG --> Q[MCP araç kalitesi E−1.Q]
     Q --> H[Kalan ortak düzenleme ve araç kabulü]
     H --> I[Dar source / time / resource sözleşmeleri]
-    I --> B[Kutulu 3D ilk sürüm]
-    B --> G[Poly 2D]
-    G --> U[UV / vertex color / material]
-    U --> B2[İleri kutulu 3D]
-    B2 --> C[Bileşen ve karakter]
-    C --> S[Simulation core / rigid / Voronoi / particle]
+    I --> G[Mesh2D / spline-to-mesh]
+    G --> BS[Ortak typed BakeService]
+    BS --> S[Simulation core / rigid / FRACTURE0–3 tamamlandı]
     G --> S
-    S --> CL[Kumaş]
-    U --> CL
-    CL --> L[Blob / sıvı / akış]
-    L --> T[Tamamlayıcı 2D araçlar]
-    T --> E[Export parity ve final kalite]
-    E --> M[Çoklu format / otomasyon]
-    M --> O[Bütün alanlarda ikinci optimizasyon / birleşik kabul]
-    O -. Mevcut seri kabulünden sonraki ayrı faz .-> F[CFX: katman / maske / efekt / tracking / compositing]
+    S --> R[v0.5.0 kapsam kapanışı]
+    R -. v0.6.0 bağımlılık kapısı .-> D[Desktop shell / render / codec / process / output / MCP kararları]
+    D --> DESK[v0.6.0 masaüstü editör temeli]
+    DESK --> E[v0.6.0 Öncelik 10 / import-export ve final render]
+    E --> M[v0.6.0 Öncelik 11 / mevcut çıktı otomasyon MVP]
+    M --> O[v0.6.0 Öncelik 12 / hedefli optimizasyon ve release kabulü]
+    O -. v0.7–v0.9 ara düzenlemeleri ayrıca kararlaştırılır .-> A10[v0.10.0 FRACTURE4–5 / emitter-particle / kumaş / Blob-sıvı / smoke-fire / Character]
+    O -. Mevcut seri kabulünden sonraki ayrı faz .-> CFX[CFX1–CFX9: katman / maske / efekt / video / tracking]
 ```
 
-Bu diyagram teslim sırasını ve önemli geometri bağımlılıklarını gösterir;
-her ok zorunlu kod bağımlılığı değildir. Tam export compiler bileşen source
+Bu diyagram v0.5.0 kapsam kapanışı, v0.6.0 masaüstü/çıktı hattı ve v0.10.0
+ileri 2D hedefini gösterir. v0.7.0–v0.9.0 kapsamı bu okla belirlenmiş sayılmaz;
+ayrıca planlanacaktır.
+
+### 22 Kasım 2026 — Basic Shape dönüşüm planı
+
+Sağ tık **Convert → Spline / 2D Mesh** hedefleri için ortak son-geometri
+değerlendirme, içbükey/dışbükey kontur ve delik analizi, mevcut Earcut hattının
+yeniden kullanımı ve kalıcı conversion stack sözleşmesi
+[Basic Shape dönüşüm planında](plans/basic-shape-conversion-plan.md) tanımlandı.
+Statik geometri conversion v1 uygulandı: sağ tık menüsünde iki hedef,
+kalıcı modifier kayıtları, ortak Boolean Union ile içbükey dış sınır/delik ve
+ayrık element çözümü, kaynak Rebuild, Mesh toleransı ve bağımlılığa uygun adım kaldırma.
+Ardından genel `Modifier` tabanı, registry ve sıralı `ModifierStack.execute`
+uygulandı. Spline/Mesh kategorileri ve sınıfa ait ayarlar ortak Edit stack
+üzerinden çalışır; taslaklar Execute ile tek sonuca uygulanır. Aç/kapat, sıra,
+kaldırma, kaynak Rebuild ve Bake tek Undo komutlarıdır. Smooth ve Subdivision uygulandı: Subdivision varsayılanı constrained Delaunay,
+ayrı Grid/Karelaj seçeneği gerçek kare hücreler ve sınıra uyan geçiş yüzleri üretir.
+Ayarlar Execute ile listedeki sıraya göre tek sonuç olarak uygulanır.
+Shape → Spline kontur görünümüne, Spline → Mesh delikleri koruyan dolgulu
+üçgen yüzeye geçer; kapatılan paint türü saklanır. Edit Mesh yerel geometri
+dönüşümünü ayrı bir stack adımı olarak uygular, nesnenin transform/origin'ini
+korur. Edit viewport ghost'u girişteki geometriyi gösterir ve export'a taşınmaz.
+Aynı Edit Mesh üzerinde hareketler birikir; her hareket ayrı Undo/Redo olur.
+Edit'e yeniden giriş aynı etkin son Edit Mesh'i kullanır; ghost o anki geometriyi
+yeni başlangıç alır. Add Spline `+` seçme modu mevcut spline katmanlarını aktif
+spline'a dahil eder; konum/konturlar korunur ve her ekleme tek Undo/Redo olur.
+Viewport ve Scene Explorer seçimleri aynı Attach sahibinden geçer; Explorer
+satırına tıklama veya Enter/Space hedef seçimini değiştirmeden ekleme yapar.
+Add Spline Operation menüsü mevcut Boolean recipe/çözücüsünü kullanır:
+Union/Subtract/Intersect/XOR kaynakları korur; Merge Paths sonucu düzenlenebilir
+konturlara uygular, Separate Inputs özgün bileşenleri açar. Tüm aksiyonlar Undo'ludur;
+Merge eğrileri kayıtlı toleransla doğrusal segmentlere örnekler.
+Line çizimi Auto Close (varsayılan açık) ile başlangıca dönünce kapanır; kapalı circle'ın
+başka snap anchor'ında ayrı Line Object olarak biter. Esc ve canvas/pasteboard
+sağ tık yerleştirilmiş segmentleri kalıcı tutar; her bitiş ayrı Undo/Redo'dur.
+Auto Close kapalıyken kapalı forma/snapa rağmen çizim devam eder. Edit geometri
+seçimleri X/Y taşıma okları ve Shift eksen kilidi kullanır; modifier listesi
+çerçeveli ve kendi içinde kaydırılabilirdir. Yeni spline boyası dolgu None, siyah
+stroke 3 px olur; Properties'ten Fill açılabilir.
+Yeni spline'lar stroke-only oluşur; isteğe bağlı Fill ve diğer paint alanları
+yalnız Properties'te bulunur, Edit içinde tekrarlanmaz.
+Yeni topolojiyi kabul eden altyapı
+[modifier sözleşmesinde](../../src/lib/modifiers/README.md) belgelenmiştir.
+Sahnede ayrı bir Spline ara nesnesi zorunlu tutulmaz. Canlı geometri driver'ları
+sessizce bake edilmez; bu sürümde açık tanıyla reddedilir. Gerçek uygulama
+sözleşmesi ve sınırlar [Edit geometri dönüşümlerinde](geometry-conversion.md).
+Her ok zorunlu kod bağımlılığı sayılmaz. 3D teslimleri ve iki plan
+arasındaki öncelik [3D ana planında](production-3d-roadmap.md) izlenir.
+Tam export compiler bileşen source
 modelinin önkoşulu değildir; kesin zaman/asset/capability sözleşmesi önkoşuldur.
+
+**12 Kasım — ortak öğe detay/izolasyon kararı:**
+[Shape/Poly, image/texture, video, component ve 3D detay planı](plans/shared-item-detail-editor.md)
+aynı host/oturum/Apply-Cancel yaşam döngüsünü, türe özel araç ve renderer
+adapter'larıyla paylaşır. Mevcut Isolate yalnız geçici görünüm filtresi olarak
+korunur; her öğeye yeni iç Timeline eklenmez. Sonraki kullanıcı önceliğiyle dar
+ortak host DET0–DET1, Poly/UV'den önce alındı ve 13 Kasım'da uygulandı: çift tık/sağ tık ve
+breadcrumb ile aynı uygulamada detay ortamı açılır. 14 Kasım kararı bu teslimden
+sonrasını 3D detay → Poly → UV olarak günceller; CFX ve bağımsız 3D/Game Engine
+sınırı korunur.
+
+**12 Kasım — 3D authoring tek sahibi:**
+[3D İçerik Editörü](plans/boxed3d-isolated-editor.md) ortak detay host'unda
+büyür; aynı işleri yapan ikinci bir 3D Animation/Modeling editörü kurulmaz.
+İçerik 2D'de kutulu render, gelecekte oyunda native model/scene instance olarak
+tüketilebilir. 2D kaynaklar world sprite/plane veya HUD/UI adapter'ıyla birlikte
+gösterilebilir. Oyun entity/input/physics/tick ve 3D solver işleri ayrı ileri
+kapsamdır; mevcut sıra değişmez, bu kaynak/runtime mimarisi henüz uygulanmadı.
+
+**Kullanım örneği; ürün hedefi değil:** [3D içeriklerin ana 2D kompozisyonda birleştirilmesi](plans/boxed3d-isolated-editor.md)
+3D film üretiminde de kullanılabilir. Kullanıcının 13 Kasım düzeltmesiyle film
+üretimi ayrı hedef, teslim, zorunlu demo veya kabul kapısı olarak planlanmaz;
+mevcut teknik kapsam ve geliştirme sırası değişmez.
 
 
 - **G0 — İnsan–ajan devam edebilir:** E−1 birleşik kabulü geçer; taze okuma ve manuel alan/kimlik koruması, tek undo, keyset/transport/eğri ve viewport pivot/seçim/key çizimi/subtree çoğaltma doğrulanır. Ayrıntı E−1 ve viewport planındadır; soft selection tartışması bu kapıya eklenmez.
@@ -124,11 +308,26 @@ modelinin önkoşulu değildir; kesin zaman/asset/capability sözleşmesi önko�
 - **G2 — Bileşen yeniden kullanılabilir:** C1 kart örneği iki instance'ta farklı text/color/başlangıçla çalışır; source ve asset'ler korunur; portable ve runtime parity geçer. İleri nested/interactive C2 işleri ilk çoklu formatı bekletmez.
 - **G3 — Çoklu format teslim edilebilir:** M0 text layout ve font/bounds, M1 variant compiler, M2 queue ve M3 portable/MCP doğrulaması tamamdır. Üç oran gerçek desteklenen formatta alınır; source değişmez, overflow ve stale bake görünürdür.
 
-Bu kapılar uygulama sırasında kanıtla tamamlanır. Optimizasyonun güncel kapanışı §12.37'dedir; önceki §12 kayıtları teslim günündeki açıkları anlatır. G0–G3 henüz tamamlanmış sayılmaz. Takvim/ETA ilgili gerçek iş yükü ölçümlerinden sonra çıkarılır.
+Bu kapılar uygulama sırasında kanıtla tamamlanır. G0'ın birleşik kabulü
+[12 Kasım kaydında](plans/pre3d-completion-audit.md) kapandı; G1–G3 henüz
+tamamlanmış sayılmaz. Önceki §12 kayıtları teslim günündeki açıkları anlatır.
+Takvim/ETA ilgili gerçek iş yükü ölçümlerinden sonra çıkarılır.
 
-## 3. Ortak mimari kararlar
+## 3. 2D mimari kararları ve ortak temel sınırı
 
-Mevcut scene, registry/property schema, evaluator, timeline, asset ve command/undo çekirdeği genişletilir. Her feature için yeni scene/timeline/render motoru açılmaz. Export için tek canonical compiler; component için derived scene/local time; format için immutable variant compiler kullanılır.
+Mevcut scene, registry/property schema, evaluator, timeline, asset,
+command/undo ve Chorono 2D render çekirdeği genişletilir. Her feature için yeni
+scene, timeline veya genel render motoru açılmaz. Dokulu/deforme Mesh2D için
+gereken GPU/offscreen pass normal bir 2D katman yüzeyi olarak mevcut
+compositor'a girer. Export için tek canonical compiler; component için derived
+scene/local time; format için immutable variant compiler kullanılır.
+
+Kaynak kimliği, explicit zaman, command transaction, job/bake yaşam döngüsü,
+asset manifest'i, topoloji connectivity doğrulaması, kaynak bütçesi ve çıktı
+capability sözleşmeleri 3D hattıyla
+[ortak temelden](shared-2d-3d-foundations.md) yeniden kullanılır. Bu paylaşım;
+Mesh2D ile editable 3D mesh'i, affine ile 3D TRS/matrisi, 2D rig ile 3D
+skeleton/skin'i veya Canvas2D ile Three.js renderer'ını tek tipe dönüştürmez.
 
 Native komutlar UI ve MCP/script için aynı mutasyon yoludur. Ağır render/analysis işleri async job id/progress/cancel ile yürür; sync QuickJS callback'i bunları beklemez. Gerçek API isimleri capabilities/catalog ve şemalarla uygulama sırasında kesinleşir.
 
@@ -136,19 +335,255 @@ Native komutlar UI ve MCP/script için aynı mutasyon yoludur. Ağır render/ana
 
 Her job source revision/hash, component version, variant, timeline/zaman kapsamı ve asset/font/cache bağımlılıklarını pin'ler. Source edit, devam eden işi kendiliğinden başka sürüme çevirmez. Stale durum ve re-run/replace politikası görünürdür. Yeni event'ler mevcut script/host yapısına açılır.
 
-Cache türleri birbirine karıştırılmaz: component çözümü, layout, PCM feature, simulation ve raster preview farklı payload'lardır; manifest/hash/ownership/job yaşam döngüsü ihtiyaç doğrulandığında paylaşılır. Fazladan genel altyapı kurmak başlı başına teslim sayılmaz.
+Cache ve bake türleri birbirine karıştırılmaz: property track, character pose,
+rigid pose, sabit topolojili mesh deformation, particle fluid, grid field,
+değişken topolojili surface sequence ve raster sequence farklı payload'lardır.
+Ortak `BakeService` kontrol düzlemi 2D ve 3D tarafından yeniden kullanılabilir;
+yalnız job, preview, progress/cancel, source hash, stale,
+atomik commit, tek undo, re-bake sahipliği ve manifest yaşam döngüsünü paylaşır;
+decoder, interpolator ve output compiler sonuç türüne aittir.
 
-Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; prosedürel konum ile fizik konumu aynı anda iki kez uygulanmaz. İlk temas particle–collider içindir; particle–particle katı temas veya sıvı yoğunluk çözümü olduğu iddia edilmez. Sabit collider'larla başlayan akışa sonradan bake edilmiş hareketli collider girdileri eklenir. İlk çözüm düzlemseldir; kumaşın yerel yüzey derinliği ve model katmanının 3D render'ı genel 3D fizik dünyası oluşturmaz.
+Particle fiziği, mevcut seed'li spawn ve görsel life kontrollerini kullanır; prosedürel konum ile fizik konumu aynı anda iki kez uygulanmaz. İlk temas particle–collider içindir; particle–particle katı temas veya sıvı yoğunluk çözümü olduğu iddia edilmez. Sabit collider'larla başlayan akışa sonradan bake edilmiş hareketli collider girdileri eklenir. İlk çözüm düzlemseldir; kumaşın yerel yüzey derinliği hacimsel fizik dünyası oluşturmaz.
+
+Hazır ve bakımı yapılabilen kütüphaneler dar backend contract'ları arkasında
+yeniden kullanılır; collision, triangulation veya fluid temelini sırf yerel
+görünsün diye baştan yazmak hedef değildir. İlk rigid backend Matter.js'tir.
+Kumaş için [Rapier soft-body JavaScript/WASM](https://www.rapier.rs/docs/user_guides/javascript/soft_bodies/)
+ile dar XPBD uygulaması; yerel z, pin, self-contact, deterministik fixed-step,
+worker/bundle maliyeti ve cache çıktısıyla prototip kapısında karşılaştırılır.
+Rapier'in 3D cloth hesabını backend olarak kullanmak 3D modelleme ürünü açmaz;
+yalnız 2D katmana çizilen yerel bir yüzey solver'ıdır. Sıvıda
+[LiquidFun particle sistemi](https://google.github.io/liquidfun/Programmers-Guide/html/md__chapter11__particles.html)
+ile sınırlı 2D PBF prototipi; bakım/paketleme, worker, boundary, kütle hatası,
+stabilite ve bake maliyetiyle karşılaştırılır. Bir alanda iki backend aynı ilk
+teslimde ürünleştirilmez. Chorono; birim/zaman adapter'ı, job/cancel, cache,
+stale/re-bake, undo, renderer ve export sahipliğini her durumda korur.
+
+### 3.1. Animasyonlu komponentler, alt animasyon ve türe göre detay düzenleme
+
+**Durum: planlandı, uygulama bekliyor.** Bu bölüm ana iş kuyruğudur;
+[ayrıntılı teknik plan](plans/item-owned-animation-plan.md) veri, zaman, adapter,
+UI ve test kontratlarını açıklar. Tamamlanan statik DET0–DET1 geriye dönük
+animasyonlu komponent teslimi sayılmaz. Yeni bağımsız 3D/Game Engine modu veya
+ikinci Timeline motoru kurulmaz; mevcut 2D/2.5D davranışları korunur.
+**14 Kasım sıra değişikliği:** Bu tablodaki IA kimlikleri yetenek kimliğidir,
+zorunlu sayısal teslim sırası değildir. §3.2 3D0–3D6 şimdi öndedir; native klip
+IA2a, IA0'ın dar 3D kaynak/instance/zaman kontratıyla çalışır. Önce 2D saat,
+Poly veya UV editörünü teslim etmeye bağlanmaz. Ortak kontrat daha sonra
+IA1a/IA1b ve library/karakter tarafından genişletilir.
+
+#### 3.1.1. Uygulanacak ürün davranışı
+
+- **Isolate selection:** Geçici görünüm filtresi; mevcut parent bağlamı ve
+  source komutları korunur. Yeni klip/komponent veya Apply/Cancel yaratmaz.
+- **Edit content:** Tek hedefin türüne uygun araçlar; bounded draft,
+  breadcrumb/Back, Apply/Cancel ve tek ana Undo. Statik içerikte boş Timeline
+  zorunlu değildir.
+- **Animasyonlu komponent:** Bir sürümlü tanımda içerik/parçalar, scoped klipler,
+  açık parametreler ve asset referansları. Örnekler kaynağı paylaşır; kendi
+  parametreleri, dış transform'u ve başlangıç/fazıyla oynar.
+- **Ana/iç animasyon:** Ana Timeline dış hareket ve açık kontrolleri gösterir.
+  İç keyler detayda kalır; native 3D import bütün bone/node track'lerini ana
+  listeye çevirmek zorunda değildir. Ortak Timeline tipi/evaluator kullanılır;
+  bütün kliplerin tek global dizide olması gerekmez.
+
+#### 3.1.2. Yapım iş paketleri
+
+Her iş önceki dilimin kontratını genişletir. Aşağıdaki işler henüz tamamlanmadı:
+
+| İş | Sıradaki yeri / bağımlılık | Somut çıktı ve bitiş koşulu |
+| --- | --- | --- |
+| IA0 — kaynak ve zaman kontratı | 3D0 ile teslim edilen dar ortak temel; DET0–DET1 ve mevcut frame/resource sahipleri | 3D kaynak/instance, scoped hedef/klip, kesin ms ve version/commit sınırı; bütün girişlerin envanteri ve eski sahne fixture'ları. Genel 2D definition kataloğu peşinen kurulmaz. |
+| IA1a — minimal komponent kaynağı ve örneği | 3D önceliği sonrasında 2D bileşen aşaması; IA0'ın gerçek tüketicili kontratı | Sürüm pin'li ortak içerik, bağımsız number parametresi ve yerel ID/asset çözümü. İki saat aynı kaynağı paylaşır; clone, kaydet/aç, history ve asgari raster kayıp üretmez. Yalnız şema/registry eklemek yeterli değildir. |
+| IA1b — detayda gerçek iç animasyon | IA1a + tür/zaman/commit capability'leri | Yerel klip oluşturma/seçme, Set Key, Curve/Dope Sheet, scrub ve oynatma. Dış hareket sürerken iç hareket çalışır; iki saat farklı değer/hız gösterir. Apply/Cancel/tek Undo, insan keyleri ve preview/raster eşliği birlikte kabul edilir. |
+| IA2a — native 3D klip oynatma | Öne alınan 3D3; IA0 ortak owner/zaman hattı + model asset/pose adapter'ı | Asset+clip referansı, seçim/trim/speed/loop, iki bağımsız model pozu ve prepared raster. Native klip ana 2D Timeline'da bone track yığını üretmez; desteksiz kanal raporlanır. IA1 saat authoring'i önkoşul değildir. |
+| IA2b — detayda yerel 3D keyler | IA2a + 3D authoring capability | Kamera/model yerleşim keyleri aynı detail transport'uyla düzenlenir. İnceleme kamerası source'a key yazmaz; native pose ile authored kanalın sahipliği açık olur. Tam rig/weight editörü bu teslim değildir. |
+| IA3 — kütüphane ve karakter bağlantısı | Genel sıradaki bileşen/Character Motion aşaması; IA1 kontratı | Katalog/sürüm/kontrol akışı ve parça/FK/klip entegrasyonu mevcut tanımı kullanır. IK/skin/SM ayrı capability/kabul dilimleridir; duplicate definition/clock motoru kurulmaz. |
+| IA-P — komponentten particle üretme | Genel sıradaki particle/fizik aşaması + çalışan parametrik komponent | Emitter komponenti kaynak alır; doğumda seed/spawn kimliğinden parametre/faz üretir, içerik zamanı age veya açık scene-sync politikasından gelir. Scrub/export deterministiktir; particle sayısıyla kalıcı Layer/Track sayısı artmaz. |
+| IA4 — kontrollü iç içe içerik | İlk çalışan teslimden sonraki ileri kapsam; C2 ile birlikte | Cycle/depth/toplam iş bütçesi, scoped kontrol ve yerel SM/event/audio kontratları ayrı kabul edilir. İlk saat/3D klibi ve çoklu format bu kapsamın tamamını beklemez. |
+
+**IA1a + IA1b tek kullanıcı kabulü oluşturur:** detayda tasarlanan bir saatten
+farklı parametreli iki örnek, dış hareketleriyle beraber oynatılır, Undo/Redo
+ve reload sonrası aynı görüntüyü verir. Her alt işi kod/test/gerçek render
+kanıtıyla ayrı kapatabiliriz; yalnız veri modelini ilk ürün teslimi saymayız.
+Zaman tahmini ölçüm yapılmadan bu plana süre taahhüdü olarak yazılmaz.
+
+#### 3.1.3. Nesne türüne göre bağlanacak araçlar
+
+| Hedef | Detay / animasyon kapsamı | Bağlandığı aşama |
+| --- | --- | --- |
+| Shape / Path / Spline | İzinli geometri/stil/parça keyleri; mevcut Pen/Spline ve stable nokta kimliği korunur | IA1b; bir defalık grupta mevcut key filtresi de kullanılabilir |
+| Poly / texture / material | Vertex/face, UV, vertex color ve slot parametreleri; kaynak/UV/material sahipleri ayrı | İlgili Poly/UV teslimi + tür adapter'ı; yeni geometri motoru IA içinde gizlenmez |
+| Image | Crop/kadraj ve desteklenen görünüm; statik içerikte Timeline kapalı | Asset/detail adapter'ı; piksel boyama ayrı Drawing kapsamı |
+| Video | Kaynak önizleme, in/out, temel clip/source zamanı | Video adapter'ı; çoklu video/chroma/despill/tracking CFX'te kalır |
+| Komponent / karakter | Parça ağacı, parametre ve gerçek yerel klip; rig kendi domain'inde | IA1/IA3 |
+| Kutulu 3D | Native klip, kamera/model keyleri; materyal/ışık/node araçları ayrı capability | IA2; bone authoring ve tam rig ayrı ileri kabul |
+| Particle | Kaynak komponent, kontrol dağılımları ve doğum/yaş/faz | IA-P; her particle'a ayrı kaynak editörü/Timeline açılmaz |
+
+#### 3.1.4. Her teslimde zorunlu korumalar
+
+1. Source/type/runtime/cache ayrılır; eski proje kendiliğinden migrate edilmez.
+   Desteksiz reader/exporter içeriği sessizce atlayamaz. Format değişimi açık
+   converter ve eski sürüm fixture'larıyla yapılır.
+2. Dış root transform ve iç parça transform'u ayrı hedeflerdir. Private iç
+   kanallar ana Timeline'a açılmaz; inline geçiş/exposed control durumunda tek
+   yazıcı guard'ı UI, native komut, MCP/script, Wire/Expression'da aynıdır.
+3. Parent/pivot, insan keyleri/ID/easing, referanslar, parametreler, clone/array,
+   autosave/sessionId, portable ve bütçeli Undo/Redo korunur. Stale Apply yeni
+   insan düzenlemesini ezmez; Apply tek ana transaction'dır.
+4. Kaynak edit'i yeni sürüm üretir; ilk politika yalnız açıldığı instance'ın
+   pin'ini günceller. Diğer örnekler kendiliğinden değişmez. Instance parametresi,
+   Make unique ve ortak kaynak edit'i açık farklı kapsamlardır.
+5. Seek/loop/geri scrub ve offline örnekleme aynı zamanı aynı frame'e taşır.
+   Bounds/hit-test, demand, mask/efekt/temporal örnekler ve raster aynı sonucu
+   kullanır. Her nesneye ayrı rAF veya her kare source/track kopyası kurulmaz.
+6. Pose/decode/yüzey kaynakları mevcut bütçe/lease/abort sistemine bağlanır;
+   kapat/sil/Cancel sonrası bırakılır. SOLID, feature sahipliği, sınıf boyutu
+   ve açıklama kuralları geçerlidir. Yeni yetenekle birlikte test, gerçek render,
+   API/skill ve mevcut helper içeriği güncellenir; son optimizasyon bunları ertelemez.
+
+### 3.2. Öncelikli 3D detay editörü yapım kuyruğu — 14 Kasım 2026
+
+Kullanıcı sıradaki işleri 3D yeteneklerini geliştirmek üzere öne aldı. §3.1
+ortak animasyon tasarımı korunur; genel teslim sırası artık **3D-T → 3D0–3D6 → Poly →
+UV/material → 2D komponent/library/karakter → simülasyonlar** olur. Geri kalan
+export/otomasyon/son optimizasyon ve CFX sırası değişmez.
+[3D domain planı](plans/boxed3d-isolated-editor.md) bu tablonun teknik ayrıntı sahibidir.
+
+| Sıra | Yapılacak iş | Somut kabul |
+| --- | --- | --- |
+| 3D-T — T0/T1/T2 tamamlandı | Ana/iç Timeline bağlamı, scoped key authoring'i, detayda yerel klip ve kesin zaman/commit hattı | Aşağıdaki 3D-T0–T2 kapısı geçer. Mevcut global `model3d.*` yasağı, iç editörde key oluşturmayı desteklemiş sayılmaz. |
+| 3D0 — tamamlandı | IA0'ın dar 3D kaynak/kimlik/commit temelini node'lara genişletme; ağaç/seçim/Frame Selection ve XYZ gizmo | Seçilen parça hem ağaçta hem 3D görünümde belli olur. İç parça edit'i ana 2D kutuyu değiştirmez; tek Undo/Apply/Cancel, reload ve raster korunur. Kaynak node referansı asset sürümüne bağlıdır. |
+| 3D1 — tamamlandı | İnceleme/çıktı kamerası ayrımı, perspektif/orthographic, front/top/side/isometric ve kadraj/target araçları | İnceleme hareketi source'a key yazmaz. Mevcut orbit/pan/dolly ve 2D taşıma çalışır; çıktı seçili kameradan üretilir. |
+| 3D2 — tamamlandı | Materyal override, texture slotları, ışık konumu/rengi/şiddeti, ortam/exposure ve kontrollü gölge | Renk/roughness/metalness/opacity gibi desteklenen alanlar modelin mevcut UV'siyle işler. Diğer instance kazara değişmez; kaynaklar bütçelenir, preview/raster karşılaştırılır. |
+| 3D3 / IA2a — tamamlandı | Native GLB/glTF klip seçimi, play/scrub, trim, hız/loop ve desteklenen skeleton/morph oynatma | İki model örneğinin pozu bağımsızdır; ileri/geri seek ve offline zaman eşleşir. Bone/node keyleri ana 2D Timeline'a dökülmez. |
+| 3D4 / IA2b genişlemesi — tamamlandı | 3D-T'deki yerel Timeline'ı yeni node kanalları ve native klip/pose authoring bağlamıyla genişletme | Temel Set Key/Curve motoru tekrar yazılmaz. Native klip/authoring sahipliği ve iki bağımsız pose doğrulanır. Tam rig/bone key editörü ayrı ileri araçtır. |
+| 3D5 — tamamlandı | Aynı içerikte çoklu model, parça hiyerarşisi, ortak kamera/ışık/depth | İki model + kamera fixture'ı kaynak birimi, bounds/seçim, clone/save/raster ve bellek bütçesiyle geçer. Ayrı 2D model kutuları kendiliğinden ortak dünyaya çevrilmez. |
+| 3D6 — tamamlandı | Typed açık parametreler, instance override, Wire/Expression; turntable ve uygun node ağacında explode | Kontroller iç sonuca ikinci yazıcı olmaz; pin'li kaynak korunur. Minimal kaynak/instance kullanımı sonraki 2D komponent/library tarafından genişletilir. |
+
+**3D0–3D6 teslimi — 14 Kasım:** [Gerçek kaynak/UI/lifecycle ve kabul](model-detail-3d-packages.md).
+Model v3; SHA-256/index-bound node/material/clip kimliği, ortak detay tree/XYZ,
+inceleme/çıktı kamerası, PBR/gömülü texture slotları/ışık, native skin+morph klibi,
+private node/native-time keys, sekiz modelli shared-depth içerik ve typed input/
+Wire/expression/instance/turntable/explode tamamlandı. Eski v1/v2 source ve 2D
+araçlar korunur. 382 dosyada 3.116 test, TypeScript/MCP/CLI/Next build geçti;
+9 kare / 24 native render kontrolünde viewport/MCP/raster RGBA farkı 0.
+512 MiB yönetilen bütçede tepe 4,37 MiB, temizlikte charge/entry 0. Eski statik
+ve numeric detail browser akışlarının 6+6 kontrolü; yeni gizmo/assembly/material/
+private key/Curve/tek Undo/Redo/Cancel akışı geçti. Tam rig/UV/HDRI/imported camera
+ve yeni dosya importer'ları bu teslimin kapsamına eklenmedi. **Sırada Poly vardır.**
+
+#### 3.2.1. Timeline/iç animasyon kapısı — T0/T1/T2 tamamlandı
+
+14 Kasım T0 öncesi kod denetimi: `timelinePropertyScope.ts` ve model registry'si ana
+2D Timeline'da `model3d.*` alanlarını gizler/yeni key edit'ini reddeder. Set Key,
+Auto Key, bulk/clear, script ve Curve/Dope Sheet projeksiyonları bunu kullanır;
+eski iç track'ler source'ta korunur. **Buna karşılık** detayda yerel Timeline,
+klip owner modeli ve scoped Timeline commit'i henüz yoktur. Statik
+`ItemDetailSession` başka öğe/Timeline değişimini bilinçli reddeder.
+Bu incelemede model Timeline scope, statik detay oturumu, Set Key, bulk ve clear
+için 5 dosyada **47 mevcut test geçti**. Bu, aşağıdaki eksik 3D-T yeteneğinin
+uygulandığı veya kabul kapısını geçtiği anlamına gelmez.
+
+| Alt iş | Yapılacak iş ve kabul |
+| --- | --- |
+| 3D-T0 / IA0 — tamamlandı, 14 Kasım | Açık scene/content authoring context, owner/Timeline/exact-leaf doğrulaması; context-aware native komut ve track projeksiyonları. Public UI/MCP/script varsayılanı scene kalır. [Gerçek sözleşme](timeline-authoring-context.md); bu teslim iç Timeline UI'sı veya runtime saati değildir. |
+| 3D-T1 / IA2b'nin dar başlangıcı — tamamlandı, 14 Kasım | Mevcut model yerleşim/kamera alanlarında yerel klip oluşturma/seçme, Set Key, zaman gezinme ve scoped Curve/Dope Sheet. Root listesine key kopyalama yoktur. Bounded detay taslağı için ayrı izinli Timeline patch/commit capability; Apply tek Undo, Cancel ve stale revision source'u korur. |
+| 3D-T2 / ortak kabul — tamamlandı, 14 Kasım | Dış kutu hareketi + yerel klip aynı anda; kesin içerik zamanı/loop/geri scrub, iki bağımsız kullanım, preview/MCP/raster eşliği, save/open/clone/history ve kaynak bırakma. Her içerik ayrı rAF başlatmaz; iç klip global olarak ikinci kez örneklenmez. |
+
+**T0 uygulama kanıtı:** `TimelineAuthoringContext.ts` geçici readonly host
+bağlamını sağlar; layer registry'sindeki `contentTimelinePaths` yalnız izinli
+exact leaf'leri açar. `assertTimelineEditTarget` hedefin yanı sıra güncel owner
+ve Timeline bağını doğrular. Set Key/Auto Key, native key/track/batch/clear,
+script host ve ortak projection aynı policy'yi kullanır. Eski scene formatı,
+statik Properties, mevcut ana UI ve evaluator değişmez; context serialize edilmez.
+İç bağlam yalnız izole draft host'una aittir; MCP'ye yeni bir context parametresi
+veya root authoring izni eklenmedi. T0 teslimi yeni UI/clock sağlamıyordu; T1 bu sınırın üzerinde tamamlandı.
+
+**T1 uygulaması:** [Model içerik klipleri](model-content-clips.md): yerel klip
+lifecycle, Keys/Curve/Set Key, değerlendirilen Properties, kendi transport'u ve
+ayrı scoped projection/Apply. Root Timeline ve mevcut elle düzenlemeler korunur;
+Apply tek ana Undo'dur. Kaynak `model3d.version:2` ile sürümlenir; v1 model
+kendiliğinden çevrilmez. Native imported GLB klip/bone key importu eklenmedi.
+T2 ortak kabulü tamamlandı. Devamındaki **3D0–3D6** [model detay araçları](model-detail-3d-packages.md) ile teslim edildi.
+T1 kabulü: 379 dosya / 3.072 test, TypeScript, MCP/CLI/Next build ve altı
+model-klip + altı mevcut statik detay browser akışı geçti. Native ilk key
+sürüklemesi ve Bézier kolu kontrol edildi. T2 sonucu aşağıda ayrıdır.
+
+**T2 kabulü:** [Kapsam, fixture ve tekrar çalıştırma](model-clip-acceptance.md).
+Dış kutu + iç numeric klip, copy/live instance yerel zamanları, lineer/Bézier/Hold,
+loop/geri scrub ve aynı-browser viewport/MCP PNG/raster eşliği doğrulandı.
+Kaynak/revision/history korunur; pinler bırakılınca yönetilen rezervasyonlar kapanır.
+Native GLB klip/rig ve genel komponent sistemi bu kapıyla etkinleştirilmedi.
+T2 kabul sonucu: 380 dosyada 3.089 test; 58 native browser kontrolünde 11
+kare için en büyük piksel farkı 0; 512 MiB ledger tepe 2,80 MiB, son yük 0.
+TypeScript/MCP/Next build geçti. Ölçüm bu küçük, aynı-browser fixture ile sınırlıdır.
+
+Doğrulama: yeni 9 bağlam testi; tam **377 dosya / 3.042 test**, `tsc --noEmit`,
+`npm run mcp:build` ve `npm run build` geçti. Render algoritması değiştirilmedi.
+Kod ve kullanım örneği [T0 bakım belgesindedir](timeline-authoring-context.md).
+
+Key kapsamı hem hedef hem zaman içindir: yeni key yalnız aktif owner/klibin
+izinli kanalına ve kendi yerel süre aralığına yazılır. Ana kompozisyon süresi
+iç klip süresinin yerine kullanılmaz; mevcut key-time doğrulama helper'ları
+doğru Timeline bağlamıyla yeniden kullanılır. Eski dosyadaki gizli veya aralık
+dışı keyler bu filtreyi kurarken otomatik silinmez/yeniden zamanlanmaz.
+
+Bu kapı genel recursive komponent/SM motoru veya 2D saat editor'ü değildir.
+3D4 işi bütün temel Timeline'ı sonraya bırakmak yerine hazır temeli yeni node
+ve imported pose kanallarına genişletir. Statik node/kamera araçları teknik
+olarak animasyonsuz geliştirilebilir; ortak kaynak/key sınırını yeniden
+yazmamak için bu kuyrukta önce 3D-T teslim edilir.
+
+**Poly/UV beklemeyen işler:** Hazır modelin node ağacı, mevcut UV/material'ı,
+kamera/ışık ve imported klipleri kullanılabilir. Yeni vertex/topoloji üretimi,
+UV unwrap/paint veya mesh skin üretme bu tabloya gizlenmez. 3D0/IA0'da gerçek
+3D tüketici için gereken dar kaynak ve lifecycle kontratı çıkarılır; önce
+genel 2D komponent motoru veya parametrik saat ekranı kurmak şart değildir.
+
+**3D-T sonrasındaki 3D0'ın uygulama sınırı:** Tek model asset'inde node kimliği ve
+non-destructive transform override'ı uçtan uca teslim edilir. Native Three
+objeleri JSON/history'ye girmez; mevcut shared statik tree başka instance'ın
+editinden etkilenemez. Read-only inspection seçimi ile source node transform
+edit'i ayrılır. Gesture/cancel, source revision ve asset değişimi aynı testte
+kontrol edilir. Çoklu model, material editor ve clip oynatma aynı ilk commit'e
+doldurulmaz.
+
+OBJ/MTL, FBX, 3DS importer'ları; sıfırdan rig/weight/IK/modelleme; 3D
+particle/fizik/kumaş/sıvı ve CFX ortak kamera/depth compositing ileri listede
+kalır. Format başına gerçek destek ve kayıp matrisi olmadan destek iddiası
+yapılmaz. Film üretimi kullanım örneğidir; yeni hedef/kabul kapısı değildir.
 
 ## 4. Mevcut karakter ve fizik planları
 
-[Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md) ve [Simulation Core 2D](plans/simulation-core-2d-architecture.md) korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
+[Character Motion](character-motion-plan.md), [Rigid Body & Fracture](plans/physics-fracture-bake-plan.md), [Cloth](plans/cloth-fabric-simulation-bake-plan.md), [Fluids](plans/fluid-liquid-simulation-bake-plan.md), [Simulation Core 2D](plans/simulation-core-2d-architecture.md), [Emitter / Collider / Surface Target](plans/emitter-collider-surface-interaction-plan.md) ve [canonical export/final render](plans/export-consistency-2d-plan.md) planları korunur. Bu üretim yol haritası onları silmez veya uygulanmış saymaz.
 
-Güncel uygulama kuyruğu §1 ve onaylanan sıra belgesindedir. V4/V5, komşu mesafesi/cetvel/guide ve D0–D2 sade hata özeti/sürüm ara işi tamamlandı; sırada kalan E−1 ortak düzenleme var. Ardından kutulu 3D/Poly ve üretim özellikleri gelir. Tam export ve ikinci genel optimizasyon sona taşınmıştır; dar frame/asset/resource sözleşmeleri feature teslimleriyle birlikte uygulanır.
+2D uygulama kuyruğu §1'dedir. V4/V5, komşu mesafesi/cetvel/guide,
+D0–D2, E−1 ortak düzenleme, dar entegrasyon, Mesh2D/spline-to-mesh ve temel
+Rigid/Voronoi dikey dilimleri, ilk **image/texture fragment appearance +
+kaynak UV korunumu**, event hizası/raster seam/mask bellek ölçümü ve darbe
+tetikli fracture + deterministic artistic explosion tamamlandı. Sıradaki 2D
+iş, fracture panel/overlay bitişi, geniş görsel kabul matrisi ve temel parity
+kapısıdır.
+Character Motion, klip
+ile State Machine/runtime davranışı yeniden kararlaştırılana kadar aktif
+kuyruktan çıkarılmıştır; simülasyon veya export işini bloke etmez. Tam export ve
+ikinci genel optimizasyon bu özelliklerin sonuna taşınmıştır. Her özellik dar
+frame/asset/resource sözleşmelerini ve kendi çıktı kabulünü kullanır. Planlar
+arası eski sıra [3D planında](production-3d-roadmap.md) korunur.
 
 Simülasyon source geometri/alan/pin/collider değişince stale olur. Çoklu format yalnız kaydedilmiş görseli root transform'uyla yerleştiriyorsa resimülasyon yaptığı iddia edilmez. Component içine baked cache alınması solver çalıştırma bağımlılığı yaratmaz; ilgili decoder/renderer capability'si gerekir.
 
-Genel per-character text animator eski backlog'da ayrı iştir. Caption planı zamanlı konuşma/kelime akışını kapsar; aynı text layout/renderer altyapısı paylaşılır. Autosave/version snapshot zaten var; bu yol haritası bunları yeni özellik gibi tekrar planlamaz.
+**25 Kasım 2026 — karakter parçaları için katman bağlantıları.** Aynı grup içindeki görsel katmanlar Properties → Link & IK üzerinden pivotlarıyla bağlanır. Üst parça, ona bağlı alt parça ve uçtaki hedef iki parçalı IK zincirini oluşturur. Hedef normal bir katmandır ve timeline üzerinden animasyonlanabilir. Seçili zincirde viewport hedefi ve gerçek bileği ayrı işaretler. Link & IK, erişim sınırı aşılırsa aradaki mesafeyi kompozisyon pikseliyle gösterir. Prefer this pose, eşit uzunluktaki kol omuza katlandığında kullanılacak omuz yönünü kaydeder. Omuz ve dirsek bağımsız açı aralıklarına ve kilitlere sahiptir. Viewport yerel limit yaylarını, panel sınırlandığında etkin eklemi gösterir. Kurulum, erişim sınırları, Undo ve kaynak dosyaları [2D pivot bağlantıları ve IK](character-motion-plan.md) belgesindedir.
+
+Sprite klip seçimi ve State Machine geçişleri ayrı bir gelecek kararıdır. Özel Character oluşturucu, Char Detail ve ayrı Setup/Animate çalışma alanı önceki tasarım arşivindedir.
+
+Import, portable kayıt, interactive runtime ve fixed render farklı
+capability'lerdir. Character, Mesh2D ve simulation türleri kendi dikey
+tesliminde kaynak/asset/metadata ve asgari raster çıktı kontrolünü tamamlar;
+tam canonical compiler, Render Preview ve yüksek kaliteli final kalite dilimi
+sonraki ortak teslimde bütün türleri birleştirir. Autosave/version snapshot
+zaten var; bu yol haritası bunları yeni özellik gibi tekrar planlamaz.
 
 ## 5. Doğrulama ve başarı ölçütleri
 
@@ -164,7 +599,12 @@ Uygulama değişikliklerinde repo kontrolleri `npm test`, `npm run mcp:build`, `
 
 İlk planlama tesliminde uygulama kodu, bağımlılık, çalışan editör sahnesi veya yayın durumu değiştirilmemişti. Sonraki ilk kaynak yönetimi uygulaması §12'de kaydedilir. Diğer ayrıntılı planlar; veri modeli önerileri, ilgili mevcut modüller, çalışma akışı, kabul kapıları ve sonraki işlerin sınırlarını içerir. Henüz uygulanmamış sınıf/araç isimleri öneridir; mevcut API diye çağrılmamalıdır.
 
-Belgeler repository'nin yerel `plan/` konvansiyonunu izler. Sonraki teknik başlangıç **OPT0 genel benchmark matrisi ve ölçüm sözleşmesi; ardından OPT1 ortak sayaçlar ve temel kaynak panelidir.** Export hattında ilk iş E0 fixture/canonical alan manifest'i, ardından E1 ortak compiler olarak korunur. Optimizasyon tüm yeni feature'ların ortak teknik koşuludur.
+İlk planlama gününde teknik başlangıç **OPT0 genel benchmark matrisi ve
+ölçüm sözleşmesi; ardından OPT1 ortak sayaçlar ve temel kaynak paneli** idi.
+Bu işler ve sonraki kapanışlar §12'de kaydedilir. Export hattının kendi
+başlangıcı E0 fixture/canonical alan manifest'i, ardından E1 ortak
+compiler'dır; güncel ürün sırasındaki yeri §1'de gösterilir. Optimizasyon
+tüm yeni 2D özelliklerin ortak teknik koşuludur.
 
 ## 7. Elle düzeltme ve kullanıcı müdahalesi
 
@@ -184,14 +624,14 @@ Mevcut inspector/spreadsheet, keyframe time/value/easing komutları, curve edito
 | Bileşen ve format | Instance'a özel metin, renk, görsel, boyut, crop, yerleşim; orana özel offset, satır kırımı ve safe area | Kaynak tanım ve diğer oranlar etkilenmez. Değeri varsayılana döndür ve instance override'ını kaldır ayrı eylemlerdir. |
 | Veriden üretim | Hücre/mapping hatasını, seçili satırın kontrolünü ve çıktısını düzeltme | Dataset/mapping değişimi ile yalnız o çıktı için satır override'ı ayrıdır; başka satırın sonucuna yazmaz. |
 | Ses ve altyazı | Analiz range/smoothing, hatalı beat marker'ı, cue/kelime zamanları, metin ve satır kırımı | Otomatik analiz yenilenince elle düzeltilen zaman/marker'lar korunur veya açık sürüm çakışması olarak gösterilir. |
-| Kutulu 3D nesne | Model yönü, pivot, kamera kadrajı, ışık/malzeme ve seçili kontrol anahtarı | 2D kutu transform'u ile iç model transform'u ayrı. Modeli kadraja sığdır açık eylem; çalışma görünümü çıktı kamerasını değiştirmez. |
-| Karakter ve sprite | Rest pose/attachment, IK hedefi ve ağırlığı, dirsek yönü, sprite pivot/kare sırası/klip zamanları | Setup ve Animate ayrıdır. Aktif IK'nin sürdüğü kemiğe gizli FK düzeltmesi yazılmaz; hedef veya IK ağırlığı üzerinden düzenlenir. |
-| Poly 2D ve ağ üretimi | Vertex/edge/face seçimi; nokta ekle/taşı, yüz oluştur/sil, ızgara yoğunluğu, triangulate ve quad birleştirme önizlemesi | Üçgen/dörtgen yüzler tek nesnede kalır. Geçersiz yüz, çakışma ve T-junction denetlenir; topology değişimi bağımlı bake'i stale yapar. |
+| Karakter parçaları ve sprite | Katman pivotu, bağlı alt parça, hedef konumu ve dirsek yönü. Sprite klipleri ileri fazdadır. | Hedef konumu viewport, sayısal alan veya timeline üzerinden düzenlenir. Dirsek yönü Properties → Link & IK bölümünde değiştirilir. |
+| Mesh2D ve kumaş kaynağı | Kaynak spline/shape noktaları, grid/triangulation çözünürlüğü, UV fit ve pin vertex/grupları | Genel Poly modelleme yapılmaz. Kaynak veya üretim ayarı değişince topology hash değişir ve bağımlı constraint/cache/bake stale olur. |
 | Blob Surface | “+” etki noktası ekle, taşı, radius/weight/threshold ayarla; merge grubu ve ayrılan bölgeleri incele | Aynı grupta birleşme/ayrılma görsel alan hesabıdır. Sıvı cache'inin yüzey görünümünü düzenlemek particle fiziğini yeniden çözmez. |
 | Rigid/fracture | Collider noktası, kütle/sekme, başlangıç hızları; Voronoi seed noktaları, parça sayısı ve kırılma anı | Collider ve parça geçerliliği yeniden doğrulanır. Geometri/kırılma değişirse bağımlı bake eski olur. |
 | Particle fiziği | Emission şekli/yolu, burst zamanı, hız/ömür, alan ve collider hedefleri | Hesabı etkileyen düzenleme yeni simülasyon ister; sırf renk/life görünümü değişimi uygun durumda aynı hareket cache'ini kullanır. |
 | Kumaş/fabric | Mesh/pin seçimi, sabitle/bırak, hedef yolu, gravity/wind ve collider tutamaçları | İlk teslim solver girdilerini düzenler ve yeniden hesaplar. Hesap sonrasında sabit topolojiye bölgesel mesh düzeltmesi ileri aşamadır. |
 | Sıvı ve akış | Domain/engel sınırları, emitter/drain, akış miktarı, kuvvet alanı konumu/yönü ve etkilenen nesneler | Fizik girdisi değişince yeniden hesapla. Appearance, opacity veya görsel maske düzeltmesi sıvı basıncını değiştirdiği iddiası taşımaz. |
+| Sahne geometrisi etkileşimi | `Emit From`, `Collide With` ve `Follow Surface` için ayrı layer picker; point/path/perimeter/fill/glyph/vertex/edge/face modları | Görsel layer otomatik collider değildir. Text glyph delikleri korunur; eksik capability inline tanı verir. [Ayrıntılı plan](plans/emitter-collider-surface-interaction-plan.md). |
 | Bake sonrası | Desteklenen transform'larda zamanlı düzeltme; görünüm/timing düzenleme; bağımsız editable kopya | Kaynak bake/cache korunur; yoğun mesh/particle verisi varsayılan olarak binlerce keyframe'e açılmaz. |
 
 ### 7.3. Kaynak düzeltmesi ve sonuç düzeltmesi
@@ -220,21 +660,44 @@ Koruma editor/authoring metadata'sıdır; oynatılan düzeltme verisi ise runtim
 
 | Dilim | Ana plana bağlandığı yer | Kabul |
 | --- | --- | --- |
-| MAN0 — güvenilir düzenleme | Export A1 ve mevcut timeline | Mevcut sayısal/typed/bulk araç envanteri, kapsam göstergesi, tek undo/cancel ve editor/player/export parity. |
+| MAN0 — güvenilir düzenleme | Mevcut timeline ve ortak frame/çıktı sözleşmesi | Mevcut sayısal/typed/bulk araç envanteri, kapsam göstergesi, tek undo/cancel ve editor/player/export parity. |
 | MAN1 — bağımsız override | Bileşen, format ve üretim otomasyonu | Instance/variant/row/kelime düzeltmesi kaydet–aç ve yeniden üretimde korunur; kaynak/diğer instance değişmez. |
-| MAN2 — feature kontrolleri | 3D, karakter ve her simülasyonun kendi teslimi | Model/pivot/IK/pin/collider/field hem tutamaç hem sayısal/düğmeli alternatifle düzenlenir; doğru kaynak invalidation oluşur. |
+| MAN2 — feature kontrolleri | Karakter ve her 2D simülasyonun kendi teslimi | IK/pin/collider/field hem tutamaç hem sayısal/düğmeli alternatifle düzenlenir; doğru kaynak invalidation oluşur. |
 | MAN3 — bake sonrası düzeltme | İlk rigid bake ve sonraki typed cache teslimleri | Base korunur; delta/kopya/retime açık ayrılır; re-bake eşleme ve topology çakışması kullanıcı emeğini silmez. |
 | MAN4 — ileri mesh düzeltmesi | Temel kumaş/cache tesliminden sonra | Sabit topolojide vertex bölgesi/falloff ve zamanlı görsel düzeltme; kaynak, normals/bounds, export parity ve topology hash doğrulanır. |
 
 Her feature elle düzeltme desteği tamamlanmadan bitmiş sayılmaz; bütün elle düzeltme araçlarının diğer feature'lardan önce tek seferde geliştirilmesi de beklenmez.
 
-Kabul senaryoları: AI ürettiği kartın tek hareketini düzeltip koruma; iki instance'tan yalnız birini değiştirme; yalnız 9:16 varyantında başlığı kaydırma; altyazı kelime zamanını analizden sonra tutma; 3D model açısını kutuyu taşımadan değiştirme; IK hedefini rest pose'u bozmadan düzeltme; kırılma anını değiştirdikten sonra stale bake tanısı; particle collider'ını, kumaş pin'ini ve sıvı emitter'ını düzeltip yeniden hesaplama; rigid bake'e delta ekleyip yeniden bake etme. Her biri undo/redo, portable round-trip ve gerçek render ile sınanır. Export'ta tutamaç, ghost ve karşılaştırma overlay'i görünmez.
+Kabul senaryoları: AI ürettiği kartın tek hareketini düzeltip koruma; iki instance'tan yalnız birini değiştirme; yalnız 9:16 varyantında başlığı kaydırma; altyazı kelime zamanını analizden sonra tutma; IK hedefini rest pose'u bozmadan düzeltme; kırılma anını değiştirdikten sonra stale bake tanısı; particle collider'ını, kumaş pin'ini ve sıvı emitter'ını düzeltip yeniden hesaplama; rigid bake'e delta ekleyip yeniden bake etme. Her biri undo/redo, portable round-trip ve gerçek render ile sınanır. Export'ta tutamaç, ghost ve karşılaştırma overlay'i görünmez.
+
+## 7A. 2D UI sözleşmeleri ve görünüm planı
+
+Yeni Mesh2D, katman bağlantıları, physics, fabric, fluid, component,
+Jobs & Bake ve Render Preview arayüzlerinin yerleşimi ve ortak davranışı
+[2D UI sözleşmesinde](production-2d-ui-contracts.md) tanımlıdır. Görsel dil
+mevcut koyu, dock edilebilir Chorono editörünü korur; yeni özellikler ayrı bir
+uygulama kabuğu veya birbiriyle uyumsuz modal akışlar kurmaz.
+
+Ana görünüm; sol Scene Explorer/Layers, orta canvas ve araç overlay'i, sağ
+bağlama duyarlı Detail inspector, altta Timeline/Dope Sheet/Curve Editor ve
+üstte kısa global/job durumundan oluşur. Katman bağlantıları Properties içinde düzenlenir. Simülasyonlar `Edit Source / Preview / Inspect Bake`, çıktı ise
+`Viewport / Final / A-B` bağlamlarını açıkça gösterir. Her feature'ın normal,
+empty, loading, invalid, stale, failed ve completed görünümü planlanır.
+
+UI teslimi için pointer yanında klavye veya sayısal alternatif; görünür focus;
+kalıcı label ve inline hata; tek transaction/undo ve Escape cancel; job
+progress/cancel; stale/re-bake; unsupported capability/fallback; dar dock ve
+reduced-motion kabulü zorunludur. Sürükleme tek erişim yolu olamaz. Yeni
+yapısal ikonlar tutarlı SVG/Lucide ailesinden gelir; durum renk yanında metin
+veya ikonla da ifade edilir. Registry'ye panel eklemek veya yalnız property
+alanlarını göstermek tamamlanmış UI sayılmaz; gerçek ekran görüntüleri ve
+temsilî akışlarla kabul edilir.
 
 ## 8. Genel optimizasyon ve kaynak yönetimi
 
 ### 8.1. Ürün hedefi ve genel kapsam
 
-**Bu plan sahne adına, nesne kimliğine, katman sayısına veya belirli bir projeye özel kestirme içermez.** Küçük/büyük vektör, metin, medya, parçacık, etkileşimli animasyon, export ve gelecekteki 2.5D/simülasyon projelerinde aynı ölçüm, zamanlama, kaynak talebi ve bütçe sözleşmesi kullanılır. Hedefler: sınırlı kaynak tüketimi, akıcı düzenleme, doğru zaman/çıktı, idle durumda gereksiz iş yapılmaması ve kullanıcıya anlaşılır kaynak görünürlüğü.
+**Bu plan sahne adına, nesne kimliğine, katman sayısına veya belirli bir projeye özel kestirme içermez.** Küçük/büyük vektör, metin, medya, parçacık, etkileşimli animasyon, export ve 2D simülasyon projelerinde aynı ölçüm, zamanlama, kaynak talebi ve bütçe sözleşmesi kullanılır. Hedefler: sınırlı kaynak tüketimi, akıcı düzenleme, doğru zaman/çıktı, idle durumda gereksiz iş yapılmaması ve kullanıcıya anlaşılır kaynak görünürlüğü.
 
 İki tamamlayıcı teslim vardır: **Genel optimizasyon altyapısı** tüketimi yönetir; **Kaynak ve Performans paneli** aynı altyapının ölçümlerini gösterir ve güvenli eylemleri sunar. Kaynak paneli yalnız bir RAM sayacı değildir. Kapsam CPU/main-thread işleri, GPU/render, bellek/cache, medya decode/IO, React/DOM, worker ve export/bake kuyruğu, idle/arka plan davranışıdır. Ayrıntılı genel uygulama sırası §8.11'dir; MEM0–MEM4 aşağıdaki bellek alt iş paketidir.
 
@@ -331,7 +794,7 @@ History'nin mevcut 50 adımı ilk düzeltmede korunur. Önce retained heap ile g
 
 MCP preview ve raster/sequence/export aynı frame demand/residency sözleşmesini kullanır. Her kare öncesi gereken font/asset hazır beklenir; eksik medyayla başarılı boş çıktı üretilmez. Export seçili aralığa ait gerekli kaynakları pin'ler ve frame/encode sırayla ilerler. Çizilmiş frame canvas'larının tamamı RAM'de biriktirilmez; encoded çıktıların paketleme/streaming belleği ayrıca bütçelenir. Editor pan/zoom'undan bağımsız doğru output rect kullanılır. Ağır portable paketleme ve preview işleri eşzamanlı sınırsız çalıştırılmaz.
 
-İleride kutulu 3D, cloth/fluid cache ve particle physics resident kaynakları aynı lease/bütçeye bağlanır; yalnız ilgili renderer/decoder eklendiğinde adapter yazılır. Bu optimizasyon için gelecekteki bütün solver'lar önceden geliştirilmez.
+İleride cloth/fluid cache ve particle physics resident kaynakları aynı lease/bütçeye bağlanır; yalnız ilgili renderer/decoder eklendiğinde adapter yazılır. Bu optimizasyon için gelecekteki bütün solver'lar önceden geliştirilmez.
 
 ### 8.8. Bellek alt iş paketi: ölçüm, uygulama sırası ve kabul
 
@@ -343,7 +806,7 @@ MCP preview ve raster/sequence/export aynı frame demand/residency sözleşmesin
 | MEM3 | Ortak kaynak demand/load/evict ve byte admission; hook/MCP/audio tüketicileri bağlanır | Görünmeyen/aktif olmayan medyanın decoded/GPU kaynakları grace/basınçla çıkar; shared kaynak ve undo reload'u çalışır; geç decode stale cache'i diriltmez. |
 | MEM4 | Ölçümde gerekli evaluation/materialization, paketleme ve GPU cleanup düzeltmeleri; büyük sahne release kapısı | Aynı script/seek/pan/export döngüsünde resident kaynak/DOM sayısı warm-up sonrası plato yapar; runtime sınırı aşımı kontrollü; sonuç görsel olarak aynıdır. |
 
-MEM0, source sayımından ayrı runtime işidir ve bu tur tamamlandı diye işaretlenmez. MEM1–2 vektör ve yoğun UI projelerini, MEM3 medyalı projeler ve gelecekteki 2.5D cache'leri kapsar. Four Seasons bu yolların regresyon örneklerinden biridir; implementasyonda onun adı/süresi/kimlikleriyle optimizasyon dalı açılmaz. Bu tur kod uygulanmadı. Önceki incelemede mevcut OffscreenCanvasCache, world-bounds ve blob lifecycle testleri çalıştırıldı: **3 dosya, 26 test geçti**; bu sonuç yeni culling veya bellek hedefinin başarı kanıtı değildir.
+MEM0, source sayımından ayrı runtime işidir ve bu tur tamamlandı diye işaretlenmez. MEM1–2 vektör ve yoğun UI projelerini, MEM3 medyalı projeler ve gelecekteki 2D simülasyon cache'lerini kapsar. Four Seasons bu yolların regresyon örneklerinden biridir; implementasyonda onun adı/süresi/kimlikleriyle optimizasyon dalı açılmaz. Bu tur kod uygulanmadı. Önceki incelemede mevcut OffscreenCanvasCache, world-bounds ve blob lifecycle testleri çalıştırıldı: **3 dosya, 26 test geçti**; bu sonuç yeni culling veya bellek hedefinin başarı kanıtı değildir.
 
 Benchmark protokolü: orijinal proje immutable fixture; normal/proxy profil ayrı; font/viewport/zoom ve hangi timeline/panellerin açık olduğu kayıtlı. Önce 60 saniye ısınma, sonra en az 10 adet 48 saniyelik oynatma döngüsü; ayrıca ileri/geri seek, zoom/pan, dope-sheet scroll/expand, 50 undo/redo, projeyi kapat/aç ve preview/export iptali. Heap allocation kaydı ve snapshot test kopyasında alınır; profiling'in overhead'i raporda belirtilir. İlk raporda p50/p95 frame süresi, allocation hızı, major GC, mounted DOM, çizilen/elenen katman, etkin/pinned resource byte'ları, acquire/release/decode sayıları ve process memory eğrisi bulunur.
 
@@ -415,54 +878,116 @@ Sekme/dock görünmezken gereksiz canvas/monitor çizimi durabilir; aktif ses ve
 
 Ortak arayüzler: önerilen `ResourceSnapshot` ölçüm kapsamı/kaynak/kalite ve sayısal özet taşır; `PerformanceTrace` bounded stage/layer/job örneklerini tutar; resource manager acquire/release ve pin/admission bilgisi sunar. Mevcut GPU event/capability ve command/job altyapısı uygun adapter'larla kullanılır. Read-only kaynak snapshot/trace raporu MCP ve scripting'e açılır; cache boşaltma ve job iptali açık host eylemleridir. İsimler çağrılabilir mevcut API değildir. Yeni lifecycle olayları script/host yapısına açılır; scene timeline'ına her frame telemetri event'i yazılmaz. Tam modeller ve araç şemaları uygulamada canonical skills/catalog ile birlikte eklenir.
 
-Test matrisi küçük/orta/büyük sahne ile 1080p/4K output, farklı zoom, düşük bellek profili ve GPU/API'siz fallback'i kapsar. İş yükleri: vektör/hiyerarşi; uzun metin ve çok font; shared/unique image; bağımsız local saatli video ve ses; particle/efekt/mask; çok keyframe/UI; state/wire; render/export/import ve ileride adapter'ı olan cloth/fluid/3D cache. Four Seasons yalnız gerçek yaşam fixture'larından biridir. Henüz uygulanmamış solver için benchmark başarı iddiası yapılmaz.
+Test matrisi küçük/orta/büyük sahne ile 1080p/4K output, farklı zoom, düşük bellek profili ve GPU/API'siz fallback'i kapsar. İş yükleri: vektör/hiyerarşi; uzun metin ve çok font; shared/unique image; bağımsız local saatli video ve ses; particle/efekt/mask; çok keyframe/UI; state/wire; render/export/import ve ileride adapter'ı olan cloth/fluid cache. Four Seasons yalnız gerçek yaşam fixture'larından biridir. Henüz uygulanmamış solver için benchmark başarı iddiası yapılmaz.
 
 Kabulde panel açık/kapalı ve trace açık/kapalı overhead'i; aynı revision/profilde piksel/timing/ses parity; CPU frame p50/p95; idle render sayısı; mounted DOM; resource live/pinned/evicted byte'ları; en az 10 tekrarın plateau davranışı; reload/cancel/undo/late result/context loss kontrol edilir. Toplam proje ağırlığı ile canlı çalışma kümesi ayrı raporlanır. Panel için başlangıç hedefi steady-state managed retained collector verisinin 8 MiB sınırında kalması ve özet modunda p95 frame ek maliyetinin %5'i aşmamasıdır; bu ölçülecek bir kabul hedefidir, bugün kanıtlanmış sonuç değildir.
 
 Otomatik CI'da deterministik sayaç, bütçe/lifecycle ve görsel davranış testleri koşar. Cihaz/tarayıcıya hassas süre/RSS ölçümleri aynı kontrollü ortamda raporlanır; değişken CI donanımından sabit FPS garantisi çıkarılmaz. Uygulama değişikliklerinde repo test/MCP build/Next build ve gerçek tarayıcı doğrulaması yapılır. Bu güncelleme yalnız plan belgelerini değiştirir.
 
-## 9. Editable Poly 2D, native ağ üretimi ve Blob Surface
+## 9. Mesh2D, spline-to-mesh ve Blob Surface
 
 ### 9.1. Ürün kararı ve mevcut sınır
 
-İki ayrı nesne ailesi planlanır: **Editable Poly 2D**, iç vertex/edge/face topolojisi düzenlenen yüzey; **Blob Surface 2D**, etki noktalarından dinamik dış sınır üreten implicit yüzey. Ayrı çalışma alanı veya genel 3D modelleme modu açılmaz. Buradaki isimler önerilen ürün/veri modelidir; bugün çağrılabilir MCP veya scripting API değildir.
+**Mesh2D** çizim, doku ve deformasyon için kullanılan düzlemsel yüzeydir.
+Kullanıcı Edit modunda Vertex, Edge ve Face seçebilir. Yüz bağlantıları
+modelleme komutuyla değişir, deformasyon oynatımı boyunca sabit kalır.
+Planlanan **Blob Surface 2D** ise her örneklemede etki noktalarından bir dış
+sınır çıkarır ve topolojisi zamanla değişebilir. Hacim ve 3D Poly modelleme
+ayrı ürün kapsamındadır. [3D ana planı](production-3d-roadmap.md)
 
-Mevcut spline sistemi kontur noktası, segment ve Bézier tutamacı düzenler; iç yüz komşuluğu, UV ve triangle/quad yüz listesi taşımaz. Mevcut `polygon` düzenli çokgen primitive'idir. Mevcut `blob`, seed ile üretilen organik kapalı şekildir; birbirine yaklaşan noktaların birleşen alanı değildir. Eski nesnelerin davranışı ve proje uyumluluğu korunur.
+Mevcut spline sistemi kontur noktası, segment ve Bézier tutamacı düzenler;
+iç yüz komşuluğu, UV ve triangle indeksleri taşımaz. Spline kaynak olarak
+kalır; mesh verisi spline şemasına gizlenmez. Mevcut `polygon` düzenli çokgen
+primitive'idir. Mevcut `blob`, seed ile üretilen organik kapalı şekildir;
+birbirine yaklaşan noktaların birleşen alanı değildir. Eski nesnelerin
+davranışı ve proje uyumluluğu korunur.
 
-Voronoi kırılmasının matematiksel girdisi kapalı polygon sınırıdır; iç üçgen ağı zorunlu değildir. Poly araçları kompleks kaynak tasarımı, deformasyon, doku ve ortak geometri düzenlemesi için kırılmadan önce geliştirilir. Mesh üçgeni/dörtgeni, Voronoi kırılma parçası ve sıvı particle'ı farklı varlıklardır.
+Voronoi kırılmasının matematiksel girdisi doğrulanmış kapalı shape/spline
+sınırıdır; iç üçgen ağı zorunlu değildir. Mesh2D kumaş ve dokulu deformasyon
+için geliştirilir; fracture'ın ilk convex dilimini bekletmez. Mesh üçgeni,
+Voronoi kırılma parçası ve sıvı particle'ı farklı varlıklardır.
 
-### 9.2. Editable Poly 2D veri modeli ve elle düzenleme
+### 9.2. Mesh2D veri modeli ve spline dönüşümü
 
-Önerilen katman türü `polyMesh`: sabit kimlikli yerel x/y vertex'ler, sıralı 3 veya 4 vertex kimliği içeren sabit kimlikli yüzler, topology sürümü/hash'i ve appearance. İlk dörtgenler basit, dışbükey ve sıfırdan büyük alanlıdır; genel n-gon yüz düzenlemesi sonraki kapsamdır. UV/doku diliminde vertex veya gerektiğinde yüz köşesi UV'si açık şemayla eklenir. Yeni mesh verisi spline kontur şemasına gizlenmez.
+**24 Kasım 2026 · Uygulanan Mesh2D kapsamı.** `Mesh2DSource` üretim tarifini,
+`Mesh2DGeometry` katmanın yerel piksel konumlarını ve UV'lerini,
+`Mesh2DTopology` ise kararlı vertex kimliklerini, üçgen bağlantılarını, varsa
+dörtgen hücreleri ve topoloji hash'ini taşır. Eski yalnız üçgen içeren dosyalar
+açılırken aynı topolojiyi korur. Editör, eski bir Grid'in dörtgenlerini ancak
+üretim tarifi, kimlikler ve üçgen bağlantıları eşleşirse tanır. [Veri modeli](../../src/lib/types/mesh2d.ts)
 
-Dikdörtgenden dönüşüm dört vertex ve bir quad yüz üretir; çizim/fizik adapter'ı bu yüzü iki üçgen olarak derler. Kullanıcı isterse diyagonali görünür/kalıcı hale getirip iki triangle yüzüne dönüştürür. Quad kaynak yüz kimliği korunur; türetilmiş üçgenler ikinci bir bağımsız düzenleme kaynağı değildir. Komşuluk, kenar listesi ve dış/delik sınırları yüz bağlantılarından hesaplanır. Diyagonal seçimi kararlıdır; her karede yeniden ağ üretip bağlantıları değiştirmez.
+| Uygulanan alan | Editördeki davranış |
+| --- | --- |
+| Üretim ve dönüşüm | Structured Grid satır ve sütunlardan dörtgen üretir. Kaynağa bağlı Create/Regenerate ayrı Mesh katmanı oluşturur. Sağ tık **Convert → 2D Mesh** ise ilk katmanın kimliğini, parent'ını, transformunu ve origin'ini korur. Özgün geometri stack'te saklanır. |
+| Kapalı Shape ve Spline | Tek şeklin son sınırı kullanılır. Uygun çoklu statik girdiler Boolean Union ile birleşir. İçbükey dış sınırlar, delikler ve ayrık adalar korunur. Eğriler kayıtlı yerel toleransla örneklenir. Earcut dolu bölgeyi üçgenler. Açık çizgide dönüşüm kapalı sınır ister. |
+| Edit seviyeleri ve seçim | **1 Vertex**, **2 Edge**, **3 Face**. Tüm modlarda noktalar görünür. Seçili noktalar ve kenarlar kırmızı, seçili yüz yarı saydam kırmızıdır. Grid hücresi tek dörtgen seçilir. İç çizim diyagonali gizlenir, bağımsız üçgenler seçilebilir. Panel yüz ve seçim sayılarını gösterir. Bölge seçimi, çoklu seçim ve Ctrl/Cmd+A aktif bileşen düzeyinde çalışır. |
+| Bileşen transformları | Move/Rotate/Scale ortak vertex'i bir kez dönüştürür. Scene/Local eksenleriyle hizalama ve dağıtma, Grid/Vertex Snap ve geçici edit pivot'u kullanılabilir. Gerçek layer transformu ve origin sabit kalır. Ghost oturuma giriş geometrisini gösterir. Yeniden girişte güncel geometri başlangıç alınır. |
+| Edit Mesh ve işlem geçmişi | Hareketler ve yerel topoloji işlemleri son etkin Edit Mesh kaydında sırasıyla birikir. Her işlem ayrı Undo/Redo adımıdır. Etkilenen bileşen kimlikleri eşlenir. Eskimiş topoloji seçimi veya bağlı pin/deformasyon klibi topoloji değişikliğini engeller. |
+| Modifier stack | Edit moduna girmeden Mesh modifier eklenebilir. Satırların ayarları, sırası ve etkinliği yönetilir. Execute taslakları kaynaktan başlayıp liste sırasıyla tek sonuç olarak uygular. Hatalı hesap önceki geometriyi korur. Rebuild kaynaktan yeniden hesaplar, Bake sonucu düzenlenebilir geometriye sabitler. |
+| Smooth | Bütün mesh'in komşu vertex'lerini Amount ve Iterations ile yumuşatır. Keep boundary dış sınırı ve delik sınırlarını sabitler. UV ve yüz bağlantıları korunur. |
+| Subdivision | Varsayılan **Delaunay** sınır ve delikleri kısıt olarak tutarak üçgen ağ üretir. **Grid / Karelaj** içeride tam kareler, kesilen sınır hücrelerinde geçiş yüzleri üretir. Levels ve yerel piksel cinsinden Base cell size detay yoğunluğunu belirler. Her iki algoritma da bütün mesh'i işler. |
+| Doku, deformasyon ve kayıt | Doku yerleşimi için fit, offset, scale, rotation, pivot ve flip vardır. Pin önayarları ile topolojiye bağlı deformasyon klibi desteklenir. GPU/Canvas çizimi, bounds ve hit-test hesaplanmış geometriyi kullanır. Düzenlenebilir proje kaynağı ve stack'i saklar. Runtime hesaplanmış geometriyi kullanır. |
+| MCP ile aynı katmanda modelleme | `convert_layer_to_mesh2d` → `split_mesh2d_edge` → `apply_mesh2d_subdivision`. Subdivision aynı satırda güncellenip çalıştırılabilir. Her ayrı çağrı tek Undo oluşturur. |
+| Temel doku ataması | Assets'ten mesh yüzeyine veya Texture alanına bırakma ve listeden seçme desteklenir. Atama mevcut vertex UV'lerini değiştirmez. Fit, konum, ölçek, açı ve pivot Texture alanından düzenlenir. |
 
-İlk araçlar **Vertex / Edge / Face** alt seçimleri, görsel/sayısal taşıma, üç/dört noktadan geçerli yüz oluşturma, yüz silme ve noktaya bağlı yüzleri göstererek silmedir. Üçgenin içine nokta eklemek üç alt yüz üretir. Ortak kenara nokta eklemek iki taraftaki komşuları da günceller; asılı vertex/T-junction bırakmaz. Quad üzerindeki bölme yüz tipinin değişebileceği önizlemeyle uygulanır. Bir sürükleme/komut bir undo transaction'ıdır; Escape iptal eder. Weld, edge extrude, diagonal flip ve kontrollü remesh ikinci dilimdedir.
+25 Kasım 2026 tarihinde 2001 portundaki üretim editöründe ayrı bir MCP oturumuyla
+delikli spline testi doğrulandı. Dönüşüm 17 vertex ve 17 üçgen, delik kenarında
+ortadan bölme 18 vertex üretti. Seviye 1 ve 64 yerel px hücre boyutunda Delaunay
+89 vertex ve 130 üçgen, Grid 29 tam dörtgen üretti. Her adımda tek katman, aynı
+kimlik ve origin korundu. Grid kaydı yeniden açılıp aynı satır çalıştırıldığında
+geometri ve doku yerleşimi tekrar doğrulandı. [MCP komutları](mcp.md)
 
-Shape veya kapalı spline, mevcut path/koordinat yardımcıları üzerinden dönüştürülür. Eğriyi düzleştirme toleransı kaynak biriminde açıkça kaydedilir; zoom değişince geometri değişmez. Kaynak korunur. Concave sınır ve delikler doğrulanmış dönüşümde desteklenebilir; ilk rigid/Voronoi solver kapsamının convex olması ayrıca geçerlidir.
+**Panel ve sağ tık menüsündeki yerel topoloji araçları**
 
-Geometri commit'inde ters dönmüş/sıfır alanlı yüz, kesişen kenar, üst üste yüz, iki yüzden fazla komşusu olan kenar, kopuk vertex fanı ve T-junction kontrol edilir. Hatalı giriş tanıyla reddedilir; hull alarak delik doldurma yapılmaz. Yerel yüz yönü ile katmanın negatif ölçekle aynalanması ayrı değerlendirilir. Hareketli sabit topolojide foldover tanısı/interpolasyon politikası ayrıca gerekir; yalnız başlangıç mesh'inin geçerli olması her ara karenin geçerli olduğunu kanıtlamaz.
+| Mod ve araç | Uygulama sonucu |
+| --- | --- |
+| Edge · Split Edge | Paneldeki yüzde veya sağ tıklanan konum kenarı böler. Komşu yüzler tek yeni vertex'i paylaşır. Yeni UV aynı oranda hesaplanır. |
+| Edge · Flip Edge | Dışbükey alan oluşturan iki komşu üçgenin ortak kenarını karşı köşelere taşır. Konumlar ve UV'ler sabit kalır. |
+| Face · Delete Face | Seçili yüzleri kaldırır. İç bölgede açıklık oluşur. Tüm yüzler seçildiğinde işlem engellenir. |
+| Edge · Fill | Bir deliğin tam sınırı seçilir. Uygun dört köşeli delik tek dörtgen olur. Karmaşık sınırlar üçgenlenir, iç adalar ve seçilmeyen delikler korunur. |
 
-İlk fill/stroke sınır path'inden çizilebilir; iç wireframe yalnız editör overlay'idir. Dokulu/deforme mesh, üçgen/UV buffer adapter'ıyla mevcut kompozitöre bağlanır. Her yüz ayrı katman veya bitmap oluşturmaz. Sabit topolojide yoğun deformasyon typed mesh clip kullanır; topology değişimi ilgili pin, constraint, vertex animasyonu ve bake eşlemelerini stale yapar; indisler sessizce yeni noktalara bağlanmaz.
+**Kabul ve kalan işler**
+
+- **Otomatik regresyon.** 24 Kasım koşusunda 584 test dosyasında 4.203 test geçti. Bu sayı tüm depoyu kapsar. Mesh tarayıcı testleri mantıksal yüz seçimini ve düzenleme göstergelerinin final PNG'ye girmediğini doğruladı. Eski Grid hücrelerinin tanınması ayrıca birim testinde denetlendi. [Temel teslimlerin doğrulaması](plans/mesh2d-edit-modes-plan.md)
+- **MESH-18 geçti.** Üretim editöründe dokulu 4×3 Grid üzerinde dört topoloji aracı denendi. Ortak kenar bölününce 20 vertex ve 12 dörtgenden 21 vertex, 12 dörtgen ve 2 üçgene geçildi. İki delikten yalnız seçilen doldu. Her araç için ayrı Undo/Redo, kaydet/aç ve Execute sonrası geometri ve UV eşliği doğrulandı. [MESH-18 kabul kaydı](releases/v0.5.0-manual-acceptance-tests.md#mesh-18--yerel-topoloji-ve-undo)
+- **MESH-19 geçti.** Pen ile çizilen dış kontur ve iç delik Mesh'e dönüştürüldü. Delik kenarını bölüp yeni vertex'i taşırken delik açık, origin ve ghost sabit kaldı. Üç Undo sırasıyla taşıma, bölme ve dönüşümü geri aldı. [MESH-19 kabul kaydı](releases/v0.5.0-manual-acceptance-tests.md#mesh-19--çizilmiş-splinedan-delikli-meshe)
+- **Sıradaki kabul MESH-05.** MESH-05–17 açık. Sıra tekli/çoklu Convert, Edit Mesh, Smooth, Delaunay/Grid, stack işlemleri, hata ve bütçe sınırları, portable/PNG ve üç modda yüz seçimidir. [Test yürütme planı](releases/v0.5.0-manual-test-plan.md)
+- **Sonraki geliştirmeler.** Weld/Connect/Slide, seçili noktalarda Smooth/Relax, ardından Inset/Extrude/Bridge planlanıyor. Loop Cut, Knife, UV seam, yüz bazlı materyal ve zamana bağlı modifier'lar ileri kapsamdadır. [Mod bazında araç listesi](plans/mesh2d-edit-modes-plan.md)
+
+Uygulama ayrıntıları için [dönüşüm ve kaynak sahipliği](geometry-conversion.md),
+[Mesh modifier algoritmaları ve bütçeleri](../../src/lib/geometry/mesh2d/modeling/README.md),
+[görünüm ve deformasyon](mesh2d-appearance-deformation-runtime.md) ve
+[topoloji teknik referansı](mesh2d-topology-reference.md) kullanılır.
+
+Topoloji doğrulayıcı ters veya dejenere üçgenleri ve ikiden fazla yüze bağlı
+kenarları reddeder. Grid üreticisi sınır kesişimlerini ortak kenarın iki
+tarafına da ekleyerek T-junction oluşumunu önler. Animasyon sırasında yüzlerin
+katlanması ayrıca denetlenmelidir. Kumaşın başlangıç geometrisi, kısıtları ve
+yoğun kare verileri için ayrı veri sahipliği öngörülür.
 
 ### 9.3. Native algoritmalar ve kullanım ayrımı
 
 “Native”, araçların Chorono içinde yerel çalışması ve aynı command/undo, job/cancel, kayıt, renderer ve MCP sözleşmesine bağlanmasıdır. Kullanıcı dış modelleme uygulamasına gönderilmez. Bu karar bütün algoritmaların sıfırdan yazılmasını veya native binary zorunluluğunu içermez. Uygun küçük kütüphaneler adapter arkasında kullanılabilir; algoritma/sürüm/ayar ve gerçekleşmiş topoloji saklanır.
 
-| İşlem / bilinen ad | Kullanım | Planlanan kapsam |
+| İşlem / bilinen ad | Kullanım | Kapsam ve durum |
 | --- | --- | --- |
-| **Structured Grid / Quad Grid Generation** | Dikdörtgeni satır/sütun veya hücre boyutuyla bölmek | İlk dilim: düzenli quad ağ ve istenirse kararlı diyagonalle triangle ağ. Tam kare hücreler yalnız uyumlu ölçü/spacing ile oluşur. |
-| **Ear Clipping / Earcut Triangulation** | Kapalı bir sınırı ve deliklerini üçgen yüzlerle doldurmak | İlk polygon dönüşümü adayı; giriş ve çıktı topolojisi denetlenir. İç nokta/constraint içeren genel kalite mesh'i yerine kullanılmaz. |
-| **Delaunay Triangulation** | Nokta kümesinden üçgen ağı ve Voronoi dual ilişkisini üretmek | Native nokta ağı aracı; kaynak silüetinin dışını ve deliklerini kendiliğinden koruduğu varsayılmaz. |
-| **Constrained Delaunay Triangulation — CDT** | Sınır/delik/korunan kenarlar ve iç noktalarla ağ üretmek | İleri native triangulate/remesh: constraint'ler korunur, yalnız domain içi yüzler seçilir; hedef kenar boyu/kalite iyileştirmesi ayrı refinement seçeneğidir. |
-| **Quad Meshing / Quadrangulation** | Dört kenarlı yüzlerden oluşan ağ üretmek | İlk grid/manual quad'dan sonra triangle-to-quad recombination. Ortak kenarlı uygun üçgenler kalite ölçütüyle eşlenir; eşlenmeyenler triangle kalır ve açık raporlanır. |
-| **Blossom-Quad / matching tabanlı recombination** | Triangulation üzerinden daha kapsamlı quad eşleme | İleri değerlendirme adayı; keyfi şekil için tam kare veya her koşulda tümü quad çıktı sözü verilmez. Tam quad remeshing ayrı kabul dilimidir. |
+| **Structured Grid / Quad Grid Generation** | Dikdörtgeni satır ve sütunlara bölmek | Uygulandı. Her hücrede bir mantıksal dörtgen ve çizim için iki üçgen vardır. Kare hücre için yatay ve dikey aralık eşit olmalıdır. |
+| **Ear Clipping / Earcut Triangulation** | Kapalı bir sınırı ve deliklerini üçgen yüzlerle doldurmak | Shape/Spline → Mesh dönüşümünde uygulanır. Giriş sınırları ve çıktı topolojisi doğrulanır. |
+| **Delaunay Triangulation** | Nokta kümesinden üçgen ağı ve Voronoi dual ilişkisini üretmek | Fracture veya mesh üretim adapter'ında değerlendirilebilir; kaynak silüetini/delikleri kendiliğinden koruduğu varsayılmaz. |
+| **Constrained Delaunay Triangulation — CDT** | Sınır, delik ve iç noktalarla ağ üretmek | Subdivision'ın varsayılan algoritmasıdır. Sınır kenarları korunur ve malzeme içindeki yüzler alınır. Grid/Karelaj ayrı bir Subdivision seçeneğidir. |
 | **Voronoi Tessellation** | Tohum noktaları çevresinde kırılma hücreleri üretmek | Kaynak sınırla kesilen değişken kenar sayılı parçalar; quad üretme algoritması değildir. |
 | **Marching Squares** | Scalar alandaki eşik seviyesinden 2D contour çıkarmak | Blob/sıvı dış sınırı; grid hücrelerinin kare olması, çıktının quad mesh olduğu anlamına gelmez. |
 
-Quad, dört kenarlı yüz demektir; bütün kenar/açılarının eşit olması gerekmez. Keyfi concave/delikli şekli sınırını koruyarak yalnız kusursuz karelerle doldurma genel gereksinim değildir. Gerektiğinde triangle/quad karma ağ geçerli üründür. Subdivision/smoothing, yeni ağ üretiminden ayrı düzenleme işlemidir; Catmull–Clark/Loop benzeri yumuşatma ilk dilimin önkoşulu değildir.
+Structured Grid'in authoring hücreleri quad olabilir; runtime/render/solver
+çıktısı kararlı triangle indeksidir. Keyfi concave/delikli şekli yalnız
+kusursuz quad veya karelerle doldurma 2D gereksinimi değildir. Subdivision ve
+smoothing ilk Mesh2D/kumaş tesliminin önkoşulu değildir.
 
-Earcut hızlı boundary triangulation adayıdır; resmi belgesi keyfi girişte doğruluk ve conforming mesh garantisi vermez. Alan korunumu tek başına yeterli kabul değildir. T-junction onarımı/doğrulama olmadan sonuç cloth/physics mesh'i olarak kabul edilmez. `d3-delaunay` constrained polygon mesher yerine geçirilmez; CDT backend'i ayrıca değerlendirilir. CGAL/Gmsh belgeleri algoritma referansıdır; bu paketlerin projeye eklenmesi kararı değildir. Uygulamada lisans, boyut, worker/WASM uyumu ve bakım kontrol edilerek sürüm sabitlenir; bugün bağımlılık yüklenmez.
+Earcut çıktısı alan, sınır ve topoloji kontrollerinden geçer. Mesh
+Subdivision'ın Delaunay seçeneğinde `cdt2d` kısıtlı üçgenlemeyi üstlenir.
+Grid seçeneği kare hücreleri kaynak bölgeyle kesiştirir ve ortak kenarları
+eşleştirir. Kullanılan backend, sınırlar ve UV örnekleme davranışı algoritma
+belgesinde kayıtlıdır. [Mesh modelleme algoritmaları](../../src/lib/geometry/mesh2d/modeling/README.md)
 
 ### 9.4. Blob Surface 2D / Metaballs
 
@@ -482,44 +1007,248 @@ Native kontroller: nokta ekle/sil/taşı, çoklu seçim, sayısal konum/radius/w
 
 **Sıvı:** PBF solver gravity, kuvvet alanı ve collider etkisiyle particle konumlarını hesaplar. Blob surface builder bu noktaların görünür yüzeyini çıkarır; metaball yakınlığı tek başına fiziksel çekim, basınç, yüzey gerilimi veya kütle korunumu sağlamaz. Manual blob kernel'i doğrudan fiziksel yoğunluk diye kullanılmaz. Fluid adapter, 2D kernel normalizasyonu, particle mass/reference density ve support radius'la yüzey alanını kalibre eder; particle çözünürlüğü değişince kontrolsüz hacim/alan değişimi ölçülür. Farklı fluid domain'lerinin fiziksel birleşmesi ayrıca solver kararıdır.
 
-Particle hareket cache'i ile surface appearance recipe ayrı hash taşır. Threshold, çizim radius'u, renk veya örnekleme kalitesi değişince mümkün olduğunda kayıtlı particle verisinden yüzey yeniden çıkarılır; fizik parametreleri değişince resimülasyon gerekir. Merge/split yüzünden contour/vertex sayısı değişebilir; sonuç sabit vertex kimlikli spline morph veya cloth clip'i değildir. `particleFluid` + appearance, değişken topolojili `surfaceSequence` veya raster sequence seçilir. **Seçili kareyi Poly'ye dönüştür**, o karenin sınırını doğrular/triangulate eder ve yeni sabit kimlikli nesne üretir; kaynak blob/cache korunur.
+**Emitter/collider/yüzey hedefleri:** Shape, spline, text glyph ve `Mesh2D`; geometri kaynağı, çarpışma hedefi veya yüzey boyunca hareket hedefi olabilir. Bu üç rol aynı layer üzerinde birlikte kullanılabilse de ayrı ayrı atanır. Sıvı görünümü particle hareketinden Blob Surface ile üretilir; rigid “top yığını”, liquid boundary ve grid smoke/fire obstacle aynı solver davranışı değildir. Text collider gerçek glyph konturunu ve delikleri korur. Ortak sözleşme, UI, cache ve aşama kabulü [sahne geometrisi etkileşim planındadır](plans/emitter-collider-surface-interaction-plan.md).
 
-**Kumaş:** Poly'nin vertex/UV, komşuluk, grid üretimi, seçim ve doğrulama yardımcıları paylaşılır. Kumaşın yerel z koordinatı, solver state'i, rest metric ve constraint'leri ayrı adapter'dadır. Authoring quad yüzleri gerekirse kararlı triangle solver mesh'ine derlenir; fizik bağlantıları kaydedilir ve diyagonal değişimi topology değişimi sayılır. Her kare yeniden triangulate edilmez. İlk cloth fixture düzenli grid'dir; gelişmiş tüm quad remesher bitmeden bu fixture bekletilmez.
+Particle hareket cache'i ile surface appearance recipe ayrı hash taşır. Threshold, çizim radius'u, renk veya örnekleme kalitesi değişince mümkün olduğunda kayıtlı particle verisinden yüzey yeniden çıkarılır; fizik parametreleri değişince resimülasyon gerekir. Merge/split yüzünden contour/vertex sayısı değişebilir; sonuç sabit vertex kimlikli spline morph veya cloth clip'i değildir. `particleFluid` + appearance, değişken topolojili `surfaceSequence` veya raster sequence seçilir. **Seçili kareyi Mesh2D snapshot'a dönüştür**, o karenin sınırını doğrular/triangulate eder ve yeni sabit topolojili kaynak üretir; blob/cache korunur.
 
-**Kırılma:** Poly adapter'ı dış/delik sınırlarını türetir. İlk Voronoi dilimi convex kaynakla başlar. Sonraki kompleks mesh diliminde her Voronoi hücresi orijinal geçerli triangle yüzlerle kesiştirilir; aynı hücrede bağlı bölgeler gruplanır. Kopuk bileşenler ayrı parçadır; concave parça fizik için uygun convex alt parçaları olan compound body olabilir. Her render üçgeni ayrı rigid body yapılmaz; convex hull ile boşluk/delik doldurulmaz. Kaynak koordinat/UV eşlemesi korunur. Hızlandırma için triangle spatial index kullanılır; bütün yüz × bütün hücre döngüsü varsayılan değildir.
+**Kumaş:** Mesh2D'nin vertex/UV, komşuluk, structured grid,
+spline-to-mesh ve doğrulama yardımcıları paylaşılır. Kumaşın yerel z
+koordinatı, solver state'i, rest metric, pin ve constraint'leri ayrı
+adapter'dadır. Kaynak grid/spline bir kez kararlı triangle solver mesh'ine
+derlenir; her kare yeniden triangulate edilmez. İlk cloth fixture düzenli
+grid'dir; keyfi spline dönüşümü ilk bayrak/perde dilimini bekletmez.
+
+**Kırılma:** İlk Voronoi dilimi doğrulanmış convex shape/spline sınırıyla
+başlar ve Mesh2D'ye bağımlı değildir. Concave/delikli sınır clipping ve compound
+body desteği ayrı dilimdir. Görsel kaynak Mesh2D ise görünüm/UV eşlemesi adapter
+üzerinden korunabilir; her render triangle'ı ayrı rigid body yapılmaz ve convex
+hull ile boşluk/delik doldurulmaz.
+
+İleri destruction, [Rigid Body & Fracture planındaki](plans/physics-fracture-bake-plan.md)
+ayrı dilimlerde ilerler: doğrulanmış parça polygon'undan render triangle/UV,
+collider ve adjacency üreten olay tabanlı fragment mesh compiler; ortak
+sınırdan kurulan bonded cluster graph; impulse/biriken damage ile bond kopması;
+parent–child lineage taşıyan secondary/recursive fracture; generation depth,
+toplam fragment/triangle/bond/byte bütçesi ve atomik topology commit. Dinamik
+mesh her kare remesh değildir: topology yalnız fracture tick'inde değişir,
+fragment'lar olaylar arasında rigid transform ile hareket eder. Sürekli
+adaptive remeshing, genel Poly 2D modelleme ve gerçek FEM/crack propagation bu
+planın parçası değildir.
+
+Kırılma öncesi dent/bend/shear isteği yalnız sabit topolojili Mesh2D
+`meshDeformation` klibiyle ileri dilimde ele alınır. `visualOnly` collider veya
+yalnız damage/fracture tick'inde doğrulanmış `eventSampledCollider` politikası
+açık seçilir. Fracture girdisinin rest sınırı mı deforme snapshot mı olduğu
+recipe'de saklanır; deformation topology hash'i ile fracture generation
+manifest'i ayrı stale nedenleridir.
 
 ### 9.6. Kaynak bütçesi, kayıt ve kabul
 
 Mesh buffer'ları ve scalar grid/scratch alanları ortak §8 ledger/budget/admission sistemine girer. Nokta alanı hesaplama spatial hash veya yerel destek splat'i kullanır; her nokta için bütün sahne grid'i dolaşılmaz. Tek grup için sınırlı buffer seti vardır; her noktaya texture/katman açılmaz. Worker görevleri snapshot, cancel/stale ve bounded transfer kullanır. Dynamic bounds surface'in tamamını kapsar; yalnız kaynak nokta merkezinden culling yapılmaz.
 
-Kaynak ve Performans paneline vertex/triangle/quad, contour component, grid hücre sayısı, topology/field/contour üretim süresi ve managed byte metrikleri eklenir. Field/frame cache'leri bounded'dır; her kare sonuçları belge/undo geçmişine eklenmez. Hedef çözünürlük, parent transform, mask/efekt, AA ve final render politikası ilgili adapter'a taşınır; düşük çözünürlüklü blob bitmap'ini büyütmek final native geometri çizimi sayılmaz.
+Kaynak ve Performans paneline vertex/triangle/quad, contour component, grid
+hücre sayısı, fracture generation/fragment/bond/collider component sayısı,
+topology/field/contour üretim süresi ve managed byte metrikleri eklenir.
+Field/frame/topology cache'leri bounded'dır; her kare sonuçları belge/undo
+geçmişine eklenmez. Hedef çözünürlük, parent transform, mask/efekt, AA ve final
+render politikası ilgili adapter'a taşınır; düşük çözünürlüklü blob bitmap'ini
+büyütmek final native geometri çizimi sayılmaz.
 
 | Dilim | Teslim ve kabul |
 | --- | --- |
-| POL0 — topoloji ve temel üretim | Triangle/quad veri modeli, rectangle→quad→iki triangle, structured grid ve doğrulanmış boundary triangulation; alan/delik/komşuluk, kaydet–aç ve bounds doğrulanır. |
-| POL1 — native alt nesne düzenleme | Vertex/edge/face, yüz oluştur/sil ve tutarlı bölme; geçersiz edit tanısı, tek undo/cancel; UI ve MCP aynı command yolunu kullanır. İlk convex Voronoi bu temel sonrasında başlayabilir. |
-| POL2 — gelişmiş ağ ve görünüm | Delaunay/CDT, constraint/refinement, triangle-to-quad recombination, UV/doku ve ileri editler; sınır/delik/kalite korunur, eşlenmeyen yüzler görünürdür. Genel full-quad remeshing ayrı ölçümlü genişletmedir. |
-| POL3 — kompleks fracture adapter'ı | Concave/delikli kaynak, bağlı bileşen ve compound collider; birleşik alan, görünüm/UV ve kütle merkezi korunur. İlk convex kırılmayı bekletmez. |
+| MESH0 — topoloji ve structured grid | Sabit vertex/triangle/UV modeli, rectangle/grid→kararlı triangle, komşuluk, topology hash, portable kayıt, bounds/hit-test ve typed fixture. |
+| MESH1 — spline-to-mesh | Kapalı spline/shape flattening, sınır/delik doğrulama ve boundary triangulation; kaynak korunur, ayar değişimi bağımlı bake'i stale yapar. |
+| MESH2 — görünüm ve deformasyon | Textured/deformable renderer, GPU/offscreen→2D compositor adapter'ı, pin selection, meshDeformation clip playback ve açık fallback. Genel Poly modelleme UI'si yoktur. |
+| 22–24 Kasım Mesh Edit ve modifier ekleri | Aynı katmanda Convert, Vertex/Edge/Face, dört yerel topoloji aracı, Smooth ve Delaunay/Grid Subdivision uygulandı. [Geliştirme ve kabul durumu](#92-mesh2d-veri-modeli-ve-spline-dönüşümü) |
+| FRACTURE0 — rigid ve tek nesil Voronoi | Sabit adım Matter adapter, doğrulanmış convex sınır, seed'li parçalar, momentum devri, olay/transform bake ve tek undo. |
+| FRACTURE1 — fragment mesh ve kompleks kaynak | Concave/delikli clipping; fragment triangle/UV/topology hash, adjacency, compound collider ve portable generation manifest. |
+| FRACTURE2 — bonded cluster | Auto/manual cluster, ortak sınır bond'ları, dayanım/damage, connected-component split ve kütle/momentum koruyan body rebuild. |
+| FRACTURE3 — secondary destruction — ilk dilim tamamlandı | Precomputed recursive child generation, kararlı lineage/kimlik, generation ve toplam fragment/triangle/byte bütçesi; portable forest, ürün UI/MCP ve canlı kabul. On-demand runtime üretim FRACTURE4+ kararıdır. |
+| FRACTURE4/5 — v0.10.0 planı | FRACTURE4 Mesh2D dent/bend/shear ve rest/deformed snapshot; FRACTURE5 `fractureEventSequence`, checkpoint/seek ve ileri native replay. v0.6.0 release kapısı değildir. |
 | BLOB0 — nokta alanı ve çizim | “+” noktalar, radius/weight/threshold, alan→contour→fill; iki küme yaklaşınca birleşir ve uzaklaşınca ayrılır, boş yüzey/delik desteklenir. |
-| BLOB1 — native grup ve düzeltme | Açık merge owner, nokta/grup animasyonu, sayısal kontrol, tek undo, seçili kareyi Poly'ye dönüştürme; kaynak ve layer sırası korunur. |
+| BLOB1 — native grup ve düzeltme | Açık merge owner, nokta/grup animasyonu, sayısal kontrol, tek undo, seçili kareyi Mesh2D snapshot'a dönüştürme; kaynak ve layer sırası korunur. |
 | BLOB2 — fluid adapter ve bake | PBF particle clip'inden normalize yüzey; fizik yeniden çalışmadan görünüm değişimi; değişken topology surface/raster/native playback ve final render parity. |
 | Ortak teslim kapısı | Portable round-trip, canonical export/runtime capability, MCP şema/skill güncellemesi, cancel/stale, kaynak bütçesi ve gerçek render QA. Desteklenmeyen export açık tanı/raster fallback verir. |
 
-Ana sırada export/bileşen/çoklu format önceliği korunur. Poly temel dilimi Voronoi ve kumaş geometri entegrasyonundan önce; Blob temel dilimi sıvının bitmiş görünümünden önce gelir. PBF'nin ham particle doğruluk prototipi Blob araçlarından bağımsız çalışabilir. Bu güncelleme yalnız planlama yapar; algoritma, nesne veya API uygulanmış sayılmaz.
+Güncel 2D sırada MESH0–2 temel teslimleri ve FRACTURE1–3 tamamlanmıştır.
+Mesh Edit eklerinin açık kabul ve geliştirme işleri §9.2'de izlenir. v0.6.0 yalnız masaüstü
+editör temeli ile **10 → 11 → 12** çıktı hattını içerir. FRACTURE4/5, kumaş,
+Blob/fluid, emitter/particle, smoke/fire ve Character Motion v0.10.0'a
+taşınmıştır; v0.7.0–v0.9.0 kapsamı ayrıca kararlaştırılır. Blob temel dilimi
+sıvının bitmiş görünümünden önce gelir. PBF'nin ham particle doğruluk prototipi
+Blob araçlarından bağımsız
+çalışabilir.
+Mesh'in uygulanmış kapsamı ve açık kabul senaryoları §9.2'de tutulur. Blob ve
+ileri simülasyon satırları kendi teslim ve kabul kayıtlarıyla kapanır.
 
-Teknik referanslar: [Earcut ve conforming çıktı sınırı](https://github.com/mapbox/earcut), [Delaunay / constrained triangulation](https://doc.cgal.org/latest/Triangulation_2/index.html), [quad recombination / Blossom](https://gmsh.info/doc/texinfo/), [Voronoi hücreleri](https://d3js.org/d3-delaunay/voronoi), [Marching Squares](https://d3js.org/d3-contour), [MultiPolygon contour çıktısı](https://d3js.org/d3-contour/contour).
+Teknik referanslar: [Earcut ve conforming çıktı sınırı](https://github.com/mapbox/earcut), [Delaunay / constrained triangulation](https://doc.cgal.org/latest/Triangulation_2/index.html), [Voronoi hücreleri](https://d3js.org/d3-delaunay/voronoi), [Marching Squares](https://d3js.org/d3-contour), [MultiPolygon contour çıktısı](https://d3js.org/d3-contour/contour).
+
+## 9A. Spline Edit, görünüm ve modifier teslimleri
+
+**Durum: 24 Kasım 2026 itibarıyla mevcut geliştirme branch'inde uygulanmış
+kapsam.** Native Edit temel araçları, sekiz statik Faz 1 modifier'ı ve canlı
+Outline ilk teslimi tamamlandı. Bütün Spline planı veya tam Outline v2 bitmiş
+sayılmaz. Bu bölüm güncel durumu; §12.83–§12.102 tarihsel teslimleri tutar.
+Sürüm/release ataması bu kayıtla yapılmaz.
+
+### 9A.1. Edit ve Properties sorumlulukları
+
+Seçili Spline üzerinde **1 Point / 2 Edge / 3 Object**, Mesh üzerinde
+**1 Vertex / 2 Edge / 3 Face** düzenlemeyi başlatır veya seviyesini değiştirir.
+Sağ tık Edit Mode da aynı yolu kullanır.
+Panelde ayrı Enter edit mode düğmesi yoktur. Edit aktifken kaynak sınırı ve alt
+seçimler vurgulanır; normal layer transform çerçevesi Edit dışında görünür.
+
+| Alan | Uygulanan kapsam | Davranış / sınır |
+| --- | --- | --- |
+| Point | Corner, Smooth, Bézier, Bézier Corner; koordinat/tangent; Break, Weld, Fuse, Connect, Reset Tangents, Copy/Paste Tangents, Chamfer ve Fillet | Break bağımsız uçlar oluşturur; Fuse yalnız konumu eşitler. Tangent panosu yerel kol vektörlerini taşır; Copy Undo yazmaz, geometri değişiklikleri ayrı Undo'dur. |
+| Edge | Sürekli Add Vertex, Refine/Divide, Split, Trim ve Extend | Add Vertex varsayılanı exact eğriyi korur; dört tip seçilebilir, her ekleme ayrı Undo, Esc araçtan çıkar. Trim tıklanan kesişim aralığını kaldırır; Extend açık ucu en yakın ileri kesişime teğet uzatır. Kesişim yoksa değişiklik/Undo yoktur. |
+| Object | Aç/kapat, Reverse, Attach/Detach, Offset Path / Inset / Outset, Simplify, Smooth, Subdivide, Interpolation ve Boolean/Paths | Simplify toleransla nokta azaltır; Smooth anchor'ları taşımadan kolları düzenler. Subdivide exact Bézier böler; Interpolation örnekleme toleransıdır, kaynak vertex eklemez. |
+| Ortak Edit transformu | Move/Rotate/Scale, toolbox Scene/Local eksenleri ve çoklu alt seçim | Yerel kaynak noktaları/kolları değişir; gerçek layer TRS/origin korunur. Ghost oturum girişindeki geometriyi tutar; yeniden giriş güncel geometriyi başlangıç alır. Mesh hareketleri aynı tail Edit Mesh üzerinde, her hareket ayrı Undo ile birikir. |
+| Properties | Fill/Stroke, renk/alpha, gradient/pattern ve gerçek layer transformu | Görünüm Edit içinde tekrarlanmaz. Yeni Spline varsayılanı No Fill, siyah 3 px stroke'tur; kullanıcı fill'i açabilir. |
+
+Native Chamfer/Fillet/Offset/Simplify/Smooth **Apply ile kaynak değiştirir**;
+yeni modifier satırı oluşturmaz. Önizleme geçicidir; Cancel, stale worker sonucu
+ve seçim/mod değişimi kaynakta iz bırakmaz. Native araçların uygun seçim
+kuralları panel/menüde paylaşılır. Boş seçim genel işlem izni değildir; Compound
+Path'in belgelenmiş seçim-yoksa-tüm-Objects davranışı ayrı sözleşmedir.
+Native Offset tam konturları ve seçili bağlı Edge zincirlerini işler.
+
+**Erişimde açık iş:** Edge araçları bugün **Edit → Edge (2) → Selection actions
+→ Topology · edge** altındadır; iki bölüm de kapalı gelir. Add Vertex, Trim,
+Extend ve Split sağ tıkta da vardır. Divide paneldedir, sağ tık eşliği henüz yoktur.
+Bu araçların uygulanmış olması görünürlük/keşfedilebilirlik işinin tamamlandığı
+anlamına gelmez; takip §9A.4'tedir.
+
+Sözleşmeler: [Edit/paint](spline-edit-and-paint.md),
+[native araçlar ve kabul sınırları](plans/spline-edit-native-tools-plan.md),
+[alt seçim/topoloji](spline-subobject-editing.md).
+
+### 9A.2. Dönüşüm, çizim, Boolean ve görünüm
+
+| İş | Uygulanan davranış | Korunan sınır |
+| --- | --- | --- |
+| Basic Shape → Spline / 2D Mesh | Sağ tık Convert iki hedefi sunar; adımlar Edit stack'inde görünür. Tek Shape'in son Bézier sınırı kullanılır; çoklu kapalı kaynak mevcut Boolean Union hesabından geçer. Mesh için Spline hesabı içeridedir, ayrı ara layer gerekmez. | İçbükeylik, delik/ada sahipliği ve yerleşim korunur. Mesh dolgu/üçgen yüzey üretir; açık çizgi sessizce kapatılmaz. Çoklu girdiler mevcut statik kaynak/parent/lifetime kurallarına tabidir. |
+| Spline çizimi ve ekleme | Auto Close varsayılan açık; kapanma algılanınca tamamlanır. Kapalıyken çizim sürer; Esc/sağ tık geçerli çizgiyi koruyarak bitirir. Add Spline + ile viewport veya Scene Explorer'dan mevcut girdiler alınır. | Attach/çizgi ekleme ile kapalı alan Boolean'ı aynı işlem değildir; kaynak/driver/referans korumaları sürer. |
+| Union / Subtract / Intersect / XOR | Toggle seçili Objects'e uygular; + sonraki girdiyi aktif işlemle ekler. Varsayılan native akış çözülen sonucu aynı parent kimliğinde edit edilebilir Spline'a indirger. | Union iç kenarları sonuçtan çıkarır; delikler ve ayrık adalar korunur. Soluk kaynak ghost'u ile belirgin sonuç sınırı ayrıdır. İşlem tek Undo'dur. |
+| Compound / Merge / Separate Paths | Compound exact konturları tek Object'te, evenodd fill kuralıyla toplar; Separate Paths adaları delikleriyle ayırır. İsteğe bağlı Non-Destructive Boolean kaynak recipe'sini saklar; Merge Paths sonucu parent'ın kendisine indirger, Separate Inputs kaynakları geri açar. | Kaynak recipe'sinden ayrılma ile geometri adalarını ayırma farklıdır. Boolean toleransla örneklenir; exact Bézier Boolean iddiası yoktur. |
+| Fill | No Fill, Solid, Linear/Radial/Angle/Reflected/Diamond Gradient, Pattern/Image; çoklu durak ve alpha | Kaynak görünümü yalnız Properties yönetir. Angle SVG çıktısı 720 vektör sektörle yaklaşıktır ve uyarı verir. |
+| Stroke | None/Solid/Gradient/Pattern; width/opacity; Solid/Dashed/Dotted; Inside/Center/Outside; Butt/Round/Square caps, Miter/Round/Bevel corners; dash/gap/sequence | Açık veya karma konturlarda Center kullanılır. Özel preset ve stroke clipboard henüz tamamlanmış değildir. |
+
+[Dönüşüm sözleşmesi](geometry-conversion.md), [Boolean ve paint ayrıntıları](spline-edit-and-paint.md)
+aynı renderer/bounds/portable/runtime sahiplerini kullanır. Mesh Smooth ve
+Delaunay/Grid Subdivision ayrı Mesh kategorisindedir; Spline araç listesine karışmaz.
+
+### 9A.3. Parametrik stack ve canlı Outline
+
+Genel **Modifier → Registry → sıralı Stack → Execute** altyapısı Spline ve Mesh
+kategorilerini ayırır; her satır kendi ayarlarını yönetir. **Modifier eklemek Edit
+moduna girmeyi gerektirmez.** Frame içinde sınırlı yüksekliğe sahip kaydırılabilir
+liste, üstte + Add modifiers, listenin altında Execute vardır. Ayar taslakları
+kaynak → etkin adımlar → sonuç sırasıyla doğrulanır; başarılı Execute tek Undo'dur.
+Add/toggle/reorder/remove/Bake kendi Undo adımlarını korur. Yeni modifier'ın hedefi
+transient alt seçim değil, kendi girdisindeki uygun geometri veya açık hedef listesidir.
+
+| Paket | Uygulanan modifier'lar | Kapsam |
+| --- | --- | --- |
+| Faz 1 — sekiz temel statik modifier | Offset Path, Round Corners, Path Simplify, Path Smoothing, Path Resample, Zig Zag, Pucker & Bloat, Repeater | Kaynak korunur; ayar, hedef, sıra, aç/kapat, silme, Execute ve Bake desteklidir. Round Corners Corner/Bézier Corner tiplerine göre çalışır; uygun mevcut dairesel yuvarlatmanın mutlak yarıçapını değiştirir, 1 px eşiği aramaz. |
+| Faz 2 — ilk bant teslimi | Stroke to Path (`strokeToPath`) | Gerçek kapalı bant/delik; width, alignment, cap/join/miter-limit ve arc-length dash. Üretilmiş sınırlar kaynak yerine doğrudan edit edilmez; açık Bake ile kalıcı geometriye çevrilir. |
+| Faz 2 — kaynak takip eden Outline | Outline (`liveOutline`) | Orijinal line/vertex/handle kayıtları kalır; Edit değişince bant otomatik güncellenir. Yeni Line/Object/layer oluşturmaz. Show source line geçici kılavuzdur; Outline enabled kalıcı ayardır. Bake Outline / Stroke to Path sınır vertex'lerini kalıcı yapar; Undo kaynak+recipe'yi geri getirir. |
+
+Canlı Outline ve Stroke to Path aynı sabit kalınlık/bant motorunu kullanır:
+köşe ve eğrilerde vertex yoğunluğu artar; çıktı toleransla sınırlı polyline'dır.
+Kaynak stroke'u varsayılan bant fill'idir; bağımsız band paint Properties'te
+Object hedefiyle düzenlenir. Kılavuz ve ghost PNG/SVG'ye girmez.
+
+Canlı kaynak düzenleme yalnız doğrudan Spline veya kaynak koruyan Convert Spline
+prefix'inden sonra tek son etkin sahip için açıktır. Native canlı Outline Apply,
+Object ya da o Object'in bütün kenarlarını ister; kısmi zincir henüz desteklenmez.
+Genel generated geometri korumaları sürer. Eski `offset`/`outline`/`chamfer`/`fillet`
+kayıtları korunur; yeni chooser'da native araç diye sunulmaz. Eski band kayıtları
+otomatik canlı kayda çevrilmez, dosya açılırken otomatik Bake yapılmaz.
+
+Hesap ve komut sahipleri: `src/lib/spline` native topoloji/modelleme/bant hesabı;
+`src/lib/modifiers` genel stack ve kategori adapter'ları; `src/lib/editor/spline`
+ve `src/lib/editor/modifiers` native komutlar; `src/components/splineEdit` panel ve
+ortak menü tanımlarıdır. İkinci solver/worker runner kurulmadı. Ayrıntılar:
+[Faz 1](spline-phase1-modifiers.md), [statik ilk paket](spline-static-modifiers.md),
+[bant geometrisi](spline-outline-band.md), [canlı kaynak sözleşmesi](spline-live-outline.md),
+[ortak Modifier mimarisi](../../src/lib/modifiers/README.md).
+
+### 9A.4. Kalan işler ve teslim sırası
+
+| Sıra / durum | İş | Bitiş koşulu / sınır |
+| --- | --- | --- |
+| 1 — açık UI kabulü | Edge araçlarının görünürlüğü ve panel/sağ tık eşliği | Trim, Extend, Divide ve Add Vertex kapalı iki bölüm aranmadan bulunabilir; Divide için sağ tık erişimi eklenir. Uygun olmayan seçim nedeni görünür; gerçek bağlı editörde kullanıcı akışı doğrulanır. |
+| 2 — Offset teslim edildi, kısmi canlı Outline açık | Kısmi Edge Offset ve canlı Outline | Yalnız seçili bağlı zincirler işlenir; stable kaynak hedefleri Split/Delete sonrasında doğru eşlenir. Legacy kalıcı bant API'sinin kısmi zincir desteği canlı kaynak desteği olarak sayılmaz. |
+| 3 — temel teslim edildi, Skew/Shear ileri fazda | Mirror, geçici edit pivot'u ve alt seçim Align/Distribute | Kaynak noktalar/kollar değişir; gerçek layer TRS/origin sabit kalır. Scene/Local referansı, delikler, seçim dışı geometri ve her işlem Undo ile doğrulanır. Genel nesne hizalama araçları bu kabulün yerine geçmez. |
+| Faz 2 — kalan Outline v2 | Bézier-fit/provenance, ayarlanabilir density ağırlıkları, stroke/outline preset ve clipboard | Mevcut sabit kalınlıklı adaptif polyline ve bağımsız paint korunarak ayrı kabul edilir. Mesh dönüşümünde Object band paint'inin per-face malzemeye aktarımı mevcut teslim değildir. |
+| Faz 2 — ileri modifier'lar | Variable Width, Boolean Paths modifier, eğrisel Zig Zag, Wiggle Paths ve Path Dynamics | Kaynak/operand sahipliği, deterministik seed/zaman ve bütçe gibi ilgili kontratlar ayrı teslimdir. Native Boolean bu eksik modifier'ın yerine tamamlanmış sayılmaz. |
+| Ertelendi — ilk fazı engellemez | Modifier parametre animasyonu ve canlı Outline animated source | Ayrı zaman/keyframe/cache/runtime kabulü gerekir; mevcut statik stack ve native araçlar bunu beklemez. Trim Paths mevcut Stroke Trim, Path Follow mevcut Motion/Follow Path akışında kalır. |
+
+Bu yerel Spline kuyruğu masaüstü/çıktı v0.6.0 veya ileri fizik v0.10.0 kapsamına
+kendiliğinden iş eklemez. Ayrıntılı [native araç planı](plans/spline-edit-native-tools-plan.md),
+[modifier fazları](plans/spline-modifier-phases-plan.md) ve
+[Outline v2](plans/spline-outline-band-v2-plan.md) sözleşmeleri korunur;
+Outline'ın eski Replace/Keep source tasarımı için güncel kaynak takip eden
+[canlı Outline düzeltmesi](plans/spline-live-outline-plan.md) esas alınır.
+
+### 9A.5. Kabul ve devir kaydı
+
+Önceki teslimlerde native geometri, CAS/lock/driver, Undo/Redo, clone ve portable
+kayıt; açık/kapalı/delikli konturlar, Bézier kolları, parent dönüşümleri, layer
+TRS/origin ve seçim dışı kaynak korunumu denetlendi. Faz 1 kapanışında **577 test
+dosyası / 4.147 test ve 17 Chrome kabul grubu**; son canlı Outline tesliminde
+**580 test dosyası / 4.178 test ve 10 Chrome kabul grubu** geçti. Typecheck,
+MCP/CLI/production build ve gerçek PNG/SVG kontrolü ilgili teslim kayıtlarındadır.
+Bunlar önceki teslim kanıtlarıdır; 24 Kasım doküman güncellemesinde yeniden test
+ve build çalıştırıldığı anlamına gelmez.
+
+Chrome kabulleri üretim bileşenlerini kullanan bağımsız fixture'lardır. Son
+kullanıcı MCP oturumunda Edge araçlarının görünürlüğü doğrulanamadı; bağlı sahne
+kabulü tamamlandı diye kaydedilmez. Tekrar üretme girişleri
+`scripts/perf/spline-point-tools.mjs`, `spline-component-tools.mjs` ve
+`spline-band.mjs`; kapsam/sınırlar yukarıdaki teslim belgelerindedir.
+
+### 9A.6. Mesh Vertex / Edge / Face — 24 Kasım 2026
+
+Mesh paneli Vertex/Edge/Face girişleri, mantıksal yüz sayıları, aktif seçim ve
+mevcut Mesh modifier stack'ini gösterir. 3, Mesh'te Face'i; Spline'da Object'i
+açar. Grid quad'ları tek yüzdür; sadece renderer'a ait iç diyagonaller seçilmez.
+Kalan Delaunay ve sınır geçiş triangle'ları ayrı yüz olarak kalır. Bütün Mesh
+Edit modlarında vertex işaretleri görünür; seçili kenar ve yüzler kırmızıdır.
+Face hareketleri aynı Edit Mesh üzerinde, her hareket ayrı Undo ile birikir;
+gerçek TRS/origin, UV ve oturum ghost'u korunur. Ctrl/Cmd+A aktif bileşenleri seçer.
+
+Temel pakette Face modunda Delete Face, Edge modunda Split Edge, Flip Edge ve
+Fill panel ve sağ tıktan kullanılabilir. Pen, Freehand ve Spiral doğrudan Spline
+oluşturur. Spline ve Mesh alt seçimlerinde Scene/Local hizalama, dağıtma,
+Grid/Vertex Snap ve geçici edit pivot’u vardır. Spline Object/Edge seçimleri
+aynalanabilir ve aynı katmana çoğaltılabilir. Mesh topoloji ve Pen → Mesh
+kabulü 24 Kasım'da üretim editöründe geçti. [Güncel Mesh teslimleri ve kabul durumu](#92-mesh2d-veri-modeli-ve-spline-dönüşümü)
+
+Bu temel tam Poly araç takımı değildir. Kullanıcının Vertex/Edge/Face/Object
+araç ve modifier listesi [ayrı teslim planında](plans/mesh2d-edit-modes-plan.md)
+mevcut/planlı olarak tutulur. Sonraki her topoloji işlemi için
+[PDF teknik referansı ve uyarlama kaydı](mesh2d-topology-reference.md) tekrar
+okunur: half-edge/Euler, attribute remap, UV-corner ve source/evaluated sözleşmeleri.
+Y-up örnekleri mevcut Y-down kayda uyarlanır; Delaunay/Grid algoritma seçimi korunur.
 
 ## 10. Kaynak kodla uyumluluk incelemesi — 6 Kasım 2026
 
 **Sonuç:** yol haritası mevcut 2D mimarisiyle uyumludur; yeni özellikler hazır altyapı kabul edilerek doğrudan açılabilecek durumda değildir. Aşağıdaki eksikler gelecekteki işler için entegrasyon koşullarıdır. Uygulanmamış bir özelliğin kaynakta bulunmaması tek başına plan çelişkisi değildir. Bu inceleme çalışan checkout'a dayanır; uygulama kodu değiştirilmedi.
 
-Bu bölüm uygulama öncesi inceleme kaydıdır. Daha sonraki §12 dilimi MaskRenderer'ın kullanılmayan cache bağımlılığını surface-provider/lease ile değiştirmiştir; tablodaki başlangıç tespiti bunun gerekçesidir.
+Bu bölüm uygulama öncesi **tarihsel 2D inceleme kaydıdır**; tablo eski
+öncelik etiketleri taşıyabilir ve güncel kuyruğun yerini almaz. Daha sonraki
+§12 dilimi MaskRenderer'ın kullanılmayan cache bağımlılığını
+surface-provider/lease ile değiştirmiştir; tablodaki başlangıç tespiti
+bunun gerekçesidir.
 
 ### 10.1. Yeniden kullanılabilen temel
 
 | Alan | Kaynakta doğrulanan temel | Sınır / karar |
 | --- | --- | --- |
-| Tek 2D çalışma alanı | [Mode bootstrap](../../src/lib/modes/bootstrap.ts) yalnız `Animation2DDescriptor` kaydediyor. | Poly/Blob/cloth/model katmanları mevcut `2danimation` içinde eklenebilir; tam 3D modu önkoşul değildir. |
+| Tek 2D çalışma alanı | [Mode bootstrap](../../src/lib/modes/bootstrap.ts) yalnız `Animation2DDescriptor` kaydediyor. | Mesh2D/Blob/cloth katmanları mevcut `2danimation` içinde geliştirilir; 3D Poly/modelleme bu planın parçası değildir. |
 | Yeni nesne/factory/inspector | [LayerDefinition](../../src/lib/registry/LayerDefinition.ts), [LayerRendererRegistry](../../src/lib/registry/LayerRendererRegistry.ts) ve schema temeli var. | Yeni katman için uygun genişletme noktaları; sınırlı type union, seçim, asset ve export ayrıca genişler. |
 | Ortak çizim | Editör, raster ve [web player adapter'ı](../../src/lib/player/RenderAdapter.ts) `CanvasRenderer` kullanıyor. | Yerel mesh/contour veya GPU canvas çıktısı bu kompozisyona bağlanabilir. Sadece yeni moda ait renderer eklemek mevcut 2D'yi genişletmez. |
 | Nokta düzenleme ve koordinatlar | Spline normalized stable ID'ler, immutable editler, `Matrix2D` ve local/world dönüşümleri var. | UX/command yaklaşımı ve geometri yardımcıları paylaşılır; spline konturları iç yüz/UV topolojisi yerine kullanılmaz. |
@@ -530,26 +1259,28 @@ Bu bölüm uygulama öncesi inceleme kaydıdır. Daha sonraki §12 dilimi MaskRe
 
 | Öncelik / alan | Kod kanıtı ve pratik etkisi | Planın zorunlu uygulama koşulu |
 | --- | --- | --- |
-| P0 — export sözleşmesi | [RuntimeOptimizer](../../src/lib/export/RuntimeOptimizer.ts) çıktı listesinde assets/stateMachines/parameterWires/initialState yok. [exportToRuntime](../../src/lib/export/runtimeExport.ts) farklı alan/politika kullanıyor; parameterWires taşımıyor. | Öncelik 1'de canonical compiler ve eski çıktı loader'ları tamamlanır. Component/rig/clip metadata'sı kayıplı yola eklenip desteklenmiş sayılmaz. |
+| P0 — export sözleşmesi | [RuntimeSceneCompiler](../../src/lib/export/runtime/RuntimeSceneCompiler.ts), RuntimeOptimizer ve `exportToRuntime` için assets/stateMachines/parameterWires/initialState ile `hidden` dahil ortak alan sınırını sağlıyor; 32-fragment ve full-turn physics fixture parity'si geçti. | File/JSON/MCP exact options/profile, versioned eski çıktı loader'ı ve package/capability manifest'i tamamlanır. Component/rig/clip metadata'sı kayıplı yola eklenip desteklenmiş sayılmaz. |
 | P0 — çalışma kümesi ve tamponlar | [useAssetCache](../../src/app/hooks/useAssetCache.ts) sahne asset'lerini dolaşıp medya yükler. [CanvasRenderer](../../src/lib/render/CanvasRenderer.ts) visibility filtresi zaman/hidden/solo içindir; viewport paint culling yoktur. Mask/efekt yolu kompozisyon boyutunda yüzeyler üretir. | Öncelik 0'daki demand loading, bağımlılık güvenli paint culling, pool/ROI ve ortak resource ledger korunur. Kaynak belge/undo verisini görünmedi diye silme yapılmaz. |
 | P0 — cache varlığı yeterli değil | [OffscreenCanvasCache](../../src/lib/render/OffscreenCanvasCache.ts) 64 MiB LRU sunar; [MaskRenderer](../../src/lib/mask/MaskRenderer.ts) constructor'da bunu almasına rağmen render'da doğrudan `createOffscreen` kullanır. | Bütçe nesnesinin bulunması bütün yüzeylerin bütçeye girdiği kanıtı değildir. Acquire/release/admission gerçek tahsis yollarına bağlanır; maliyet çift sayılmaz. |
-| P1 — kapalı tipler ve şema | [LayerType/Layer](../../src/lib/types/core.ts) içinde polyMesh/blobSurface/deformableMesh/scene3d yok; [AssetType](../../src/lib/types/media.ts) model veya binary simulation clip içermiyor. | Her feature type/schema/default/registry/validator/import/save/runtime sürümünü birlikte genişletir. API adları gerçekleşmeden capabilities içinde ilan edilmez. |
-| P1 — clone/instance görsel verisi | [InstanceResolver](../../src/lib/clone/InstanceResolver.ts) kaynak görsel alanlarını açık whitelist'ten alır; [CloneSingleLayer](../../src/lib/clone/CloneSingleLayer.ts) instance verisini ayrı strip listesiyle temizler. | Yeni mesh/blob/model/clip alanları iki yola ve bağımlılık/ID eşlemelerine eklenir; payload copy/share politikası açıktır. Metadata eklemek instance desteğini otomatik sağlamaz. |
-| P1 — nihai geometri, seçim ve culling | [resolveLayerWorldBounds](../../src/lib/geometry/resolveLayerWorldBounds.ts) mevcut türlere özel dallar içerir; bilinmeyende null döner, stroke/efekt padding'ini dışarıda bırakır. Varsayılan değerlendirme saf timeline override'ıdır. | Poly/deforme mesh/Blob için geometry bounds ve hit-test, render için ayrıca konservatif paint bounds eklenir. Component/layout/IK/cache sonrası nihai frame aynı biçimde renderer, seçim ve export'a verilmelidir. |
+| P1 — kapalı tipler ve şema | [LayerType/Layer](../../src/lib/types/core.ts) içinde mesh2d/blobSurface/deformableMesh yok; [AssetType](../../src/lib/types/media.ts) binary simulation clip içermiyor. | Her 2D feature type/schema/default/registry/validator/import/save/runtime sürümünü birlikte genişletir. API adları gerçekleşmeden capabilities içinde ilan edilmez. |
+| P1 — clone/instance görsel verisi | [InstanceResolver](../../src/lib/clone/InstanceResolver.ts) kaynak görsel alanlarını açık whitelist'ten alır; [CloneSingleLayer](../../src/lib/clone/CloneSingleLayer.ts) instance verisini ayrı strip listesiyle temizler. | Yeni mesh/blob/clip alanları iki yola ve bağımlılık/ID eşlemelerine eklenir; payload copy/share politikası açıktır. Metadata eklemek instance desteğini otomatik sağlamaz. |
+| P1 — nihai geometri, seçim ve culling | [resolveLayerWorldBounds](../../src/lib/geometry/resolveLayerWorldBounds.ts) mevcut türlere özel dallar içerir; bilinmeyende null döner, stroke/efekt padding'ini dışarıda bırakır. Varsayılan değerlendirme saf timeline override'ıdır. | Mesh2D/deforme mesh/Blob için geometry bounds ve hit-test, render için ayrıca konservatif paint bounds eklenir. Component/layout/IK/cache sonrası nihai frame aynı biçimde renderer, seçim ve export'a verilmelidir. |
 | P1 — final render hedefi | [RasterExportEngine](../../src/lib/export/raster/RasterExportEngine.ts) normal composition çözünürlüğünde render edip `drawImage` ile büyütür. Plugin `RenderContext` Canvas2D ve displayScale taşır; ayrı output scale/kalite/renk sözleşmesi yoktur. | FQ0–FQ2 açık logical/backing/output ölçek modeli ekler; clear/background, mask/effect/particle/mesh hedefleri aynı frame request'i izler. Ana canvas'ı büyütmek tek başına yeterli değildir. |
-| P1 — FP16 ve yerel derinlik | Mevcut plugin arayüzü `CanvasRenderingContext2D`; [GPU offscreen helper](../../src/lib/render/OffscreenCanvasCache.ts) `depth:false` ile açılıyor. | Uçtan uca FP16 mevcut Canvas2D işlemlerine bayrak eklenerek sağlanmaz; sonraki backend diliminde doğrulanır. Kumaş/model için gereken yerel depth ayrı adapter/context ayarıdır; particle helper'ının tüm tüketicileri global değiştirilmez. |
+| P1 — FP16 ve yerel derinlik | Mevcut plugin arayüzü `CanvasRenderingContext2D`; [GPU offscreen helper](../../src/lib/render/OffscreenCanvasCache.ts) `depth:false` ile açılıyor. | Uçtan uca FP16 mevcut Canvas2D işlemlerine bayrak eklenerek sağlanmaz; sonraki backend diliminde doğrulanır. Kumaş için gereken yerel depth ayrı adapter/context ayarıdır; particle helper'ının tüm tüketicileri global değiştirilmez. |
 | P1 — saat ve sprite | [ChronoPlayer](../../src/lib/player/ChronoPlayer.ts) SM timeline'larını global zamanla değerlendirir. [FrameSequenceRendererPlugin](../../src/lib/render/renderers/FrameSequenceRendererPlugin.ts) kareyi `ctx.timeMs` üzerinden seçer. | Bağımsız component saati öncelik 2'de somutlaşır; karakter aşamasına ertelenmez. Karakter aynı zaman sözleşmesini SM giriş/blend/completion için genişletir. Planlanan optional frameIndex ve eski zamana bağlı fallback birlikte test edilir. |
 | P1 — hesap işi ve binary cache | GIF worker client'ı ve MCP request queue'su var; genel simulation job/bake/cache deposu yok. [MCP limitleri](../../src/lib/mcp/protocol.ts) 32 MiB scene / 50.000 keyframe, QuickJS 2 s / 32 MiB sınırı koyuyor. Script okumaları JSON kopyası döndürüyor. | İlk rigid bake içinde gerçek job/cancel/stale kurulur; ağır triangulation/surface/solver işleri host worker job'ıdır. Dense sonuç binary asset/chunk + küçük manifest olarak taşınır; her frame scene JSON/undo/QuickJS içinde kopyalanmaz. Limit artırmak ana çözüm değildir. |
-| P1 — encoder/capability | [Exporter2D](../../src/lib/export/Exporter2D.ts) GIF/WebM metotları hata atan placeholder, HTML yolu da placeholder; gerçek HTML yolu ayrı modülde. [SVGExporter](../../src/lib/export/vector/SVGExporter.ts) yalnız shape/path/text/group destekliyor. | Menüler ve queue yalnız gerçek destek gösterir. Yeni nesne için runtime/render capability veya açık bake/fallback gerekir. Poly/Blob'u registry'ye eklemek SVG/Lottie desteği sağlamaz. |
+| P1 — encoder/capability | [Exporter2D](../../src/lib/export/Exporter2D.ts) GIF/WebM metotları hata atan placeholder, HTML yolu da placeholder; gerçek HTML yolu ayrı modülde. [SVGExporter](../../src/lib/export/vector/SVGExporter.ts) yalnız shape/path/text/group destekliyor. | Menüler ve queue yalnız gerçek destek gösterir. Yeni nesne için runtime/render capability veya açık bake/fallback gerekir. Mesh2D/Blob'u registry'ye eklemek SVG/Lottie desteği sağlamaz. |
 | P1 — resource panel entegrasyonu | `resourceMonitor`, [2D descriptor](../../src/lib/modes/animation2d/descriptor.ts) ve [page/dock registry](../../src/app/page.tsx) içinde kayıtlı; proje geneli canvas/medya/PCM/CPU/WebGL temel adapter'ları uygulandı. | Eksiksiz residency/budget ledger, diğer GPU pipeline'ları, jobs ve ayrıntılı trace işleri bekliyor. Telemetri scene/history metadata'sı yapılmaz; eski yerleşimler eksik yeni/kapalı panel nedeniyle sıfırlanmaz. |
 
 ### 10.3. Sıraya etkisi ve tamamlanma koşulu
 
-Bu incelemenin eski sıra kaydı, 8 Kasım kullanıcı kararıyla §1 ve [onaylanan sıra belgesi](plans/geometry-material-boxed3d-sequence.md) tarafından güncellenmiştir. Teknik geometri ve source koruma gereksinimleri geçerliliğini korur.
+Bu incelemenin eski sıra kaydı, 8 Kasım kararı ve 17 Kasım kapsam ayrımıyla
+§1 tarafından güncellenmiştir. Teknik geometri ve source koruma gereksinimleri
+geçerliliğini korur; 3D teslimleri [ayrı plandadır](production-3d-roadmap.md).
 
-Export aşamasında capability/schema/asset extension noktaları tasarlanır; gelecekteki tüm solver'ların binary formatları o aşamada uygulanmaz. Component C0/C1'de bağımsız local time ve türetilmiş frame görünümü ilk gerçek kullanımda doğrulanır. Bu altyapı Character/Poly/cloth/fluid tarafından genişletilir. Böylece aynı saat veya frame pipeline'ı tekrar yazılmaz.
+Export aşamasında capability/schema/asset extension noktaları tasarlanır; gelecekteki tüm solver'ların binary formatları o aşamada uygulanmaz. Component C0/C1'de bağımsız local time ve türetilmiş frame görünümü ilk gerçek kullanımda doğrulanır. Bu altyapı Character/Mesh2D/cloth/fluid tarafından genişletilir. Böylece aynı saat veya frame pipeline'ı tekrar yazılmaz.
 
-POL0/POL1; veri, editor, clone, bounds ve render entegrasyonuyla birlikte tamamlanır. POL2 gelişmiş Delaunay/CDT/quad/doku ve POL3 kompleks fracture ayrı dilimlerdir. BLOB0/BLOB1; implicit field, açık merge grubu, değişken component/delik, düzenleme ve bounds/render desteğini tamamlar. BLOB2 fluid cache adapter'ıdır; ham PBF doğruluk prototipini bekletmez. Mevcut seed'li blob primitive veya spline editor'ü bu teslimlerin yerine geçmiş sayılmaz.
+MESH0–MESH2; veri, spline/grid dönüşümü, clone, bounds, textured/deformable render, cache playback ve portable entegrasyonuyla birlikte tamamlanır. BLOB0/BLOB1; implicit field, açık merge grubu, değişken component/delik, düzenleme ve bounds/render desteğini tamamlar. BLOB2 fluid cache adapter'ıdır; ham PBF doğruluk prototipini bekletmez. Mevcut seed'li blob primitive veya spline editor'ü bu teslimlerin yerine geçmiş sayılmaz.
 
 Yeni nesne tesliminde asgari kanıt: oluştur → düzenle/animasyonla → parent/instance/clone → seç/bounds ölç → mask/efektle render → undo/redo → portable kaydet/aç → desteklenen player/export'ta aynı frame. Desteksiz hedef açık tanı verir. Ayrıca job iptali/stale sonuç ve sınırlı kaynak yaşam döngüsü kontrol edilir. Yeni solver'ın doğruluğu kendi fizik fixture'larıyla ayrıca ölçülür.
 
@@ -557,7 +1288,7 @@ Yeni nesne tesliminde asgari kanıt: oluştur → düzenle/animasyonla → paren
 
 Çalıştırılan mevcut testler: `LayerRegistry`, `animationRendering`, `CanvasRenderer.selection`, `resolveLayerWorldBounds`, `spline/edit/mutations`, `SplineInstance`, `runtimeExport`, `ChronoPlayer`. Sonuç: **8 test dosyası / 70 test geçti** (`npm test -- --maxWorkers=2` ve bu dosyalar).
 
-Bu sonuç mevcut altyapının ilgili davranışları içindir; henüz yazılmamış Poly/Blob/cloth/fluid veya gelecekteki compiler performansının kanıtı değildir. Yeni test yazılmadı, kaynak kod/bağımlılık veya çalışan sahne değiştirilmedi. Doküman yerel bağlantı/anchor ve biçim kontrolleri ayrıca yapılır. Bu plan incelemesi için Next/MCP build çalıştırılmadı; uygulama değiştiğinde repo kontrolleri zorunludur.
+Bu sonuç mevcut altyapının ilgili davranışları içindir; henüz yazılmamış Mesh2D/Blob/cloth/fluid veya gelecekteki compiler performansının kanıtı değildir. Yeni test yazılmadı, kaynak kod/bağımlılık veya çalışan sahne değiştirilmedi. Doküman yerel bağlantı/anchor ve biçim kontrolleri ayrıca yapılır. Bu plan incelemesi için Next/MCP build çalıştırılmadı; uygulama değiştiğinde repo kontrolleri zorunludur.
 
 ## 11. Geliştirme ve devir standardı — 6 Kasım 2026
 
@@ -567,10 +1298,14 @@ Bu yol haritasındaki bütün işler [AGENTS.md içindeki canonical mühendislik
 - Yeni ortak işlevden önce mevcut uygulama ve testleri aranır. Uygun yardımcı kullanılır; eksik yetenek uyumlu genişletme veya açıkça farklı implementation/version ile karşılanır. Sıralama gibi farklı algoritmalar ortak contract ve ilgili implementasyonlarında çözülür; çağıran feature'larda tekrar yazılmaz.
 - Sınıf başına hedef en fazla 300 satır uygulama kodudur; açıklama/boş satır ve generated kod hariçtir. İstisna gerekçelendirilir. Eski büyük sınıflar ilgili iş kapsamında kademeli ayrılır; yalnız satır sayısı için anlamsız parçalama yapılmaz.
 - Core temel sözleşmeleri, domain utility'leri ortak yardımcıları, converter'lar temsil dönüşümlerini, adapter'lar platform/render/solver bağlantısını üstlenir. Mevcut geometry/math ve diğer domain sahipleri yeni paralel utility paketlerinden önce değerlendirilir.
-- Poly bağlantı/topoloji, matematik, UV/buffer hazırlığı ve doğrulama ortak kullanılabilir. 2D/3D vertex konumları, affine/matrix/projection, normals/depth ve renderer ayrıntıları açık adapter/payload sınırlarında kalır. Bu paylaşım ilkeleri tam game-engine/3D modu geliştirmesini başlatmaz.
+- Boyuttan bağımsız index/connectivity, adjacency, topology fingerprint ve
+  doğrulama [2D–3D ortak temelinden](shared-2d-3d-foundations.md) kullanılabilir.
+  Mesh2D konumu/UV'si ile 3D normal/tangent/skin/rest verisi ve renderer
+  tamponları açık adapter/payload sınırlarında kalır; [3D Poly/modelleme
+  işleri](production-3d-roadmap.md) bu planın teslimi değildir.
 - Sınıf/fonksiyonların üzerinde sorumluluk, girdi/çıktı, koordinat/birim/zaman, ownership/mutation, yaşam döngüsü, hata/limit ve gerektiğinde algoritma açıklaması bulunur. Açıklamanın koddan uzun olması geçerlidir. Yeni geliştirici repo dışı konuşmalara ihtiyaç duymadan entry point, bağımlılık, veri akışı ve kabul ölçütlerini anlayabilmelidir.
 
-Her feature tesliminde yeniden kullanılan modüller, yeni/genişleyen public sözleşmeler, gerekçeli istisnalar, kayıt/uyumluluk etkisi ve doğrulama sonucu belgelenir. Sayısal doğruluk, görsel QA, kaynak bütçesi ve taşınabilirlik kabul koşulları korunur. Ana geliştirme sırası değişmez.
+Her feature tesliminde yeniden kullanılan modüller, yeni/genişleyen public sözleşmeler, gerekçeli istisnalar, kayıt/uyumluluk etkisi ve doğrulama sonucu belgelenir. Sayısal doğruluk, görsel QA, kaynak bütçesi ve taşınabilirlik kabul koşulları korunur. Güncel 2D sıra §1'dedir.
 
 ## 12. İlk optimizasyon uygulaması — 7 Kasım 2026
 
@@ -2367,3 +3102,1033 @@ MCP build ve production build geçti. Önceden var olan 47 çalışma dosyası k
 Kullanıcının “3D geliştirmesinden önceki işleri bitir” sınırında duruldu.
 Poly, material/UV, fizik/kumaş/Blob, Export E0, CFX ve ikinci genel optimizasyon
 [onaylı sırayı](plans/geometry-material-boxed3d-sequence.md) korur.
+
+### 12.65. v0.5.0 2D geliştirmelerinin MCP yüzeyi — 19 Kasım 2026
+
+`codex/mesh2d-mesh0` branch'inde mevcut Mesh2D, final render ve ilk fizik bake
+dilimleri gerçek MCP araçlarına bağlandı. Standard katalog artık 49, legacy
+uyum envanteri 86 araçtır.
+
+- `create_mesh2d_from_source`, `regenerate_mesh2d`, `set_mesh2d_texture`,
+  `set_mesh2d_pins`, `set_mesh2d_deformation` aynı domain generator/authoring
+  helper'larını ve native command/undo yolunu kullanır; native batch'e girebilir.
+- `bake_rigid_bodies` ve `bake_voronoi_fracture` solver hazırlığını async yürütür,
+  bağlantı iptalini ve son revision kontrolünü uygular, normal track + provenance
+  kayıtlarını tek source transaction'ında yayınlar. Uzun iş oldukları için
+  `batch_actions` alt eylemi değildir.
+- `render_2d` source'u değiştirmez. `auto` ile Chorono Render bağlantısı
+  önceliklidir; yoksa built-in PNG/PNG-sequence çıktı yazılır. Dış MP4 akışı
+  frame transferi sonrasında Chorono Render tarafından bitirilir; ses ayrıca
+  WAV olarak üretilir ve bu araç henüz mux yapmaz.
+
+Kalan MCP fizik işi, mevcut doğrudan/iptal edilebilir çağrıyı job kimliği,
+ilerleme/status, kullanıcı Cancel ve ayrı Preview/Apply ürün akışına taşımaktır.
+Kalan canlı kabul için browser editöründe **MCP → Connect this editor** yapılmalı;
+fixture'lar gerçek `render_preview`, `validate_scene` ve portable save ile
+incelenmelidir. Canonical skill ve MCP rehberi bu sınırlarla güncellendi. Bu
+19 Kasım açık maddesi aşağıdaki §12.66'da tamamlandı.
+
+### 12.66. Voronoi canlı kabulü ve rigid Worker sınırı — 21 Kasım 2026
+
+`codex/mesh2d-mesh0` çalışma ağacında sıradaki iki fizik işi tamamlandı. Eski
+Voronoi kabul fixture'ı yüklenirken `generation:fragment:n` biçimindeki
+kimliklerin portable sahne kimliği sözleşmesini ihlal ettiği görüldü. Fracture
+compiler v2; generation, seed ve fragment kimliklerini ASCII `\w`/tire ve 128
+karakter sahne sınırı içinde üretir. Compiler v1 manifestleri okunabilir;
+ancak kolon içeren eski fragment kimlikleri güncel sahneye eklenebilir kabul
+edilmez. Tarihsel dosya silinmedi, yeni v2 fixture onun yerini aldı.
+
+Rigid solver yürütmesi `RigidBodySimulationExecutor` sözleşmesi arkasına alındı.
+Browser varsayılanı bir defalık dedicated Worker'dır; ready handshake, tick
+progress, cooperative cancel, deadline, aktarılabilir `Float64Array` buffer'lar
+ve bütün çıkışlarda listener/timer/Worker temizliği uygulanır. Worker olmayan
+ortam aynı sabit-adım runner'ı bounded-yield inline fallback olarak kullanır.
+Track compiler, preview bütçesi ve atomik sahne commit'i ana sahiplerinde kaldı;
+dense solver buffer'ları scene JSON/history içine girmez.
+
+Bağlı gerçek editörde temiz `900×500`, 3 saniyelik kabul sahnesi üretildi.
+Seed `20261121`, 16 fragment, 800 ms olay zamanı ve
+`voronoi-worker-v2` generation kimliğiyle alınan bake raporu
+`execution: worker`, 360 tick, 91 sample, 18 body, 68 track ve 4.675 keyframe
+verdi; recipe hash `e66b64a673c300aa`, topology hash `05b945bdf7909921`.
+0/799/800/1200/2500 ms gerçek PNG önizlemelerinde tek kaynak, atomik görünürlük
+değişimi, fragment–fragment/zemin çarpışması ve durulma incelendi.
+
+- Portable proje:
+  `projects/voronoi-fracture-worker-v2-acceptance-2026-11-21.chorono.json`
+  (`65d82ab1f21d7e5f5e96085ed23f121c25f8f9614a17c1811891a6ca444683f1`).
+- Auto render:
+  `projects/exports/voronoi-fracture-worker-v2-1200ms-2026-11-21.png`
+  (`5e2fda3b9e20a1452ee6f0a0aab4f5a39702268d479ae7d830369464f0dd82b7`).
+  Dış Chorono Render kapalı olduğundan beklenen açık uyarıyla built-in backend
+  seçildi.
+- Save → load turu sonrasında sahne `valid: true`, warnings boş ve aynı 1200 ms
+  görüntüsüyle doğrulandı.
+- Doğrulama: 415 test dosyası / 3.172 test, TypeScript, MCP build ve production
+  build geçti. Build yalnız önceden bilinen `applicationBuildInfo.ts`
+  named-export uyarılarını verdi.
+
+21 Kasım devamında `Physics` dock'una Rigid / Fracture / Particle sekmeleri,
+body–static collider seçimi, dünya/malzeme/hız ve Voronoi alanları eklendi.
+Hazırlanan dense cache kaynak sahneyi değiştirmeden scrub edilebilir SVG
+önizlemesinde incelenir; aynı workspace job'u ayrı `Jobs & Bake` dock'unda
+progress, stale/error, Cancel, Apply ve Discard durumlarıyla görünür. Apply
+mevcut atomik rigid/fracture komutlarını kullanır. İlk UI dilimi root uniform
+rectangle kaynaklarla sınırlıdır; Particle sekmesi mevcut görsel emitter
+paneline yönlendirir ve particle-body solver varmış gibi davranmaz.
+
+Ürün UI'ı `http://127.0.0.1:2010` üzerindeki izole editörde de kabul edildi;
+2000 portundaki başka proje değiştirilmedi. İki rectangle'lı kaynak sahnede
+Rigid preview `91` sample / `2` body / `273` keyframe raporladı, dock
+değişiminde aynı Worker işi korundu ve Discard sahneyi değiştirmedi. Ardından
+seed `20261121`, 16 fragment ve 800 ms olaylı Fracture preview `91` sample /
+`18` body / `4.675` keyframe raporladı. Apply sonrası sahne 18 layer oldu;
+tek Undo ile 2 layer'a, Redo ile tekrar 18 layer'a döndü. 1200 ve 2500 ms
+gerçek PNG'leri incelendi, `validate_scene` revision 33 için `valid: true` ve
+uyarısız sonuç verdi, tarayıcı console error kaydı boş kaldı. Portable kabul
+dosyası `projects/physics-ui-acceptance-2026-11-21.chorono.json` olarak
+kaydedildi. Bu UI durum dosyası 2010 kabul çalışma alanındaki önceki iki
+fracture provenance manifestini de korur; temiz, tek-manifestli canonical
+fixture hâlâ
+`projects/voronoi-fracture-worker-v2-acceptance-2026-11-21.chorono.json`'dır.
+Hızlı işte Cancel düğmesini zamanında yakalama ve ayrı rigid Apply turunun
+kanıtı hâlâ manuel kabul matrisinde açık tutulur.
+
+Bu kayıttaki kalıcı MCP job ve ayrı rigid Apply açıkları aşağıdaki §12.67'de
+kapatıldı. Canlı Worker işi çok hızlı olduğundan running durumunda Cancel
+ekran kanıtı manuel kabul matrisinde açık kalır.
+
+### 12.67. Kalıcı MCP bake job ve insan inceleme UI'ı — 21 Kasım 2026
+
+Rigid/Voronoi hazırlığı tek çağrıda source'a yazmak zorunda değildir. Yeni
+bağlantı-sahipli akış `prepare_rigid_body_bake` veya
+`prepare_voronoi_fracture_bake` ile tab-local bir `bakeJob.jobId` üretir;
+`get_bake_job`, `preview_bake_job`, `cancel_bake_job`, `discard_bake_job` ve
+`commit_bake_job` aynı kaydı yönetir. Prepare kaynak revision/token'ına bağlanır
+ama scene/history yazmaz. Commit hemen öncesindeki güncel kaynak okumasını ister
+ve tek undo transaction'ı yayınlar. MCP bağlantısı kapanınca sahip olduğu aktif
+işler iptal edilir; başka bağlantı aynı job kimliğini okuyamaz.
+
+`MCPPhysicsBakeJobManager` dense preview'ı React state'e kopyalamadan tutar ve
+kaynak değişikliğini editör commit aboneliğinden izler. Aynı tabdaki
+**Jobs & Bake** paneli workspace ve MCP işlerini tek listede gösterir. Queue
+seviyesinde tek atomik live status bölgesi kullanılır; kartlarda görünür metin,
+progress, inline error, 44 px eylemler, async double-submit koruması ve
+`Review preview / Apply / Discard / Cancel / Remove` akışı vardır. Panelden
+Apply normal insan komut/history yolunu kullanır. Güvenli yaşam döngüsü
+araçlarıyla standard katalog 58, legacy katalog 95 çağrılabilir araçtır.
+
+Yeni production build `http://127.0.0.1:2010` üzerinde sınandı; 2000 portundaki
+başka proje çalışmaya devam etti. Flat `add_layer/update_layer` sözleşmesindeki
+0..1 `fillOpacity`, modelin 0..100 yüzdesine tek yardımcıyla çevrildi. Blue,
+red ve floor katmanlarının üçünde de internal opacity `100` okundu ve gerçek
+PNG'de görünürlük doğrulandı. Yeni kırmızı rigid box için persistent Worker
+preview 25 sample, 2 body, 75 keyframe ve 12,7 KiB retained preview raporladı.
+UI'dan Apply sahneyi 6 track/150 keyframe'e çıkardı; tek Undo 3/75'e, Redo
+yeniden 6/150'ye döndürdü. `validate_scene` revision 4 için `valid: true`,
+warnings boş ve browser console error listesi boştu. Portable kanıt:
+`projects/mcp-bake-job-ui-acceptance-2026-11-21.chorono.json`
+(`sha256 2f4dfcd8ac477e3c7b35655a3798ec53a75b32a90286a40e5433fe3a04398443`).
+
+Doğrulama **418 test dosyası / 3.185 test**, `npx tsc --noEmit`,
+`npm run mcp:build` ve `npm run build` ile geçti. Production build yalnız
+önceden bilinen `applicationBuildInfo.ts` named-export uyarısını verdi.
+
+Bu kayıtta sıradaki olan dünya-uzayı ve olay-korumalı keyframe sadeleştirme
+aşağıdaki §12.68'de; generated track/layer/topology sahipliğini koruyan güvenli
+Re-bake / Clear Bake ise §12.69'da tamamlandı. Güncel sıradaki fizik işi
+Canvas tanıları (§12.70), image→Mesh2D fragment görünümü ve kaynak UV korunumu
+(§12.71) ile seam/mask kalite ölçümü (§12.72) sonrasında darbe/temas fracture
+ve artistic explosion tetikleriydi; bunlar §12.73'te tamamlandı.
+
+### 12.68. Olay-korumalı rigid keyframe sadeleştirme — 21 Kasım 2026
+
+Rigid bake artık x/y/açıyı birbirinden bağımsız normalize kanallar olarak
+seyreltmez. `RigidPoseKeyframeSimplifier`, üç kanalı tek poz örneği olarak
+değerlendirir; renderer'ın gerçek lineer zaman interpolasyonunu kullanır ve
+rectangle köşeleri veya convex collider vertex'lerinin dünya-uzayı sapmasını
+ölçer. Varsayılan sınırlar `0,5 px` ve unwrap edilmiş açı için `0,25°`'dir.
+Başlangıç/son, fracture, contact start/end ve sleep start/end anları ile bu
+anların iki dense komşusu zorunlu tutulur. Karşılaştırma bütçesi aşılırsa
+yaklaşık sonucu sessizce yayınlamak yerine iş açık hatayla durur.
+
+Matter backend collision/sleep event'lerini kararlı body kimlikleri ve tam
+fixed tick zamanı ile üretir. Worker istemcisi event türünü, tick/zaman
+eşliğini, body sahipliğini, cardinality'yi ve contact kimlik sırasını güven
+sınırında doğrular. Commit komutları artık eski `track.keys === dense samples`
+varsayımını kullanmaz; ortak validator üç transform kanalının aynı zaman
+kümesini, lineer interpolasyonu, sınır anahtarlarını ve fracture hold
+switch'lerini denetler. Dense clip scene JSON/history dışında kalmaya devam
+eder.
+
+**Jobs & Bake** kartı hem workspace hem MCP işinde ortak kalite özetini
+gösterir: `retained / candidate` keyframe, korunan event sayısı, ölçülmüş
+maksimum pixel/açı hatası ve retained preview belleği. Tek live region,
+görünür durum metni, inline hata ve 44 px eylem sözleşmesi korunur.
+
+Production build `http://127.0.0.1:2010` üzerinde gerçek MCP Worker işiyle
+doğrulandı; 2000 portundaki başka proje değiştirilmedi. 37 sample / 2 body
+fixture'ında 111 candidate key 69 retained key'e indi; ölçülen en büyük hata
+`0,493 px / 0°`, retained preview `12,5 KiB` oldu. UI Review ve Apply sonrası
+`simplify_acceptance` timeline'ı 3 track / 69 key taşıdı; tek Undo 0 track'e,
+Redo yeniden 3/69'a döndürdü. `validate_scene` geçerli ve uyarısız, browser
+console error listesi boş, kartta tek live region ve eylem yüksekliği 44 px idi.
+600 ms gerçek PNG'si görsel olarak incelendi.
+
+Portable kanıt:
+`projects/mcp-rigid-simplification-acceptance-2026-11-21.chorono.json`
+(`sha256 9f9c21e6aae00455136b4ea24493a8f789186eee423e4d3a9f0fcddcf7389547`).
+Doğrulama **422 test dosyası / 3.194 test**, `npx tsc --noEmit`,
+`npm run mcp:build` ve `npm run build` ile geçti. Production build yalnız
+önceden bilinen `applicationBuildInfo.ts` named-export uyarısını verdi.
+
+### 12.69. Sahiplik hash'li güvenli Re-bake / Clear Bake — 21 Kasım 2026
+
+Rigid ve Voronoi bake kayıtları artık ürettikleri track içeriklerini, fracture
+katmanlarını, generation/topology manifestlerini ve ekledikleri timeline
+üyeliklerini kararlı sahiplik hash'leriyle kaydeder. `RigidBakeOwnershipInspector`
+kaynak/recipe değişimini generated output değişiminden ayırır; `current`,
+`edited`, `missing` ve `legacy` durumlarını hedef bazında tanılar. Runtime
+cache, DOM/GPU veya Matter nesnesi scene JSON/history içine alınmaz.
+
+Varsayılan `Clear` ve replacement commit, edited/missing/legacy output'u
+silmez. Kullanıcı ürün UI'ında **Replace edited bake** veya **Delete edited
+output** seçimini açıkça yaptığında `discard-edits` politikası devreye girer.
+İlk MVP sessiz bir `New Version` üretmez; aynı kaynak/timeline üzerinde çoklu
+aktif sürüm sahipliği ve izolasyonu ayrıca tasarlanana kadar açık Replace tek
+destructive seçimdir. Re-bake hazırlanırken mevcut çıktı değişmez; Apply ve
+Clear bütün owned track/layer/topology/membership değişikliğini tek undo
+transaction'ında yapar. Undo, kullanıcının düzenlediği önceki anahtarı da
+bit düzeyinde geri getirir.
+
+**Physics Simulations → Inspect Bake** görünümü kayıt başına `Output edited /
+Source current`, issue sayısı ve hedefini metinle gösterir. Re-bake ve Clear
+44 px odak halkalı eylemlerdir. Değişmiş çıktıyı silmeden önce neden, sonuç ve
+“Undo restores” kurtarma bilgisini aynı kartta gösteren ikinci adım gerekir;
+durum yalnız renkle anlatılmaz. MCP tarafında `inspect_physics_bake` ve
+`clear_physics_bake` eklendi; prepare araçları `replaceRecordId`, commit ise
+yalnız açık `replaceEdited` ile değişmiş çıktıyı yeniler.
+
+2010 portundaki production editöründe temiz iki-layer fixture ile ilk rigid
+bake, generated key düzenleme, güvenli Clear reddi, source'a dokunmayan
+replacement preview, açık Replace, Undo ile exact edited key'e dönüş, açık
+Clear ve Undo ile bütün bake'in geri gelmesi doğrulandı. Son UI turunda yalnız
+bir kayıt kaldı; `Output edited / Source current`, tek ownership issue, 44 px
+Re-bake/Clear/Delete eylemleri, açıklamalı onay ve boş browser console görüldü.
+500 ms gerçek PNG incelendi; `validate_scene` geçerli ve uyarısızdır.
+
+Portable kanıt:
+`projects/rebake-clear-acceptance-2026-11-21.chorono.json`
+(`sha256 dde6e800168d9c71af29034f379466abf70ddd82931500fd9cbd700318bc13fc`).
+Doğrulama **424 test dosyası / 3.200 test**, `npx tsc --noEmit`,
+`npm run mcp:build`, `npm run cli:build`, **16/16 CLI testi** ve
+`npm run build` ile geçti. Production build yalnız önceden bilinen
+`applicationBuildInfo.ts` named-export ve Browserslist uyarılarını verdi.
+
+**Sıradaki geliştirme:** §12.70'te tamamlanan Canvas tanılarından sonra
+§12.71'de image/texture fragment appearance ve kaynak UV korunumu da kapandı.
+Fragment kenarı seam/boşluk ve mask bellek ölçümü §12.72'de kapandı. Güncel
+sıra olan darbe/temas fracture tetiklemesi ve açıkça dış enerji olarak
+raporlanan artistic explosion impulse/spin §12.73'te tamamlandı.
+
+### 12.70. Fracture Canvas tanıları — 21 Kasım 2026
+
+Physics → Fracture → Inspect Bake görünümüne kayıt seçimi ile birlikte
+**Show on Canvas**, **Fragments**, **Colliders**, **Centroids** ve **Triangles**
+kontrolleri eklendi. Ana kontrol güvenli varsayılan olarak kapalıdır; alt
+kontroller disabled semantiği kullanır. Durum `Off · editor-only` veya
+`On · N diagnostics` metniyle de anlatılır, yalnız renge dayanmaz. Satırlar
+44–50 px yüksekliğinde, klavye odağı görünür ve editör/playback/export sınırı
+aynı kartta açıklanır.
+
+`FractureOverlayGeometryResolver` bake sahipliği, güncel frame override'ları
+ve ortak world-matrix resolver üzerinden dünya-uzayı geometri üretir. Olaydan
+önce source transform'u, olaydan sonra fragment transform'ları kullanılır.
+Eksik/legacy sahiplikte yaklaşık eşleştirme yapılmaz. Triangle fan yalnız tanı
+geometrisidir; image/UV appearance mesh sözleşmesi değildir. Overlay scene,
+history veya portable JSON'a yazılmaz; playback sırasında ve final render
+yolunda çizilmez.
+
+2010 portundaki production editöründe temiz güncel fracture bake ile 0 ms'de
+`source` fazı, 16 fragment, 2 collider, 16 centroid ve 49 triangle; 1200 ms'de
+`fragments` fazı, 16 fragment, 17 collider, 16 centroid ve 49 triangle DOM'da
+doğrulandı. Play sırasında overlay kayboldu, Pause ile geri geldi; ana toggle
+kapalıyken tamamen kalktı. Browser console error listesi boş, validator geçerli
+ve uyarısızdı. 1200 ms gerçek renderer PNG'sinde cyan/red/mint/yellow editör
+tanıları yer almadı.
+
+Portable kanıt:
+`projects/fracture-overlay-acceptance-2026-11-21.chorono.json`
+(`sha256 7dbf5007350e50332179115ef8d1bab829404307730b2367484453c2ab68e6f6`).
+Doğrulama **425 test dosyası / 3.203 test**, `npx tsc --noEmit`,
+`npm run mcp:build` ve `npm run build` ile geçti. Bu teslim yalnız editor-only
+overlay alt dilimini kapatır. Image/UV görünümü §12.71'de, seam/mask ölçümü
+§12.72'de, darbe/explosion ise §12.73'te tamamlandı; compound collider hâlâ
+sıradadır.
+
+### 12.71. Image fracture Mesh2D görünümü ve kaynak UV korunumu — 21 Kasım 2026
+
+İlk fracture appearance dilimi sharp solid rectangle davranışını korurken root
+image rectangle kaynağını da destekler. `FractureAppearanceCompiler`, kaynak
+asset'in kalıcı width/height bilgisini ve `fill`/`contain`/`cover`/`none` fit
+değerini doğrular. Solid kaynaklar editable Path fragment olarak kalır; image
+kaynaklar bake-owned `Mesh2D` fragment üretir. Her fragment vertex'i kaynak
+rectangle yerel uzayındadır; UV değeri `x/sourceWidth`, `y/sourceHeight` olarak
+tam kaynak rectangle'a göre normalize edilir. Ortak texture asset, fit ve
+`textureReferenceBounds` fragmentlerde korunur. Efekt, mask, motion blur,
+eksik asset veya kalıcı boyut yokluğu Preview öncesi açık hatadır.
+
+Physics kaynak seçicisi image katmanını adı ve türüyle gösterir; desteklenmeyen
+kaynakta Preview disabled olur ve düzeltme eylemi aynı satırdaki açıklamada
+verilir. Image seçildiğinde durum yalnız renge dayanmaz: asset adı, fit ve
+source-rectangle UV koruması metinle görünür. Apply sonrasında Mesh Detail,
+seçili parçanın source layer ve generation kimliğini, bake-owned image mesh
+durumunu ve texture düzenlemesinin çıktıyı edited yapacağını açıklar. Eylemler
+44 px hedef ve görünür klavye odak halkası sözleşmesini korur.
+
+Canlı kabul sırasında proje değişimi sonrası Physics formunda kalan eski
+source/collider/timeline kimlikleri `reconcilePhysicsDraftWithScene` ile güncel
+sahneye taşındı. Worker collision event sıralaması backend ve istemci güven
+sınırında aynı UTF-16 body-id comparator'ına bağlandı. Legacy implicit-all
+timeline'larda fracture apply artık sahip olmadığı explicit üyeliği yazmış gibi
+kaydetmiyor. Bu üç hata ayrı regression testleriyle kapatıldı.
+
+İzole `http://127.0.0.1:2010` production editöründe 300×180 `cover` image,
+16 fragment, seed `20261121` ve 800 ms fracture ile Preview `91` sample / `68`
+track / `18` body verdi. Apply sonrası Inspector `Output current / Source
+current` gösterdi. `0`, `799`, `800` ve `1200` ms gerçek PNG'leri incelendi;
+800 ms'de source→fragment geçişi hizalı, 1200 ms'de ayrılan parçaların texture
+koordinatları kaynakla tutarlıydı. Validator geçerli/uyarısız ve browser console
+error listesi boştu.
+
+Taşınabilir kaynak ve kabul projeleri:
+
+- `projects/image-fracture-uv-source-acceptance-2026-11-21.chorono.json`
+- `projects/image-fracture-uv-acceptance-2026-11-21.chorono.json`
+  (`sha256 14f37d9d9580883dc4aa4327d8d53d51dc35a1eb1772ceedb0c8e619f330462c`)
+
+Tekrarlanabilir canlı kontrol `scripts/qa/image-fracture-uv-live.mjs` ile 2010
+portuna sabitlenmiştir; `inspect` modu 16 fragmentin UV/position eşliğini,
+appearance provenance'ını, blob içermeyen portable asset'i, dört gerçek kareyi
+ve kayıt hash'ini doğrular. Hedefli regression doğrulaması **4 test dosyası /
+15 test**; tam doğrulama **427 test dosyası / 3.216 test**, `npx tsc --noEmit`,
+`npm run mcp:build`, `npm run cli:build`, **16/16 CLI testi** ve
+`npm run build` ile geçti. Production build yalnız bilinen
+`applicationBuildInfo.ts` named-export uyarısını verdi. Güncel sıradaki iş
+seam/boşluk ile mask bellek ölçümüydü; bu iş §12.72'de fiziksel ayrılma
+boşluğunu raster seam'den ayırarak kapatıldı.
+
+### 12.72. Fracture event hizası, raster seam ve mask bellek bütçesi — 21 Kasım 2026
+
+`FractureAppearanceQualityAnalyzer`, committed fracture kaydını exact topology
+event zamanında canonical frame evaluator ve ortak world-matrix resolver ile
+ölçer. Her fragment vertex'i aynı source-local noktanın kaynak ve fragment
+transformları üzerinden karşılaştırılır; maksimum/ortalama event gap, toplam
+alan farkı, ortak sınır sayısı/uzunluğu ve render triangle sayısı raporlanır.
+Bu nedenle olaydan sonra fizik sonucu oluşan gerçek parça ayrılması raster seam
+olarak yanlış sınıflandırılmaz. Eksik source, generation veya fragment sayısal
+bir yarım rapor yerine açık `unavailable` nedeni verir.
+
+**Physics → Fracture → Inspect Bake** kartında durum `Geometry aligned`,
+`Review alignment` veya `Unavailable` metniyle gösterilir; yalnız renge
+dayanmaz. Uyarı, export öncesi Re-bake ve event-frame inceleme adımını; eksik
+kaynak ise restore/relink yolunu aynı kartta verir. Kart exact event zamanı,
+appearance türü, gap/alan/ortak sınır/fragment/triangle metrikleriyle birlikte
+mevcut mask scratch ve full-frame alternatifini gösterir. Üretilen mask-free
+Mesh2D yolu için güncel scratch tam `0 B`'dır. Mevcut genel mask pipeline'ının
+dört eşzamanlı RGBA8 yüzey worst-case'i 800×450 fixture'da `5.5 MiB`'dır;
+decoded image ve GPU belleği bu sayıya dahil değildir.
+
+Tekrarlanabilir MCP raster harness'i `799.999 ↔ 800 ms` geçişinde 800×450 tam
+karede 300 değişen piksel buldu; tamamı dış üst silhouette satırında
+`x=250…549, y=210`, maksimum kanal farkı `5` idi. Bir piksel inset iç bölgede
+53.044 piksel karşılaştırıldı ve **0 piksel / 0 kanal değişikliği** görüldü;
+internal raster seam yoktur. 1200 ms fiziksel ayrılma bu kıyasın dışında kalır.
+Validator geçerli/uyarısız, browser console hata listesi boş ve portable SHA
+aynı kaldı:
+`14f37d9d9580883dc4aa4327d8d53d51dc35a1eb1772ceedb0c8e619f330462c`.
+
+Doğrulama **429 test dosyası / 3.222 test**, `npx tsc --noEmit`,
+`npm run mcp:build` ve `npm run build` ile geçti. Production build yalnız
+bilinen `applicationBuildInfo.ts` named-export uyarısını verdi. Sonraki darbe
+ve explosion dilimi §12.73'te tamamlandı.
+
+### 12.73. Darbe tetikli fracture ve artistic explosion — 21 Kasım 2026
+
+Fracture tarifi artık sabit zamanın yanında seçili statik collider'a karşı
+pozitif göreli normal hız eşiğiyle tetiklenebilir. `RigidFractureRecipeRealizer`
+ilk nitelikli teması integer solver tick'ine bağlar; gerçekleşen zaman, ölçülen
+hız, collider, temas noktası ve normal recipe provenance/hash'ine yazılır.
+Nitelikli temas oluşmazsa iş yayınlanabilir yaklaşık bir sonuç üretmek yerine
+açık hatayla durur.
+
+İsteğe bağlı artistic explosion, kırılma anında tek kez eklenen deterministik
+dış enerjidir. Kaynak-yerel merkez, radial/directional hız, yön, spin,
+variation ve seed saklanır. `FractureExplosionImpulseResolver` bu ilaveyi
+fiziksel temas enerjisi gibi göstermez. Worker önizlemesi, doğrudan MCP bake,
+kalıcı MCP job ve commit aynı gerçekleşmiş recipe hash'ini kullanır.
+
+**Physics → Fracture → Configure** görünümü Time/Impact seçimine göre yalnız
+ilgili alanları gösterir. Impact seçiminde eşik ve collider zorunludur; eksik
+collider aynı bölümde kurtarma metni verir ve Preview disabled kalır. Artistic
+explosion kapalıyken ayrıntı alanları gizlidir; açıldığında dış enerji olduğu
+amber durum kartında metinle açıklanır. **Review preview** ve **Inspect Bake**,
+geçici job kalktıktan sonra da tetik türü, olay zamanı/tick'i, minimum/ölçülen
+hız, collider, temas noktası ve explosion tarifini aynı semantik özetle
+gösterir. Dokunma/klavye hedefleri 44 px, yeni kanıt metni 12 px ve panel yatay
+taşmasızdır.
+
+İzole `http://127.0.0.1:2010` production editöründe image fracture kaynağı,
+floor collider, `100 px/s` eşik ve seed `20261121` ile gerçek Worker işi
+çalıştırıldı. İlk nitelikli temas tick `68` / `566.667 ms`, ölçülen hız
+`236.1 px/s`, collider `rigid:image_fracture_floor` ve temas noktası
+`400, 393.4 px` olarak gerçekleşti. Radial `180 px/s`, direction `270°`,
+directional `20 px/s`, spin `180°/s` ve variation `0.15` ayarları tek sefer
+uygulandı. Event ve after kareleri arasında `47.734` piksel (`%13,2594`)
+değişti; kaynak dokusu ayrılan 16 fragmentte korundu. Validator geçerli ve
+uyarısız, browser console hata listesi boştu.
+
+Tekrarlanabilir MCP kabulü
+`scripts/qa/impact-fracture-explosion-live.mjs` içindedir. Portable kanıt:
+`projects/impact-explosion-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 3d51d8e52026bdde58d32c6ce6a4ee5f39324b9bce67a994b03aabd01b26dbcd`).
+Doğrulama **430 test dosyası / 3.229 test**, `npx tsc --noEmit`,
+`npm run mcp:build`, `npm run cli:build`, **16/16 CLI testi** ve
+`npm run build` ile geçti. Production build yalnız bilinen
+`applicationBuildInfo.ts` named-export uyarısını verdi.
+Bu dilimden sonraki fizik işi topology/collider tanısını §12.74'te tamamlamak,
+ardından 32 fragment görsel matrisiyle aşama 4
+scrub/player/MCP/render/export parity kapısını kapatmaktır.
+
+### 12.74. Topology olayı ve gerçek render–collider tanısı — 21 Kasım 2026
+
+Committed fracture bake artık aynı değerlendirilmiş karede iki ayrı geometri
+taşır: Path/Mesh2D'den gelen gerçek render sınırı ve bake body snapshot'ından
+gelen gerçek derlenmiş collider sınırı. `FractureOverlayGeometryResolver`
+source/fragment fazını, exact event tick'ini ve bu iki polygon kümesini üretir;
+`FractureRenderColliderAnalyzer` iki yönlü vertex→edge mesafesiyle maksimum ve
+ortalama px farkını ölçer. Sabit-topology görünüm ile değişken-topology olay
+durumu tek cache biçimine zorlanmaz.
+
+**Inspect Bake → Topology & collider** kartı olay zamanı/tick, source→fragment,
+polygon ve örnek sayılarını; aligned/review/unavailable durumunu ve kurtarma
+yolunu semantik başlık/`dl` ile verir. Canvas'taki **Event state** ve
+**Collider delta** seçenekleri önce/source, exact event ve sonra/fragments
+durumlarını metinle gösterir. Rozetler ve delta çizgileri editor-only'dir;
+canonical render/export çıktısına girmez.
+
+MCP `inspect_physics_bake` aynı kalıcı kayıttan `topologyEvent` ile
+`renderColliderQuality` alanlarını döndürür. İzole 2010 production kabulünde
+tick `68` / `566.667 ms`, 16 fragment body, 16/16 polygon, 164 örnek ve `0 px`
+maksimum/ortalama fark görüldü. 421 px panel yatay taşmadı; kontroller 44 px,
+kanıt metni 12/16 px idi. Before/exact/after gerçek PNG'leri 800×450 üretildi;
+validator geçerli ve uyarısızdı.
+
+Tekrarlanabilir MCP kabulü
+`scripts/qa/fracture-topology-collider-live.mjs` içindedir. Portable kanıt
+`projects/fracture-topology-collider-acceptance-2026-11-21.chorono.json`
+(`sha256 3d51d8e52026bdde58d32c6ce6a4ee5f39324b9bce67a994b03aabd01b26dbcd`).
+Doğrulama **431 test dosyası / 3.232 test**, TypeScript, MCP/CLI build,
+**16/16 CLI testi** ve production build ile geçti. Aşama 3 panel/overlay dilimi
+tamamlandı; sıradaki fizik işi 32 fragment, eğimli zemin ve yüksek hızlı küçük
+parça geniş görsel matrisi, ardından aşama 4 parity kapısıdır.
+
+### 12.75. Geniş fizik görsel matrisi ve temiz MCP reseti — 21 Kasım 2026
+
+Aşama 3'ün son kabul matrisi üç ayrı editable proje olarak gerçek Worker,
+canonical raster renderer ve portable save üzerinden tamamlandı:
+
+- **32 parçalı dokulu panel:** zamanlı olay tick `48` / `400 ms`; 32 fragment,
+  32/32 render–collider polygon, 346 sınır örneği ve exact event'te `0 px`
+  maksimum/ortalama fark. 10.515 ham key 4.569 key'e sadeleşti; maksimum
+  vertex/açı hatası `0,497 px / 0,243°`, retained toplamı 766.712 byte oldu.
+- **Eğimli zemin:** 76 px kutu `-12°` statik yüzeyde `x=378 → 221,8 px`
+  ilerledi ve `-180,707°` döndü. 276 ham key 144 key'e sadeleşti; gerçek
+  0/1400/2800 ms karelerinde temas ve kayma görsel olarak incelendi.
+- **Yüksek hızlı küçük cisim:** 24 px gövde `1200 px/s` hız ve 120 Hz sabit
+  adımla 28 px duvara `350 ms`te `x=508,025` merkezinde temas etti, duvarın
+  içinden geçmeden `800 ms`te `x=380,389` konumuna geri sekti. 222 ham key 18
+  key'e, ölçülen vertex hatası sayısal epsilon düzeyine indi.
+
+Canlı matris ilk turda gerçek bir MCP yaşam döngüsü kusurunu yakaladı:
+`clear_scene`, layer/timeline'ı kaldırırken önceki fracture bake kaydını
+bırakıyordu. `clearAuthoredSceneContent` artık katman, timeline, parameter,
+trigger, binding, wire, state machine, initial state, physics ownership ve
+authoring kaydını birlikte temizler; composition, asset/collection ve editor
+guide verisini korur. Tek Undo eski sahneyi aynen geri getirir. Son turda her
+fixture commit öncesi 0 bake kaydıyla başladı ve yalnız kendi bake kaydıyla
+kaydedildi; canlı Rigid UI'da eski **Canvas diagnostics / Applied fracture
+bake** görünmedi.
+
+Tekrarlanabilir MCP harness'i
+`scripts/qa/physics-visual-matrix-live.mjs` içindedir. Portable kanıtlar:
+`projects/physics-visual-matrix-panel-32-2026-11-21.chorono.json`,
+`projects/physics-visual-matrix-inclined-floor-2026-11-21.chorono.json` ve
+`projects/physics-visual-matrix-high-speed-small-body-2026-11-21.chorono.json`.
+Üç validator geçerli/uyarısız, kareler 800×450 ve production UI canlıydı.
+Doğrulama **432 test dosyası / 3.234 test**, TypeScript, MCP build ve production
+build ile geçti. Aşama 3 tamamlandı; sıradaki iş aşama 4
+scrub/player/MCP/render/export parity kapısıdır.
+
+### 12.76. Temel playback ve runtime export parity — 21 Kasım 2026
+
+`RuntimeSceneCompiler`, runtime'a taşınan sahne alanlarının tek yetkili
+sınırı olarak eklendi. Composition, embedded visual asset'ler, `hidden` dahil
+görsel layer'lar, timeline'lar, parameter/trigger/binding/wire,
+state-machine ve initial state korunur. Audio varsayılan görsel runtime
+profilinden ayrı tutulur. Authoring kaydı, physics ownership/recipe ve yoğun
+editör cache'leri runtime JSON'a girmez; committed physics hareketi mevcut
+normal transform/opacity track'leri üzerinden solver olmadan oynar.
+`RuntimeOptimizer` ve eski `exportToRuntime` aynı derleyiciye bağlandı; her yol
+kendi açık track optimizasyonu/sinyal bake politikasını sınırın üstünde uygular.
+
+Tekrarlanabilir canlı kabul
+`scripts/qa/physics-playback-parity-live.mjs` ile izole 2010 production
+editöründe yürütüldü. 32 fragment panelinde 0/399/400/1200/2800/400 ms
+seek sırası için viewport scrub, açık `ChronoPlayer` raster'ı ve MCP
+`render_2d` PNG'si arasında her karede **0 farklı piksel** bulundu. Runtime
+export 1 asset, 34 layer ve 132 track taşıdı; 4.569 kaynak key güvenli biçimde
+4.407 key'e indi ve birleşik key zamanları ile ara noktalardaki bağımsız
+semantik evaluator karşılaştırması geçti.
+
+Panelin dönmesi tam tur kanıtlamadığı için ikinci bir gerçek Worker fixture'ı
+720°/s başlangıç açısal hızı, sıfır yerçekimi, 120 Hz solver ve 60 FPS örnekleme
+ile üretildi. Bake edilmiş unwrapped dönüş `713,9999999999966°` değerini
+korudu. 0/250/500/750/1000/250 ms seek sırasının her karesinde scrub/player ve
+final render yine **0 farklı piksel** verdi; runtime export 3 track ve 9/9 key
+taşıdı, physics tarifi taşımadı.
+
+Portable kanıt
+`projects/physics-playback-parity-full-turn-2026-11-21.chorono.json`, runtime
+kanıtları `projects/exports/physics-parity-1795285088211.runtime.json` ve
+`projects/exports/physics-full-turn-parity-1795285088211.runtime.json` olarak
+kaydedildi. Validator geçerli ve uyarısızdı. Doğrulama **433 test dosyası /
+3.237 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run build` ile
+geçti; production build yalnız bilinen `applicationBuildInfo.ts` named-export
+uyarısını verdi. Böylece aşama 4 kapandı; aşama 5'in ilk convex kaynak dilimi
+§12.77'de tamamlandı.
+
+### 12.77. Convex shape/spline fracture kaynağı — 21 Kasım 2026
+
+`FractureSourceBoundaryCompiler`, root shape ve kapalı spline kaynaklarını
+mevcut `ShapeBoundaryMesh2DGenerator` / `SplineBoundaryMesh2DGenerator`
+üzerinden tek yetkili boundary akışına bağladı. Sıralı tek dış halka,
+centroid, bounds ve alan derlenir; açık/branching, kopuk, çok halkalı, delikli
+ve concave kaynaklar Preview öncesinde açık tanıyla reddedilir. Image
+rectangle'ın mevcut collider ve full-source UV davranışı değişmedi.
+
+`RigidBodyLayerCompiler`, katman adaptasyonu ile recipe orchestration'ı ayırdı.
+Fracture kaynağı artık rectangle veya convex-polygon collider taşır; solid
+shape/spline fragment'ları editable Path olarak kalır. Physics UI fracture
+kaynağında Shape/Image/Spline gösterir, statik çevreyi desteklenen rectangle
+listesinde tutar ve concave/delikli kaynak için sonraki clipping dilimini açıkça
+belirtir. MCP prepare/bake açıklamaları, schema, canonical Chorono skill'i ve
+gerçek stdio kabulü aynı capability sınırına güncellendi.
+
+İzole `http://127.0.0.1:2010` production editöründe chamfered kapalı spline
+MCP script dry-run/apply ile üretildi. Persistent Worker işi 12 Path fragment,
+tick `48` / `400 ms` olay ve convex-polygon source collider verdi. Exact event
+incelemesinde 12/12 render–collider polygon, 128 örnek,
+`2,842170943040401e-14 px` maksimum ve epsilon düzeyinde ortalama fark ölçüldü.
+399/400/1600 ms gerçek 640×420 kareleri incelendi; validator geçerli/uyarısız,
+UI'da spline durum kartı ve etkin Preview görüldü, browser console hatası yoktu.
+
+Tekrarlanabilir harness `scripts/qa/convex-spline-fracture-live.mjs` içindedir.
+Portable kanıt
+`projects/convex-spline-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 653e2a2bd06e19fd8eaed05836d36824b5d5086039088e72abad89b8873ce60b`).
+Doğrulama **434 test dosyası / 3.245 test**, TypeScript, MCP build ve production
+build ile geçti. Bilinen `applicationBuildInfo.ts` ve caniuse-lite uyarıları
+sürer. Convex Mesh2D ve fragment triangle/UV dilimi §12.78'de tamamlandı.
+
+### 12.78. Convex Mesh2D fracture ve UV clipping — 21 Kasım 2026
+
+`FractureSourceBoundaryCompiler`, doğrulanmış sabit-topology Mesh2D'yi aynı tek
+halkalı convex kaynak sözleşmesine bağladı. Mesh2D rectangle görünümde olsa bile
+source collider gerçek boundary'den `convexPolygon` olarak derlenir; deformation
+binding bulunan kaynaklar statik geometriye bake edilmeden kabul edilmez.
+Bake-owned fracture fragment'ları kök source picker'dan çıkarıldı; recursive
+yeniden kırılma secondary-destruction aşamasına bırakıldı.
+
+Yeni `FractureMesh2DClipper`, her source triangle'ını convex fragment ile
+Sutherland–Hodgman half-plane clipping üzerinden keser. Yeni boundary
+vertex'lerinde UV doğrusal enterpole edilir; source appearance ve texture
+reference bounds korunur. Alan eşliği ve üretilen topology ortak validator ile
+denetlenir. Overlay resolver, UV seam'i için çoğaltılmış vertex indekslerine
+değil kuantize geometrik edge sahipliğine bakarak gerçek dış sınırı çıkarır;
+bu nedenle Inspector render–collider ölçümü fragment triangle soup'u polygon
+sanmaz.
+
+İzole 2010 production editöründe MCP ile shape→Mesh2D oluşturuldu ve persistent
+Worker fracture uygulandı. 10 fragment toplam 38 render triangle, tick `48` /
+`400 ms` olay ve convex source collider üretti. Exact event'te 10/10
+render–collider polygon, 108 örnek, `7,948456744365475e-10 px` maksimum ve
+`3,45635770255906e-11 px` ortalama fark ölçüldü. 399/400/1600 ms gerçek
+640×420 kareleri incelendi; validator geçerli/uyarısız, Mesh2D capability kartı
+ve etkin Preview görüldü, generated fragment'lar source listesinden çıkarıldı
+ve browser console hatası yoktu.
+
+Tekrarlanabilir harness `scripts/qa/convex-mesh2d-fracture-live.mjs` içindedir.
+Portable kanıt
+`projects/convex-mesh2d-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 9dd9e0a541d3ad8d1bbda479bb67055b2b753f4e4e13312a81ae305794397095`).
+Doğrulama **434 test dosyası / 3.250 test**, TypeScript, MCP build ve production
+build ile geçti. Bilinen `applicationBuildInfo.ts` uyarısı sürer. Aktif fizik
+işi olarak tanımlanan concave/delikli ve çok halkalı source clipping,
+connected component, fragment adjacency ve compound collider sonraki §12.79
+diliminde tamamlandı.
+
+### 12.79. Kompleks fracture region, adjacency ve compound collider — 21 Kasım 2026
+
+`FractureSourceRegionCompiler`, image, kapalı shape/spline ve sabit-topology
+Mesh2D kaynaklarını concavity, delik ve kopuk dış halkaları koruyan doğrulanmış
+region sözleşmesine derler. Topology bağlantısı vertex konumundan ayrı tutulur;
+deformation-bound ve daha önce üretilmiş fracture fragment Mesh2D kaynakları
+secondary destruction gelene kadar açık tanıyla reddedilir.
+
+`FractureRegionClipper`, kaynak triangle'larını her convex Voronoi hücresiyle
+keser, UV'leri yeni kenarlarda enterpole eder ve yalnız pozitif uzunlukta ortak
+edge taşıyan parçaları aynı connected component'e alır. Nokta teması gövdeleri
+yanlışlıkla birleştirmez. Portable generation schema v2; source/fragment
+ring'leri, render triangle soup'u, convex collider parçaları, cell/component
+sahipliği, adjacency uzunluğu ve deterministik topology hash'ini saklar.
+`PhysicsBakeRecipeFactory` convex tek halkalı kaynakta önceki kompakt Path
+akışını, kompleks kaynakta Mesh2D + `compoundPolygon` akışını otomatik seçer.
+
+Physics Fracture UI artık closed shape/spline ve Mesh2D capability kartlarında
+concave/delikli kaynakların fixed-topology Mesh2D fragment ve compound collider
+üreteceğini açıkça gösterir. Inspector çok halkalı render sınırını gerçek
+compound collider union'ıyla karşılaştırır. Doğrudan ve kalıcı MCP bake
+araçları aynı kaynak/limit/açıklama sözleşmesini yayımlar; preview gövdeleri
+`colliderPartsPx` taşır. Canonical Chorono skill'i bu davranışla eşlendi.
+
+İzole `http://127.0.0.1:2010` production editöründe temiz 1080×1080 proje UI'dan
+oluşturuldu ve gerçek stdio MCP bağlantısı kuruldu. Yedi uçlu concave yıldız,
+zemin ve 8 hücreli persistent Worker bake; tick `72` / `600 ms` olay, 8
+editable Mesh2D fragment, 36 track, 1.266 keyframe ve 10 body üretti.
+Inspector `Output current` / `Source current`, 8/8 render–collider polygon, 178
+sınır örneği ve tam `0 px` maksimum/ortalama delta verdi. 599/600/1400 ms gerçek
+PNG'lerinde bütün yıldızdan atomik parçalanmaya ve zemin temasına geçiş
+incelendi. `validate_scene` geçerli ve uyarısızdı.
+
+Portable kanıt
+`projects/complex-region-fracture-acceptance-2026-11-21.chorono.json`
+(`sha256 ab9af337e67d4163a63bb2a542ec77b8342aaf69f1d7f961c9826c6aefcac285`,
+2.122.864 byte) olarak kaydedildi. Uygulama doğrulaması **440 test dosyası /
+3.264 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run build` ile
+geçti. Bilinen `applicationBuildInfo.ts` named-export uyarısı sürer. Sıradaki
+destruction işi bonded cluster/hasar/connected-component ayrılmasıdır;
+secondary/recursive fracture bundan sonra gelir.
+
+### 12.80. Bonded cluster ilk dikey dilimi — 21 Kasım 2026
+
+FRACTURE2 için geometri, politika ve solver sorumlulukları ayrıldı.
+`FractureSharedBoundaryAnalyzer`, eski adjacency manifestini değiştirmeden ortak
+sınır uzunluğu, ağırlıklı midpoint ve A→B unit normal üretir.
+`FractureBondGraphCompiler`; kararlı bond kimliği, auto/shared-boundary veya
+explicit manual origin, disabled/custom/unbreakable override, impulse strength,
+damage threshold/decay, relative normal speed scale ve seed'li variation'ı
+portable/hash'li graph'a derler. Canonical override kaydı Re-bake sırasında
+manual kararların kaybolmasını önler. `FractureClusterComponents`, kopmuş bond
+setinden kararlı intact connected component kimlikleri çıkarır.
+
+Matter Worker başlangıçta intact graph component'ini tek compound body olarak
+etkinleştirir ve fragment'lara virtual pose sağlar. Aynı temas bir fixed tick'te
+bir kez toplanır; en yakın kırılabilir bond scalar load/damage alır. Kopuşta
+component'ler aynı tick'te yeni body'lere çevrilir. Yeni body velocity alanı
+eski cluster COM'u etrafında kurulur; toplam mass, COM, linear momentum ve
+angular momentum tolerans dışında kalırsa job publish edilmeden başarısız olur.
+Gerçekleşen bond break sequence recipe hash/provenance içinde portable kalır ve
+track simplifier kopuş tick'ini korur.
+
+Physics UI'da **Keep fragments bonded** progressive disclosure kartı graph id,
+impulse/damage/decay/speed/variation/seed alanlarını ve explosion ile karşılıklı
+dışlamayı gösterir. Preview raporu bond/break/split sayılarını, commit sonrası
+Inspector graph materialini ve gerçekleşen break'leri gösterir. Doğrudan ve
+kalıcı MCP Voronoi araçları aynı `cluster.defaults/overrides` şemasını kullanır;
+`get_bake_job` aynı metrikleri, `inspect_physics_bake.bondedCluster` graph,
+manual/unbreakable ve break sequence'i döndürür. Canonical Chorono skill ve MCP
+rehberi eşlendi.
+
+Kod, UI ve MCP servis sözleşmesi `codex/mesh2d-mesh0` branch'inde
+`1a0c0017`, `0d347583` ve `aba2eafa` commitleriyle gruplandı. Tam doğrulama
+**444 test dosyası / 3.277 test**, `npx tsc --noEmit`, `npm run mcp:build` ve
+`npm run build` ile geçti. Production build'de yalnız önceden bilinen
+`applicationBuildInfo.ts` named-export ve güncel olmayan Browserslist veri
+uyarıları kaldı.
+
+Bu ilk dikey dilimde otomatik cluster ve MCP üzerinden manual pair override
+çalışır. Artistic explosion bonded modla birleşmez; ayrı external energy modeli
+olduğundan UI ve compiler bunu karşılıklı dışlar. Canvas ve action authoring
+tamamlaması §12.81'de kayıtlıdır.
+
+### 12.81. FRACTURE2 Canvas ve action authoring tamamlaması — 22 Kasım 2026
+
+Canvas diagnostics'e varsayılan açık bond çizgileri ve isteğe bağlı connected
+component renkleri eklendi. Bond hit target'ı sahne seçimini veya undo geçmişini
+değiştirmeden editor-local seçim yapar; intact, unbreakable ve gerçekleşmiş
+broken durumları renk/metinle ayrılır. Bu çizimler playback, preview capture,
+runtime export ve final render'a girmez.
+
+Bonded Re-bake draft'ı seçili bond için Strength, Damage Threshold ve
+Unbreakable; fragment çifti için **Group selected fragments**; mevcut kenar için
+**Split cluster** işlemlerini canonical pair override'a çevirir. **Break at
+playhead**, local zamanı `stepHz` tick'ine hizalayıp portable `forcedBreaks`
+schedule'ı üretir. **Reset bond/all damage** aynı zaman sözleşmesiyle yükten
+önce çalışan `damageResets` kaydıdır. Forced action Unbreakable'ı bilinçli olarak
+aşar; impact topology action zamanından sonra etkinleşirse action ilk etkin
+cluster tick'inde uygulanır. Replacement Apply bütün değişikliği tek undoable
+edit olarak yayımlar.
+
+Doğrudan ve persistent MCP Voronoi araçları `cluster.forcedBreaks` ve
+`cluster.damageResets` için aynı bounded schema'yı kullanır. Job raporu authored
+action sayılarını, `inspect_physics_bake.bondedCluster` canonical schedule'ları
+ve `reason: forced` gerçekleşme kanıtını döndürür. Canonical skill, MCP rehberi
+ve domain README aynı sözleşmeyle eşlendi.
+
+Domain/solver `e2f07284`, Canvas/UI `a089b7aa`, MCP servis/test `4e82f4a5`
+commitleriyle `codex/mesh2d-mesh0` branch'inde gruplandı. Tam doğrulama **446
+test dosyası / 3.282 test**, `npx tsc --noEmit`, `npm run mcp:build` ve `npm run
+build` ile geçti. Production build'de yalnız bilinen `applicationBuildInfo.ts`
+named-export ve güncel olmayan Browserslist verisi uyarıları sürer.
+
+Temiz canlı kabul 22 Kasım'da 2000 portundaki kullanıcı projesine dokunmadan,
+MCP etkin production editörünün izole `2010` oturumunda tamamlandı. Tekrarlanabilir
+`scripts/qa/fracture-bond-actions-live.mjs` harness'i temiz 900×500 sahneyi MCP
+`clear_scene` ve QuickJS dry-run/apply akışıyla kurdu; ilk bonded bake'i commit
+edip aynı record'u persistent Re-bake ile atomik değiştirdi. Sonuç 8 fragment,
+14 bond, 49 sample, 36 track ve tek kayıtlı bake'tir. Unbreakable olarak
+işaretlenen bond için 450 ms damage reset ve tick 72 / 600 ms forced break
+uygulandı; Inspector olayı `reason: forced`, action sayılarını `1 / 1` verdi.
+599/600/1000 ms gerçek 900×500 PNG'leri incelendi; 599→1000 karşılaştırmasında
+19.760 piksel değişti. `validate_scene` geçerli ve uyarısız, browser console
+error listesi boştu.
+
+Canlı UI'da **Inspect Bake** kartı 8/14 fragment/bond, 0/1
+manual/unbreakable, 1/0 break/split ve 1/1 forced/reset gösterdi. Canvas bond ve
+cluster renk overlay'leri açıldı; geniş hit target ile bond seçimi doğrulandı.
+**Re-bake → Edit Source** görünümünde Strength, Damage Threshold, Unbreakable,
+Split, Break at playhead, Reset bond/all damage ve Group kontrolleri gerçek
+sahne üzerinde görüldü. Portable proje
+`projects/fracture-bond-actions-acceptance-2026-11-22.chorono.json`
+(`1.082.787` byte,
+`sha256 8f63c2f71b6dbc8cbf5745cd9e81ed82ef48fddf461fd7605e3feb4f413de819`)
+olarak kaydedildi. Harness `3336a1db` commit'indedir. FRACTURE2 aşama 6 kod ve
+canlı kabul kapsamı kapanmıştır; onu izleyen FRACTURE3 teslimi §12.82'de
+tamamlanmıştır.
+
+### 12.82. FRACTURE3 precomputed recursive generation — 22 Kasım 2026
+
+İlk secondary destruction dilimi, daha önce oluşmuş bir root fragment'ını
+sonraki fixed tick'te deterministik child generation ile değiştiren iki olaylı
+recipe olarak tamamlandı. `FractureGenerationHierarchyCompiler` kararlı
+parent–child lineage ve generation kimliklerini doğrular; depth, generation,
+toplam fragment, triangle ve UTF-8 portable byte bütçelerini solver allocation
+öncesinde uygular. Root ve child body snapshot'ları aynı canonical recipe hash'i
+altındadır; parent opacity geçişi tek track'te root görünümü → parent fragment →
+child fragments sırasını korur.
+
+Portable commit bütün generation forest'ını, topology manifestlerini, generated
+layer sahipliğini ve iki fracture event'ini birlikte kaydeder. Clear ve Re-bake
+tam ağacı tek undoable işlemle yönetir; source hash, ownership ve hierarchy hash
+denetimi eksik/edited output'u sessizce ezmez. Canvas/MCP görünürlüğü canonical
+event schedule'ını kullanır; child event sonrasında stale parent fragment
+çizilmez.
+
+Physics → Fracture UI'ına **Precompute secondary fracture**, parent fragment,
+child fragment/time/seed/generation ve toplam fragment/triangle/portable byte
+bütçeleri eklendi. Inspect Bake iki event'i, lineage listesini ve used/limit
+tablosunu gösterir. Persistent/doğrudan MCP schema aynı `secondary` ve `budgets`
+sözleşmesini kullanır; job sonucu generation/fragment sayısını, preview iki
+event'i, `inspect_physics_bake` ise `topologyEvents` ve `recursiveHierarchy`
+kanıtını döndürür. Canonical skill ile MCP rehberi aynı anda güncellendi.
+
+Domain/lineage `fe0c4f45`, portable forest `5de59dd2`, UI/MCP `72711c78`, canlı
+testte bulunan convex collider owner-id tanısı düzeltmesi `206853a3` ve kabul
+harness'i `5eaf8ca9` commitleriyle `codex/mesh2d-mesh0` branch'inde gruplandı.
+Tam doğrulama **448 test dosyası / 3.292 test**, `npm run mcp:build` ve
+`npm run build` ile geçti. Production build'de yalnız önceden bilinen
+`applicationBuildInfo.ts` named-export uyarısı kaldı.
+
+Temiz canlı kabul, 2000 portundaki kullanıcı projesine dokunmadan MCP etkin
+production editörünün izole `2010` oturumunda tamamlandı.
+`scripts/qa/recursive-fracture-live.mjs` temiz 900×500/1800 ms sahne kurdu;
+400 ms/tick 48'de 6 root fragment ve 800 ms/tick 96'da seçili parent'tan 4
+child fragment üretti. Sonuç 2 generation, 10 fragment, 26 triangle,
+6.040/2.097.152 portable byte, Worker execution, 55 sample ve 887 keyframe'dir.
+Görünür dynamic body sayıları 399/600/800/1000 ms için 1/6/9/9'dur; root ve
+child karşılaştırmalarında sırasıyla 38.280 ve 4.934 piksel değişti.
+
+Canlı Inspect Bake görünümünde iki event, current/current sahiplik, lineage ve
+bütçe tablosu doğrulandı. Topology & collider kartı exact 400 ms event'inde
+6/6 polygon, 56 boundary sample ve 0 px maksimum/ortalama fark verdi. Re-bake
+authoring'de bütün secondary alanları geri yüklendi; `validate_scene` uyarısız
+geçti ve browser console warning/error listesi boştu. Portable kanıt
+`projects/recursive-fracture-acceptance-2026-11-22.chorono.json`
+(`1.348.566` byte,
+`sha256 9e9225bffae2a402a4694d22e08e84f6eebb266f8af1f0888c2cb42bff7be77d`)
+olarak kaydedildi. FRACTURE3 ilk dilimi kapanmıştır. 22 Kasım kapsam kararıyla
+FRACTURE4 damage deformation ve FRACTURE5 event/checkpoint bake v0.10.0 ileri
+2D planına alındı. v0.5.0 burada kapsam kapanışına girer; v0.6.0 yalnız
+masaüstü editör ve Öncelik 10–12'yi kapsar. Aradaki v0.7.0–v0.9.0 düzenlemeleri
+ayrıca planlanacaktır.
+
+Aşağıdaki Spline kayıtları teslim gününün kapsamını korur. Güncel native /
+modifier ayrımı, Outline düzeltmesi ve açık işler [§9A’dadır](#9a-spline-edit-görünüm-ve-modifier-teslimleri).
+
+### 12.83. Spline alt obje edit ve sınırlı 2D combine planı — 15 Kasım 2026
+
+[Üç modlu spline edit planı](plans/spline-2d-operations-plan.md): tek spline
+katmanında Point / Edge (Segment) / Object (Sub-spline). Edit içinde Add yeni
+SubShape ekler; ilk çizim ayrı Object olarak korunur. Continue açık ucu uzatır,
+Attach kayıtları toplar, Join uçları bağlar; kapalı Boolean ayrı hesaplanır.
+Fill/Stroke bağımsızdır; açık stroke-only çizim ve kullanıcı kontrollü Auto Close
+S2D-1 kapsamındadır.
+Sıra: edit bağlamı → compound/çoklu edit → temel topoloji → Boolean preview →
+recipe Apply/Cancel/tek Undo. Ayrıntılı referans araçları modlara dağıtılmıştır;
+2D sade kalır, gelişmiş modifier/kesit/UV araçları 3D içerik detayına ayrılır.
+Mevcut combineMode metadata'sı çalışan Boolean motoru kabul edilmez. Kaynaklar,
+key'ler ve stable kimlikler korunur; uyumsuz animasyonda açıklamalı ret uygulanır.
+Bu plan mevcut Image/None teslimini, Poly veya 3D öncelik sırasını değiştirmez.
+
+
+### 12.84. S2D-0 tamamlandı — 15 Kasım 2026
+
+[Spline alt obje düzenleme](spline-subobject-editing.md): Point/Edge/Object seçim
+bağlamı, ayrı ID bankaları, moda göre viewport/Properties/sağ tık ve mevcut region
+seçim araçları bağlandı. Seçim/mod değişikliği source/history yazmaz; eski spline
+ve key verileri korunur. Nokta hareketi tam parent inverse ve tek Undo ile çalışır;
+key/driver/kilit çakışması source'u ezmeden reddedilir. Edge/Object Delete kök
+katmana sızmaz. S2D-1 compound edit/Auto Close ve sonraki topoloji/Boolean aşamaları
+ayrı plan olarak kalır; yeni 3D workspace/modifier kapsamı açılmadı.
+
+16 Kasım eki: [S2D-5 kapsamı](plans/spline-2d-operations-plan.md#s2d-5--vertex-snap-çizerek-bağlama-ve-sınırlı-köşeoutline-araçları)
+önce Vertex snap + aynı spline'da açık uçları çizerek Connect (5A), ardından
+gerçek Offset/Outline (5B), Chamfer (5C) ve Fillet (5D) olarak ayrılır. Offset,
+normal X/Y kopyalama değildir. Yeni köşe araçları planlıdır; bu teslimde yalnız
+5A geliştirilir. Kullanıcı kabul örneği çeyreği kesilmiş circle'ın iç paraleli,
+iki uç bağlantısı ve sonradan yuvarlatılmış köşeleridir.
+
+**16 Kasım S2D-5B teslimi:** [Offset / Outline](spline-outline.md) artık mevcut
+Spline & Boolean panelindedir. Edge/Object tam kontur seçimi, composition-px
+paralel hesap, açık Left/Right/Both, kapalı Inside/Outside, miter/bevel/round,
+CPU worker önizleme, Apply/Cancel ve tek Undo; eski geometry/key'ler korunur.
+Çıktı statik, yeni ID'li düzenlenebilir spline Object'idir. Chamfer ve Fillet
+ayrı 5C/5D paketleri olarak planlı kalır; 3D/Poly işi bu teslimle açılmaz.
+
+
+### 12.85. S2D-1 tamamlandı — 15 Kasım 2026
+
+[Spline compound edit](spline-subobject-editing.md#s2d-1--aynı-katmanda-üretim-ve-dönüşüm):
+Edit'te Add yeni SubShape, Done sonrasında Add ayrı katmandır. Continue açık seçili
+ucu uzatır. Point/Edge/Object yerel dönüşümleri, delikli konturların birlikte
+hareketi, tek Undo, Auto Close ve bağımsız ortak Fill/Stroke uygulanmıştır.
+Katılan canlı koordinatlar source üzerinden ezilmez; eski ID/track/key/time verisi
+korunur. Çizim target/revision/document/time bağlamı yakalanır ve stale up reddedilir.
+Sıradaki spline dilimi S2D-2 topoloji/Boolean'dır; bu teslim yeni 3D workspace açmaz.
+
+
+### 12.86. S2D-2 tamamlandı — 15 Kasım 2026
+
+[Spline temel topoloji](spline-subobject-editing.md#s2d-2--temel-topoloji): ortak
+validation/ID remap/ownership temizliği, Object Copy/Detach/Attach, Point
+Join/Connect/Weld, Edge Refine/Divide ve üç modda Delete uygulandı. Properties'te
+katlanır Topology ve aktif moda özel sağ tık/kısayollar kullanılır. Her işlem tek
+Undo; outer animasyonlar ve ilgisiz insan düzenlemeleri korunur. Referans/driver,
+child graph, dinamik Attach veya belirsiz hole ownership dönüşümleri açıklamalı
+ret verir. Yeni source şeması veya 3D çalışma modu açılmaz. Sıradaki spline paketi
+**S2D-3 Boolean preview**, ardından **S2D-4 recipe / Apply / Cancel**'dır.
+
+
+### 12.87. S2D-3 tamamlandı — 15 Kasım 2026
+
+Kapalı Shape/Spline ve spline Object girdileri için Union/Subtract/Intersect
+önizlemesi Properties ve viewport sağ tık akışına bağlandı. A−B/B−A, aktif girdi
+ve kompozisyon-piksel toleransı görünür; delik/winding ve bounded worker hesap
+sözleşmesi [Boolean önizleme belgesindedir](boolean-preview.md). Source/key,
+Undo/Redo ve final export değişmez. Kalıcı sonuç henüz yoktur.
+
+Sıradaki dilim **S2D-4 — sürümlü recipe, Apply/Cancel ve işlem düzenleme**.
+Mevcut kaynaklar korunacak; clone/reference/bounds/hit/save/load ve export
+eşliği tamamlanmadan Boolean layer tamamlandı sayılmayacak.
+
+
+### 12.88. Spline edit / Boolean panel düzenlemesi — 15 Kasım 2026
+
+Spline alt seçim ve Boolean önizleme kontrolleri **Spline & Boolean** dock
+paneline taşındı. Genel Properties ayrı kaldı. Viewport, Layers ve Scene Explorer
+sağ tık **Edit Mode → Point / Edge / Object** ortak seçim sahibini kullanır ve
+paneli öne getirir. Eski layout ve kaynak/Undo/animasyonlar korunur. Bu UI işi
+S2D-4 recipe / Apply / Cancel sırasını değiştirmez; kalıcı Boolean sonucu eklemez.
+
+### 12.89. S2D-4 tamamlandı — kaynakları koruyan Boolean recipe
+
+Apply/Cancel, sağ tık Edit Operation ve tek Undo/Redo; ortak renderer/bounds/SVG
+değerlendirmesi; portable recipe/source ve bağımsız forest Copy uygulanmıştır.
+Girdiler statik/eş ömürlü ve contiguous kardeştir; bağımsız key/ref/instance
+sessizce kaybedilmez. Generated spline noktaları salt okunur; grup ve sonuç
+transform/style animasyonu açıktır. Türetilmiş geometri JSON/history dışında,
+8 kayıt / 16 MiB tahmini önbellekle sınırlıdır.
+[Sözleşme ve test girişleri](boolean-operation.md). Mevcut 3D/Poly öncelikleri
+yeniden sıralanmaz; editable path bake ve linked operation Instance etkin değildir.
+
+**16 Kasım S2D-5C teslimi:** [Chamfer / pah](spline-chamfer.md) Point modunda
+seçili köşelere uygulanır. Line/quadratic/cubic edge trim, world-px mesafe,
+worker preview, Apply/Cancel ve tek Undo/Redo tamamlandı. Offset ile ortak preview
+yaşam döngüsü kullanılır. Fillet S2D-5D sıradaki ayrı pakettir; ana sıra değişmez.
+
+**16 Kasım S2D-5D teslimi:** [Fillet / yuvarlatma](spline-fillet.md) Point
+modunda radius ile çalışır. Düzenli line/quadratic/cubic komşuluklarında teğet
+yay, worker preview, Apply/Cancel ve tek Undo/Redo tamamlandı. Chamfer ile ortak
+topoloji ve source/driver/reference koruması kullanılır. S2D-5A–5D yerel sırası
+tamamlandı; diğer ana paketlerin önceliği değişmedi.
+
+### 12.90. Spline MCP ve script eşliği — 16 Kasım 2026
+
+Son S2D araçları [ortak MCP plan akışı](mcp-spline-editing.md) ile açılır. Point/Edge/Object, append/Continue/Auto Close, topology/Attach/Detach/paint ve Offset/Chamfer/Fillet/Boolean aynı native koruma ve hesaplamaları kullanır. Basit işlemler `.spline.edit` içinde de kullanılabilir; CPU solverlar async MCP planıdır. [Script uyumluluk incelemesi](script-api-compatibility-audit.md) gerçek kapsamı, düzeltilen animation silme davranışını ve özel 3D API sınırlarını kaydeder. Ana geliştirme sırası değiştirilmez.
+
+#### 12.90.1. 22 Kasım 2026 · Transform eksenleri ve doğrudan Boolean seçimi
+
+Toolbox Axes Scene/Local, nesne Move/Scale ve Spline Edit taşıma/Shift kısıtları
+için ortak değerlendirilen referans kullanır; aktif root/parent dönüşleri korunur.
+Native gesture/Undo ve shear tanıları mevcut transform owner'ında kalır. Add
+Spline Operation select yerine Union/Subtract/Intersect/XOR toggle düğmeleri
+seçili Object bankını doğrudan uygular; + aynı layer Object'leri ve Explorer
+spline/shape girdilerini ortak Boolean recipe'ye ekler. Dış sınır, gerçek delikler,
+seçim dışı Object'ler, kaynak kayıtları ve tek aksiyon Undo/Redo native testlidir.
+
+### 12.91. Spline Edit ve paint — 22 Kasım 2026
+
+1/2/3 Point/Edge/Object, Mesh vertex/edge edit, bütünleşik Spline Boolean/Paths,
+Fill/Stroke seçenekleri ve native doğrulama girişleri
+[Spline Edit ve görünüm sözleşmesinde](spline-edit-and-paint.md) belgelenir.
+Outline geometrik bant v2 için [uygulama planı](plans/spline-outline-band-v2-plan.md)
+hazırdır; sabit kalınlık ve köşelerde artan vertex yoğunluğu kararı kesindir,
+v2 henüz uygulanmış değildir.
+
+### 12.92. Native Spline Edit araçları — ilk teslim
+
+Chamfer/Fillet Point araçları, Offset Path Edge/Object aracıdır; Apply doğrudan
+geometriyi değiştirir. Offset varsayılan Replace, isteğe bağlı Keep source Append;
+Object/delik sahipliği ve seçilmemiş geometri korunur. Eski stack kapalı
+Source / History bölümündedir ve açık Bake/Undo ile edit edilebilir.
+[Native Edit teslim planı](plans/spline-edit-native-tools-plan.md) ilk teslim ile
+sonraki nokta/topoloji, kesişim ve Outline v2 aşamalarını ayrı tutar.
+
+### 12.93. Native Spline Edit — Point/Edge teslimi, 23 Kasım 2026
+
+Point moduna Break, Fuse, Reset Tangents ve Copy/Paste Tangents; Edge moduna
+Split eklendi. Panel ve sağ tık aynı seçim ve güvenlik kurallarını kullanır.
+Her geometri işlemi ayrı Undo/Redo'dur; tangent panosu belgeye özel ve geçicidir.
+Exact Bézier bölmesi, contour/delik sahipliği, layer TRS/origin ve portable
+kayıt korunur. Sözleşmeler ve kalan aşamalar [native Edit planındadır](plans/spline-edit-native-tools-plan.md).
+
+### 12.94. Native Spline Edit — Trim/Extend, 23 Kasım 2026
+
+Edge paneli ve sağ tıkta Trim/Extend tamamlandı: kesişimler arasındaki contour
+aralığı silinir; açık uç en yakın ileri kesişime teğet olarak uzatılır. Her edit
+ayrı Undo/Redo'dur. Aynı spline ve diğer görünür spline layer'ları tam parent/frame
+transformlarıyla sınır olabilir; no-hit/Cancel Undo oluşturmaz. Üst üste/belirsiz
+eğri teması güvenli biçimde reddedilir. Kapsam ve kalan kontur araçları
+[native Edit planında](plans/spline-edit-native-tools-plan.md) ayrı tutulur.
+
+### 12.95. Native Spline Edit — Add Vertex / Simplify / Smooth, 23 Kasım 2026
+
+Edge Add Vertex sürekli çalışır: Preserve curve varsayılanı, dört nokta tipi,
+her tıklamada ayrı Undo ve Esc ile araçtan çıkış. Object Simplify yerel px
+toleransıyla orijinal Bézier'e karşı kontrollü nokta azaltır; Smooth anchor'ları
+taşımadan tangent'leri düzenler. Panel ve sağ tık ortak komut/uygunluk kurallarını
+kullanır. Araç/tolerans geçicidir, modifier üretmez; delikler, layer TRS/origin ve
+seçilmemiş geometri korunur. Sınırlar ve kalan aşamalar
+[native Edit planında](plans/spline-edit-native-tools-plan.md) belgelenir.
+
+### 12.96. 2D Spline modifier kapsamı — 23 Kasım 2026
+
+Planlı Faz 1 mevcut statik Execute akışını kullanır: temel Offset Path, Round
+Corners, Simplify, Smoothing, Resample, Zig Zag, Pucker & Bloat ve Repeater.
+Animasyonlu parametreler ön koşul değildir. Variable Width, Stroke to Path,
+Outline v2'nin tam kapsamı, Boolean modifier, Wiggle ve Dynamics Faz 2'dedir.
+Mevcut native Edit, Stroke Trim ve Follow Path davranışları korunur; bu plan
+yeni modifier'ların uygulanmış olduğu anlamına gelmez.
+[Fazlar ve yürütme sözleşmesi](plans/spline-modifier-phases-plan.md).
+
+### 12.97. Native Spline Edit — Object Subdivide / Interpolation, 23 Kasım 2026
+
+Object Subdivide, seçili kontur/delikleri exact Bézier bölmesiyle 2–64 eşit
+parametre parçasına ayırır; panel/sağ tık aynı bölme sayısını kullanır.
+Interpolation, Object'e yerel tolerans metadata'sı yazar; kaynak vertex'leri ve
+exact render eğrileri korunur. Adaptif örnekleme ve Mesh dönüşümü ayarı tüketir;
+conversion tolerance daha hassassa önceliklidir. Default metadata'yı kaldırır.
+Her değişiklik ayrı Undo/Redo'dur; modifier satırı oluşmaz. 572 dosyada 4.092 test
+ve gerçek Chrome'da yedi kabul grubu geçti. Ayrıntılar
+[Spline Edit sözleşmesinde](spline-edit-and-paint.md#object-subdivide-ve-interpolation).
+
+### 12.98. Statik Spline modifier — Faz 1 ilk paket, 23 Kasım 2026
+
+Offset Path, Round Corners, Path Simplify ve Path Smoothing ayrı kayıt türleriyle
+uygulandı. Native Edit hesaplarını paylaşırlar; kaynak korunur, ayar taslakları
+Execute ile sırayla ve tek Undo'da uygulanır. Object hedefleri modifier'ın kendi
+girdisinden seçilir. Sıralama, toggle, silme, Bake, portable kayıt, clone,
+runtime/renderer ve Mesh dönüşümü doğrulandı; son modifier kapanınca panel açık
+kalıp Object edit'e döner. Eski dört modeling kaydı ve kapalı legacy history
+akışı korunur. 574 dosyada 4.109 test ve gerçek Chrome'da sekiz kabul grubu geçti.
+[Teslim sözleşmesi](spline-static-modifiers.md). Resample, Zig Zag, Pucker & Bloat
+ve Repeater sonraki temel paketlerdir; ileri işler Faz 2'de kalır.
+
+### 12.99. Round Corners — mevcut yarıçapı değiştirme, 23 Kasım 2026
+
+Modern Round Corners, Corner / Bézier Corner nokta tiplerini hedefler; 1 px
+uygunluk eşiği yoktur. Düz yan kenarlar arasındaki mevcut dairesel Bézier köşe
+zinciri aynı native Fillet solver ile yeni mutlak yerel yarıçapta yeniden kurulur.
+Kaynağa işlenmiş yuvarlatma büyütülüp küçültülebilir; Smooth/bağlı Bézier noktalar
+otomatik hedef olmaz. Kaynak, layer TRS, delikler ve sıra korunur; her Execute
+ayrı Undo/Redo'dur. Eski Fillet/Chamfer değişmez. Eğri yan kenarlar/elipsler güvenle
+çıkarılamaz. 575 dosyada 4.129 test ve gerçek Chrome'da 12 kabul grubu geçti.
+[Ayrıntılar ve sınırlar](spline-static-modifiers.md).
+
+### 12.100. Spline modifier Faz 1 — temel paket tamamlandı, 23 Kasım 2026
+
+Path Resample, Zig Zag, Pucker & Bloat ve aynı-spline Repeater eklendi; menüde
+sekiz temel statik modifier vardır. Ortak bounded Bézier arc sampler, açık polyline
+çıktısı, köşe/uç sabitleme, radyal kontrol kafesi ve mevcut RepeaterResolver
+matrisleri kullanılır. Bağımsız kopyalar deliklerini korur ve layer boyasını paylaşır.
+Mevcut stack/Execute/Undo/Redo/portable/renderer akışı korunur; ikinci runner yoktur.
+577 dosyada 4.147 test; gerçek Chrome'da 17 kabul grubu, birlikte sıra/toggle/Bake,
+portable reload, PNG ve SVG kontrolü geçti. Animasyonlu parametreler ve ileri
+Outline/Boolean/Width/Dynamics işleri Faz 2'de kalır.
+[Teslim sözleşmesi](spline-phase1-modifiers.md).
+
+### 12.101. Outline / Stroke to Path ilk geometri teslimi — 23 Kasım 2026
+
+İlk teslimin native Replace/Keep source davranışı aşağıda tarihsel olarak
+korunur; güncel UI kaynak takip eden canlı Outline’dır (§12.102 ve §9A.3).
+
+- Native Edge/Object Outline; gerçek kapalı bant, Inside/Center/Outside veya
+  açıkta Center/Left/Right; cap/join/miter-limit, arc-length dash ve delikler.
+  Kısmi zincir, Keep source, worker preview/Cancel, tek Undo/Redo; modifier satırı
+  eklemez. Layer TRS/origin ve seçilmemiş geometri korunur.
+- Ayrı `strokeToPath` statik modifier aynı band hesabıyla mevcut ordered Execute
+  akışına bağlandı; Edit moduna girmek gerekmez. Eski `outline` kayıtları korundu.
+- Properties'te bağımsız band paint, kaynak stroke → fill bağı ve generated ID
+  paint override'ları; toggle/Execute/Bake, clone/portable/runtime, asset demand,
+  viewport/PNG/SVG birlikte ele alındı. 579 dosyada 4.167 test ve gerçek tarayıcıda
+  7 kabul grubu geçti; dışa aktarılan PNG/SVG görsel kontrol edildi.
+- Tam v2 fit/provenance, ayarlanabilir density ağırlıkları ve ortak preset/
+  clipboard kapsamı açık kalır. [Teslim sözleşmesi](spline-outline-band.md).
+
+### 12.102. Canlı Outline ve kaynak çizgi düzenleme — 23 Kasım 2026
+
+- `liveOutline` native Outline ayarını kaynak çizgiye bağlı tutar; point/Bezier
+  handle hareketi ve Refine bandı otomatik günceller. Layer ve logical Object
+  sayısı/source kimlikleri korunur. `sourceEditing: inputSpline` admission'ı
+  result-preserving edit yetkisinden ayrıdır; genel generated kilitleri sürer.
+- Edit'te kaynak kılavuzu toggle'ı, kalıcı Outline enabled ve açık Bake ayrı
+  akışlardır; kılavuz/ghost PNG/SVG'ye girmez. Sadece Bake sınır vertex'lerini
+  kalıcı yapar; Undo source+recipe'yi geri getirir. Properties band boyasını
+  source Object ID'siyle bağımsız taşır.
+- 580 dosyada 4.178 test; gerçek Chrome'da 10 kabul grubu geçti. Gerçek point ve
+  handle drag, guide toggle, Off/On, Bake/Undo, Add Vertex, scope admission,
+  portable source/paint ve PNG/SVG görsel kontrol edildi. Kısmi Edge zinciri
+  remap'i, animated source/parametreler ve Bezier-fit ileri kapsamda kalır.
+- [Uygulama ve sınırlar](spline-live-outline.md); legacy `outline`/`strokeToPath`
+  ve eski kalıcı band API'si otomatik dönüştürülmez.

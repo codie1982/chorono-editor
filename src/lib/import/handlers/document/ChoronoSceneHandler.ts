@@ -65,6 +65,9 @@ function patchLayerIds(layer: Layer, remap: Map<string, string>): Layer {
   if (patched.audio?.assetId && remap.has(patched.audio.assetId)) {
     patched.audio = { ...patched.audio, assetId: remap.get(patched.audio.assetId)! }
   }
+  if (patched.style?.fill?.image?.assetId && remap.has(patched.style.fill.image.assetId)) {
+    patched.style = { ...patched.style, fill: { ...patched.style.fill, image: { ...patched.style.fill.image, assetId: remap.get(patched.style.fill.image.assetId)! } } }
+  }
   return patched
 }
 

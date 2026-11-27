@@ -1,3 +1,4 @@
+import { splitBezier } from '../../geometry/bezier/curves'
 // ── Spline edit mutations (BL-73 Sprint 4) ────────────────────────────────────
 //
 // Pure transforms on SplinePathData. Each returns a fresh object (no mutation),
@@ -61,6 +62,10 @@ export function moveSplineHandle(
 
 // ── Insert a point on a segment (De Casteljau split preserves the curve) ──────
 
+/** Insert an anchor at a strictly interior parameter using exact De Casteljau
+ * subdivision in layer-local px. Pure; unknown edges/invalid t return input.
+ * Retained endpoint handles shrink on only the split side, so mirror points
+ * become Smooth (independent lengths) without moving the opposite curve. */
 export function insertPointOnSegment(data: SplinePathData, segmentId: string, t: number): SplinePathData {
   if (!Number.isFinite(t) || t <= 0 || t >= 1) return data
   const seg = data.segments[segmentId]
@@ -84,14 +89,12 @@ export function insertPointOnSegment(data: SplinePathData, segmentId: string, t:
     const inH  = getHandle(data, to.id, 'in')
     const c1 = outH ? { x: outH.x, y: outH.y } : { x: from.x, y: from.y }
     const c2 = inH  ? { x: inH.x,  y: inH.y  } : { x: to.x,   y: to.y }
-    const p01   = lerpPt(from, c1, t)
-    const p12   = lerpPt(c1, c2, t)
-    const p23   = lerpPt(c2, to, t)
-    const p012  = lerpPt(p01, p12, t)
-    const p123  = lerpPt(p12, p23, t)
-    const p0123 = lerpPt(p012, p123, t)
+    const [left, right] = splitBezier([from, c1, c2, to], t)
+    const [p01, p012, p0123, p123, p23] = [left[1], left[2], left[3], right[1], right[2]]
 
     // shrink the existing handles to the split tangents
+    if (from.type === 'bezier') points[from.id] = { ...from, type: 'smooth' }
+    if (to.type === 'bezier') points[to.id] = { ...to, type: 'smooth' }
     if (outH) handles[outH.id] = { ...outH, x: p01.x, y: p01.y }
     else { const id = uid('h'); handles[id] = { id, pointId: from.id, kind: 'out', x: p01.x, y: p01.y, locked: false } }
     if (inH)  handles[inH.id]  = { ...inH,  x: p23.x, y: p23.y }
@@ -105,9 +108,8 @@ export function insertPointOnSegment(data: SplinePathData, segmentId: string, t:
     seg2 = { id: uid('seg'), fromPointId: newPtId, toPointId: to.id,   type: 'cubic' }
   } else if (seg.type === 'quadratic') {
     const control = seg.control1 ?? from
-    const p01 = lerpPt(from, control, t)
-    const p12 = lerpPt(control, to, t)
-    const mid = lerpPt(p01, p12, t)
+    const [left, right] = splitBezier([from, control, to], t)
+    const [p01, mid, p12] = [left[1], left[2], right[1]]
     newPt = { id: newPtId, x: mid.x, y: mid.y, type: 'smooth' }
     seg1 = { id: uid('seg'), fromPointId: from.id, toPointId: newPtId, type: 'quadratic', control1: p01 }
     seg2 = { id: uid('seg'), fromPointId: newPtId, toPointId: to.id, type: 'quadratic', control1: p12 }

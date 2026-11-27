@@ -25,6 +25,7 @@ import { useRuntimeFrameSignal } from './runtime/useRuntimeFrameSignal'
 import { useRuntimeParameters } from './runtime/useRuntimeParameters'
 import type { ParamLookup } from '@/lib/statemachine'
 import type { ParamValueMap } from '@/lib/runtime/paramResolver'
+import type { IKDiagnostics } from '@/lib/rig2d/diagnostics'
 import { evaluateSceneFrame } from '@/lib/runtime/evaluateSceneFrame'
 import {
   evaluateTriggers,
@@ -46,6 +47,8 @@ import {
 export interface FrameEvalResult {
   /** Final OverrideMap to be passed into the renderer. */
   overrides:    OverrideMap
+  rigSourceOverrides: OverrideMap
+  ikDiagnostics: IKDiagnostics
   /** Same immutable input frame used to resolve wire sources; before wire output. */
   wireSourceOverrides?: OverrideMap
   wireErrors?: ReadonlyMap<string, string>
@@ -103,7 +106,7 @@ export interface InteractiveRuntimeReturn {
   /** Per-frame pipeline with global ms. An optional editor-only local override
    * holds a paused timeline at its terminal pose without loop remapping. Segment
    * preview takes priority; omitted override preserves runtime/player callers. */
-  evaluateFrame: (globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null) => FrameEvalResult
+  evaluateFrame: (globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null, rigDragOverrides?: Map<string, number>) => FrameEvalResult
   /** Monotonic counter that increments every animation frame while a
    *  segment is actively playing. Consumers add it to `useMemo` deps to
    *  force re-evaluation on each frame without polling. Retains its last value
@@ -179,7 +182,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
   const prevSnapshotRef = useRef<PlaybackSnapshot>(emptySnapshot())
 
   // ── Per-frame evaluation ───────────────────────────────────────────────
-  const evaluateFrame = useCallback((globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null): FrameEvalResult => {
+  const evaluateFrame = useCallback((globalTimeMs: number, authoringOverride?: ExternalTimelineTime | null, rigDragOverrides?: Map<string, number>): FrameEvalResult => {
     acknowledge()
     const paramValues = readValues()
     // Drain before the SM/trigger passes. Feedback emitted by either pass stays
@@ -233,7 +236,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
       baseOverrides = evaluateTimelines(scene.timelines, globalTimeMs, externalTime)
     }
 
-    const wireEvaluation = evaluateSceneFrame(scene, globalTimeMs, { baseOverrides, paramValues, externalTime, timelineWeights })
+    const wireEvaluation = evaluateSceneFrame(scene, globalTimeMs, { baseOverrides, paramValues, externalTime, timelineWeights, rigDragOverrides })
     const bindingOverrides = wireEvaluation.wireSourceOverrides
     const overrides = wireEvaluation.overrides
 
@@ -276,7 +279,7 @@ export function useInteractiveRuntime(scene: ChronoScene, options: { playbackDri
     prevSnapshotRef.current = nextSnapshot
 
     return {
-      overrides, wireSourceOverrides: bindingOverrides, wireErrors: wireEvaluation.errors, expressionErrors: wireEvaluation.expressionErrors,
+      overrides, rigSourceOverrides: wireEvaluation.rigSourceOverrides, ikDiagnostics: wireEvaluation.ikDiagnostics, wireSourceOverrides: bindingOverrides, wireErrors: wireEvaluation.errors, expressionErrors: wireEvaluation.expressionErrors,
       paramValues,
       events:  allEvents,
       actions,

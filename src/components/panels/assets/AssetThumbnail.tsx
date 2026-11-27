@@ -17,7 +17,7 @@ export default function AssetThumbnail({ asset }: { asset: Asset }) {
       if (video.getAttribute('src') === url) { video.removeAttribute('src'); video.load() }
     }
   }, [asset.url])
-  if (asset.type === 'image') return <img src={asset.url} alt={asset.name} loading="lazy" decoding="async"
+  if (asset.type === 'image') return <img draggable={false} src={asset.url} alt={asset.name} loading="lazy" decoding="async"
     className="max-w-full max-h-full object-contain" />
   if (asset.type === 'video') return <video ref={videoRef} src={asset.url} muted playsInline preload="metadata"
     aria-label={asset.name} className="max-w-full max-h-full object-contain" />

@@ -2,6 +2,7 @@ import type { ChronoScene } from '@/lib/types'
 import type { Guide } from '@/lib/snap/AlignmentGuides'
 import type { ViewportLayerChange } from '@/lib/editor/viewportKeyframes'
 import type { CloneForestCommand } from '@/lib/editor/commands-clone-forest'
+import type { EditorCommand } from '@/lib/editor/commands-keyframe'
 
 /** One source-layer edit. Explicit paths retain rendered edits whose desired
  * value happens to equal the authored fallback, but differs from an active key. */
@@ -18,6 +19,10 @@ export interface CanvasDragPreview {
   snapPoint?: { x: number; y: number }
   /** Exact prepared forest command behind a clone preview; IDs stay fixed. */
   cloneCommand?: CloneForestCommand
+  /** Root-parent-local translation reached by this clone gesture. */
+  cloneOffset?: { x: number; y: number }
+  /** Complete canonical geometry-stack command; bypasses layer TRS/key editing. */
+  geometryCommand?: EditorCommand
 }
 
 /** Backward-compatible aliases; object and motion-key gestures share one

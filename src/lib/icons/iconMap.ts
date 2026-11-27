@@ -142,10 +142,12 @@ export const LAYER_TYPE_ICON: Record<string, string> = {
   particleEmitter: 'noise',  // BL-13: row 3, col 7 (existing sprite)
   text:             'text',
   image:            'image',
+  model3d:          'group',
   video:            'video',
   audio:            'audio',
   pathStroke:       'motionPath',
   path:             'bezierPath',
+  mesh2d:           'box3d',
   svg:              'svgImport',
   group:            'group',
   mask:             'rectMask',
@@ -193,6 +195,13 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
     ],
   },
   {
+    title: '3D Objects',
+    items: [
+      { label: 'Empty 3D Scene', type: 'empty3dScene', icon: 'group', available: true },
+      { label: 'Import GLB / glTF', type: 'model3d', icon: 'group', available: true },
+    ],
+  },
+  {
     title: 'Path & Vector',
     items: [
       { label: 'Path Stroke',  type: 'pathStroke',   icon: 'motionPath',   available: true  },
@@ -223,6 +232,9 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
   {
     title: 'Spline Objects',
     items: [
+      { label: 'Bézier Pen', type: 'splinePen', icon:'bezierPath', available:true },
+      { label: 'Freehand', type: 'splineFreehand', icon:'freehandPath', available:true },
+      { label: 'Spiral', type: 'splineSpiral', icon:'spiral', available:true },
       { label: 'Circle',    type: 'splineCircle',    icon: 'circle',    available: true  },
       { label: 'Line',      type: 'splineLine',      icon: 'line',      available: true  },
       { label: 'Rectangle', type: 'splineRect',      icon: 'rectangle', available: true  },
@@ -231,6 +243,12 @@ export const ADD_LAYER_GROUPS: AddLayerGroup[] = [
       { label: 'Donut',     type: 'splineDonut',     icon: 'ring',      available: true  },
       { label: 'NGon',      type: 'splineNGon',      icon: 'polygon',   available: true  },
       { label: 'Star',      type: 'splineStar',      icon: 'star',      available: true  },
+    ],
+  },
+  {
+    title: 'Mesh & Surface',
+    items: [
+      { label: 'Structured Grid', type: 'mesh2d', icon: 'box3d', available: true },
     ],
   },
   {

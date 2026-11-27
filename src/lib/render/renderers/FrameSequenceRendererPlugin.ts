@@ -9,29 +9,8 @@ import { nativePaintBounds } from '../visibility/nativePaintBounds'
 import type { Layer } from '@/lib/types'
 import type { LayerRendererPlugin } from '@/lib/registry/LayerRendererRegistry'
 import type { RenderContext } from '../RenderContext'
-import type { FrameSequenceData } from '@/lib/types/media'
 import { frameAtTime, frameRect } from '@/lib/frameSequence/frameMath'
-
-/** Compute the destination box for a frame inside the layer, honouring objectFit. */
-function fitRect(
-  fit: FrameSequenceData['objectFit'],
-  boxW: number, boxH: number,
-  frameW: number, frameH: number,
-): { dx: number; dy: number; dw: number; dh: number } {
-  if (!frameW || !frameH || fit === 'fill') {
-    return { dx: 0, dy: 0, dw: boxW, dh: boxH }
-  }
-  if (fit === 'none') {
-    return { dx: (boxW - frameW) / 2, dy: (boxH - frameH) / 2, dw: frameW, dh: frameH }
-  }
-  // contain (default) or cover
-  const scale = fit === 'cover'
-    ? Math.max(boxW / frameW, boxH / frameH)
-    : Math.min(boxW / frameW, boxH / frameH)
-  const dw = frameW * scale
-  const dh = frameH * scale
-  return { dx: (boxW - dw) / 2, dy: (boxH - dh) / 2, dw, dh }
-}
+import { resolveFitRect } from '../media/resolveFitRect'
 
 function renderFrameSequence(ctx: RenderContext, layer: Layer): void {
   const cfg = layer.frameSequence
@@ -49,7 +28,9 @@ function renderFrameSequence(ctx: RenderContext, layer: Layer): void {
 
   const boxW = layer.size?.width  ?? sw
   const boxH = layer.size?.height ?? sh
-  const { dx, dy, dw, dh } = fitRect(cfg.objectFit ?? 'contain', boxW, boxH, sw, sh)
+  const fitted = resolveFitRect(cfg.objectFit ?? 'contain', boxW, boxH, sw, sh)
+  if (!fitted) return
+  const { dx, dy, dw, dh } = fitted
 
   // Clip to the layer box for cover/fill so frames don't bleed outside.
   ctx.canvas.save()

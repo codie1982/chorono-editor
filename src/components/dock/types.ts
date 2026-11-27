@@ -4,6 +4,7 @@
 
 export type DockDirection = 'h' | 'v'
 export type DockEdge      = 'left' | 'right' | 'top' | 'bottom' | 'center'
+export type DockTheme = 'default' | 'model3d'
 
 export interface DockSplit {
   kind: 'split'

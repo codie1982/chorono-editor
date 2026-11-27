@@ -1,0 +1,107 @@
+import { useMemo, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import SceneCanvas from '@/components/SceneCanvas'
+import GeometryEditPanel from '@/components/editorGeometry/GeometryEditPanel'
+import { useEditorState } from '@/app/hooks/useEditorState'
+import { useSnapSettings } from '@/app/hooks/useSnapSettings'
+import { emptyScene, newRectLayer } from '@/lib/defaults'
+import type { Layer } from '@/lib/types'
+import { prepareGeometryConversion, type ConversionTarget } from '@/lib/editor/commands-geometry-conversion'
+import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
+import { containsMesh2DPoint } from '@/lib/geometry/mesh2d/Mesh2DGeometryQueries'
+import { useSplineEditSelection } from '@/components/splineEdit/useSplineEditSelection'
+import { SplineModeControls } from '@/components/splineEdit/SplineModeControls'
+import { useGeometryEditMode } from '@/components/editorGeometry/useGeometryEditMode'
+import { checkLiveMeshCenter } from './checkLiveMeshCenter'
+import { checkMeshEditSession } from './checkMeshEditSession'
+import { Mesh2DBoundaryRingExtractor } from '@/lib/geometry/mesh2d'
+
+/** Synthetic, unpersisted frame-with-hole plus separate island. Every command
+ * and canvas/panel below is production code; no connected document is touched. */
+function rectangle(id: string, x: number, y: number, width: number, height: number): Layer {
+  const layer = newRectLayer()
+  return { ...layer, id, name: id, size: { width, height },
+    transform: { ...layer.transform, x, y, anchorX: 0, anchorY: 0 },
+    style: { fill: { type: 'solid', color: '#3B82F6', opacity: 100 }, cornerRadius: 0,
+      stroke: { width: 2, color: '#172554' } } }
+}
+const layers = [rectangle('top', 100, 100, 200, 30), rectangle('bottom', 100, 270, 200, 30),
+  rectangle('left', 100, 130, 30, 140), rectangle('right', 270, 130, 30, 140), rectangle('island', 380, 100, 80, 80)]
+const rounded = rectangle('rounded', 500, 300, 180, 130)
+rounded.transform = { ...rounded.transform, anchorX: 90, anchorY: 65 }
+rounded.style = { ...rounded.style, cornerRadius: 25 }
+const base = emptyScene()
+const initial = { ...base, composition: { ...base.composition, width: 800, height: 500 }, layers: [...layers, rounded] }
+const assets = new Map()
+
+/** Visual acceptance host: native undo, multi-selection, modifier controls,
+ * mesh stroke/hole painting and portable source all use the normal contracts. */
+function Subject() {
+  const editor = useEditorState(initial), snap = useSnapSettings()
+  const [selected, setSelected] = useState(layers.map(layer => layer.id))
+  const [tool, setTool] = useState<'select' | 'move' | 'scale' | 'rotate'>('select')
+  const [centerCheck, setCenterCheck] = useState('')
+  const [sessionCheck, setSessionCheck] = useState('')
+  const ids = useMemo(() => new Set(selected), [selected])
+  const layer = editor.scene.layers.find(item => item.id === selected[0]) ?? null
+  const splineEdit = useSplineEditSelection(selected.length === 1 ? layer : null, editor.getDocumentSignal())
+  const editMode = useGeometryEditMode(selected.length === 1 ? layer : null, splineEdit, editor.getDocumentSignal())
+  const convert = (target: ConversionTarget) => {
+    const plan = prepareGeometryConversion(editor.getScene(), selected, target)
+    editor.dispatchCommand(plan.command); setSelected([plan.layerId])
+  }
+  const spline = layer?.spline, mesh = layer?.mesh2d
+  // This private fixture has one convex rectangular hole. Test its current
+  // centroid so local Edit transforms cannot turn a fixed-coordinate check
+  // into a false failure while the hole itself is preserved.
+  const hole = useMemo(() => {
+    if (!mesh || layer?.id === 'rounded') return null
+    const holes = new Mesh2DBoundaryRingExtractor().extract(mesh.geometry).filter(ring => ring.role === 'hole')
+    return holes.length === 1 && holes.every(ring => {
+      const center = ring.points.reduce((sum, point) => ({ x: sum.x + point.x / ring.points.length, y: sum.y + point.y / ring.points.length }), { x: 0, y: 0 })
+      return !containsMesh2DPoint(mesh.geometry, center.x, center.y)
+    })
+  }, [mesh, layer?.id])
+  return <main className="flex h-screen flex-col bg-gray-900 text-xs text-gray-100">
+    <nav className="flex gap-4 p-3">
+      <button onClick={() => setSelected(editor.scene.layers.filter(layer => layer.id !== 'rounded').map(layer => layer.id))}>Select frame and island</button>
+      <button onClick={() => setSelected(['rounded'])}>Select rounded shape</button>
+      <button onClick={editor.undo}>Undo</button><button onClick={editor.redo}>Redo</button>
+      {(['select', 'move', 'scale', 'rotate'] as const).map(mode => <button key={mode} aria-pressed={tool === mode} onClick={() => setTool(mode)}>{mode}</button>)}
+      {layer?.id === 'rounded' && layer.type === 'mesh2d' && <button onClick={() => {
+        void checkLiveMeshCenter().then(setCenterCheck, error => setCenterCheck(`FAIL · ${String(error)}`))
+      }}>Check live mesh center</button>}
+      {layer?.type === 'mesh2d' && editMode.active && <button onClick={() => {
+        void checkMeshEditSession(editor, layer.id).then(setSessionCheck, error => setSessionCheck(`FAIL · ${String(error)}`))
+      }}>Check Edit session</button>}
+    </nav>
+    {centerCheck && <output aria-label="Live mesh center check" className="block px-3 pb-3">{centerCheck}</output>}
+    {sessionCheck && <output aria-label="Edit session check" className="block px-3 pb-3">{sessionCheck}</output>}
+    {editMode.active && <output aria-label="Edit object transform" className="block px-3 pb-3">
+      Object transform {JSON.stringify(layer?.transform)}
+    </output>}
+    <output aria-label="Conversion acceptance" className="block px-3 pb-3">
+      Type {layer?.type} · Elements {spline ? Object.keys(spline.subShapes).length : '—'} ·
+      Contours {spline ? Object.keys(spline.contours).length : mesh?.boundaryRings?.length ?? '—'} ·
+      Hole {hole === null ? 'pending' : hole ? 'PASS' : 'FAIL'} · Vertices {mesh?.geometry.topology.vertexIds.length ?? '—'} · Triangles {(mesh?.geometry.topology.triangleIndices.length ?? 0) / 3} · Quads {(mesh?.geometry.topology.quadIndices?.length ?? 0) / 4} · Modifiers {layer?.modifierStack?.modifiers.length ?? layer?.geometryConversion?.stages.length ?? 0}
+    </output>
+    <div className="flex min-h-0 flex-1">
+      <section className="min-w-0 flex-1"><SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} timeMs={0}
+        menuHandlers={{ convertToSpline: () => convert('spline'), convertToMesh2D: () => convert('mesh2d') }}
+        selectedLayerId={selected[0] ?? null} selectedLayerIds={ids} isPlaying={false} toolMode={tool} splineEdit={splineEdit} geometryEditActive={editMode.active} onExitGeometryEdit={editMode.exit}
+        onSelectLayer={(id, shift) => setSelected(previous => !id ? [] : shift ? Array.from(new Set([...previous, id])) : [id])} /></section>
+      <aside className="w-[400px] border-l border-gray-700">
+        <GeometryEditPanel key={`${layer?.id}:${layer?.type}`} layer={layer} selectedIds={selected}
+          editMode={editMode}
+          getScene={editor.getScene} getRevision={editor.getRevision} getDocumentSignal={editor.getDocumentSignal}
+          isTransactionActive={editor.isTransactionActive} dispatchCommand={editor.dispatchCommand}
+          onSelectLayer={id => setSelected([id])} selectedPointId={null} onClearPoint={() => {}}
+          splineModeControls={<SplineModeControls controller={splineEdit} />}
+          onLayerChange={next => { const before = editor.getScene().layers.find(item => item.id === next.id)!; editor.dispatchCommand(makeUpdateLayerCmd(next.id, next, before)) }} />
+      </aside>
+    </div>
+  </main>
+}
+
+document.body.style.margin = '0'
+createRoot(document.getElementById('app')!).render(<Subject />)

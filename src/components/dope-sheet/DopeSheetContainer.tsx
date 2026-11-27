@@ -9,6 +9,8 @@ import DopeSheetGrid from './DopeSheetGrid'
 import type { DopeSheetUIState } from './types'
 
 interface Props {
+  /** Hard row/key isolation; source scene and edit commands remain complete. */
+  layerScope?: ReadonlySet<string> | null
   collisionPolicy?: KeyCollisionPolicy
   onCollisionPolicyChange?: (policy: KeyCollisionPolicy) => void
   scene: ChronoScene
@@ -31,8 +33,8 @@ export default function DopeSheetContainer(props: Props) {
   const { scene, selectedTimeline, uiState, selectedLayerId } = props
   const rows = useMemo(() => flattenDopeSheetRows(buildHierarchy(
     scene, selectedTimeline, uiState.filterAnimatedOnly, uiState.filterSelectedObjectOnly,
-    uiState.filterText, selectedLayerId, props.selectedLayerIds,
-  ), selectedTimeline, uiState.collapsedNodeIds), [scene, selectedTimeline, uiState, selectedLayerId, props.selectedLayerIds])
+    uiState.filterText, selectedLayerId, props.selectedLayerIds, undefined, props.layerScope,
+  ), selectedTimeline, uiState.collapsedNodeIds), [scene, selectedTimeline, uiState, selectedLayerId, props.selectedLayerIds, props.layerScope])
 
   return <div className="dope-sheet-container">
     <DopeSheetGrid {...props} rows={rows} />

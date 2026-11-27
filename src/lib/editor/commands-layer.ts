@@ -3,7 +3,11 @@
 import type { ChronoScene, Layer } from '../types'
 import type { EditorCommand } from './commands-keyframe'
 import { makeAddAudioClipCmd } from './commands-audio'
+import { pruneDeletedLinks } from '../rig2d/types'
 import { nextKfId } from '../defaults'
+import { assertModelContentPatch } from '../model3d/animation/modelClipOwnership'
+import { LayerIndex } from '../scene/LayerIndex'
+import { reconcileModifierLayerPatch } from '../modifiers/authoring'
 
 // ── Add layer ─────────────────────────────────────────────────────────────────
 
@@ -17,20 +21,23 @@ export function makeAddLayerCmd(layer: Layer): EditorCommand {
 
 // ── Delete layer ──────────────────────────────────────────────────────────────
 
-export function makeDeleteLayerCmd(layer: Layer): EditorCommand {
+/** Delete explicit roots and their descendants once, with the existing layer
+ * deletion contract: remove their Timeline membership/tracks, retain assets and
+ * unrelated source. Inputs are copied; overlapping roots and malformed cycles
+ * are deduplicated by LayerIndex. One snapshot restores exact order, IDs and
+ * animation data on Undo; Redo uses the same requested IDs. No runtime handles.
+ */
+export function makeDeleteLayersCmd(layerIds: readonly string[], label = 'Delete layers'): EditorCommand {
+  const roots = [...layerIds]
   let snapshot: ChronoScene | undefined
   return {
-    label: `Delete ${layer.name}`,
+    label,
     execute: (scene) => {
       snapshot ??= scene
-      const removed = new Set([layer.id])
-      let changed = true
-      while (changed) {
-        changed = false
-        for (const child of scene.layers) if (child.parentId && removed.has(child.parentId) && !removed.has(child.id)) { removed.add(child.id); changed = true }
-      }
+      const removed = new LayerIndex(scene.layers).subtreeIds(roots)
+      if (!removed.size) return scene
       return { ...scene,
-        layers: scene.layers.filter(l => !removed.has(l.id)),
+        layers: scene.layers.filter(l => !removed.has(l.id)).map(l => pruneDeletedLinks(l, removed)),
         timelines: scene.timelines.map(tl => ({ ...tl,
           layerIds: tl.layerIds?.filter(id => !removed.has(id)),
           tracks: tl.tracks.filter(tr => !removed.has(tr.target.match(/^layers\.([^.]+)\./)?.[1] ?? '')),
@@ -41,20 +48,30 @@ export function makeDeleteLayerCmd(layer: Layer): EditorCommand {
   }
 }
 
+/** Compatibility entry point; singleton deletion uses the same subtree owner. */
+export function makeDeleteLayerCmd(layer: Layer): EditorCommand {
+  return makeDeleteLayersCmd([layer.id], `Delete ${layer.name}`)
+}
+
 // ── Update layer (patch) ──────────────────────────────────────────────────────
 
+/** Immutable source patch. Private model clip/base channels require the owning
+ * detail host for forward changes; ordinary outer edits remain unchanged.
+ * contentOwnerId is ephemeral internal authority and never enters scene JSON.
+ */
 export function makeUpdateLayerCmd(
   layerId: string,
   patch: Partial<Layer>,
   prevLayer: Layer,
+  options: { contentOwnerId?: string } = {},
 ): EditorCommand {
-  const next: Layer = { ...prevLayer, ...patch }
+  const next: Layer = reconcileModifierLayerPatch(prevLayer, patch)
   return {
     label: 'Update Layer',
-    execute: (scene) => ({
+    execute: (scene) => { assertModelContentPatch(prevLayer, next, options.contentOwnerId); return ({
       ...scene,
       layers: scene.layers.map((l) => l.id === layerId ? next : l),
-    }),
+    }) },
     undo: (scene) => ({
       ...scene,
       layers: scene.layers.map((l) => l.id === layerId ? prevLayer : l),

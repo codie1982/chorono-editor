@@ -1,3 +1,4 @@
+import { isBooleanProjection, markBooleanProjection } from '../../booleanOperations/projectOperations'
 import type {ChronoScene,Layer} from '../../types'
 import type {FontBindings} from '../../asset/fonts'
 import type {OverrideMap} from '../../evaluator'
@@ -31,5 +32,7 @@ export function projectFrameFonts(scene:ChronoScene,fonts:FontBindings|undefined
     if(projected!==layer)layers??=scene.layers.slice(0,i)
     layers?.push(projected)
   }
-  return layers?{...scene,layers}:scene
+  const result=layers?{...scene,layers}:scene
+  if(isBooleanProjection(scene))markBooleanProjection(result)
+  return result
 }

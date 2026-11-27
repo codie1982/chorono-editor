@@ -1,25 +1,33 @@
-/** Commands for track-level operations (out-of-range, curve modifiers). */
+/** Commands for 2D track authoring (controllers, ranges and modifiers).
+ * Forward execution rejects registry-owned internal subtrees before mutation;
+ * undo restores the previous track payload without reapplying authoring guards.
+ * Saved internal 3D tracks therefore survive as read-only compatibility data. */
 
 import type { ChronoScene, Track, Keyframe } from '../types/core'
 import type { EditorCommand } from './commands-keyframe'
 import type { OutOfRangeSettings } from '../animation/out-of-range/types'
 import type { CurveModifier } from '../animation/modifiers/types'
 import { isScalarNumericTrack } from '../animation/typedValues'
+import { assertTimelineEditTarget } from '../timeline/authoring/timelinePropertyScope'
+import type { TimelineAuthoringContext } from '../timeline/authoring/TimelineAuthoringContext'
 
 /** Update a track's out-of-range behavior settings.
  *  @param timelineId - Timeline containing the track
  *  @param target - Track target (e.g., "layers.card.opacity")
  *  @param prevSettings - Previous out-of-range settings (for undo)
- *  @param nextSettings - New out-of-range settings (for redo) */
+ *  @param nextSettings - New out-of-range settings (for redo)
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeSetOutOfRangeCmd(
   timelineId: string,
   target: string,
   prevSettings: OutOfRangeSettings | undefined,
-  nextSettings: OutOfRangeSettings | undefined
+  nextSettings: OutOfRangeSettings | undefined,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   return {
     label: 'Set Out of Range',
-    execute: (scene) => updateOutOfRange(scene, timelineId, target, nextSettings),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, target, context); return updateOutOfRange(scene, timelineId, target, nextSettings) },
     undo: (scene) => updateOutOfRange(scene, timelineId, target, prevSettings),
   }
 }
@@ -103,28 +111,36 @@ function updateScopeArray(
   }
 }
 
+/** Append one modifier to a scope-owned track/segment; isolated targets reject on execute.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeAddCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
   modifier: CurveModifier,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   return {
     label: `Add ${modifier.type} modifier`,
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) => [...arr, modifier]),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, scope.target, context); return updateScopeArray(scene, timelineId, scope, (arr) => [...arr, modifier]) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) => arr.filter((m) => m.id !== modifier.id)),
   }
 }
 
+/** Remove one scope-owned modifier by stable identity; undo restores its original order.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeRemoveCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
   modifier: CurveModifier,
   /** Original index — restored on undo so order is preserved. */
   originalIndex: number,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   return {
     label: `Remove ${modifier.type} modifier`,
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) => arr.filter((m) => m.id !== modifier.id)),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, scope.target, context); return updateScopeArray(scene, timelineId, scope, (arr) => arr.filter((m) => m.id !== modifier.id)) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) => {
       const next = [...arr]
       const idx = Math.max(0, Math.min(next.length, originalIndex))
@@ -134,29 +150,35 @@ export function makeRemoveCurveModifierCmd(
   }
 }
 
+/** Replace modifier source settings within the active host scope.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeUpdateCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
   modifierId: string,
   prev: CurveModifier,
   next: CurveModifier,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   return {
     label: `Edit ${next.type} modifier`,
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) =>
-      arr.map((m) => m.id === modifierId ? next : m)
-    ),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, scope.target, context); return updateScopeArray(scene, timelineId, scope, (arr) => arr.map((m) => m.id === modifierId ? next : m)) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) =>
       arr.map((m) => m.id === modifierId ? prev : m)
     ),
   }
 }
 
+/** Reorder the scope-owned modifier stack in one reversible, scope-checked source edit.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeReorderCurveModifierCmd(
   timelineId: string,
   scope: ModifierScope,
   fromIndex: number,
   toIndex: number,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   function reorder(arr: CurveModifier[], from: number, to: number): CurveModifier[] {
     const next = [...arr]
@@ -167,7 +189,7 @@ export function makeReorderCurveModifierCmd(
   }
   return {
     label: 'Reorder modifier',
-    execute: (scene) => updateScopeArray(scene, timelineId, scope, (arr) => reorder(arr, fromIndex, toIndex)),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, scope.target, context); return updateScopeArray(scene, timelineId, scope, (arr) => reorder(arr, fromIndex, toIndex)) },
     undo:    (scene) => updateScopeArray(scene, timelineId, scope, (arr) => reorder(arr, toIndex, fromIndex)),
   }
 }
@@ -187,11 +209,13 @@ type TrackCurvePatch = Partial<Pick<Track,
   'easeCurve' | 'timeWarp' | 'multiplierCurve' | 'multiplierAmplitude'
 >>
 
+/** Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data. */
 export function makeUpdateTrackCurvesCmd(
   timelineId: string,
   target:     string,
   prev:       TrackCurvePatch,
   next:       TrackCurvePatch,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   function apply(scene: ChronoScene, patch: TrackCurvePatch): ChronoScene {
     return {
@@ -208,7 +232,7 @@ export function makeUpdateTrackCurvesCmd(
   const fields = Object.keys(next).join(', ')
   return {
     label: `Edit Track Curves (${fields || 'reset'})`,
-    execute: (scene) => apply(scene, next),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, target, context); return apply(scene, next) },
     undo:    (scene) => apply(scene, prev),
   }
 }
@@ -222,33 +246,40 @@ export function makeUpdateTrackCurvesCmd(
 
 import { bakeTrack, validateBakeOptions } from '../animation/baking/bake'
 import type { BakeOptions } from '../animation/baking/bake'
+import { isSameTrackBakeSource } from '../animation/baking/TrackBakeSource'
 
 /** Prepare a bounded numeric bake and return one undoable source replacement.
  * The selected window becomes linear keys; outside authored keys and unrelated
- * metadata survive. Signal processors are removed from the whole track. */
+ * metadata survive. Signal processors are removed from the whole track.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
 export function makeBakeTrackToKeyframesCmd(
   timelineId: string,
   target:     string,
   prevTrack:  Track,
   options:    BakeOptions,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   const baked = bakeTrack(prevTrack, { ...options, keyIdPrefix: timelineId })
-  return makeApplyTrackBakeCmd(timelineId, target, prevTrack, baked, options)
+  return makeApplyTrackBakeCmd(timelineId, target, prevTrack, baked, options, context)
 }
 
 /** Apply one already-reviewed numeric conversion. Stale track data or invalid
  * timeline bounds reject before publishing; unrelated source edits survive.
  * Prepared IDs/payload remain stable across execute/undo/redo. Source equality
- * is structural because script handles expose detached tracks. */
-export function makeApplyTrackBakeCmd(timelineId: string, target: string, prevTrack: Track, baked: Track, options: BakeOptions): EditorCommand {
+ * is structural because script handles expose detached tracks.
+ * Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data.
+ */
+export function makeApplyTrackBakeCmd(timelineId: string, target: string, prevTrack: Track, baked: Track, options: BakeOptions, context?: TimelineAuthoringContext): EditorCommand {
   let before: import('../types').Timeline | undefined
   return {
     label: `Bake Track to Keyframes (${baked.keyframes.length} kfs)`,
     execute: (scene) => {
+      assertTimelineEditTarget(scene, timelineId, target, context)
       validateBakeOptions(options)
       const timeline = scene.timelines.find(item => item.id === timelineId)
       const live = timeline?.tracks.find(track => track.target === target)
-      if (!timeline || !live || JSON.stringify(live) !== JSON.stringify(prevTrack)) throw new Error('Track changed. Preview the current source before baking.')
+      if (!timeline || !isSameTrackBakeSource(prevTrack, live)) throw new Error('Track changed. Preview the current source before baking.')
       if (baked.target !== target || !isScalarNumericTrack(baked)) throw new Error('The prepared bake must belong to this numeric source track.')
       if (options.endMs > timeline.durationMs || options.startMs < 0 || options.signal?.aborted) throw new Error('Bake range is outside this timeline, or the operation was cancelled.')
       before = timeline
@@ -277,11 +308,13 @@ export function makeApplyTrackBakeCmd(timelineId: string, target: string, prevTr
 
 import type { TrackController } from '../animation/controllers/types'
 
+/** Optional host context defaults to the scene; content edits stay within the bound owner/Timeline. Inverse source restoration retains legacy key data. */
 export function makeSetTrackControllerCmd(
   timelineId: string,
   target:     string,
   prev:       TrackController | undefined,
   next:       TrackController | undefined,
+  context?: TimelineAuthoringContext,
 ): EditorCommand {
   function apply(scene: ChronoScene, controller: TrackController | undefined): ChronoScene {
     return {
@@ -299,7 +332,7 @@ export function makeSetTrackControllerCmd(
     : `Set Controller: ${next.type}`
   return {
     label,
-    execute: (scene) => apply(scene, next),
+    execute: (scene) => { assertTimelineEditTarget(scene, timelineId, target, context); return apply(scene, next) },
     undo:    (scene) => apply(scene, prev),
   }
 }

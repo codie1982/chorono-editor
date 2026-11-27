@@ -1,3 +1,4 @@
+import { isModelInstanceInput } from '../../model3d/content/modelInstanceInputs'
 import type { Layer, ParameterRef } from '../../types'
 import { layerRegistry } from '../../registry'
 import { PropertySchemaIndex } from '../../registry/PropertySchemaIndex'
@@ -31,7 +32,8 @@ export function propertyExpressionConstraints(layer: Layer, path: string, kind: 
   if (!path || path.length > 256) throw new Error('Expression path exceeds 256 characters.')
   const schema = schemas.resolve(layer).get(path), point = !!splineCoordinateAddress(path)
   const structuralException = !!schema && ['select', 'string'].includes(schema.valueType) && /^(?:style|text|particleEmitter|repeater|image|frameSequence|pathStroke)\./.test(path) && !/(?:Id|src|url)$/.test(path)
-  if ((!owned.test(path) && !point && path !== 'path.closed') || structural.test(path) && !structuralException) throw new Error('This field has no safe expression target contract.')
+  const modelInput = isModelInstanceInput(layer, path) || !!schema && /^model3d\.content\.parameters\.[A-Za-z][A-Za-z0-9_]*\.value$/.test(path) && Object.prototype.hasOwnProperty.call(layer.model3d?.content?.parameters ?? {}, path.split('.')[3])
+  if ((!modelInput && !owned.test(path) && !point && path !== 'path.closed') || structural.test(path) && !structuralException) throw new Error('This field has no safe expression target contract.')
   const value = readPropertyPath(layer, path)
   const declared = schema?.animationValueType ?? (schema && ['angle', 'percent'].includes(schema.valueType) ? 'number' : schema?.valueType === 'select' ? 'string' : schema?.valueType)
   const actual = isColorTarget(path) ? 'color' : isVec2(value) && point ? 'vec2' : typeof value

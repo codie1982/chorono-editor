@@ -3,6 +3,8 @@ import { makeBulkDeleteKfCmd, type EditorCommand } from '../../editor/commands-k
 import { LayerIndex } from '../../scene/LayerIndex'
 import { LayerTrackIndex } from '../LayerTrackIndex'
 import { parseTrackTarget } from '../TrackTargetParser'
+import { isTimelineTargetInScope } from './timelinePropertyScope'
+import { assertTimelineContext, SCENE_TIMELINE_CONTEXT, type TimelineAuthoringContext } from './TimelineAuthoringContext'
 
 export type ClearKeyScope = { kind: 'layer'; layerId: string } | { kind: 'track'; target: string }
 export interface ClearKeyPlan {
@@ -19,7 +21,9 @@ export interface ClearKeyPlan {
  * produce no command/history entry. A stale plan refuses; undo/redo restore
  * full key identities, easing, tangents and signal payloads in one step.
  */
-export function prepareClearKeyframes(scene: ChronoScene, timelineId: string, scope: ClearKeyScope): ClearKeyPlan {
+export function prepareClearKeyframes(scene: ChronoScene, timelineId: string, scope: ClearKeyScope,
+  context: TimelineAuthoringContext = SCENE_TIMELINE_CONTEXT): ClearKeyPlan {
+  assertTimelineContext(scene, timelineId, context)
   const empty = (reason: string): ClearKeyPlan => ({ command: null, keyIds: new Set(), reason })
   const timeline = scene.timelines.find(item => item.id === timelineId)
   if (!timeline) return empty('Choose an active timeline first.')
@@ -30,9 +34,9 @@ export function prepareClearKeyframes(scene: ChronoScene, timelineId: string, sc
   const protectedLayer = Array.from(index.ancestorIds([layerId])).map(id => index.get(id)!).find(layer => layer.locked || layer.frozen)
   if (protectedLayer) return empty(`Unlock and unfreeze ${protectedLayer.name} first.`)
   const tracks = scope.kind === 'layer' ? new LayerTrackIndex(timeline.tracks).forLayer(layerId) : timeline.tracks.filter(track => track.target === scope.target)
-  const items = tracks.flatMap(track => track.keyframes.map(kf => ({ timelineId, target: track.target, kf })))
+  const items = tracks.filter(track => isTimelineTargetInScope(scene.layers, track.target, index, context)).flatMap(track => track.keyframes.map(kf => ({ timelineId, target: track.target, kf })))
   if (!items.length) return empty('No keyframes to clear.')
-  const command = makeBulkDeleteKfCmd(items)
+  const command = makeBulkDeleteKfCmd(items, context)
   return { keyIds: new Set(items.map(item => item.kf.id)), command: { ...command, label: `Clear ${items.length} Keyframes`,
     execute(current) {
       if (current.layers !== scene.layers || current.timelines !== scene.timelines) throw new Error('Source changed. Open the keyframe menu again.')

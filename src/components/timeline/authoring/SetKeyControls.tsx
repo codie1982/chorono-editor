@@ -25,7 +25,7 @@ export function SetKeyControls({ controls }: { controls: TimelineAuthoringContro
   const key = shortcutRegistry.displayString('timeline.keyframe.set')
   const keyset = KEYSETS.find(item => item.value === controls.keyset)!.label
   return <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Set Key">
-    <DropdownButton label="◆ Set Key" primaryAction={{ onSelect: () => controls.setKey(), disabled: controls.disabled || !controls.selectedCount,
+    <DropdownButton label="◆ Set Key" primaryAction={{ onSelect: () => controls.setKey(), disabled: controls.setKeyDisabled,
       title: `Set keys${key ? ` (${key})` : ''} · ${keyset}. Hold for channels; ArrowDown or right-click opens options.`,
       className: 'px-3 py-1.5 whitespace-nowrap text-xs font-semibold rounded bg-amber-500 text-gray-950 hover:bg-amber-400 active:bg-amber-300 disabled:bg-gray-700 disabled:text-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white',
     }} sections={[

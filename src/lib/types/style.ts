@@ -8,11 +8,13 @@ export interface GradientStop {
   offset: number
   /** Hex colour string: '#rrggbb' or '#rrggbbaa' */
   color: string
+  /** Stop alpha 0–100, multiplied by any alpha in color. Omitted means 100. */
+  opacity?: number
 }
 
 export interface GradientFill {
-  type: 'linear' | 'radial'
-  /** Linear only: 0 = top→bottom, 90 = left→right, 135 = diagonal */
+  type: 'linear' | 'radial' | 'angle' | 'reflected' | 'diamond'
+  /** Non-radial direction in degrees: 0 = left→right, 90 = top→bottom; retained legacy convention */
   angle?: number
   /** At least two stops required for a valid gradient */
   stops: GradientStop[]
@@ -21,13 +23,35 @@ export interface GradientFill {
 // ── Fill ──────────────────────────────────────────────────────────────────────
 
 export interface ShapeFill {
-  type: 'solid' | 'gradient'
+  type: 'solid' | 'gradient' | 'image' | 'none'
+  /** Last active mode while type is None. Inactive payloads remain on this
+   * fill; representation conversion can restore the exact paint without
+   * guessing from stale gradient/image data. Optional for legacy scenes. */
+  disabledType?: 'solid' | 'gradient' | 'image'
   /** Solid fill colour (hex) */
   color?: string
   /** Fill opacity 0–100, independent of layer opacity. Default 100. */
   opacity?: number
   /** Used when type === 'gradient' */
   gradient?: GradientFill
+  /** Shared static image paint; inactive mode data is retained for switching. */
+  image?: ImagePaint
+}
+
+/** Serializable image placement inside a local paint box. Fit is applied first,
+ * then uniform scale/rotation around the box centre plus offsets in local px.
+ * `fill` means Stretch in the UI. Assets are shared registry IDs, never decoded
+ * pixels/URLs. Positive rotation is clockwise in Canvas coordinates. */
+export interface ImagePaint {
+  version: 1
+  assetId: string
+  fit?: 'cover' | 'contain' | 'fill'
+  offsetX?: number
+  offsetY?: number
+  scale?: number
+  rotationDeg?: number
+  /** Repeat the placed image as a seamless 2D tile; omitted preserves image fit. */
+  repeat?: boolean
 }
 
 // ── Stroke ────────────────────────────────────────────────────────────────────
@@ -68,6 +92,9 @@ export interface TrimPathDefinition {
 }
 
 export interface ShapeStroke {
+  /** Omitted preserves legacy gradient-if-present behavior. None retains the
+   * authored width/color/gradient/trim so existing keys survive re-enabling. */
+  type?: 'solid' | 'gradient' | 'pattern' | 'none'
   color: string
   /** Stroke thickness in px */
   width: number
@@ -77,6 +104,8 @@ export interface ShapeStroke {
   alignment?: StrokeAlignment
   /** Dash pattern, e.g. [] = solid, [8,4] = dashed, [2,4] = dotted */
   dashArray?: number[]
+  /** False retains the authored dash sequence but paints a solid stroke. */
+  dashEnabled?: boolean
   lineCap?:  LineCap
   lineJoin?: LineJoin
   /** Optional trim — hides parts of the stroke for reveal / progress animations. */
@@ -87,6 +116,8 @@ export interface ShapeStroke {
    * radial uses the shape centre + min(w,h)/2.
    */
   gradient?: GradientFill
+  /** Pattern stroke borrows the same registered image/placement as image fill. */
+  image?: ImagePaint
 }
 
 // ── Unified ShapeStyle ────────────────────────────────────────────────────────

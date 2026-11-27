@@ -4,7 +4,7 @@ import type { ChronoScene, Layer } from '@/lib/types'
 import type { ToolMode } from '@/components/TopToolbar/ToolGroup'
 import { availableShapeTemplate, canPlaceShape } from '@/lib/editor/placement'
 
-interface CreationState { kind: string; template: Layer; createNext: () => Layer }
+interface CreationState { kind: string; template: Layer; createNext: () => Layer; hint?: { x: number; y: number } }
 interface Options {
   toolMode: ToolMode
   setToolMode: Dispatch<SetStateAction<ToolMode>>
@@ -42,13 +42,13 @@ export function useShapeCreationTool(options: Options) {
   /** Arm a supported registry default or toggle the already-active kind off.
    * Returns false for nonshape capabilities; callers retain their own workflow.
    * The factory must return a fresh stable ID and equivalent default geometry. */
-  const choose = useCallback((kind: string, template: Layer, createNext: () => Layer): boolean => {
+  const choose = useCallback((kind: string, template: Layer, createNext: () => Layer, hint?: { x: number; y: number }): boolean => {
     if (!canPlaceShape(template)) return false
     const current = latest.current
     if (current.state?.kind === kind && current.options.toolMode === 'shape-draw') close()
     else {
       const available = availableShapeTemplate(template, createNext, current.options.getScene().layers)
-      setState({ kind, template: available, createNext }); current.options.setToolMode('shape-draw')
+      setState({ kind, template: available, createNext, hint }); current.options.setToolMode('shape-draw')
     }
     return true
   }, [close])
@@ -61,7 +61,7 @@ export function useShapeCreationTool(options: Options) {
     current.options.onSelect(id)
     if (current.state && current.options.toolMode === 'shape-draw') {
       const next = availableShapeTemplate(current.state.createNext(), current.state.createNext, current.options.getScene().layers)
-      setState({ ...current.state, template: next })
+      setState({ ...current.state, template: next, hint: undefined })
     }
   }, [close])
 
@@ -71,5 +71,5 @@ export function useShapeCreationTool(options: Options) {
     return () => options.documentSignal.removeEventListener('abort', close)
   }, [options.documentSignal, close])
 
-  return { kind: state?.kind ?? null, template: state?.template ?? null, choose, complete, close }
+  return { kind: state?.kind ?? null, template: state?.template ?? null, hint: state?.hint, choose, complete, close }
 }

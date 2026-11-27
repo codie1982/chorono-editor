@@ -146,6 +146,33 @@ describe('viewport source and key transaction', () => {
     expect(after.timelines[0].tracks[0].keyframes.every(key => key.timeMs <= 1000)).toBe(true)
   })
 
+  it('writes the selected last frame in local time even when playback loops to the first', () => {
+    const scene = fixture(), tl = scene.timelines[0], prev = scene.layers[0]
+    tl.loop = true
+    const next = { ...prev, transform: { ...prev.transform, x: 85 } }
+    const [keys] = buildViewportKeyframeCommands(scene, [{ prev, next }], {
+      timelineId: tl.id, timeMs: tl.durationMs, timeBasis: 'local', autoKeyframe: true,
+    })
+    const changed = keys.execute(scene).timelines[0].tracks[0].keyframes
+    expect(changed).toEqual([tl.tracks[0].keyframes[0], tl.tracks[0].keyframes[1], { ...tl.tracks[0].keyframes[2], value: 85 }])
+  })
+
+  it('creates the first timeline with just the moved channels and restores it with the same Undo/Redo', () => {
+    const scene = { ...fixture(), timelines: [] }, prev = scene.layers[0]
+    const next = { ...prev, transform: { ...prev.transform, y: 75 } }
+    const clock = { timelineId: '', timeMs: 350, timeBasis: 'local' as const }
+    expect(buildViewportKeyframeCommands(scene, [{ prev, next }], { ...clock, autoKeyframe: false })).toEqual([])
+    const keys = buildViewportKeyframeCommands(scene, [{ prev, next }], { ...clock, autoKeyframe: true })
+    const move = makeBatchCmd('Move', [makeUpdateLayerCmd(prev.id, next, prev), ...keys])
+    const after = move.execute(scene)
+    expect(after.timelines).toHaveLength(1)
+    expect(after.timelines[0]).toMatchObject({ durationMs: scene.composition.durationMs, layerIds: [prev.id],
+      tracks: [{ target: 'layers.hero.transform.y', keyframes: [{ timeMs: 350, value: 75 }] }] })
+    const restored = move.undo(after)
+    expect(restored).toEqual(scene)
+    expect(move.execute(restored)).toEqual(after)
+  })
+
   it('refuses a driven channel atomically after another intended channel was processed', () => {
     const scene = fixture(), prev = scene.layers[0]
     scene.timelines[0].tracks[1].controller = { type: 'waveform', waveform: {

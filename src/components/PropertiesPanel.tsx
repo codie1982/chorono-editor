@@ -1,4 +1,12 @@
 'use client'
+import type { IKDiagnostics } from '@/lib/rig2d/diagnostics'
+import type { PivotPicking } from './rig2d/usePivotPicking'
+import { PivotLinkControls } from './PropertiesPanel/PivotLinkControls'
+import { SplineAppearanceControls } from './paint/SplineAppearanceControls'
+import { ImagePaintControls } from './paint/ImagePaintControls'
+import { CompositionBackgroundControls } from './paint/CompositionBackgroundControls'
+import { withFillType, strokeType, withStrokeType } from '@/lib/paint/paintSource'
+import type { ShapeFill, ShapeStroke } from '@/lib/types'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
 import { propertyHelpTopics, type DocumentationTopic } from '@/components/help/documentation'
 import { useEffect, useRef, useState } from 'react'
@@ -32,10 +40,11 @@ import { centerOrigin } from '@/lib/editor/layerTransforms'
 import AudioInspector from '@/components/audio/AudioInspector'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
-type PropTab = 'properties' | 'effects' | 'motion' | 'interact'
+type PropTab = 'properties' | 'links' | 'effects' | 'motion' | 'interact'
 
 const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
   { id: 'properties', label: 'Properties', icon: '🎨' },
+  { id: 'links',      label: 'Link & IK',  icon: '↗' },
   { id: 'effects',    label: 'Effects',    icon: '✨' },
   { id: 'motion',     label: 'Motion',     icon: '🎬' },
   { id: 'interact',   label: 'Interact',   icon: '🖱' },
@@ -46,9 +55,12 @@ const TABS: Array<{ id: PropTab; label: string; icon: string }> = [
 
 interface Props {
   layer: Layer | null
+  pivotPicking?: PivotPicking
+  ikDiagnostics?: IKDiagnostics
   composition: Composition
   onLayerChange: (layer: Layer) => void
   onCompositionChange: (comp: Composition) => void
+  onImportPaintImage?: (file: File, layerId?: string) => void
   /** Available scene parameters for property binding popovers. */
   parameters?: SceneParameter[]
   /** All scene layers — needed for Mask picker + Path Motion picker. */
@@ -334,11 +346,11 @@ function Section({ title, children, helpTopic }: { title: string; children: Reac
 // ── Ana bileşen ──────────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({
-  layer, composition, onLayerChange, onCompositionChange,
+  layer, composition, onLayerChange, onCompositionChange, onImportPaintImage,
   parameters = [], allLayers = [], allTimelines = [],
   onConvertToSpline,
   scene, parameterWires, onRequestNewWire, onEditWire,
-  dispatchCommand,
+  dispatchCommand, pivotPicking, ikDiagnostics,
   currentTimeMs = 0, selectedTimelineId, onNormalizeAudio, getScene, isTransactionActive, expressionFrame, expressionExternalTime,
 }: Props) {
   // Convenience: bundle the wire-related props so we don't list them on
@@ -396,12 +408,13 @@ export default function PropertiesPanel({
 
       {/* ── Tab bar — only visible when a layer is selected ── */}
       {layer && (
-        <div className="flex border-b border-gray-800 shrink-0 bg-gray-950/60">
-          {TABS.map(t => (
+        <div className="flex overflow-x-auto border-b border-gray-800 shrink-0 bg-gray-950/60">
+          {TABS.filter(t => t.id !== 'links' || !!pivotPicking).map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] uppercase
+              aria-pressed={activeTab === t.id}
+              className={`flex-auto shrink-0 whitespace-nowrap flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] uppercase
                 tracking-wider transition-colors border-b-2
                 ${activeTab === t.id
                   ? 'text-blue-300 border-blue-500 bg-gray-900'
@@ -430,45 +443,8 @@ export default function PropertiesPanel({
                   onChange={(v) => onCompositionChange({ ...composition, height: v })} />
               </Field>
             </Row2>
-            <Field label="Bg Type">
-              <select
-                value={composition.backgroundGradient ? 'gradient' : 'solid'}
-                onChange={(e) => {
-                  if (e.target.value === 'gradient') {
-                    onCompositionChange({
-                      ...composition,
-                      backgroundGradient: {
-                        type: 'linear', angle: 90,
-                        stops: [
-                          { offset: 0, color: composition.backgroundColor || '#1E293B' },
-                          { offset: 1, color: '#000000' },
-                        ],
-                      },
-                    })
-                  } else {
-                    const next = { ...composition }
-                    delete next.backgroundGradient
-                    onCompositionChange(next)
-                  }
-                }}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
-              >
-                <option value="solid">Solid</option>
-                <option value="gradient">Gradient</option>
-              </select>
-            </Field>
-            {!composition.backgroundGradient && (
-              <Field label="Bg Color">
-                <ColorInput value={composition.backgroundColor}
-                  onChange={(v) => onCompositionChange({ ...composition, backgroundColor: v })} />
-              </Field>
-            )}
-            {composition.backgroundGradient && (
-              <Field label="Bg Gradient">
-                <GradientInput value={composition.backgroundGradient}
-                  onChange={(g) => onCompositionChange({ ...composition, backgroundGradient: g })} />
-              </Field>
-            )}
+            <CompositionBackgroundControls composition={composition} assets={scene?.assets} onChange={onCompositionChange}
+              onImport={onImportPaintImage ? file => onImportPaintImage(file) : undefined} />
             <Field label="Duration (ms)">
               <NumInput value={composition.durationMs} min={100} step={100}
                 onChange={(v) => onCompositionChange({ ...composition, durationMs: v })} />
@@ -482,6 +458,7 @@ export default function PropertiesPanel({
         {/* ── Layer özellikleri ──────────────────────────────────────── */}
         {layer && (
           <>
+            {activeTab === 'links' && scene && pivotPicking && <PivotLinkControls key={layer.id} layer={layer} scene={scene} picking={pivotPicking} diagnostics={ikDiagnostics} />}
             {/* Schema-driven properties: rendered for layer types that DON'T
                 already have a rich hand-written UI (group, repeater).
                 particleEmitter has its own dedicated dock tab — see below for
@@ -589,17 +566,32 @@ export default function PropertiesPanel({
               </Field>
             </Section>
 
-            {/* ── Spline Fill / Stroke / Trim (schema-driven) ──────────────
-                Splines declare these groups (incl. the gradient fill option) via
-                their LayerDefinition. Transform & Appearance are hand-written
-                above, so filter them out here to avoid duplicate sections. */}
-            {layer.type === 'spline' && (
+            {/* Appearance belongs to Properties; Edit owns only geometry. */}
+            {layer.type === 'spline' && <>
+              <SplineAppearanceControls key={layer.id} layer={layer} assets={scene?.assets ?? []} onChange={onLayerChange} />
+              <SchemaPanel layer={layer} scene={scene} onLayerChange={onLayerChange}
+                filterGroup={g => !['Transform', 'Appearance', 'Fill', 'Stroke'].includes(g.title)} />
+            </>}
+
+            {/* Mesh2D source, texture, deformation and pins are in Edit. */}
+            {layer.type === 'mesh2d' && (
               <SchemaPanel
                 layer={layer}
                 onLayerChange={onLayerChange}
-                filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance'}
+                filterGroup={(g) => g.title !== 'Transform' && g.title !== 'Appearance' && g.title !== 'Geometry'}
               />
             )}
+            {layer.type === 'model3d' && activeTab === 'properties' && <>
+              <p className="text-xs text-gray-400">Move and resize the box with the 2D tools or Width / Height below. The 2D Timeline animates the box; model pose and camera settings below are static.</p>
+              <label className="text-xs text-gray-300">Model asset
+                <select aria-label="3D model asset" className="block w-full bg-gray-800 rounded p-1.5" value={layer.model3d?.assetId ?? ''}
+                  onChange={event => layer.model3d && update({ model3d: { ...layer.model3d, assetId: event.target.value } })}>
+                  <option value="">Choose imported model</option>
+                  {scene?.assets.filter(asset => asset.type === 'model3d').map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                </select>
+              </label>
+              <SchemaPanel layer={layer} scene={scene} onLayerChange={onLayerChange} filterGroup={group => group.title !== 'Transform' && group.title !== 'Appearance'} />
+            </>}
 
             {/* ── Shape özellikleri ──────────────────────────────────── */}
             {layer.type === 'shape' && layer.style && layer.size && (
@@ -616,34 +608,15 @@ export default function PropertiesPanel({
                 </Row2>
                 <Field label="Fill Type">
                   <select
-                    value={layer.style.fill?.type ?? 'solid'}
-                    onChange={(e) => {
-                      const t = e.target.value as 'solid' | 'gradient'
-                      if (t === 'gradient') {
-                        update({ style: { ...layer.style!, fill: {
-                          ...layer.style!.fill,
-                          type: 'gradient',
-                          gradient: layer.style!.fill?.gradient ?? {
-                            type: 'linear', angle: 90,
-                            stops: [
-                              { offset: 0, color: layer.style!.fill?.color ?? '#3B82F6' },
-                              { offset: 1, color: '#EC4899' },
-                            ],
-                          },
-                        } } })
-                      } else {
-                        update({ style: { ...layer.style!, fill: {
-                          ...layer.style!.fill, type: 'solid', color: layer.style!.fill?.color ?? '#3B82F6',
-                        } } })
-                      }
-                    }}
+                    aria-label="Fill Type" value={layer.style.fill?.type ?? 'none'}
+                    onChange={event => update({ style: { ...layer.style!, fill: withFillType(layer.style?.fill, event.target.value as ShapeFill['type']) } })}
                     className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
                   >
-                    <option value="solid">Solid</option>
-                    <option value="gradient">Gradient</option>
+                    <option value="none">None</option><option value="solid">Color</option>
+                    <option value="gradient">Gradient</option><option value="image">Image</option>
                   </select>
                 </Field>
-                {layer.style.fill?.type !== 'gradient' && (
+                {layer.style.fill?.type === 'solid' && (
                   <ParamBindButton
                     label="Fill Color"
                     layer={layer}
@@ -671,6 +644,10 @@ export default function PropertiesPanel({
                     />
                   </Field>
                 )}
+                {layer.style.fill?.type === 'image' && layer.style.fill.image && <ImagePaintControls
+                  value={layer.style.fill.image} assets={scene?.assets ?? []}
+                  onImport={onImportPaintImage ? file => onImportPaintImage(file, layer.id) : undefined}
+                  onChange={image => update({ style: { ...layer.style!, fill: { ...layer.style!.fill!, image } } })} />}
                 {(layer.shapeKind === 'rect' || (!layer.shapeKind && layer.shape === 'rect')) && (
                   <ParamBindButton
                     label="Corner Radius" layer={layer} propertyPath="style.cornerRadius"
@@ -907,6 +884,12 @@ export default function PropertiesPanel({
             {/* ── Stroke (all shapes) ───────────────────────────────── */}
             {layer.type === 'shape' && (
               <Section title="Stroke">
+                <Field label="Stroke Type"><select aria-label="Stroke Type" value={strokeType(layer.style?.stroke)}
+                  onChange={event => update({ style: { ...layer.style, stroke: withStrokeType(layer.style?.stroke, event.target.value as NonNullable<ShapeStroke['type']>) } })}
+                  className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs text-gray-200">
+                  <option value="none">None</option><option value="solid">Color</option><option value="gradient">Gradient</option>
+                </select></Field>
+                {strokeType(layer.style?.stroke) !== 'none' && <>
                 <Row2>
                   <ParamBindButton
                     label="Color"
@@ -966,35 +949,10 @@ export default function PropertiesPanel({
                     </Field>
                   </Row2>
                 )}
-                {/* ── Stroke gradient toggle ── */}
+                {/* ── Active gradient stroke controls ── */}
                 {layer.style?.stroke && layer.style.stroke.width > 0 && (
                   <div className="border-t border-gray-700 pt-1.5 space-y-1.5">
-                    <label className="flex items-center gap-2 text-[10px] text-gray-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!layer.style.stroke.gradient}
-                        onChange={(e) => update({
-                          style: {
-                            ...layer.style!,
-                            stroke: {
-                              ...layer.style!.stroke!,
-                              gradient: e.target.checked
-                                ? (layer.style!.stroke!.gradient ?? {
-                                    type: 'linear', angle: 90,
-                                    stops: [
-                                      { offset: 0, color: layer.style!.stroke!.color },
-                                      { offset: 1, color: '#FFFFFF' },
-                                    ],
-                                  })
-                                : undefined,
-                            },
-                          },
-                        })}
-                        className="accent-blue-500"
-                      />
-                      Use gradient stroke
-                    </label>
-                    {layer.style.stroke.gradient && (
+                    {strokeType(layer.style.stroke) === 'gradient' && layer.style.stroke.gradient && (
                       <>
                         <Row2>
                           <Field label="Type">
@@ -1048,11 +1006,12 @@ export default function PropertiesPanel({
                     )}
                   </div>
                 )}
+                </>}
               </Section>
             )}
 
             {/* ── Trim Path (only shows when stroke has width) ──────── */}
-            {layer.type === 'shape' && (layer.style?.stroke?.width ?? 0) > 0 && (
+            {layer.type === 'shape' && strokeType(layer.style?.stroke) !== 'none' && (layer.style?.stroke?.width ?? 0) > 0 && (
               <Section title="Trim Path">
                 <Row2>
                   <Field label="Start">
@@ -1165,8 +1124,28 @@ export default function PropertiesPanel({
                   parameters={parameters}
                   onBind={(id) => bindParam('text.value', id)}
                 >
-                  <TextInput propertyPath="text.value" fieldLabel="Content" value={layer.text.value} onChange={value => updateText({ value })} />
+                  <TextInput propertyPath="text.value" fieldLabel="Content" value={layer.text.value} multiline onChange={value => updateText({ value })} />
                 </ParamBindButton>
+
+                <Row2>
+                  <Field label="Direction">
+                    <select value={layer.text.direction ?? 'horizontal'}
+                      onChange={e => updateText({ direction: e.target.value as 'horizontal' | 'vertical' })}
+                      className={TEXT_INPUT_CLASS}>
+                      <option value="horizontal">Horizontal</option>
+                      <option value="vertical">Vertical</option>
+                    </select>
+                  </Field>
+                  <Field label="Alignment">
+                    <select value={layer.text.textAlign ?? 'left'}
+                      onChange={e => updateText({ textAlign: e.target.value as 'left' | 'center' | 'right' })}
+                      className={TEXT_INPUT_CLASS}>
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </Field>
+                </Row2>
 
                 <Field label="Font">
                   <TextInput propertyPath="text.fontFamily" fieldLabel="Font family" suggestions={FONT_FAMILIES} value={layer.text.fontFamily ?? 'sans-serif'}
@@ -1238,10 +1217,52 @@ export default function PropertiesPanel({
                   </Field>
                 )}
 
-                <Field label="Letter Spacing">
-                  <NumInput propertyPath="text.letterSpacing" fieldLabel="Letter spacing" value={layer.text.letterSpacing ?? 0} step={0.5}
-                    onChange={(v) => updateText({ letterSpacing: v })} />
+                <Field label="Texture (image asset)">
+                  <select value={layer.text.textureAssetId ?? ''}
+                    onChange={e => updateText({ textureAssetId: e.target.value || undefined })}
+                    className={TEXT_INPUT_CLASS}>
+                    <option value="">None — color or gradient</option>
+                    {(scene?.assets ?? []).filter(asset => asset.type === 'image').map(asset => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                  </select>
                 </Field>
+
+                <Row2>
+                  <Field label="Letter Spacing (px)">
+                    <NumInput propertyPath="text.letterSpacing" fieldLabel="Letter spacing" value={layer.text.letterSpacing ?? 0} step={0.5}
+                      onChange={v => updateText({ letterSpacing: v })} />
+                  </Field>
+                  <Field label="Line Height">
+                    <NumInput propertyPath="text.lineHeight" fieldLabel="Line height" value={layer.text.lineHeight ?? 1.2} min={0.5} max={5} step={0.05}
+                      onChange={v => updateText({ lineHeight: v })} />
+                  </Field>
+                </Row2>
+
+                <Field label="Text Opacity">
+                  <input type="range" min={0} max={1} step={0.01} value={layer.opacity}
+                    onChange={e => update({ opacity: Number(e.target.value) })}
+                    className="w-full accent-blue-500" aria-label="Text opacity" />
+                </Field>
+
+                <Field label="Use text as mask for…">
+                  <select value="" onChange={e => {
+                    const target = allLayers.find(item => item.id === e.target.value)
+                    if (!target) return
+                    onLayerChange({ ...target, masks: [
+                      ...(target.masks ?? []),
+                      { id: `mask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                        maskLayerId: layer.id, mode: 'add', opacity: 1 },
+                    ] })
+                  }} className={TEXT_INPUT_CLASS}>
+                    <option value="">Choose a target layer…</option>
+                    {allLayers.filter(item => item.id !== layer.id && item.type !== 'audio' && item.type !== 'group'
+                      && !(item.masks ?? []).some(mask => mask.maskLayerId === layer.id)).map(item => (
+                      <option key={item.id} value={item.id}>{item.name} ({item.type})</option>
+                    ))}
+                  </select>
+                </Field>
+                <p className="text-[10px] text-gray-500">The text stays editable; its glyphs reveal the target layer.</p>
 
                 <Row2>
                   <BooleanInput propertyPath="text.uppercase" label="Uppercase" value={!!layer.text.uppercase} onChange={value => updateText({ uppercase: value })} />
@@ -1477,13 +1498,13 @@ export default function PropertiesPanel({
                       ✓ <strong>Scrub mode active.</strong> Animate this layer&apos;s
                       <code className="text-amber-100"> transform.x </code>
                       or <code className="text-amber-100">transform.y</code> on the timeline above
-                      (e.g. 0 → 200). Click <strong>▶ Preview</strong> in the toolbar, then drag this
+                      (e.g. 0 → 200). Click <strong>Interact</strong> in the toolbar, then drag this
                       layer — it moves along its keyframe path AND scrubs the timeline. All other
                       layers&apos; animations on that timeline play in sync.
                     </div>
                   ) : (
                     <div className="text-[10px] text-amber-200/70 leading-snug">
-                      💡 Click <strong className="text-amber-100">▶ Preview</strong> in the toolbar,
+                      💡 Click <strong className="text-amber-100">Interact</strong> in the toolbar,
                       then drag — layer follows your cursor. Pick a timeline above to scrub-control
                       a full keyframe animation instead.
                     </div>
@@ -2064,9 +2085,9 @@ export default function PropertiesPanel({
             </>)}{/* end of Motion tab */}
 
             {/* Group / Repeater: helpful tab content reminder */}
-            {(layer.type === 'group' || layer.type === 'repeater') && activeTab !== 'properties' && (
+            {(layer.type === 'group' || layer.type === 'repeater') && activeTab !== 'properties' && activeTab !== 'links' && (
               <p className="text-xs text-gray-600 text-center py-8 italic">
-                {layer.type === 'group' ? 'Groups' : 'Repeaters'} only use the Properties tab.
+                {layer.type === 'group' ? 'Groups' : 'Repeaters'} use the Properties and Link &amp; IK tabs.
               </p>
             )}
           </>

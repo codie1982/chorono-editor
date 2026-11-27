@@ -18,7 +18,7 @@ import { renderWorkMonitor } from '@/lib/resources/performance/RenderWorkMonitor
 export function drawViewportFrame(canvas: HTMLCanvasElement, opts: CanvasRendererOptions): void {
   const {
     scene, timeMs, selectedLayerId, selectedLayerIds, assets, viewportRef, viewportScale,
-    snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, overrides, paramValues, dragOverrides,
+    snapEnabled, snapToGridOn, gridSize, gridVisible, gridInFront, meshTrianglesVisible, overrides, paramValues, dragOverrides,
     ghostSettings, selectedTimeline, hideEditorUI,
   } = opts
   const ctx = canvas.getContext('2d')
@@ -53,6 +53,7 @@ export function drawViewportFrame(canvas: HTMLCanvasElement, opts: CanvasRendere
       mediaPrefetchMs: 500,
       lod: viewportScale !== undefined && !ghostSettings?.enabled ? { zoom: viewportScale } : undefined,
       selectedLayerIds,
+      editorOverlays: { meshTriangles: !!meshTrianglesVisible },
       // SceneCanvas draws the single editable DOM frame for every selection.
       selectionOutline: false,
       // BL-66 — playback / preview → 'preview' (clean frame); else 'editor'.

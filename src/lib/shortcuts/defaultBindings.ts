@@ -1,6 +1,8 @@
 import type { ShortcutDefinition } from './ShortcutDefinition'
+import { model3dShortcutDefinitions } from '../model3d/inspection/viewShortcuts'
 
 export const defaultBindings: ShortcutDefinition[] = [
+  ...model3dShortcutDefinitions,
   // ── Global ──────────────────────────────────────────────────────────────
   { id: 'global.undo',   label: 'Undo',   contexts: ['global'], binding: { type: 'keyboard', key: 'z', meta: true } },
   { id: 'global.redo',   label: 'Redo',   contexts: ['global'], binding: { type: 'keyboard', key: 'z', meta: true, shift: true } },
@@ -13,8 +15,9 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.tool.pen',              label: 'Pen Tool',           contexts: ['canvas'], binding: { type: 'keyboard', key: 'p' } },
   { id: 'canvas.tool.move',             label: 'Move Tool',          contexts: ['canvas'], binding: { type: 'keyboard', key: 'g' } },
   { id: 'canvas.tool.rotate',           label: 'Rotate Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'r' } },
-  { id: 'canvas.tool.scale',            label: 'Scale Tool',         contexts: ['canvas'], binding: { type: 'keyboard', key: 's' } },
+  { id: 'canvas.tool.scale',            label: 'Scale Tool',         contexts: ['canvas'], binding: { type: 'keyboard', key: 's', shift: true } },
   { id: 'canvas.tool.anchor',           label: 'Anchor Tool',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'a' } },
+  { id: 'canvas.tool.texture',          label: 'Texture Tool',       contexts: ['canvas'], binding: { type: 'keyboard', key: 't' } },
   { id: 'canvas.tool.box-select',       label: 'Box Select',         contexts: ['canvas'], binding: { type: 'keyboard', key: 'b' } },
   { id: 'canvas.tool.lasso-select',     label: 'Lasso Select',       contexts: ['canvas'], binding: { type: 'keyboard', key: 'l' } },
   { id: 'canvas.tool.circle-select',    label: 'Circle Select',      contexts: ['canvas'], binding: { type: 'keyboard', key: 'o' } },
@@ -35,6 +38,8 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'global.deleteBackspace',   label: 'Delete Selected',    contexts: ['global'], binding: { type: 'keyboard', key: 'backspace' } },
 
   // ── Canvas — selection ───────────────────────────────────────────────────
+  { id: 'canvas.select.solo', label: 'Solo Selection', contexts: ['canvas', 'layerPanel'], binding: { type: 'keyboard', key: 's' }, description: 'Solo selected objects or complete groups; press again on the same selection to exit Solo' },
+  { id: 'canvas.select.clear', label: 'Clear Layer Selection', contexts: ['canvas'], binding: { type: 'keyboard', key: 'escape' }, description: 'Clear layer selection after active drawing/drag tools have cancelled' },
   { id: 'canvas.select.duplicate',  label: 'Duplicate Layer',    contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true } },
   { id: 'canvas.select.cloneQuick', label: 'Clone Quick',        contexts: ['canvas'], binding: { type: 'keyboard', key: 'd', meta: true, alt: true }, description: 'Clone with animation tracks copied' },
   { id: 'canvas.select.copy',       label: 'Copy Keyframes',     contexts: ['canvas', 'timeline'], binding: { type: 'keyboard', key: 'c', meta: true } },
@@ -57,6 +62,11 @@ export const defaultBindings: ShortcutDefinition[] = [
   { id: 'canvas.gesture.cloneDrag',    label: 'Clone while dragging',          contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta'] }, description: 'Cmd/Ctrl + drag copies the complete selected subtree and animation' },
   { id: 'canvas.gesture.cloneDragAlt', label: 'Copy while dragging (Alt)', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['alt'] }, description: 'Hold Alt before mouse-down, drag, then release the mouse to copy; Alt may remain held' },
   { id: 'canvas.gesture.instanceDrag', label: 'Instance clone while dragging', contexts: ['canvas'], binding: { type: 'gesture', gesture: 'drag', modifiers: ['meta', 'shift'] }, description: 'Cmd/Ctrl + Shift + drag creates linked appearance with independent animation' },
+
+  // Shared component-level Edit entry. Timeline/text/detail contexts keep digits.
+  { id: 'canvas.edit.point', label: 'Edit Point mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '1' }, description: 'Enter Point editing for the selected Spline or Mesh' },
+  { id: 'canvas.edit.edge', label: 'Edit Edge mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '2' }, description: 'Enter Edge editing for the selected Spline or Mesh' },
+  { id: 'canvas.edit.object', label: 'Edit Object / Face mode', contexts: ['canvas', 'splineEdit', 'layerPanel'], binding: { type: 'keyboard', key: '3' }, description: 'Enter Spline Object or Mesh Face editing; the stable shortcut ID is retained' },
 
   // ── Playback ─────────────────────────────────────────────────────────────
   { id: 'global.playback.toggle',        label: 'Play / Pause',           contexts: ['global'],   binding: { type: 'keyboard', key: ' ' } },

@@ -8,7 +8,7 @@
 // defer physical URL revocation. It never owns decoded browser media.
 // Use useAssetRegistry hook to sync it with scene.assets in React.
 
-import type { Layer }      from '../types/core'
+import type { Composition, Layer }      from '../types/core'
 import type {
   Asset,
   AssetType,
@@ -37,12 +37,12 @@ export class AssetRegistry {
    * Sync registry from scene data.
    * Call this when scene is loaded or replaced.
    */
-  sync(assets: Asset[], collections: AssetCollection[], layers: Layer[]): void {
+  sync(assets: Asset[], collections: AssetCollection[], layers: Layer[], composition?: Composition): void {
     this.assets.clear()
     this.collections.clear()
     for (const asset of assets) this.assets.set(asset.id, asset)
     for (const col of collections) this.collections.set(col.id, col)
-    this.index.build(layers)
+    this.index.build(layers, composition)
   }
 
   // ── Asset Queries ─────────────────────────────────────────────────────────
@@ -175,8 +175,8 @@ export class AssetRegistry {
   // ── Index Sync ────────────────────────────────────────────────────────────
 
   /** Call when layers change to keep reverse index current */
-  rebuildIndex(layers: Layer[]): void {
-    this.index.build(layers)
+  rebuildIndex(layers: Layer[], composition?: Composition): void {
+    this.index.build(layers, composition)
   }
 
   addLayerToIndex(layer: Layer): void {

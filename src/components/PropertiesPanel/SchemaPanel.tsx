@@ -11,6 +11,11 @@
 // schema-able.
 
 'use client'
+import { useState } from 'react'
+import { modelInstanceInputGroup } from '@/lib/model3d/content/modelInstanceInputs'
+import { resolveInstanceLayer } from '@/lib/clone/InstanceResolver'
+import type { ChronoScene } from '@/lib/types'
+import { modelClipReadOnlyReason } from '@/lib/model3d/animation/modelClipOwnership'
 import type { Layer } from '@/lib/types'
 import type { PropertySchema, PropertyGroup } from '@/lib/registry'
 import { layerRegistry } from '@/lib/registry'
@@ -26,6 +31,7 @@ import type { GradientFill } from '@/lib/types'
 
 interface Props {
   layer: Layer
+  scene?: ChronoScene
   onLayerChange: (layer: Layer) => void
   /**
    * Optional filter — return false to skip a section. Used by PropertiesPanel
@@ -33,15 +39,20 @@ interface Props {
    * Appearance, Shape, etc. for richly-customised layer types).
    */
   filterGroup?: (group: PropertyGroup) => boolean
+  /** Optional capability-owned projection of the same authoritative schemas. */
+  groups?: readonly PropertyGroup[]
+  /** Read-only driver/ownership explanation; literal controls cannot bypass it. */
+  disabledReason?: (schema: PropertySchema) => string | null
 }
 
 /** Render registered source schemas. Numeric fields retain their explicit source
  * path for formula commands; literal changes use the shared immutable writer.
  * No source is mutated or expression evaluated by rendering the inspector. */
-export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props) {
+export default function SchemaPanel({ layer, onLayerChange, filterGroup, groups: suppliedGroups, disabledReason, scene }: Props) {
+  const readOnlyReason = (schema: PropertySchema) => disabledReason?.(schema) ?? modelClipReadOnlyReason(layer, schema.path)
   const def = layerRegistry.findForLayer(layer)
-  if (!def?.getPropertyGroups) return null
-  const groups = def.getPropertyGroups(layer)
+  if (!def?.getPropertyGroups && !suppliedGroups) return null
+  const groups = layer.type === 'model3d' && layer.instanceOf && scene ? [modelInstanceInputGroup(layer, resolveInstanceLayer(layer, scene.layers)?.model3d)] : suppliedGroups ?? def!.getPropertyGroups(layer)
 
   return (
     <>
@@ -58,13 +69,16 @@ export default function SchemaPanel({ layer, onLayerChange, filterGroup }: Props
             </div>
             <div className="grid grid-cols-2 gap-2">
               {visible.map(schema => (
-                <div key={schema.id} className={schema.fullWidth ? 'col-span-2' : ''}>
+                <fieldset key={schema.id} aria-label={schema.label} disabled={!!readOnlyReason(schema)} className={`min-w-0 ${schema.fullWidth ? 'col-span-2' : ''}`}>
                   <SchemaField
                     schema={schema}
                     value={readPropertyPath(layer, schema.path) ?? schema.defaultValue}
-                    onChange={(v) => onLayerChange(writePropertyPath(layer, schema.path, v, true))}
+                    onChange={(v) => { if (!readOnlyReason(schema)) onLayerChange(def?.applyPropertyChange
+                      ? def.applyPropertyChange(layer, schema.path, v)
+                      : writePropertyPath(layer, schema.path, v, true)) }}
                   />
-                </div>
+                  {readOnlyReason(schema) && <p className="text-xs text-amber-200 mt-1">{readOnlyReason(schema)}</p>}
+                </fieldset>
               ))}
             </div>
           </div>
@@ -85,15 +99,22 @@ interface FieldProps {
 /** Adapt a typed schema field to its existing control. Numeric ranges and units
  * remain source values (no implicit percent/angle conversion). */
 function SchemaField({ schema, value, onChange }: FieldProps) {
-  const inputClass =
-    "w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 " +
-    "focus:outline-none focus:border-blue-500 [appearance:textfield] " +
-    "[&::-webkit-inner-spin-button]:appearance-none"
-
+  const [error, setError] = useState<string | null>(null)
+  const commit = (nextValue: unknown) => {
+    try {
+      onChange(nextValue)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The value could not be applied')
+    }
+  }
   // Booleans: render with a horizontal label so they sit nicely in a 2-col grid
   if (schema.valueType === 'boolean') {
     return (
-      <BooleanInput propertyPath={schema.path} label={schema.label} help={schema.help} value={!!value} onChange={onChange} />
+      <div className="flex flex-col gap-0.5">
+        <BooleanInput propertyPath={schema.path} label={schema.label} help={schema.help} value={!!value} onChange={commit} />
+        {error && <p role="alert" className="text-[10px] leading-snug text-red-400">{error}</p>}
+      </div>
     )
   }
 
@@ -110,23 +131,23 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
           propertyPath={schema.path}
           fieldLabel={schema.label}
           value={String(value ?? '#000000')}
-          onChange={(v) => onChange(v)}
+          onChange={commit}
         />
       )}
 
       {schema.valueType === 'gradient' && (
         <GradientInput
           value={(value as GradientFill | undefined)}
-          onChange={(g) => onChange(g)}
+          onChange={commit}
         />
       )}
 
       {schema.valueType === 'select' && (
-        <TextInput propertyPath={schema.path} fieldLabel={schema.label} value={String(value ?? '')} onChange={onChange} options={schema.options} />
+        <TextInput propertyPath={schema.path} fieldLabel={schema.label} value={String(value ?? '')} onChange={commit} options={schema.options} />
       )}
 
       {schema.valueType === 'string' && (
-        <TextInput propertyPath={schema.path} fieldLabel={schema.label} value={String(value ?? '')} onChange={onChange} />
+        <TextInput propertyPath={schema.path} fieldLabel={schema.label} value={String(value ?? '')} onChange={commit} />
       )}
 
       {(schema.valueType === 'number' || schema.valueType === 'angle' || schema.valueType === 'percent') && (
@@ -135,9 +156,13 @@ function SchemaField({ schema, value, onChange }: FieldProps) {
           min={schema.min}
           max={schema.max}
           step={schema.step ?? 1}
-          onChange={(v) => onChange(v)}
+          onChange={commit}
+          onValidDraft={() => setError(null)}
         /></NumericPropertyScope>
       )}
+      {error
+        ? <p role="alert" className="text-[10px] leading-snug text-red-400">{error}</p>
+        : schema.help && <p className="text-[10px] leading-snug text-gray-500">{schema.help}</p>}
     </label>
   )
 }

@@ -5,6 +5,7 @@ import { nextModifierId, makeAddCurveModifierCmd, makeBakeTrackToKeyframesCmd } 
 import type { CurveModifier } from '../../animation/modifiers/types'
 import { copyScriptData } from './scriptData'
 import { ensureLayerInTimeline } from '../../timeline/keyframeOps'
+import { assertTimelineEditTarget } from '../../timeline/authoring/timelinePropertyScope'
 
 export class TimelineHandle {
   constructor(public readonly id: string, private readonly ctx: ApiContext) {}
@@ -16,6 +17,7 @@ export class TimelineHandle {
   }
 
   set(patch: Partial<Omit<Timeline, 'id' | 'tracks'>>): this {
+    if (this.ctx.timelineContext?.kind === 'content') throw new Error('Inner clip lifecycle editing requires the scoped detail Timeline host.')
     const prev = this.data
     const prevComposition = this.ctx.host.getScene().composition
     const next = { ...prev, ...patch, id: this.id, tracks: prev.tracks }
@@ -35,7 +37,8 @@ export class TimelineHandle {
 
   /** Shallowly configure one full target path; supplied arrays/objects replace
    * that field. Existing layer owners enter explicit timeline membership in
-   * the same command. Undo restores the complete original timeline. */
+   * the same command. Feature-owned internal targets are rejected in the 2D
+   * authoring scope. Undo restores the complete original timeline. */
   track(target: string, patch: Partial<Omit<Track, 'target'>>): this {
     const prev = this.data
     const existing = prev.tracks.find(t => t.target === target)
@@ -43,6 +46,7 @@ export class TimelineHandle {
     this.ctx.host.applyCommand({
       label: `Update track ${target}`,
       execute: scene => {
+        assertTimelineEditTarget(scene, this.id, target, this.ctx.timelineContext)
         const updated = { ...scene, timelines: scene.timelines.map(t => t.id !== this.id ? t : { ...t, tracks: existing ? t.tracks.map(tr => tr.target === target ? next : tr) : [...t.tracks, next] }) }
         const layerId = /^layers\.([^.]+)\./.exec(target)?.[1]
         return layerId && scene.layers.some(layer => layer.id === layerId) ? ensureLayerInTimeline(updated, this.id, layerId) : updated
@@ -52,17 +56,19 @@ export class TimelineHandle {
     return this
   }
 
+  /** Remove one outer track; isolated internal source survives 2D operations. */
   removeTrack(target: string): this {
     const prev = this.data
-    this.ctx.host.applyCommand({ label: 'Remove track', execute: scene => ({ ...scene, timelines: scene.timelines.map(t => t.id !== this.id ? t : { ...t, tracks: t.tracks.filter(tr => tr.target !== target) }) }), undo: scene => ({ ...scene, timelines: scene.timelines.map(t => t.id === this.id ? prev : t) }) })
+    this.ctx.host.applyCommand({ label: 'Remove track', execute: scene => { assertTimelineEditTarget(scene, this.id, target, this.ctx.timelineContext); return { ...scene, timelines: scene.timelines.map(t => t.id !== this.id ? t : { ...t, tracks: t.tracks.filter(tr => tr.target !== target) }) } }, undo: scene => ({ ...scene, timelines: scene.timelines.map(t => t.id === this.id ? prev : t) }) })
     return this
   }
 
   modifier(target: string, config: Partial<CurveModifier> & Pick<CurveModifier, 'type'>): this {
+    assertTimelineEditTarget(this.ctx.host.getScene(), this.id, target, this.ctx.timelineContext)
     if (!this.data.tracks.some(t => t.target === target)) this.track(target, {})
     this.ctx.host.applyCommand(makeAddCurveModifierCmd(this.id, { kind: 'track', target }, {
       id: nextModifierId(), enabled: true, blendMode: 'add', weight: 1, parameters: {}, ...config,
-    }))
+    }, this.ctx.timelineContext))
     return this
   }
 
@@ -70,9 +76,10 @@ export class TimelineHandle {
    * to the full timeline; keys outside it remain but signal processors are
    * removed globally. One stale-checked command restores the original on undo. */
   bake(target: string, fps = 60, tolerance = 0.005, range: { startMs?: number; endMs?: number } = {}): this {
+    assertTimelineEditTarget(this.ctx.host.getScene(), this.id, target, this.ctx.timelineContext)
     const track = this.data.tracks.find(t => t.target === target)
     if (!track) throw new Error(`Track '${target}' not found`)
-    this.ctx.host.applyCommand(makeBakeTrackToKeyframesCmd(this.id, target, track, { startMs: range.startMs ?? 0, endMs: range.endMs ?? this.data.durationMs, fps, tolerance }))
+    this.ctx.host.applyCommand(makeBakeTrackToKeyframesCmd(this.id, target, track, { startMs: range.startMs ?? 0, endMs: range.endMs ?? this.data.durationMs, fps, tolerance }, this.ctx.timelineContext))
     return this
   }
 }

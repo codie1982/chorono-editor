@@ -8,14 +8,20 @@ import {LayerIndex} from '../LayerIndex'
  * request ancestor context; flat timelines keep separate membership filtering.
  * Null means unrestricted. LayerIndex supplies the bounded subtree walk;
  * ancestor closure visits each parent once and tolerates missing ids/cycles.
+ * Optional index must describe these same layers and is borrowed for this call.
  * Expected O(n), without mutation, recursion, DOM or geometry/resource ownership.
  */
-export function editorSoloScope(layers:readonly Layer[],includeAncestors=false):ReadonlySet<string>|null{
-  const visualRoots=layers.filter(layer=>layer.type!=='audio'&&layer.solo).map(layer=>layer.id)
-  const audioSolo=layers.some(layer=>layer.type==='audio'&&layer.solo)
+export function editorSoloScope(layers:readonly Layer[],includeAncestors=false,suppliedIndex?:LayerIndex):ReadonlySet<string>|null{
+  const visualRoots:string[]=[]
+  let audioSolo=false
+  for(const layer of layers)if(layer.solo){
+    if(layer.type==='audio')audioSolo=true
+    else visualRoots.push(layer.id)
+  }
   if(!visualRoots.length&&!audioSolo)return null
-  const index=new LayerIndex(layers),visualIds=visualRoots.length?index.subtreeIds(visualRoots):null
-  const scope=new Set(layers.filter(layer=>layer.type==='audio'?(!audioSolo||layer.solo):(!visualIds||visualIds.has(layer.id))).map(layer=>layer.id))
+  const index=suppliedIndex??new LayerIndex(layers),visualIds=visualRoots.length?index.subtreeIds(visualRoots):null
+  const scope=new Set<string>()
+  for(const layer of layers)if(layer.type==='audio'?(!audioSolo||layer.solo):(!visualIds||visualIds.has(layer.id)))scope.add(layer.id)
   if(includeAncestors){
     const walked=new Set<string>()
     for(const id of Array.from(scope)){

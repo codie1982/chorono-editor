@@ -60,6 +60,7 @@ earlier live value changed. Use `get_runtime` to inspect that state.
 | --- | --- | --- |
 | Full scene records and concurrency revision | `get_scene` | `describe_layer` is a summary, not a full nested Layer record |
 | Flat layer properties with a chosen id | `add_layer`, `update_layer` | `create_object`/`patch_object` use model-shaped nested data |
+| Import and edit boxed 3D | `import_asset`, `update_model3d` | Base64 GLB/glTF import uses the native pipeline; static model edits deep-merge only declared presentation fields and outer box size |
 | Model-valued keys and custom Bézier easing | `set_keyframes` | `add_keyframes` keeps full-target addressing and its easeInOut insertion default |
 | Append a numeric signal modifier | `add_modifier` | `update_track` replaces arrays; `bake_track` replaces the authored stack with sampled keys |
 | Live interactive values/events | `control_runtime` | `edit_entity` changes authored defaults/records |
@@ -163,3 +164,9 @@ feedback; do not estimate or promise a score from local coverage counts.
 
 References: [TDQS dimensions](https://tdqs.dev/dimensions),
 [MCP tool results](https://modelcontextprotocol.io/specification/2025-06-18/server/tools).
+
+## Native prepared spline edits
+
+`src/lib/editor/spline/operations` owns source operation types, strict shared JSON schemas and simple native planners. `src/lib/mcp/spline` owns transport definitions, worker/preview orchestration and capabilities. `prepare_spline_edit` consumes fresh source authority, returns actual PNG metadata and a new plan-bound token; `apply_spline_edit` commits the stored draft exactly once; `discard_spline_edit` releases it. They are not batch actions. Script/Console simple operations use the same validators and planners via `SplineHandle.edit`; asynchronous CPU solvers are native-only. The broker stores source drafts in `PreparedPlanStore` with a shared 50-plan/64 MiB estimated admission budget and five-minute expiry. No PNG, worker or browser object enters history or retained plans. Source revisions, document/client identity, active transactions and cancellation are rechecked across async boundaries.
+
+Unsafe keyed/referenced spline deletions now refuse instead of silently pruning tracks. Existing public names and signatures remain; callers must explicitly resolve animation ownership before a destructive edit. See [audit](../tr/script-api-compatibility-audit.md) for deliberate legacy shorthand differences and unsupported editor-only APIs.

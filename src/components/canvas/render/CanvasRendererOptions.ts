@@ -23,6 +23,8 @@ export interface CanvasRendererOptions {
   gridVisible?: boolean
   /** false paints behind content; omitted retains the historical front grid. */
   gridInFront?: boolean
+  /** Viewport-only fixed-topology diagnostic for selected Mesh2D layers. */
+  meshTrianglesVisible?: boolean
   /** Timeline / runtime override map (already merged upstream). */
   overrides?: OverrideMap
   paramValues?: Map<string, string | number | boolean>

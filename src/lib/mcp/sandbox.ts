@@ -1,3 +1,4 @@
+import { SPLINE_SCRIPT_SURFACE } from '../script/api/splineSurface'
 import { commandAuthoringHints } from '../editor/authoring/AuthoringCommand'
 import { AuthoringHintCollector } from '../editor/authoring/AuthoringHints'
 import { getQuickJS } from 'quickjs-emscripten'
@@ -28,6 +29,8 @@ const facade = `
     get data() { return call('layer.get', this.id, 'data'); }
     get particles() { return new Particles(this.id); }
     get spline() { return new Spline(this.id); }
+    geometry2d(...args) { return call('layer.method', this.id, 'geometry2d', ...args); }
+    rig2d(...args) { return call('layer.method', this.id, 'rig2d', ...args); }
     get(path) { return call('layer.method', this.id, 'get', path); }
     set(patch) { call('layer.method', this.id, 'set', patch); return this; }
     patch(patch) { call('layer.method', this.id, 'patch', patch); return this; }
@@ -65,9 +68,9 @@ const facade = `
     constructor(id) { this.id = id; }
     get layerId() { return this.id; }
   }
-  for (const property of ['data','bounds']) Object.defineProperty(Spline.prototype, property, { get() { return call('spline.get', this.id, property); } });
-  for (const method of ['getPoint','getHandle','getSegment','getContour','getSubShape','appendPrimitive','addContour','addPoint','setHandle','splitSegment','offsetContour','outlineContour']) Spline.prototype[method] = function(...args) { return call('spline.method', this.id, method, ...args); };
-  for (const method of ['movePoint','removePoint','setPointType','setPointLocked','removeHandle','setHandleLocked','setSegmentType','setQuadraticControl','setContourClosed','reverseContour','removeContour','removeSubShape','setSubShape','setFillRule','transform','chamferCorners','filletCorners']) Spline.prototype[method] = function(...args) { call('spline.method', this.id, method, ...args); return this; };
+  for (const property of ${JSON.stringify(SPLINE_SCRIPT_SURFACE.properties)}) Object.defineProperty(Spline.prototype, property, { get() { return call('spline.get', this.id, property); } });
+  for (const method of ${JSON.stringify(SPLINE_SCRIPT_SURFACE.valueMethods)}) Spline.prototype[method] = function(...args) { return call('spline.method', this.id, method, ...args); };
+  for (const method of ${JSON.stringify(SPLINE_SCRIPT_SURFACE.chainMethods)}) Spline.prototype[method] = function(...args) { call('spline.method', this.id, method, ...args); return this; };
   class Explorer {}
   for (const property of ['tree','roots','nodes']) Object.defineProperty(Explorer.prototype, property, { get() { return call('explorer.get', property); } });
   for (const method of ['node','query','children','ancestors','descendants','group','ungroup','reparent','rename','reorder','moveBefore','moveAfter','setFlags']) Explorer.prototype[method] = function(...args) { return call('explorer.method', method, ...args); };
@@ -129,14 +132,14 @@ export async function runSafeScript(code: string, initial: ChronoScene, timeoutM
     const keyframes = scene.timelines.reduce((n, tl) => n + tl.tracks.reduce((m, tr) => m + tr.keyframes.length, 0), 0)
     if (keyframes > LIMITS.keyframes) throw budgetError = new Error('Keyframe limit exceeded')
   } }, line => { if (logs.length < 200 && line.length < 4096) logs.push(line) })
-  const layerMethods = new Set(['get', 'set', 'patch', 'font', 'stroke', 'shapeParam', 'parent', 'interactive', 'followPath', 'configureParticles', 'key', 'audioGain', 'audioFades', 'moveAudio', 'trimAudio', 'splitAudio'])
+  const layerMethods = new Set(['geometry2d', 'rig2d', 'get', 'set', 'patch', 'font', 'stroke', 'shapeParam', 'parent', 'interactive', 'followPath', 'configureParticles', 'key', 'audioGain', 'audioFades', 'moveAudio', 'trimAudio', 'splitAudio'])
   const layerProperties = new Set(['data', 'pos', 'opacity', 'rotation', 'scale', 'size', 'fill', 'text', 'cornerRadius', 'blendMode', 'name', 'type'])
   const sceneCollections = new Set(['assets', 'assetCollections', 'parameters', 'triggers', 'bindings', 'parameterWires', 'stateMachines', 'initialState', 'particlePresets'])
   const timelineMethods = new Set(['set', 'track', 'removeTrack', 'modifier', 'bake', 'key'])
   const particleProperties = new Set(['data', 'presets', 'motionModifiers'])
   const particleMethods = new Set(['getPreset', 'patch', 'applyPreset', 'emission', 'visual', 'animation', 'random', 'rendering', 'seed', 'life', 'lifeKey', 'removeLifeKey', 'clearLife', 'addMotionModifier', 'updateMotionModifier', 'removeMotionModifier'])
   const splineProperties = new Set(['data', 'bounds'])
-  const splineMethods = new Set(['getPoint', 'getHandle', 'getSegment', 'getContour', 'getSubShape', 'appendPrimitive', 'addContour', 'addPoint', 'movePoint', 'removePoint', 'setPointType', 'setPointLocked', 'setHandle', 'removeHandle', 'setHandleLocked', 'setSegmentType', 'setQuadraticControl', 'splitSegment', 'setContourClosed', 'reverseContour', 'removeContour', 'removeSubShape', 'setSubShape', 'setFillRule', 'transform', 'offsetContour', 'outlineContour', 'chamferCorners', 'filletCorners'])
+  const splineMethods = new Set<string>([...SPLINE_SCRIPT_SURFACE.valueMethods, ...SPLINE_SCRIPT_SURFACE.chainMethods])
   const explorerProperties = new Set(['tree', 'roots', 'nodes'])
   const explorerMethods = new Set(['node', 'query', 'children', 'ancestors', 'descendants', 'group', 'ungroup', 'reparent', 'rename', 'reorder', 'moveBefore', 'moveAfter', 'setFlags'])
 

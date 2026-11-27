@@ -41,7 +41,7 @@ const initial = fixture()
 /** Actual editor, runtime, graph, timeline and wire controls in an isolated
  * document. Test controls only arrange source/revision edge cases. */
 function Host() {
-  const editor = useEditorState(initial), scene = editor.scene, assets = useAssetCache(scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(initial), scene = editor.scene, assets = useAssetCache(scene.assets), snap = useSnapSettings({ persist: false })
   const runtime = useInteractiveRuntime(scene), frame = runtime.evaluateFrame(500)
   const [keys, setKeys] = useState(new Set<string>()), [settings, setSettings] = useState(DEFAULT_TIMELINE_SETTINGS)
   const [wireOpen, setWireOpen] = useState(false), [report, setReport] = useState('Ready')

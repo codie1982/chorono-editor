@@ -33,7 +33,7 @@ export function useAssetCache(assets: Asset[], options: { managed?: boolean; ser
   useEffect(() => {
     const source = assetSourcePool.retainAssets(assets)
     // Active renderer requests replace this empty managed set on the next frame.
-    session.setDemand(options.managed ? [] : assets.filter(asset => ['image', 'spriteSheet', 'video', 'font'].includes(asset.type)).map(asset => ({
+    session.setDemand(options.managed ? [] : assets.filter(asset => ['image', 'spriteSheet', 'video', 'font', 'meshDeformation', 'model3d'].includes(asset.type)).map(asset => ({
       key: JSON.stringify([asset.id, asset.url]), asset, required: true,
       layerId: asset.type === 'video' ? `legacy:${asset.id}` : undefined,
     })))

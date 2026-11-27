@@ -1,3 +1,6 @@
+import { compositionForOutput } from '../../paint/paintSource'
+import { flattenBooleanOperationsForOutput } from '../../booleanOperations/projectOperations'
+import { assertModelPlaybackExport } from '../../model3d/source/modelCapabilities'
 // ── htmlExport ────────────────────────────────────────────────────────────────
 //
 // Standalone HTML export. Produces a single self-playing .html that loads
@@ -49,7 +52,10 @@ function escapeHtml(s: string): string {
 }
 
 export function exportHTML(scene: ChronoScene, opts: HTMLExportOptions = {}): HTMLExportResult {
-  return renderHTMLDocument(scene.composition,embedJson(scene),opts)
+  scene = flattenBooleanOperationsForOutput(scene)
+  assertModelPlaybackExport(scene)
+  const output = { ...scene, composition: compositionForOutput(scene.composition) }
+  return renderHTMLDocument(output.composition,embedJson(output),opts)
 }
 
 /** Render the existing standalone document around an already script-escaped

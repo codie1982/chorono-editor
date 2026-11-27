@@ -58,7 +58,7 @@ function Host() {
     selectedKeyIds: keys, currentTimeMs: time, isPlaying: playing, timeBasis: 'global', onSeek: paused })
   const clipboard = useKeyframeClipboard({ scene, selectedKfIds: keys, selectedTimelineId: 'active', currentTimeMs: authoring.localTimeMs,
     dispatchCommand: editor.dispatchCommand, collisionPolicy: authoring.collisionPolicy, onError: setError })
-  const runtime = useInteractiveRuntime(scene, { playbackDriven: playing }), assets = useAssetCache(scene.assets), snap = useSnapSettings()
+  const runtime = useInteractiveRuntime(scene, { playbackDriven: playing }), assets = useAssetCache(scene.assets), snap = useSnapSettings({ persist: false })
   const frame = useMemo(() => runtime.evaluateFrame(time, playing ? null : { timelineId: 'active', localTimeMs: authoring.localTimeMs }), [scene, time, playing, authoring.localTimeMs, runtime.evaluateFrame])
   const noop = () => {}
   useKeyboard({ onUndo: editor.undo, onRedo: editor.redo, onPlayToggle: () => setPlaying(value => !value), onStepBack: noop, onStepForward: noop,

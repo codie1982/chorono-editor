@@ -13,8 +13,9 @@ import { DEFAULT_TIMELINE_GHOST_SETTINGS } from '@/lib/types/editor'
 import { evaluateTimelines } from '@/lib/evaluator'
 import { makeUpdateLayerCmd } from '@/lib/editor/commands-layer'
 import { buildViewportKeyframeCommands } from '@/lib/editor/viewportKeyframes'
-import { buildTrajectoryModel, projectTrajectoryPosition } from '@/lib/timeline/trajectory'
+import { buildTrajectoryModel, projectTrajectoryPosition, trajectoryCurveHandles } from '@/lib/timeline/trajectory'
 import {assertAuthoringData} from '@/lib/editor/authoring'
+import { MotionKeysPanel } from '@/components/canvas/motion/MotionKeysPanel'
 
 type Point = { x: number; y: number }
 interface Runtime { editor: EditorStateReturn; selected: Set<string>; layerId: string; timeMs: number; motion: boolean; snap: boolean; route: string }
@@ -66,12 +67,13 @@ function fixture(follow = false): ChronoScene {
  * harness only supplies ordinary public callbacks; no key table or drag stub
  * substitutes for TimelinePanel, CurveEditor or SceneCanvas interaction. */
 function Subject({ source }: { source: ChronoScene }) {
-  const editor = useEditorState(source), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings()
+  const editor = useEditorState(source), assets = useAssetCache(editor.scene.assets), snap = useSnapSettings({ persist: false })
   const [selected, setSelected] = useState(new Set<string>()), [layerId, setLayer] = useState('hero')
   const [timeMs, setTime] = useState(0), [motion, setMotion] = useState(false), [route, setRoute] = useState('')
   const [timelineId, setTimeline] = useState('motion')
   const [tool, setTool] = useState<'select' | 'pen'>('select')
   const [settings, setSettings] = useState<TimelineSettings>({ ...DEFAULT_TIMELINE_SETTINGS, snapEnabled: false, snapToFrame: false, snapToKeyframes: false })
+  const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null), [showControls, setShowControls] = useState(false)
   const selectedLayers = useMemo(() => new Set([layerId]), [layerId])
   const overrides = useMemo(() => evaluateTimelines(editor.scene.timelines, timeMs), [editor.scene.timelines, timeMs])
   useEffect(() => { snap.setEnabled(false) }, [])
@@ -85,6 +87,7 @@ function Subject({ source }: { source: ChronoScene }) {
     </nav>
     <section data-panel="canvas" style={{ display: 'flex', position: 'relative', height: 740, minHeight: 740 }}>
       <SceneCanvas scene={editor.scene} editor={editor} assets={assets} snap={snap} timeMs={timeMs} overrides={overrides}
+        motionControlsHost={controlsHost} onOpenMotionControls={() => setShowControls(true)}
         selectedLayerId={layerId} selectedLayerIds={selectedLayers} selectedKeyframeIds={selected}
         onSelectLayer={id => { if (id) setLayer(id) }} onSelectKeyframes={setSelected} onSeekKeyframe={setTime}
         selectedTimeline={editor.scene.timelines.find(timeline => timeline.id === timelineId) ?? null}
@@ -92,6 +95,7 @@ function Subject({ source }: { source: ChronoScene }) {
         toolMode={tool} onToolModeChange={value => setTool(value === 'pen' ? 'pen' : 'select')} isPlaying={false}
         buildLayerCommitCommands={changes => buildViewportKeyframeCommands(editor.getScene(), changes, { timelineId, timeMs, autoKeyframe: false })} />
     </section>
+    {showControls && <MotionKeysPanel active={motion} layerName="Motion hero" controlsRef={setControlsHost} />}
     <section data-panel="timeline" style={{ height: 340, minHeight: 340, display: 'flex', flexDirection: 'column' }}>
       <TimelinePanel scene={editor.scene} editor={editor} settings={settings} onSettingsChange={setSettings}
         selectedLayerId={layerId} selectedLayerIds={selectedLayers} selectedTimelineId={timelineId} selectedKfIds={selected}
@@ -153,6 +157,64 @@ function pointer(target: EventTarget, type: string, point: Point) {
 function node(timeMs: number): Element { const result = host.querySelector(`[data-motion-time-ms="${timeMs}"]`); assert(result, `Missing motion node at ${timeMs}ms.`); return result }
 /** Select/seek through the real node; an unmoved pointer must not create undo. */
 async function selectNode(timeMs: number) { const element = node(timeMs), point = center(element); pointer(element, 'pointerdown', point); pointer(window, 'pointerup', point); await frames() }
+/** Pan is a view-only owner even when a trajectory is already selected. Both
+ * direct stale-node input and the real hit target must leave source/history. */
+async function panChecks(mount: (source?: ChronoScene) => Promise<void>) {
+  await mount(); await selectNode(500)
+  const before = structuredClone(live().editor.getScene()), revision = live().editor.getRevision()
+  const pan = host.querySelector<HTMLButtonElement>('button[title^="Pan mode"]')!
+  flushSync(() => pan.click()); await frames()
+  const mark = node(500), p = center(mark), end = { x: p.x + 30, y: p.y + 20 }
+  assert(mark.getAttribute('aria-disabled') === 'true' && getComputedStyle(mark).pointerEvents === 'none', 'Pan left key marks interactive.')
+  pointer(mark, 'pointerdown', p); pointer(window, 'pointermove', end); pointer(window, 'pointerup', end); await frames()
+  equal(live().editor.getScene(), before, 'Pan edited a key through a stale mark.')
+  const canvas = host.querySelector('canvas')!, original = canvas.getBoundingClientRect()
+  pointer(canvas, 'pointerdown', p); pointer(window, 'pointermove', end); pointer(window, 'pointerup', end); await frames()
+  assert(canvas.getBoundingClientRect().left !== original.left, 'Pan did not move the viewport on its first drag.')
+  equal(live().editor.getScene(), before, 'Pan wrote source or attribution.')
+  assert(live().editor.getRevision() === revision && !live().editor.isTransactionActive(), 'Pan wrote history or left an active gesture.')
+  record('object context opens a separate Motion Keys panel; Pan moves only the viewport', { revision, controlsOutsideCanvas: true })
+}
+
+/** Real segment/node context menus and SVG control dragging, with the same
+ * sparse keys/reflected parent as the other checks. Menu writes/gesture writes
+ * each have one Undo; native Timeline/Curve key IDs share the new insertion. */
+async function curveChecks(mount: (source?: ChronoScene) => Promise<void>) {
+  await mount()
+  const menuAction = async (label: string) => {
+    const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(element => element.textContent?.trim() === label)
+    assert(item, `Missing curve menu '${label}'.`); flushSync(() => item.click()); await frames(3)
+  }
+  const contextAt = async (element: Element, p: Point) => { flushSync(() => element.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true, cancelable: true, button: 2, clientX: p.x, clientY: p.y }))); await frames() }
+  const segment = () => host.querySelector('[data-motion-segment-hit]')!
+  const sample = projectTrajectoryPosition(model().context!, 250)!, p = client(sample.world)
+  pointer(segment(), 'pointermove', p); await frames()
+  assert(host.querySelector('[data-motion-segment-highlight][stroke-width="4"]'), 'Hover did not thicken the motion segment.')
+  await contextAt(segment(), p); await menuAction('Set segment Bezier')
+  assert(live().editor.getScene().timelines[0].tracks.find(track => track.target === 'layers.hero.transform.y')!.keyframes.some(key => key.timeMs === 500), 'Segment easing did not fill its sparse Y endpoint.')
+  await selectNode(0)
+  const baseline = structuredClone(live().editor.getScene()), handle = host.querySelector('[data-motion-handle="out"][data-motion-handle-time="0"]')!
+  assert(handle, 'Bezier control lines/handle were not rendered.')
+  const h = trajectoryCurveHandles(model().context!, 0)[0], start = center(handle), end = client({ x: h.world.x + 12, y: h.world.y - 9 })
+  pointer(handle, 'pointerdown', start); pointer(window, 'pointermove', { x: end.x - 2, y: end.y }); pointer(window, 'pointerup', end); await frames()
+  const moved = trajectoryCurveHandles(model().context!, 0)[0]
+  close(moved.world.x, h.world.x + 12, 'Released Bezier handle world X'); close(moved.world.y, h.world.y - 9, 'Released Bezier handle world Y')
+  const changed = structuredClone(live().editor.getScene())
+  equal(changed.layers, baseline.layers, 'Handle moved source transform/anchor.')
+  await click('Undo'); equal(live().editor.getScene(), baseline, 'Handle drag needs more than one Undo.')
+  await click('Redo'); equal(live().editor.getScene(), changed, 'Handle Redo changed source.')
+  await contextAt(node(500), center(node(500))); await menuAction('Corner Bezier · independent handles')
+  assert(trajectoryCurveHandles(model().context!, 500).length === 2, 'An interior node lacks incoming/outgoing handles.')
+  record('path hover, segment context easing and native Bezier handle drag share one source/history', { sparseYFilled: true, controls: 2 })
+  const beforeInsert = structuredClone(live().editor.getScene()), projection = projectTrajectoryPosition(model().context!, 250)!
+  await contextAt(segment(), client(projection.world)); await menuAction('Add keyframe here')
+  const inserted = live().editor.getScene().timelines[0].tracks.flatMap(track => track.keyframes.filter(key => !beforeInsert.timelines[0].tracks.some(old => old.keyframes.some(previous => previous.id === key.id))))
+  assert(inserted.length >= 2 && inserted.some(key => key.timeMs > 100 && key.timeMs < 400), 'Path insertion did not create native time/position keys.')
+  for (const id of Array.from(live().selected)) assert(host.querySelector(`[data-panel="timeline"] [data-kf-id="${id}"]`), 'Inserted native key is missing in Timeline.')
+  await click('Undo'); equal(live().editor.getScene(), beforeInsert, 'Path insertion undo differs.')
+  record('right-clicking the motion line inserts paired native keys at its local time and appears in Timeline', { keyCount: inserted.length })
+}
 /** Place one Add/Draw point through the real SVG input surface. */
 async function place(point: Point) { const surface = host.querySelector('[data-testid="motion-input-surface"]'); assert(surface, 'Missing native motion input surface.'); const p = client(point); pointer(surface, 'pointerdown', p); pointer(window, 'pointerup', p); await frames() }
 /** Resolve an authored node using the same explicit domain owner as the UI. */
@@ -293,6 +355,10 @@ async function editCancelChecks(mount: (source?: ChronoScene) => Promise<void>) 
   equal(live().editor.getScene(), baseline, 'Escape did not restore key source.')
   assert(!live().editor.canUndo, 'Canceled key drag created history.')
   record('Escape cancels sparse motion preview without history', { restored: true })
+  flushSync(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))); await frames()
+  assert(!live().motion, 'Idle Escape left motion editing stuck active.')
+  equal(live().editor.getScene(), baseline, 'Leaving motion editing rewrote animation source.')
+  record('Idle Escape exits motion editing without changing animation', { motion: live().motion })
 }
 
 /** A manual source edit invalidates the prepared drawing plan; readonly Follow
@@ -322,7 +388,16 @@ async function main() {
   host = document.getElementById('motion-host')!; const root = createRoot(host)
   const button = document.getElementById('run-motion-keys') as HTMLButtonElement; let generation = 0
   const mount = async (source = fixture()) => { runtime = undefined; flushSync(() => root.render(<Subject key={++generation} source={source} />)); await frames(4)
-    assert(!live().snap, 'Fixture snapping did not disable.'); await click('Motion Keys'); assert(live().motion, 'Motion mode did not activate.') }
+    assert(!live().snap, 'Fixture snapping did not disable.')
+    assert(!host.querySelector('[data-motion-controls]'), 'Idle viewport still has fixed motion controls.')
+    const sample = projectTrajectoryPosition(model().context!, 0)!, p = client(sample.world), canvas = host.querySelector('canvas')!
+    flushSync(() => canvas.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: p.x, clientY: p.y }))); await frames()
+    const menu = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(item => item.textContent?.trim() === 'Edit motion keys')
+    assert(menu, 'Object context menu has no motion editing entry.')
+    flushSync(() => menu.click()); await frames(4)
+    assert(live().motion, 'Motion mode did not activate.')
+    assert(host.querySelector('[data-panel="motionKeys"] [data-motion-controls]'), 'Controls did not open in the dedicated panel.')
+    assert(!host.querySelector('[data-panel="canvas"] [data-motion-controls]'), 'Motion controls still cover the viewport.') }
   const inspect = document.createElement('button'); inspect.textContent = 'Open editable fixture'; button.after(inspect)
   inspect.onclick = async () => { await mount(); await selectNode(500) }
   button.onclick = async () => {
@@ -332,7 +407,7 @@ async function main() {
       status.textContent = 'Running real motion-key controls…'
       const metadata = await (await fetch('motion-key-interactions-sources.json')).json()
       manifest = { sourceManifest: 'motion-key-interactions-sources.json', bundleSha256: metadata.bundleSha256, sourceFiles: metadata.sources.length }
-      await selectionChecks(mount); await sparseDragCheck(mount); await numericCheck(mount); await endpointCheck(mount)
+      await curveChecks(mount); await panChecks(mount); await selectionChecks(mount); await sparseDragCheck(mount); await numericCheck(mount); await endpointCheck(mount)
       await drawingChecks(mount); await editCancelChecks(mount); await sourceGuardChecks(mount)
       status.textContent = `PASS · ${checks.length} checks`
       document.getElementById('report')!.textContent = JSON.stringify({ passed: true, checks, manifest, elapsedMs: performance.now() - started,
