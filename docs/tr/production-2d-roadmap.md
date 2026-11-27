@@ -63,24 +63,24 @@ commitleri içeren başka bir branch bulunmadı.
 
 | Gerçekleşen 2D geliştirme | Geliştirildiği branch | Commit / aralık | v0.5.0 durumu |
 | --- | --- | --- | --- |
-| Mesh2D topoloji, layer, spline/shape dönüşümü, texture ve deformasyon | `codex/mesh2d-mesh0` | `ff80d3a5`–`56e67b56` | Geliştirme branch'inde |
-| Chorono Render 2D ve dahili render fallback | `codex/mesh2d-mesh0` | `4cf90550`–`b14f46fb` | Geliştirme branch'inde |
-| Typed BakeService ve Mesh2D deformation bake | `codex/mesh2d-mesh0` | `aaf3066a`–`251f2d3d` | Geliştirme branch'inde |
-| 2D rigid body bake | `codex/mesh2d-mesh0` | `13aca9c3` | Geliştirme branch'inde |
-| İlk deterministik Voronoi fracture dilimi | `codex/mesh2d-mesh0` | `fcd22d8b` | Geliştirme branch'inde |
-| Voronoi v2 portable kimlikleri, canlı kabul ve rigid Worker sınırı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
-| Kalıcı MCP bake job, Jobs & Bake insan inceleme UI'ı ve opacity birim düzeltmesi | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
-| Olay-korumalı rigid keyframe sadeleştirme ve kalite raporu UI'ı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
-| Sahiplik hash'li güvenli Re-bake / Clear Bake, Inspector ve MCP yaşam döngüsü | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
-| Image fracture Mesh2D görünümü, kaynak UV koruması ve canlı kabul | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
-| Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Geliştirme branch'inde |
-| Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Geliştirme branch'inde |
-| Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Geliştirme branch'inde |
-| Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Geliştirme branch'inde |
-| Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Geliştirme branch'inde |
-| Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Geliştirme branch'inde |
-| Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Geliştirme branch'inde |
-| Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dikey dilim geliştirme branch'inde |
+| Mesh2D topoloji, layer, spline/shape dönüşümü, texture ve deformasyon | `codex/mesh2d-mesh0` | `ff80d3a5`–`56e67b56` | Yerel main'de; v0.5.0 adayı |
+| Chorono Render 2D ve dahili render fallback | `codex/mesh2d-mesh0` | `4cf90550`–`b14f46fb` | Yerel main'de; v0.5.0 adayı |
+| Typed BakeService ve Mesh2D deformation bake | `codex/mesh2d-mesh0` | `aaf3066a`–`251f2d3d` | Yerel main'de; v0.5.0 adayı |
+| 2D rigid body bake | `codex/mesh2d-mesh0` | `13aca9c3` | Yerel main'de; v0.5.0 adayı |
+| İlk deterministik Voronoi fracture dilimi | `codex/mesh2d-mesh0` | `fcd22d8b` | Yerel main'de; v0.5.0 adayı |
+| Voronoi v2 portable kimlikleri, canlı kabul ve rigid Worker sınırı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Kalıcı MCP bake job, Jobs & Bake insan inceleme UI'ı ve opacity birim düzeltmesi | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Olay-korumalı rigid keyframe sadeleştirme ve kalite raporu UI'ı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Sahiplik hash'li güvenli Re-bake / Clear Bake, Inspector ve MCP yaşam döngüsü | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Image fracture Mesh2D görünümü, kaynak UV koruması ve canlı kabul | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Darbe tetikli fracture, deterministik artistic explosion ve kalıcı olay kanıtı UI/MCP akışı | `codex/mesh2d-mesh0` | `1cedbbe5`, `22ba0ae4` | Yerel main'de; v0.5.0 adayı |
+| Topology olay göstergesi, gerçek render–collider fark analizi ve MCP incelemesi | `codex/mesh2d-mesh0` | `5c35d23a` | Yerel main'de; v0.5.0 adayı |
+| Temiz MCP sahne reseti ve 32 parça/eğimli zemin/yüksek hızlı cisim kabul matrisi | `codex/mesh2d-mesh0` | `6d5d33f4` (reset düzeltmesi), bu kabul kaydı | Yerel main'de; v0.5.0 adayı |
+| Temel scrub/player/MCP/render/export parity ve canonical runtime compiler | `codex/mesh2d-mesh0` | `57a750ae` | Yerel main'de; v0.5.0 adayı |
+| Convex shape/spline fracture kaynağı, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `fb5a3cdd` | Yerel main'de; v0.5.0 adayı |
+| Convex Mesh2D fracture kaynağı, UV clipping, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `d5940f74` | Yerel main'de; v0.5.0 adayı |
+| Concave/delikli/çok halkalı region clipping, adjacency, compound collider, ürün UI'ı ve MCP kabulü | `codex/mesh2d-mesh0` | `5ef84c2b`–`349d91d3` | Yerel main'de; v0.5.0 adayı |
+| Bonded cluster graph, Matter split runtime, ürün UI'ı ve MCP servis sözleşmesi | `codex/mesh2d-mesh0` | `1a0c0017`–`aba2eafa` | İlk dilim yerel main'de; v0.5.0 adayı |
 | FRACTURE2 Canvas bond authoring, fixed-tick break/reset, MCP tamamlama ve temiz canlı kabul | `codex/mesh2d-mesh0` | `e2f07284`–`4e82f4a5`, `3336a1db` | Aşama 6 ve temiz UI/MCP kabulü tamamlandı |
 | FRACTURE3 recursive generation, lineage/bütçe, portable forest, ürün UI/MCP ve temiz canlı kabul | `codex/mesh2d-mesh0` | `fe0c4f45`–`72711c78`, `206853a3`, `5eaf8ca9`, `acc68a08` | İlk secondary destruction dilimi ve canlı UI/MCP kabulü tamamlandı |
 | Akıllı Shape/Spline/Mesh dönüşümü ve genel Modifier/Registry/Execute altyapısı | `codex/mesh2d-mesh0` | `000d5608`, `51003e08`, `e5fda161`, `05939389` | 22 Kasım ek 2D teslimi; release ataması yapılmadı |
@@ -89,29 +89,27 @@ commitleri içeren başka bir branch bulunmadı.
 | Outline bant geometrisi, Stroke to Path ve canlı kaynak düzenleme | `codex/mesh2d-mesh0` | `6e4a94bb`–`30a48e8d` | İlk geometri/canlı kaynak teslimi; tam v2 açık |
 | Mesh Vertex/Edge/Face, mantıksal quad seçimi ve Edit Mesh stack entegrasyonu | `codex/mesh2d-mesh0` | `40f0e55a` | 24 Kasım ek 2D teslimi; 4.188 test ve native UI kabulü, release ataması yapılmadı |
 | Mesh yerel topoloji araçları, ortak Edit transformları ve Spline → Mesh kabulü | `codex/mesh2d-mesh0` | `9066079e`, `bb7ad083`, `a7d38a7b`, `18f8934b` | 24 Kasım. Üretim editöründe MESH-18 ve MESH-19 geçti. Ayrıntılar §9.2'de. |
+| Assets'ten Mesh2D'ye temel doku sürükle-bırak | `main` | `6022aad4` | 27 Kasım ek 2D teslimi; sürüm ataması yapılmadı. |
 
 Spline satırları 24 Kasım durum eşleştirmesidir; sonraki ek geliştirmeyi
 v0.5.0’a atanmış release kapsamı olarak yorumlamaz.
 
-Bu commitler henüz `main` branch'ine birleştirilmedi. Repository'de henüz
-`release/v0.5.0` branch'i veya `v0.5.0` etiketi yoktur; belge bunlar varmış gibi
-bir release durumu ileri sürmez. Kalan canlı kabul, kalite ve release kapıları
-geçildikten sonra v0.5.0 entegrasyon/release adımı ayrıca kaydedilecektir.
+Tablodaki bütün commitler yerel `main` geçmişindedir.
+`codex/release-v0.5.0` sürüm adayı ayrı dalda durur; bu tablodaki sonraki
+2D teslimlerine otomatik sürüm ataması yapılmaz.
 
 3D geliştirmelerin gerçek branch'i `codex/developing-3d-mode`'dur ve bu 2D
 teslim tablosuna dahil değildir. Gelecek 2D dikey dilimleri başka feature
 branch'lerinde geliştirilirse branch adı ve commit aralığı bu tabloya eklenmeden
 v0.5.0 entegrasyonuna alınmamalıdır.
 
-v0.6.0 geliştirme branch'i henüz açılmadı. Bu tur yalnız kapsamı
-`codex/mesh2d-mesh0` üzerinde belgeliyor; bağımlılık/shell kararı alınmadan
-uygulama branch'i varsayılmaz. Geliştirme başladığında gerçek branch adı,
-başlangıç commit'i ve her V6 dikeyinin commit aralığı hem bu bölüme hem
-[v0.6.0 ana planına](plans/v0.6.0-master-plan.md) yazılmalıdır.
+v0.6.0 geliştirme branch'i `codex/editor-v0.6.0`, başlangıç commit'i
+`fd0424a8`. V6 dikeylerinin teslim kayıtları bu bölümde ve
+[v0.6.0 ana planında](plans/v0.6.0-master-plan.md) izlenir.
 v0.10.0 geliştirme branch'i de henüz açılmadı; aradaki sürümler ve V10-0
 bağımlılık doğrulaması tamamlanmadan aktif sıra sayılmaz.
 
-Bu branch'teki gerçekleşmiş dilimlerin kullanıcı tarafından uygulanacak test
+Bu kayıttaki gerçekleşmiş dilimlerin kullanıcı tarafından uygulanacak test
 sırası ve kanıt şablonu
 [`v0.5.0 manuel test yürütme planında`](releases/v0.5.0-manual-test-plan.md),
 tek tek ekran adımları
@@ -930,6 +928,7 @@ açılırken aynı topolojiyi korur. Editör, eski bir Grid'in dörtgenlerini an
 | Subdivision | Varsayılan **Delaunay** sınır ve delikleri kısıt olarak tutarak üçgen ağ üretir. **Grid / Karelaj** içeride tam kareler, kesilen sınır hücrelerinde geçiş yüzleri üretir. Levels ve yerel piksel cinsinden Base cell size detay yoğunluğunu belirler. Her iki algoritma da bütün mesh'i işler. |
 | Doku, deformasyon ve kayıt | Doku yerleşimi için fit, offset, scale, rotation, pivot ve flip vardır. Pin önayarları ile topolojiye bağlı deformasyon klibi desteklenir. GPU/Canvas çizimi, bounds ve hit-test hesaplanmış geometriyi kullanır. Düzenlenebilir proje kaynağı ve stack'i saklar. Runtime hesaplanmış geometriyi kullanır. |
 | MCP ile aynı katmanda modelleme | `convert_layer_to_mesh2d` → `split_mesh2d_edge` → `apply_mesh2d_subdivision`. Subdivision aynı satırda güncellenip çalıştırılabilir. Her ayrı çağrı tek Undo oluşturur. |
+| Temel doku ataması | Assets'ten mesh yüzeyine veya Texture alanına bırakma ve listeden seçme desteklenir. Atama mevcut vertex UV'lerini değiştirmez. Fit, konum, ölçek, açı ve pivot Texture alanından düzenlenir. |
 
 25 Kasım 2026 tarihinde 2001 portundaki üretim editöründe ayrı bir MCP oturumuyla
 delikli spline testi doğrulandı. Dönüşüm 17 vertex ve 17 üçgen, delik kenarında
