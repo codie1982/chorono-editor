@@ -17,9 +17,11 @@ import { makeUpdateLayerCmd, makeDeleteLayerCmd } from '../commands-layer'
 import { executeAuthoredCommand } from '../authoring/AuthoringCommand'
 import { parseSceneJson } from '../../format/scene/SceneJsonConverter'
 import { exportSVG } from '../../export/vector/SVGExporter'
-import { createRectangleSpline, createDonutSpline, mergeSplineData } from '../../spline'
+import { createRectangleSpline, createCircleSpline, createDonutSpline, mergeSplineData } from '../../spline'
 import { evaluateSceneFrame } from '../../runtime/evaluateSceneFrame'
 import { makePivotCommand } from '../../rig2d/commands'
+import { prepareAddModifier } from '../modifiers/commands'
+import { materializeRenderScene } from '../../render/materializeOverrides'
 
 /** Fixed source fixture makes loss of IDs/manual keys/stacking observable. */
 export function operationFixture(): ChronoScene {
@@ -35,6 +37,29 @@ function apply(scene: ChronoScene, operation: 'union' | 'subtract' | 'intersect'
   return { plan, result, command, next: command.execute(scene) }
 }
 describe('persisted Boolean operation', () => {
+  it('exports the evaluated live Outline input used by the viewport', () => {
+    const scene = emptyScene()
+    scene.layers = [
+      { ...newSplineLayerFromData(createCircleSpline({ radius: 40 })), id: 'a' },
+      { ...newSplineLayerFromData(createRectangleSpline({ width: 12, height: 12 })), id: 'b' },
+    ]
+    scene.timelines = [{ ...newTimeline(), id: 'main', layerIds: ['a', 'b'], tracks: [] }]
+    const outlined = prepareAddModifier(scene, 'a', 'liveOutline').command.execute(scene)
+    const plan = prepareBooleanOperation(outlined, [{ layerId: 'a', label: 'A' }, { layerId: 'b', label: 'B' }],
+      { operation: 'subtract', reverse: false, tolerancePx: .25 }, 0, new Map())
+    const result = new PolygonClippingBackend().compute(plan.request)
+    const authored = plan.command(result).execute(outlined)
+    const outputId = authored.layers.find(layer => layer.booleanOperation)!.booleanOperation!.resultLayerId
+    const visible = materializeRenderScene(authored, new Map()).layers.find(layer => layer.id === outputId)!.spline
+    const exported = flattenBooleanOperationsForOutput(authored).layers.find(layer => layer.id === outputId)!.spline
+    const raw = projectBooleanOperations(authored).layers.find(layer => layer.id === outputId)!.spline
+
+    expect(exported).toEqual(visible)
+    expect(exported).not.toEqual(raw)
+    expect(exportToRuntime(authored).layers.find(layer => layer.id === outputId)?.spline).toEqual(visible)
+    expect(authored.layers.find(layer => layer.id === 'a')!.modifierStack).toBeDefined()
+  })
+
   it.each(['union', 'subtract', 'intersect', 'xor'] as const)('keeps exact sources, save/open, one inverse and shared bounds for %s', operation => {
     const scene = operationFixture(), before = structuredClone(scene), { next, command, plan, result } = apply(scene, operation)
     expect(scene).toEqual(before); expect(command.undo(next)).toBe(scene); expect(command.execute(command.undo(next))).toEqual(next)

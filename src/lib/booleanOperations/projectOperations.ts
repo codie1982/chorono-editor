@@ -3,6 +3,7 @@ import type { ChronoScene, Layer } from '../types'
 import { removeSplineContours } from '../spline/topology'
 import { assertBooleanOperation, assertSceneBooleanOperations } from './validation'
 import { evaluateBooleanOperation } from './evaluateOperation'
+import { projectModifierStacks } from '../modifiers'
 
 let lastProjection: { source: WeakRef<ChronoScene>; result: WeakRef<ChronoScene> } | undefined
 const projected = new WeakSet<ChronoScene>()
@@ -49,26 +50,39 @@ export function projectBooleanOperations(scene: ChronoScene): ChronoScene {
 }
 
 
+/** Validate output against the same modifier-before-Boolean geometry order as
+ * rendering. The projected scene is transient; authored input and history stay
+ * unchanged. Strict evaluation rejects a broken modifier or Boolean recipe. */
+function validatedBooleanOutputScene(scene: ChronoScene): ChronoScene {
+  assertSceneBooleanOperations(scene)
+  const projectedScene = projectModifierStacks(scene, true)
+  assertSceneBooleanOperations(projectedScene)
+  let vertices = 0
+  for (const layer of projectedScene.layers) if (layer.booleanOperation) {
+    vertices += evaluateBooleanOperation(projectedScene, layer.booleanOperation).result.outputVertices
+    if (vertices > BOOLEAN_SCENE_LIMITS.outputVertices) throw new Error('Boolean derived scene geometry budget exceeded: at most 65,536 output vertices.')
+  }
+  return projectedScene
+}
+
 /** Strict render-output admission: a solver/conversion failure must not export
  * fallback sources or a blank result. Viewport may fail open for recovery. */
 export function assertBooleanOutput(scene: ChronoScene): void {
-  assertSceneBooleanOperations(scene)
-  let vertices = 0
-  for (const layer of scene.layers) if (layer.booleanOperation) {
-    vertices += evaluateBooleanOperation(scene, layer.booleanOperation).result.outputVertices
-    if (vertices > BOOLEAN_SCENE_LIMITS.outputVertices) throw new Error('Boolean derived scene geometry budget exceeded: at most 65,536 output vertices.')
-  }
+  if (scene.layers.some(layer => layer.booleanOperation)) validatedBooleanOutputScene(scene)
+  else assertSceneBooleanOperations(scene)
 }
 
 /** Convert valid operation groups into ordinary runtime-compatible group/spline
  * source at export. Fully consumed sources are omitted; partial remainders and
- * output geometry stay ordinary splines. Live input drivers are refused by the
- * common policy, so outer animation is preserved without per-frame baking.
+ * output geometry stay ordinary splines. Static modifier geometry is projected
+ * before Boolean evaluation, matching the editor's visible result. Live input
+ * drivers are refused by the common policy, so outer animation is preserved
+ * without per-frame baking.
  * Portable project JSON must save the ORIGINAL scene, not this projection. */
 export function flattenBooleanOperationsForOutput(scene: ChronoScene): ChronoScene {
   if (!scene.layers.some(layer => layer.booleanOperation)) return scene
-  assertBooleanOutput(scene)
+  const projectedScene = validatedBooleanOutputScene(scene)
   const hidden = new Set(scene.layers.flatMap(layer => layer.booleanOperation?.inputs.filter(input => !input.subShapeId).map(input => input.layerId) ?? []))
-  const result = projectBooleanOperations(scene)
+  const result = projectBooleanOperations(projectedScene)
   return { ...result, timelines: result.timelines.map(timeline => ({ ...timeline, layerIds: timeline.layerIds?.filter(id => !hidden.has(id)) })), layers: result.layers.filter(layer => !hidden.has(layer.id)).map(({ booleanOperation: _recipe, booleanResultFor: _owner, ...layer }) => layer) }
 }
