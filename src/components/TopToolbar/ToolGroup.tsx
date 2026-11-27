@@ -94,7 +94,7 @@ export default function ToolGroup({
   const showContainToggle = selectionRegionForTool(mode, style) != null && containMode != null && onContainModeChange != null
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/compound-splines' : 'editor/canvas/tools'} compact />
+      <DocumentationHelp topic={isSelectionTool(mode) ? 'editor/canvas/selection' : mode === 'spline-draw' ? 'editor/canvas/compound-splines#draw-and-append-spline-contours' : 'editor/canvas/tools'} compact />
       <ToolBtn active={mode === 'select'} hint="Select" shortcut="V" onClick={() => onChange('select')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
           <path d="M2 1 L2 12 L5 9 L7 13 L9 12 L7 8 L11 8 Z" />

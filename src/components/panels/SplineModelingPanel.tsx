@@ -60,7 +60,13 @@ function SplineModelingSettings(props: SplineModelingPanelProps) {
   const [pointIds, setPointIds] = useState<string[]>([])
   const [preview, setPreview] = useState<Preview | null>(null)
   const [error, setError] = useState('')
-  if (!layer || layer.type !== 'spline' || !layer.spline) return <div className="p-3 text-xs text-gray-400">Select a spline layer to model its contours.</div>
+  const help = <DocumentationHelp topic="editor/canvas/spline-modeling#use-the-spline-modeling-panel-in-v04" compact />
+  if (!layer || layer.type !== 'spline' || !layer.spline) return (
+    <div className="flex items-center justify-between gap-2 p-3 text-xs text-gray-400">
+      <p>Select a spline layer to model its contours.</p>
+      {help}
+    </div>
+  )
   const spline = layer.spline
   const contours = Object.values(spline.contours)
   const activeId = spline.contours[contourId] ? contourId : contours[0]?.id
@@ -127,7 +133,7 @@ function SplineModelingSettings(props: SplineModelingPanelProps) {
   return <div className={`space-y-3 text-xs text-gray-200 ${props.operation ? '' : 'h-full overflow-auto bg-gray-900 p-3'}`} data-panel="spline-modeling">
     <div className="flex items-center justify-between gap-2">
       <h3 className="font-semibold text-sm">{props.operation ? SPLINE_MODELING_OPERATIONS.find(item => item.id === mode)?.label : 'Spline Modeling'}</h3>
-      <DocumentationHelp topic="editor/canvas/spline-modeling" compact />
+      {help}
     </div>
     <p className="text-gray-400">{cornerMode ? 'Apply updates the source contour.' : 'Apply creates a separate spline layer.'}</p>
     <label className="block space-y-1">Contour
