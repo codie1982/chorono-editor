@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { acceptTextureDrag, droppedTexture, isTextureAsset } from '../panels/assets/textureAssetDrag'
 import ScrubInput from '@/components/inputs/ScrubInput'
 import {
   DEFAULT_MESH2D_TEXTURE_TRANSFORM,
@@ -38,7 +39,7 @@ const FIT_OPTIONS: readonly [Mesh2DTextureFit, string][] = [
 export default function Mesh2DTextureControls({ layer, allAssets, onLayerChange, onDiagnostic }: Props) {
   const [linkScale, setLinkScale] = useState(true)
   const mesh = layer.mesh2d!
-  const visualAssets = allAssets.filter(asset => asset.type === 'image' || asset.type === 'spriteSheet')
+  const visualAssets = allAssets.filter(isTextureAsset)
   const textureAssetId = mesh.appearance?.kind === 'texture' ? mesh.appearance.textureAssetId : undefined
   const textureAsset = visualAssets.find(asset => asset.id === textureAssetId)
   const textureMissing = !!textureAssetId && !textureAsset
@@ -78,8 +79,14 @@ export default function Mesh2DTextureControls({ layer, allAssets, onLayerChange,
   return (
     <section aria-labelledby="mesh2d-texture-heading" className="flex flex-col gap-2">
       <h3 id="mesh2d-texture-heading" className="border-t border-gray-700 pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Mesh Appearance</h3>
-      <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
-        Texture asset
+      <label onDragOver={acceptTextureDrag} onDrop={event => {
+        const asset = droppedTexture(event, allAssets)
+        if (asset && asset.id !== textureAssetId) {
+          onLayerChange(setMesh2DTexture(layer, asset.id))
+          onDiagnostic(null)
+        }
+      }} className="flex flex-col gap-1 text-[10px] uppercase tracking-wide text-gray-500">
+        Texture asset · select or drop from Assets
         <select aria-label="Texture asset" value={textureAssetId ?? ''}
           onChange={event => { onLayerChange(setMesh2DTexture(layer, event.target.value || null)); onDiagnostic(null) }}
           className="min-h-9 rounded border border-gray-700 bg-gray-900 px-2 text-xs normal-case tracking-normal text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">

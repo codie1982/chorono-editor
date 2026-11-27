@@ -122,6 +122,8 @@ import { makeTransformMeshGeometryCmd } from '@/lib/editor/modifiers/commands'
 import { evaluateTimelines, type OverrideMap } from '@/lib/evaluator'
 import { canvasOwnsPointDeletion } from '@/lib/editor/keyboardContext'
 import type { ShortcutContext } from '@/lib/shortcuts'
+import { acceptTextureDrag, droppedTexture } from './panels/assets/textureAssetDrag'
+import { setMesh2DTexture } from '@/lib/mesh2d'
 import { Mesh2DTextureOverlay } from './canvas/mesh2d/Mesh2DTextureOverlay'
 import { PhysicsViewportOverlay } from './physics/PhysicsViewportOverlay'
 import type { PhysicsViewportOverlaySettings } from './physics/PhysicsViewportOverlayState'
@@ -1230,6 +1232,23 @@ export default function SceneCanvas({
     <div
       ref={containerRef}
       data-testid="canvas-viewport"
+      onDragOver={acceptTextureDrag}
+      onDrop={event => {
+        const source = editor.getScene()
+        const asset = droppedTexture(event, source.assets)
+        if (!asset || hideEditorUI || motionEditing || arrayEditing || placingShape || contentInspection || editor.isTransactionActive()) return
+        const rect = canvasRef.current?.getBoundingClientRect()
+        if (!rect?.width || !rect.height) return
+        const x = (event.clientX - rect.left) * width / rect.width
+        const y = (event.clientY - rect.top) * height / rect.height
+        if (x < 0 || y < 0 || x > width || y > height) return
+        const id = hitTestLayer(geometryScene, timeMs, x, y, geometryOverrides, meshFrameQuery)
+        const layer = source.layers.find(item => item.id === id)
+        if (layer?.type !== 'mesh2d' || layer.instanceOf || !new CanvasSelectionEligibility(source.layers, timeMs, geometryOverrides).accepts(layer)) return
+        if (layer.mesh2d?.appearance?.textureAssetId === asset.id) return
+        editor.dispatchCommand(makeUpdateLayerCmd(layer.id, setMesh2DTexture(layer, asset.id), layer))
+        onSelectLayer(layer.id)
+      }}
       className={`min-h-0 flex-1 flex items-center justify-center bg-neutral-800 overflow-hidden relative ${
         isPanning ? 'cursor-grabbing' : panMode ? 'cursor-grab' : placingShape ? 'cursor-crosshair' : ''
       }`}

@@ -1,4 +1,5 @@
 'use client'
+import { isTextureAsset, startTextureDrag } from './assets/textureAssetDrag'
 import { AssetIndex } from '@/lib/asset/AssetIndex'
 import { newModelLayer } from '@/lib/model3d/source/modelDefaults'
 import { DocumentationHelp } from '@/components/help/DocumentationHelp'
@@ -240,6 +241,9 @@ export default function AssetsPanel({ scene, editor, onSelectLayer, onImportFile
             <div
               key={a.id}
               data-asset-id={a.id}
+              draggable={isTextureAsset(a)}
+              onDragStart={event => startTextureDrag(event, a)}
+              title={isTextureAsset(a) ? 'Drag onto a 2D mesh to assign its texture' : undefined}
               className="border border-gray-700 rounded overflow-hidden bg-gray-900/50 group hover:border-blue-500/60 transition-colors"
               onContextMenu={(e) => {
                 e.preventDefault()
